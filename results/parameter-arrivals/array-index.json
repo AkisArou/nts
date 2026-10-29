@@ -1,0 +1,900 @@
+{
+  "version": 1,
+  "complete": true,
+  "production_fix": "c9a99cf195d2",
+  "followup_source": "a2ec4fb7683b8e1290d69ccd6e7cde3f9efee1eb",
+  "compiler_sha256": {
+    "main": "e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770",
+    "paired": "628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5"
+  },
+  "finding": "Declared literal ranges must not license integer conversions or remove bounds checks at unproved arrivals.",
+  "label_correction": {
+    "case_ids": [
+      6,
+      7,
+      8,
+      10
+    ],
+    "actual_inputs": [
+      0.5,
+      -0.5,
+      1.5,
+      3.7
+    ],
+    "old_answers": [
+      10,
+      10,
+      20,
+      40
+    ],
+    "node_answers": [
+      -1,
+      -1,
+      -1,
+      -1
+    ]
+  },
+  "global_path": "Main retains nts_check but truncates the incoming double to i32. The repaired path retains the double and validates with nts_index.",
+  "local_path": "A known local array length combines with the old false literal range to remove the check. The repair retains a checked read.",
+  "findings": [
+    {
+      "kind": "global",
+      "arm": "main",
+      "signature": "func pick(d: i32) -> f64 {  @ /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/src/main.ts:9:1 - /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/src/main.ts:9:67",
+      "array_reads": [
+        "%2 = array.get %1[%0] : f64"
+      ],
+      "checks": [
+        {
+          "label": "main-finding-check-c",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 1.7861294746398926
+        },
+        {
+          "label": "main-finding-check-llvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 1.449094533920288
+        },
+        {
+          "label": "main-finding-check-jvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 0.8415749073028564
+        },
+        {
+          "label": "main-finding-asan",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 4.9235899448394775
+        }
+      ],
+      "asan_stdout": "17 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\nchecked 9 of 29 cases; the rest were not reached (a pool value in a loop bound will do that)\n  nts  viaCastIndex 6 4024000000000000\n  node viaCastIndex 6 bff0000000000000\n  nts  viaCastIndex 7 4024000000000000\n  node viaCastIndex 7 bff0000000000000\n  nts  viaCastIndex 8 4034000000000000\n  node viaCastIndex 8 bff0000000000000\n  nts  viaCastIndex 10 4044000000000000\n  node viaCastIndex 10 bff0000000000000\n",
+      "raw_directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival1"
+    },
+    {
+      "kind": "global",
+      "arm": "paired",
+      "signature": "func pick(d: f64) -> f64 {  @ /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/src/main.ts:9:1 - /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/src/main.ts:9:67",
+      "array_reads": [
+        "%2 = array.get %1[%0] : f64"
+      ],
+      "checks": [
+        {
+          "label": "paired-finding-check-c",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 1.1362128257751465
+        },
+        {
+          "label": "paired-finding-check-llvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 1.1093883514404297
+        },
+        {
+          "label": "paired-finding-check-jvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 0.7261767387390137
+        },
+        {
+          "label": "paired-finding-asan",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 1.142484188079834
+        }
+      ],
+      "asan_stdout": "17 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\nchecked 5 of 29 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case it compared: 5 of 29\n",
+      "raw_directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival1"
+    },
+    {
+      "kind": "local",
+      "arm": "main",
+      "signature": "func pick(d: i32) -> i32 {  @ /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/src/main.ts:7:1 - /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/src/main.ts:10:2",
+      "array_reads": [
+        "%15 = array.get unchecked %2[%0] : i32"
+      ],
+      "checks": [
+        {
+          "label": "main-finding-check-c",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 3.7039029598236084
+        },
+        {
+          "label": "main-finding-check-llvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 4.712935447692871
+        },
+        {
+          "label": "main-finding-check-jvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 2.728449583053589
+        },
+        {
+          "label": "main-finding-asan",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 1,
+          "wall_s": 5.440720081329346
+        }
+      ],
+      "asan_stdout": "17 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\nchecked 11 of 29 cases; the rest were not reached (a pool value in a loop bound will do that)\n  the compiled program aborted: AddressSanitizer: SEGV\n  the compiled program aborted: AddressSanitizer: SEGV\n  the compiled program aborted: AddressSanitizer: SEGV\n  the compiled program aborted: AddressSanitizer: heap-buffer-overflow\n  the compiled program aborted: AddressSanitizer: heap-buffer-overflow\n  nts  viaCastIndex 6 4024000000000000\n  node viaCastIndex 6 bff0000000000000\n  nts  viaCastIndex 7 4024000000000000\n  node viaCastIndex 7 bff0000000000000\n  nts  viaCastIndex 8 4034000000000000\n  node viaCastIndex 8 bff0000000000000\n  nts  viaCastIndex 10 4044000000000000\n  node viaCastIndex 10 bff0000000000000\n  nts  viaCastIndex 12 c1d0505050800000\n  node viaCastIndex 12 bff0000000000000\n  nts  viaCastIndex 26 4024000000000000\n  node viaCastIndex 26 bff0000000000000\n",
+      "raw_directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival3"
+    },
+    {
+      "kind": "local",
+      "arm": "paired",
+      "signature": "func pick(d: f64) -> i32 {  @ /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/src/main.ts:7:1 - /home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/src/main.ts:10:2",
+      "array_reads": [
+        "%15 = array.get %2[%0] : i32"
+      ],
+      "checks": [
+        {
+          "label": "paired-finding-check-c",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 2.928419589996338
+        },
+        {
+          "label": "paired-finding-check-llvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 2.0094735622406006
+        },
+        {
+          "label": "paired-finding-check-jvm",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 6.749822616577148
+        },
+        {
+          "label": "paired-finding-asan",
+          "argv": [
+            "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+            "check",
+            "/home/akisarou/Projects/nts-lanes/compiler/tests/outcomes/a-local-array-index-trusted-from-a-literal-union/tsconfig.json"
+          ],
+          "status": 0,
+          "wall_s": 3.4276907444000244
+        }
+      ],
+      "asan_stdout": "17 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\nchecked 5 of 29 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case it compared: 5 of 29\n",
+      "raw_directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival3"
+    }
+  ],
+  "declines": {
+    "declined": [
+      {
+        "case": 3,
+        "input": "-1.0",
+        "status": -6,
+        "stderr": "nts: refused: index -1 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 6,
+        "input": "0.5",
+        "status": -6,
+        "stderr": "nts: refused: index 0.5 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 7,
+        "input": "-0.5",
+        "status": -6,
+        "stderr": "nts: refused: index -0.5 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 8,
+        "input": "1.5",
+        "status": -6,
+        "stderr": "nts: refused: index 1.5 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 9,
+        "input": "-1.5",
+        "status": -6,
+        "stderr": "nts: refused: index -1.5 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 10,
+        "input": "3.7",
+        "status": -6,
+        "stderr": "nts: refused: index 3.7 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 11,
+        "input": "-3.7",
+        "status": -6,
+        "stderr": "nts: refused: index -3.7 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 12,
+        "input": "7.0",
+        "status": -6,
+        "stderr": "nts: refused: index 7 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 13,
+        "input": "27.0",
+        "status": -6,
+        "stderr": "nts: refused: index 27 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 14,
+        "input": "100.0",
+        "status": -6,
+        "stderr": "nts: refused: index 100 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 15,
+        "input": "255.0",
+        "status": -6,
+        "stderr": "nts: refused: index 255 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 16,
+        "input": "256.0",
+        "status": -6,
+        "stderr": "nts: refused: index 256 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 17,
+        "input": "1000.0",
+        "status": -6,
+        "stderr": "nts: refused: index 1000 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 18,
+        "input": "4096.0",
+        "status": -6,
+        "stderr": "nts: refused: index 4096 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 19,
+        "input": "65535.0",
+        "status": -6,
+        "stderr": "nts: refused: index 65535 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 20,
+        "input": "2147483647.0",
+        "status": -6,
+        "stderr": "nts: refused: index 2.14748e+09 is outside [0, 4)",
+        "node": -1
+      },
+      {
+        "case": 21,
+        "input": "-2147483648.0",
+        "status": -6,
+        "stderr": "nts: refused: index -2.14748e+09 is outside [0, 4)",
+        "node": -1
+      }
+    ],
+    "official_compared": 5,
+    "official_expected": 29,
+    "not_reached": [
+      {
+        "case": 22,
+        "input": "2147483648.0"
+      },
+      {
+        "case": 23,
+        "input": "4294967295.0"
+      },
+      {
+        "case": 24,
+        "input": "9007199254740991.0"
+      },
+      {
+        "case": 25,
+        "input": "-9007199254740991.0"
+      },
+      {
+        "case": 26,
+        "input": "1e-8"
+      },
+      {
+        "case": 27,
+        "input": "12345.0"
+      },
+      {
+        "case": 28,
+        "input": "NAN"
+      }
+    ],
+    "reason": "restart loop uses <= REFUSALS with REFUSALS=16, then stops after 17 declines"
+  },
+  "remaining_gap": "Numeric slots cannot yet return undefined for a missing index; the repaired read stops by name. This is the separate L4 acceptance case, not full Node agreement.",
+  "controls": [
+    {
+      "label": "main-global-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4258894920349121,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-global-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.38943982124328613,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-global-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.31390810012817383,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-global-asan",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.48352694511413574,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-local-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.3106570243835449,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-local-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.29040050506591797,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-local-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.1905345916748047,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-local-asan",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4148552417755127,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-global-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.33002781867980957,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-global-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.34955716133117676,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-global-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.1871798038482666,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-global-asan",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/an-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4406440258026123,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-local-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.3077538013458252,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-local-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.2914094924926758,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-local-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.1952807903289795,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "paired-local-asan",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-local-array-index-proved-by-literal-callers/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.408261775970459,
+      "cases": 29,
+      "functions": 1,
+      "stdout_sha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8"
+    },
+    {
+      "label": "main-typed-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.43926262855529785,
+      "cases": 155,
+      "functions": 7,
+      "stdout_sha256": "8f1a3cf931572dc1224b427836ac1efc50aac23dc20ce40ad548fd2f8d599e0b"
+    },
+    {
+      "label": "main-typed-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4604527950286865,
+      "cases": 155,
+      "functions": 7,
+      "stdout_sha256": "8f1a3cf931572dc1224b427836ac1efc50aac23dc20ce40ad548fd2f8d599e0b"
+    },
+    {
+      "label": "main-typed-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.2101728916168213,
+      "cases": 155,
+      "functions": 7,
+      "stdout_sha256": "8f1a3cf931572dc1224b427836ac1efc50aac23dc20ce40ad548fd2f8d599e0b"
+    },
+    {
+      "label": "paired-typed-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4011099338531494,
+      "cases": 155,
+      "functions": 7,
+      "stdout_sha256": "8f1a3cf931572dc1224b427836ac1efc50aac23dc20ce40ad548fd2f8d599e0b"
+    },
+    {
+      "label": "paired-typed-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.29897522926330566,
+      "cases": 155,
+      "functions": 7,
+      "stdout_sha256": "8f1a3cf931572dc1224b427836ac1efc50aac23dc20ce40ad548fd2f8d599e0b"
+    },
+    {
+      "label": "paired-typed-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.21594834327697754,
+      "cases": 155,
+      "functions": 7,
+      "stdout_sha256": "8f1a3cf931572dc1224b427836ac1efc50aac23dc20ce40ad548fd2f8d599e0b"
+    }
+  ],
+  "rust": {
+    "passed": 1811,
+    "failed": 0,
+    "ignored": 4,
+    "groups": 257,
+    "ignored_tests": [
+      "test hir::lower::implementation_tests::measured_native_and_gtk_declarations_match_the_old_scan ... ignored, full GIR surface: supply NTS_IMPLEMENTATION_PROJECTS",
+      "test no_program_keeps_an_unrequested_reachable_type ... ignored, whole-program corpus capture audit; run explicitly for a frontend switch",
+      "test program::diagnostic_scope_tests::composed_matches_plain_for_corpus_and_interop_configs ... ignored, one-off audit; NTS_SCOPE_CONFIGS is a newline-separated absolute config list",
+      "test program::tests::shared_graph_environment_probe ... ignored, child-process helper for the shared-graph environment test"
+    ]
+  },
+  "phases": [
+    {
+      "label": "fmt-owned",
+      "argv": [
+        "cargo",
+        "fmt",
+        "-p",
+        "nts-core",
+        "--",
+        "--check"
+      ],
+      "status": 0,
+      "wall_s": 2.3409156799316406
+    },
+    {
+      "label": "clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "status": 0,
+      "wall_s": 0.6317212581634521
+    },
+    {
+      "label": "focused-rust",
+      "argv": [
+        "cargo",
+        "test",
+        "--profile",
+        "nts-dev",
+        "-p",
+        "nts-core",
+        "--test",
+        "parameter_arrivals",
+        "--",
+        "--nocapture"
+      ],
+      "status": 0,
+      "wall_s": 0.6706874370574951
+    },
+    {
+      "label": "record-typed",
+      "argv": [
+        "node",
+        "tooling/differential/record-oracles.ts",
+        "tests/programs/a-typed-literal-assertion-keeps-its-value"
+      ],
+      "status": 0,
+      "wall_s": 46.040109157562256
+    },
+    {
+      "label": "main-typed-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.43926262855529785
+    },
+    {
+      "label": "main-typed-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4604527950286865
+    },
+    {
+      "label": "main-typed-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/e325cf8bc04797ebfc335ed39cc74dd62cf6a81db7f7cdabf9da7155713ae770/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.2101728916168213
+    },
+    {
+      "label": "paired-typed-check-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.4011099338531494
+    },
+    {
+      "label": "paired-typed-check-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.29897522926330566
+    },
+    {
+      "label": "paired-typed-check-jvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-gate/bin/628460acd152dc20e8c19dcbe023b6ac171d1cc5ff3d1e605b5990931af89fd5/nts",
+        "check",
+        "/home/akisarou/Projects/nts-lanes/compiler/tests/programs/a-typed-literal-assertion-keeps-its-value/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.21594834327697754
+    },
+    {
+      "label": "matrix",
+      "argv": [
+        "cargo",
+        "test",
+        "--profile",
+        "nts-dev",
+        "--no-fail-fast",
+        "-p",
+        "nts-core",
+        "-p",
+        "nts-codegen-common",
+        "-p",
+        "nts-codegen-c",
+        "-p",
+        "nts-codegen-llvm",
+        "-p",
+        "nts-codegen-jvm",
+        "-p",
+        "nts-frontend-ts",
+        "-p",
+        "nts-frontend-tsrs"
+      ],
+      "status": 0,
+      "wall_s": 1399.2825770378113
+    }
+  ],
+  "raw_directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival6",
+  "superseded": [
+    {
+      "directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival2",
+      "reason": "Stopped own unit during planner build to restore incidental vendor formatting; no complete evidence."
+    },
+    {
+      "directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival4",
+      "reason": "Controls are valid; final Clippy found assert_is_empty in the new test, corrected before final run."
+    },
+    {
+      "directory": "/home/akisarou/.cache/nts-scratch/compiler/parameter-array-arrival5",
+      "reason": "Earlier typed-local guard extended at coordinator request to field/global storage and string length; 92-case precursor superseded by155."
+    }
+  ],
+  "negative_baseline_records": {
+    "a-literal-union-index-is-not-a-bounds-proof": {
+      "run": "check",
+      "category": "wrong-answer",
+      "nts": "17 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare | checked 9 of 29 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 4 case(s) disagree between the compiled program and node",
+      "node": null,
+      "measured_with": "e325cf8bc04797eb",
+      "source": "measured"
+    },
+    "a-local-array-index-trusted-from-a-literal-union": {
+      "run": "check",
+      "category": "aborted",
+      "nts": "AddressSanitizer: SEGV",
+      "node": null,
+      "measured_with": "e325cf8bc04797eb",
+      "source": "measured"
+    }
+  },
+  "current_records": {
+    "a-literal-union-index-is-not-a-bounds-proof": {
+      "run": "check",
+      "category": "aborted",
+      "nts": "17 case(s) the compiled program declined",
+      "node": null,
+      "measured_with": "a2ae91d52b354777",
+      "source": "measured"
+    },
+    "a-local-array-index-trusted-from-a-literal-union": {
+      "run": "check",
+      "category": "aborted",
+      "nts": "17 case(s) the compiled program declined",
+      "node": null,
+      "measured_with": "a2ae91d52b354777",
+      "source": "measured"
+    }
+  },
+  "outcome_recording": "The measured_with field identifies each main compiler. The unsafe baseline is retained separately; the follow-up records must come from the actual fixed main pin before landing."
+}
