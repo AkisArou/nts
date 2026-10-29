@@ -276,23 +276,53 @@ struct Testable {
 
 impl Testable {
     fn tuples(&self) -> Vec<Vec<f64>> {
-        self.input_pools
-            .as_ref()
-            .map_or_else(|| tuples(&self.params), |pools| tuples_from_pools(pools))
+        self.input_pools.as_ref().map_or_else(
+            || tuples(&self.params),
+            |pools| tuples_from_pools(pools, &self.params),
+        )
     }
 }
 
-/// The values one parameter may be given.
-///
-/// The declared type is the contract, and feeding a value outside it is not a
-/// test — it is asking what happens when the program is called wrongly, which
-/// TypeScript already forbids and the compiler is entitled to assume never
-/// happens. `weigh(mode: 0 | 1 | 2 | 3)` handed `0.5` produced forty-four
-/// disagreements that were all this harness's fault.
-///
-/// So the pool is filtered by the parameter's declared facts, and the facts'
-/// own endpoints are added: a literal type like `64` admits exactly one value
-/// and the pool does not happen to contain it.
+/// The numeric representation's bounds, independently of source declarations.
+/// A literal or enum annotation is admission metadata, never a value proof.
+fn input_representation(ty: &HirType) -> Option<Facts> {
+    match ty {
+        // Both float representations include infinities. The exact round trip
+        // below excludes finite f64 values a float32 cannot preserve.
+        HirType::Float { bits: 32 | 64 } => Some(Facts::TOP),
+        HirType::Int { bits, signed } if (1..=64).contains(bits) => {
+            let power = i32::from(*bits) - i32::from(*signed);
+            let limit = 2.0_f64.powi(power);
+            // Above 2^53, limit - 1 rounds back to the excluded limit.
+            let high = if power > 53 {
+                limit.next_down()
+            } else {
+                limit - 1.0
+            };
+            Some(Facts::new(
+                if *signed { -limit } else { 0.0 },
+                high,
+                true,
+                false,
+                false,
+            ))
+        }
+        _ => None,
+    }
+}
+
+/// Every generated argument must survive its ABI without changing value.
+#[allow(clippy::cast_possible_truncation)]
+fn input_fits(ty: &HirType, value: f64) -> bool {
+    input_representation(ty).is_some_and(|facts| facts.contains(value))
+        && (!matches!(ty, HirType::Float { bits: 32 })
+            || value.is_nan()
+            || f64::from(value as f32).to_bits() == value.to_bits())
+}
+
+/// Sweep the representation, including values outside literal/enum claims.
+/// Keep declaration endpoints as extra samples, never as a filter. Only an
+/// explicit workload-domain sidecar may narrow generated TypeScript inputs.
 fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
     if is_string(ty) {
         // An index into `STRINGS`, carried as a double so that one tuple type
@@ -308,17 +338,15 @@ fn inputs(ty: &HirType, known: Facts) -> Vec<f64> {
     let mut values: Vec<f64> = POOL
         .iter()
         .copied()
-        .filter(|value| known.contains(*value))
+        .filter(|value| input_fits(ty, *value))
         .collect();
     for edge in [known.lo, known.hi] {
-        if edge.is_finite() && !values.iter().any(|value| value.to_bits() == edge.to_bits()) {
+        if edge.is_finite()
+            && input_fits(ty, edge)
+            && !values.iter().any(|value| value.to_bits() == edge.to_bits())
+        {
             values.push(edge);
         }
-    }
-    if values.is_empty() {
-        // Nothing in the declared set can be written down. Better to check
-        // nothing than to check something the type forbids.
-        values.push(0.0);
     }
     values
 }
@@ -1077,25 +1105,36 @@ fn tuples(params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
         .iter()
         .map(|(ty, known)| inputs(ty, *known))
         .collect();
-    tuples_from_pools(&pools)
+    tuples_from_pools(&pools, params)
 }
 
-fn tuples_from_pools(pools: &[Vec<f64>]) -> Vec<Vec<f64>> {
+fn tuples_from_pools(pools: &[Vec<f64>], params: &[(HirType, Facts)]) -> Vec<Vec<f64>> {
     if pools.is_empty() {
         return vec![Vec::new()];
     }
     // What a parameter holds while a different one is under test: the quiet
-    // value if its type admits it, and otherwise something from the middle of
-    // its pool. Not the first -- for a string that is the empty one, and every
+    // value if available, and otherwise something from the middle of its
+    // declaration's samples. Keep that anchor when widening the sweep so
+    // existing calls of the other parameters remain in the population. The
+    // declaration chooses only this anchor; it never filters a swept value.
+    // Not the first -- for a string that is the empty one, and every
     // sweep of the *other* parameters would then be asking what happens at an
     // index into nothing.
     let resting: Vec<f64> = pools
         .iter()
-        .map(|pool| {
-            pool.iter()
+        .zip(params)
+        .map(|(pool, (ty, known))| {
+            let declared: Vec<f64> = pool
+                .iter()
+                .copied()
+                .filter(|value| input_representation(ty).is_none() || known.contains(*value))
+                .collect();
+            let anchor = if declared.is_empty() { pool } else { &declared };
+            anchor
+                .iter()
                 .copied()
                 .find(|value| *value == QUIET)
-                .unwrap_or_else(|| pool[pool.len() / 2])
+                .unwrap_or_else(|| anchor[anchor.len() / 2])
         })
         .collect();
 
@@ -3097,6 +3136,94 @@ mod classification {
             stopped_with(None, None, "nts: out of memory\n"),
             Stopped::Declined
         ));
+    }
+}
+
+#[cfg(test)]
+mod ingress_pools {
+    use super::{Facts, HirType, POOL, STRINGS, input_fits, inputs, tuples};
+
+    fn bits(values: &[f64]) -> Vec<u64> {
+        values.iter().map(|value| value.to_bits()).collect()
+    }
+
+    #[test]
+    fn literal_and_enum_declarations_add_edges_without_removing_other_arrivals() {
+        let literal = inputs(&HirType::NUMBER, Facts::constant(64.0));
+        assert_eq!(bits(&literal[..POOL.len()]), bits(POOL));
+        assert_eq!(
+            literal.last().map(|value| value.to_bits()),
+            Some(64.0_f64.to_bits())
+        );
+        let enumeration = inputs(&HirType::NUMBER, Facts::new(0.0, 3.0, true, false, false));
+        assert_eq!(bits(&enumeration), bits(POOL));
+        for value in [-1.0_f64, 0.5, f64::NAN] {
+            assert!(bits(&enumeration).contains(&value.to_bits()));
+        }
+    }
+
+    #[test]
+    fn unconstrained_numeric_and_string_populations_keep_their_order_and_bits() {
+        assert_eq!(bits(&inputs(&HirType::NUMBER, Facts::TOP)), bits(POOL));
+        let string = HirType::Managed(nts_core::hir::ManagedType::String);
+        let strings = inputs(&string, Facts::BOTTOM);
+        assert_eq!(strings.len(), STRINGS.len());
+        assert_eq!(strings, vec![0.0, 1.0, 2.0, 3.0, 4.0]);
+    }
+
+    #[test]
+    fn widening_a_parameter_keeps_the_other_parameters_existing_calls() {
+        let calls = tuples(&[
+            (HirType::NUMBER, Facts::TOP),
+            (HirType::NUMBER, Facts::constant(1000.0)),
+        ]);
+        for &value in POOL {
+            assert!(
+                calls
+                    .iter()
+                    .any(|call| bits(call) == bits(&[value, 1000.0]))
+            );
+            assert!(
+                calls
+                    .iter()
+                    .any(|call| bits(call) == bits(&[super::QUIET, value]))
+            );
+        }
+        assert_eq!(calls.len(), 2 * POOL.len());
+    }
+
+    #[test]
+    fn integer_and_float_abis_never_change_a_generated_argument() {
+        let byte = HirType::Int {
+            bits: 8,
+            signed: false,
+        };
+        let values = inputs(&byte, Facts::constant(64.0));
+        assert!(values.contains(&64.0) && values.contains(&255.0));
+        for invalid in [-1.0_f64, -0.0, 0.5, 256.0, f64::NAN] {
+            assert!(!input_fits(&byte, invalid));
+        }
+        let float = HirType::Float { bits: 32 };
+        assert!(input_fits(&float, 0.5) && input_fits(&float, -0.0));
+        assert!(!input_fits(&float, 3.7));
+        for edge in [f64::NEG_INFINITY, f64::INFINITY, -0.0, f64::NAN] {
+            assert!(input_fits(&float, edge), "float32 can preserve {edge:?}");
+        }
+        for overflow in [f64::MIN, f64::MAX] {
+            assert!(!input_fits(&float, overflow));
+            assert!(input_fits(&HirType::NUMBER, overflow));
+        }
+        let default = inputs(&float, Facts::constant(f64::MAX));
+        assert!(bits(&default).contains(&(-0.0_f64).to_bits()));
+        assert!(bits(&default).contains(&f64::NAN.to_bits()));
+        assert!(!bits(&default).contains(&f64::MAX.to_bits()));
+        let int64 = HirType::Int {
+            bits: 64,
+            signed: true,
+        };
+        assert!(input_fits(&int64, -2.0_f64.powi(63)));
+        assert!(input_fits(&int64, 2.0_f64.powi(63).next_down()));
+        assert!(!input_fits(&int64, 2.0_f64.powi(63)));
     }
 }
 

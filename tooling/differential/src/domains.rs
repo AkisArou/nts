@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use nts_core::hir::{Func, HirType, facts::Facts};
+use nts_core::hir::{Func, HirType};
 use nts_semantic_schema::{SemanticSnapshot, TypeId, TypeKind};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -215,7 +215,7 @@ impl Domains {
                     return Ok(pool);
                 };
                 domain
-                    .project(&pool, &parameter.ty, parameter.known)
+                    .project(&pool, &parameter.ty)
                     .with_context(|| format!("domain for {}.{}", function.name, parameter.name))
             })
             .collect::<Result<Vec<_>>>()
@@ -323,29 +323,29 @@ impl NumericDomain {
         Ok(())
     }
 
-    fn project(&self, pool: &[f64], ty: &HirType, known: Facts) -> Result<Vec<f64>> {
-        ensure!(
-            matches!(ty, HirType::Float { .. } | HirType::Int { .. }),
-            "domain parameter is not numeric"
-        );
+    fn project(&self, pool: &[f64], ty: &HirType) -> Result<Vec<f64>> {
+        let representation = super::input_representation(ty)
+            .context("domain parameter has no numeric input representation")?;
         let integer = self.integer || matches!(ty, HirType::Int { .. });
         ensure!(
             !self.allow_nan || !matches!(ty, HirType::Int { .. }),
             "an integer parameter cannot admit NaN"
         );
-        let mut low = self.min.unwrap_or(f64::NEG_INFINITY).max(known.lo);
-        let mut high = self.max.unwrap_or(f64::INFINITY).min(known.hi);
+        let mut low = self.min.unwrap_or(f64::NEG_INFINITY).max(representation.lo);
+        let mut high = self.max.unwrap_or(f64::INFINITY).min(representation.hi);
         if integer {
             low = low.ceil();
             high = high.floor();
         }
         ensure!(
             low <= high,
-            "domain contradicts the parameter's declared type"
+            "domain contradicts the parameter's numeric representation"
         );
         let mut result: Vec<f64> = Vec::new();
         let mut add = |value: f64| {
-            if known.contains(value) && !result.iter().any(|old| old.to_bits() == value.to_bits()) {
+            if super::input_fits(ty, value)
+                && !result.iter().any(|old| old.to_bits() == value.to_bits())
+            {
                 result.push(value);
             }
         };
@@ -373,7 +373,7 @@ impl NumericDomain {
         }
         ensure!(
             !result.is_empty(),
-            "domain generates no input allowed by the declared type"
+            "domain generates no input allowed by the numeric representation"
         );
         Ok(result)
     }
@@ -446,7 +446,7 @@ mod tests {
     fn clipping_keeps_signed_zero_and_only_explicit_nan() {
         let bounded = domain(json!({"min":-2,"max":2,"allowNaN":true,"reason":"small workload"}));
         let values = bounded
-            .project(super::super::POOL, &HirType::NUMBER, Facts::TOP)
+            .project(super::super::POOL, &HirType::NUMBER)
             .unwrap();
         let identity = bits(&values);
         for value in [0.0_f64, -0.0, -2.0, 2.0, 0.5, -0.5, f64::NAN] {
@@ -468,7 +468,7 @@ mod tests {
         let finite = domain(json!({"max":2,"reason":"finite workload"}));
         assert!(
             finite
-                .project(super::super::POOL, &HirType::NUMBER, Facts::TOP)
+                .project(super::super::POOL, &HirType::NUMBER)
                 .unwrap()
                 .iter()
                 .all(|value| !value.is_nan())
@@ -479,45 +479,80 @@ mod tests {
     fn integer_boundaries_stay_inside_the_declared_range() {
         let bounded = domain(json!({"min":1.2,"max":4.8,"integer":true,"reason":"whole sizes"}));
         let values = bounded
-            .project(super::super::POOL, &HirType::NUMBER, Facts::TOP)
+            .project(super::super::POOL, &HirType::NUMBER)
             .unwrap();
         assert_eq!(bits(&values), bits(&[2.0, 3.0, 4.0]));
         let zeros = domain(json!({"min":0,"max":0,"integer":true,"reason":"zero sizes"}));
         assert_eq!(
-            bits(
-                &zeros
-                    .project(super::super::POOL, &HirType::NUMBER, Facts::TOP)
-                    .unwrap()
-            ),
+            bits(&zeros.project(super::super::POOL, &HirType::NUMBER).unwrap()),
             bits(&[0.0, -0.0])
         );
     }
 
     #[test]
-    fn a_domain_cannot_widen_the_parameter_type() {
+    fn explicit_domains_narrow_the_representation_instead_of_a_literal_claim() {
+        let pool =
+            super::super::inputs(&HirType::NUMBER, nts_core::hir::facts::Facts::constant(3.0));
         let bounded = domain(json!({"min":0,"max":9,"reason":"bounded size"}));
-        let values = bounded
-            .project(&[3.0], &HirType::NUMBER, Facts::constant(3.0))
-            .unwrap();
-        assert_eq!(bits(&values), bits(&[3.0]));
-        let contradictory = domain(json!({"max":2,"reason":"wrong literal bound"}));
+        let values = bounded.project(&pool, &HirType::NUMBER).unwrap();
+        for value in [0.0_f64, -0.0, 0.5, 3.0, 9.0] {
+            assert!(bits(&values).contains(&value.to_bits()));
+        }
+        assert!(values.iter().all(|value| (0.0..=9.0).contains(value)));
+        let outside_claim = domain(json!({"max":2,"reason":"small workload"}));
+        let narrowed = outside_claim.project(&pool, &HirType::NUMBER).unwrap();
+        assert!(narrowed.iter().all(|value| *value <= 2.0));
+        assert!(bits(&narrowed).contains(&2.0_f64.to_bits()));
+    }
+
+    #[test]
+    fn domains_cannot_widen_the_numeric_representation() {
+        let byte = HirType::Int {
+            bits: 8,
+            signed: false,
+        };
+        let bounded = domain(json!({"min":-100,"max":1000,"reason":"bounded byte workload"}));
+        let values = bounded.project(super::super::POOL, &byte).unwrap();
         assert!(
-            contradictory
-                .project(&[3.0], &HirType::NUMBER, Facts::constant(3.0))
-                .is_err()
+            values
+                .iter()
+                .all(|value| (0.0..=255.0).contains(value) && value.fract() == 0.0)
         );
-        assert!(bounded.project(&[0.0], &HirType::Bool, Facts::TOP).is_err());
+        assert!(!bits(&values).contains(&(-0.0_f64).to_bits()));
+        assert!(bits(&values).contains(&255.0_f64.to_bits()));
+        let impossible = domain(json!({"min":256,"reason":"outside byte representation"}));
+        assert!(impossible.project(&[256.0], &byte).is_err());
+        assert!(bounded.project(&[0.0], &HirType::Bool).is_err());
         let nan = domain(json!({"allowNaN":true,"reason":"floating input"}));
-        assert!(
-            nan.project(
-                &[0.0],
-                &HirType::Int {
-                    bits: 32,
-                    signed: true
-                },
-                Facts::TOP
-            )
-            .is_err()
+        assert!(nan.project(&[0.0], &byte).is_err());
+    }
+
+    #[test]
+    fn float32_domains_keep_infinities_without_rounding_finite_overflow() {
+        let float = HirType::Float { bits: 32 };
+        let unbounded = domain(json!({"allowNaN":true,"reason":"all floating arrivals"}));
+        let pool = [
+            f64::NEG_INFINITY,
+            f64::INFINITY,
+            -0.0,
+            f64::NAN,
+            f64::MIN,
+            f64::MAX,
+        ];
+        assert_eq!(
+            bits(&unbounded.project(&pool, &float).unwrap()),
+            bits(&pool[..4])
+        );
+        let bounded =
+            domain(json!({"min":-2,"max":2,"allowNaN":true,"reason":"bounded floating workload"}));
+        assert_eq!(
+            bits(&bounded.project(&pool, &float).unwrap()),
+            bits(&[-2.0, 2.0, -0.0, f64::NAN])
+        );
+        let finite = domain(json!({"reason":"no NaN workload"}));
+        assert_eq!(
+            bits(&finite.project(&pool, &float).unwrap()),
+            bits(&pool[..3])
         );
     }
 
