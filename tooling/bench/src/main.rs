@@ -38,6 +38,7 @@ use serde::{Deserialize, Serialize};
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
 mod execution;
 mod reference_link;
+mod references;
 mod results;
 mod workload;
 
@@ -1156,6 +1157,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
     // Every case counts references now, so the row says its name and not
     // `name (rc)`: a suffix every row carried would distinguish nothing.
     let shown = name.to_owned();
+    references::validate(case)?;
 
     let specialized = out.join(format!("{name}.specialized.c"));
     let plain = out.join(format!("{name}.plain.c"));
@@ -2787,6 +2789,7 @@ fn compile(
             let output = std::process::Command::new(driver)
                 .args(&shared)
                 .args(&extra)
+                .args(references::warning_flags(source)?)
                 .args(defines)
                 .args(&includes)
                 .arg("-c")
@@ -2797,6 +2800,9 @@ fn compile(
                 .with_context(|| format!("running {driver}"))?;
             if !output.status.success() {
                 bail!("{driver}: {}", String::from_utf8_lossy(&output.stderr));
+            }
+            if !output.stderr.is_empty() {
+                eprint!("{}", String::from_utf8_lossy(&output.stderr));
             }
             objects.push(object);
         }

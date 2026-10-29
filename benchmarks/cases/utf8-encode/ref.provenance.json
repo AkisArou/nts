@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "nts-authored"
+    }
+  }
+}

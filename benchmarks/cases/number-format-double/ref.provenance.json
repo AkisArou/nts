@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "references": {
+    "ref.java": {
+      "kind": "nts-authored"
+    }
+  }
+}

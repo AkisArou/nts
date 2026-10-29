@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/mandelbrot-gpp-2.html"
+      ]
+    },
+    "ref.java": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/mandelbrot-graalvmaot-1.html"
+      ]
+    }
+  }
+}

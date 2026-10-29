@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/revcomp-gpp-1.html",
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/fasta-gpp-1.html"
+      ]
+    },
+    "ref.java": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/revcomp-javavm-4.html",
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/fasta-javavm-8.html"
+      ]
+    }
+  }
+}

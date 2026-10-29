@@ -170,6 +170,14 @@ provably local, and allocating anyway is a real gap rather than an artifact.
 
 ## Rules the harness enforces
 
+Every existing reference source is declared once in its case's versioned
+`ref.provenance.json`, under `references` by filename. An `nts-authored`
+reference keeps `-Wall -Wextra -Werror`; a `third-party` reference lists its
+`upstream` URLs and keeps the same optimization, LTO, CPU and loop flags with
+`-Wno-error`. Its warnings are printed, and its source stays unchanged. Missing,
+duplicate, unknown and stale declarations fail the harness check.
+
+
 **Workload domains narrow generated inputs only, never what nts compiles.**
 Beside an entry such as `case.ts` or `main.ts`, an optional `case.domains.json`
 or `main.domains.json` declares `{"version":1,"functions":{"work":{"n":{"max":32768,"allowNaN":true,"reason":"bounded generated output"}}}}`.

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/fasta-gpp-1.html"
+      ]
+    },
+    "ref.java": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/fasta-javavm-8.html"
+      ]
+    }
+  }
+}
