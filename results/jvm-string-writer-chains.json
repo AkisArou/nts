@@ -1,0 +1,1183 @@
+{
+  "schema": 1,
+  "subject": "Closed private JVM string writer families share one carrier",
+  "before_compiler": "b38be359931b532da39e5395eba38d8a72dcf76b",
+  "after_compiler": "f6a64f44d9ca5cf15710efdb569bb0f60b37d5d5",
+  "compiler_sha256": {
+    "before": "2ae804c3cae409fc263eeead9075a247a0380a2dd73e723126cb0c214f8316e6",
+    "after": "fe44a7a63d428a0f60a1e52b4864cfe98dcbf1a6f0c09ed9588f577d0c55dda4"
+  },
+  "clean_stack": [
+    "da93a776d",
+    "b57ca7d93",
+    "03d827496"
+  ],
+  "measured_end_utc": "2026-10-29T02:17:37.065Z",
+  "evidence": "nts-gate-waiting/runtime2-20261027/performance-regression-20261029",
+  "methodology": {
+    "memory": "HostGc",
+    "cpu": 4,
+    "sibling": 5,
+    "admission": "with-lock.sh --wait",
+    "schedule": "three A/B/A brackets per row; geometric A anchor within each bracket and geometric mean of the three ratios; no layout confidence interval claimed",
+    "builtin_json_work": {
+      "before": {
+        "warmup": 4,
+        "operations": 2
+      },
+      "after": {
+        "warmup": 256,
+        "operations": 8192
+      },
+      "normalization": "per call; longer candidate batch amortizes VM/probe setup"
+    },
+    "control_work": {
+      "warmup": 256,
+      "operations": 128
+    },
+    "jvm_flags": [
+      "-XX:-UsePerfData",
+      "-XX:+UseG1GC",
+      "-Xms512m",
+      "-Xmx512m",
+      "-Xbatch",
+      "-XX:-TieredCompilation",
+      "-XX:CompileThreshold=100",
+      "-Xverify:all"
+    ],
+    "counters": "inherited user instructions and cycles, taskset before exec, acknowledged FIFO enable/disable after warmup",
+    "allocation": "current Java thread allocated bytes in the fixed-work loop",
+    "cpu_time": "current Java thread CPU",
+    "checksum": "every warm and measured call agrees with the retained Node checksum",
+    "discarded_counts": "The threshold-1 diagnostic sitting exposed instrumentation IO compilation on identical-class controls; its short-window instruction deltas are not used. The focused intermediate follow-up was interrupted before replacement."
+  },
+  "jdk": {
+    "release_sha256": "d28a389f59063b3d10f5d49252a39f37c35737384a14cc742005b59df921eb15",
+    "modules_sha256": "3a1ee82e4728fee7a30ac31f9cc9b69bf9f84136af0880900f549db30e722643",
+    "libjvm_sha256": "ad7937cdabd7d09b3de8f4258a2c7111c3066ca87fb9a3704a4adf29bd18d27e"
+  },
+  "validation": {
+    "passed": 1905,
+    "failed": 0,
+    "ignored": 5,
+    "successful_groups": 264,
+    "profile": "nts-dev",
+    "phases": {
+      "clippy": "0",
+      "build": "0",
+      "matrix": "0"
+    },
+    "runtime_phases": {
+      "old-descriptor": "0",
+      "compile-cost": "0",
+      "jvm-compile-cost": "0",
+      "jvm-verifies": "0",
+      "assembles": "0"
+    },
+    "source_execution_comparisons": 40,
+    "typed_split_optional_execution_comparisons": 16,
+    "declined_frame_old_guard_exit": 101,
+    "declined_frame_restored_guard_exit": 0,
+    "old_descriptor_guard": [
+      {
+        "arm": "before",
+        "status": 1,
+        "expected": 1
+      },
+      {
+        "arm": "after",
+        "status": 0,
+        "expected": 0
+      }
+    ]
+  },
+  "census": [
+    {
+      "name": "json-stringify-builtin",
+      "functions": 16,
+      "values": 459,
+      "blocks": 97,
+      "graph_charge": 3893082,
+      "graph_budget": 164504128,
+      "charge_scope": "conservative reservations for bounded graph/set work, not CPU or a literal value-visit count",
+      "admitted": [
+        {
+          "function": "Array<Row#jsonOf8>#json",
+          "parameter": 0
+        },
+        {
+          "function": "Array<string>#json",
+          "parameter": 0
+        },
+        {
+          "function": "Document#json14",
+          "parameter": 0
+        },
+        {
+          "function": "Document#jsonOf14",
+          "parameter": 0
+        },
+        {
+          "function": "Meta#json4",
+          "parameter": 0
+        },
+        {
+          "function": "Meta#jsonOf4",
+          "parameter": 0
+        },
+        {
+          "function": "Row#json8",
+          "parameter": 0
+        },
+        {
+          "function": "Row#jsonOf8",
+          "parameter": 0
+        },
+        {
+          "function": "String#json",
+          "parameter": 0
+        }
+      ],
+      "rejected": []
+    },
+    {
+      "name": "json-stringify-typed",
+      "functions": 25,
+      "values": 801,
+      "blocks": 215,
+      "graph_charge": 909,
+      "graph_budget": 277680704,
+      "charge_scope": "conservative reservations for bounded graph/set work, not CPU or a literal value-visit count",
+      "admitted": [],
+      "rejected": [
+        {
+          "function": "assembleContainer",
+          "reason": "PublicAbi"
+        },
+        {
+          "function": "containerSuffix",
+          "reason": "PublicAbi"
+        },
+        {
+          "function": "member",
+          "reason": "PublicAbi"
+        },
+        {
+          "function": "memberPrefix",
+          "reason": "PublicAbi"
+        },
+        {
+          "function": "quoteFromIndex",
+          "reason": "PublicAbi"
+        },
+        {
+          "function": "quoteFromIndex#whole",
+          "reason": "NoTransfer"
+        },
+        {
+          "function": "quoteJSONString",
+          "reason": "PublicAbi"
+        }
+      ]
+    },
+    {
+      "name": "str-append-loop",
+      "functions": 5,
+      "values": 219,
+      "blocks": 31,
+      "graph_charge": 0,
+      "graph_budget": 0,
+      "charge_scope": "conservative reservations for bounded graph/set work, not CPU or a literal value-visit count",
+      "admitted": [],
+      "rejected": []
+    }
+  ],
+  "native_emission": {
+    "pairs": 12,
+    "rows": [
+      {
+        "name": "json-stringify-builtin",
+        "backend": "c",
+        "memory": "nogc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "1ddbdbf3f8b4f26f87edbd2bce9ee3b0b051cb0ca6b5733d3b0367230d853a64"
+      },
+      {
+        "name": "json-stringify-builtin",
+        "backend": "c",
+        "memory": "rc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "8f1b54edef4e46904b06b62db7e841784d57bdef2d64d27496d1b3e54ff42aa5"
+      },
+      {
+        "name": "json-stringify-builtin",
+        "backend": "llvm",
+        "memory": "nogc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "7ee17ceb819cf666968bcf30e1dac75d5cc22bc1393cd2baf65540c0aee8537f"
+      },
+      {
+        "name": "json-stringify-builtin",
+        "backend": "llvm",
+        "memory": "rc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "2c2a70855a6bf5fe0383ea555806f9b79f3e9fc21b65422e696794f79530d45a"
+      },
+      {
+        "name": "json-stringify-typed",
+        "backend": "c",
+        "memory": "nogc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "c0bf64744a13ea5c7d24364066ecb7a1bb0695af7145aeb99963f74c7fb51029"
+      },
+      {
+        "name": "json-stringify-typed",
+        "backend": "c",
+        "memory": "rc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "f8371205b18900199da3b9a5412072aeed79278970a18b814f43d97862189394"
+      },
+      {
+        "name": "json-stringify-typed",
+        "backend": "llvm",
+        "memory": "nogc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "6f8454cab1131d08803871767f90c4affdde849c7529ec675d231b757a8e943a"
+      },
+      {
+        "name": "json-stringify-typed",
+        "backend": "llvm",
+        "memory": "rc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "b4a263a528d089100566b3f1736947116e208e2cab50b473e33782fbc30fe115"
+      },
+      {
+        "name": "str-append-loop",
+        "backend": "c",
+        "memory": "nogc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "8bfb96820b70b69a917b06b23a92ef1cb90dff1cf905620ede13b891f7566541"
+      },
+      {
+        "name": "str-append-loop",
+        "backend": "c",
+        "memory": "rc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "d383b59e253757d957d419ef52815e14d9e17652ebdd0951cad6d877979a945b"
+      },
+      {
+        "name": "str-append-loop",
+        "backend": "llvm",
+        "memory": "nogc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "8755145ce1eb4170abcbb0f821bf0a763337b871392faa2d8f0783f9fd79b172"
+      },
+      {
+        "name": "str-append-loop",
+        "backend": "llvm",
+        "memory": "rc",
+        "identical": true,
+        "diagnostics_identical": true,
+        "sha256": "c26a03cec160263a41f29f8c59b8664b89c3fd08e2ddbcba9ace6954614a5912"
+      }
+    ]
+  },
+  "compile_cost": {
+    "scope": "representative module/case sample, not a new 29-module calibration",
+    "prepared_no_gc_and_rc": [
+      {
+        "project": "runtime/node/tty",
+        "arm": "nogc",
+        "instruction_ratio": 1.0095792106180603,
+        "instruction_delta_percent": 0.957921061806033,
+        "instruction_anchor_ratio": 0.9975663429353633,
+        "stdout_equal": true,
+        "stdout_scope": "complete prepared HIR listing",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 49010192,
+            "user_s": 0.008928,
+            "sys_s": 0.009829,
+            "cpu_s": 0.018757,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 49419426,
+            "user_s": 0.012781,
+            "sys_s": 0.010426,
+            "cpu_s": 0.023207,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 48890918,
+            "user_s": 0.009119,
+            "sys_s": 0.009116,
+            "cpu_s": 0.018235,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "runtime/node/tty",
+        "arm": "rc",
+        "instruction_ratio": 1.0140316679521941,
+        "instruction_delta_percent": 1.4031667952194127,
+        "instruction_anchor_ratio": 0.9941652426607239,
+        "stdout_equal": true,
+        "stdout_scope": "complete prepared HIR listing",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 49449700,
+            "user_s": 0.012691,
+            "sys_s": 0.007266,
+            "cpu_s": 0.019957,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 49997060,
+            "user_s": 0.008888,
+            "sys_s": 0.011595,
+            "cpu_s": 0.020483,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 49161173,
+            "user_s": 0.010092,
+            "sys_s": 0.008078,
+            "cpu_s": 0.01817,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "runtime/node/http",
+        "arm": "nogc",
+        "instruction_ratio": 1.000022847571861,
+        "instruction_delta_percent": 0.002284757186110653,
+        "instruction_anchor_ratio": 0.9999998397003276,
+        "stdout_equal": true,
+        "stdout_scope": "complete prepared HIR listing",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 394723202052,
+            "user_s": 113.686358,
+            "sys_s": 0.506646,
+            "cpu_s": 114.193004,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 394732188881,
+            "user_s": 111.869185,
+            "sys_s": 0.520523,
+            "cpu_s": 112.389708,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 394723138778,
+            "user_s": 108.775509,
+            "sys_s": 0.526185,
+            "cpu_s": 109.301694,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "runtime/node/http",
+        "arm": "rc",
+        "instruction_ratio": 1.0000378213810386,
+        "instruction_delta_percent": 0.0037821381038583013,
+        "instruction_anchor_ratio": 1.0000003692335304,
+        "stdout_equal": true,
+        "stdout_scope": "complete prepared HIR listing",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 420498105419,
+            "user_s": 119.337701,
+            "sys_s": 0.554081,
+            "cpu_s": 119.89178199999999,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 420514086872,
+            "user_s": 118.816591,
+            "sys_s": 0.518286,
+            "cpu_s": 119.334877,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 420498260681,
+            "user_s": 102.219661,
+            "sys_s": 0.55529,
+            "cpu_s": 102.774951,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "runtime/node/buffer",
+        "arm": "nogc",
+        "instruction_ratio": 1.0001431146100221,
+        "instruction_delta_percent": 0.014311461002214365,
+        "instruction_anchor_ratio": 1.000000263462968,
+        "stdout_equal": true,
+        "stdout_scope": "complete prepared HIR listing",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 11329865527,
+            "user_s": 1.548804,
+            "sys_s": 0.025691,
+            "cpu_s": 1.574495,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 11331488489,
+            "user_s": 1.532561,
+            "sys_s": 0.029655,
+            "cpu_s": 1.562216,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 11329868512,
+            "user_s": 1.485286,
+            "sys_s": 0.030546,
+            "cpu_s": 1.515832,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "runtime/node/buffer",
+        "arm": "rc",
+        "instruction_ratio": 1.0002741645966202,
+        "instruction_delta_percent": 0.027416459662021886,
+        "instruction_anchor_ratio": 1.0000343315452274,
+        "stdout_equal": true,
+        "stdout_scope": "complete prepared HIR listing",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 12407743292,
+            "user_s": 1.049678,
+            "sys_s": 0.017942,
+            "cpu_s": 1.06762,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 12411358101,
+            "user_s": 0.859064,
+            "sys_s": 0.018855,
+            "cpu_s": 0.877919,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 12408169269,
+            "user_s": 0.922273,
+            "sys_s": 0.012916,
+            "cpu_s": 0.935189,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      }
+    ],
+    "jvm_emission": [
+      {
+        "project": "json-stringify-builtin",
+        "arm": "host-gc",
+        "instruction_ratio": 1.0155863247516723,
+        "instruction_delta_percent": 1.558632475167232,
+        "instruction_anchor_ratio": 0.9989484750556418,
+        "stdout_equal": false,
+        "stdout_scope": "emitter command report includes its per-cell output directory; class bytes are compared separately for the controls",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 283675629,
+            "user_s": 0.024231,
+            "sys_s": 0.01398,
+            "cpu_s": 0.038210999999999995,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 287945579,
+            "user_s": 0.023435,
+            "sys_s": 0.010762,
+            "cpu_s": 0.034197000000000005,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 283377337,
+            "user_s": 0.023526,
+            "sys_s": 0.009628,
+            "cpu_s": 0.033153999999999996,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "json-stringify-typed",
+        "arm": "host-gc",
+        "instruction_ratio": 1.0005297400766469,
+        "instruction_delta_percent": 0.05297400766468563,
+        "instruction_anchor_ratio": 1.0008087214553385,
+        "stdout_equal": false,
+        "stdout_scope": "emitter command report includes its per-cell output directory; class bytes are compared separately for the controls",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 341792589,
+            "user_s": 0.035651,
+            "sys_s": 0.013642,
+            "cpu_s": 0.049293000000000003,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 342111903,
+            "user_s": 0.046054,
+            "sys_s": 0.010435,
+            "cpu_s": 0.056489,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 342069004,
+            "user_s": 0.037395,
+            "sys_s": 0.013142,
+            "cpu_s": 0.050537,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "str-append-loop",
+        "arm": "host-gc",
+        "instruction_ratio": 0.9996129499615187,
+        "instruction_delta_percent": -0.03870500384812736,
+        "instruction_anchor_ratio": 1.0008358484669535,
+        "stdout_equal": false,
+        "stdout_scope": "emitter command report includes its per-cell output directory; class bytes are compared separately for the controls",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 290120769,
+            "user_s": 0.021944,
+            "sys_s": 0.008748,
+            "cpu_s": 0.030692000000000004,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 290129654,
+            "user_s": 0.027352,
+            "sys_s": 0.014693,
+            "cpu_s": 0.042045,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 290363266,
+            "user_s": 0.026071,
+            "sys_s": 0.008641,
+            "cpu_s": 0.034712,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "http",
+        "arm": "host-gc",
+        "instruction_ratio": 1.0019369057161314,
+        "instruction_delta_percent": 0.19369057161313652,
+        "instruction_anchor_ratio": 1.0000001394979134,
+        "stdout_equal": false,
+        "stdout_scope": "emitter command report includes its per-cell output directory; class bytes are compared separately for the controls",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 507111527325,
+            "user_s": 49.936939,
+            "sys_s": 0.224252,
+            "cpu_s": 50.161191,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 508093789980,
+            "user_s": 42.201145,
+            "sys_s": 0.175458,
+            "cpu_s": 42.376602999999996,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 507111598066,
+            "user_s": 42.738682,
+            "sys_s": 0.199249,
+            "cpu_s": 42.937931,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      },
+      {
+        "project": "buffer",
+        "arm": "host-gc",
+        "instruction_ratio": 1.0035292735914696,
+        "instruction_delta_percent": 0.3529273591469595,
+        "instruction_anchor_ratio": 0.9999809662090327,
+        "stdout_equal": false,
+        "stdout_scope": "emitter command report includes its per-cell output directory; class bytes are compared separately for the controls",
+        "diagnostics_equal": true,
+        "cells": [
+          {
+            "binary": "before",
+            "instructions": 11821239415,
+            "user_s": 0.992712,
+            "sys_s": 0.024811,
+            "cpu_s": 1.017523,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "after",
+            "instructions": 11862846904,
+            "user_s": 1.108089,
+            "sys_s": 0.037379,
+            "cpu_s": 1.1454680000000002,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          },
+          {
+            "binary": "before",
+            "instructions": 11821014412,
+            "user_s": 0.830528,
+            "sys_s": 0.024945,
+            "cpu_s": 0.855473,
+            "counter_scope": "exec-inherited-user-instructions-v1"
+          }
+        ]
+      }
+    ]
+  },
+  "artifact_identities": [
+    {
+      "name": "json-stringify-builtin",
+      "arm": "before",
+      "program_sha256": "ff119a7d9bef5a043dc2844f2fea6b30701f6bb2840049d1e92b7eefa1751695",
+      "runtime_sha256": "0844d909e67df4cf56802ad988b60014313aa1fc996ebfed44530dbdd86747e0",
+      "compiler_sha256": "2ae804c3cae409fc263eeead9075a247a0380a2dd73e723126cb0c214f8316e6",
+      "checksum": "41204cb600000000"
+    },
+    {
+      "name": "json-stringify-builtin",
+      "arm": "after",
+      "program_sha256": "2cdc83dd0fc788eca7d400ca4597ce140e773d5f84f3609ccc19d1a60028ea29",
+      "runtime_sha256": "0844d909e67df4cf56802ad988b60014313aa1fc996ebfed44530dbdd86747e0",
+      "compiler_sha256": "fe44a7a63d428a0f60a1e52b4864cfe98dcbf1a6f0c09ed9588f577d0c55dda4",
+      "checksum": "41204cb600000000"
+    },
+    {
+      "name": "json-stringify-typed",
+      "arm": "before",
+      "program_sha256": "1756d209409bdec1f2fb782c6924e09d1f3944b676f496ac3bc0a0b26fc514b0",
+      "runtime_sha256": "0844d909e67df4cf56802ad988b60014313aa1fc996ebfed44530dbdd86747e0",
+      "compiler_sha256": "2ae804c3cae409fc263eeead9075a247a0380a2dd73e723126cb0c214f8316e6",
+      "checksum": "41204cb600000000"
+    },
+    {
+      "name": "json-stringify-typed",
+      "arm": "after",
+      "program_sha256": "1756d209409bdec1f2fb782c6924e09d1f3944b676f496ac3bc0a0b26fc514b0",
+      "runtime_sha256": "0844d909e67df4cf56802ad988b60014313aa1fc996ebfed44530dbdd86747e0",
+      "compiler_sha256": "fe44a7a63d428a0f60a1e52b4864cfe98dcbf1a6f0c09ed9588f577d0c55dda4",
+      "checksum": "41204cb600000000"
+    },
+    {
+      "name": "str-append-loop",
+      "arm": "before",
+      "program_sha256": "e3abea84b47b273e9c1a895ab1776269de2c412ebf8e6e3d6ebf8b21747f7286",
+      "runtime_sha256": "0844d909e67df4cf56802ad988b60014313aa1fc996ebfed44530dbdd86747e0",
+      "compiler_sha256": "2ae804c3cae409fc263eeead9075a247a0380a2dd73e723126cb0c214f8316e6",
+      "checksum": "41d913b379000000"
+    },
+    {
+      "name": "str-append-loop",
+      "arm": "after",
+      "program_sha256": "e3abea84b47b273e9c1a895ab1776269de2c412ebf8e6e3d6ebf8b21747f7286",
+      "runtime_sha256": "0844d909e67df4cf56802ad988b60014313aa1fc996ebfed44530dbdd86747e0",
+      "compiler_sha256": "fe44a7a63d428a0f60a1e52b4864cfe98dcbf1a6f0c09ed9588f577d0c55dda4",
+      "checksum": "41d913b379000000"
+    }
+  ],
+  "rows": [
+    {
+      "name": "json-stringify-builtin",
+      "metrics": {
+        "instructions_per_op": {
+          "before": 7807496155.318311,
+          "after": 27983769.81465584,
+          "ratio": 0.003584218199786619,
+          "delta_percent": -99.64157818002134,
+          "max_anchor_drift_percent": 0.0045943180441820886,
+          "pairs": [
+            {
+              "before": 7807523212.922876,
+              "after": 27983760.787109375,
+              "ratio": 0.0035842046221253804,
+              "anchor_drift": 0.000008889670463307908
+            },
+            {
+              "before": 7807486033.690113,
+              "after": 27983773.517211914,
+              "ratio": 0.00358422332060013,
+              "anchor_drift": 0.000045943180441820886
+            },
+            {
+              "before": 7807479219.413664,
+              "after": 27983775.139648438,
+              "ratio": 0.0035842266566737013,
+              "anchor_drift": 0.000009405640832627071
+            }
+          ]
+        },
+        "cycles_per_op": {
+          "before": 20478338277.57988,
+          "after": 5970918.308009869,
+          "ratio": 0.0002915724033403119,
+          "delta_percent": -99.97084275966597,
+          "max_anchor_drift_percent": 2.2789588864660315,
+          "pairs": [
+            {
+              "before": 20216573336.502033,
+              "after": 5926053.047973633,
+              "ratio": 0.00029312846194729983,
+              "anchor_drift": 0.022789588864660315
+            },
+            {
+              "before": 20871580592.793713,
+              "after": 5971449.70690918,
+              "ratio": 0.0002861043360065854,
+              "anchor_drift": 0.021985921084090032
+            },
+            {
+              "before": 20352663557.526184,
+              "after": 6015587.861816406,
+              "ratio": 0.00029556759707708677,
+              "anchor_drift": 0.002383456720684851
+            }
+          ]
+        },
+        "bytes_per_op": {
+          "before": 75451025964.00002,
+          "after": 1572040.0185546875,
+          "ratio": 0.000020835237141834967,
+          "delta_percent": -99.99791647628582,
+          "max_anchor_drift_percent": 0,
+          "pairs": [
+            {
+              "before": 75451025964,
+              "after": 1572040.0185546875,
+              "ratio": 0.00002083523714183497,
+              "anchor_drift": 0
+            },
+            {
+              "before": 75451025964,
+              "after": 1572040.0185546875,
+              "ratio": 0.00002083523714183497,
+              "anchor_drift": 0
+            },
+            {
+              "before": 75451025964,
+              "after": 1572040.0185546875,
+              "ratio": 0.00002083523714183497,
+              "anchor_drift": 0
+            }
+          ]
+        },
+        "cpu_ns_per_op": {
+          "before": 3798319850.9458585,
+          "after": 1192774.1325780884,
+          "ratio": 0.0003140267748333684,
+          "delta_percent": -99.96859732251666,
+          "max_anchor_drift_percent": 2.4623961533346783,
+          "pairs": [
+            {
+              "before": 3736596800.757083,
+              "after": 1177509.5197753906,
+              "ratio": 0.00031512886794122716,
+              "anchor_drift": 0.024623961533346783
+            },
+            {
+              "before": 3878948076.955914,
+              "after": 1194816.6170654297,
+              "ratio": 0.0003080259372801626,
+              "anchor_drift": 0.015063025450888334
+            },
+            {
+              "before": 3780806020.610551,
+              "after": 1206171.2023925781,
+              "ratio": 0.00031902488406368895,
+              "anchor_drift": 0.005432373334769647
+            }
+          ]
+        },
+        "wall_ns_per_op": {
+          "before": 4008499406.2394886,
+          "after": 1211849.38214266,
+          "ratio": 0.0003023199604960256,
+          "delta_percent": -99.96976800395039,
+          "max_anchor_drift_percent": 2.2680600650446303,
+          "pairs": [
+            {
+              "before": 3941965639.0736475,
+              "after": 1197249.9074707031,
+              "ratio": 0.0003037190115518242,
+              "anchor_drift": 0.022680600650446303
+            },
+            {
+              "before": 4098929301.987875,
+              "after": 1214136.9477539062,
+              "ratio": 0.0002962083164413402,
+              "anchor_drift": 0.01782669785540847
+            },
+            {
+              "before": 3986228673.4812293,
+              "after": 1224315.7873535156,
+              "ratio": 0.0003071363656326077,
+              "anchor_drift": 0.005368206993827673
+            }
+          ]
+        }
+      },
+      "program_sha256": {
+        "before": "ff119a7d9bef5a043dc2844f2fea6b30701f6bb2840049d1e92b7eefa1751695",
+        "after": "2cdc83dd0fc788eca7d400ca4597ce140e773d5f84f3609ccc19d1a60028ea29"
+      }
+    },
+    {
+      "name": "json-stringify-typed",
+      "metrics": {
+        "instructions_per_op": {
+          "before": 18786040.305249583,
+          "after": 18786890.605536897,
+          "ratio": 1.0000452623476555,
+          "delta_percent": 0.004526234765545034,
+          "max_anchor_drift_percent": 0.007366194409730298,
+          "pairs": [
+            {
+              "before": 18785403.522413917,
+              "after": 18786061.71875,
+              "ratio": 1.0000350376469314,
+              "anchor_drift": -0.00007366194409730298
+            },
+            {
+              "before": 18786396.886220723,
+              "after": 18788158.5625,
+              "ratio": 1.000093774037137,
+              "anchor_drift": 0.000014563086858876417
+            },
+            {
+              "before": 18786320.52338082,
+              "after": 18786451.6015625,
+              "ratio": 1.0000069773206264,
+              "anchor_drift": 0.00000491299515581467
+            }
+          ]
+        },
+        "cycles_per_op": {
+          "before": 6440956.845346956,
+          "after": 6415397.013084378,
+          "ratio": 0.9960316715549762,
+          "delta_percent": -0.39683284450238165,
+          "max_anchor_drift_percent": 3.201585418998676,
+          "pairs": [
+            {
+              "before": 6623150.44573682,
+              "after": 6687770.3671875,
+              "ratio": 1.0097566742564748,
+              "anchor_drift": -0.03201585418998676
+            },
+            {
+              "before": 6353668.725433525,
+              "after": 6188155.359375,
+              "ratio": 0.9739499534503616,
+              "anchor_drift": 0.0006478879915059466
+            },
+            {
+              "before": 6349828.277648942,
+              "after": 6380108.3125,
+              "ratio": 1.0047686383831265,
+              "anchor_drift": -0.029384610595556082
+            }
+          ]
+        },
+        "bytes_per_op": {
+          "before": 6522169.18750001,
+          "after": 6522169.18750001,
+          "ratio": 1,
+          "delta_percent": 0,
+          "max_anchor_drift_percent": 0,
+          "pairs": [
+            {
+              "before": 6522169.1875,
+              "after": 6522169.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            },
+            {
+              "before": 6522169.1875,
+              "after": 6522169.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            },
+            {
+              "before": 6522169.1875,
+              "after": 6522169.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            }
+          ]
+        },
+        "cpu_ns_per_op": {
+          "before": 1216647.1965310508,
+          "after": 1212301.325369375,
+          "ratio": 0.9964279939377129,
+          "delta_percent": -0.35720060622871364,
+          "max_anchor_drift_percent": 3.458908676900163,
+          "pairs": [
+            {
+              "before": 1247906.3478665054,
+              "after": 1256092.7578125,
+              "ratio": 1.006560115636875,
+              "anchor_drift": -0.03458908676900163
+            },
+            {
+              "before": 1199698.6836272017,
+              "after": 1165617.3828125,
+              "ratio": 0.9715917827702708,
+              "anchor_drift": 0.012650495755755387
+            },
+            {
+              "before": 1202928.4683835122,
+              "after": 1216897.5390625,
+              "ratio": 1.011612553070391,
+              "anchor_drift": -0.026122100843387175
+            }
+          ]
+        },
+        "wall_ns_per_op": {
+          "before": 1259189.9126698906,
+          "after": 1256328.24187808,
+          "ratio": 0.9977273715719789,
+          "delta_percent": -0.22726284280211173,
+          "max_anchor_drift_percent": 3.386507915526382,
+          "pairs": [
+            {
+              "before": 1288813.830305551,
+              "after": 1298893.234375,
+              "ratio": 1.007820682733564,
+              "anchor_drift": -0.03386507915526382
+            },
+            {
+              "before": 1241034.0940158593,
+              "after": 1204562.5546875,
+              "ratio": 0.9706119763314953,
+              "anchor_drift": 0.0110174001355412
+            },
+            {
+              "before": 1248244.919633503,
+              "after": 1267379.140625,
+              "ratio": 1.0153288995537149,
+              "anchor_drift": -0.024629629576974676
+            }
+          ]
+        }
+      },
+      "program_sha256": {
+        "before": "1756d209409bdec1f2fb782c6924e09d1f3944b676f496ac3bc0a0b26fc514b0",
+        "after": "1756d209409bdec1f2fb782c6924e09d1f3944b676f496ac3bc0a0b26fc514b0"
+      }
+    },
+    {
+      "name": "str-append-loop",
+      "metrics": {
+        "instructions_per_op": {
+          "before": 624318.9092353162,
+          "after": 625596.653039208,
+          "ratio": 1.002046620381015,
+          "delta_percent": 0.20466203810149963,
+          "max_anchor_drift_percent": 0.21963859735689706,
+          "pairs": [
+            {
+              "before": 624878.1083907235,
+              "after": 625568.234375,
+              "ratio": 1.0011044169655003,
+              "anchor_drift": 0.0021963859735689706
+            },
+            {
+              "before": 622499.1545968398,
+              "after": 625633.9453125,
+              "ratio": 1.0050358152175973,
+              "anchor_drift": -0.00014574760773578
+            },
+            {
+              "before": 625583.6515924155,
+              "after": 625587.78125,
+              "ratio": 1.000006601287572,
+              "anchor_drift": 0.00009802576802586671
+            }
+          ]
+        },
+        "cycles_per_op": {
+          "before": 205491.45001529861,
+          "after": 205329.1977558412,
+          "ratio": 0.9992104184410354,
+          "delta_percent": -0.07895815589645805,
+          "max_anchor_drift_percent": 3.919122015027887,
+          "pairs": [
+            {
+              "before": 207579.98676005797,
+              "after": 210330.0390625,
+              "ratio": 1.0132481572302094,
+              "anchor_drift": -0.006910149787422548
+            },
+            {
+              "before": 199386.67708904113,
+              "after": 198634.96875,
+              "ratio": 0.9962298968516065,
+              "anchor_drift": -0.03919122015027887
+            },
+            {
+              "before": 209652.3112467622,
+              "after": 207202.5625,
+              "ratio": 0.9883151836858177,
+              "anchor_drift": -0.022738426262413625
+            }
+          ]
+        },
+        "bytes_per_op": {
+          "before": 147673.1874999998,
+          "after": 147673.1874999998,
+          "ratio": 1,
+          "delta_percent": 0,
+          "max_anchor_drift_percent": 0,
+          "pairs": [
+            {
+              "before": 147673.1875,
+              "after": 147673.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            },
+            {
+              "before": 147673.1875,
+              "after": 147673.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            },
+            {
+              "before": 147673.1875,
+              "after": 147673.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            }
+          ]
+        },
+        "cpu_ns_per_op": {
+          "before": 27851.268622855347,
+          "after": 26827.157960185214,
+          "ratio": 0.9632292992991447,
+          "delta_percent": -3.6770700700855308,
+          "max_anchor_drift_percent": 8.678826729623768,
+          "pairs": [
+            {
+              "before": 27403.48198412472,
+              "after": 27448.2265625,
+              "ratio": 1.00163280631276,
+              "anchor_drift": 0.01598764115912399
+            },
+            {
+              "before": 27774.520316156722,
+              "after": 26294.328125,
+              "ratio": 0.9467068315021203,
+              "anchor_drift": -0.050961775859380665
+            },
+            {
+              "before": 28384.59027353934,
+              "after": 26751.46875,
+              "ratio": 0.942464502471196,
+              "anchor_drift": -0.08678826729623768
+            }
+          ]
+        },
+        "wall_ns_per_op": {
+          "before": 38377.212744088254,
+          "after": 37489.49568888586,
+          "ratio": 0.976868641786939,
+          "delta_percent": -2.3131358213061004,
+          "max_anchor_drift_percent": 3.963744278440906,
+          "pairs": [
+            {
+              "before": 38670.59229035565,
+              "after": 38429.6640625,
+              "ratio": 0.9937697300820568,
+              "anchor_drift": -0.0005493622147052513
+            },
+            {
+              "before": 37750.501573253656,
+              "after": 36045.484375,
+              "ratio": 0.9548345816029723,
+              "anchor_drift": -0.027762087986535455
+            },
+            {
+              "before": 38718.34085361281,
+              "after": 38037.4453125,
+              "ratio": 0.9824141343326885,
+              "anchor_drift": -0.03963744278440906
+            }
+          ]
+        }
+      },
+      "program_sha256": {
+        "before": "e3abea84b47b273e9c1a895ab1776269de2c412ebf8e6e3d6ebf8b21747f7286",
+        "after": "e3abea84b47b273e9c1a895ab1776269de2c412ebf8e6e3d6ebf8b21747f7286"
+      }
+    }
+  ]
+}
