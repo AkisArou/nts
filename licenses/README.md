@@ -25,6 +25,11 @@ Data files the compiler carries derived tables from, declared in
 | Input | Licence file | Full text |
 | --- | --- | --- |
 | Unicode Character Database 17.0.0 | compiler/unicode/data/LICENSE | [compiler/unicode/data/LICENSE](texts/e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96.txt) |
+| Node 24.20.0 bundled brotli sources | build/node-deps/recipes.json#notice/brotli | [build/node-deps/recipes.json#notice/brotli](texts/3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94.txt) |
+| Node 24.20.0 bundled openssl sources | build/node-deps/recipes.json#notice/openssl | [build/node-deps/recipes.json#notice/openssl](texts/7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a.txt) |
+| Node 24.20.0 bundled uv sources | build/node-deps/recipes.json#notice/uv | [build/node-deps/recipes.json#notice/uv](texts/e1b5bf88a1345ad15d6b2cc171d6fe1dace8c8a5dfc24d5a0a29e49eb68e1131.txt) |
+| Node 24.20.0 bundled zlib sources | build/node-deps/recipes.json#notice/zlib | [build/node-deps/recipes.json#notice/zlib](texts/00ec84eb8f9afac7c30aa1b8a7d3869fbe07b96a0c04ef9a86fcec38d4c50c1e.txt) |
+| Node 24.20.0 bundled zstd sources | build/node-deps/recipes.json#notice/zstd | [build/node-deps/recipes.json#notice/zstd](texts/253ea8e54e3fcda3d6a1c26abbd7d172f27f523f452e5e706a41ff8a39eadf72.txt) |
 
 ## Embedded C components
 
@@ -42,6 +47,7 @@ All upstream licence alternatives remain in the compiler distribution.
 
 | Package | Version | Licence | Texts and notices |
 | --- | --- | --- | --- |
+| adler2 | 2.0.1 | 0BSD OR MIT OR Apache-2.0 | [LICENSE-0BSD](texts/861399f8c21c042b110517e76dc6b63a2b334276c8cf17412fc3c8908ca8dc17.txt), [LICENSE-APACHE](texts/8ada45cd9f843acf64e4722ae262c622a2b3b3007c7310ef36ac1061a30f6adb.txt), [LICENSE-MIT](texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt) |
 | aho-corasick | 1.1.5 | Unlicense OR MIT | [COPYING](texts/01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f.txt), [LICENSE-MIT](texts/0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f.txt), [UNLICENSE](texts/7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c.txt) |
 | anyhow | 1.0.104 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a.txt), [LICENSE-MIT](texts/23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3.txt) |
 | atomic-polyfill | 1.0.3 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/8924c88b998da95624f60eeb8705eaa581586e65b686e6d3367ffb14067b8451.txt) |
@@ -79,6 +85,7 @@ All upstream licence alternatives remain in the compiler distribution.
 | litemap | 0.8.3 | Unicode-3.0 | [LICENSE](texts/f367c1b8e1aa262435251e442901da4607b4650e0e63a026f5044473ecfb90f2.txt) |
 | lock_api | 0.4.14 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/c9a75f18b9ab2927829a208fc6aa2cf4e63b8420887ba29cdb265d6619ae82d5.txt) |
 | memchr | 2.8.3 | Unlicense OR MIT | [COPYING](texts/01c266bced4a434da0051174d6bee16a4c82cf634e2679b6155d40d75012390f.txt), [LICENSE-MIT](texts/0f96a83840e146e43c0ec96a22ec1f392e0680e6c1226e6f3ba87e0740af850f.txt), [UNLICENSE](texts/7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c.txt) |
+| miniz_oxide | 0.9.1 | MIT OR Zlib OR Apache-2.0 | [LICENSE](texts/4108245a1f2df9d4e94df8abed5b4ba0759bb2f9b40a6b939f1be141077ae50b.txt), [LICENSE-APACHE.md](texts/0d542e0c8804e39aa7f37eb00da5a762149dc682d7829451287e11b938e94594.txt), [LICENSE-MIT.md](texts/799e9ca9d179295ef372f25d3769cdda7d25bb2668add6a6a1e22d1e4c678b8d.txt), [LICENSE-ZLIB.md](texts/0a54e647fe54104658b5e563c04c6f9edf251710e47bce692e0bd990a4ddaa39.txt) |
 | num-bigint | 0.5.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb.txt) |
 | num-integer | 0.1.47 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb.txt) |
 | num-traits | 0.2.19 | MIT OR Apache-2.0 | [LICENSE-APACHE](texts/a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2.txt), [LICENSE-MIT](texts/6485b8ed310d3f0340bf1ad1f47645069ce4069dcc6bb46c7d5c6faf41de1fdb.txt) |

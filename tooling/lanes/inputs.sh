@@ -16,7 +16,7 @@ mode=$1
 root=$2
 tree=$3
 case $mode in
-  gate|lane) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/node third_party/deno" ;;
+  gate|lane) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/node third_party/node-source third_party/deno" ;;
   *) echo "inputs.sh: mode is gate or lane, not $mode" >&2; exit 2 ;;
 esac
 

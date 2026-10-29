@@ -8,5 +8,55 @@
         "sha256": "e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96"
       }
     ]
+  },
+  {
+    "name": "Node 24.20.0 bundled brotli sources",
+    "license": "build/node-deps/recipes.json#notice/brotli",
+    "texts": [
+      {
+        "upstream": "build/node-deps/recipes.json#notice/brotli",
+        "sha256": "3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94"
+      }
+    ]
+  },
+  {
+    "name": "Node 24.20.0 bundled openssl sources",
+    "license": "build/node-deps/recipes.json#notice/openssl",
+    "texts": [
+      {
+        "upstream": "build/node-deps/recipes.json#notice/openssl",
+        "sha256": "7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a"
+      }
+    ]
+  },
+  {
+    "name": "Node 24.20.0 bundled uv sources",
+    "license": "build/node-deps/recipes.json#notice/uv",
+    "texts": [
+      {
+        "upstream": "build/node-deps/recipes.json#notice/uv",
+        "sha256": "e1b5bf88a1345ad15d6b2cc171d6fe1dace8c8a5dfc24d5a0a29e49eb68e1131"
+      }
+    ]
+  },
+  {
+    "name": "Node 24.20.0 bundled zlib sources",
+    "license": "build/node-deps/recipes.json#notice/zlib",
+    "texts": [
+      {
+        "upstream": "build/node-deps/recipes.json#notice/zlib",
+        "sha256": "00ec84eb8f9afac7c30aa1b8a7d3869fbe07b96a0c04ef9a86fcec38d4c50c1e"
+      }
+    ]
+  },
+  {
+    "name": "Node 24.20.0 bundled zstd sources",
+    "license": "build/node-deps/recipes.json#notice/zstd",
+    "texts": [
+      {
+        "upstream": "build/node-deps/recipes.json#notice/zstd",
+        "sha256": "253ea8e54e3fcda3d6a1c26abbd7d172f27f523f452e5e706a41ff8a39eadf72"
+      }
+    ]
   }
 ]

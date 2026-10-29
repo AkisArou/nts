@@ -103,6 +103,9 @@ else
   pnpm install --silent
 fi
 
+say "pinned Node native dependency sources"
+node tooling/bootstrap/node.ts
+
 say "cargo build"
 cargo build --release
 

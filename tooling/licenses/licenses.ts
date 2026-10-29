@@ -11,6 +11,18 @@ import { fileURLToPath } from "node:url";
 const directory = dirname(fileURLToPath(import.meta.url));
 const root = resolve(directory, "../..");
 const destination = join(root, "licenses");
+const nodeRecipePath = "build/node-deps/recipes.json";
+const nodeRecipe = JSON.parse(readFileSync(join(root, nodeRecipePath), "utf8")) as { node: string; notices: Record<string, string> };
+// Compiler and program attributions read the same resolved notice bytes.
+function licenseInput(path: string): Buffer {
+  const marker = "#notice/";
+  const at = path.indexOf(marker);
+  if (at < 0) return readFileSync(path);
+  const recipe = JSON.parse(readFileSync(path.slice(0, at), "utf8"));
+  const text = recipe.notices[path.slice(at + marker.length)];
+  if (typeof text !== "string") throw new Error(`missing bundled dependency notice: ${path}`);
+  return Buffer.from(text);
+}
 const sha256 = (bytes: Uint8Array | string) => createHash("sha256").update(bytes).digest("hex");
 const args = process.argv.slice(2);
 if (args.length !== 1 || !["--update", "--check"].includes(args[0])) throw new Error("use --update or --check");
@@ -31,6 +43,9 @@ const declaredComponents = [
 // so vendoring data without its license stops at --check, not at release.
 const declaredData: { name: string; license: string }[] = [
   { name: "Unicode Character Database 17.0.0", license: "compiler/unicode/data/LICENSE" },
+  ...Object.keys(nodeRecipe.notices).sort().map(name => ({
+    name: `Node ${nodeRecipe.node} bundled ${name} sources`, license: `${nodeRecipePath}#notice/${name}`,
+  })),
 ];
 const lock = readFileSync(join(root, "Cargo.lock"), "utf8");
 const packages: Package[] = lock.split("[[package]]").slice(1).map((entry) => {
@@ -112,7 +127,7 @@ if (args[0] === "--update") {
   const inventory: Attribution[] = [];
   mkdirSync(join(destination, "texts"), { recursive: true });
   const copy = (source: string, names: string[]): Text[] => [...new Set(names)].sort().map((name) => {
-    const bytes = readFileSync(join(source, name));
+    const bytes = licenseInput(join(source, name));
     const digest = sha256(bytes);
     writeFileSync(join(destination, "texts", `${digest}.txt`), bytes);
     return { upstream: name, sha256: digest };
@@ -172,7 +187,7 @@ const projects: Vendored[] = JSON.parse(readFileSync(vendorPath, "utf8"));
 const data: VendoredData[] = JSON.parse(readFileSync(dataPath, "utf8"));
 const components: Component[] = JSON.parse(readFileSync(componentsPath, "utf8"));
 const loadText = (digest: string) => readFileSync(join(destination, "texts", `${digest}.txt`));
-const loadLicense = (path: string) => readFileSync(join(root, path));
+const loadLicense = (path: string) => licenseInput(join(root, path));
 const discoverComponents = () => readdirSync(join(root, "runtime/c"), { withFileTypes: true })
   .filter(entry => entry.isDirectory() && licenceNames(join(root, "runtime/c", entry.name)).length)
   .map(entry => `runtime/c/${entry.name}`);

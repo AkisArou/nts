@@ -17,6 +17,12 @@ serde.workspace = true
 serde_json.workspace = true
 anyhow.workspace = true
 hmac-sha256.workspace = true
+miniz_oxide.workspace = true
+
+[build-dependencies]
+serde_json.workspace = true
+hmac-sha256.workspace = true
+miniz_oxide.workspace = true
 
 [lints]
 workspace = true
