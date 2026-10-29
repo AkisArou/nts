@@ -1,0 +1,57 @@
+{
+  "version": 1,
+  "workspaceClippy": "PASS in canonical systemdEnvironment r4",
+  "canonicalFrontendBackendSuite": {
+    "source": "37e5d4642 plus conflict-message wording",
+    "scope": "C, LLVM, JVM and both frontends; no-fail-fast, nts-dev, NTS_CHECKERS=1",
+    "passed": 840,
+    "failedTargets": [
+      "nts-bench source-contract test double missing opaqueInput export"
+    ],
+    "log": "/home/akisarou/.cache/nts-tmp/helper2-harness-preflight-r4.log"
+  },
+  "touchedCrateRerun": {
+    "scope": "nts-bench including source contract, driver, reference and layout controls after updating the test observer; Clippy and fmt pass",
+    "passed": 40,
+    "failedRustTargets": [],
+    "log": "/home/akisarou/.cache/nts-tmp/helper2-harness-preflight-r5.log"
+  },
+  "binaryCLIControls": {
+    "status": "PASS",
+    "count": 3,
+    "observations": [
+      {
+        "binary": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/nts-dev/nts-bench",
+        "args": [
+          "--help",
+          "--root",
+          "/missing-nts-bench-help-tree"
+        ],
+        "status": 0,
+        "signal": null,
+        "stdout": "Usage: nts-bench [--root <tree>] [case ...]\n       nts-bench [--root <tree>] --render [run.json]\n       nts-bench --help\n\nWith no case names, measures every benchmark case. Explicit case names select\nonly those rows. --render renders a saved run without measuring workloads.\n",
+        "stderr": ""
+      },
+      {
+        "binary": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/nts-dev/nts-bench",
+        "args": [
+          "-h"
+        ],
+        "status": 0,
+        "signal": null,
+        "stdout": "Usage: nts-bench [--root <tree>] [case ...]\n       nts-bench [--root <tree>] --render [run.json]\n       nts-bench --help\n\nWith no case names, measures every benchmark case. Explicit case names select\nonly those rows. --render renders a saved run without measuring workloads.\n",
+        "stderr": ""
+      },
+      {
+        "binary": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/nts-dev/nts-bench",
+        "args": [
+          "--unknown-sentinel-flag"
+        ],
+        "status": 1,
+        "signal": null,
+        "stdout": "",
+        "stderr": "Error: unknown option `--unknown-sentinel-flag`\n"
+      }
+    ]
+  }
+}

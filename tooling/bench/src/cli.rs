@@ -59,7 +59,7 @@ pub(super) fn parse(args: impl IntoIterator<Item = String>) -> Result<Arguments>
 
 fn set_command(selected: &mut Option<Command>, command: Command) -> Result<()> {
     if selected.replace(command).is_some() {
-        bail!("choose one command: --help, --render or measurement");
+        bail!("choose one command: --help, --render, --count or measurement");
     }
     Ok(())
 }

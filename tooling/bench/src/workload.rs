@@ -462,7 +462,13 @@ mod tests {
         // A completion-only test observer; no timing or calibration in a test.
         std::fs::write(
             common.join("bench.mjs"),
-            "export function measure(run) { console.log(run()); }\n",
+            "let reads = 0;\n\
+             export function opaqueInput(value) { reads++; return value; }\n\
+             export function measure(run) {\n\
+               const answer = run();\n\
+               if (reads !== 1) throw new Error('driver did not read its opaque input');\n\
+               console.log(answer);\n\
+             }\n",
         )?;
         let harness = crate::node_harness(case, output, "selected", selected)?;
         let invoke = |argument: Option<&str>| -> Result<std::process::Output> {
