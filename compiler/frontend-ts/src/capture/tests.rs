@@ -73,6 +73,123 @@ fn capture_project_and_diagnostics(
     })
 }
 
+fn tuple_metadata_snapshot(count: u16) -> SemanticSnapshot {
+    let mut options = SessionOptions::new(root());
+    options.checker_count = NonZeroU16::new(count);
+    native::run(options, |session| {
+        let mut spec = ProjectSpec::new(root().join("tuple-metadata.json"));
+        spec.overlays.insert(root().join("tuple-metadata.json"),
+            r#"{"compilerOptions":{"strict":true,"target":"ESNext"},"files":["tuple-metadata.ts"]}"#.into());
+        spec.overlays.insert(
+            root().join("tuple-metadata.ts"),
+            "export type Fixed = [string, number[]];\n\
+             export type Optional = readonly [number, string?];\n\
+             export type Rest = [string, ...number[]];\n\
+             export type Variadic<T extends unknown[]> = [number, ...T, boolean];\n\
+             export type Bound = Variadic<[string, number]>;\n\
+             export type RestSuffix = [...number[], string];\n\
+             export type OptionalRest = [number?, ...string[]];\n\
+             export type OnlyVariadic<T extends unknown[]> = [...T];\n\
+             export type Mapped = Readonly<[number, string?]>;\n\
+             export type Empty = readonly [];\n"
+                .into(),
+        );
+        let checked = session.open(spec).unwrap();
+        let paths: Vec<_> = checked
+            .projects()
+            .flat_map(native::Project::files)
+            .filter(|file| !file.is_default_library() && !file.is_external_library())
+            .map(|file| file.path().to_owned())
+            .collect();
+        let checked = checked.start_diagnostics(native::DiagnosticScope::Files(&paths));
+        let project = checked.projects().next().unwrap();
+        let snapshot = Capture::syntax(
+            root(),
+            project
+                .files()
+                .filter(|file| paths.contains(&file.path().to_owned())),
+            project.semantics(),
+        )
+        .unwrap()
+        .finish()
+        .unwrap();
+        assert_eq!(checked.finish().diagnostics(), []);
+        snapshot
+    })
+}
+
+#[test]
+fn tuple_shapes_keep_the_native_flags_prefix_and_readonly_view() {
+    use nts_semantic_schema::{TupleElementKind::*, TupleType, TypeKind};
+    let mut previous_digest = None;
+    for count in [1, 4] {
+        let snapshot = tuple_metadata_snapshot(count);
+        snapshot.validate().unwrap();
+        let digest = snapshot.digest().unwrap();
+        if let Some(previous) = previous_digest.replace(digest) {
+            assert_eq!(
+                digest, previous,
+                "tuple capture must not depend on checker count"
+            );
+        }
+        assert!(!snapshot.diagnostics.iter().any(|d| d.code == "NTS0003"));
+        let tuples: Vec<&TupleType> = snapshot
+            .types
+            .iter()
+            .filter_map(|record| {
+                if let TypeKind::Tuple(tuple) = &record.kind {
+                    Some(tuple)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        for (flags, fixed_length, readonly) in [
+            (vec![Required, Required], 2, false),
+            (vec![Required, Optional], 2, true),
+            (vec![Required, Rest], 1, false),
+            (vec![Required, Variadic, Required], 1, false),
+            (vec![Required; 4], 4, false),
+            (vec![Rest, Required], 0, false),
+            (vec![Optional, Rest], 1, false),
+            (vec![Variadic], 0, false),
+            (vec![], 0, true),
+        ] {
+            assert!(
+                tuples.iter().any(|tuple| tuple.element_flags == flags
+                    && tuple.fixed_length == fixed_length
+                    && tuple.readonly == readonly),
+                "missing {flags:?}/{fixed_length}/{readonly}: {tuples:?}"
+            );
+        }
+        let fixed = tuples
+            .iter()
+            .find(|tuple| tuple.element_flags == [Required, Required])
+            .unwrap();
+        let rest = tuples
+            .iter()
+            .find(|tuple| tuple.element_flags == [Required, Rest])
+            .unwrap();
+        assert!(
+            matches!(
+                snapshot.types[fixed.elements[1].0 as usize].kind,
+                TypeKind::Array(_)
+            ),
+            "[string, number[]] keeps the array in its second position"
+        );
+        assert_eq!(
+            snapshot.types[rest.elements[1].0 as usize].kind,
+            TypeKind::Number,
+            "[string, ...number[]] records the spread's element type"
+        );
+        let bytes = postcard::to_allocvec(&snapshot).unwrap();
+        let loaded: SemanticSnapshot = postcard::from_bytes(&bytes).unwrap();
+        loaded.validate().unwrap();
+        assert_eq!(loaded.types, snapshot.types);
+        assert_eq!(loaded.digest().unwrap(), snapshot.digest().unwrap());
+    }
+}
+
 #[test]
 fn phase_import_queries_preserve_the_call_and_pristine_diagnostics() {
     let config = root().join("tests/workspace/phase-import-capture/tsconfig.json");

@@ -654,6 +654,7 @@ pub(super) fn declaration(
         .map(|record| &record.kind)
     {
         Some(TypeKind::Tuple(elements)) => elements
+            .elements
             .iter()
             .map(|ty| super::super::native::present_scalar(builder.snapshot, *ty))
             .collect(),

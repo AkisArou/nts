@@ -178,6 +178,7 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
     let TypeKind::Tuple(elements) = &snapshot.types.get(chain.0 as usize)?.kind else {
         return None;
     };
+    let elements = &elements.elements;
     let mut tags: Vec<String> = elements
         .iter()
         .map_while(|element| text(snapshot, *element).map(str::to_owned))
@@ -208,6 +209,7 @@ fn handle(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<Pointee> {
         let TypeKind::Tuple(names) = &snapshot.types.get(pair.0 as usize)?.kind else {
             return None;
         };
+        let names = &names.elements;
         let [retain, release] = names.as_slice() else {
             return None;
         };

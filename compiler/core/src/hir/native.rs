@@ -2515,7 +2515,7 @@ fn callback_slots_within(
     for parameter in &signature.parameters {
         match &snapshot.types.get(parameter.ty.0 as usize)?.kind {
             TypeKind::Tuple(elements) if parameter.rest => {
-                for element in elements {
+                for element in &elements.elements {
                     one(&mut parameters, &mut bridging, *element)?;
                 }
             }

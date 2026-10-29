@@ -235,13 +235,18 @@ impl<'p, 's> Graph<'p, 's> {
                     pending.push((*one, *other));
                 }
                 (TypeKind::Tuple(one), TypeKind::Tuple(other)) => {
-                    pending.extend(one.iter().copied().zip(other.iter().copied()));
+                    pending.extend(
+                        one.elements
+                            .iter()
+                            .copied()
+                            .zip(other.elements.iter().copied()),
+                    );
                 }
                 (TypeKind::Tuple(items), TypeKind::Array(element)) => {
-                    pending.extend(items.iter().map(|item| (*item, *element)));
+                    pending.extend(items.elements.iter().map(|item| (*item, *element)));
                 }
                 (TypeKind::Array(element), TypeKind::Tuple(items)) => {
-                    pending.extend(items.iter().map(|item| (*element, *item)));
+                    pending.extend(items.elements.iter().map(|item| (*element, *item)));
                 }
                 (TypeKind::Object { properties: one }, TypeKind::Object { properties: other }) => {
                     for wanted in other {
@@ -506,7 +511,7 @@ impl<'p, 's> Graph<'p, 's> {
                                     self.transfer(Some(*element), Some(target));
                                 }
                                 TypeKind::Tuple(elements) => {
-                                    for element in elements {
+                                    for element in &elements.elements {
                                         self.transfer(Some(*element), Some(target));
                                     }
                                 }

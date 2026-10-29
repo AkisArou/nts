@@ -290,10 +290,11 @@ pub(super) fn cases(
                 return Ok(None);
             };
             ensure!(
-                positions.len() <= 16_384 - parameters.len(),
+                positions.elements.len() <= 16_384 - parameters.len(),
                 "oracle source parameter expansion exceeds validation budget"
             );
             positions
+                .elements
                 .iter()
                 .enumerate()
                 .map(|(index, ty)| (format!("{}_{index}", parameter.name), *ty))

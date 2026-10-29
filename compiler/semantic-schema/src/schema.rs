@@ -69,7 +69,8 @@ use crate::origin::Origin;
 /// 51: owned source contexts and declaration sites, including external symbols
 /// and selected overloads, for inspection-to-final-capture rebinding.
 /// 52: checker-proved membership in the global value and type binding tables.
-pub const SCHEMA_VERSION: u32 = 52;
+/// 53: tuple element kinds, initial fixed prefix and readonly metadata.
+pub const SCHEMA_VERSION: u32 = 53;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -664,6 +665,33 @@ pub struct TypeRecord {
     pub symbol: Option<SymbolId>,
 }
 
+/// One position in the checker's tuple shape. These are mutually exclusive
+/// kinds, not the checker's bit flags or a promise about a runtime array.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TupleElementKind {
+    Required,
+    Optional,
+    /// The element type of an array spread, as in `...number[]`.
+    Rest,
+    /// An unexpanded tuple/type-parameter spread, as in `...T`.
+    Variadic,
+}
+
+/// Ordered tuple positions and their shape from the same checker reference.
+/// Consumers must consult the kinds before expanding arguments or folding a
+/// length; the number of positions is not a runtime arity.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct TupleType {
+    pub elements: Vec<TypeId>,
+    pub element_flags: Vec<TupleElementKind>,
+    /// Required/optional prefix before the first Rest/Variadic position.
+    /// Required suffixes after a spread are allowed and do not extend it.
+    /// This is neither minimum length nor runtime arity.
+    pub fixed_length: u32,
+    /// The checker's readonly view, not proof that no writable alias exists.
+    pub readonly: bool,
+}
+
 /// The closed set of type shapes the compiler understands.
 ///
 /// Reachable behavior either lowers statically or produces a precise
@@ -712,7 +740,7 @@ pub enum TypeKind {
         properties: Vec<PropertyRecord>,
     },
     Array(TypeId),
-    Tuple(Vec<TypeId>),
+    Tuple(TupleType),
     Union(Vec<TypeId>),
     Intersection(Vec<TypeId>),
     Function(SignatureId),
@@ -1385,10 +1413,38 @@ impl SemanticSnapshot {
             }
         }
 
-        for record in &self.types {
+        for (index, record) in self.types.iter().enumerate() {
             if let TypeKind::Object { properties } = &record.kind {
                 for property in properties {
                     self.check_key(&property.name)?;
+                }
+            }
+            if let TypeKind::Tuple(tuple) = &record.kind {
+                if tuple.elements.len() != tuple.element_flags.len() {
+                    return Err(SnapshotError::Project(format!(
+                        "tuple #{index} has {} element types but {} element kinds",
+                        tuple.elements.len(),
+                        tuple.element_flags.len()
+                    )));
+                }
+                let prefix = tuple
+                    .element_flags
+                    .iter()
+                    .take_while(|kind| {
+                        matches!(
+                            kind,
+                            TupleElementKind::Required | TupleElementKind::Optional
+                        )
+                    })
+                    .count();
+                if tuple.fixed_length as usize != prefix {
+                    return Err(SnapshotError::Project(format!(
+                        "tuple #{index} has fixed prefix {} but its element kinds describe {prefix}",
+                        tuple.fixed_length
+                    )));
+                }
+                for &TypeId(element) in &tuple.elements {
+                    check(element, "tuple element type", self.types.len())?;
                 }
             }
         }
@@ -1566,6 +1622,113 @@ mod tests {
 
     use super::*;
     use nts_diagnostics::{Location, SourceId, Span};
+
+    fn tuple_snapshot(shape: TupleType) -> SemanticSnapshot {
+        let mut value = snapshot(Vec::new());
+        value.types = vec![
+            TypeRecord {
+                kind: TypeKind::Number,
+                symbol: None,
+            },
+            TypeRecord {
+                kind: TypeKind::Tuple(shape),
+                symbol: None,
+            },
+        ];
+        value
+    }
+
+    #[test]
+    fn tuple_metadata_survives_serialization_and_changes_the_digest() {
+        use TupleElementKind::{Optional, Required, Rest, Variadic};
+        let shapes = [
+            (vec![], 0, true),
+            (vec![Required, Required], 2, false),
+            (vec![Required, Optional], 2, true),
+            (vec![Required, Rest, Required], 1, false),
+            (vec![Rest, Required], 0, false),
+            (vec![Required, Variadic, Required], 1, false),
+        ];
+        for (element_flags, fixed_length, readonly) in shapes {
+            let value = tuple_snapshot(TupleType {
+                elements: vec![TypeId(0); element_flags.len()],
+                element_flags,
+                fixed_length,
+                readonly,
+            });
+            value.validate().unwrap();
+            let bytes = postcard::to_allocvec(&value).unwrap();
+            let loaded: SemanticSnapshot = postcard::from_bytes(&bytes).unwrap();
+            loaded.validate().unwrap();
+            assert_eq!(loaded.types, value.types);
+            assert_eq!(loaded.digest().unwrap(), value.digest().unwrap());
+            let mut changed = loaded;
+            let TypeKind::Tuple(tuple) = &mut changed.types[1].kind else {
+                unreachable!()
+            };
+            tuple.readonly = !tuple.readonly;
+            assert_ne!(changed.digest().unwrap(), value.digest().unwrap());
+        }
+        let mut value = tuple_snapshot(TupleType {
+            elements: vec![TypeId(0); 2],
+            element_flags: vec![Required, Optional],
+            fixed_length: 2,
+            readonly: false,
+        });
+        let before = value.digest().unwrap();
+        let TypeKind::Tuple(tuple) = &mut value.types[1].kind else {
+            unreachable!()
+        };
+        tuple.element_flags[1] = Rest;
+        tuple.fixed_length = 1;
+        value.validate().unwrap();
+        assert_ne!(before, value.digest().unwrap());
+    }
+
+    #[test]
+    fn malformed_tuple_shapes_are_rejected_at_the_boundary() {
+        use TupleElementKind::{Required, Rest};
+        let shape = TupleType {
+            elements: vec![TypeId(0); 3],
+            element_flags: vec![Required, Rest, Required],
+            fixed_length: 1,
+            readonly: false,
+        };
+        let mut mismatch = shape.clone();
+        mismatch.element_flags.pop();
+        assert!(
+            tuple_snapshot(mismatch)
+                .validate()
+                .unwrap_err()
+                .to_string()
+                .contains("3 element types but 2 element kinds")
+        );
+        for fixed_length in [0, 2, 3, u32::MAX] {
+            let mut mismatch = shape.clone();
+            mismatch.fixed_length = fixed_length;
+            assert!(
+                tuple_snapshot(mismatch)
+                    .validate()
+                    .unwrap_err()
+                    .to_string()
+                    .contains("fixed prefix")
+            );
+        }
+        let mut dangling = shape;
+        dangling.elements[2] = TypeId(99);
+        assert!(matches!(
+            tuple_snapshot(dangling).validate(),
+            Err(SnapshotError::DanglingId {
+                what: "tuple element type",
+                id: 99,
+                ..
+            })
+        ));
+        assert!(
+            postcard::from_bytes::<TupleElementKind>(&[4]).is_err(),
+            "unknown element kinds cannot deserialize"
+        );
+    }
 
     #[test]
     fn checker_strictness_options_are_serialized_and_hashed_independently() {

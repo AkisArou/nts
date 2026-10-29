@@ -13340,6 +13340,7 @@ fn signals_of_type(
                 signal.name
             ));
         };
+        let elements = &elements.elements;
         let mut kinds = String::new();
         for element in elements {
             let is_boolean = match kind(*element) {
@@ -21343,7 +21344,7 @@ fn representation_of(
         // A heterogeneous tuple is a struct with positional fields, which is a
         // different thing: it needs a layout rather than an element type, and
         // it is refused rather than approximated by the widest member.
-        TypeKind::Tuple(elements) => tuple_representation(snapshot, ty, elements, path, subst)?,
+        TypeKind::Tuple(tuple) => tuple_representation(snapshot, ty, &tuple.elements, path, subst)?,
 
         TypeKind::Union(members) => union_representation(snapshot, members, path, subst)?,
 
@@ -25321,8 +25322,8 @@ impl<'a> FuncBuilder<'a> {
             .get(answer.0 as usize)
             .map(|record| &record.kind)
         {
-            Some(TypeKind::Tuple(elements)) if outs.len() > 1 || elements.len() == 2 => {
-                elements.clone()
+            Some(TypeKind::Tuple(tuple)) if outs.len() > 1 || tuple.elements.len() == 2 => {
+                tuple.elements.clone()
             }
             _ => vec![answer],
         };
@@ -33620,7 +33621,7 @@ impl<'a> FuncBuilder<'a> {
                     "a bound function whose remaining parameters end in a rest",
                 ));
             };
-            for (at, element) in elements.iter().enumerate() {
+            for (at, element) in elements.elements.iter().enumerate() {
                 remaining.push((format!("{}{at}", parameter.name), *element));
             }
         }
@@ -36268,7 +36269,7 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Tuple(positions) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
             return None;
         };
-        Some(positions.clone())
+        Some(positions.elements.clone())
     }
 
     /// The parameters as the callee declares them, before any expansion.
@@ -36931,7 +36932,7 @@ impl<'a> FuncBuilder<'a> {
         for arm in &arms {
             let arm = self.snapshot.types.get(arm.0 as usize)?;
             let positions = match &arm.kind {
-                TypeKind::Tuple(positions) => positions.clone(),
+                TypeKind::Tuple(tuple) => tuple.elements.clone(),
                 TypeKind::Array(of) => vec![*of],
                 #[expect(
                     clippy::match_same_arms,
@@ -37573,7 +37574,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
         {
             Some(record) => match &record.kind {
-                TypeKind::Tuple(elements) => elements.clone(),
+                TypeKind::Tuple(tuple) => tuple.elements.clone(),
                 #[expect(
                     clippy::match_same_arms,
                     reason = "keep audited semantic type variants explicit"
@@ -47322,6 +47323,7 @@ impl<'a> FuncBuilder<'a> {
             // of unions printed 240 characters, three of them the same
             // `a union of a boolean literal | undefined` -- which tells a reader
             // less than the shape does, because the repetition hides the arity.
+            let positions = &positions.elements;
             let mut shown: Vec<String> = positions
                 .iter()
                 .take(6)
@@ -55659,24 +55661,13 @@ impl<'a> FuncBuilder<'a> {
         // `const pair: [string, number]` refused on `pair.length` all along,
         // measured on the binary before that fix. So this is a hole the other
         // change uncovered rather than one it made.
-        // **Correct today because of a check in another function, which is
-        // written down here rather than relied on.** A *variadic* tuple is
-        // indistinguishable from a fixed one in the snapshot: `nts types` shows
-        //
-        //     [string, ...number[]]   Tuple([String, Number])
-        //     [string, number]        Tuple([String, Number])
-        //
-        // -- the rest is flattened to its element type and the `...` is gone, so
-        // `fixed_arity_positions` answers 2 for both and nothing here can tell
-        // them apart. The fold is nevertheless right for every variadic tuple that
-        // *lowers*, because a tuple literal whose element count differs from the
-        // type's position count is refused (`a tuple literal of 4 element(s) where
-        // the type has 2`), which leaves only the one length the fold would give.
-        //
-        // So this is sound on a precondition owned elsewhere, and the day a
-        // variadic tuple lowers it becomes a wrong answer in a commit about
-        // something else. What it needs then is the rest marker in the schema,
-        // which is a `SCHEMA_VERSION` change and the frontend's half.
+        // This fold relies on the flat tuple representation and its admission
+        // checks, including refusal of a literal whose element count differs
+        // from the layout's position count. Snapshot element kinds and readonly
+        // do not certify runtime extent or exclude a writable alias. Carrying
+        // those facts must not loosen these checks or authorize a new fold.
+        // A variable-extent tuple needs its runtime extent represented before
+        // that admission can change.
         // `outcomes/a-variadic-tuple-rest-expanded-as-fixed-arity` records the
         // same missing fact from the other side, where it already costs a program:
         // the rest is expanded as that many parameters and every call of a
@@ -57157,7 +57148,7 @@ impl<'a> FuncBuilder<'a> {
         // element type and a length the compiler does not fix, and a tuple has
         // neither.
         if let TypeKind::Tuple(elements) = &record.kind {
-            let elements = elements.clone();
+            let elements = elements.elements.clone();
             return self.tuple_layout(id, ty, &elements);
         }
         // A class this compiler provides rather than decomposes. It never
@@ -60112,6 +60103,7 @@ impl<'a> FuncBuilder<'a> {
             let TypeKind::Tuple(positions) = &self.snapshot.types.get(arm.0 as usize)?.kind else {
                 return None;
             };
+            let positions = &positions.elements;
             let Some(position) = positions.get(at) else {
                 continue;
             };
@@ -66582,7 +66574,7 @@ impl<'a> FuncBuilder<'a> {
             && let Some(tuple) = self.snapshot.node_types.get(&target)
             && matches!(
                 self.snapshot.types.get(tuple.0 as usize).map(|record| &record.kind),
-                Some(TypeKind::Tuple(elements)) if elements.is_empty()
+                Some(TypeKind::Tuple(tuple)) if tuple.elements.is_empty()
             )
             && let Some(empty @ HirType::Managed(ManagedType::Array(_))) = self.type_of(target)
         {
@@ -71988,7 +71980,7 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
             .map(|record| &record.kind)
         {
-            Some(TypeKind::Tuple(elements)) if kinds.is_some() => elements.clone(),
+            Some(TypeKind::Tuple(tuple)) if kinds.is_some() => tuple.elements.clone(),
             _ if kinds.is_none() && rest_ty.is_none() => {
                 with_this.parameters.iter().skip(1).map(|p| p.ty).collect()
             }
@@ -81306,7 +81298,7 @@ impl<'a> FuncBuilder<'a> {
         };
         let elements: Vec<TypeId> = match kind(array) {
             Some(TypeKind::Array(element)) => vec![*element],
-            Some(TypeKind::Tuple(elements)) => elements.clone(),
+            Some(TypeKind::Tuple(tuple)) => tuple.elements.clone(),
             _ => return false,
         };
         elements.into_iter().any(|element| match kind(element) {
@@ -81952,8 +81944,8 @@ impl<'a> FuncBuilder<'a> {
             return [element, None];
         }
         match element.and_then(kind) {
-            Some(TypeKind::Tuple(halves)) if halves.len() == 2 => {
-                [Some(halves[0]), Some(halves[1])]
+            Some(TypeKind::Tuple(tuple)) if tuple.elements.len() == 2 => {
+                [Some(tuple.elements[0]), Some(tuple.elements[1])]
             }
             _ => [None, None],
         }

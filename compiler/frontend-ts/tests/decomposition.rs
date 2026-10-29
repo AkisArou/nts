@@ -170,9 +170,10 @@ fn every_shape_something_references_is_opened() {
             TypeKind::Array(element) => {
                 referenced.insert(element.0);
             }
-            TypeKind::Union(members)
-            | TypeKind::Intersection(members)
-            | TypeKind::Tuple(members) => {
+            TypeKind::Tuple(tuple) => {
+                referenced.extend(tuple.elements.iter().map(|member| member.0));
+            }
+            TypeKind::Union(members) | TypeKind::Intersection(members) => {
                 referenced.extend(members.iter().map(|member| member.0));
             }
             _ => {}

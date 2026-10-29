@@ -711,7 +711,12 @@ mod tests {
         assert_eq!(found.at_call, before);
         for kind in [
             TypeKind::Number,
-            TypeKind::Tuple(vec![TypeId(0)]),
+            TypeKind::Tuple(nts_semantic_schema::TupleType {
+                elements: vec![TypeId(0)],
+                element_flags: vec![nts_semantic_schema::TupleElementKind::Required],
+                fixed_length: 1,
+                readonly: false,
+            }),
             TypeKind::Union(vec![TypeId(4), TypeId(8)]),
         ] {
             let (mut snapshot, found, body, calls) = fixture();

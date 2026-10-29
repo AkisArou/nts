@@ -46,7 +46,8 @@ fn unrequested(snapshot: &SemanticSnapshot) -> Vec<TypeId> {
                 }
             }
             TypeKind::Array(element) => work.push(*element),
-            TypeKind::Tuple(parts) | TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
+            TypeKind::Tuple(tuple) => work.extend(tuple.elements.iter().copied()),
+            TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
                 work.extend(parts.iter().copied());
             }
             TypeKind::Function(signature) => signature_types(snapshot, *signature, &mut work),
@@ -153,7 +154,15 @@ fn incoming_edges(snapshot: &SemanticSnapshot, target: TypeId) -> Vec<String> {
                 }
             }
             TypeKind::Array(id) => edge(*id, "array element".into()),
-            TypeKind::Tuple(parts) | TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
+            TypeKind::Tuple(tuple) => {
+                for (part, &id) in tuple.elements.iter().enumerate() {
+                    edge(
+                        id,
+                        format!("tuple position {part} ({:?})", tuple.element_flags[part]),
+                    );
+                }
+            }
+            TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
                 for (part, &id) in parts.iter().enumerate() {
                     edge(id, format!("constituent {part}"));
                 }

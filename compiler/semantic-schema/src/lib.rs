@@ -47,6 +47,6 @@ pub use schema::{
     ModuleRecord, NativeAttributes, NodeData, NodeId, NodeKind, NodeRecord, ParameterRecord,
     ProjectSemantics, PropertyKey, PropertyRecord, SCHEMA_VERSION, SemanticSnapshot, SignatureId,
     SignatureRecord, SnapshotError, StrictOptionSource, SymbolFlags, SymbolId, SymbolRecord,
-    TypeId, TypeKind, TypePredicate, TypeRecord, VariableKind,
+    TupleElementKind, TupleType, TypeId, TypeKind, TypePredicate, TypeRecord, VariableKind,
 };
 pub use text::JsText;

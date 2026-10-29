@@ -1020,9 +1020,9 @@ fn unify(
     // `S` from position 0 and silently ignore the rest, which is the same wrong
     // binding the instantiation-arguments arm below refuses for the same reason.
     if let (TypeKind::Tuple(ours), TypeKind::Tuple(theirs)) = (&generic.kind, &actual.kind)
-        && ours.len() == theirs.len()
+        && ours.elements.len() == theirs.elements.len()
     {
-        let (ours, theirs) = (ours.clone(), theirs.clone());
+        let (ours, theirs) = (ours.elements.clone(), theirs.elements.clone());
         for (ours, theirs) in ours.iter().zip(&theirs) {
             unify(snapshot, *ours, *theirs, into, sources, deferred, depth + 1);
         }
@@ -1384,7 +1384,7 @@ fn suffix_of(
                         .map(|record| &record.kind)
                     {
                         Some(TypeKind::Tuple(positions)) => {
-                            format!("{spelled}x{}", positions.len())
+                            format!("{spelled}x{}", positions.elements.len())
                         }
                         _ => spelled,
                     }

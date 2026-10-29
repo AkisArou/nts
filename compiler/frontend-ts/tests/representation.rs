@@ -10,7 +10,9 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_frontend_ts::Frontend;
-use nts_semantic_schema::{PropertyRecord, SemanticSnapshot, TypeKind};
+use nts_semantic_schema::{
+    PropertyRecord, SemanticSnapshot, TupleElementKind, TupleType, TypeKind,
+};
 
 fn snapshot() -> SemanticSnapshot {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -112,7 +114,7 @@ fn a_tuple_keeps_its_element_types_and_arity() {
     // A tuple is an object type *and* array-like, so it has to be separated
     // before either path. Treated as an array it loses its arity, which is the
     // property that lets it be laid out flat.
-    let tuples: Vec<&Vec<nts_semantic_schema::TypeId>> = snapshot
+    let tuples: Vec<&TupleType> = snapshot
         .types
         .iter()
         .filter_map(|record| match &record.kind {
@@ -121,9 +123,17 @@ fn a_tuple_keeps_its_element_types_and_arity() {
         })
         .collect();
     assert!(!tuples.is_empty(), "`[number, string]` should decompose");
-    assert!(tuples.iter().all(|t| t.len() == 2), "both are pairs");
+    assert!(
+        tuples.iter().all(|t| t.elements.len() == 2),
+        "both are pairs"
+    );
+    assert!(
+        tuples
+            .iter()
+            .all(|t| t.fixed_length == 2 && t.element_flags == [TupleElementKind::Required; 2])
+    );
 
-    let first = &snapshot.types[tuples[0][0].0 as usize].kind;
+    let first = &snapshot.types[tuples[0].elements[0].0 as usize].kind;
     assert_eq!(first, &TypeKind::Number);
 }
 

@@ -664,7 +664,10 @@ fn substitute_kind(site: &mut impl Site, ty: TypeId, sigma: &Sigma, depth: u32) 
             properties: substitute_properties(site, properties, sigma, depth + 1)?,
         },
         TypeKind::Array(element) => TypeKind::Array(substitute(site, *element, sigma, depth + 1)?),
-        TypeKind::Tuple(items) => TypeKind::Tuple(substitute_all(site, items, sigma, depth + 1)?),
+        TypeKind::Tuple(tuple) => TypeKind::Tuple(nts_semantic_schema::TupleType {
+            elements: substitute_all(site, &tuple.elements, sigma, depth + 1)?,
+            ..tuple.clone()
+        }),
         TypeKind::Union(items) => TypeKind::Union(substitute_all(site, items, sigma, depth + 1)?),
         TypeKind::Intersection(items) => {
             TypeKind::Intersection(substitute_all(site, items, sigma, depth + 1)?)
@@ -742,7 +745,7 @@ impl From<&TypeKind> for CompositeBucket {
     fn from(kind: &TypeKind) -> Self {
         match kind {
             TypeKind::Array(element) => Self::Array(*element),
-            TypeKind::Tuple(items) => Self::Tuple(items.clone()),
+            TypeKind::Tuple(tuple) => Self::Tuple(tuple.elements.clone()),
             TypeKind::Intersection(items) => Self::Intersection(items.clone()),
             TypeKind::Object { properties } => {
                 Self::Object(properties.iter().map(|prop| prop.ty).collect())
@@ -1365,9 +1368,10 @@ fn parameters_in(snapshot: &SemanticSnapshot, ty: TypeId, into: &mut Vec<TypeId>
                 }
             }
             Some(TypeKind::Array(element)) => pending.push(*element),
-            Some(
-                TypeKind::Tuple(items) | TypeKind::Union(items) | TypeKind::Intersection(items),
-            ) => {
+            Some(TypeKind::Tuple(tuple)) => {
+                pending.extend(tuple.elements.iter().rev().copied());
+            }
+            Some(TypeKind::Union(items) | TypeKind::Intersection(items)) => {
                 pending.extend(items.iter().rev().copied());
             }
             Some(TypeKind::Function(signature)) => {
@@ -1479,7 +1483,12 @@ mod tests {
             deep = TypeId(u32::try_from(kinds.len() - 1).expect("small graph"));
         }
         let root = TypeId(u32::try_from(kinds.len()).expect("small graph"));
-        kinds.push(TypeKind::Tuple(vec![TypeId(0), deep]));
+        kinds.push(TypeKind::Tuple(nts_semantic_schema::TupleType {
+            elements: vec![TypeId(0), deep],
+            element_flags: vec![nts_semantic_schema::TupleElementKind::Required; 2],
+            fixed_length: 2,
+            readonly: false,
+        }));
         let mut graph = snapshot(kinds);
         let owners = FxHashMap::from_iter([
             (TypeId(0), Owner::Function(NodeId(10))),
@@ -1896,6 +1905,45 @@ mod tests {
     }
 
     #[test]
+    fn tuple_substitution_keeps_kinds_fixed_prefix_and_readonly_identity() {
+        use nts_semantic_schema::{
+            TupleElementKind::{Required, Rest},
+            TupleType,
+        };
+        let shape = |elements, element_flags, fixed_length, readonly| {
+            TypeKind::Tuple(TupleType {
+                elements,
+                element_flags,
+                fixed_length,
+                readonly,
+            })
+        };
+        let snapshot = snapshot(vec![
+            TypeKind::TypeParameter {
+                name: "T".into(),
+                constraint: None,
+                is_this: false,
+            },
+            TypeKind::Number,
+            TypeKind::String,
+            shape(vec![TypeId(0), TypeId(1)], vec![Required, Rest], 1, true),
+            shape(vec![TypeId(2), TypeId(1)], vec![Required; 2], 2, true),
+            shape(vec![TypeId(2), TypeId(1)], vec![Required, Rest], 1, false),
+            shape(vec![TypeId(2), TypeId(1)], vec![Required, Rest], 1, true),
+        ]);
+        let templates = Templates::new(&snapshot);
+        let sigma = Sigma::from([(TypeId(0), TypeId(2))]);
+        assert_eq!(templates.resolve(TypeId(3), &sigma), Some(TypeId(6)));
+        let TypeKind::Tuple(tuple) = &snapshot.types[6].kind else {
+            unreachable!()
+        };
+        assert_eq!(tuple.elements, [TypeId(2), TypeId(1)]);
+        assert_eq!(tuple.element_flags, [Required, Rest]);
+        assert_eq!(tuple.fixed_length, 1);
+        assert!(tuple.readonly);
+    }
+
+    #[test]
     fn root_resolution_cache_is_separate_for_each_sigma() {
         let snapshot = snapshot(vec![
             TypeKind::TypeParameter {
@@ -1931,7 +1979,12 @@ mod tests {
             parameter("ClassT"),
             TypeKind::Number,
             TypeKind::Union(vec![TypeId(0), TypeId(3)]),
-            TypeKind::Tuple(vec![TypeId(0), TypeId(1)]),
+            TypeKind::Tuple(nts_semantic_schema::TupleType {
+                elements: vec![TypeId(0), TypeId(1)],
+                element_flags: vec![nts_semantic_schema::TupleElementKind::Required; 2],
+                fixed_length: 2,
+                readonly: false,
+            }),
             TypeKind::Function(SignatureId(0)),
             TypeKind::Array(TypeId(1)), // Not mentioned by any recorded call.
         ]);

@@ -226,7 +226,7 @@ fn reaches_owner(probe: &FuncBuilder, supplies: &Supplies, effect: &Effect, owne
             }
             TypeKind::Array(element) if effect.nested => pending.push((*element, false)),
             TypeKind::Tuple(elements) if effect.nested => {
-                pending.extend(elements.iter().map(|ty| (*ty, false)));
+                pending.extend(elements.elements.iter().map(|ty| (*ty, false)));
             }
             // A function is also an object. Its signature says nothing about
             // references stored in expando properties that an opaque call can

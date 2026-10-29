@@ -3,11 +3,11 @@
 use nts_frontend_tsrs::{self as native, Type};
 use nts_semantic_schema::{
     Accessor, IndexSignature, MemberKind, NodeKind, PropertyRecord, SignatureId, SnapshotError,
-    SymbolFlags, TypeId, TypeKind, syntax,
+    SymbolFlags, TupleElementKind, TupleType, TypeId, TypeKind, syntax,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Capture, symbols::required_text};
+use super::{Capture, arena_index, symbols::required_text};
 
 #[cfg(test)]
 #[path = "graph_test.rs"]
@@ -174,7 +174,8 @@ impl<'p> Capture<'p, '_> {
                 dependencies.extend(self.snapshot.type_arguments.get(&id).into_iter().flatten());
             }
             TypeKind::Array(element) => dependencies.push(element),
-            TypeKind::Tuple(parts) | TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
+            TypeKind::Tuple(tuple) => dependencies.extend(&tuple.elements),
+            TypeKind::Union(parts) | TypeKind::Intersection(parts) => {
                 dependencies.extend(parts);
             }
             TypeKind::Object { properties } => {
@@ -306,8 +307,22 @@ impl<'p> Capture<'p, '_> {
         ty: Type<'p>,
         work: &mut Vec<TypeId>,
     ) -> Result<TypeKind, SnapshotError> {
-        if let Some(elements) = ty.tuple_elements() {
-            return Ok(TypeKind::Tuple(self.reached_types(elements, work)?));
+        if let Some(tuple) = ty.tuple() {
+            return Ok(TypeKind::Tuple(TupleType {
+                elements: self.reached_types(tuple.elements, work)?,
+                element_flags: tuple
+                    .element_flags
+                    .into_iter()
+                    .map(|kind| match kind {
+                        native::TupleElementKind::Required => TupleElementKind::Required,
+                        native::TupleElementKind::Optional => TupleElementKind::Optional,
+                        native::TupleElementKind::Rest => TupleElementKind::Rest,
+                        native::TupleElementKind::Variadic => TupleElementKind::Variadic,
+                    })
+                    .collect(),
+                fixed_length: arena_index(tuple.fixed_length)?,
+                readonly: tuple.readonly,
+            }));
         }
         let arguments = self.record_arguments(id, ty, work)?;
         if ty.is_array() {
