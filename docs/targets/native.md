@@ -279,7 +279,9 @@ nts bind-c --module c:epoll --header sys/epoll.h \
 - It binds the items it is named, and generates signatures only, never
   ownership. Binding whole headers, with an overrides file, is decided for
   after ResourceFlow ([Decisions](#decisions)).
-  The flags are in the [CLI reference](../reference/cli.md#nts-bind-c).
+  The flags are in the [CLI reference](../reference/cli.md#nts-bind-c), and
+  the binder's design, C's number types included, is
+  [C headers](c-headers.md).
 
 ## C calling TypeScript
 

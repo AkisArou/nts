@@ -766,6 +766,25 @@ From the open-questions audit; each is the register's recommendation.
 
 ## Compiler (10-29)
 
+- **C's number types are aliases where C's type is the same everywhere.**
+  The user asked whether nts's scalars and C's types could be
+  interchangeable, sketching one `Scalar<number, "label">` per kind, and
+  agreed to the coordinator's recommendation:
+  - a C type whose width and signedness are the same on every target nts
+    builds for is an alias of the fixed-width kind (`c_int = Int32`,
+    `c_short = Int16`, `c_longlong = BigInt64`, `c_double = Float64` and the
+    rest), so the two mix in arrays, function types and overrides;
+  - a C type that depends on the target (`char`, `long`, the pointer-wide
+    integers, `wchar_t`) is a kind of its own;
+  - each fixed width keeps an optional label of its own. TypeScript 7.0.2
+    rejects a `Uint8` where a `Uint16` is written when the kinds share one
+    label with a value per kind, and accepts it with separate labels;
+  - a binding keeps the C type it was written with, for the witness and the
+    emitted C.
+  The missing names are built first. The page is
+  [C headers](../../targets/c-headers.md#cs-number-types); the scalar table
+  in `language/numbers.md` follows it.
+
 - **Delegated decisions, late 10-29.** The user handed the coordinator the
   open questions of the evening: "take the best decisions you think we
   should make for all those issues you have mentioned". The coordinator
