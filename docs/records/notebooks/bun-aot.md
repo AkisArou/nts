@@ -31,14 +31,14 @@ All source links below use full commit IDs and file line ranges. `B:` paths are 
 
 | Source | Revision read | What it establishes |
 |---|---|---|
-| nts | `b698106e055c5a612408860a4a562e031d2c3782` | The requested language and foundation documents, distinguishing current behavior from decisions not yet built. |
+| nts | `01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5` | The language and foundation documents, plus the integral-arithmetic design note; current behavior is distinguished from decisions not yet built. |
 | Bun frontend, documentation and tests | `8d5672c5529049f1a9a3453d07e6cd6a1564abc7` | The merge of PR #45631, dated 2026-10-27; its commit message preserves the PR description used here. |
 | Requested WebKit AOT branch | `c3131ea84f7eaad531619e3842bb30c48df18ab1` | The compiler/runtime source on `claude/compile-aot` when read, dated 2026-10-29. |
 | WebKit build selected by that Bun merge | `286c20834be3cb8855f6095fb1a1a8ed7db6ec1e` | Provenance only: Bun's build selects `autobuild-preview-pr-914-286c2083`, which resolves to this commit. |
 
 **Revision boundary:** the requested WebKit branch is later than the engine selected by the Bun merge. This is a study of those explicitly pinned source snapshots, not a claim that the two source trees were built together or that every branch feature shipped on October 27. The build selection is visible in [B: scripts/build/deps/webkit.ts:1–6][source-001]. The PR's frozen description is the [merge commit message][source-002].
 
-**Two source corrections.** The requested `docs/bundler/aot.mdx` is absent at the merge revision; the document is [docs/compiler/aot.mdx][source-003]. The additional [docs/compiler/internals.mdx][source-004] supplied in the conversation was read and used as the source map. The requested nts `docs/records/notebooks/integral-arithmetic-regions.md` is absent at the pinned revision, and the repository's history query for that exact path returned no commits. Its contents are therefore **not claimed as reviewed**. Section 3 compares against the published numeric proof contract and the handoff's description of the work in progress; it does not invent details of the missing note.
+**Source paths and design status.** The requested `docs/bundler/aot.mdx` is absent at the Bun merge revision; the document is [docs/compiler/aot.mdx][source-003]. The additional [docs/compiler/internals.mdx][source-004] supplied in the conversation was read and used as the source map. The nts [integral-arithmetic-regions.md design note][source-196] was read at the nts revision above. It describes proposed work that depends on the parameter-arrival correction actually landing; its artifact experiments do not establish that the production compiler implements the design.
 
 No speed or memory experiments were run. The early 24% startup, 48% memory, 46% CPU and nearly 2x size figures are retained only as **unverified preview claims supplied in the handoff**. Neither source inspection nor a later result on another workload can validate those percentages or apportion their causes.
 
@@ -77,7 +77,7 @@ The frontend stage order is [B: compile.rs:1350–1450][source-005]; the bridge 
 
 **Author report + docs.** The frozen PR reports continuing fuzzer-discovered miscompilations, and the test documentation retains known wrong-output cases as TODOs. These are implemented checking and fallback mechanisms in an experimental compiler, not a guarantee for every accepted program ([merge description][source-002]; [B: test/aot/README.md:139–153][source-194]).
 
-**nts today [docs].** nts deliberately checks erased primitive/class casts. A mismatch is TypeError where exception transport currently permits it; elsewhere it is a named stop pending the decided fix. Erased interface casts instead require provable field access or refusal. Its every-writer collection rule is decided but not fully built. [nts docs/language/types.md:82–108][source-032]; [nts docs/language/types.md:193–204][source-033].
+**nts today [docs].** nts deliberately checks erased primitive/class casts. A mismatch is TypeError where exception transport currently permits it; elsewhere it is a named stop pending the decided fix. Erased interface casts instead require provable field access or refusal. Its full every-writer collection policy is decided but not fully built. The newer Decisions section also names a current defect: erased literal/enum value tests are unbuilt, and main still treats declared literal types as facts. The rule forbidding that trust is the required contract, not a claim that this defect is already fixed. [nts docs/language/types.md:82–110][source-032]; [nts docs/language/types.md:195–217][source-033].
 
 **Take it? [Recommendation] Yes: explicit proof provenance and independently checked backend claims address nts's core correctness risks; retain nts's chosen cast semantics and never substitute TypeScript assignability for runtime proof.**
 
@@ -93,7 +93,7 @@ The frontend stage order is [B: compile.rs:1350–1450][source-005]; the bridge 
 
 **[Inference] A JIT can still make a better profitability choice.** A static estimate cannot know which branch a deployment repeatedly takes or which member of a large possible-value set predominates. Bun's AOT must establish a stronger fact, carry tested alternatives or use generic operations. For nts, such a loss should identify the missing fact and motivate proof from all callers/writers or an existing language operation. Repeated tests need demonstrated payoff of their own.
 
-**nts today [docs].** nts already propagates numeric facts through operations, guards, stores and call sites, and can use one guarded integer clone at an external entry. Its proposed common memory analysis follows allocation sites and aliases, supplies every-writer content summaries, and records effects of callbacks, exceptions and suspension. That analysis is decided, not built; unknown writers must make its content facts unknown. [nts docs/foundations/numbers.md:24–77][source-045]; [nts docs/foundations/memory.md:3–5][source-046]; [nts docs/foundations/memory.md:156–192][source-047].
+**nts today [docs].** nts already propagates numeric facts through operations, guards, stores and call sites, and can use one guarded integer clone at an external entry. Its proposed common memory analysis follows allocation sites and aliases, supplies every-writer content summaries, and records effects of callbacks, exceptions and suspension. That unified analysis is decided, not built; unknown writers must make its content facts unknown. The integral-region note reuses existing flow and container-closure authorities; having those APIs is distinct from completing every consumer and the full collection representation policy. [nts docs/foundations/numbers.md:24–77][source-045]; [nts docs/foundations/memory.md:3–5][source-046]; [nts docs/foundations/memory.md:156–192][source-047].
 
 **Take it? [Recommendation] Yes: shared value/effect analysis and explicit proof lifetimes; later: larger generic continuations where a measured workload justifies their binary size and complexity.**
 
@@ -112,6 +112,18 @@ The frontend stage order is [B: compile.rs:1350–1450][source-005]; the bridge 
 **[Code] Minus zero is preserved explicitly.** The rules retain its possibility for negative-times-zero, negation of zero and negative remainders. The generic integer test compares the bits after conversion back to double, rejecting −0 despite its ordinary equality with +0. Remainder emission supplies −0 when a negative dividend has zero remainder, and NaN for a zero divisor. [ir/AOTResultRulesNatural.cpp:86–113][source-064]; [ir/AOTResultRulesNatural.cpp:193–204][source-065]; [codegen/AOTTypeTestEmitter.cpp:572–604][source-066]; [codegen/AOTOperatorEmitterArithmetic.cpp:289–336][source-067].
 
 **nts today [docs].** nts's numeric contract requires integrality, range, exclusion of NaN and preservation of observable −0. Existing analyses propagate facts through operations, guards, stores and call sites, but the docs acknowledge missing writes through wider aliases; complete every-writer collection summaries remain part of the unbuilt fix. Its designed truncated sums require proved int32 operands; numbers.md records that repeated per-addend integer tests were measured and rejected because their payoff depended on a dependency-chain condition the compiler could not establish. Bun's speculative integer arms should therefore not replace the proof-based integral-region direction. [nts docs/foundations/numbers.md:24–90][source-068].
+
+### Direct comparison with nts's integral-arithmetic design
+
+**[Docs; design, not shipped] The newer nts note proposes a shared producer of numeric certificates and consumers for exact arithmetic regions.** A certificate records the proof licensing a particular transformation. Implementation explicitly waits for the parameter-arrival correction to land; the reported experiments changed emitted artifacts, not production compiler code. C, LLVM and JVM must consume the same admitted arithmetic. [integral-arithmetic-regions.md:3–17][source-196]; [integral-arithmetic-regions.md:26–29][source-197]; [integral-arithmetic-regions.md:90–97][source-198].
+
+**[Docs] Its first obligation is the value that actually enters the region.** The producer reuses existing flow, loop bounds and complete-writer authorities, including container identities and wider aliases; it must not create another alias or range analysis. A query identifies the exact function, value/program point and immutable analysis revision. Rewriting that graph invalidates its certificate. An unknown writer, nonnumeric alternative, nonconvergence or exhausted budget returns an explicit failure to prove—not an empty set mistakenly accepted as success. A literal annotation or one observed caller supplies no ingress proof. [integral-arithmetic-regions.md:31–67][source-199]; [integral-arithmetic-regions.md:111–129][source-200].
+
+**[Docs] It then certifies both the original arithmetic and the replacement arithmetic.** Every original operation's operands, order and numeric domain must be accounted for; independently, every proposed machine intermediate must fit its chosen width. An integral input does not prove an exact floating-point product, and a small final answer cannot justify an overflowing intermediate. If the original product rounds, conversion must preserve that rounding boundary; moving beyond it requires an exact-prefix proof. The proposed dyadic representation—an integer scaled by a power of two—can carry an exact division by two through later additions, but only while both the original sequence and replacement remain justified. This differs from merely marking the final integer instruction nonoverflowing. [integral-arithmetic-regions.md:131–168][source-201]; [integral-arithmetic-regions.md:199–223][source-202].
+
+**[Docs] The design permits bounded, guarded loop versions.** One test before the loop, over stable controlling values or real trip counts, must establish every fast-region obligation. Its true edge enters a fast clone; its false edge enters the original floating loop unchanged. The predicate cannot rerun getters or move effects. Unsupported control flow or exhausted budgets leaves the original program intact; clones cannot recursively generate further versions. This is compatible with rejecting repeated per-addend integer tests: the check is amortized across a proven region. [integral-arithmetic-regions.md:231–250][source-203]; [integral-arithmetic-regions.md:270–281][source-204].
+
+**[Inference] Bun's useful contribution is implementation discipline around this existing nts direction:** distinguish predictions from facts, preserve compiled alternatives, invalidate stale proofs and independently validate optimizer claims. Bun's inspected integer path tests and widened arithmetic illustrate those mechanisms; they do not themselves certify nts's proposed cross-operation rewrites. nts should encode and validate its region certificates in shared core, preserving original rounding points and keeping the fallback unchanged, rather than replacing this design with repeated integer speculation. [select/AOTNumberPathRules.cpp:250–267][source-052]; [codegen/AOTOperatorEmitterArithmetic.cpp:119–140][source-205]; [codegen/AOTClaimChecks.cpp:241–252][source-029].
 
 **Take it? [Recommendation] Yes: use Bun's exactness, widening and −0 checks to review and independently validate nts's integer proofs; no: adopting repeated int32 speculation as the default after nts has rejected that tradeoff.**
 
@@ -288,9 +300,9 @@ This table condenses the evidence above. “Today” follows the pinned nts docu
 
 | Topic | Bun AOT | nts today | Take it? |
 |---|---|---|---|
-| 1. Types and soundness | Expected types, proven facts and guards are distinct; mismatch normally selects compiled generic work. | Runtime representation needs proof; erased primitive/class casts deliberately check, with incomplete exception transport. | **Yes:** proof reasons and independent validation. **No:** trusting declarations or changing the checked-cast contract. |
+| 1. Types and soundness | Expected types, proven facts and guards are distinct; mismatch normally selects compiled generic work. | Runtime representation requires proof; checked casts exist, while literal-type soundness and exception transport have documented gaps. | **Yes:** proof reasons and independent validation. **No:** trusting declarations or changing the checked-cast contract. |
 | 2. Speculation without a profile | Whole-program value flow, static frequency estimates and precompiled alternatives. | Numeric flow and guarded external-entry clones; the shared alias/effect/content analysis is decided, not built. | **Yes:** shared conservative facts and explicit invalidation. **Later:** large generic continuations where measured benefit pays for them. |
-| 3. Numbers | Proven integer representations coexist with guarded int32 paths; widening and floating-point paths preserve results. | Double by default; integrality, range, NaN and observable minus-zero obligations; repeated speculative addend checks rejected. | **Yes:** review and validate the numeric proof obligations. **No:** adopting per-operation speculation by default. |
+| 3. Numbers | Proven integer representations coexist with guarded int32 paths; widening and floating-point paths preserve results. | Double by default; exact-region certificates and one-guard loop versions are designed; repeated speculative addend checks rejected. | **Yes:** review and validate the numeric proof obligations. **No:** adopting per-operation speculation by default. |
 | 4. Objects and properties | Fixed compiled layouts, exceptional fields in side storage, data-only property caches. | Fixed structs, direct proved accesses and interface dispatch; general runtime-key member tables are deferred. | **Later:** prebuilt name lookup and side storage for supported dynamic behavior; keep proved static accesses cheap. |
 | 5. Calls and closures | Known-target calls and tables, specialization-aware inlining, deferred/slim/full closures, interpreter adapters. | Direct/small-set/table dispatch, typed/tagged closure entries, shared mutable captures; some flow extensions planned. | **Yes:** actual-callee flow, residual-size inlining and avoiding unnecessary closure objects. |
 | 6. Compilation and fallback | Build-known JavaScript compiles or fails; permitted runtime source is interpreted; some constant source compiles. | No engine; runtime source permanently refused. | **No:** interpreter inclusion. **Yes:** clear diagnostics and checks that enforce the intended execution boundary. |
@@ -305,7 +317,7 @@ This table condenses the evidence above. “Today” follows the pinned nts docu
 
 The source revisions are listed near the beginning; every implementation and documentation reference in this notebook is pinned to one of them. The entry points are:
 
-- **nts:** [README.md:1–36][source-191] and [architecture.md:6–45][source-008], followed by the language and foundation pages cited in each section. The unavailable integral-arithmetic notebook is a stated limitation, not an inferred source.
+- **nts:** [README.md:1–36][source-191] and [architecture.md:6–45][source-008], followed by the language and foundation pages cited in each section. The [integral-arithmetic design note][source-196] is compared directly in section 3, with its implementation prerequisites retained.
 - **Bun feature:** PR #45631, “Compile TypeScript to machine code ahead of time: `bun build --compile --aot`,” using the description preserved in its [merge commit][source-002]; [compiler/aot.mdx:1–23][source-003] and [compiler/internals.mdx:72–116][source-004] at that same revision. The public preview percentages supplied in the handoff are not independent evidence.
 - **Compiler implementation:** [WebKit aot/README.md:1–8][source-192], then the analysis, value-flow, representation, object, IR, passes, selection, code generation, placement, image, runtime, stubs and builtin sources identified alongside the claims.
 - **Contribution scope:** the [cloud-agent PR workflow][source-193], with the handoff's explicit exception authorizing this one research notebook.
@@ -319,7 +331,7 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-005]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/aot/compile.rs#L1350-L1450
 [source-006]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/jsc/bindings/BunAOTCompile.cpp#L403-L423
 [source-007]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/pipeline/AOTPipeline.cpp#L1854-L1942
-[source-008]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/architecture.md#L6-L45
+[source-008]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/architecture.md#L6-L45
 [source-009]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTTypeKinds.h#L21-L40
 [source-010]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTTypeKinds.h#L81-L123
 [source-011]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTDeclaredType.h#L42-L77
@@ -343,8 +355,8 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-029]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/codegen/AOTClaimChecks.cpp#L241-L252
 [source-030]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/tests/AOTProofValidationTests.cpp#L631-L706
 [source-031]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/README.md#L155-L159
-[source-032]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/language/types.md#L82-L108
-[source-033]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/language/types.md#L193-L204
+[source-032]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/language/types.md#L82-L110
+[source-033]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/language/types.md#L195-L217
 [source-034]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1280-L1312
 [source-035]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/valueflow/AOTValueFlowSolver.cpp#L6219-L6267
 [source-036]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/valueflow/AOTValueFlowSolver.cpp#L6304-L6333
@@ -356,9 +368,9 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-042]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/analysis/AOTGuardAvailability.cpp#L42-L44
 [source-043]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/analysis/AOTGuardAvailability.cpp#L99-L128
 [source-044]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/analysis/AOTGenericCopy.cpp#L645-L705
-[source-045]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/numbers.md#L24-L77
-[source-046]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/memory.md#L3-L5
-[source-047]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/memory.md#L156-L192
+[source-045]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/numbers.md#L24-L77
+[source-046]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/memory.md#L3-L5
+[source-047]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/memory.md#L156-L192
 [source-048]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/represent/AOTRepresentationRules.cpp#L73-L86
 [source-049]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTResultRulesNatural.cpp#L75-L113
 [source-050]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTResultRulesNatural.cpp#L193-L264
@@ -374,12 +386,12 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-060]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/codegen/AOTOperatorEmitterArithmetic.cpp#L525-L551
 [source-061]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTPrimitives.h#L49-L79
 [source-062]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTResultRulesNatural.cpp#L75-L100
-[source-063]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/numbers.md#L55-L63
+[source-063]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/numbers.md#L55-L63
 [source-064]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTResultRulesNatural.cpp#L86-L113
 [source-065]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/ir/AOTResultRulesNatural.cpp#L193-L204
 [source-066]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/codegen/AOTTypeTestEmitter.cpp#L572-L604
 [source-067]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/codegen/AOTOperatorEmitterArithmetic.cpp#L289-L336
-[source-068]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/numbers.md#L24-L90
+[source-068]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/numbers.md#L24-L90
 [source-069]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/object/AOTCellFormat.h#L26-L85
 [source-070]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1424-L1477
 [source-071]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/object/AOTObjectMethodTable.cpp#L59-L79
@@ -389,8 +401,8 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-075]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/stubs/AOTStubsPropertySiteCaches.cpp#L140-L204
 [source-076]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1517-L1532
 [source-077]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1581-L1600
-[source-078]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/objects.md#L28-L98
-[source-079]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/objects.md#L224-L228
+[source-078]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/objects.md#L28-L98
+[source-079]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/objects.md#L224-L228
 [source-080]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTResolveCalls.cpp#L3122-L3186
 [source-081]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/object/AOTMemberGuards.cpp#L340-L399
 [source-082]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1534-L1547
@@ -405,8 +417,8 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-091]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/object/AOTClosure.cpp#L149-L166
 [source-092]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/runtime/AOTCallOperations.cpp#L313-L342
 [source-093]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/runtime/AOTCallOperations.cpp#L879-L927
-[source-094]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/objects.md#L107-L121
-[source-095]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/objects.md#L185-L208
+[source-094]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/objects.md#L107-L121
+[source-095]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/objects.md#L185-L208
 [source-096]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/aot/compile.rs#L1350-L1381
 [source-097]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/image/AOTCompile.cpp#L360-L420
 [source-098]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/aot/package_diagnostics.rs#L32-L67
@@ -423,7 +435,7 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-109]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/compatibility.mdx#L588-L603
 [source-110]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/jsc/compiled_program.rs#L410-L485
 [source-111]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/jsc/compiled_program.rs#L622-L664
-[source-112]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/language/boundaries.md#L44-L57
+[source-112]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/language/boundaries.md#L44-L57
 [source-113]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1706-L1757
 [source-114]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/heap/MarkedBlockCage.h#L49-L59
 [source-115]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1759-L1793
@@ -432,8 +444,8 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-118]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/object/AOTObjectVisiting.h#L48-L149
 [source-119]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/runtime/AOTSavedFrame.h#L309-L364
 [source-120]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/size.mdx#L12-L37
-[source-121]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/architecture.md#L21-L48
-[source-122]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/memory.md#L428-L439
+[source-121]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/architecture.md#L21-L48
+[source-122]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/memory.md#L428-L439
 [source-123]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/image/AOTImageFormat.h#L54-L84
 [source-124]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/image/AOTImageLoading.cpp#L566-L610
 [source-125]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/image/AOTImageLoading.cpp#L450-L505
@@ -454,7 +466,7 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-140]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/src/trim/decide.rs#L709-L728
 [source-141]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/size.mdx#L235-L264
 [source-142]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/compatibility.mdx#L504-L530
-[source-143]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/numbers.md#L183-L198
+[source-143]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/numbers.md#L183-L198
 [source-144]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/runtime/AOTUnwinding.cpp#L179-L229
 [source-145]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/runtime/AOTUnwinding.cpp#L246-L314
 [source-146]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/codegen/AOTExceptionEmitter.cpp#L178-L239
@@ -467,9 +479,9 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-153]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTCoroutines.cpp#L1646-L1674
 [source-154]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTFuseGeneratorLoops.cpp#L467-L541
 [source-155]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTFuseGeneratorLoops.cpp#L812-L857
-[source-156]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/language/errors.md#L29-L39
-[source-157]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/language/errors.md#L80-L100
-[source-158]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/language/async.md#L49-L89
+[source-156]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/language/errors.md#L29-L39
+[source-157]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/language/errors.md#L80-L100
+[source-158]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/language/async.md#L49-L89
 [source-159]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/builtins/array.builtins.ts#L360-L382
 [source-160]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/builtins/array-callbacks.builtins.ts#L16-L59
 [source-161]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1133-L1183
@@ -490,10 +502,10 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-176]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTJSONSerializer.cpp#L201-L208
 [source-177]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTJSONSerializer.cpp#L891-L918
 [source-178]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/internals.mdx#L1254-L1268
-[source-179]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/json.md#L6-L60
-[source-180]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/strings.md#L6-L37
-[source-181]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/strings.md#L88-L98
-[source-182]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/objects.md#L124-L183
+[source-179]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/json.md#L6-L60
+[source-180]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/strings.md#L6-L37
+[source-181]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/strings.md#L88-L98
+[source-182]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/objects.md#L124-L183
 [source-183]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/passes/AOTHeat.h#L37-L122
 [source-184]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/perf/measure-idioms.ts#L22-L47
 [source-185]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/perf/behind-the-jit.linux-x64.json#L59-L63
@@ -501,9 +513,19 @@ The source revisions are listed near the beginning; every implementation and doc
 [source-187]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/perf/behind-the-jit.linux-x64.json#L248-L253
 [source-188]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/perf/behind-the-jit.linux-x64.json#L446-L449
 [source-189]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/perf/README.md#L109-L151
-[source-190]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/foundations/README.md#L14-L39
-[source-191]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/README.md#L1-L36
+[source-190]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/foundations/README.md#L14-L39
+[source-191]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/README.md#L1-L36
 [source-192]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/README.md#L1-L8
-[source-193]: https://github.com/AkisArou/nts/blob/b698106e055c5a612408860a4a562e031d2c3782/docs/contributing/cloud-agents.md#L123-L149
+[source-193]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/contributing/cloud-agents.md#L123-L149
 [source-194]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/test/aot/README.md#L139-L153
 [source-195]: https://github.com/oven-sh/bun/blob/8d5672c5529049f1a9a3453d07e6cd6a1564abc7/docs/compiler/compatibility.mdx#L1103-L1105
+[source-196]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L3-L17
+[source-197]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L26-L29
+[source-198]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L90-L97
+[source-199]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L31-L67
+[source-200]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L111-L129
+[source-201]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L131-L168
+[source-202]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L199-L223
+[source-203]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L231-L250
+[source-204]: https://github.com/AkisArou/nts/blob/01b93bdcc2f12d9c8cea687c30a3f1013bddd1f5/docs/records/notebooks/integral-arithmetic-regions.md#L270-L281
+[source-205]: https://github.com/oven-sh/WebKit/blob/c3131ea84f7eaad531619e3842bb30c48df18ab1/Source/JavaScriptCore/aot/codegen/AOTOperatorEmitterArithmetic.cpp#L119-L140
