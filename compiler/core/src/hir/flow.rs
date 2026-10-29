@@ -415,8 +415,8 @@ impl Written {
 /// is written by callers and a call's result by the callee.
 #[derive(Debug, Clone, Copy)]
 pub struct Context<'a> {
-    /// Facts for each parameter, overriding the declared type. Absent entries
-    /// fall back to the declaration.
+    /// Facts proved about arriving values. An absent entry is unknown; a
+    /// declaration is not a proof about an unchecked caller.
     pub params: &'a [Facts],
     /// Interval bounds for loop-carried values, from counting iterations.
     ///
@@ -462,10 +462,9 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
     let mut values = vec![Facts::BOTTOM; func.values.len()];
 
     // A parameter is an input, so nothing inside the function constrains it.
-    // What *does* constrain it is its declared type — `0 | 1 | 2` is a fact
-    // about every possible caller, available without seeing one. For an ordinary
-    // `number` this is TOP, and assuming otherwise would be exactly the
-    // unsoundness this analysis exists to avoid.
+    // Only proved callers, a checked store contract or the actual machine
+    // representation constrains it. A literal annotation is not such a proof:
+    // an export, callback or indirect call may receive another value.
     for (index, op) in func.values.iter().enumerate() {
         if let OpKind::Param(slot) = op.kind {
             values[index] = parameter_facts(func, context, slot);
@@ -629,19 +628,20 @@ fn merge(slot: &mut Option<Relations>, arriving: Relations) {
 
 /// Run one block, then hand its successors what it proved.
 /// What a parameter holds: what callers were proven to pass, if anything
-/// determined that, and otherwise what its declared type admits -- a literal
-/// union's members, and a written scalar kind's range, which every call was
-/// proven to fit (`super::obligations`).
+/// determined that, and otherwise only its representation and checked scalar
+/// contract. A written scalar kind's range is justified by store obligations
+/// and boundary guards; `Param::known` alone carries no arrival proof.
 fn parameter_facts(func: &Func, context: &Context, slot: u32) -> Facts {
-    let declared = func.params.get(slot as usize).map_or(Facts::TOP, |param| {
-        param.written.map_or(param.known, |kind| {
-            param.known.narrow(kind.facts_on(context.written.targets))
-        })
+    let represented = func.params.get(slot as usize).map_or(Facts::TOP, |param| {
+        param.written.map_or_else(
+            || held_by(&param.ty).unwrap_or(Facts::TOP),
+            |kind| kind.facts_on(context.written.targets),
+        )
     });
     context
         .params
         .get(slot as usize)
-        .map_or(declared, |from_callers| from_callers.narrow(declared))
+        .map_or(represented, |from_callers| from_callers.narrow(represented))
 }
 
 /// What a call is worth, whoever it is calling.
@@ -2499,6 +2499,44 @@ mod tests {
         let analysis = analyze(&function);
         let facts = analysis.get(ValueId(0));
         assert!(facts.maybe_nan && !facts.whole, "{facts:?}");
+    }
+
+    #[test]
+    fn a_literal_contract_never_overrides_an_arrival_proof() {
+        let mut function = func(
+            vec![op(OpKind::Param(0))],
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0)],
+                Terminator::Return(Some(ValueId(0))),
+            )],
+            1,
+        );
+        function.params[0].known = Facts::constant(64.0);
+        assert_eq!(analyze(&function).get(ValueId(0)), Facts::TOP);
+
+        let whole = Whole::default();
+        let caps = FxHashMap::default();
+        let written = Written::default();
+        let actual = [Facts::constant(2.0)];
+        let context = Context {
+            params: &actual,
+            caps: &caps,
+            param_lengths: &[],
+            whole: &whole,
+            written: &written,
+        };
+        assert_eq!(analyze_with(&function, &context).get(ValueId(0)), actual[0]);
+
+        // A physical integer slot still supplies its actual representation's
+        // range, independently of the declaration's alleged singleton.
+        function.params[0].ty = HirType::Int {
+            bits: 8,
+            signed: false,
+        };
+        function.values[0].ty = function.params[0].ty.clone();
+        let represented = analyze(&function).get(ValueId(0));
+        assert_eq!(represented, Facts::new(0.0, 255.0, true, false, false));
     }
 
     /// The arm whose absence cost the `bytes` benchmark 2.4x. A conversion is

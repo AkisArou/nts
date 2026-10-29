@@ -317,12 +317,12 @@ fn settle(
 
 impl Crossing {
     /// What crosses between functions when nothing is known to: every
-    /// parameter what its declaration admits, and every return, field, element
+    /// parameter unknown, and every return, field, element
     /// and global absent, which reads as TOP at the use. Sound without a
     /// fixpoint, which is why it is the answer when the fixpoint fails.
     fn nothing(program: &Program, growable: bool) -> Self {
         Self {
-            params: program.funcs.iter().map(declared_params).collect(),
+            params: program.funcs.iter().map(unproven_params).collect(),
             param_lengths: no_lengths(program),
             whole: flow::Whole {
                 returns: FxHashMap::default(),
@@ -560,15 +560,16 @@ fn arguments(
 /// unprovable for exactly that reason, and so was every other function that
 /// calls itself.
 ///
-/// A root keeps its declared type, since its callers are outside the program
-/// and there is nothing to join.
+/// A root starts unknown, since its callers are outside the program. Its
+/// declaration chooses representation, not the values an unchecked arrival
+/// may contain; `flow` separately applies checked scalar contracts.
 fn seed(program: &Program, outward: &rustc_hash::FxHashSet<&str>) -> Vec<Vec<Facts>> {
     program
         .funcs
         .iter()
         .map(|func| {
             if outward.contains(func.name.as_str()) {
-                declared_params(func)
+                unproven_params(func)
             } else {
                 vec![Facts::BOTTOM; func.params.len()]
             }
@@ -637,9 +638,9 @@ fn no_lengths(program: &Program) -> Vec<Vec<Facts>> {
         .collect()
 }
 
-/// What each parameter's declared type admits, before any caller is seen.
-fn declared_params(func: &Func) -> Vec<Facts> {
-    func.params.iter().map(|param| param.known).collect()
+/// No caller or boundary check has supplied a value proof.
+fn unproven_params(func: &Func) -> Vec<Facts> {
+    vec![Facts::TOP; func.params.len()]
 }
 
 /// What a call through each dispatch slot can return.

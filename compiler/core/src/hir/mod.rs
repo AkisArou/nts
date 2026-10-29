@@ -896,14 +896,13 @@ pub struct Param {
     /// declaration and costs one discriminant on a struct that already carries
     /// a `String`, an `Origin` and a `Facts`.
     pub shape: ParamShape,
-    /// What the *declared type* says the value can be.
+    /// The declaration's numeric contract, used to build uniform-entry checks.
+    /// It is not a value proof for an unchecked arrival. Flow analysis obtains
+    /// parameter facts from actual callers or checked scalar contracts.
     ///
-    /// A parameter is an input, so nothing inside a function constrains it —
-    /// which is why an exported `(n: number)` defeats every proof downstream of
-    /// it. But TypeScript's types often say more than `number`: `0 | 1 | 2` is a
-    /// union of literal types, and `const` gives a literal type of its own. That
-    /// is a fact about every possible caller, available without seeing one, and
-    /// it is the only way a parameter becomes provable at all.
+    /// Signature specialization also records its proved caller facts here when
+    /// choosing a narrower ABI. A later analysis recomputes those proofs from
+    /// the calls rather than trusting this declaration/bookkeeping field.
     pub known: facts::Facts,
     /// The scalar kind the parameter's type was **written** as -- `n: c_int`
     /// -- or `None`.

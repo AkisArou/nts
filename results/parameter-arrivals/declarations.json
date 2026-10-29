@@ -1,0 +1,665 @@
+{
+  "version": 1,
+  "compiler": {
+    "source": "6285847c2d199be3039fd5c619a69a7990086207",
+    "scan_sha256": "1056a5080dd890d923a4250a51fe8683c05318848a0d04a35e7d121ab01b0b84",
+    "producer_changed": false
+  },
+  "capture_count": 1874,
+  "capture_failures": 0,
+  "captures_with_diagnostics": 1013,
+  "scan_source_sha256": "e88d40dce66f9c6db299b9dcc9bb82797827447fecce76e5fac1e4d9f63eeb3a",
+  "scope": "Native checker declarations before producer edits; export ancestry and callback shape are candidates, not escape proofs. Diagnostics are retained, including intentionally incomplete TypeScript snippets.",
+  "parameters": [
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "moveTo",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "lane",
+      "rewritten_by": null,
+      "source": "runtime/chromium/examples/board/board.ts",
+      "span": {
+        "end": 4240,
+        "start": 4230
+      },
+      "type_id": 2,
+      "uri": "nts-workspace:///board.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "<anonymous>",
+      "function_kind": "constructor",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "placement",
+      "rewritten_by": null,
+      "source": "tests/programs/a-derived-constructor-whose-base-is-in-another-module/src/children.ts",
+      "span": {
+        "end": 323,
+        "start": 303
+      },
+      "type_id": 14,
+      "uri": "nts-workspace:///src/children.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "literalFirst",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "n",
+      "rewritten_by": null,
+      "source": "tests/programs/a-function-value-keeps-implementation-parameters/src/throwers.ts",
+      "span": {
+        "end": 33,
+        "start": 29
+      },
+      "type_id": 4,
+      "uri": "nts-workspace:///src/throwers.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "broadFirst",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "n",
+      "rewritten_by": null,
+      "source": "tests/programs/a-function-value-keeps-implementation-parameters/src/throwers.ts",
+      "span": {
+        "end": 301,
+        "start": 297
+      },
+      "type_id": 4,
+      "uri": "nts-workspace:///src/throwers.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "applyZero",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "value",
+      "rewritten_by": null,
+      "source": "tests/programs/a-generic-function-value-keeps-one-erased-root/src/main.ts",
+      "span": {
+        "end": 2585,
+        "start": 2577
+      },
+      "type_id": 73,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "applyFalse",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "boolean"
+      ],
+      "parameter": "value",
+      "rewritten_by": null,
+      "source": "tests/programs/a-generic-function-value-keeps-one-erased-root/src/main.ts",
+      "span": {
+        "end": 4432,
+        "start": 4420
+      },
+      "type_id": 113,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "applyLiteralString",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "value",
+      "rewritten_by": null,
+      "source": "tests/programs/a-generic-function-value-keeps-one-erased-root/src/main.ts",
+      "span": {
+        "end": 4522,
+        "start": 4508
+      },
+      "type_id": 116,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": true,
+      "function": "widen",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "a",
+      "rewritten_by": null,
+      "source": "tests/programs/an-enum-across-a-module/src/main.ts",
+      "span": {
+        "end": 2974,
+        "start": 2966
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "applyLiteral",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "bigint"
+      ],
+      "parameter": "value",
+      "rewritten_by": null,
+      "source": "tests/programs/an-erased-bigint-preserves-its-primitive/src/main.ts",
+      "span": {
+        "end": 2629,
+        "start": 2605
+      },
+      "type_id": 12,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": false,
+      "function": "pick",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "c",
+      "rewritten_by": null,
+      "source": "tests/programs/enums/src/main.ts",
+      "span": {
+        "end": 2116,
+        "start": 2107
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "pipeline",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "rounds",
+      "rewritten_by": null,
+      "source": "tests/programs/interprocedural/src/main.ts",
+      "span": {
+        "end": 355,
+        "start": 345
+      },
+      "type_id": 7,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "weigh",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "mode",
+      "rewritten_by": null,
+      "source": "tests/programs/literals/src/main.ts",
+      "span": {
+        "end": 358,
+        "start": 339
+      },
+      "type_id": 3,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "fixed",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "scale",
+      "rewritten_by": null,
+      "source": "tests/programs/literals/src/main.ts",
+      "span": {
+        "end": 468,
+        "start": 460
+      },
+      "type_id": 11,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": true,
+      "function": "clampIndex",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "limit",
+      "rewritten_by": null,
+      "source": "tests/programs/mathops/src/main.ts",
+      "span": {
+        "end": 664,
+        "start": 653
+      },
+      "type_id": 10,
+      "uri": "nts-workspace:///src/main.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "flip",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "bigint"
+      ],
+      "parameter": "bit",
+      "rewritten_by": null,
+      "source": "tests/typescript/bigint/typeof-and-literal-types.ts",
+      "span": {
+        "end": 187,
+        "start": 179
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/bigint/typeof-and-literal-types.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "<anonymous>",
+      "function_kind": "method declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "hint",
+      "rewritten_by": null,
+      "source": "tests/typescript/conversions/to-primitive-hints.ts",
+      "span": {
+        "end": 302,
+        "start": 265
+      },
+      "type_id": 8,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/conversions/to-primitive-hints.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": false,
+      "function": "raise",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "level",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/as-parameter-type.ts",
+      "span": {
+        "end": 162,
+        "start": 150
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/as-parameter-type.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": false,
+      "function": "get",
+      "function_kind": "method declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "channel",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/combination-enum-keyed-class.ts",
+      "span": {
+        "end": 498,
+        "start": 482
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/combination-enum-keyed-class.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": false,
+      "function": "isError",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "status",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/const-enum-in-namespace.ts",
+      "span": {
+        "end": 262,
+        "start": 243
+      },
+      "type_id": 2,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/const-enum-in-namespace.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": false,
+      "function": "next",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "light",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/exhaustive-never.ts",
+      "span": {
+        "end": 217,
+        "start": 205
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/exhaustive-never.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": false,
+      "function": "sides",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "shape",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/in-switch.ts",
+      "span": {
+        "end": 164,
+        "start": 152
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/in-switch.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "byName",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "name",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/keyof-typeof-lookup.ts",
+      "span": {
+        "end": 238,
+        "start": 214
+      },
+      "type_id": 9,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/keyof-typeof-lookup.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": true,
+      "function": "isWeekend",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "day",
+      "rewritten_by": null,
+      "source": "tests/typescript/enums/merged-with-namespace.ts",
+      "span": {
+        "end": 256,
+        "start": 244
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/enums/merged-with-namespace.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "split",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "boolean"
+      ],
+      "parameter": "asNumbers",
+      "rewritten_by": null,
+      "source": "tests/typescript/literal-types/boolean-literal-overload.ts",
+      "span": {
+        "end": 211,
+        "start": 196
+      },
+      "type_id": 3,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/literal-types/boolean-literal-overload.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "split",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "boolean"
+      ],
+      "parameter": "asNumbers",
+      "rewritten_by": null,
+      "source": "tests/typescript/literal-types/boolean-literal-overload.ts",
+      "span": {
+        "end": 269,
+        "start": 253
+      },
+      "type_id": 6,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/literal-types/boolean-literal-overload.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "reverse",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "direction",
+      "rewritten_by": null,
+      "source": "tests/typescript/literal-types/enum-like-object.ts",
+      "span": {
+        "end": 350,
+        "start": 330
+      },
+      "type_id": 8,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/literal-types/enum-like-object.ts"
+    },
+    {
+      "callback_shaped": true,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "<anonymous>",
+      "function_kind": "arrow function",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "axis",
+      "rewritten_by": null,
+      "source": "tests/typescript/literal-types/mapped-over-literal-keys.ts",
+      "span": {
+        "end": 389,
+        "start": 385
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/literal-types/mapped-over-literal-keys.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "opposite",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "face",
+      "rewritten_by": null,
+      "source": "tests/typescript/literal-types/numeric-literal-union.ts",
+      "span": {
+        "end": 204,
+        "start": 195
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/literal-types/numeric-literal-union.ts"
+    },
+    {
+      "callback_shaped": true,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "<anonymous>",
+      "function_kind": "arrow function",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "b",
+      "rewritten_by": null,
+      "source": "tests/typescript/literal-types/numeric-literal-union.ts",
+      "span": {
+        "end": 363,
+        "start": 362
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/literal-types/numeric-literal-union.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": true,
+      "function": "secure",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "port",
+      "rewritten_by": null,
+      "source": "tests/typescript/modules-and-exports/export-const-enum.ts",
+      "span": {
+        "end": 256,
+        "start": 246
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/modules-and-exports/export-const-enum.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": true,
+      "export_ancestor": true,
+      "function": "go",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "number"
+      ],
+      "parameter": "light",
+      "rewritten_by": null,
+      "source": "tests/typescript/namespaces/with-an-enum.ts",
+      "span": {
+        "end": 220,
+        "start": 208
+      },
+      "type_id": 2,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/namespaces/with-an-enum.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "fire",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "event",
+      "rewritten_by": null,
+      "source": "tests/typescript/objects/combination-object-registry.ts",
+      "span": {
+        "end": 607,
+        "start": 592
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/objects/combination-object-registry.ts"
+    },
+    {
+      "callback_shaped": true,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "<anonymous>",
+      "function_kind": "arrow function",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "key",
+      "rewritten_by": null,
+      "source": "tests/typescript/type-operators/mapped-type-values.ts",
+      "span": {
+        "end": 547,
+        "start": 544
+      },
+      "type_id": 27,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/type-operators/mapped-type-values.ts"
+    },
+    {
+      "callback_shaped": false,
+      "enum_declaration": false,
+      "export_ancestor": false,
+      "function": "pad",
+      "function_kind": "function declaration",
+      "literal_kinds": [
+        "string"
+      ],
+      "parameter": "align",
+      "rewritten_by": null,
+      "source": "tests/typescript/unions/literal-union-parameter.ts",
+      "span": {
+        "end": 260,
+        "start": 248
+      },
+      "type_id": 1,
+      "uri": "nts-workspace:///../../../../../Projects/nts-lanes/compiler/tests/typescript/unions/literal-union-parameter.ts"
+    }
+  ],
+  "diagnostic_code_captures": {
+    "TS2322": 1,
+    "TS2304": 1012
+  }
+}

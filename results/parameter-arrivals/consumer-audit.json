@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "base": "6285847c2",
+  "param_known_readers": [
+    [
+      "hir/lower.rs::known_values",
+      "Producer: numeric literal/union declaration metadata. All authored arrivals; does not justify a value fact."
+    ],
+    [
+      "hir/lower/interfaces.rs",
+      "Producer: declared slot metadata, with adapter/virtual joins. No checked-arrival authority."
+    ],
+    [
+      "hir/flow.rs::parameter_facts",
+      "UNSOUND on main: seeded every local/open parameter from metadata and intersected actual caller facts with it. Corrected to callers plus physical representation/checked scalar store contracts."
+    ],
+    [
+      "hir/interprocedural.rs::seed",
+      "UNSOUND on main: exports and runtime callbacks seeded by declared_params. Corrected to TOP at open arrivals."
+    ],
+    [
+      "hir/interprocedural.rs::Crossing::nothing",
+      "UNSOUND on main: nonconvergence fallback reused declared_params for every parameter. Corrected to TOP."
+    ],
+    [
+      "hir/signatures.rs",
+      "Records proved arriving facts after specialization of a closed direct or typed-signature group; consumers must not treat the cache as independent proof."
+    ],
+    [
+      "hir/guards.rs",
+      "Resets wrapper metadata after inserting actual numerical tests; fast body receives proved values. Sound consumer; unchecked clone seeds required the correction."
+    ],
+    [
+      "hir/lower/uniform_inputs.rs",
+      "Checked contract: builds runtime numeric admission tests from metadata. Retained unchanged."
+    ],
+    [
+      "hir/mod.rs::uniform_direct_arguments",
+      "Conservative bypass only when known is TOP; a narrow declared contract forces the checked adapter. Sound consumer."
+    ],
+    [
+      "hir/lower/literal_methods/adapters.rs; hir/lower/virtual_returns.rs",
+      "Joins declaration/admission metadata across literal adapters/virtual contracts. Not a value proof; unchanged."
+    ],
+    [
+      "hir/flow.rs::Written",
+      "Native scalar store/return/field/global contracts checked by obligations and external boundary adapters; not TypeScript literal values. Retained."
+    ],
+    [
+      "hir/flow.rs::held_by",
+      "Actual physical integer representation ranges. Sound representation fact independent of declared literals."
+    ],
+    [
+      "hir/obligations.rs::local_analysis",
+      "Indirect consumer of flow. Previously inherited the unchecked literal seed in strict store checks; now unknown unless a checked scalar contract or CFG proof supplies the fact."
+    ],
+    [
+      "tooling/differential/src/lib.rs::inputs; domains::NumericDomain::project",
+      "Population restrictions trusted declaration metadata and hid outside-declaration arrivals. Helper lane pairs its representation-wide pool repair with this seed fix."
+    ]
+  ]
+}

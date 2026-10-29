@@ -1103,6 +1103,20 @@ mod tests {
         accumulator_caps(func, &super::super::flow::analyze(func))
     }
 
+    fn with_arrivals(func: &Func, params: &[Facts]) -> super::super::flow::Analysis {
+        use super::super::flow::{Context, Whole, Written};
+        super::super::flow::analyze_with(
+            func,
+            &Context {
+                params,
+                caps: &FxHashMap::default(),
+                param_lengths: &[],
+                whole: &Whole::default(),
+                written: &Written::default(),
+            },
+        )
+    }
+
     /// `for (i = start; i < 10; i++)` where `start` is anywhere in `[0, 100]`.
     /// Started at 100 the loop never runs and `i` is 100, so a cap of "the
     /// guard plus one step" -- which is what the counter's bound was -- says
@@ -1123,8 +1137,13 @@ mod tests {
         f.end(Vec::new(), Terminator::Return(Some(i)));
         let func = f.finish(&[Facts::new(0.0, 100.0, true, false, false)]);
 
-        let cap = caps_of(&func)[&i];
+        let actual = [Facts::new(0.0, 100.0, true, false, false)];
+        let cap = accumulator_caps(&func, &with_arrivals(&func, &actual))[&i];
         assert!(cap.hi >= 100.0, "the counter can be its start: {cap:?}");
+        assert!(
+            !caps_of(&func).contains_key(&i),
+            "the annotation alone proves no start bound"
+        );
     }
 
     /// The same loop with its test the other way round: it goes round while
@@ -1285,8 +1304,8 @@ mod tests {
         (f.finish(&[start]), xs, BlockId(3))
     }
 
-    fn least_after(func: &Func, xs: ValueId, at: BlockId) -> Option<f64> {
-        least_lengths(func, &super::super::flow::analyze(func)).at_least(xs, at)
+    fn least_after(func: &Func, xs: ValueId, at: BlockId, actual: Facts) -> Option<f64> {
+        least_lengths(func, &with_arrivals(func, &[actual])).at_least(xs, at)
     }
 
     /// Ten trips from zero, a push on each: ten at least once the test fails.
@@ -1296,10 +1315,14 @@ mod tests {
     fn a_loop_that_pushes_every_trip_leaves_at_least_its_trips() {
         let exact = Facts::new(0.0, 0.0, true, false, false);
         let (func, xs, after) = pushed_in_a_loop(exact, false);
-        assert_eq!(least_after(&func, xs, after), Some(10.0));
+        assert_eq!(least_after(&func, xs, after, exact), Some(10.0));
+        assert_eq!(
+            least_lengths(&func, &super::super::flow::analyze(&func)).at_least(xs, after),
+            Some(0.0)
+        );
         let ranged = Facts::new(0.0, 4.0, true, false, false);
         let (func, xs, after) = pushed_in_a_loop(ranged, false);
-        assert_eq!(least_after(&func, xs, after), Some(6.0));
+        assert_eq!(least_after(&func, xs, after, ranged), Some(6.0));
     }
 
     /// A `break` that lands where the test exits arrives with five trips
@@ -1309,7 +1332,7 @@ mod tests {
     fn an_exit_the_body_can_also_reach_proves_no_trips() {
         let exact = Facts::new(0.0, 0.0, true, false, false);
         let (func, xs, after) = pushed_in_a_loop(exact, true);
-        assert_eq!(least_after(&func, xs, after), Some(0.0));
+        assert_eq!(least_after(&func, xs, after, exact), Some(0.0));
     }
 
     /// A start that may be NaN fails `NaN < 10` at once and leaves with no
@@ -1318,6 +1341,6 @@ mod tests {
     fn a_start_that_may_be_nan_proves_no_trips() {
         let nan = Facts::new(0.0, 0.0, true, true, false);
         let (func, xs, after) = pushed_in_a_loop(nan, false);
-        assert_eq!(least_after(&func, xs, after), Some(0.0));
+        assert_eq!(least_after(&func, xs, after, nan), Some(0.0));
     }
 }
