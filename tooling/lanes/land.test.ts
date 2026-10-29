@@ -305,6 +305,67 @@ test("a failed post-FF ledger write reports the real landing and recovers on res
   assert.equal(saved.verified.tip,run(s,s.root,["rev-parse","main"]));
 });
 
+test("two concurrent submissions of one commit publish one pending entry and one disposition",async()=>{
+  const s=scratch(),tree=lane(s,"duplicate-admission",{a:"green\n"}),state=join(s.home,".cache/nts-land");
+  const lock=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"));assert.ok(lock);
+  let first:ReturnType<typeof land>,second:ReturnType<typeof land>;
+  const completed:Landed[]=[];
+  try {
+    first=land(s,tree);second=land(s,tree);
+    void first.done.then(r=>completed.push(r));void second.done.then(r=>completed.push(r));
+    await until("one final pending record and the duplicate refusal",()=>completed.length===1&&(!!first.record()||!!second.record()));
+    assert.equal(completed[0].status,1,completed[0].out);
+    const entry=first.record()??second.record()!;assert.match(completed[0].out,new RegExp(`already pending as ${entry.id}`));
+    assert.equal(queuedLandings(state).length,1);
+  }finally{lock.close();}
+  const results=await Promise.all([first!.done,second!.done]);assert.equal(results.filter(r=>r.status===0).length,1,JSON.stringify(results));
+  assert.equal(states(s).length,1);assert.equal(gates(s),1);assert.ok(onMain(s,"a"));
+});
+
+test("a legacy duplicate that adds no commits is excluded before the verification ledger exists",async()=>{
+  const s=scratch(),tree=lane(s,"legacy-duplicate",{a:"green\n"}),state=join(s.home,".cache/nts-land");
+  const lock=GateResource.tryAcquire(join(s.home,".cache/nts-land.lock"));assert.ok(lock);
+  let client:ReturnType<typeof land>;
+  try {
+    client=land(s,tree);await until("the original completed queue record",()=>!!client.record());
+    const entry=JSON.parse(readFileSync(join(state,"pending",client.record()!.id+".json"),"utf8"));
+    mkdirSync(join(state,"queue"),{recursive:true});writeFileSync(join(state,"queue/9999999999999-1.json"),JSON.stringify({...entry,id:"9999999999999-1",at:entry.at+1}));
+  }finally{lock.close();}
+  const result=await client!.done;assert.equal(result.status,0,result.out);
+  await until("the empty replay's disposition",()=>states(s).length===2);
+  assert.ok(states(s).some(r=>r.state==="conflict"&&/adds no commits.*already contained/.test(r.message)),JSON.stringify(states(s)));
+  assert.equal(gates(s),1);assert.equal(readLedger(join(state,"verification"))!.transactions[0].entries.length,1);
+});
+
+for(const mode of ["throw","crash"] as const)test(`a post-green ledger ${mode} holds the members across restart with exactly one gate directory`,async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land"),trigger=join(s.home,"fail-ledger"),preload=join(s.home,"ledger-fault.ts");
+  writeFileSync(trigger,"armed");
+  writeFileSync(preload,`import fs from 'node:fs';import {syncBuiltinESMExports}from'node:module';const write=fs.writeFileSync;fs.writeFileSync=function(...args){const text=typeof args[1]==='string'?args[1]:'';if(process.env.NTS_LAND_TRAIN_UNIT&&fs.existsSync(${JSON.stringify(trigger)})&&text.includes('"kind": "strict"')&&text.includes('"state": "prepared"')){fs.unlinkSync(${JSON.stringify(trigger)});${mode==='crash'?'process.exit(73);':'throw Error("injected post-green ledger failure");'}}return write.apply(this,args);};syncBuiltinESMExports();`);
+  s.env.NODE_OPTIONS=`--import=${preload}`;
+  const tree=lane(s,"post-green-failure",{a:"green\n"}),client=land(s,tree),base=run(s,s.root,["rev-parse","main"]);
+  await until("the post-green hold",()=>heldLandings(state).length===1,{stopped:()=>client.child.exitCode===null?undefined:`client exited ${client.child.exitCode} instead of holding its green train; gate runs ${gates(s)}`});
+  const held=heldLandings(state)[0];assert.match(held.batch.reason,/post-green/);assert.equal(run(s,s.root,["rev-parse","main"]),base);assert.equal(states(s).length,0);
+  const owner=JSON.parse(readFileSync(join(state,"train-owner.json"),"utf8"));
+  assert.equal(spawnTest("systemctl",["--user","stop",owner.unit],{encoding:"utf8"}).status,0);
+  const next=land(s,lane(s,"after-post-green",{b:"green\n"})),result=await next.done;assert.equal(result.status,0,result.out);
+  assert.equal(gates(s),2,"one frozen gate and one unrelated landing, no baseline, half or replay");
+  const runs=readdirSync(join(state,"runs")).filter(name=>name.startsWith(held.batch.tip.slice(0,12)+"-"));assert.equal(runs.length,1,JSON.stringify(runs));
+  assert.equal(heldLandings(state).length,1);assert.ok(!onMain(s,"a")&&onMain(s,"b"));
+  const resolution=spawnTest(process.execPath,[LAND,"--refuse-held",held.entry.id,"--because=control completed"],{cwd:s.root,env:s.env,encoding:"utf8"});assert.equal(resolution.status,0,resolution.stderr);
+  assert.equal((await client.done).status,1);
+});
+
+test("a post-FF process crash finishes the recorded green landing without another gate",async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land"),trigger=join(s.home,"crash-commit"),preload=join(s.home,"commit-crash.ts");
+  writeFileSync(trigger,"armed");
+  writeFileSync(preload,`import fs from 'node:fs';import {syncBuiltinESMExports}from'node:module';const write=fs.writeFileSync;fs.writeFileSync=function(...args){const text=typeof args[1]==='string'?args[1]:'';if(process.env.NTS_LAND_TRAIN_UNIT&&fs.existsSync(${JSON.stringify(trigger)})&&text.includes('"kind": "strict"')&&text.includes('"transition": "committed"')){fs.unlinkSync(${JSON.stringify(trigger)});process.exit(73);}return write.apply(this,args);};syncBuiltinESMExports();`);
+  s.env.NODE_OPTIONS=`--import=${preload}`;
+  const tree=lane(s,"post-FF-crash",{a:"green\n"}),tip=run(s,tree,["rev-parse","HEAD"]),result=await land(s,tree).done;
+  assert.equal(result.status,0,result.out);assert.equal(existsSync(trigger),false,"the post-FF crash was exercised");assert.equal(gates(s),1);assert.equal(run(s,s.root,["rev-parse","main"]),tip);
+  assert.equal(readdirSync(join(state,"runs")).filter(name=>name.startsWith(tip.slice(0,12)+"-")).length,1);
+  assert.equal(readLedger(join(state,"verification"))!.transactions[0].state,"committed");assert.equal(heldLandings(state).length,0);
+});
+
 test("a coordinator docs commit is accounted for by the next strict train",async()=>{
   const s=scratch(),base=run(s,s.root,["rev-parse","main"]);
   new VerificationLedger(join(s.home,".cache/nts-land/verification"),s.root,base);

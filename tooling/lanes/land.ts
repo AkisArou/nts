@@ -445,12 +445,21 @@ type Entry = { durable?: true; unit?: string; id: string; sha: string; tree: str
 /** What became of a landing, written by whichever process gated it. */
 type Result = { state: "landed" | "red" | "conflict" | "unrun" | "regular" | "withdrawn" | "abandoned"; trainUnit?: string; trace?: string; message: string; landing?: string; main?: string; run?: string };
 
-function enqueue(sha: string, tree: string): string {
-  mkdirSync(QUEUE, { recursive: true });
-  const at = Date.now();
-  const id = `${at}-${process.pid}`;
-  durableRecord(join(QUEUE, `${id}.json`), { id, sha, tree, pid: process.pid, at, durable: true, unit: process.env.NTS_LAND_SUBMISSION_UNIT, author: authorOf(tree) });
-  return id;
+async function enqueue(sha: string, tree: string): Promise<string> {
+  return withTrainLaunchLock(STATE,()=>{
+    for(const directory of [QUEUE,LEGACY_QUEUE])for(const name of existsSync(directory)?readdirSync(directory):[]) {
+      if(!name.endsWith(".json"))continue;
+      let entry:Entry;
+      try{entry=JSON.parse(readFileSync(join(directory,name),"utf8"));}
+      catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")continue;throw error;}
+      if(entry.sha===sha&&!resultOf(entry.id))fail(`${sha.slice(0,12)} is already pending as ${entry.id}; follow that entry's disposition instead of submitting it twice`);
+    }
+    mkdirSync(QUEUE, { recursive: true });
+    const at = Date.now();
+    const id = `${at}-${process.pid}`;
+    durableRecord(join(QUEUE, `${id}.json`), { id, sha, tree, pid: process.pid, at, durable: true, unit: process.env.NTS_LAND_SUBMISSION_UNIT, author: authorOf(tree) });
+    return id;
+  });
 }
 
 function alive(pid: number): boolean {
@@ -583,6 +592,7 @@ async function resolveHeld(root:string,asked:string,action:"retry"|"refuse",note
       selected=direct.length?direct:selected.filter(row=>row.entry.sha===sha);
     }
     if(!selected.length)fail(`no held submission matches ${asked}; use the qualified hold:entry identity from lane status for an idempotent replay`);
+    if(action==="refuse")for(const {batch} of selected)if(spawnSync("git",["merge-base","--is-ancestor",batch.tip,"main"],{cwd:root}).status===0)fail("held tip is already on main; retry its bookkeeping recovery instead of refusing an actual landing");
     for(const {batch,entry} of selected)prepareHeldResolution(STATE,batch.id,entry.id,action,note);
     recoverHeldDecisions();
   });
@@ -648,7 +658,7 @@ async function underTheLock(sha: string, tree: string): Promise<void> {
   const checkedOut = spawnSync("git", ["symbolic-ref", "--quiet", "HEAD"], { cwd: tree, encoding: "utf8" });
   const fullBranch = checkedOut.status === 0 ? checkedOut.stdout.trim() : "";
   const submission: Submission = { sha, tree, branch: fullBranch.startsWith("refs/heads/") ? fullBranch.slice(11) : null };
-  const id = enqueue(sha, tree);
+  const id = await enqueue(sha, tree);
   let result: Result | null = null;
   let announced = "", lastFailure = "", lastFailureAt = 0;
   while (!(result = resultOf(id))) {
@@ -948,13 +958,11 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
       answer(entry, { state: "conflict", message: `${short} does not replay onto main (${base.slice(0, 12)})${behind} without a conflict: rebase onto main by hand, then land` });
       continue;
     }
-    if (landing === tip && tip === base) {
-      answer(entry, { state: "landed", message: `${short}'s changes are on main already`, landing: tip, main: base });
+    if (landing === tip) {
+      if(tip===base)answer(entry, { state: "landed", message: `${short}'s changes are on main already`, landing: tip, main: base });
+      else answer(entry,{state:"conflict",message:`${short} adds no commits: its changes are already contained in the pending train through ${members.at(-1)!.entry.id} (${tip.slice(0,12)}); follow that landing's disposition`});
       continue;
     }
-    // A landing whose changes a landing ahead of it in this train already
-    // makes adds nothing, and lands or not with the train: it is answered
-    // after the gate, never before.
     if (landing !== entry.sha) say(`${short} replayed onto ${tip.slice(0, 12)} as ${landing.slice(0, 12)}`);
     members.push({ entry, landing });
     tip = landing;
@@ -1052,21 +1060,35 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     answer(members[0].entry, { state: gated.state, message: gated.message, run: gated.run });
     return {state:"done",size:members.length};
   }
-  if (git(["rev-parse", "main"], root) !== base) {
-    // Every landing takes this lock, so this is a hand-made move of main.
-    fail("main moved while the gate ran, under the landing lock: someone moved it by hand");
-  }
-  const ledger = ledgerAt(root, base);
-  let previous = base;
-  const landings: Omit<LandingRecord, "commits" | "state">[] = members.map(({entry,landing}) => {
-    const owed = unionChecks(owedSteps(GATE_TREE, `${previous}..${landing}`), entry.required ?? {steps:[],interop:null});
-    const record = { id: entry.id, submitted: entry.sha, base: previous, tip: landing,
-      author: entry.author ?? {lane:null,address:null}, owed };
-    previous = landing; return record;
-  });
-  const transaction = ledger.prepare(base, tip, landings, "strict", {commit:tip,run:gated.run,checks:gated.checks});
-  execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
-  finishLedger(ledger, transaction, tip);
+  // Publish the green proof before any ledger/fast-forward work. A process
+  // death in this phase must never turn into another gate of the same tip.
+  admitted("post-green journal",()=>{
+    try{durableRecord(FROZEN,{version:1,phase:"post-green",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum,proof:gated});return {value:true};}
+    catch(error){return {hold:String(error)};}
+  },held=>{status({...held,commit:tip,run:gated.run});say(`post-green journal held: ${held.reason}`);});
+  try { finishGreenTrain(root,frozen,gated,record); }
+  catch(error) {record("held");return holdBatch({run:gated.run,message:`post-green landing failed: ${String(error)}; green proof retained, no gate restart`});}
+  return {state:"done",size:members.length};
+}
+
+function finishGreenTrain(root:string,frozen:FrozenComposition,gated:Extract<Gated,{ok:true}>,record:(verdict:string)=>void):void {
+  const {base,tip,members}=frozen,shas=members.map(m=>m.entry.sha.slice(0,12));
+  const current=git(["rev-parse","main"],root);
+  if(current===base) {
+    const ledger = ledgerAt(root, base);
+    let previous = base;
+    const landings: Omit<LandingRecord, "commits" | "state">[] = members.map(({entry,landing}) => {
+      const owed = unionChecks(owedSteps(GATE_TREE, `${previous}..${landing}`), entry.required ?? {steps:[],interop:null});
+      const record = { id: entry.id, submitted: entry.sha, base: previous, tip: landing,
+        author: entry.author ?? {lane:null,address:null}, owed };
+      previous = landing; return record;
+    });
+    const transaction = ledger.prepare(base, tip, landings, "strict", {commit:tip,run:gated.run,checks:gated.checks});
+    execFileSync("git", ["merge", "--ff-only", "-q", tip], { cwd: root, env: { ...process.env, NTS_LAND: "1" } });
+    finishLedger(ledger, transaction, tip);
+  } else if(spawnSync("git",["merge-base","--is-ancestor",tip,current],{cwd:root}).status===0) {
+    ledgerAt(root,current); // Recover a crash after the real fast-forward.
+  } else fail("main moved outside the green frozen train before landing");
   // Every member's own commit carries the note, not only the tip: a lane asks
   // `git notes --ref=land show` of the commit it landed, and a member before
   // the tip was gated as part of the tip.
@@ -1082,7 +1104,6 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     const train = members.length > 1 ? ` in a train of ${members.length}` : "";
     answer(entry, { state: "landed", message: `LANDED ${entry.sha.slice(0, 12)}${train} as ${landing.slice(0, 12)}: main is ${tip.slice(0, 12)}${refreshed}`, landing, main: tip, run: gated.run });
   }
-  return {state:"done",size:members.length};
 }
 
 /**
@@ -1116,6 +1137,24 @@ async function runController(root: string): Promise<void> {
   if(!inheritedLandingLock())fail("train supervisor does not own the landing descriptor");
   markTrainRunning(STATE);
   if(refreshController(STATE)){process.exitCode=76;return;}
+  let saved = existsSync(FROZEN) ? JSON.parse(readFileSync(FROZEN,"utf8")) : null;
+  if(saved?.phase==="post-green") {
+    const frozen:FrozenComposition=saved.composition,proof:Extract<Gated,{ok:true}>=saved.proof;
+    if(!frozen?.generation||!proof?.ok||!proof.run)fail("invalid post-green train journal; preserve it for operator recovery");
+    if(!wasHeldGeneration(STATE,frozen.generation)) {
+      try {
+        const current=git(["rev-parse","main"],root);
+        if(spawnSync("git",["merge-base","--is-ancestor",frozen.tip,current],{cwd:root}).status!==0)throw new Error("interrupted post-green landing before fast-forward");
+        finishGreenTrain(root,frozen,proof,()=>{});
+      } catch(error) {
+        const reason=`post-green recovery held: ${String(error)}; green proof retained, no gate restart`;
+        holdLandings(STATE,{tip:frozen.tip,generation:frozen.generation,run:proof.run,reason,entries:frozen.members.map(m=>m.entry)});
+        status({state:"held",commit:frozen.tip,base:frozen.base,run:proof.run,reason,train:frozen.members.map(m=>m.entry.sha.slice(0,12))});
+        say(reason);
+      }
+    }
+    durableRecord(FROZEN,{version:1,phase:"boundary",nextLimit:TRAIN_MAX});saved=null;
+  }
   admitted("verification-ledger",()=>{
     try { return {value:ledgerAt(root,git(["rev-parse","main"],root))}; }
     catch(error) {
@@ -1125,7 +1164,6 @@ async function runController(root: string): Promise<void> {
   },held=>{status(held);say(`verification journal held ${held.age_s} s: ${held.reason}; queued submissions are kept`);});
   drainReady(root);
   await withTrainLaunchLock(STATE,()=>recoverHeldDecisions());
-  let saved = existsSync(FROZEN) ? JSON.parse(readFileSync(FROZEN,"utf8")) : null;
   if(saved?.phase==="running"&&saved.composition&&wasHeldGeneration(STATE,saved.composition.generation)) {
     durableRecord(FROZEN,{version:1,phase:"boundary",nextLimit:TRAIN_MAX});saved=null;
   }

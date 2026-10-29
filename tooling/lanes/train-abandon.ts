@@ -1,9 +1,24 @@
 // Operator decisions are durable provenance, separate from a measured verdict.
 import {existsSync,readFileSync,rmSync} from "node:fs";
-import {join} from "node:path";
+import {dirname,join} from "node:path";
 import {spawnSync} from "node:child_process";
 import {durableRecord} from "./durable-record.ts";
 import {trainOwner,trainUnitState,withTrainLaunchLock} from "./train-service.ts";
+import {GateResource} from "./gate-resource.ts";
+
+/** Another train may own status even while this stopped owner is abandoned. */
+function reconcileStatus(state:string,unit:string,record:string,reason:string,run:string):void {
+  const lock=GateResource.tryAcquire(join(dirname(state),"nts-land.lock"));
+  if(!lock)return;
+  try {
+    const path=join(state,"status.json");
+    if(!existsSync(path))return;
+    let previous;
+    try{previous=JSON.parse(readFileSync(path,"utf8"));}catch(error){if(error instanceof SyntaxError)return;throw error;}
+    if(previous.holder_unit!==unit)return;
+    durableRecord(path,{...previous,at:new Date().toISOString(),state:"abandoned",holder_unit:null,reason,run,abandonment:record});
+  } finally {lock.close();}
+}
 
 export async function abandonFrozen(state:string,id:string,reason:string,run:string,options:{unitState?:(unit:string)=>string}={}) {
   if(!reason.trim()||!run.trim())throw new Error("abandonment requires --because=<reason> and --run=<evidence path>");
@@ -18,6 +33,7 @@ export async function abandonFrozen(state:string,id:string,reason:string,run:str
       if(!existsSync(record))throw new Error("abandoned train lacks its operator record");
       const prior=JSON.parse(readFileSync(record,"utf8"));
       if(prior.reason!==reason||prior.run!==run)throw new Error("operator abandonment is immutable");
+      reconcileStatus(state,owner.unit,record,reason,run);
       return record;
     }
     if(frozen.version!==1||frozen.phase!=="running"||!frozen.composition||!Array.isArray(frozen.entries)||!frozen.entries.length)throw new Error("no running frozen train to abandon");
@@ -42,8 +58,7 @@ export async function abandonFrozen(state:string,id:string,reason:string,run:str
     }
     durableRecord(path,{version:1,phase:"abandoned",nextLimit:6,abandonment:record});
     owner.phase="retiring";durableRecord(join(owner.directory,"owner.json"),owner);durableRecord(join(state,"train-owner.json"),owner);
-    // status.json belongs to the current landing-lock holder, possibly a
-    // legacy train. The separate operator record is the abandonment status.
+    reconcileStatus(state,owner.unit,record,reason,run);
     return record;
   });
 }
