@@ -1,0 +1,10 @@
+{
+  "node": "v24.20.0",
+  "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "tests": 178,
+  "passed": 178,
+  "failed": 0,
+  "serializedCharacters": 47057,
+  "sha256": "b5366a25ad90d8f01c3b2e23af723a4bbafa1e28964aa170298437c0a46ff208",
+  "failures": []
+}

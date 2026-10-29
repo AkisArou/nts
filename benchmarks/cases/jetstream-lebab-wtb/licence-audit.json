@@ -1,0 +1,1010 @@
+{
+  "node_modules/acorn-jsx": {
+    "name": "acorn-jsx",
+    "version": "5.3.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/acorn-jsx/-/acorn-jsx-5.3.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d967b05e40c5396a56d70e0d3150477b969cb6cc1058d68bc2b95ab0159158cc",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1068,
+        "sha256": "cfa72b62b9ae173078823a3796b25c027a9071046a263beddf966df67018ce06",
+        "text": "Copyright (C) 2012-2017 by Ingvar Stepanyan\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/acorn": {
+    "name": "acorn",
+    "version": "8.15.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/acorn/-/acorn-8.15.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "e46eae89bd9761f16d1d25563b837b55b4b78f3ece06ee0b9789cb2644f523b3",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1099,
+        "sha256": "76a876cf886ff9be2a8b5e2e86514fed06223c8c9f0c1e9ee9606e93841e00b7",
+        "text": "MIT License\n\nCopyright (C) 2012-2022 by various contributors (see AUTHORS)\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/assert": {
+    "name": "assert",
+    "version": "2.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/assert/-/assert-2.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "90027e5efd4bc03eabe781aa7a05d6bcef7098bf125f75c0452830558d66a054",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1096,
+        "sha256": "6239c6144c31e58cf925c34483606969c555574d64ffa96518ab5d7f45c75d43",
+        "text": "Copyright Joyent, Inc. and other Node contributors. All rights reserved.\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to\ndeal in the Software without restriction, including without limitation the\nrights to use, copy, modify, merge, publish, distribute, sublicense, and/or\nsell copies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\nIN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/ast-types": {
+    "name": "ast-types",
+    "version": "0.16.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/ast-types/-/ast-types-0.16.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "ab08015b2b359f6ec90560a90f809351d8d2a03433ea48d8d6f0ba387e9ac4e3",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1075,
+        "sha256": "a374b737c41b30b1ec04c5fcc17d1b853f008f217cc43a9dbea441abd9afde70",
+        "text": "Copyright (c) 2013 Ben Newman <bn@cs.stanford.edu>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/available-typed-arrays": {
+    "name": "available-typed-arrays",
+    "version": "1.0.7",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/available-typed-arrays/-/available-typed-arrays-1.0.7.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "8b140e0fa3fede3d81d1dffcc400c9755d7388e8a4add228487f5e20c9cf7863",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1067,
+        "sha256": "6d0917530cf3b3dca12c1ab7798e4d38ad0a6798ecc1bd27849a3048ba91d265",
+        "text": "MIT License\n\nCopyright (c) 2020 Inspect JS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/call-bind-apply-helpers": {
+    "name": "call-bind-apply-helpers",
+    "version": "1.0.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/call-bind-apply-helpers/-/call-bind-apply-helpers-1.0.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "073e9ff9dbabedf5c128020a677381e9f92c90188d118830b30a7656a7c37d2c",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "text": "MIT License\n\nCopyright (c) 2024 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/call-bind": {
+    "name": "call-bind",
+    "version": "1.0.8",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/call-bind/-/call-bind-1.0.8.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "30e2bdf3ce00c012527ae4161df4145cbf4c797e9fa30e43fc7324b2e07b0523",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416",
+        "text": "MIT License\n\nCopyright (c) 2020 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/call-bound": {
+    "name": "call-bound",
+    "version": "1.0.4",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/call-bound/-/call-bound-1.0.4.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "32086f492fedf1b9b34811f2ee50ca2cca53da5c783f7cd5f939d3f1e86bbd32",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "text": "MIT License\n\nCopyright (c) 2024 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/define-data-property": {
+    "name": "define-data-property",
+    "version": "1.1.4",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/define-data-property/-/define-data-property-1.1.4.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "16304ad73df1364ca8623c28a8969de01cd7189b4f9b05668fadb598f110e4d2",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "b41d08bc3624d8c436fc80237d73ebb361985a67f4504bbcd703e5ca2b27254c",
+        "text": "MIT License\n\nCopyright (c) 2023 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/define-properties": {
+    "name": "define-properties",
+    "version": "1.2.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/define-properties/-/define-properties-1.2.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "5de7e3804fadee9d773cd494b695e6efedfee8837e751fd9b9b77c3e9c6b40f4",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1080,
+        "sha256": "00d402c2bbe7c67369bd01ce2c16b8ed46ccc949a1ee2d6bb8f9606afa8c7434",
+        "text": "The MIT License (MIT)\n\nCopyright (C) 2015 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/dunder-proto": {
+    "name": "dunder-proto",
+    "version": "1.0.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/dunder-proto/-/dunder-proto-1.0.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "ed1342228c82c10df9921c59d684df516a0cd6ed25b61e5f9d6330895326cfdb",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1073,
+        "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1",
+        "text": "MIT License\n\nCopyright (c) 2024 ECMAScript Shims\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/es-define-property": {
+    "name": "es-define-property",
+    "version": "1.0.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/es-define-property/-/es-define-property-1.0.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "5986b8b13121340a8b0d5c7d8f0f961aa80ef3a74515ca9cb7a78d86ed0385f7",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "text": "MIT License\n\nCopyright (c) 2024 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/es-errors": {
+    "name": "es-errors",
+    "version": "1.3.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/es-errors/-/es-errors-1.3.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d14dd1c35b4bd3b8aca3219fd3627eb7f3eb49cf6b4c8a7ca58b91fd7a190993",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "text": "MIT License\n\nCopyright (c) 2024 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/es-object-atoms": {
+    "name": "es-object-atoms",
+    "version": "1.1.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/es-object-atoms/-/es-object-atoms-1.1.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "3e18e4d757818aee7bf1921686c6c3e7f9676d17c5c6fec560567c6beee579ce",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "text": "MIT License\n\nCopyright (c) 2024 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/escope": {
+    "name": "escope",
+    "version": "4.0.0",
+    "lockLicense": "BSD-2-Clause",
+    "packageLicense": "BSD-2-Clause",
+    "url": "https://registry.npmjs.org/escope/-/escope-4.0.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "fb1a4871a73a8d32039a2e7cefb7f8d6dddc1bc6b13707c25ca97a4fd2d49d18",
+    "notices": {
+      "LICENSE.BSD": {
+        "bytes": 1231,
+        "sha256": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
+        "text": "Redistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n  * Redistributions of source code must retain the above copyright\n    notice, this list of conditions and the following disclaimer.\n  * Redistributions in binary form must reproduce the above copyright\n    notice, this list of conditions and the following disclaimer in the\n    documentation and/or other materials provided with the distribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\nARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY\nDIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\nLOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\nON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF\nTHIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/escope/node_modules/estraverse": {
+    "name": "estraverse",
+    "version": "4.3.0",
+    "lockLicense": "BSD-2-Clause",
+    "packageLicense": "BSD-2-Clause",
+    "url": "https://registry.npmjs.org/estraverse/-/estraverse-4.3.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "7f262b147df8eeb209d0b7220b4dff6c70a5b1edba157bf335cee0bb71b9f1ae",
+    "notices": {
+      "LICENSE.BSD": {
+        "bytes": 1231,
+        "sha256": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
+        "text": "Redistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n  * Redistributions of source code must retain the above copyright\n    notice, this list of conditions and the following disclaimer.\n  * Redistributions in binary form must reproduce the above copyright\n    notice, this list of conditions and the following disclaimer in the\n    documentation and/or other materials provided with the distribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\nARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY\nDIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\nLOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\nON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF\nTHIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/esprima": {
+    "name": "esprima",
+    "version": "4.0.1",
+    "lockLicense": "BSD-2-Clause",
+    "packageLicense": "BSD-2-Clause",
+    "url": "https://registry.npmjs.org/esprima/-/esprima-4.0.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d8a1910e9cbecc95b4c5df75376c46a7a9261859c294ef91505c1442e093cc74",
+    "notices": {
+      "LICENSE.BSD": {
+        "bytes": 1303,
+        "sha256": "94bcb9959136723aa4fb36e1a6c4d5c662a2369978cfae344dabfb83ae619e79",
+        "text": "Copyright JS Foundation and other contributors, https://js.foundation/\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n  * Redistributions of source code must retain the above copyright\n    notice, this list of conditions and the following disclaimer.\n  * Redistributions in binary form must reproduce the above copyright\n    notice, this list of conditions and the following disclaimer in the\n    documentation and/or other materials provided with the distribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\nARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY\nDIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\nLOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\nON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF\nTHIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/esrecurse": {
+    "name": "esrecurse",
+    "version": "4.3.0",
+    "lockLicense": "BSD-2-Clause",
+    "packageLicense": "BSD-2-Clause",
+    "url": "https://registry.npmjs.org/esrecurse/-/esrecurse-4.3.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "3ecf9370d7296b47b570c88a11f70b35bb965af8d536536b259eb55f9b793b61",
+    "notices": {
+      "esrecurse.js header": {
+        "bytes": 1330,
+        "sha256": "93a2af4d556efacc486b1b5863376a874463de44ae6f7e3e3d3d454a0589a374",
+        "text": "/*\n  Copyright (C) 2014 Yusuke Suzuki <utatane.tea@gmail.com>\n\n  Redistribution and use in source and binary forms, with or without\n  modification, are permitted provided that the following conditions are met:\n\n    * Redistributions of source code must retain the above copyright\n      notice, this list of conditions and the following disclaimer.\n    * Redistributions in binary form must reproduce the above copyright\n      notice, this list of conditions and the following disclaimer in the\n      documentation and/or other materials provided with the distribution.\n\n  THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\n  AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\n  IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\n  ARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY\n  DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n  (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\n  LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\n  ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n  (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF\n  THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n*/",
+        "presentBeforeSupplement": false,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/estraverse": {
+    "name": "estraverse",
+    "version": "5.3.0",
+    "lockLicense": "BSD-2-Clause",
+    "packageLicense": "BSD-2-Clause",
+    "url": "https://registry.npmjs.org/estraverse/-/estraverse-5.3.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "3e8d45da5b8085a4a8d51368ffead5b551a502c286978962a05d5c8e0d72fda6",
+    "notices": {
+      "LICENSE.BSD": {
+        "bytes": 1231,
+        "sha256": "0e74697a68cebdcd61502c30fe80ab7f9e341d995dcd452023654d57133534b1",
+        "text": "Redistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n  * Redistributions of source code must retain the above copyright\n    notice, this list of conditions and the following disclaimer.\n  * Redistributions in binary form must reproduce the above copyright\n    notice, this list of conditions and the following disclaimer in the\n    documentation and/or other materials provided with the distribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE\nARE DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY\nDIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES\n(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;\nLOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND\nON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT\n(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF\nTHIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/f-matches": {
+    "name": "f-matches",
+    "version": "1.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/f-matches/-/f-matches-1.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "077a92347546599e4b9f4533d410b362d72eff759b08ba06bcdca487bd5eab53",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1085,
+        "sha256": "d348b23be18ad907eaa0e109fe82be68a60e2eb6521f77072126e1e38911500a",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 Mohamad Mohebifar\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/for-each": {
+    "name": "for-each",
+    "version": "0.3.5",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/for-each/-/for-each-0.3.5.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "4bd2cfc8e674c93cf7abb3bd3d6fd8e388fa10324bec011223a8fa4f287185d1",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1075,
+        "sha256": "d07913d776eef217a95d7ee3ee83577fc3c365b9c870f5a3411f785b81090614",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2012 Raynos.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/function-bind": {
+    "name": "function-bind",
+    "version": "1.1.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "704402651b02a1454f17d445fc7dd716efc282d059407126d58ef30a47e807aa",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1052,
+        "sha256": "773e131a7684726005a7e4688a80b4620033bc08499bc1404dd1a1eb3bca725e",
+        "text": "Copyright (c) 2013 Raynos.\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/get-intrinsic": {
+    "name": "get-intrinsic",
+    "version": "1.3.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/get-intrinsic/-/get-intrinsic-1.3.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "662e27e54e00fe46fbb08f9f4aacb054e3695dbe72cc14b436613fbcfb780544",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "39c5ec504cf6bd5cd782a7c695828e09189df79f5d94840e4f08feb97b9fd416",
+        "text": "MIT License\n\nCopyright (c) 2020 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/get-proto": {
+    "name": "get-proto",
+    "version": "1.0.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/get-proto/-/get-proto-1.0.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "eb2cc52afb1f1fd82c5fc2a58c2380f0f16fdcdb5631538f3c66887435d70681",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "be46ce1e3b0479af9ce82d22b465a6d7d2ff084fca0aaf3d54172da2b5eb5781",
+        "text": "MIT License\n\nCopyright (c) 2025 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/gopd": {
+    "name": "gopd",
+    "version": "1.2.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/gopd/-/gopd-1.2.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d536d0de4dd285dc1468fbb7f39334a47ee0eec9c27f9b626a6e71466c9fda82",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5",
+        "text": "MIT License\n\nCopyright (c) 2022 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/has-property-descriptors": {
+    "name": "has-property-descriptors",
+    "version": "1.0.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/has-property-descriptors/-/has-property-descriptors-1.0.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "0219bbd8f32e268eeb6efff55a2c6ff2d502098f49c583ff023b2d9d5a8bfa87",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1067,
+        "sha256": "0f0ca96f50793990031ebc488a38f7292ff70bce8ab6a8e5eeda674abc32ccdf",
+        "text": "MIT License\n\nCopyright (c) 2022 Inspect JS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/has-symbols": {
+    "name": "has-symbols",
+    "version": "1.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/has-symbols/-/has-symbols-1.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "4460c7532f28b8df2ddc9a1ec17816d43c24d4b9591dc6c5936b82f7f86ae7c5",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "206c1adcf206dc0031b11232f5b054ec5f1662407ab1ca415247921cab2068ab",
+        "text": "MIT License\n\nCopyright (c) 2016 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/has-tostringtag": {
+    "name": "has-tostringtag",
+    "version": "1.0.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/has-tostringtag/-/has-tostringtag-1.0.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "dc1c74e3f1179a6271f84747d72c89f258aa46ad3e6464fae0e41737a7f0ef7b",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1067,
+        "sha256": "e2560e002e13281578c75c850061d9255c33d16d732939e8c2db64c2506642fa",
+        "text": "MIT License\n\nCopyright (c) 2021 Inspect JS\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/hasown": {
+    "name": "hasown",
+    "version": "2.0.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/hasown/-/hasown-2.0.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "50cdc4d2cd11ae04b6ee29f328d09022244962e5dfab303c8fc223ff8dfa807d",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1083,
+        "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a",
+        "text": "MIT License\n\nCopyright (c) Jordan Harband and contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/inherits": {
+    "name": "inherits",
+    "version": "2.0.4",
+    "lockLicense": "ISC",
+    "packageLicense": "ISC",
+    "url": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d94dbc6c1bb3c5ac0fb12a73ade187108fc60de273a1b754f55044eb5e24afaf",
+    "notices": {
+      "LICENSE": {
+        "bytes": 749,
+        "sha256": "5ffe28e7ade7d8f10d85d5337a73fd793dac5c462fb9a28fbf8c5046c7fbca3b",
+        "text": "The ISC License\n\nCopyright (c) Isaac Z. Schlueter\n\nPermission to use, copy, modify, and/or distribute this software for any\npurpose with or without fee is hereby granted, provided that the above\ncopyright notice and this permission notice appear in all copies.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY AND\nFITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM\nLOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR\nOTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR\nPERFORMANCE OF THIS SOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/is-arguments": {
+    "name": "is-arguments",
+    "version": "1.2.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/is-arguments/-/is-arguments-1.2.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "476c29799ec4f51b694d576fc70a27631c8ffe00e4269b7608027e12c7b0e51c",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1081,
+        "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2014 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/is-callable": {
+    "name": "is-callable",
+    "version": "1.2.7",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/is-callable/-/is-callable-1.2.7.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "1b5c6e4e8ab142a6857fca2fb79d880ba64f2c4ad87907b583934d04b503c3a1",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1082,
+        "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/is-generator-function": {
+    "name": "is-generator-function",
+    "version": "1.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/is-generator-function/-/is-generator-function-1.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "4b194158a7d062321b75213fe7b3c658b3ab2431452ddfcfcd1485421f3cffe3",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1081,
+        "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2014 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/is-nan": {
+    "name": "is-nan",
+    "version": "1.3.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/is-nan/-/is-nan-1.3.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "f0a66f9818c5cd398979ad3acc8fc21526c586622fb62697524c0e3f2a628653",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1081,
+        "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2014 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/is-regex": {
+    "name": "is-regex",
+    "version": "1.2.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/is-regex/-/is-regex-1.2.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "a73e499153621af82d1f0f1ba77f21a01f95612b09d50d57253fc9e123a98b0d",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1081,
+        "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2014 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/is-typed-array": {
+    "name": "is-typed-array",
+    "version": "1.1.15",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/is-typed-array/-/is-typed-array-1.1.15.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d1ef6229208ce395c816f88637e45b970f6d742d616d3c980fb0dbb679cb7690",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1082,
+        "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/lebab": {
+    "name": "lebab",
+    "version": "3.2.7",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/lebab/-/lebab-3.2.7.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "b3a31bd327f018fedc21d1e086aff199cf7604d7a172d2911dbd72bd5512c167",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1085,
+        "sha256": "d348b23be18ad907eaa0e109fe82be68a60e2eb6521f77072126e1e38911500a",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 Mohamad Mohebifar\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/lebab/node_modules/eslint-visitor-keys": {
+    "name": "eslint-visitor-keys",
+    "version": "3.4.3",
+    "lockLicense": "Apache-2.0",
+    "packageLicense": "Apache-2.0",
+    "url": "https://registry.npmjs.org/eslint-visitor-keys/-/eslint-visitor-keys-3.4.3.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "30ce592c610e46e141ffc5653545d33f24089e57316c1057e5a68d106841aaea",
+    "notices": {
+      "LICENSE": {
+        "bytes": 11337,
+        "sha256": "d8bf34ff6d190640a01e7704ad78253fc181bc128949d71273fbbaa12f33c0b4",
+        "text": "                                 Apache License\n                           Version 2.0, January 2004\n                        http://www.apache.org/licenses/\n\n   TERMS AND CONDITIONS FOR USE, REPRODUCTION, AND DISTRIBUTION\n\n   1. Definitions.\n\n      \"License\" shall mean the terms and conditions for use, reproduction,\n      and distribution as defined by Sections 1 through 9 of this document.\n\n      \"Licensor\" shall mean the copyright owner or entity authorized by\n      the copyright owner that is granting the License.\n\n      \"Legal Entity\" shall mean the union of the acting entity and all\n      other entities that control, are controlled by, or are under common\n      control with that entity. For the purposes of this definition,\n      \"control\" means (i) the power, direct or indirect, to cause the\n      direction or management of such entity, whether by contract or\n      otherwise, or (ii) ownership of fifty percent (50%) or more of the\n      outstanding shares, or (iii) beneficial ownership of such entity.\n\n      \"You\" (or \"Your\") shall mean an individual or Legal Entity\n      exercising permissions granted by this License.\n\n      \"Source\" form shall mean the preferred form for making modifications,\n      including but not limited to software source code, documentation\n      source, and configuration files.\n\n      \"Object\" form shall mean any form resulting from mechanical\n      transformation or translation of a Source form, including but\n      not limited to compiled object code, generated documentation,\n      and conversions to other media types.\n\n      \"Work\" shall mean the work of authorship, whether in Source or\n      Object form, made available under the License, as indicated by a\n      copyright notice that is included in or attached to the work\n      (an example is provided in the Appendix below).\n\n      \"Derivative Works\" shall mean any work, whether in Source or Object\n      form, that is based on (or derived from) the Work and for which the\n      editorial revisions, annotations, elaborations, or other modifications\n      represent, as a whole, an original work of authorship. For the purposes\n      of this License, Derivative Works shall not include works that remain\n      separable from, or merely link (or bind by name) to the interfaces of,\n      the Work and Derivative Works thereof.\n\n      \"Contribution\" shall mean any work of authorship, including\n      the original version of the Work and any modifications or additions\n      to that Work or Derivative Works thereof, that is intentionally\n      submitted to Licensor for inclusion in the Work by the copyright owner\n      or by an individual or Legal Entity authorized to submit on behalf of\n      the copyright owner. For the purposes of this definition, \"submitted\"\n      means any form of electronic, verbal, or written communication sent\n      to the Licensor or its representatives, including but not limited to\n      communication on electronic mailing lists, source code control systems,\n      and issue tracking systems that are managed by, or on behalf of, the\n      Licensor for the purpose of discussing and improving the Work, but\n      excluding communication that is conspicuously marked or otherwise\n      designated in writing by the copyright owner as \"Not a Contribution.\"\n\n      \"Contributor\" shall mean Licensor and any individual or Legal Entity\n      on behalf of whom a Contribution has been received by Licensor and\n      subsequently incorporated within the Work.\n\n   2. Grant of Copyright License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      copyright license to reproduce, prepare Derivative Works of,\n      publicly display, publicly perform, sublicense, and distribute the\n      Work and such Derivative Works in Source or Object form.\n\n   3. Grant of Patent License. Subject to the terms and conditions of\n      this License, each Contributor hereby grants to You a perpetual,\n      worldwide, non-exclusive, no-charge, royalty-free, irrevocable\n      (except as stated in this section) patent license to make, have made,\n      use, offer to sell, sell, import, and otherwise transfer the Work,\n      where such license applies only to those patent claims licensable\n      by such Contributor that are necessarily infringed by their\n      Contribution(s) alone or by combination of their Contribution(s)\n      with the Work to which such Contribution(s) was submitted. If You\n      institute patent litigation against any entity (including a\n      cross-claim or counterclaim in a lawsuit) alleging that the Work\n      or a Contribution incorporated within the Work constitutes direct\n      or contributory patent infringement, then any patent licenses\n      granted to You under this License for that Work shall terminate\n      as of the date such litigation is filed.\n\n   4. Redistribution. You may reproduce and distribute copies of the\n      Work or Derivative Works thereof in any medium, with or without\n      modifications, and in Source or Object form, provided that You\n      meet the following conditions:\n\n      (a) You must give any other recipients of the Work or\n          Derivative Works a copy of this License; and\n\n      (b) You must cause any modified files to carry prominent notices\n          stating that You changed the files; and\n\n      (c) You must retain, in the Source form of any Derivative Works\n          that You distribute, all copyright, patent, trademark, and\n          attribution notices from the Source form of the Work,\n          excluding those notices that do not pertain to any part of\n          the Derivative Works; and\n\n      (d) If the Work includes a \"NOTICE\" text file as part of its\n          distribution, then any Derivative Works that You distribute must\n          include a readable copy of the attribution notices contained\n          within such NOTICE file, excluding those notices that do not\n          pertain to any part of the Derivative Works, in at least one\n          of the following places: within a NOTICE text file distributed\n          as part of the Derivative Works; within the Source form or\n          documentation, if provided along with the Derivative Works; or,\n          within a display generated by the Derivative Works, if and\n          wherever such third-party notices normally appear. The contents\n          of the NOTICE file are for informational purposes only and\n          do not modify the License. You may add Your own attribution\n          notices within Derivative Works that You distribute, alongside\n          or as an addendum to the NOTICE text from the Work, provided\n          that such additional attribution notices cannot be construed\n          as modifying the License.\n\n      You may add Your own copyright statement to Your modifications and\n      may provide additional or different license terms and conditions\n      for use, reproduction, or distribution of Your modifications, or\n      for any such Derivative Works as a whole, provided Your use,\n      reproduction, and distribution of the Work otherwise complies with\n      the conditions stated in this License.\n\n   5. Submission of Contributions. Unless You explicitly state otherwise,\n      any Contribution intentionally submitted for inclusion in the Work\n      by You to the Licensor shall be under the terms and conditions of\n      this License, without any additional terms or conditions.\n      Notwithstanding the above, nothing herein shall supersede or modify\n      the terms of any separate license agreement you may have executed\n      with Licensor regarding such Contributions.\n\n   6. Trademarks. This License does not grant permission to use the trade\n      names, trademarks, service marks, or product names of the Licensor,\n      except as required for reasonable and customary use in describing the\n      origin of the Work and reproducing the content of the NOTICE file.\n\n   7. Disclaimer of Warranty. Unless required by applicable law or\n      agreed to in writing, Licensor provides the Work (and each\n      Contributor provides its Contributions) on an \"AS IS\" BASIS,\n      WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or\n      implied, including, without limitation, any warranties or conditions\n      of TITLE, NON-INFRINGEMENT, MERCHANTABILITY, or FITNESS FOR A\n      PARTICULAR PURPOSE. You are solely responsible for determining the\n      appropriateness of using or redistributing the Work and assume any\n      risks associated with Your exercise of permissions under this License.\n\n   8. Limitation of Liability. In no event and under no legal theory,\n      whether in tort (including negligence), contract, or otherwise,\n      unless required by applicable law (such as deliberate and grossly\n      negligent acts) or agreed to in writing, shall any Contributor be\n      liable to You for damages, including any direct, indirect, special,\n      incidental, or consequential damages of any character arising as a\n      result of this License or out of the use or inability to use the\n      Work (including but not limited to damages for loss of goodwill,\n      work stoppage, computer failure or malfunction, or any and all\n      other commercial damages or losses), even if such Contributor\n      has been advised of the possibility of such damages.\n\n   9. Accepting Warranty or Additional Liability. While redistributing\n      the Work or Derivative Works thereof, You may choose to offer,\n      and charge a fee for, acceptance of support, warranty, indemnity,\n      or other liability obligations and/or rights consistent with this\n      License. However, in accepting such obligations, You may act only\n      on Your own behalf and on Your sole responsibility, not on behalf\n      of any other Contributor, and only if You agree to indemnify,\n      defend, and hold each Contributor harmless for any liability\n      incurred by, or claims asserted against, such Contributor by reason\n      of your accepting any such warranty or additional liability.\n\n   END OF TERMS AND CONDITIONS\n\n   APPENDIX: How to apply the Apache License to your work.\n\n      To apply the Apache License to your work, attach the following\n      boilerplate notice, with the fields enclosed by brackets \"{}\"\n      replaced with your own identifying information. (Don't include\n      the brackets!)  The text should be enclosed in the appropriate\n      comment syntax for the file format. We also recommend that a\n      file or class name and description of purpose be included on the\n      same \"printed page\" as the copyright notice for easier\n      identification within third-party archives.\n\n   Copyright contributors\n\n   Licensed under the Apache License, Version 2.0 (the \"License\");\n   you may not use this file except in compliance with the License.\n   You may obtain a copy of the License at\n\n       http://www.apache.org/licenses/LICENSE-2.0\n\n   Unless required by applicable law or agreed to in writing, software\n   distributed under the License is distributed on an \"AS IS\" BASIS,\n   WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.\n   See the License for the specific language governing permissions and\n   limitations under the License.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/lebab/node_modules/espree": {
+    "name": "espree",
+    "version": "9.6.1",
+    "lockLicense": "BSD-2-Clause",
+    "packageLicense": "BSD-2-Clause",
+    "url": "https://registry.npmjs.org/espree/-/espree-9.6.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "6cd05eb78c766a8164d1f1f3a651a00b409201500ae2afc324f35cf50956181b",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1322,
+        "sha256": "26c95937762a3dc17a3934a0a2773c70259ba4bf28dab713c225e4af8eb9d349",
+        "text": "BSD 2-Clause License\n\nCopyright (c) Open JS Foundation\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n1. Redistributions of source code must retain the above copyright notice, this\n   list of conditions and the following disclaimer.\n\n2. Redistributions in binary form must reproduce the above copyright notice,\n   this list of conditions and the following disclaimer in the documentation\n   and/or other materials provided with the distribution.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\"\nAND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE\nIMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/lodash": {
+    "name": "lodash",
+    "version": "4.17.21",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/lodash/-/lodash-4.17.21.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "6a087ac9e5702a0c9d60fbcd48696012646ec8df1491dea472b150e79fcaf804",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1952,
+        "sha256": "f71e8ed126b46346494aad5486874cd8f0aafe95092ed67d2e3cb6110f939abc",
+        "text": "Copyright OpenJS Foundation and other contributors <https://openjsf.org/>\n\nBased on Underscore.js, copyright Jeremy Ashkenas,\nDocumentCloud and Investigative Reporters & Editors <http://underscorejs.org/>\n\nThis software consists of voluntary contributions made by many\nindividuals. For exact contribution history, see the revision history\navailable at https://github.com/lodash/lodash\n\nThe following license applies to all parts of this software except as\ndocumented below:\n\n====\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND\nNONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE\nLIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION\nOF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION\nWITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n\n====\n\nCopyright and related rights for sample code are waived via CC0. Sample\ncode is defined as all source code displayed within the prose of the\ndocumentation.\n\nCC0: http://creativecommons.org/publicdomain/zero/1.0/\n\n====\n\nFiles located in the node_modules and vendor directories are externally\nmaintained libraries used by this software which have their own\nlicenses; we recommend you read them, as their terms may differ from the\nterms above.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/math-intrinsics": {
+    "name": "math-intrinsics",
+    "version": "1.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/math-intrinsics/-/math-intrinsics-1.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "b8c2c35575493dc086df88cfc468a9e2651b6617336480ab3f00fcf853f443a7",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1073,
+        "sha256": "2b770a704c15de238c3f622b01b0044ddd60b49ee30608ea6991ebf19db7a7a1",
+        "text": "MIT License\n\nCopyright (c) 2024 ECMAScript Shims\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/object-is": {
+    "name": "object-is",
+    "version": "1.1.6",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/object-is/-/object-is-1.1.6.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "ed20196adebc0396b4fa793a13730858771ff7ea4b6cce14e30442f1b75eea2c",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1081,
+        "sha256": "dc0fe5a22d9336f345ee984f9bf56f11f22877a3aa5fd16a1db9a8ca0e23a5d1",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2014 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy of\nthis software and associated documentation files (the \"Software\"), to deal in\nthe Software without restriction, including without limitation the rights to\nuse, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of\nthe Software, and to permit persons to whom the Software is furnished to do so,\nsubject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS\nFOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR\nCOPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER\nIN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN\nCONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/object-keys": {
+    "name": "object-keys",
+    "version": "1.1.1",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/object-keys/-/object-keys-1.1.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "9678d9055619767c8a134033709e88a6e0a19600f3d3f2cda40acdfd75e7f212",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1080,
+        "sha256": "5640e5cbe2e9f57f6ccfdd8dbfbeadb875495bdbcb69d2666ce3177ccd0942e4",
+        "text": "The MIT License (MIT)\n\nCopyright (C) 2013 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN\nTHE SOFTWARE.",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/object.assign": {
+    "name": "object.assign",
+    "version": "4.1.7",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/object.assign/-/object.assign-4.1.7.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "08e4dcd218f7ac619100ac3d3bb76b54c66257cabf0b2409dbfbb6dff01bfcf3",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1080,
+        "sha256": "a596744eec6b05682ed972bf93937668bbc8da2caed93fbf6510389de019b5c0",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2014 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/os-browserify": {
+    "name": "os-browserify",
+    "version": "0.3.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/os-browserify/-/os-browserify-0.3.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "7df96551e0d82458745fb7dea7e9c0739f5a0c06d20607592f9a0a00af60b738",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1077,
+        "sha256": "d25d1d6d28c35cb6f358e2833e405c4e53fec2fa24d156323ddea5cd438d3407",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2017 CoderPuppy\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/possible-typed-array-names": {
+    "name": "possible-typed-array-names",
+    "version": "1.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "c29791211b8e2f181c049247214843292380e4134c140c5105376b7c6ae3e3c7",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "5e325595b4ea8cfec3802f545b1def5d7b73e4a5b8e9ba63e32a320f67732292",
+        "text": "MIT License\n\nCopyright (c) 2024 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/process": {
+    "name": "process",
+    "version": "0.11.10",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/process/-/process-0.11.10.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "7c10569b3c9cb056152ad630d40f9f4fcc321a0013c2bb8384f036aaa674e6bb",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1098,
+        "sha256": "59a400d04c5078579acc27ddd6452c1bdf763f9506e01364700935fbb1a7c91b",
+        "text": "(The MIT License)\n\nCopyright (c) 2013 Roman Shtylman <shtylman@gmail.com>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n'Software'), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/recast": {
+    "name": "recast",
+    "version": "0.23.11",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/recast/-/recast-0.23.11.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "27583e87b6c2037556869186b19942b23d48c8b4f5285dcfd511ed4b3bd16484",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1075,
+        "sha256": "6ca87d1dce5b82873603e566fd83dabe8771fb169013337d4a14bb9bbf794687",
+        "text": "Copyright (c) 2012 Ben Newman <bn@cs.stanford.edu>\n\nPermission is hereby granted, free of charge, to any person obtaining\na copy of this software and associated documentation files (the\n\"Software\"), to deal in the Software without restriction, including\nwithout limitation the rights to use, copy, modify, merge, publish,\ndistribute, sublicense, and/or sell copies of the Software, and to\npermit persons to whom the Software is furnished to do so, subject to\nthe following conditions:\n\nThe above copyright notice and this permission notice shall be\nincluded in all copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND,\nEXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF\nMERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.\nIN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY\nCLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,\nTORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE\nSOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/recast/node_modules/source-map": {
+    "name": "source-map",
+    "version": "0.6.1",
+    "lockLicense": "BSD-3-Clause",
+    "packageLicense": "BSD-3-Clause",
+    "url": "https://registry.npmjs.org/source-map/-/source-map-0.6.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "bdbca10d17ff5a5802d5acfc7b2f22f9f9bf587632a95650d3c5f513c7092b86",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1526,
+        "sha256": "6cb0631f71c7749763fd3dd1d5bee52dd1070ec17f2edc1710079ad070bd2fbd",
+        "text": "\nCopyright (c) 2009-2011, Mozilla Foundation and contributors\nAll rights reserved.\n\nRedistribution and use in source and binary forms, with or without\nmodification, are permitted provided that the following conditions are met:\n\n* Redistributions of source code must retain the above copyright notice, this\n  list of conditions and the following disclaimer.\n\n* Redistributions in binary form must reproduce the above copyright notice,\n  this list of conditions and the following disclaimer in the documentation\n  and/or other materials provided with the distribution.\n\n* Neither the names of the Mozilla Foundation nor the names of project\n  contributors may be used to endorse or promote products derived from this\n  software without specific prior written permission.\n\nTHIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS \"AS IS\" AND\nANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED\nWARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE\nDISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE\nFOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL\nDAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR\nSERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER\nCAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,\nOR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE\nOF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/safe-regex-test": {
+    "name": "safe-regex-test",
+    "version": "1.1.0",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/safe-regex-test/-/safe-regex-test-1.1.0.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "e92ad20e8549ef06adab664f8a6e9c0a349e38f34c9548ebb526f24f7d8cf12e",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1071,
+        "sha256": "d90bf0a089da4cf43d644ed240a0b3825dcdb705e64e38371d56995a4cc9e4c5",
+        "text": "MIT License\n\nCopyright (c) 2022 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/set-function-length": {
+    "name": "set-function-length",
+    "version": "1.2.2",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/set-function-length/-/set-function-length-1.2.2.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "a339df70dfa3507a3fe2137464915212d69a9585d201c253b90f0c13fd952b4a",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1083,
+        "sha256": "bf9b0d665be2a689851eea667ca9f42066ea1d903b38349c51e6a44b2577680a",
+        "text": "MIT License\n\nCopyright (c) Jordan Harband and contributors\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/tiny-invariant": {
+    "name": "tiny-invariant",
+    "version": "1.3.3",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/tiny-invariant/-/tiny-invariant-1.3.3.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "746a0b1c98dafa3f96769e200a23fd10dacece300b312d111d19bb65c85c3d48",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1073,
+        "sha256": "b1c501095de70182748cb8e8d97ac5577701a4ef3b755ba30d59fd87b24bdb0f",
+        "text": "MIT License\n\nCopyright (c) 2019 Alexander Reardon\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/tslib": {
+    "name": "tslib",
+    "version": "2.8.1",
+    "lockLicense": "0BSD",
+    "packageLicense": "0BSD",
+    "url": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "66f635d5eeabae44807534976913a102cf615b9a045368359c9f79ae6ee2119e",
+    "notices": {
+      "LICENSE.txt": {
+        "bytes": 655,
+        "sha256": "210b19e543130388c68654b7497e967119ce17145f66ab7d85688fbd70f08751",
+        "text": "Copyright (c) Microsoft Corporation.\r\n\r\nPermission to use, copy, modify, and/or distribute this software for any\r\npurpose with or without fee is hereby granted.\r\n\r\nTHE SOFTWARE IS PROVIDED \"AS IS\" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH\r\nREGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY\r\nAND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,\r\nINDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM\r\nLOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR\r\nOTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR\r\nPERFORMANCE OF THIS SOFTWARE.",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/util": {
+    "name": "util",
+    "version": "0.12.5",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/util/-/util-0.12.5.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "d3b9dac1449f7d6b6995355f5cc73179fec7b90bfa8967ff7d3c0654525ab282",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1096,
+        "sha256": "6239c6144c31e58cf925c34483606969c555574d64ffa96518ab5d7f45c75d43",
+        "text": "Copyright Joyent, Inc. and other Node contributors. All rights reserved.\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to\ndeal in the Software without restriction, including without limitation the\nrights to use, copy, modify, merge, publish, distribute, sublicense, and/or\nsell copies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in\nall copies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\nFROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\nIN THE SOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "node_modules/which-typed-array": {
+    "name": "which-typed-array",
+    "version": "1.1.19",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/which-typed-array/-/which-typed-array-1.1.19.tgz",
+    "integrityChecked": true,
+    "archiveSha256": "aaccea91985a6e1731f84192d4682f474aea76f64a210982576e488732b0ad3f",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1082,
+        "sha256": "c61652db3d2808f667b48af0a358f0d85fd07ad4a0d0b1a50882dec3b764c522",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2015 Jordan Harband\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  },
+  "input/preact": {
+    "name": "preact",
+    "version": "8.2.5",
+    "lockLicense": "MIT",
+    "packageLicense": "MIT",
+    "url": "https://registry.npmjs.org/preact/-/preact-8.2.5.tgz",
+    "integrityChecked": null,
+    "archiveSha256": "f307c17fea6c64c945dc6d2b518ad42853edc06f9bfff071e63a6a0e20619ef0",
+    "notices": {
+      "LICENSE": {
+        "bytes": 1079,
+        "sha256": "48847c33de7ee90f023d97dd90055cb8fe1e54edb7b956c90e19db852773ce18",
+        "text": "The MIT License (MIT)\n\nCopyright (c) 2017 Jason Miller\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE.\n",
+        "presentBeforeSupplement": true,
+        "preservedInSharedLicense": true
+      }
+    }
+  }
+}
