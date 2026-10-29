@@ -100,19 +100,19 @@ cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
 else
-  node --input-type=module -e 'import fs from "node:fs";import {PressureError,CaseBudgetError} from ${JSON.stringify(new URL("./step-result.ts",import.meta.url).href)};fs.writeFileSync(process.env.NTS_GATE_RUN_DIR+"/observed.json",JSON.stringify(process.env));const code=Number(fs.readFileSync("result-code","utf8"));if(code===86)throw new PressureError("system pressure control");if(code===87)throw new CaseBudgetError("named case exceeds the outcomes step budget");console.error("FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory");process.exit(code);' 
+  node --input-type=module -e 'import fs from "node:fs";import {PressureError,CaseBudgetError} from ${JSON.stringify(new URL("./step-result.ts",import.meta.url).href)};fs.writeFileSync(process.env.NTS_GATE_RUN_DIR+"/observed.json",JSON.stringify(process.env));const code=Number(fs.readFileSync("result-code","utf8"));if(code>=88){const value={version:1,kind:code===92?"unknown":"hung",verdict:code===88||code===90||code===92?"FAIL":"NOT RUN",completedFailures:code===88||code===90||code===92?1:0,step:process.env.NTS_GATE_STEP,attempt:process.env.NTS_GATE_STEP_ATTEMPT,reason:"unfinished work with retained results"};fs.writeFileSync(process.env.NTS_GATE_STEP_RESULT,JSON.stringify(value));process.exit(code===90||code===91||code===92?0:1);}if(code===86)throw new PressureError("system pressure control");if(code===87)throw new CaseBudgetError("named case exceeds the outcomes step budget");console.error("FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory");process.exit(code);' 
 fi
 `);
-  for (const code of [0,7,86,87]) {
+  for (const code of [0,7,86,87,88,89,90,91,92]) {
     writeFileSync(join(root,"result-code"),String(code));
     const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:"rustfmt",CARGO_TARGET_DIR:join(run,"target")}});
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:root,env:planned.env,encoding:"utf8"});
     assert.equal(actual.status,code===0?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,"summary.json"),"utf8"));
     assert.equal(summary.environment.canonical,true);assert.equal(summary.environment.host.JAVA_HOME,base.JAVA_HOME);
-    assert.equal(summary.steps[0].verdict,code===0?"PASS":code===86?"INSTRUMENT":"FAIL");
-    assert.equal(summary.steps[0].exit,code===86||code===87?1:code);
-    assert.equal(summary.steps[0].reason,code===0?"":code===86?"system pressure control":code===87?"named case exceeds the outcomes step budget":"Node/V8 heap out of memory diagnostic; exit 7");
+    assert.equal(summary.steps[0].verdict,code===0?"PASS":code===86||code===92?"INSTRUMENT":code===89||code===91?"NOT RUN":"FAIL");
+    assert.equal(summary.steps[0].exit,code===86||code===87||code===88||code===89?1:code>=90?0:code);
+    assert.equal(summary.steps[0].reason,code===0?"":code===92?"invalid instrument result for rustfmt":code>=88?"unfinished work with retained results":code===86?"system pressure control":code===87?"named case exceeds the outcomes step budget":"Node/V8 heap out of memory diagnostic; exit 7");
     const observed=JSON.parse(readFileSync(join(directory,"observed.json"),"utf8"));
     assert.equal(summary.temporary.state,code===0?"removed after green":"retained after red");
     assert.equal(existsSync(join(directory,"tmp")),code!==0);

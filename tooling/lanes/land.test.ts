@@ -1476,3 +1476,30 @@ PIN`;
   }
   for(const result of await results){assert.equal(result.status,1,result.out);assert.match(result.out,/unavailable control complete/);assert.doesNotMatch(result.out,/checking failed steps on main|gating its first half/);}
 });
+
+
+test("a completed failure and a hung remainder refuse the culprit instead of holding it",async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land");
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
+if [ -e "$NTS_GATE_TREE/FAIL_AND_HUNG" ]; then
+node - "$NTS_GATE_RUN_DIR/summary.json" <<'MIXED'
+const fs=require('node:fs'),file=process.argv[2],summary=JSON.parse(fs.readFileSync(file));
+summary.verdict='red';summary.steps[0]={...summary.steps[0],verdict:'FAIL',reason:'completed assertion failed; unfinished work hung',instrument:{kind:'hung',verdict:'FAIL',completedFailures:1}};
+fs.writeFileSync(file,JSON.stringify(summary));
+MIXED
+exit 1
+fi
+`));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","mixed failure and hang stand-in"]);
+  const tree=lane(s,"failure-before-hang",{FAIL_AND_HUNG:"definite failure\n"}),client=land(s,tree);
+  await waitFor("the mixed train's disposition",()=>states(s).length>0||heldLandings(state).length>0);
+  const held=heldLandings(state);
+  if(held.length){
+    const resolved=spawnTest(process.execPath,[LAND,"--refuse-held",held[0].entry.id,"--because=mixed control complete"],{cwd:s.root,env:s.env,encoding:"utf8"});assert.equal(resolved.status,0,resolved.stderr);
+  }
+  const result=await client.done;
+  assert.equal(held.length,0,"a definite failure is red, not held");
+  assert.equal(result.status,1,result.out);assert.match(result.out,/gate not green: fake=FAIL/);
+  assert.equal(states(s)[0].state,"red");assert.equal(gates(s),2,"one candidate and its healthy baseline, no retry");
+  assert.equal(onMain(s,"FAIL_AND_HUNG"),false);
+});

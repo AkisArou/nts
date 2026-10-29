@@ -14,16 +14,22 @@ import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts"
 import {gateCommand} from "./affinity.ts";
 
 export const TOOLING_IDLE_GUARD_MS=5*60_000;
+/** Cancellation/abortion is unfinished work; only completed test or hook errors
+ * supply definite failures, including reports delivered after a guard fires. */
+export function completedTestFailure(data:{details:{passed?:boolean;error?:{failureType?:string}};todo?:unknown;skip?:unknown}):boolean {
+  return data.details.passed===false&&!data.todo&&!data.skip&&!["testAborted","cancelledByParent","subtestsFailed","testTimeoutFailure"].includes(data.details.error?.failureType??"");
+}
 export async function runTooling(files:string[],options:{idleMs?:number;output?:NodeJS.WritableStream;resultEnv?:NodeJS.ProcessEnv}={}):Promise<number> {
   const names=new Set(files.map(file=>resolve(file))),controller=new AbortController();
   const active=new Map<string,ReturnType<typeof setTimeout>>();
-  let hung:string|undefined,success=true,priorFailures=0;
+  let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0;
+  const hangReason=()=>`tooling file NOT RUN (hung): ${hungFile}; no test activity for ${options.idleMs??TOOLING_IDLE_GUARD_MS} ms; ${priorFailures} prior assertion failure(s) retained in the transcript`;
   const touch=(file:string)=>{
     clearTimeout(active.get(file));
     active.set(file,setTimeout(()=>{
       if(hung)return;
-      hung=`tooling file NOT RUN (hung): ${file}; no test activity for ${options.idleMs??TOOLING_IDLE_GUARD_MS} ms; ${priorFailures} prior assertion failure(s) retained in the transcript`;
-      publishHung(hung,options.resultEnv);process.stderr.write(hung+"\n");controller.abort(new Error(hung));
+      hungFile=file;hung=hangReason();
+      publishHung(hung,options.resultEnv,priorFailures);process.stderr.write(hung+"\n");controller.abort(new Error(hung));
     },options.idleMs??TOOLING_IDLE_GUARD_MS));
   };
   const fileOf=(data:{file?:string;name?:string})=>{
@@ -37,7 +43,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;output?:
     }
     events.on("test:complete",data=>{
       const file=fileOf(data);if(!file)return;
-      if(!data.details.passed&&!data.todo&&!data.skip)priorFailures++;
+      if(completedTestFailure(data))priorFailures++;
       if(resolve(data.name)===file){clearTimeout(active.get(file));active.delete(file);}
       else if(active.has(file))touch(file);
     });
@@ -47,7 +53,13 @@ export async function runTooling(files:string[],options:{idleMs?:number;output?:
   report.pipe(options.output??process.stdout,{end:false});
   try{await finished(report);}catch(error){if(!hung)throw error;}
   finally{for(const timer of active.values())clearTimeout(timer);}
-  return hung?2:success?0:1;
+  if(hung){
+    // Draining can deliver a completed failure after the guard's observation.
+    // Publish the final evidence only after those events have been consumed.
+    publishHung(hangReason(),options.resultEnv,priorFailures);
+    return priorFailures>0?1:2;
+  }
+  return success?0:1;
 }
 
 /** The outside supervisor remains alive to stop the whole slice after a file abort. */

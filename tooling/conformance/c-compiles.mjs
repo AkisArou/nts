@@ -70,6 +70,14 @@ export async function measure({ project, root, compiler, env, work, cached, cc, 
   return { category: "compiles", bytes, reused: Boolean(cached) };
 }
 
+/** Every result here completed before all workers drained. Only a rejected C
+ * translation supplies a definite failure; an unmeasured command cannot. */
+export function finishLiveness(results, held, env) {
+  const completedFailures=[...results].filter(result=>result.category==="rejected").length;
+  (held.kind==="runaway"?publishRunaway:publishHung)(held.why,env,completedFailures);
+  return completedFailures>0?1:2;
+}
+
 async function main() {
   const source = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
   const cc = process.env.NTS_C_COMPILES_CC ?? "clang";
@@ -126,7 +134,7 @@ async function main() {
   for (const [project, result] of [...results].sort()) {
     if (result.category !== "compiles") console.log(`  ${result.category === "rejected" ? "DOES NOT COMPILE" : "NOT MEASURED"}  ${project}: ${result.why}`);
   }
-  if (held) { (held.kind === "runaway" ? publishRunaway : publishHung)(held.why,env); return 2; }
+  if (held) return finishLiveness(results.values(),held,env);
   return compiled.length === projects.length ? 0 : 1;
 }
 

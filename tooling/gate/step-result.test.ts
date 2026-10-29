@@ -96,3 +96,28 @@ test("the real selector preload publishes its infrastructure error before the co
   assert.notEqual(result.status,0);assert.match(result.stderr,/cargo metadata setup control/);
   assert.equal(readStepInstrument(path,"tooling","preload")?.kind,"selector-setup");
 });
+
+
+test("completed failures outrank liveness without converting missing measurements into failures",t=>{
+  const directory=mkdtempSync(join(homedir(),".cache/nts-scratch/step-result/evidence-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const path=join(directory,"result.json"),env={NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"one"};
+  for(const publish of [publishHung,publishRunaway]){
+    publish("unfinished control",env);
+    let row=readStepInstrument(path,"tooling","one")!;
+    assert.equal(row.verdict,"NOT RUN");assert.equal(needsOperatorHold({name:"tooling",verdict:row.verdict,instrument:row}),true);
+    // A completed result can arrive while the aborted test stream drains.
+    publish("unfinished control with a completed failure",env,1);
+    row=readStepInstrument(path,"tooling","one")!;
+    assert.equal(row.verdict,"FAIL");assert.equal(row.completedFailures,1);
+    assert.equal(needsOperatorHold({name:"tooling",verdict:row.verdict,instrument:row}),false);
+    for(const count of [-1,0.5,"1",null]){
+      const bad={...row,completedFailures:count};writeFileSync(path,JSON.stringify(bad));
+      assert.throws(()=>readStepInstrument(path,"tooling","one"),/invalid instrument/);
+      assert.equal(needsOperatorHold({name:"tooling",verdict:"FAIL",instrument:bad}),true);
+    }
+    for(const bad of [{...row,kind:"unknown"},{...row,completedFailures:0},{...row,verdict:"NOT RUN"}]){
+      writeFileSync(path,JSON.stringify(bad));assert.throws(()=>readStepInstrument(path,"tooling","one"),/invalid instrument/);
+      assert.equal(needsOperatorHold({name:"tooling",verdict:"FAIL",instrument:bad}),true);
+    }
+  }
+});

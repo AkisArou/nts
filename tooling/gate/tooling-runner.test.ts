@@ -7,7 +7,8 @@ import {join} from "node:path";
 import {PassThrough} from "node:stream";
 import {randomUUID} from "node:crypto";
 import {waitFor} from "./test-wait.ts";
-import {runScopedTooling} from "./tooling-runner.ts";
+import {completedTestFailure,runScopedTooling} from "./tooling-runner.ts";
+import {readStepInstrument} from "./step-result.ts";
 import {newToolingSlice,stopToolingSlice,toolingSlice,toolingSliceArgs,toolingSlicePrefix} from "./tooling-slice.ts";
 
 test("tooling slice names preserve nesting and cannot name unrelated units",()=>{
@@ -95,4 +96,54 @@ test("test children cannot publish into their supervising step's instrument reco
   const output=new PassThrough();output.resume();
   assert.equal((await runScopedTooling([file],{fixture:true,output})).status,0);
   assert.equal(existsSync(result),false);
+});
+
+
+test("a completed failure followed by an idle test is red while pass followed by idle holds",async t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-mixed-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const keys=["NTS_GATE_STEP_RESULT","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP"] as const;
+  const before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  t.after(()=>{for(const key of keys)if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];});
+  for(const failed of [false,true]){
+    const file=join(directory,`${failed}.test.mjs`),result=join(directory,`${failed}.json`);
+    writeFileSync(file,`import {test} from 'node:test';test('completed',()=>{${failed?"throw new Error('definite assertion')":""}});test('unfinished',async()=>{await new Promise(()=>{setInterval(()=>{},1000)});});`);
+    Object.assign(process.env,{NTS_GATE_STEP_RESULT:result,NTS_GATE_STEP_ATTEMPT:"mixed",NTS_GATE_STEP:"tooling"});
+    const output=new PassThrough();let transcript="";output.on("data",part=>transcript+=part);
+    const actual=await runScopedTooling([file],{fixture:true,idleMs:1000,output});
+    assert.equal(actual.status,failed?1:2,transcript);
+    const observation=readStepInstrument(result,"tooling","mixed")!;
+    assert.equal(observation.kind,"hung");assert.equal(observation.verdict,failed?"FAIL":"NOT RUN");
+    assert.equal(observation.completedFailures??0,failed?1:0,transcript);
+    if(failed)assert.match(transcript,/definite assertion/);
+  }
+});
+
+test("guard cancellation is unfinished work and late completed test errors remain definite",()=>{
+  for(const failureType of ["testAborted","cancelledByParent","subtestsFailed","testTimeoutFailure"])
+    assert.equal(completedTestFailure({details:{passed:false,error:{failureType}}}),false);
+  for(const failureType of ["testCodeFailure","hookFailed","uncaughtException","unhandledRejection",undefined]){
+    assert.equal(completedTestFailure({details:{passed:false,error:{failureType}}}),true);
+    assert.equal(completedTestFailure({details:{passed:false,error:{failureType}},todo:true}),false);
+    assert.equal(completedTestFailure({details:{passed:false,error:{failureType}},skip:true}),false);
+  }
+});
+
+
+test("completed uncaught exceptions and rejections remain red before a later hang",async t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-async-mixed-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const keys=["NTS_GATE_STEP_RESULT","NTS_GATE_STEP_ATTEMPT","NTS_GATE_STEP"] as const;
+  const before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
+  t.after(()=>{for(const key of keys)if(before[key]===undefined)delete process.env[key];else process.env[key]=before[key];});
+  for(const rejection of [false,true]){
+    const file=join(directory,`${rejection}.test.mjs`),frame=join(directory,`${rejection}.json`);
+    const action=rejection?"Promise.reject(Error('definite rejection'))":"throw Error('definite uncaught')";
+    writeFileSync(file,`import{test}from'node:test';test('completed failure',async()=>{await new Promise(resolve=>{setImmediate(()=>{${action}});setImmediate(resolve);});});test('unfinished',async()=>await new Promise(()=>{setInterval(()=>{},1000)}));`);
+    Object.assign(process.env,{NTS_GATE_STEP_RESULT:frame,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"async"});
+    const output=new PassThrough();let transcript="";output.on("data",part=>transcript+=part);
+    const result=await runScopedTooling([file],{fixture:true,idleMs:1000,output});
+    assert.equal(result.status,1,transcript);
+    const row=readStepInstrument(frame,"tooling","async")!;
+    assert.equal(row.verdict,"FAIL");assert.equal(row.completedFailures,1,transcript);
+    assert.match(transcript,rejection?/definite rejection/:/definite uncaught/);
+  }
 });

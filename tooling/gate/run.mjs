@@ -69,7 +69,7 @@
 //   NTS_GATE_TOKEN_HELD=1 a fixed step: its tools must not ask for tokens
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
-import { readStepInstrument } from "./step-result.ts";
+import { instrumentPolicy, readStepInstrument } from "./step-result.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -763,17 +763,17 @@ function start(step, slots, rider = false) {
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     if (stopping && (signal || code !== 0)) {
       finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
-    } else if (code === 0) {
-      finish(step.name, "PASS", "", extra);
-    } else if (code === 77) {
-      finish(step.name, "SKIPPED", lastLine(text) || "exited 77 without a reason", extra);
     } else {
       let instrument;
       try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
       catch (error) { instrument = { kind: "invalid-instrument", reason: error.message }; }
       const status = signal ? `killed by ${signal}` : `exit ${code}`;
       const heap = nodeHeapOomReason(text);
-      finish(step.name, instrument?.verdict ?? (instrument ? "INSTRUMENT" : "FAIL"), instrument?.reason ?? (heap ? `${heap}; ${status}` : status), { ...extra, ...(instrument ? { instrument } : {}) });
+      const disposition=instrument&&instrumentPolicy(instrument.kind,instrument.completedFailures);
+      if(instrument)finish(step.name,disposition?.verdict??"INSTRUMENT",instrument.reason,{...extra,instrument});
+      else if(code===0)finish(step.name,"PASS","",extra);
+      else if(code===77)finish(step.name,"SKIPPED",lastLine(text)||"exited 77 without a reason",extra);
+      else finish(step.name,"FAIL",heap?`${heap}; ${status}`:status,extra);
     }
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
