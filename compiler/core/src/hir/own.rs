@@ -3994,52 +3994,75 @@ fn freshness(
     harmless: &rustc_hash::FxHashSet<String>,
     zeroed: &rustc_hash::FxHashSet<(u32, u32)>,
 ) -> Vec<Fresh> {
-    /// Enough rounds for any reducible graph; reaching it would be a bug, and
-    /// looping forever would hide it.
-    const ROUNDS: usize = 1024;
-
     let count = func.blocks.len();
     let incoming = super::loops::predecessors(func);
     let mut entry: Vec<Option<Fresh>> = vec![None; count];
+    let mut outgoing: Vec<Option<Fresh>> = vec![None; count];
+    let mut pending = std::collections::VecDeque::new();
+    let mut queued = vec![false; count];
     if count > 0 {
         entry[0] = Some(Fresh::entering(func, layouts, BlockId(0), zeroed));
+        pending.push_back(0);
+        queued[0] = true;
     }
-
-    for _ in 0..ROUNDS {
-        let mut changed = false;
-        for at in 1..count {
+    // None is the unvisited optimistic predecessor. Once reached, a base can
+    // only acquire writes/aliases or lose its freshness. Allocation and null
+    // stores are fixed transfer kills/gens. Canonicalization removes facts
+    // about a base already lost, so each base/slot fact moves monotonically
+    // through a finite lattice. No round limit can expose an optimistic prefix.
+    while let Some(from) = pending.pop_front() {
+        queued[from] = false;
+        let Some(mut after) = entry[from].clone() else {
+            continue;
+        };
+        for &value in &func.blocks[from].ops {
+            after.observe(func, value, &func.values[value.0 as usize].kind, harmless);
+        }
+        after.canonicalize();
+        if outgoing[from].as_ref() == Some(&after) {
+            continue;
+        }
+        outgoing[from] = Some(after);
+        for successor in func.blocks[from].terminator.successors() {
+            let at = successor.0 as usize;
+            // The entry contract is fixed, rather than a loop-carried claim.
+            if at == 0 {
+                continue;
+            }
             let mut merged: Option<Fresh> = None;
-            for (from, args) in &incoming[at] {
-                let Some(before) = entry[from.0 as usize].clone() else {
-                    // Not reached yet: assume it agrees rather than let it
-                    // decide, which is what keeps a loop enterable.
+            for (predecessor, args) in &incoming[at] {
+                let Some(after) = &outgoing[predecessor.0 as usize] else {
                     continue;
                 };
-                let mut after = before;
-                for value in &func.blocks[from.0 as usize].ops {
-                    let kind = func.values[value.0 as usize].kind.clone();
-                    after.observe(func, *value, &kind, harmless);
-                }
                 let carried = after.across(&func.blocks[at].params, args);
                 merged = Some(match merged {
                     None => carried,
                     Some(other) => other.both(&carried),
                 });
             }
-            let Some(merged) = merged else { continue };
-            if entry[at].as_ref() != Some(&merged) {
-                entry[at] = Some(merged);
-                changed = true;
+            if let Some(facts) = &mut merged {
+                facts.canonicalize();
             }
-        }
-        if !changed {
-            break;
+            if entry[at] != merged {
+                entry[at] = merged;
+                if !queued[at] {
+                    queued[at] = true;
+                    pending.push_back(at);
+                }
+            }
         }
     }
     entry.into_iter().map(Option::unwrap_or_default).collect()
 }
 
 impl Fresh {
+    /// Once a base is not fresh, its alias and slot marks carry no authority.
+    /// A later allocation resets them, and phi rebinding clears them too.
+    fn canonicalize(&mut self) {
+        self.written.retain(|(base, _)| self.bases.contains(base));
+        self.escaped.retain(|base| self.bases.contains(base));
+    }
+
     /// What is known on entry to a block.
     fn entering(
         func: &Func,
@@ -4370,6 +4393,97 @@ mod tests {
                 base: None,
             }],
             ..super::Program::default()
+        }
+    }
+
+    #[test]
+    fn freshness_waits_for_a_written_predecessor_beyond_1024_blocks() {
+        use crate::hir::{Block, HirType, Op, OpKind, Param, Terminator, ValueId};
+        for count in [8, 1100] {
+            let mut program = stopped_summary_program();
+            let layouts = program.layouts.clone();
+            let func = &mut program.funcs[0];
+            func.initializes_receiver = true;
+            func.values.truncate(1);
+            func.params.push(Param {
+                name: "branch".into(),
+                ty: HirType::Bool,
+                origin: func.origin.clone(),
+                known: crate::hir::facts::Facts::TOP,
+                written: None,
+                shape: crate::hir::ParamShape::Ordinary,
+            });
+            let origin = func.origin.clone();
+            func.values.extend([
+                Op {
+                    kind: OpKind::Param(1),
+                    ty: HirType::Bool,
+                    origin: origin.clone(),
+                },
+                Op {
+                    kind: OpKind::ConstString("written".into()),
+                    ty: HirType::Managed(super::ManagedType::String),
+                    origin: origin.clone(),
+                },
+                Op {
+                    kind: OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(2),
+                    },
+                    ty: HirType::Void,
+                    origin: origin.clone(),
+                },
+                Op {
+                    kind: OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(2),
+                    },
+                    ty: HirType::Void,
+                    origin,
+                },
+            ]);
+            let id = |at| super::BlockId(u32::try_from(at).expect("small graph"));
+            func.blocks = (0..=count)
+                .map(|at| Block {
+                    params: Vec::new(),
+                    ops: match at {
+                        0 => vec![ValueId(0), ValueId(1), ValueId(2)],
+                        1 => vec![ValueId(4)],
+                        n if n == count => vec![ValueId(3)],
+                        _ => Vec::new(),
+                    },
+                    terminator: match at {
+                        0 => Terminator::Branch {
+                            cond: ValueId(1),
+                            then_target: id(1),
+                            then_args: Vec::new(),
+                            else_target: id(count),
+                            else_args: Vec::new(),
+                        },
+                        1 => Terminator::Return(None),
+                        _ => Terminator::Jump {
+                            target: id(at - 1),
+                            args: Vec::new(),
+                        },
+                    },
+                })
+                .collect();
+            let harmless = rustc_hash::FxHashSet::default();
+            let zeroed = rustc_hash::FxHashSet::default();
+            let facts = super::freshness(func, &layouts, &harmless, &zeroed);
+            assert!(
+                !facts[1].initializing(func, &func.values[4].kind),
+                "late written path, {count} blocks"
+            );
+            // One difference: the long path no longer writes the slot.
+            func.blocks[count].ops.clear();
+            let facts = super::freshness(func, &layouts, &harmless, &zeroed);
+            assert!(
+                facts[1].initializing(func, &func.values[4].kind),
+                "untouched control, {count} blocks"
+            );
         }
     }
 
