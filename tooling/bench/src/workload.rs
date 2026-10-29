@@ -139,6 +139,8 @@ fn direct_binding(
     let file = snapshot.nodes[declaration.0 as usize].origin.location.file;
     ensure!(
         snapshot.sources[file.0 as usize].display_path == entry
+            && walk::parent(snapshot, declaration).and_then(|id| walk::kind_of(snapshot, id))
+                == Some(syntax::SOURCE_FILE)
             && child(snapshot, declaration, "name").and_then(|id| walk::text_of(snapshot, id))
                 == Some(name)
             && child(snapshot, declaration, "body").is_some(),
