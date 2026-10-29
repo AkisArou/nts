@@ -47,7 +47,8 @@ export class CommandActivitySampler {
   private readonly watches=new Set<ActivityWatch>();
   private timer:ReturnType<typeof setInterval>|undefined;
   private period:number|undefined;
-  constructor(private readonly snapshot=activitySnapshot){}
+  private readonly snapshot:typeof activitySnapshot;
+  constructor(snapshot=activitySnapshot){this.snapshot=snapshot;}
   watch(watch:ActivityWatch):()=>void {
     if(!Number.isFinite(watch.pollMs)||watch.pollMs<=0)throw new Error("command activity interval must be positive");
     this.watches.add(watch);this.schedule();
