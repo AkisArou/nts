@@ -272,6 +272,9 @@ export function inputFor(tree: string, path: string): { reason: string; link?: s
   return null;
 }
 export function buildOutput(path: string): boolean {
+  // Create-only benchmark runs are evidence that an archive must preserve.
+  // The derived table and the older disposable benchmark output stay below.
+  if (/^results\/benchmarks\/runs\/[^/]+\.json$/.test(path)) return false;
   return /\.(o|obj)$/.test(path) || /(^|\/)out(\/|$)/.test(path) || path === "target" || path.startsWith("target/") || path.startsWith("results/benchmarks/");
 }
 export function missingInput(status: string, path: string): boolean {
@@ -539,7 +542,7 @@ export async function inventory(options: Options) {
       landingDefinition: "Stable patch IDs restricted to main commits after the unique merge-base; subject-only matches are archived before proposed branch deletion (MainClaude, Orcode 5f16afb4-4064-4d43-bf56-573216406c5e).",
       diffstatDefinition: "Unmatched commits: unique file paths across the series; summed added/deleted lines; binary-file changes counted separately. Merges diff against the first parent; renames count as delete/add.",
       inputDefinition: "Status paths under external symlinks are INPUTS and do not count as work. Pure deletions under third_party/ are MISSING INPUTS, retained in HEAD (MainClaude, Orcode 5183622e-e243-43e9-ad34-c16ababacade). Other deletions and nonlinked additions/modifications remain work. Expected linked-submodule errors use the read-only pathspec fallback.",
-      snapshotDefinition: "Snapshot tracked changes and non-ignored untracked work, excluding linked/missing inputs, *.o, *.obj, target/, out/ and results/benchmarks/*; preserve HEAD as the parent. Colliding snapshot basenames get a stable path-hash suffix, approved in Orcode 5183622e; no existing archive is overwritten.",
+      snapshotDefinition: "Snapshot tracked changes and non-ignored untracked work, including immutable benchmark runs; exclude linked/missing inputs, *.o, *.obj, target/, out/ and disposable benchmark output; preserve HEAD as the parent. Colliding snapshot basenames get a stable path-hash suffix, approved in Orcode 5183622e; no existing archive is overwritten.",
       targetFreedDefinition: "Estimated exclusive target allocation freed if all proposals are approved: real paths counted once, only inside retiring trees, and only when no retained worktree references the target. External/shared targets are excluded.",
       checkedOutRule: "Lane homes, tool-owned infrastructure, active processes and trees used within 24 hours are kept. An ACTIVE lane's branch at most three days old is kept regardless of checkout retirement. Other branches checked out only by retiring/pruned trees inherit retirement: landed branches delete, unlanded branches archive then delete. Old unchecked-out compiler branches archive by the compiler owner's decision; tsrs policy is unchanged." },
     totals: { branches: branches.length, landed: count(branches.map(b => b.stateOfLanding)), branchActions: count(branches.map(b => b.proposal.action)),

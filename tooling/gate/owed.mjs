@@ -109,6 +109,7 @@ export const STRICT_PATHS = [
 ];
 export const isStrictPath = path => STRICT_PATHS.some(prefix => prefix.endsWith("/") ? path.startsWith(prefix) : path === prefix);
 export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit"];
+const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
 
 /**
  * What each instrument asks, and of which kind -- because the failure this
@@ -574,10 +575,19 @@ export const RULES = [
     arms: [],
   },
   {
+    // Immutable run evidence and its rendered table are data, not benchmark
+    // inputs. Producer changes retain their own obligations below.
+    name: "benchmark run records",
+    when: benchmarkRecord,
+    settled: true,
+    steps: ["format", "records"],
+    arms: [],
+  },
+  {
     // Tool-written measurements are outputs. Recorded conformance baselines
     // still owe their readers through the rules and derived maps below.
     name: "tool-written results",
-    when: p => p.startsWith("results/"),
+    when: p => p.startsWith("results/") && !benchmarkRecord(p),
     settled: true,
     steps: TREE_CHECKS,
     arms: [],
@@ -658,7 +668,7 @@ export const RULES = [
   {
     // Read by two steps and by people; no program compiles a page of it.
     name: "documentation",
-    when: (p) => /\.md$/.test(p) && !/^(tests|benchmarks|tooling\/(conformance|memory)|runtime)\//.test(p),
+    when: (p) => /\.md$/.test(p) && !benchmarkRecord(p) && !/^(tests|benchmarks|tooling\/(conformance|memory)|runtime)\//.test(p),
     steps: ["records", "primitives"],
     arms: [],
   },
@@ -1122,10 +1132,13 @@ export function stepInputs() {
         // exists in the script's directory.
         const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
-        // branches.test models build-output paths and writes them only in
-        // private fixture repos. Those strings do not read checked-in bench
-        // cells; keep real imports/beside-file dependencies unchanged.
-        const referenced = named(body).filter(p => !(input === "tooling/lanes/branches.test.ts" && p.startsWith("results/benchmarks/")));
+        // These tooling controls supply private fixture roots to the archive
+        // and record validator. They read fixture evidence, not this tree's
+        // benchmark data. The records step runs that same validator against
+        // the real tree. Imports/beside-file dependencies stay additive.
+        const fixtureBenchmarks = input === "tooling/lanes/branches.test.ts" ||
+          step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-record(?:\.test)?\.ts$/.test(input));
+        const referenced = named(body).filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
         queue.push(...referenced, ...imports(input, body), ...beside);
       }
     }
@@ -1243,7 +1256,7 @@ export function owed(changes) {
       // A future compiled include or corpus input keeps its full ordinary
       // reach. Only an output with no execution reader takes the fast lane.
       if (!fullReader && !crateOf(path) && !covering(embedded(), path).size && [...readers].every(step => TREE_CHECKS.includes(step))) {
-        add("tool-written results", path, TREE_CHECKS, {precise:true});
+        add(benchmarkRecord(path) ? "benchmark run records" : "tool-written results", path, [...readers], {precise:true});
         continue;
       }
     }

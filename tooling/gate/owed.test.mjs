@@ -148,6 +148,23 @@ test("tool-written result outputs owe tree checks while recorded baselines retai
   ]) assert.ok(stepsFor(path).includes(expected), path);
 });
 
+test("benchmark run data owes only format and records without narrowing producer reach", () => {
+  const run = "results/benchmarks/runs/2026-10-29-b6a6c9afa-full.json";
+  const table = "results/benchmarks/full.md";
+  for (const path of [run, table]) {
+    for (const added of [false, true]) assert.deepEqual(changeOwes([{path, added}]).sort(), ["format", "records"], path);
+  }
+  // Other result paths have not acquired a blanket exemption.
+  for (const path of ["results/benchmarks/runs/notes.md", "results/benchmarks/runs/nested/run.json", "results/benchmarks/cells.tsv"]) {
+    assert.ok(stepsFor(path).includes("audit"), path);
+  }
+  for (const source of ["tooling/bench/run-record.ts", "tooling/bench/src/main.rs", "benchmarks/cases/awfy-towers/case.ts"]) {
+    const alone = stepsFor(source);
+    assert.ok(alone.some(step => !["format", "records"].includes(step)), source);
+    assert.deepEqual(stepsFor(run, table, source).sort(), [...new Set(["format", "records", ...alone])].sort(), source);
+  }
+});
+
 function owes(path, want, { not = [] } = {}) {
   const got = stepsFor(path);
   const reached = reach(path);

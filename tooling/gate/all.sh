@@ -1664,33 +1664,6 @@ corpus() {
   node tooling/gate/corpus.ts "$root" core
 }
 
-# Two records were committed as 0164 on 2026-09-06, by two sessions that each
-# believed they had claimed it. `claim-record.sh` is atomic and was guarding the
-# wrong noun -- it made the exclusive create on the *file name*, and two
-# different titles at the same number are two different names, so both
-# succeeded. The script now claims a number-only name and renames.
-#
-# This step is the half that does not depend on anyone using the script. It is
-# record 0077's rule applied to a filing convention rather than to a table:
-# where two things must agree and only one can be deleted, make the second one
-# assert. Filesystem only, milliseconds.
-#
-# # Why four are allowed, and why they are named rather than counted
-#
-# Pointing this at the corpus found that 0164 was the *fifth* collision, not the
-# first: 0099, 0102, 0116 and 0120 have each been claimed twice, over two days,
-# by sessions that all believed the convention was holding. Nothing had ever
-# looked.
-#
-# They are listed by number rather than allowed by count. A count would let a
-# fixed collision be spent on a new one and report the same green -- the failure
-# mode this whole file is about. Each of the four is a *later* file taking a
-# number an earlier file already had, and in both of the pairs anything cites,
-# the citation means the earlier one; so the fix is to renumber the later, and
-# three of the four are nts-69's to renumber rather than mine.
-#
-# The list only shrinks.
-KNOWN_DUPLICATE_RECORDS="0099 0102 0116 0120"
 # Nothing sits or points where the corpora used to be (`tooling/migrate/table.ts`
 # lists those places): a fixture landed in an old corpus directory after the
 # move to `tests/` is run by no step, and a tool still globbing an old one
@@ -1700,38 +1673,7 @@ old_paths() {
 }
 
 records() {
-  # `tr` because the membership tests below match on spaces; a newline-
-  # separated list silently matches nothing and reports every number stale.
-  dupes=$(ls docs/records | grep -oE '^[0-9]{4}' | sort | uniq -d | tr '\n' ' ')
-  unexpected=""
-  for n in $dupes; do
-    case " $KNOWN_DUPLICATE_RECORDS " in
-      *" $n "*) ;;
-      *) unexpected="$unexpected $n" ;;
-    esac
-  done
-  if [ -n "$unexpected" ]; then
-    echo "  a record number was claimed twice:"
-    for n in $unexpected; do
-      for f in docs/records/"$n"-*.md; do echo "    $f"; done
-    done
-    echo "  renumber the later one; tooling/gate/claim-record.sh takes the next free"
-    return 1
-  fi
-  # A number that leaves the list may not come back, and a list naming a number
-  # that is no longer duplicated is a stale allowance -- both are the same bug.
-  stale=""
-  for n in $KNOWN_DUPLICATE_RECORDS; do
-    case " $dupes " in
-      *" $n "*) ;;
-      *) stale="$stale $n" ;;
-    esac
-  done
-  if [ -n "$stale" ]; then
-    echo "  fixed, so remove from KNOWN_DUPLICATE_RECORDS:$stale"
-    return 1
-  fi
-  echo "  $(ls docs/records | grep -cE '^[0-9]{4}') records, 4 numbers claimed twice and named"
+  node tooling/gate/records.ts "$root"
 }
 
 # The Test262 protocol layer, which nothing in this file ran until 2026-09-18.

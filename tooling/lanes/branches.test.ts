@@ -52,6 +52,10 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     writeFileSync(join(repo, "third_party/input-file"), "pristine input\n");
     writeFileSync(join(repo, "third_party/modified-input"), "before\n");
     writeFileSync(join(repo, "delete-me"), "ordinary source\n");
+    mkdirSync(join(repo, "results/benchmarks/runs"), { recursive: true });
+    const trackedRun = "results/benchmarks/runs/2026-10-28-abcdef123-first.json";
+    const untrackedRun = "results/benchmarks/runs/2026-10-29-abcdef456-second.json";
+    writeFileSync(join(repo, trackedRun), '{"observation":"before"}\n');
     git(["add", "."]); git(["commit", "-qm", "base"]);
     commit("historical", "old patch\n", "historical patch");
     git(["rm", "-q", "historical"]); git(["commit", "-qm", "remove historical patch"]);
@@ -94,8 +98,10 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     rmSync(join(dirty, "delete-me"));
     writeFileSync(join(dirty, "third_party/modified-input"), "local modification is work\n");
     writeFileSync(join(dirty, "third_party/added"), "local addition is work\n");
+    writeFileSync(join(dirty, trackedRun), '{"observation":"retained tracked evidence"}\n');
+    writeFileSync(join(dirty, untrackedRun), '{"observation":"retained new evidence"}\n');
     mkdirSync(join(dirty, "out")); mkdirSync(join(dirty, "results/benchmarks"), { recursive: true });
-    for (const path of ["artifact.o", "artifact.obj", "out/generated", "results/benchmarks/timing"]) writeFileSync(join(dirty, path), "throwaway\n");
+    for (const path of ["artifact.o", "artifact.obj", "out/generated", "results/benchmarks/timing", "results/benchmarks/full.md"]) writeFileSync(join(dirty, path), "throwaway\n");
     git(["worktree", "add", "-q", "--detach", clean, base]);
     git(["worktree", "add", "-q", "--detach", active, base]);
     activeChild = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000)"], { cwd: active, stdio: "ignore" });
@@ -194,10 +200,12 @@ test("inventory classifies replays and subjects, protects work, and leaves Git u
     assert.equal(branch("jvm/home").proposal.reason, "landed, still checked out");
     const dw = r.worktrees.find(w => w.path === dirty)!;
     assert.equal(dw.dirty, true);
-    assert.deepEqual(dw.snapshotFiles.untracked, ["internal-link", "third_party/added", "untracked"]);
+    assert.deepEqual(dw.snapshotFiles.untracked, ["internal-link", untrackedRun, "third_party/added", "untracked"]);
     assert.ok(dw.snapshotFiles.tracked.some(e => e.path === "delete-me" && e.status === " D"));
     assert.ok(dw.snapshotFiles.tracked.some(e => e.path === "third_party/modified-input"));
-    assert.equal(dw.buildOutputs.length, 4);
+    assert.ok(dw.snapshotFiles.tracked.some(e => e.path === trackedRun));
+    assert.ok(!dw.buildOutputs.includes(trackedRun) && !dw.buildOutputs.includes(untrackedRun));
+    assert.equal(dw.buildOutputs.length, 5);
     assert.equal(dw.tracked[0].path, "base");
     assert.equal(dw.proposal.action, "snapshot then remove");
     assert.equal(dw.proposal.archiveRef, "refs/archive/compiler/snapshot/dirty");
@@ -277,7 +285,8 @@ test("NUL parsers preserve unusual filenames and prunable worktrees", () => {
   assert.deepEqual(parseDiffstats(`${sha}\0\n2\t3\tpath\nwith\ttabs\0-\t-\timage\0`).get(sha), {
     stat: { files: 2, insertions: 2, deletions: 3, binaryFiles: 1 }, paths: ["path\nwith\ttabs", "image"],
   });
-  for (const path of ["a.o", "nested/a.obj", "out/code.c", "nested/out/code.c", "target/cache", "results/benchmarks/cells.tsv"]) assert.equal(buildOutput(path), true);
+  for (const path of ["a.o", "nested/a.obj", "out/code.c", "nested/out/code.c", "target/cache", "results/benchmarks/cells.tsv", "results/benchmarks/full.md"]) assert.equal(buildOutput(path), true);
+  assert.equal(buildOutput("results/benchmarks/runs/2026-10-29-abcdef456-full.json"), false);
   assert.equal(buildOutput("compiler/outcome.rs"), false);
   assert.equal(missingInput(" D", "third_party/input"), true);
   assert.equal(missingInput("D ", "third_party/input"), true);
