@@ -1,0 +1,2975 @@
+{
+  "schema": 1,
+  "scope": "artifact-only diagnosis; no production compiler transformation; three matched A/B/A brackets per comparator, not a layout confidence interval",
+  "raw_directory": "/home/akisarou/.cache/nts-gate-waiting/runtime2-20261027/performance-regression-20261029",
+  "native_compiler_source": "7982057ed25b2b42d5d6196852f32f5c782158b7",
+  "jvm_original_artifact_source": "cf162669e407ba72cf3e1ce240908b320deb24af",
+  "protocol": {
+    "cpu": 4,
+    "sibling_idle_guard": "with-lock.sh --wait",
+    "pmu": "inherited user instructions and cycles, FIFO-gated hot window",
+    "jvm": "G1, 512 MiB, -Xbatch, no tiered compilation, threshold 100, -Xverify:all; 256 warmups and 128 measured calls"
+  },
+  "variants": {
+    "general": "i64 product; conversion; floating /2,+i,+1; proved bounded nonnegative loop domain required",
+    "guarded": "general fast loop under count <= 2^26; original floating fallback preserved",
+    "whole": "count <= 2^25; integer product,/2,+i,+1 then conversion; requires even-product proof",
+    "scaled": "count <= 2^25; 2.0 / double(product + 2*i + 2); exact dyadic scaling, no parity precondition",
+    "unsigned_half": "full-i32 comparator only; logical half of u64 product, preserving the final floating additions; equivalence is for complete A, including signed-zero controls",
+    "fasta_integer": "i64 affine product/add/remainder; double state holder retained and converted at region ingress; closed [0,139968) state invariant required"
+  },
+  "jvm_unsigned_half": {
+    "state": "PASS",
+    "scope": "JVM hot-window inherited user instructions and cycles; main-thread allocated bytes and CPU; three A/B/A brackets per row, not a layout confidence interval",
+    "completed": 9,
+    "rows": [
+      {
+        "name": "clbg-spectral-norm",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009534.972773688,
+            "after": 8799681.431019403,
+            "ratio": 0.9767076167206806,
+            "delta_percent": -2.3292383279319373,
+            "max_anchor_drift_percent": 0.01687119067934617,
+            "pairs": [
+              {
+                "before": 9009278.737500777,
+                "after": 8800160.640625,
+                "ratio": 0.9767885861933285,
+                "anchor_drift": -0.00016863395675503767
+              },
+              {
+                "before": 9010043.12109375,
+                "after": 8798656.015625,
+                "ratio": 0.9765387243293139,
+                "anchor_drift": 9.537967748940446e-09
+              },
+              {
+                "before": 9009283.08122114,
+                "after": 8800227.7265625,
+                "ratio": 0.9767955615586779,
+                "anchor_drift": -0.0001687119067934617
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20691154.043506093,
+            "after": 12420349.705593439,
+            "ratio": 0.6002734153676469,
+            "delta_percent": -39.97265846323531,
+            "max_anchor_drift_percent": 0.15184027568271308,
+            "pairs": [
+              {
+                "before": 20687102.815677103,
+                "after": 12423437.859375,
+                "ratio": 0.6005402481956182,
+                "anchor_drift": 0.0004780085767424058
+              },
+              {
+                "before": 20696952.155112166,
+                "after": 12417471.4765625,
+                "ratio": 0.5999661874608612,
+                "anchor_drift": -0.0015184027568271308
+              },
+              {
+                "before": 20689408.4422506,
+                "after": 12420140.5,
+                "ratio": 0.6003139497520082,
+                "anchor_drift": -0.0003556754390465766
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 4033334.107231872,
+            "after": 2429548.5672019627,
+            "ratio": 0.60236729777623,
+            "delta_percent": -39.763270222377,
+            "max_anchor_drift_percent": 0.5241747364422844,
+            "pairs": [
+              {
+                "before": 4028675.934838328,
+                "after": 2435441.28125,
+                "ratio": 0.604526479826612,
+                "anchor_drift": -0.00275428579790038
+              },
+              {
+                "before": 4032785.741405116,
+                "after": 2438404.1015625,
+                "ratio": 0.6046450909918422,
+                "anchor_drift": -0.0015036128810631544
+              },
+              {
+                "before": 4038546.740183774,
+                "after": 2414868.0859375,
+                "ratio": 0.5979547201743198,
+                "anchor_drift": -0.005241747364422844
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4051399.6317073377,
+            "after": 2442223.068069835,
+            "ratio": 0.6028097176482781,
+            "delta_percent": -39.719028235172196,
+            "max_anchor_drift_percent": 0.43138333073561297,
+            "pairs": [
+              {
+                "before": 4046947.114336424,
+                "after": 2445861.640625,
+                "ratio": 0.6043720294640041,
+                "anchor_drift": -0.0036648202962544785
+              },
+              {
+                "before": 4048728.7619760847,
+                "after": 2456375.265625,
+                "ratio": 0.6067028467538299,
+                "anchor_drift": -0.001962436240658505
+              },
+              {
+                "before": 4058532.6199371293,
+                "after": 2424540.1796875,
+                "ratio": 0.5973932962315475,
+                "anchor_drift": -0.00431383330735613
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "12f53d00b54a7af1882031ef8153efe437888c736bc86e3abfa66b1247c6625a"
+        }
+      }
+    ]
+  },
+  "jvm_general": {
+    "state": "PASS",
+    "scope": "JVM hot-window inherited user instructions and cycles; main-thread allocated bytes and CPU; three A/B/A brackets per row, not a layout confidence interval",
+    "completed": 27,
+    "rows": [
+      {
+        "name": "general",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009278.116409052,
+            "after": 8838005.328124972,
+            "ratio": 0.9809892883679378,
+            "delta_percent": -1.901071163206225,
+            "max_anchor_drift_percent": 0.01687916473749329,
+            "pairs": [
+              {
+                "before": 9009277.694482926,
+                "after": 8838004.984375,
+                "ratio": 0.980989296154917,
+                "anchor_drift": 0.0001687916473749329
+              },
+              {
+                "before": 9008518.988281222,
+                "after": 8838006.0625,
+                "ratio": 0.981072035702757,
+                "anchor_drift": 1.569694878522654e-07
+              },
+              {
+                "before": 9010037.730468748,
+                "after": 8838004.9375,
+                "ratio": 0.9809065402260199,
+                "anchor_drift": 3.555062866311687e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20694117.257865246,
+            "after": 15023010.283917874,
+            "ratio": 0.725955598720119,
+            "delta_percent": -27.404440127988096,
+            "max_anchor_drift_percent": 0.1419779355127826,
+            "pairs": [
+              {
+                "before": 20700315.396971136,
+                "after": 15012426.8984375,
+                "ratio": 0.7252269644468371,
+                "anchor_drift": 0.001419779355127826
+              },
+              {
+                "before": 20692364.837778725,
+                "after": 15024602.0546875,
+                "ratio": 0.7260940048406934,
+                "anchor_drift": 0.0004909597342137584
+              },
+              {
+                "before": 20689673.018360417,
+                "after": 15032008.40625,
+                "ratio": 0.7265464462831435,
+                "anchor_drift": 0.00011852478579355008
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 4033185.3546026507,
+            "after": 2931468.025673475,
+            "ratio": 0.7268369211764832,
+            "delta_percent": -27.316307882351676,
+            "max_anchor_drift_percent": 0.6909579340429906,
+            "pairs": [
+              {
+                "before": 4038773.4926187703,
+                "after": 2921023.0703125,
+                "ratio": 0.7232450831052888,
+                "anchor_drift": 0.0069095793404299055
+              },
+              {
+                "before": 4037935.3683268395,
+                "after": 2930770.703125,
+                "ratio": 0.7258092157971798,
+                "anchor_drift": -0.0005945848730932735
+              },
+              {
+                "before": 4022867.0868958933,
+                "after": 2942650.3125,
+                "ratio": 0.7314808689766071,
+                "anchor_drift": 0.0061770748923957175
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4053616.2814853545,
+            "after": 2946627.8990401216,
+            "ratio": 0.7269133767048115,
+            "delta_percent": -27.308662329518853,
+            "max_anchor_drift_percent": 0.8672120084989521,
+            "pairs": [
+              {
+                "before": 4060378.9977540346,
+                "after": 2936436.8203125,
+                "ratio": 0.7231927911007239,
+                "anchor_drift": 0.00867212008498952
+              },
+              {
+                "before": 4058672.807913597,
+                "after": 2945404.8125,
+                "ratio": 0.7257063951440116,
+                "anchor_drift": -0.0010120990901306692
+              },
+              {
+                "before": 4041823.0134055354,
+                "after": 2958082.1875,
+                "ratio": 0.7318683123157331,
+                "anchor_drift": 0.0065760266260390665
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "a22d9b4e32b6167a6b6288ecf8dbf15a37924310a258636fa44ea26bd28f4a5f"
+        }
+      },
+      {
+        "name": "guarded",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009279.807908606,
+            "after": 8836566.595960734,
+            "ratio": 0.9808294097163825,
+            "delta_percent": -1.917059028361745,
+            "max_anchor_drift_percent": 0.016867715438606545,
+            "pairs": [
+              {
+                "before": 9009280.530642888,
+                "after": 8835553.515625,
+                "ratio": 0.9807168825049906,
+                "anchor_drift": -0.00016817700611682085
+              },
+              {
+                "before": 9009280.753244257,
+                "after": 8837073.1796875,
+                "ratio": 0.9808855358964428,
+                "anchor_drift": 0.00016835013053650982
+              },
+              {
+                "before": 9009278.139838926,
+                "after": 8837073.1796875,
+                "ratio": 0.9808858204310579,
+                "anchor_drift": 0.00016867715438606545
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20688662.222572744,
+            "after": 15019040.152860168,
+            "ratio": 0.7259551145106619,
+            "delta_percent": -27.404488548933813,
+            "max_anchor_drift_percent": 0.034550110781927934,
+            "pairs": [
+              {
+                "before": 20682953.945939858,
+                "after": 15014839.1640625,
+                "ratio": 0.7259523568687329,
+                "anchor_drift": -0.00021583644964862092
+              },
+              {
+                "before": 20694241.210851327,
+                "after": 15023152.4609375,
+                "ratio": 0.7259581208060865,
+                "anchor_drift": 0.00034550110781927934
+              },
+              {
+                "before": 20688793.051071074,
+                "after": 15019129.984375,
+                "ratio": 0.7259548658686713,
+                "anchor_drift": 0.0001551107176687161
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 4028838.280457152,
+            "after": 2919842.4465376744,
+            "ratio": 0.7247355796585518,
+            "delta_percent": -27.526442034144814,
+            "max_anchor_drift_percent": 0.7618579481091237,
+            "pairs": [
+              {
+                "before": 4029860.258262454,
+                "after": 2920995.2734375,
+                "ratio": 0.7248378569575857,
+                "anchor_drift": -0.003087237042847746
+              },
+              {
+                "before": 4030891.7765031843,
+                "after": 2921780.0546875,
+                "ratio": 0.7248470603252357,
+                "anchor_drift": 0.007618579481091237
+              },
+              {
+                "before": 4025764.6324169533,
+                "after": 2916754.515625,
+                "ratio": 0.7245218689980553,
+                "anchor_drift": -0.0025291096882129604
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4047791.798990546,
+            "after": 2932901.0171204237,
+            "ratio": 0.7245681504300312,
+            "delta_percent": -27.543184956996882,
+            "max_anchor_drift_percent": 0.8778935016994227,
+            "pairs": [
+              {
+                "before": 4048189.184004248,
+                "after": 2935102.6015625,
+                "ratio": 0.7250408684357129,
+                "anchor_drift": -0.0036759364721623555
+              },
+              {
+                "before": 4049796.192325672,
+                "after": 2934009.796875,
+                "ratio": 0.724483321515024,
+                "anchor_drift": 0.008778935016994227
+              },
+              {
+                "before": 4045391.2483597468,
+                "after": 2929593.5546875,
+                "ratio": 0.7241805241644648,
+                "anchor_drift": -0.00289676041037501
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "3f0056e8ff17fdeb5d4b7c0f44f1557ade25b5195cdfd50fe8fa94b49958e26e"
+        }
+      },
+      {
+        "name": "identical",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009280.626732139,
+            "after": 9009534.804650199,
+            "ratio": 1.0000282128982936,
+            "delta_percent": 0.0028212898293578093,
+            "max_anchor_drift_percent": 0.016924346658853118,
+            "pairs": [
+              {
+                "before": 9009280.268529711,
+                "after": 9010042.8984375,
+                "ratio": 1.0000846493709883,
+                "anchor_drift": 0.00016924346658853118
+              },
+              {
+                "before": 9009282.862458616,
+                "after": 9010043.453125,
+                "ratio": 1.0000844229977008,
+                "anchor_drift": -0.00016874485745299594
+              },
+              {
+                "before": 9009278.749208657,
+                "after": 9008518.1484375,
+                "ratio": 0.999915575842159,
+                "anchor_drift": 0.00016869101990102386
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20689608.399322204,
+            "after": 20688376.961219035,
+            "ratio": 0.999940480357123,
+            "delta_percent": -0.005951964287698175,
+            "max_anchor_drift_percent": 0.03458702659528967,
+            "pairs": [
+              {
+                "before": 20685007.195452027,
+                "after": 20693708.046875,
+                "ratio": 1.0004206356488425,
+                "anchor_drift": 0.0001647547204721711
+              },
+              {
+                "before": 20689747.481129266,
+                "after": 20691091.6953125,
+                "ratio": 1.00006497006232,
+                "anchor_drift": -0.000312874751236758
+              },
+              {
+                "before": 20694071.514881495,
+                "after": 20680333.5703125,
+                "ratio": 0.9993361410508745,
+                "anchor_drift": 0.0003458702659528967
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 4028961.6637519724,
+            "after": 4032763.61946927,
+            "ratio": 1.000943656464022,
+            "delta_percent": 0.09436564640219469,
+            "max_anchor_drift_percent": 0.3343944617553607,
+            "pairs": [
+              {
+                "before": 4030477.7547154757,
+                "after": 4049614.578125,
+                "ratio": 1.0047480285400745,
+                "anchor_drift": 0.0012639683249446865
+              },
+              {
+                "before": 4021219.208160169,
+                "after": 4026120.3984375,
+                "ratio": 1.0012188319073443,
+                "anchor_drift": -0.003343944617553607
+              },
+              {
+                "before": 4035200.588008632,
+                "after": 4022609.2734375,
+                "ratio": 0.9968796310625674,
+                "anchor_drift": 0.0030967362530827103
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4046143.0420953715,
+            "after": 4054407.597668803,
+            "ratio": 1.0020425762231964,
+            "delta_percent": 0.20425762231963684,
+            "max_anchor_drift_percent": 0.34170494297659504,
+            "pairs": [
+              {
+                "before": 4047067.5777848894,
+                "after": 4076483.640625,
+                "ratio": 1.0072684881768668,
+                "anchor_drift": 0.0013015043139710247
+              },
+              {
+                "before": 4036600.6429580636,
+                "after": 4046046.2734375,
+                "ratio": 1.0023399962777875,
+                "anchor_drift": -0.0034170494297659504
+              },
+              {
+                "before": 4054781.489611552,
+                "after": 4040784.3359375,
+                "ratio": 0.996547988169051,
+                "anchor_drift": 0.0027515386568219835
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263"
+        }
+      }
+    ]
+  },
+  "jvm_guard_overhead": {
+    "state": "PASS",
+    "scope": "JVM hot-window inherited user instructions and cycles; main-thread allocated bytes and CPU; three A/B/A brackets per row, not a layout confidence interval",
+    "completed": 9,
+    "rows": [
+      {
+        "name": "guard-overhead",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 8839017.887474224,
+            "after": 8836668.583746552,
+            "ratio": 0.99973421213108,
+            "delta_percent": -0.026578786891995332,
+            "max_anchor_drift_percent": 0.017240891680647685,
+            "pairs": [
+              {
+                "before": 8838762.537767762,
+                "after": 8837069.46875,
+                "ratio": 0.9998084495413778,
+                "anchor_drift": 0.0001716433214546953
+              },
+              {
+                "before": 8838761.803101819,
+                "after": 8835554.40625,
+                "ratio": 0.9996371214743344,
+                "anchor_drift": 0.00017240891680647685
+              },
+              {
+                "before": 8839529.343747944,
+                "after": 8837381.984375,
+                "ratio": 0.9997570731099544,
+                "anchor_drift": -1.3646079221052432e-06
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 15022590.352153717,
+            "after": 15032967.140143573,
+            "ratio": 1.000690745586922,
+            "delta_percent": 0.06907455869220591,
+            "max_anchor_drift_percent": 0.24063698662342148,
+            "pairs": [
+              {
+                "before": 15045138.01835165,
+                "after": 15070197.1640625,
+                "ratio": 1.0016655975957338,
+                "anchor_drift": 0.0012007393483031148
+              },
+              {
+                "before": 15019144.192362364,
+                "after": 15012449.6796875,
+                "ratio": 0.9995542680335762,
+                "anchor_drift": -0.0024063698662342148
+              },
+              {
+                "before": 15003518.262102883,
+                "after": 15016323.8359375,
+                "ratio": 1.0008535047320841,
+                "anchor_drift": 0.00030243677673191804
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 2911931.4870983027,
+            "after": 2937299.306581042,
+            "ratio": 1.0087116814372645,
+            "delta_percent": 0.8711681437264529,
+            "max_anchor_drift_percent": 0.27029915398684157,
+            "pairs": [
+              {
+                "before": 2911690.6314302357,
+                "after": 3000117.21875,
+                "ratio": 1.0303694995495893,
+                "anchor_drift": -0.00023968112577710254
+              },
+              {
+                "before": 2918742.236681492,
+                "after": 2903855.1953125,
+                "ratio": 0.994899501168038,
+                "anchor_drift": 0.001102532058803618
+              },
+              {
+                "before": 2905376.943602938,
+                "after": 2908917.6640625,
+                "ratio": 1.0012186785151433,
+                "anchor_drift": 0.0027029915398684157
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 2925167.9849410974,
+            "after": 2952633.002033598,
+            "ratio": 1.0093892102039559,
+            "delta_percent": 0.9389210203955889,
+            "max_anchor_drift_percent": 0.22768017019187958,
+            "pairs": [
+              {
+                "before": 2924663.452469171,
+                "after": 3021660.6953125,
+                "ratio": 1.033165266506626,
+                "anchor_drift": -0.00023495936544315477
+              },
+              {
+                "before": 2933350.164522487,
+                "after": 2917739.578125,
+                "ratio": 0.9946782397184318,
+                "anchor_drift": 0.001555897342616408
+              },
+              {
+                "before": 2917511.840373377,
+                "after": 2919686.265625,
+                "ratio": 1.000745301260318,
+                "anchor_drift": 0.002276801701918796
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "a22d9b4e32b6167a6b6288ecf8dbf15a37924310a258636fa44ea26bd28f4a5f",
+          "after": "3f0056e8ff17fdeb5d4b7c0f44f1557ade25b5195cdfd50fe8fa94b49958e26e"
+        }
+      }
+    ]
+  },
+  "jvm_denominator": {
+    "state": "PASS",
+    "scope": "JVM hot-window inherited user instructions and cycles; main-thread allocated bytes and CPU; three A/B/A brackets per row, not a layout confidence interval",
+    "completed": 27,
+    "rows": [
+      {
+        "name": "whole",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009278.14374131,
+            "after": 9513226.73124568,
+            "ratio": 1.0559366221648374,
+            "delta_percent": 5.593662216483741,
+            "max_anchor_drift_percent": 0.016878903513117827,
+            "pairs": [
+              {
+                "before": 9009278.245265167,
+                "after": 9513727.890625,
+                "ratio": 1.0559922372943633,
+                "anchor_drift": 0.00016878903513117827
+              },
+              {
+                "before": 9009278.003117211,
+                "after": 9512221.3203125,
+                "ratio": 1.0558250413652759,
+                "anchor_drift": -0.00016865651289932337
+              },
+              {
+                "before": 9009278.182841597,
+                "after": 9513731.0625,
+                "ratio": 1.055992596678738,
+                "anchor_drift": 0.00016858782087547652
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20682606.258902878,
+            "after": 10979561.471979726,
+            "ratio": 0.5308596670331908,
+            "delta_percent": -46.91403329668093,
+            "max_anchor_drift_percent": 0.028044933998661037,
+            "pairs": [
+              {
+                "before": 20686866.46464328,
+                "after": 10980440.96875,
+                "ratio": 0.5307928577543194,
+                "anchor_drift": 0.00028044933998661037
+              },
+              {
+                "before": 20678066.24218387,
+                "after": 10978026.09375,
+                "ratio": 0.5309019695156262,
+                "anchor_drift": 1.1848310295103914e-06
+              },
+              {
+                "before": 20682887.00884559,
+                "after": 10980217.515625,
+                "ratio": 0.5308841802853256,
+                "anchor_drift": 0.0001972099391016613
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 4005224.299467068,
+            "after": 2124148.088091601,
+            "ratio": 0.5303443525932453,
+            "delta_percent": -46.96556474067547,
+            "max_anchor_drift_percent": 1.1314429286436,
+            "pairs": [
+              {
+                "before": 3980720.5747886226,
+                "after": 2109954.53125,
+                "ratio": 0.530043365669302,
+                "anchor_drift": -0.006074986971592478
+              },
+              {
+                "before": 4029241.3217497403,
+                "after": 2130294.6953125,
+                "ratio": 0.5287086389721123,
+                "anchor_drift": -0.011314429286436
+              },
+              {
+                "before": 4005858.0368394465,
+                "after": 2132267.0234375,
+                "ratio": 0.5322872163287699,
+                "anchor_drift": 0.000798019127122851
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4021633.71815998,
+            "after": 2134141.5566596747,
+            "ratio": 0.5306653231553135,
+            "delta_percent": -46.93346768446865,
+            "max_anchor_drift_percent": 1.0622885432616913,
+            "pairs": [
+              {
+                "before": 3997333.9649970992,
+                "after": 2118318.8046875,
+                "ratio": 0.5299329060910819,
+                "anchor_drift": -0.006147468537054501
+              },
+              {
+                "before": 4046496.3440051572,
+                "after": 2140554.5859375,
+                "ratio": 0.5289896255828106,
+                "anchor_drift": -0.010622885432616913
+              },
+              {
+                "before": 4021221.114242288,
+                "after": 2143640.921875,
+                "ratio": 0.5330820815305808,
+                "anchor_drift": 0.0010426881333553961
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "2ab49d7e33bd6fb07298a47ad1eed30a96eef104509d2c5424701f15ad4e80cd"
+        }
+      },
+      {
+        "name": "scaled",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009784.94702973,
+            "after": 6824451.997395301,
+            "ratio": 0.7574489333005797,
+            "delta_percent": -24.255106669942027,
+            "max_anchor_drift_percent": 0.016867125296471386,
+            "pairs": [
+              {
+                "before": 9010038.308593744,
+                "after": 6824453.0234375,
+                "ratio": 0.7574277477742086,
+                "anchor_drift": 7.196834261868901e-08
+              },
+              {
+                "before": 9010038.593749998,
+                "after": 6824448.2890625,
+                "ratio": 0.7574271983470106,
+                "anchor_drift": 3.1215183105004485e-08
+              },
+              {
+                "before": 9009277.96014286,
+                "after": 6824454.6796875,
+                "ratio": 0.7574918556047397,
+                "anchor_drift": -0.00016867125296471386
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20678722.677795827,
+            "after": 10996178.716347137,
+            "ratio": 0.531762956913895,
+            "delta_percent": -46.8237043086105,
+            "max_anchor_drift_percent": 0.07665156359283332,
+            "pairs": [
+              {
+                "before": 20683742.92897164,
+                "after": 10995561.1171875,
+                "ratio": 0.5316040309989571,
+                "anchor_drift": -0.0007665156359283332
+              },
+              {
+                "before": 20671529.440476198,
+                "after": 10993760.3828125,
+                "ratio": 0.5318310101083281,
+                "anchor_drift": 1.8972152440843715e-05
+              },
+              {
+                "before": 20680897.63900458,
+                "after": 10999215.3515625,
+                "ratio": 0.5318538655119961,
+                "anchor_drift": -0.0001667968777535611
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 3983505.0027387347,
+            "after": 2116956.8963007415,
+            "ratio": 0.5314307111062476,
+            "delta_percent": -46.85692888937524,
+            "max_anchor_drift_percent": 0.6053590229833539,
+            "pairs": [
+              {
+                "before": 3975724.9202196063,
+                "after": 2106607.703125,
+                "ratio": 0.5298675701659555,
+                "anchor_drift": 0.00010579408613642372
+              },
+              {
+                "before": 3972437.0284349024,
+                "after": 2109661.2890625,
+                "ratio": 0.5310748223222771,
+                "anchor_drift": -0.006053590229833539
+              },
+              {
+                "before": 4002420.841112678,
+                "after": 2134713.734375,
+                "ratio": 0.533355641277729,
+                "anchor_drift": 0.00251124064263486
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4002195.136944924,
+            "after": 2128012.0172861353,
+            "ratio": 0.5317112095914823,
+            "delta_percent": -46.82887904085177,
+            "max_anchor_drift_percent": 0.8278711159363739,
+            "pairs": [
+              {
+                "before": 3995890.242339198,
+                "after": 2120877.96875,
+                "ratio": 0.5307648208846788,
+                "anchor_drift": 0.001039255260098626
+              },
+              {
+                "before": 3992597.1423154096,
+                "after": 2119728.59375,
+                "ratio": 0.5309147199661409,
+                "anchor_drift": -0.008278711159363739
+              },
+              {
+                "before": 4018146.227953761,
+                "after": 2143513.828125,
+                "ratio": 0.5334583926321127,
+                "anchor_drift": 0.0026382957997133083
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "b15485edfe81208a52b004a5dffcc726fcc40e8eb85bf9d0ef92f714236a031d"
+        }
+      },
+      {
+        "name": "identical",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9009535.680296084,
+            "after": 9009532.916745346,
+            "ratio": 0.9999996932638007,
+            "delta_percent": -3.0673619932919394e-05,
+            "max_anchor_drift_percent": 1.0146632134500067e-05,
+            "pairs": [
+              {
+                "before": 9008530.535156239,
+                "after": 9010038.375,
+                "ratio": 1.0001673791122623,
+                "anchor_drift": -1.0146632134500067e-07
+              },
+              {
+                "before": 9010038.199218744,
+                "after": 9010042.140625,
+                "ratio": 1.0000004374461204,
+                "anchor_drift": -7.023416148665973e-08
+              },
+              {
+                "before": 9010038.390624993,
+                "after": 9008518.3203125,
+                "ratio": 0.9998312914721791,
+                "anchor_drift": 8.324049227681485e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 20669570.284853924,
+            "after": 20665810.996702068,
+            "ratio": 0.999818124513471,
+            "delta_percent": -0.01818754865290373,
+            "max_anchor_drift_percent": 0.025866184485590082,
+            "pairs": [
+              {
+                "before": 20667017.55520539,
+                "after": 20669546.40625,
+                "ratio": 1.000122361682708,
+                "anchor_drift": 0.00021953674828245617
+              },
+              {
+                "before": 20668439.143595755,
+                "after": 20662846.2890625,
+                "ratio": 0.9997294012143637,
+                "anchor_drift": 0.0002586618448559008
+              },
+              {
+                "before": 20673254.672694407,
+                "after": 20665040.859375,
+                "ratio": 0.9996026840742084,
+                "anchor_drift": -7.56897403687562e-05
+              }
+            ]
+          },
+          "bytes_per_op": {
+            "before": 7817.187500000001,
+            "after": 7817.187500000001,
+            "ratio": 1,
+            "delta_percent": 0,
+            "max_anchor_drift_percent": 0,
+            "pairs": [
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              },
+              {
+                "before": 7817.1875,
+                "after": 7817.1875,
+                "ratio": 1,
+                "anchor_drift": 0
+              }
+            ]
+          },
+          "cpu_ns_per_op": {
+            "before": 3996847.426840254,
+            "after": 3983029.923620335,
+            "ratio": 0.9965428995044623,
+            "delta_percent": -0.34571004955377127,
+            "max_anchor_drift_percent": 0.46176043221579643,
+            "pairs": [
+              {
+                "before": 3981148.943610316,
+                "after": 3977253.2265625,
+                "ratio": 0.9990214591056512,
+                "anchor_drift": -0.0029440146022512437
+              },
+              {
+                "before": 3977510.783483922,
+                "after": 3967257.3984375,
+                "ratio": 0.9974221603398292,
+                "anchor_drift": 0.004617604322157964
+              },
+              {
+                "before": 4032115.079734171,
+                "after": 4004673.2421875,
+                "ratio": 0.9931941829526155,
+                "anchor_drift": -0.004129674634365532
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 4019111.524047214,
+            "after": 4004855.6345877433,
+            "ratio": 0.996452974899014,
+            "delta_percent": -0.35470251009860343,
+            "max_anchor_drift_percent": 0.5946781923973243,
+            "pairs": [
+              {
+                "before": 4002687.543949826,
+                "after": 4003421.5859375,
+                "ratio": 1.0001833872815737,
+                "anchor_drift": -0.005946781923973243
+              },
+              {
+                "before": 3999096.3989640707,
+                "after": 3990891.5859375,
+                "ratio": 0.9979483332713119,
+                "anchor_drift": 0.0038737001318704944
+              },
+              {
+                "before": 4055800.732527884,
+                "after": 4020308.125,
+                "ratio": 0.9912489271863801,
+                "anchor_drift": -0.0019262139608803297
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+          "after": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263"
+        }
+      }
+    ]
+  },
+  "native_general_and_fasta": {
+    "state": "PASS",
+    "scope": "JVM hot-window inherited user instructions and cycles; main-thread allocated bytes and CPU; three A/B/A brackets per row, not a layout confidence interval",
+    "completed": 72,
+    "rows": [
+      {
+        "name": "clbg-spectral-norm-c-general",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9167367.504557276,
+            "after": 7859187.569986976,
+            "ratio": 0.8573003717893947,
+            "delta_percent": -14.269962821060533,
+            "max_anchor_drift_percent": 6.902881111159331e-06,
+            "pairs": [
+              {
+                "before": 9167367.971679686,
+                "after": 7859187.873046875,
+                "ratio": 0.857300361164283,
+                "anchor_drift": 3.856239150223928e-08
+              },
+              {
+                "before": 9167367.48242187,
+                "after": 7859187.1328125,
+                "ratio": 0.8573003261713068,
+                "anchor_drift": -6.902881111159331e-08
+              },
+              {
+                "before": 9167367.059570312,
+                "after": 7859187.7041015625,
+                "ratio": 0.8573004280325974,
+                "anchor_drift": 4.687141785808535e-09
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3214905.796656674,
+            "after": 2805936.3423670884,
+            "ratio": 0.8727895993982502,
+            "delta_percent": -12.721040060174982,
+            "max_anchor_drift_percent": 7.747631076238437,
+            "pairs": [
+              {
+                "before": 3299169.475861845,
+                "after": 2817696.7197265625,
+                "ratio": 0.8540624361197732,
+                "anchor_drift": 0.07747631076238437
+              },
+              {
+                "before": 3173124.2818479957,
+                "after": 2797606.9775390625,
+                "ratio": 0.8816569188742157,
+                "anchor_drift": -0.006084975174737939
+              },
+              {
+                "before": 3174044.762850916,
+                "after": 2802544.345703125,
+                "ratio": 0.8829567807310598,
+                "anchor_drift": 0.006416592123907661
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 630151.3036361665,
+            "after": 551579.8219612415,
+            "ratio": 0.8753133077380875,
+            "delta_percent": -12.468669226191253,
+            "max_anchor_drift_percent": 8.375443919318947,
+            "pairs": [
+              {
+                "before": 643729.1393963017,
+                "after": 549645.6650390625,
+                "ratio": 0.8538461775313263,
+                "anchor_drift": 0.08375443919318948
+              },
+              {
+                "before": 625514.384730033,
+                "after": 558031.5615234375,
+                "ratio": 0.8921162728564259,
+                "anchor_drift": 0.000833194255730918
+              },
+              {
+                "before": 621432.6210964973,
+                "after": 547121.197265625,
+                "ratio": 0.8804191777062617,
+                "anchor_drift": 0.008865563555576994
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+          "after": "6c9eca74941a3a3ed41dd4175e424bd31488c687ba7c800ecbc90c52492e280f"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-c-guarded",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9167367.530598952,
+            "after": 7856687.055664073,
+            "ratio": 0.8570276068282321,
+            "delta_percent": -14.29723931717679,
+            "max_anchor_drift_percent": 7.041364846749332e-06,
+            "pairs": [
+              {
+                "before": 9167367.310546875,
+                "after": 7856687.2294921875,
+                "ratio": 0.8570276463618104,
+                "anchor_drift": -1.0013439077916075e-08
+              },
+              {
+                "before": 9167367.814941406,
+                "after": 7856686.96484375,
+                "ratio": 0.8570275703390621,
+                "anchor_drift": -5.6458749897458915e-09
+              },
+              {
+                "before": 9167367.466308588,
+                "after": 7856686.97265625,
+                "ratio": 0.8570276037838256,
+                "anchor_drift": -7.041364846749332e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3255405.6909134937,
+            "after": 2810408.429020749,
+            "ratio": 0.8633051287171937,
+            "delta_percent": -13.669487128280633,
+            "max_anchor_drift_percent": 12.85947346916142,
+            "pairs": [
+              {
+                "before": 3418874.0429996536,
+                "after": 2838133.494140625,
+                "ratio": 0.8301368984189023,
+                "anchor_drift": -0.1285947346916142
+              },
+              {
+                "before": 3180796.489987093,
+                "after": 2797073.025390625,
+                "ratio": 0.879362459747299,
+                "anchor_drift": -0.0049301724039972905
+              },
+              {
+                "before": 3172461.5752240336,
+                "after": 2796222.2939453125,
+                "ratio": 0.8814046215036815,
+                "anchor_drift": 0.0010372882649780646
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 636802.5976672673,
+            "after": 548966.068769711,
+            "ratio": 0.8620663150255377,
+            "delta_percent": -13.793368497446234,
+            "max_anchor_drift_percent": 13.103801935644332,
+            "pairs": [
+              {
+                "before": 668124.0991743043,
+                "after": 556774.0908203125,
+                "ratio": 0.8333393324808928,
+                "anchor_drift": -0.13103801935644332
+              },
+              {
+                "before": 621702.3770424309,
+                "after": 544064.8564453125,
+                "ratio": 0.8751210813018659,
+                "anchor_drift": -0.008807194008696118
+              },
+              {
+                "before": 621691.3347009664,
+                "after": 546143.556640625,
+                "ratio": 0.8784802459942925,
+                "anchor_drift": 0.005177609624488877
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+          "after": "29acbc137d6ce48d47ce071c8a2d0d70ab3a31debd6e2e529bee3fb58a26fce8"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-c-identical",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9167367.126953132,
+            "after": 9167367.330078134,
+            "ratio": 1.000000022157397,
+            "delta_percent": 2.2157397028266246e-06,
+            "max_anchor_drift_percent": 9.267757672404286e-07,
+            "pairs": [
+              {
+                "before": 9167367.126464844,
+                "after": 9167367.142578125,
+                "ratio": 1.0000000017576782,
+                "anchor_drift": 9.267757672404286e-09
+              },
+              {
+                "before": 9167367.159179688,
+                "after": 9167367.051757812,
+                "ratio": 0.9999999882821454,
+                "anchor_drift": -2.5566228023521376e-09
+              },
+              {
+                "before": 9167367.095214844,
+                "after": 9167367.795898438,
+                "ratio": 1.00000007643237,
+                "anchor_drift": 8.841654075553151e-09
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3168084.8452581936,
+            "after": 3171142.637002181,
+            "ratio": 1.00096518619082,
+            "delta_percent": 0.09651861908199777,
+            "max_anchor_drift_percent": 0.12749699860086228,
+            "pairs": [
+              {
+                "before": 3169685.0680088988,
+                "after": 3167429.4697265625,
+                "ratio": 0.9992883841031711,
+                "anchor_drift": -0.0012749699860086228
+              },
+              {
+                "before": 3165784.455053892,
+                "after": 3166032.8369140625,
+                "ratio": 1.000078458234822,
+                "anchor_drift": -7.825340265998904e-06
+              },
+              {
+                "before": 3168786.3299456285,
+                "after": 3179984.2041015625,
+                "ratio": 1.0035338053721425,
+                "anchor_drift": 0.0006694134494718007
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 624224.9317985072,
+            "after": 621686.5748708369,
+            "ratio": 0.9959335861187785,
+            "delta_percent": -0.4066413881221531,
+            "max_anchor_drift_percent": 1.6182489529682043,
+            "pairs": [
+              {
+                "before": 620551.8432430021,
+                "after": 622553.5439453125,
+                "ratio": 1.0032256784410623,
+                "anchor_drift": 0.0017703945448788172
+              },
+              {
+                "before": 627752.228662122,
+                "after": 620688.6015625,
+                "ratio": 0.9887477466791696,
+                "anchor_drift": -0.016182489529682043
+              },
+              {
+                "before": 624391.5233951042,
+                "after": 621818.9990234375,
+                "ratio": 0.9958799498787576,
+                "anchor_drift": 0.013148658713838524
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+          "after": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940"
+        }
+      },
+      {
+        "name": "clbg-fasta-c-integer",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 24285382.848958295,
+            "after": 20580371.99739579,
+            "ratio": 0.8474386475763784,
+            "delta_percent": -15.256135242362156,
+            "max_anchor_drift_percent": 1.1371938946069804e-05,
+            "pairs": [
+              {
+                "before": 24285382.798828088,
+                "after": 20580371.109375,
+                "ratio": 0.8474386127596113,
+                "anchor_drift": 1.1371938946069804e-07
+              },
+              {
+                "before": 24285381.255859375,
+                "after": 20580370.85546875,
+                "ratio": 0.8474386561464128,
+                "anchor_drift": 1.447630237905173e-09
+              },
+              {
+                "before": 24285384.4921875,
+                "after": 20580374.02734375,
+                "ratio": 0.8474386738231122,
+                "anchor_drift": -1.2867821252982026e-09
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 10612173.260223748,
+            "after": 9547674.099425165,
+            "ratio": 0.8996907480969553,
+            "delta_percent": -10.030925190304474,
+            "max_anchor_drift_percent": 3.3008493126374217,
+            "pairs": [
+              {
+                "before": 10761245.249279305,
+                "after": 9899553.33203125,
+                "ratio": 0.9199263749419925,
+                "anchor_drift": -0.033008493126374217
+              },
+              {
+                "before": 10514937.27399432,
+                "after": 9364827.42578125,
+                "ratio": 0.8906213305658479,
+                "anchor_drift": -0.003120330308835073
+              },
+              {
+                "before": 10561942.049915886,
+                "after": 9388092.94921875,
+                "ratio": 0.8888604865327315,
+                "anchor_drift": 0.007980536566307483
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 2111868.6504024197,
+            "after": 1898324.423081008,
+            "ratio": 0.8988837552559353,
+            "delta_percent": -10.111624474406467,
+            "max_anchor_drift_percent": 3.561872274988631,
+            "pairs": [
+              {
+                "before": 2132808.418557751,
+                "after": 1961056.03125,
+                "ratio": 0.9194712540454555,
+                "anchor_drift": -0.03561872274988631
+              },
+              {
+                "before": 2090241.9908525134,
+                "after": 1857888.3046875,
+                "ratio": 0.8888388582844196,
+                "anchor_drift": 0.001213274380182039
+              },
+              {
+                "before": 2112770.3610149627,
+                "after": 1877594.05859375,
+                "ratio": 0.8886881855403181,
+                "anchor_drift": 0.007238638553908716
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0e7b001a91a8bc4bd2dc8bfbeb2ac5912dc6f11df86dceab48252d132bffe873",
+          "after": "e22d892331a8e49c1fdfee07026789849542abf63469d5eb7a171f312b53296a"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-llvm-general",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 11586469.25781251,
+            "after": 11258789.376627624,
+            "ratio": 0.9717187459014788,
+            "delta_percent": -2.8281254098521225,
+            "max_anchor_drift_percent": 6.515209760582508e-06,
+            "pairs": [
+              {
+                "before": 11586469.163574219,
+                "after": 11258789.098632812,
+                "ratio": 0.9717187298118762,
+                "anchor_drift": -1.4328405129049315e-09
+              },
+              {
+                "before": 11586469.438964838,
+                "after": 11258789.119140625,
+                "ratio": 0.9717187084857586,
+                "anchor_drift": -6.515209760582508e-08
+              },
+              {
+                "before": 11586469.170898438,
+                "after": 11258789.912109375,
+                "ratio": 0.9717187994068038,
+                "anchor_drift": 1.5508391681962053e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3212063.104860153,
+            "after": 2881406.785991898,
+            "ratio": 0.8970579630369212,
+            "delta_percent": -10.29420369630788,
+            "max_anchor_drift_percent": 1.0701654048380638,
+            "pairs": [
+              {
+                "before": 3212646.8504894567,
+                "after": 2878000.2763671875,
+                "ratio": 0.8958346218255253,
+                "anchor_drift": -0.010701654048380638
+              },
+              {
+                "before": 3202133.1349507417,
+                "after": 2867590.5615234375,
+                "ratio": 0.8955250892675796,
+                "anchor_drift": -0.0006358331281081098
+              },
+              {
+                "before": 3221438.418631232,
+                "after": 2898716.5517578125,
+                "ratio": 0.8998205692814262,
+                "anchor_drift": 0.009023870060324235
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 631270.1826384763,
+            "after": 566702.1884439073,
+            "ratio": 0.8977173388346996,
+            "delta_percent": -10.228266116530039,
+            "max_anchor_drift_percent": 3.262058205077867,
+            "pairs": [
+              {
+                "before": 636755.3391344452,
+                "after": 564596.65625,
+                "ratio": 0.8866775377454519,
+                "anchor_drift": -0.03262058205077867
+              },
+              {
+                "before": 626471.9024636785,
+                "after": 564407.44140625,
+                "ratio": 0.9009301760967214,
+                "anchor_drift": -0.004070970387378026
+              },
+              {
+                "before": 630625.6576834727,
+                "after": 571128.2421875,
+                "ratio": 0.9056533542981278,
+                "anchor_drift": 0.010699584193858636
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+          "after": "e43bf6cca84a4ec6f1d55220ed29475c5d1f63d4d0ec88682032c7b331934782"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-llvm-guarded",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 11586469.369628873,
+            "after": 10926089.297200538,
+            "ratio": 0.9430042015940239,
+            "delta_percent": -5.699579840597613,
+            "max_anchor_drift_percent": 6.489924342378828e-06,
+            "pairs": [
+              {
+                "before": 11586469.515624994,
+                "after": 10926089.04296875,
+                "ratio": 0.9430041677695103,
+                "anchor_drift": -5.545935333195473e-08
+              },
+              {
+                "before": 11586469.444335932,
+                "after": 10926089.090820312,
+                "ratio": 0.9430041777015649,
+                "anchor_drift": -6.489924342378828e-08
+              },
+              {
+                "before": 11586469.148925781,
+                "after": 10926089.7578125,
+                "ratio": 0.9430042593109992,
+                "anchor_drift": -1.2389856252070786e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3223809.1003907137,
+            "after": 2892079.3049641917,
+            "ratio": 0.8971000499420637,
+            "delta_percent": -10.289995005793628,
+            "max_anchor_drift_percent": 3.082680407868099,
+            "pairs": [
+              {
+                "before": 3200821.5674173967,
+                "after": 2883408.7587890625,
+                "ratio": 0.9008339571754258,
+                "anchor_drift": 0.0019506859769111706
+              },
+              {
+                "before": 3214244.2833657106,
+                "after": 2901673.1376953125,
+                "ratio": 0.9027543901102945,
+                "anchor_drift": -0.002300467448356658
+              },
+              {
+                "before": 3256623.9005648675,
+                "after": 2891185.0576171875,
+                "ratio": 0.8877859850858756,
+                "anchor_drift": -0.03082680407868099
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 630984.0865317103,
+            "after": 567816.4040705657,
+            "ratio": 0.8998902130664607,
+            "delta_percent": -10.010978693353934,
+            "max_anchor_drift_percent": 2.611554675913519,
+            "pairs": [
+              {
+                "before": 627377.2153859348,
+                "after": 567001.607421875,
+                "ratio": 0.9037650611412157,
+                "anchor_drift": 0.003695145057516447
+              },
+              {
+                "before": 627814.0414091194,
+                "after": 569735.2705078125,
+                "ratio": 0.9074904875160964,
+                "anchor_drift": -0.0026318565322024368
+              },
+              {
+                "before": 637816.0628033895,
+                "after": 566717.2197265625,
+                "ratio": 0.8885276693027663,
+                "anchor_drift": -0.02611554675913519
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+          "after": "2955a2b71930ed258c4fefe2fba762e619bebb3fc93003b4a2eddf7f2c72c57e"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-llvm-identical",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 11586469.485351562,
+            "after": 11586469.690104123,
+            "ratio": 1.000000017671697,
+            "delta_percent": 1.7671696994625563e-06,
+            "max_anchor_drift_percent": 6.422496556801605e-06,
+            "pairs": [
+              {
+                "before": 11586469.517578121,
+                "after": 11586469.083984375,
+                "ratio": 0.9999999625775785,
+                "anchor_drift": 5.225653643137207e-08
+              },
+              {
+                "before": 11586469.499023432,
+                "after": 11586470.87890625,
+                "ratio": 1.0000001190943297,
+                "anchor_drift": 6.338212199530346e-08
+              },
+              {
+                "before": 11586469.43945312,
+                "after": 11586469.107421875,
+                "ratio": 0.9999999713431907,
+                "anchor_drift": -6.422496556801605e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3212084.4219949306,
+            "after": 3217898.1189339627,
+            "ratio": 1.0018099452490163,
+            "delta_percent": 0.18099452490163426,
+            "max_anchor_drift_percent": 0.9029105441358487,
+            "pairs": [
+              {
+                "before": 3208947.1097907694,
+                "after": 3199909.7138671875,
+                "ratio": 0.997183688102553,
+                "anchor_drift": 0.006994818493352151
+              },
+              {
+                "before": 3216718.048871695,
+                "after": 3245240.9716796875,
+                "ratio": 1.0088670882479107,
+                "anchor_drift": 0.009029105441358487
+              },
+              {
+                "before": 3210593.325595885,
+                "after": 3208722.7578125,
+                "ratio": 0.9994173762935118,
+                "anchor_drift": 0.00027508768802420036
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 630186.6251428261,
+            "after": 638282.4599839947,
+            "ratio": 1.0128467259033493,
+            "delta_percent": 1.2846725903349343,
+            "max_anchor_drift_percent": 1.028358505801008,
+            "pairs": [
+              {
+                "before": 629317.5246845287,
+                "after": 626703.1201171875,
+                "ratio": 0.9958456510985424,
+                "anchor_drift": 0.005128963746091841
+              },
+              {
+                "before": 632230.3057869421,
+                "after": 658084.4296875,
+                "ratio": 1.0408935219712017,
+                "anchor_drift": 0.01028358505801008
+              },
+              {
+                "before": 629017.0381462058,
+                "after": 630514.7607421875,
+                "ratio": 1.002381052507569,
+                "anchor_drift": -0.00435956890416711
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+          "after": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f"
+        }
+      },
+      {
+        "name": "clbg-fasta-llvm-integer",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 24203718.770182267,
+            "after": 20498704.90104167,
+            "ratio": 0.846923776287428,
+            "delta_percent": -15.307622371257201,
+            "max_anchor_drift_percent": 1.3137186116729538e-05,
+            "pairs": [
+              {
+                "before": 24203719.722656198,
+                "after": 20498704.8828125,
+                "ratio": 0.8469237422058077,
+                "anchor_drift": 1.3137186116729538e-07
+              },
+              {
+                "before": 24203718.3046875,
+                "after": 20498704.94921875,
+                "ratio": 0.8469237945662587,
+                "anchor_drift": 6.7784007296012305e-09
+              },
+              {
+                "before": 24203718.283203125,
+                "after": 20498704.87109375,
+                "ratio": 0.8469237920902187,
+                "anchor_drift": 1.3718191915756961e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 10630233.355088599,
+            "after": 9484228.407858253,
+            "ratio": 0.892193810902396,
+            "delta_percent": -10.780618909760397,
+            "max_anchor_drift_percent": 0.4112552761711852,
+            "pairs": [
+              {
+                "before": 10603439.248869358,
+                "after": 9430892.16796875,
+                "ratio": 0.8894182299365146,
+                "anchor_drift": 4.8236176438898326e-05
+              },
+              {
+                "before": 10629997.39323065,
+                "after": 9439738.9296875,
+                "ratio": 0.8880283390943138,
+                "anchor_drift": 0.0032361249019006166
+              },
+              {
+                "before": 10657331.73139835,
+                "after": 9582818.2421875,
+                "ratio": 0.8991761243534209,
+                "anchor_drift": -0.004112552761711852
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 2113610.6993846935,
+            "after": 1880060.9883365054,
+            "ratio": 0.8895020208233353,
+            "delta_percent": -11.04979791766647,
+            "max_anchor_drift_percent": 0.3928158335530618,
+            "pairs": [
+              {
+                "before": 2112638.603192649,
+                "after": 1877421.4453125,
+                "ratio": 0.8886619048214468,
+                "anchor_drift": 0.003928158335530618
+              },
+              {
+                "before": 2111047.160430443,
+                "after": 1868601.16015625,
+                "ratio": 0.8851536787909758,
+                "anchor_drift": 0.0025037814348725096
+              },
+              {
+                "before": 2117151.075848194,
+                "after": 1894250.5625,
+                "ratio": 0.8947167654254937,
+                "anchor_drift": -0.003083349470729191
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "4cedb164170598bae46b5685547dfa6ab2072eea4e190ddee81cee95f9724902",
+          "after": "c900977c4d290e799249d28042ebe16c7211623639f3dea1ad9d5c4aa8a69b11"
+        }
+      }
+    ]
+  },
+  "native_denominator": {
+    "state": "PASS",
+    "scope": "JVM hot-window inherited user instructions and cycles; main-thread allocated bytes and CPU; three A/B/A brackets per row, not a layout confidence interval",
+    "completed": 54,
+    "rows": [
+      {
+        "name": "clbg-spectral-norm-c-whole",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9167367.657226568,
+            "after": 7037866.936197911,
+            "ratio": 0.7677085941513457,
+            "delta_percent": -23.229140584865426,
+            "max_anchor_drift_percent": 8.426202113831494e-06,
+            "pairs": [
+              {
+                "before": 9167367.815429688,
+                "after": 7037866.93359375,
+                "ratio": 0.7677085806187733,
+                "anchor_drift": -9.587334814931125e-09
+              },
+              {
+                "before": 9167367.388183586,
+                "after": 7037866.953125,
+                "ratio": 0.7677086185284298,
+                "anchor_drift": -8.426202113831494e-08
+              },
+              {
+                "before": 9167367.768066406,
+                "after": 7037866.921875,
+                "ratio": 0.7677085833068347,
+                "anchor_drift": -3.0892522984160564e-09
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3164562.4880142896,
+            "after": 2638620.192844518,
+            "ratio": 0.8338025249424633,
+            "delta_percent": -16.61974750575367,
+            "max_anchor_drift_percent": 0.10834119613782889,
+            "pairs": [
+              {
+                "before": 3166223.602619293,
+                "after": 2638804.494140625,
+                "ratio": 0.8334232907485262,
+                "anchor_drift": 0.00046719223170188506
+              },
+              {
+                "before": 3164163.944838369,
+                "after": 2638638.046875,
+                "ratio": 0.8339131893527048,
+                "anchor_drift": 0.00045275677390610447
+              },
+              {
+                "before": 3163300.629147808,
+                "after": 2638418.0517578125,
+                "ratio": 0.8340712316263792,
+                "anchor_drift": 0.0010834119613782889
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 612751.7085947117,
+            "after": 512815.53930493206,
+            "ratio": 0.836905931247464,
+            "delta_percent": -16.309406875253597,
+            "max_anchor_drift_percent": 0.4390516029951108,
+            "pairs": [
+              {
+                "before": 614658.3815432449,
+                "after": 515616.724609375,
+                "ratio": 0.8388671497731757,
+                "anchor_drift": -0.004390516029951108
+              },
+              {
+                "before": 612434.0111040768,
+                "after": 512880.20703125,
+                "ratio": 0.8374456639118486,
+                "anchor_drift": -0.0013193220865412858
+              },
+              {
+                "before": 611167.8264385063,
+                "after": 509965.263671875,
+                "ratio": 0.8344111741673726,
+                "anchor_drift": 0.00014858993376654084
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+          "after": "d4ef3deda7c678b2cb6159d42582580d271b153186132bad8eaf099f4193ffbf"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-c-scaled",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9167367.746582022,
+            "after": 6371766.959960929,
+            "ratio": 0.6950486918490416,
+            "delta_percent": -30.495130815095838,
+            "max_anchor_drift_percent": 6.391556617302285e-07,
+            "pairs": [
+              {
+                "before": 9167367.764648438,
+                "after": 6371766.9248046875,
+                "ratio": 0.6950486866443544,
+                "anchor_drift": 6.391556173213075e-10
+              },
+              {
+                "before": 9167367.721679688,
+                "after": 6371767.03125,
+                "ratio": 0.6950487015134739,
+                "anchor_drift": 6.391556617302285e-09
+              },
+              {
+                "before": 9167367.753417969,
+                "after": 6371766.923828125,
+                "ratio": 0.6950486873892967,
+                "anchor_drift": 1.0652589921278377e-10
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3164316.1072509442,
+            "after": 2638972.258067062,
+            "ratio": 0.8339787077592946,
+            "delta_percent": -16.602129224070538,
+            "max_anchor_drift_percent": 0.05209136474577658,
+            "pairs": [
+              {
+                "before": 3163615.765963425,
+                "after": 2638267.5576171875,
+                "ratio": 0.8339405771085315,
+                "anchor_drift": 0.0003691217564822935
+              },
+              {
+                "before": 3162636.446529004,
+                "after": 2638106.8662109375,
+                "ratio": 0.8341479998772107,
+                "anchor_drift": 0.00037449935552658076
+              },
+              {
+                "before": 3166697.5283872834,
+                "after": 2640543.0537109375,
+                "ratio": 0.8338475746547531,
+                "anchor_drift": 0.0005209136474577658
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 610140.6991045455,
+            "after": 508532.94969593844,
+            "ratio": 0.8334683302429624,
+            "delta_percent": -16.65316697570376,
+            "max_anchor_drift_percent": 0.829721586839538,
+            "pairs": [
+              {
+                "before": 608509.510213679,
+                "after": 507203.6455078125,
+                "ratio": 0.8335180255929068,
+                "anchor_drift": 0.00829721586839538
+              },
+              {
+                "before": 610347.954346661,
+                "after": 508403.26171875,
+                "ratio": 0.8329728282008639,
+                "anchor_drift": 0.0021511739515860384
+              },
+              {
+                "before": 611568.5203587617,
+                "after": 509995.798828125,
+                "ratio": 0.8339144050922511,
+                "anchor_drift": 0.006262171178904596
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+          "after": "864ac9f55fcff7950eafdab13cbda041740cf240acc64f760573190558e4152d"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-c-identical",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 9167367.519694027,
+            "after": 9167367.733723963,
+            "ratio": 1.0000000233469373,
+            "delta_percent": 2.3346937272350488e-06,
+            "max_anchor_drift_percent": 1.0652594362170476e-07,
+            "pairs": [
+              {
+                "before": 9167367.754882812,
+                "after": 9167367.754882812,
+                "ratio": 1,
+                "anchor_drift": -1.0652594362170476e-09
+              },
+              {
+                "before": 9167367.770507812,
+                "after": 9167367.75390625,
+                "ratio": 0.9999999981890589,
+                "anchor_drift": 4.2610381889574e-10
+              },
+              {
+                "before": 9167367.033691406,
+                "after": 9167367.692382812,
+                "ratio": 1.0000000718517545,
+                "anchor_drift": 9.587335370042638e-10
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3177936.58193734,
+            "after": 3166916.652474753,
+            "ratio": 0.9965323633186314,
+            "delta_percent": -0.34676366813686244,
+            "max_anchor_drift_percent": 2.399739204527296,
+            "pairs": [
+              {
+                "before": 3164731.8137559444,
+                "after": 3172160.337890625,
+                "ratio": 1.0023472839317353,
+                "anchor_drift": -0.00022881645790107097
+              },
+              {
+                "before": 3163679.8976512076,
+                "after": 3162190.9580078125,
+                "ratio": 0.9995293646349934,
+                "anchor_drift": -0.001602284320719849
+              },
+              {
+                "before": 3205577.1304943897,
+                "after": 3166406.568359375,
+                "ratio": 0.9877804961351925,
+                "anchor_drift": 0.02399739204527296
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 615491.9136479468,
+            "after": 611919.6439706292,
+            "ratio": 0.99419607374507,
+            "delta_percent": -0.5803926254929981,
+            "max_anchor_drift_percent": 1.514692048119648,
+            "pairs": [
+              {
+                "before": 613279.3407352986,
+                "after": 614973.79296875,
+                "ratio": 1.0027629370841349,
+                "anchor_drift": -0.005018594663216969
+              },
+              {
+                "before": 611631.8321977865,
+                "after": 607999.9814453125,
+                "ratio": 0.9940620311741728,
+                "anchor_drift": -0.004045256919375739
+              },
+              {
+                "before": 621610.9260968437,
+                "after": 612806.0029296875,
+                "ratio": 0.9858353146679014,
+                "anchor_drift": 0.01514692048119648
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+          "after": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-llvm-whole",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 11586469.209309872,
+            "after": 12567049.069986966,
+            "ratio": 1.084631464768333,
+            "delta_percent": 8.463146476833305,
+            "max_anchor_drift_percent": 6.161213905730989e-06,
+            "pairs": [
+              {
+                "before": 11586469.085449219,
+                "after": 12567049.068359375,
+                "ratio": 1.0846314762226925,
+                "anchor_drift": 3.118535207846662e-09
+              },
+              {
+                "before": 11586469.109375,
+                "after": 12567049.072265625,
+                "ratio": 1.0846314743200933,
+                "anchor_drift": -8.765612569128223e-09
+              },
+              {
+                "before": 11586469.433105463,
+                "after": 12567049.069335938,
+                "ratio": 1.0846314437622138,
+                "anchor_drift": -6.161213905730989e-08
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3211487.8917395393,
+            "after": 2707476.623532732,
+            "ratio": 0.8430598883765988,
+            "delta_percent": -15.694011162340116,
+            "max_anchor_drift_percent": 1.9713571312405476,
+            "pairs": [
+              {
+                "before": 3232226.8816880537,
+                "after": 2837458.0830078125,
+                "ratio": 0.8778647622427822,
+                "anchor_drift": -0.019713571312405476
+              },
+              {
+                "before": 3199414.863278068,
+                "after": 2642073.044921875,
+                "ratio": 0.8257988281691141,
+                "anchor_drift": -0.0008647477391435787
+              },
+              {
+                "before": 3202922.799200092,
+                "after": 2647401.8740234375,
+                "ratio": 0.8265581283084962,
+                "anchor_drift": -0.00040603951920370474
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 623476.1645609197,
+            "after": 535261.8292681858,
+            "ratio": 0.8585120966815794,
+            "delta_percent": -14.148790331842065,
+            "max_anchor_drift_percent": 2.0149947782966193,
+            "pairs": [
+              {
+                "before": 626710.1685159602,
+                "after": 562072.224609375,
+                "ratio": 0.8968615044819731,
+                "anchor_drift": -0.020149947782966193
+              },
+              {
+                "before": 619662.3478128501,
+                "after": 522273.6279296875,
+                "ratio": 0.8428358278877129,
+                "anchor_drift": -0.010979316150824703
+              },
+              {
+                "before": 624076.3370079759,
+                "after": 522406.5341796875,
+                "ratio": 0.8370875535583894,
+                "anchor_drift": -0.00208623959654064
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+          "after": "6b077584ecaeae1cbef76be0210c1ff812d9afa251c3510adbe4bf2622b4e9bd"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-llvm-scaled",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 11586469.447753893,
+            "after": 9945569.278645825,
+            "ratio": 0.8583778970369468,
+            "delta_percent": -14.162210296305322,
+            "max_anchor_drift_percent": 5.149797099868181e-06,
+            "pairs": [
+              {
+                "before": 11586469.525878903,
+                "after": 9945569.09765625,
+                "ratio": 0.8583778756283242,
+                "anchor_drift": -5.149797099868181e-08
+              },
+              {
+                "before": 11586469.793457031,
+                "after": 9945568.973632812,
+                "ratio": 0.8583778451007702,
+                "anchor_drift": 9.271321488313333e-10
+              },
+              {
+                "before": 11586469.023925781,
+                "after": 9945569.764648438,
+                "ratio": 0.8583779703817508,
+                "anchor_drift": 2.949965827170331e-09
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3200489.8184974683,
+            "after": 2639927.2191913044,
+            "ratio": 0.8248509974734651,
+            "delta_percent": -17.514900252653486,
+            "max_anchor_drift_percent": 0.10861087839608707,
+            "pairs": [
+              {
+                "before": 3199847.709601781,
+                "after": 2641737.501953125,
+                "ratio": 0.8255822594388055,
+                "anchor_drift": -0.001048060437378151
+              },
+              {
+                "before": 3201749.9789172844,
+                "after": 2639495.6005859375,
+                "ratio": 0.8243915414902319,
+                "anchor_drift": 0.00023994152539952296
+              },
+              {
+                "before": 3199872.139029442,
+                "after": 2638549.5703125,
+                "ratio": 0.8245796880849128,
+                "anchor_drift": 0.0010861087839608707
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 622154.7615225388,
+            "after": 514755.0188336684,
+            "ratio": 0.8273745548036286,
+            "delta_percent": -17.262544519637135,
+            "max_anchor_drift_percent": 0.586367853755787,
+            "pairs": [
+              {
+                "before": 623352.7408493878,
+                "after": 516972.5107421875,
+                "ratio": 0.829341842690472,
+                "anchor_drift": 0.00586367853755787
+              },
+              {
+                "before": 620441.5776876156,
+                "after": 511982.095703125,
+                "ratio": 0.8251898552822348,
+                "anchor_drift": 0.0014596128981334555
+              },
+              {
+                "before": 622673.6973027586,
+                "after": 515323.021484375,
+                "ratio": 0.8275972210109477,
+                "anchor_drift": 0.0029444279638439763
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+          "after": "8052b3c2b306044508f38845e127f28bbf0ab7dd83d5eb69ca7802716818dd0f"
+        }
+      },
+      {
+        "name": "clbg-spectral-norm-llvm-identical",
+        "metrics": {
+          "instructions_per_op": {
+            "before": 11586469.245117221,
+            "after": 11586469.068684887,
+            "ratio": 0.999999984772558,
+            "delta_percent": -1.5227441974019484e-06,
+            "max_anchor_drift_percent": 4.998084857099627e-06,
+            "pairs": [
+              {
+                "before": 11586469.166992188,
+                "after": 11586469.084960938,
+                "ratio": 0.9999999929200821,
+                "anchor_drift": 1.0114167281471964e-09
+              },
+              {
+                "before": 11586469.512207028,
+                "after": 11586469.0625,
+                "ratio": 0.9999999611868804,
+                "anchor_drift": 4.998084857099627e-08
+              },
+              {
+                "before": 11586469.056152344,
+                "after": 11586469.05859375,
+                "ratio": 1.000000000210712,
+                "anchor_drift": 5.899931654340662e-10
+              }
+            ]
+          },
+          "cycles_per_op": {
+            "before": 3204078.9353102124,
+            "after": 3201508.5429921383,
+            "ratio": 0.9991977749706035,
+            "delta_percent": -0.08022250293965305,
+            "max_anchor_drift_percent": 0.5597863461686892,
+            "pairs": [
+              {
+                "before": 3201206.8638278167,
+                "after": 3205972.087890625,
+                "ratio": 1.0014885711125554,
+                "anchor_drift": 0.00025881467218047405
+              },
+              {
+                "before": 3200988.3190076584,
+                "after": 3199152.2412109375,
+                "ratio": 0.9994264028438286,
+                "anchor_drift": -0.0008831305467618122
+              },
+              {
+                "before": 3210049.959450266,
+                "after": 3199405.966796875,
+                "ratio": 0.9966841660448134,
+                "anchor_drift": -0.005597863461686892
+              }
+            ]
+          },
+          "wall_ns_per_op": {
+            "before": 624202.7373675233,
+            "after": 623520.2961704369,
+            "ratio": 0.9989066994483784,
+            "delta_percent": -0.1093300551621601,
+            "max_anchor_drift_percent": 0.8183028562082639,
+            "pairs": [
+              {
+                "before": 625736.4729577254,
+                "after": 626666.14453125,
+                "ratio": 1.0014857238049912,
+                "anchor_drift": -0.00443399744402595
+              },
+              {
+                "before": 623062.3155406023,
+                "after": 621457.109375,
+                "ratio": 0.997423682791328,
+                "anchor_drift": -0.00818302856208264
+              },
+              {
+                "before": 623812.469905404,
+                "after": 622449.884765625,
+                "ratio": 0.9978157135268783,
+                "anchor_drift": -0.007771537511643611
+              }
+            ]
+          }
+        },
+        "program_sha256": {
+          "before": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+          "after": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f"
+        }
+      }
+    ]
+  },
+  "jvm_code_size": {
+    "baseline": {
+      "class_bytes": 4678,
+      "bytecode_bytes": 1195,
+      "sha256": "0077588b6c0709887895fe08c609a95057cffa0f6844739122b1e816b8568263",
+      "methods": {
+        "<init>()V": {
+          "code_bytes": 5,
+          "member_sha256": "735b3bcc7c1eba8e709e50fb5cabc5e6f6f8db65789ec312fe81a9e34647465e"
+        },
+        "A(II)D": {
+          "code_bytes": 85,
+          "member_sha256": "57105d378ca0f68655e3ab4185c37e079c8d7d721df7c8d7350a48b043e37169"
+        },
+        "Au(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "e62e2b866185b99fda4b00d487c7ca9f1e007477b9f45b70d3030ff390e93f51"
+        },
+        "Atu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "f80f06c90657b9e0fe9d2752596fd2e88fdc90c24dab8f3479628cccca4b5b41"
+        },
+        "AtAu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 11,
+          "member_sha256": "eb287e022df2b5e10b19ba2fbc043185b061478456d8d88e3705e6cad3ff53e6"
+        },
+        "spectralnorm(D)D": {
+          "code_bytes": 325,
+          "member_sha256": "aa78e270200cc839fc5689271e61c1c9a24cb9be8d4d85efc39f168fd171068b"
+        },
+        "render(D)Ljava/lang/String;": {
+          "code_bytes": 94,
+          "member_sha256": "3937e3c4e8bd9208f1e0fd59f131d7c0e0eb2ced2079faeb5b34f94870d6a61d"
+        },
+        "work(D)D": {
+          "code_bytes": 172,
+          "member_sha256": "b99aeb2facebff1e5f3e519d75ade8d0631c01efa5be75d150c29bcb5ee8987f"
+        },
+        "module$init()V": {
+          "code_bytes": 1,
+          "member_sha256": "e3aa8b59d4b3dca3ef0245ead41c6c3cd774773f713ea4b62341fde60fe9a8d5"
+        },
+        "RangeError$toString(Lnts/gen/RangeError;)Ljava/lang/String;": {
+          "code_bytes": 72,
+          "member_sha256": "2d6e6f507a32d42704f65a155cf1a20edb565fdff5961fa9cff314abe2183f9c"
+        },
+        "work$whole(I)J": {
+          "code_bytes": 121,
+          "member_sha256": "ac89f2278137422e1a323966a10b37e0b4cc37d960b56979e31a15cc8f5dce13"
+        },
+        "<clinit>()V": {
+          "code_bytes": 7,
+          "member_sha256": "8a7c99948803fa89dd4e59f23277886ec795de319903516bd718289ae9c26698"
+        }
+      },
+      "class_bytes_delta": 0,
+      "class_bytes_delta_percent": 0.0,
+      "bytecode_bytes_delta": 0,
+      "bytecode_bytes_delta_percent": 0.0
+    },
+    "general": {
+      "class_bytes": 4463,
+      "bytecode_bytes": 1132,
+      "sha256": "a22d9b4e32b6167a6b6288ecf8dbf15a37924310a258636fa44ea26bd28f4a5f",
+      "methods": {
+        "<init>()V": {
+          "code_bytes": 5,
+          "member_sha256": "735b3bcc7c1eba8e709e50fb5cabc5e6f6f8db65789ec312fe81a9e34647465e"
+        },
+        "Au(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "e62e2b866185b99fda4b00d487c7ca9f1e007477b9f45b70d3030ff390e93f51"
+        },
+        "Atu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "f80f06c90657b9e0fe9d2752596fd2e88fdc90c24dab8f3479628cccca4b5b41"
+        },
+        "AtAu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 11,
+          "member_sha256": "eb287e022df2b5e10b19ba2fbc043185b061478456d8d88e3705e6cad3ff53e6"
+        },
+        "spectralnorm(D)D": {
+          "code_bytes": 325,
+          "member_sha256": "aa78e270200cc839fc5689271e61c1c9a24cb9be8d4d85efc39f168fd171068b"
+        },
+        "render(D)Ljava/lang/String;": {
+          "code_bytes": 94,
+          "member_sha256": "3937e3c4e8bd9208f1e0fd59f131d7c0e0eb2ced2079faeb5b34f94870d6a61d"
+        },
+        "work(D)D": {
+          "code_bytes": 172,
+          "member_sha256": "b99aeb2facebff1e5f3e519d75ade8d0631c01efa5be75d150c29bcb5ee8987f"
+        },
+        "module$init()V": {
+          "code_bytes": 1,
+          "member_sha256": "e3aa8b59d4b3dca3ef0245ead41c6c3cd774773f713ea4b62341fde60fe9a8d5"
+        },
+        "RangeError$toString(Lnts/gen/RangeError;)Ljava/lang/String;": {
+          "code_bytes": 72,
+          "member_sha256": "2d6e6f507a32d42704f65a155cf1a20edb565fdff5961fa9cff314abe2183f9c"
+        },
+        "work$whole(I)J": {
+          "code_bytes": 121,
+          "member_sha256": "ac89f2278137422e1a323966a10b37e0b4cc37d960b56979e31a15cc8f5dce13"
+        },
+        "<clinit>()V": {
+          "code_bytes": 7,
+          "member_sha256": "8a7c99948803fa89dd4e59f23277886ec795de319903516bd718289ae9c26698"
+        },
+        "A(II)D": {
+          "code_bytes": 22,
+          "member_sha256": "be4e548a480111a18a0c87730992b729334262997657b5366e13f9a4268c217a"
+        }
+      },
+      "class_bytes_delta": -215,
+      "class_bytes_delta_percent": -4.595981188542108,
+      "bytecode_bytes_delta": -63,
+      "bytecode_bytes_delta_percent": -5.271966527196648
+    },
+    "guarded": {
+      "class_bytes": 6178,
+      "bytecode_bytes": 1577,
+      "sha256": "3f0056e8ff17fdeb5d4b7c0f44f1557ade25b5195cdfd50fe8fa94b49958e26e",
+      "methods": {
+        "<init>()V": {
+          "code_bytes": 5,
+          "member_sha256": "735b3bcc7c1eba8e709e50fb5cabc5e6f6f8db65789ec312fe81a9e34647465e"
+        },
+        "A(II)D": {
+          "code_bytes": 85,
+          "member_sha256": "57105d378ca0f68655e3ab4185c37e079c8d7d721df7c8d7350a48b043e37169"
+        },
+        "Au$integral(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "1def412863081bff36d5489b881a34cbbbe961d3fd2a54b1efcaefa1d64172dd"
+        },
+        "Au$floating(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "7a8d51fe73fab5ba726e6a22f14686d4396ef827150e47c3eea40221847cb5b6"
+        },
+        "Au(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 22,
+          "member_sha256": "7cd4dcf96618152e12222b7dbafe7f63cfe2f623e5fa55b8aff91b5b62ce49a4"
+        },
+        "Atu$integral(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "def5cd0f138bb4f351397c32749e7e83d4bcce5a5694f5005d56cb7d184f492f"
+        },
+        "Atu$floating(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "7595068fde0df7e4af9c02bca3b6333dde836cdbe3280123ca8927566a4abf18"
+        },
+        "Atu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 22,
+          "member_sha256": "84a36c2070a8429b3dfa37c2dcaf290f6cf8955f4cdb4b0ac7e6eb1cb8eaac1b"
+        },
+        "AtAu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 11,
+          "member_sha256": "eb287e022df2b5e10b19ba2fbc043185b061478456d8d88e3705e6cad3ff53e6"
+        },
+        "spectralnorm(D)D": {
+          "code_bytes": 325,
+          "member_sha256": "aa78e270200cc839fc5689271e61c1c9a24cb9be8d4d85efc39f168fd171068b"
+        },
+        "render(D)Ljava/lang/String;": {
+          "code_bytes": 94,
+          "member_sha256": "3937e3c4e8bd9208f1e0fd59f131d7c0e0eb2ced2079faeb5b34f94870d6a61d"
+        },
+        "work(D)D": {
+          "code_bytes": 172,
+          "member_sha256": "b99aeb2facebff1e5f3e519d75ade8d0631c01efa5be75d150c29bcb5ee8987f"
+        },
+        "module$init()V": {
+          "code_bytes": 1,
+          "member_sha256": "e3aa8b59d4b3dca3ef0245ead41c6c3cd774773f713ea4b62341fde60fe9a8d5"
+        },
+        "RangeError$toString(Lnts/gen/RangeError;)Ljava/lang/String;": {
+          "code_bytes": 72,
+          "member_sha256": "2d6e6f507a32d42704f65a155cf1a20edb565fdff5961fa9cff314abe2183f9c"
+        },
+        "work$whole(I)J": {
+          "code_bytes": 121,
+          "member_sha256": "ac89f2278137422e1a323966a10b37e0b4cc37d960b56979e31a15cc8f5dce13"
+        },
+        "<clinit>()V": {
+          "code_bytes": 7,
+          "member_sha256": "8a7c99948803fa89dd4e59f23277886ec795de319903516bd718289ae9c26698"
+        },
+        "A$integral(II)D": {
+          "code_bytes": 22,
+          "member_sha256": "71a8cb9f235143603b98c387ef86ac566e99bf28f0121db9b2d9b2bbc94557ad"
+        },
+        "integralRange(I)Z": {
+          "code_bytes": 14,
+          "member_sha256": "28923378c067467752b85ce1c30f784141a81b8a8b1de0e9afc780e4601c6305"
+        }
+      },
+      "class_bytes_delta": 1500,
+      "class_bytes_delta_percent": 32.06498503634032,
+      "bytecode_bytes_delta": 382,
+      "bytecode_bytes_delta_percent": 31.966527196652716
+    },
+    "whole": {
+      "class_bytes": 6178,
+      "bytecode_bytes": 1577,
+      "sha256": "2ab49d7e33bd6fb07298a47ad1eed30a96eef104509d2c5424701f15ad4e80cd",
+      "methods": {
+        "<init>()V": {
+          "code_bytes": 5,
+          "member_sha256": "735b3bcc7c1eba8e709e50fb5cabc5e6f6f8db65789ec312fe81a9e34647465e"
+        },
+        "A(II)D": {
+          "code_bytes": 85,
+          "member_sha256": "57105d378ca0f68655e3ab4185c37e079c8d7d721df7c8d7350a48b043e37169"
+        },
+        "Au$integral(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "1def412863081bff36d5489b881a34cbbbe961d3fd2a54b1efcaefa1d64172dd"
+        },
+        "Au$floating(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "7a8d51fe73fab5ba726e6a22f14686d4396ef827150e47c3eea40221847cb5b6"
+        },
+        "Au(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 22,
+          "member_sha256": "7cd4dcf96618152e12222b7dbafe7f63cfe2f623e5fa55b8aff91b5b62ce49a4"
+        },
+        "Atu$integral(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "def5cd0f138bb4f351397c32749e7e83d4bcce5a5694f5005d56cb7d184f492f"
+        },
+        "Atu$floating(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "7595068fde0df7e4af9c02bca3b6333dde836cdbe3280123ca8927566a4abf18"
+        },
+        "Atu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 22,
+          "member_sha256": "84a36c2070a8429b3dfa37c2dcaf290f6cf8955f4cdb4b0ac7e6eb1cb8eaac1b"
+        },
+        "AtAu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 11,
+          "member_sha256": "eb287e022df2b5e10b19ba2fbc043185b061478456d8d88e3705e6cad3ff53e6"
+        },
+        "spectralnorm(D)D": {
+          "code_bytes": 325,
+          "member_sha256": "aa78e270200cc839fc5689271e61c1c9a24cb9be8d4d85efc39f168fd171068b"
+        },
+        "render(D)Ljava/lang/String;": {
+          "code_bytes": 94,
+          "member_sha256": "3937e3c4e8bd9208f1e0fd59f131d7c0e0eb2ced2079faeb5b34f94870d6a61d"
+        },
+        "work(D)D": {
+          "code_bytes": 172,
+          "member_sha256": "b99aeb2facebff1e5f3e519d75ade8d0631c01efa5be75d150c29bcb5ee8987f"
+        },
+        "module$init()V": {
+          "code_bytes": 1,
+          "member_sha256": "e3aa8b59d4b3dca3ef0245ead41c6c3cd774773f713ea4b62341fde60fe9a8d5"
+        },
+        "RangeError$toString(Lnts/gen/RangeError;)Ljava/lang/String;": {
+          "code_bytes": 72,
+          "member_sha256": "2d6e6f507a32d42704f65a155cf1a20edb565fdff5961fa9cff314abe2183f9c"
+        },
+        "work$whole(I)J": {
+          "code_bytes": 121,
+          "member_sha256": "ac89f2278137422e1a323966a10b37e0b4cc37d960b56979e31a15cc8f5dce13"
+        },
+        "<clinit>()V": {
+          "code_bytes": 7,
+          "member_sha256": "8a7c99948803fa89dd4e59f23277886ec795de319903516bd718289ae9c26698"
+        },
+        "A$integral(II)D": {
+          "code_bytes": 22,
+          "member_sha256": "5fca011b9f7b4bce7e21d1914a4b1f72c92b76c4712c7db08ec2d4d8b62ccc65"
+        },
+        "integralRange(I)Z": {
+          "code_bytes": 14,
+          "member_sha256": "28923378c067467752b85ce1c30f784141a81b8a8b1de0e9afc780e4601c6305"
+        }
+      },
+      "class_bytes_delta": 1500,
+      "class_bytes_delta_percent": 32.06498503634032,
+      "bytecode_bytes_delta": 382,
+      "bytecode_bytes_delta_percent": 31.966527196652716
+    },
+    "scaled": {
+      "class_bytes": 6180,
+      "bytecode_bytes": 1579,
+      "sha256": "b15485edfe81208a52b004a5dffcc726fcc40e8eb85bf9d0ef92f714236a031d",
+      "methods": {
+        "<init>()V": {
+          "code_bytes": 5,
+          "member_sha256": "735b3bcc7c1eba8e709e50fb5cabc5e6f6f8db65789ec312fe81a9e34647465e"
+        },
+        "A(II)D": {
+          "code_bytes": 85,
+          "member_sha256": "57105d378ca0f68655e3ab4185c37e079c8d7d721df7c8d7350a48b043e37169"
+        },
+        "Au$integral(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "1def412863081bff36d5489b881a34cbbbe961d3fd2a54b1efcaefa1d64172dd"
+        },
+        "Au$floating(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "7a8d51fe73fab5ba726e6a22f14686d4396ef827150e47c3eea40221847cb5b6"
+        },
+        "Au(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 22,
+          "member_sha256": "7cd4dcf96618152e12222b7dbafe7f63cfe2f623e5fa55b8aff91b5b62ce49a4"
+        },
+        "Atu$integral(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "def5cd0f138bb4f351397c32749e7e83d4bcce5a5694f5005d56cb7d184f492f"
+        },
+        "Atu$floating(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 151,
+          "member_sha256": "7595068fde0df7e4af9c02bca3b6333dde836cdbe3280123ca8927566a4abf18"
+        },
+        "Atu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 22,
+          "member_sha256": "84a36c2070a8429b3dfa37c2dcaf290f6cf8955f4cdb4b0ac7e6eb1cb8eaac1b"
+        },
+        "AtAu(Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;Lnts/rt/NtsArrayD;)V": {
+          "code_bytes": 11,
+          "member_sha256": "eb287e022df2b5e10b19ba2fbc043185b061478456d8d88e3705e6cad3ff53e6"
+        },
+        "spectralnorm(D)D": {
+          "code_bytes": 325,
+          "member_sha256": "aa78e270200cc839fc5689271e61c1c9a24cb9be8d4d85efc39f168fd171068b"
+        },
+        "render(D)Ljava/lang/String;": {
+          "code_bytes": 94,
+          "member_sha256": "3937e3c4e8bd9208f1e0fd59f131d7c0e0eb2ced2079faeb5b34f94870d6a61d"
+        },
+        "work(D)D": {
+          "code_bytes": 172,
+          "member_sha256": "b99aeb2facebff1e5f3e519d75ade8d0631c01efa5be75d150c29bcb5ee8987f"
+        },
+        "module$init()V": {
+          "code_bytes": 1,
+          "member_sha256": "e3aa8b59d4b3dca3ef0245ead41c6c3cd774773f713ea4b62341fde60fe9a8d5"
+        },
+        "RangeError$toString(Lnts/gen/RangeError;)Ljava/lang/String;": {
+          "code_bytes": 72,
+          "member_sha256": "2d6e6f507a32d42704f65a155cf1a20edb565fdff5961fa9cff314abe2183f9c"
+        },
+        "work$whole(I)J": {
+          "code_bytes": 121,
+          "member_sha256": "ac89f2278137422e1a323966a10b37e0b4cc37d960b56979e31a15cc8f5dce13"
+        },
+        "<clinit>()V": {
+          "code_bytes": 7,
+          "member_sha256": "8a7c99948803fa89dd4e59f23277886ec795de319903516bd718289ae9c26698"
+        },
+        "A$integral(II)D": {
+          "code_bytes": 24,
+          "member_sha256": "b2d2a9d00a25917dbe56ab4fa61388ef93b7f3b67bac4ef68f4a141f532307c3"
+        },
+        "integralRange(I)Z": {
+          "code_bytes": 14,
+          "member_sha256": "28923378c067467752b85ce1c30f784141a81b8a8b1de0e9afc780e4601c6305"
+        }
+      },
+      "class_bytes_delta": 1502,
+      "class_bytes_delta_percent": 32.10773834972209,
+      "bytecode_bytes_delta": 384,
+      "bytecode_bytes_delta_percent": 32.13389121338912
+    }
+  },
+  "native_code_size": {
+    "clbg-spectral-norm/c/baseline": {
+      "elf_bytes": 82600,
+      "text_bytes": 32448,
+      "binary_sha256": "9cc0327946f6bd0a0a2365b689eb711c4bf25be064d8d126700b115a40b17940",
+      "program_sha256": "f9fb1e7cbd3f74d76b17cff4369c942f531942cd136aaff882506b88c1d545d8",
+      "text_bytes_delta": 0,
+      "text_bytes_delta_percent": 0.0
+    },
+    "clbg-spectral-norm/c/general": {
+      "elf_bytes": 82600,
+      "text_bytes": 32512,
+      "binary_sha256": "6c9eca74941a3a3ed41dd4175e424bd31488c687ba7c800ecbc90c52492e280f",
+      "program_sha256": "99a0aa23c8b94c87af858a7db3be19503f6f6daa3729b47c4a3b85decfe648f0",
+      "text_bytes_delta": 64,
+      "text_bytes_delta_percent": 0.19723865877712132
+    },
+    "clbg-spectral-norm/c/guarded": {
+      "elf_bytes": 82600,
+      "text_bytes": 33472,
+      "binary_sha256": "29acbc137d6ce48d47ce071c8a2d0d70ab3a31debd6e2e529bee3fb58a26fce8",
+      "program_sha256": "59dc737b3a5dc1a00621e8da713b9b210895e8b1c25bbc627206ac1adcffd44b",
+      "text_bytes_delta": 1024,
+      "text_bytes_delta_percent": 3.155818540433919
+    },
+    "clbg-spectral-norm/llvm/baseline": {
+      "elf_bytes": 82840,
+      "text_bytes": 32416,
+      "binary_sha256": "0d173c6347a96ee062f86cb8c05f84a24d0df771999dce953d354628a64b914f",
+      "program_sha256": "1bb49d14076c6acfb49a92ae6eaba10b6562e5eac20846c746a743339cf2d2e8",
+      "text_bytes_delta": 0,
+      "text_bytes_delta_percent": 0.0
+    },
+    "clbg-spectral-norm/llvm/general": {
+      "elf_bytes": 82840,
+      "text_bytes": 32384,
+      "binary_sha256": "e43bf6cca84a4ec6f1d55220ed29475c5d1f63d4d0ec88682032c7b331934782",
+      "program_sha256": "9022840e4d84de06efdf37ac3094252cc06c226692c0851e361227444fa70525",
+      "text_bytes_delta": -32,
+      "text_bytes_delta_percent": -0.09871668311944859
+    },
+    "clbg-spectral-norm/llvm/guarded": {
+      "elf_bytes": 82840,
+      "text_bytes": 32928,
+      "binary_sha256": "2955a2b71930ed258c4fefe2fba762e619bebb3fc93003b4a2eddf7f2c72c57e",
+      "program_sha256": "6d955895d48b28a6d718ce9e37ff96dbf9ccdd6181c649906534d3a6bf4b3d6e",
+      "text_bytes_delta": 512,
+      "text_bytes_delta_percent": 1.5794669299111552
+    },
+    "clbg-fasta/c/baseline": {
+      "elf_bytes": 78744,
+      "text_bytes": 35968,
+      "binary_sha256": "0e7b001a91a8bc4bd2dc8bfbeb2ac5912dc6f11df86dceab48252d132bffe873",
+      "program_sha256": "1fa968b2467d8d06cadc8328eed94c9e125276ce810956cf8ef70bc76156ed60",
+      "text_bytes_delta": 0,
+      "text_bytes_delta_percent": 0.0
+    },
+    "clbg-fasta/c/integer": {
+      "elf_bytes": 78744,
+      "text_bytes": 36032,
+      "binary_sha256": "e22d892331a8e49c1fdfee07026789849542abf63469d5eb7a171f312b53296a",
+      "program_sha256": "e2d05d6be5c1d20245759eed21bedaf692b102b7befb776b12711e9eeaf88c4d",
+      "text_bytes_delta": 64,
+      "text_bytes_delta_percent": 0.1779359430605032
+    },
+    "clbg-fasta/llvm/baseline": {
+      "elf_bytes": 83136,
+      "text_bytes": 36224,
+      "binary_sha256": "4cedb164170598bae46b5685547dfa6ab2072eea4e190ddee81cee95f9724902",
+      "program_sha256": "24942ec745287b630d9a95e6e2cc2e5edfe73ad1d18e7353aa3873c04947bb1d",
+      "text_bytes_delta": 0,
+      "text_bytes_delta_percent": 0.0
+    },
+    "clbg-fasta/llvm/integer": {
+      "elf_bytes": 83152,
+      "text_bytes": 36192,
+      "binary_sha256": "c900977c4d290e799249d28042ebe16c7211623639f3dea1ad9d5c4aa8a69b11",
+      "program_sha256": "5a18fd53612961c884d359c09d3358ebfee5e1ef8a89d7d3136cb6eba72c59f0",
+      "text_bytes_delta": -32,
+      "text_bytes_delta_percent": -0.08833922261484162
+    },
+    "clbg-spectral-norm/c/whole": {
+      "elf_bytes": 82600,
+      "text_bytes": 33792,
+      "binary_sha256": "d4ef3deda7c678b2cb6159d42582580d271b153186132bad8eaf099f4193ffbf",
+      "program_sha256": "df746f336b15bc11c464f75e19b2b8d9943219623c168ad868d1e4b654cf146d",
+      "text_bytes_delta": 1344,
+      "text_bytes_delta_percent": 4.142011834319526
+    },
+    "clbg-spectral-norm/c/scaled": {
+      "elf_bytes": 82600,
+      "text_bytes": 33408,
+      "binary_sha256": "864ac9f55fcff7950eafdab13cbda041740cf240acc64f760573190558e4152d",
+      "program_sha256": "5ffd712c9c135ee2617aae04ccb32d81b62abe7520854422d4ba0881aab18991",
+      "text_bytes_delta": 960,
+      "text_bytes_delta_percent": 2.9585798816567976
+    },
+    "clbg-spectral-norm/llvm/whole": {
+      "elf_bytes": 82840,
+      "text_bytes": 32992,
+      "binary_sha256": "6b077584ecaeae1cbef76be0210c1ff812d9afa251c3510adbe4bf2622b4e9bd",
+      "program_sha256": "be71f06200213c608e117967b4dda104539158fab0d8ca0aaa8173779b6f8974",
+      "text_bytes_delta": 576,
+      "text_bytes_delta_percent": 1.7769002961500524
+    },
+    "clbg-spectral-norm/llvm/scaled": {
+      "elf_bytes": 82840,
+      "text_bytes": 32928,
+      "binary_sha256": "8052b3c2b306044508f38845e127f28bbf0ab7dd83d5eb69ca7802716818dd0f",
+      "program_sha256": "2fd91371186d1a5e4836575bc43f6df8baa087e9f98b2a7110788e60d32e7612",
+      "text_bytes_delta": 512,
+      "text_bytes_delta_percent": 1.5794669299111552
+    }
+  },
+  "exhaustive_controls": {
+    "fasta-lcg-proof1": {
+      "result": "PASS 139968 LCG states, output and stored successor bitwise equal; max affine intermediate 542681632",
+      "source_sha256": "e6a9dcc10f2f3ce5cd5404595f5a75dc31f02a858e95309dcfaf5dfcd86184a3"
+    },
+    "spectral-arithmetic-dyadic-proof1": {
+      "result": "PASS 45 exact-dyadic pairs, including odd products; 25 integer-/2 negatives",
+      "source_sha256": "ee475e8b2d2d4d14b3872fc9304dbbf8d0664af503875801ca01bf289761267f"
+    }
+  },
+  "limits": [
+    "No static range from the opaque benchmark seed is assumed.",
+    "Signed i64 product is not equivalent at the full i32-sum extremes; guarded variants retain the original A and floating loops.",
+    "Range-only integer division is invalid for odd products; the 45-case dyadic control includes 25 such negatives.",
+    "FASTA fmod profile share is not the measured gain; only the LCG region was changed.",
+    "Native wall changes include this frozen link layout; CPU instructions and exact work are reported beside them."
+  ]
+}
