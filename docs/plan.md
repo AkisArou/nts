@@ -230,6 +230,13 @@ The designs and their build orders are in [`foundations/`](foundations).
    owes no notice in programs, and FFC is used under BSL-1.0 (*done*).
    Then `nts build` writes the notices file for the third-party code a program
    links.
+8. **Bounds-check placement,** to be discussed with the user: smarter
+   choices of where, when and how checks are placed, using what the checker
+   proves. The ideas and a census of the checks left in the benchmarks are in
+   [the notebook](records/notebooks/bounds-check-placement.md). The
+   recommendation is a relational fact domain, whose rule for what a call
+   removes is a whole-program effect summary, built in the compiler lane after
+   the flow fixes land and validated by the validation build.
 
 ## Phase 3: conformance-driven development
 

@@ -52,6 +52,17 @@ Dates are 2026.
   and as sane we can"** (10-27). What the checker knows is the first source of
   facts; where TypeScript is unsound by design, the compiler proves the fact,
   checks it at run time, or refuses.
+- **A fix that adds a run-time cost asks what the compiler could prove
+  instead** (10-29). The merge-bound fix put back bounds checks that a wrong
+  proof had removed. The user asked to "be smarter where, when and how we
+  place those checks", leveraging TypeScript's static analysis, then made it
+  part of the coordinator's role: "when something needs 'fixing' like this
+  case with the bounds case, always wonder what we can do to leverage the
+  compiler and be optimized". The fix still lands first, since a check a wrong
+  proof removed is a memory-safety hole; the proof that would remove the cost
+  is recorded as an idea or a plan item. The bounds ideas are in
+  [bounds-check placement](bounds-check-placement.md); the role is in
+  [workflow](../../contributing/workflow.md#roles).
 - **An obvious winner is built first** (10-28): where a faster
   implementation is obvious or much expected (SIMD, a native library, code the
   compiler generates per type), it is the first one built, not a later

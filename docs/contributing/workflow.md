@@ -12,7 +12,10 @@ who decides what. The rules every session follows every time are in
   overwrites shared state.
 - **The coordinator** (MainClaude) decides, designs and reviews. Every change
   to `compiler/` or `runtime/c/` from another lane is reviewed by it before it
-  lands. Branch and worktree cleanup is its call:
+  lands. It reads each fix for the run-time cost the fix adds (a check put
+  back, a conversion, a copy) and asks what the compiler could prove instead,
+  recording the answer as a plan item or an idea. Branch and worktree cleanup
+  is its call:
   - landed branches are deleted;
   - branches with unique work are archived (`refs/archive/…` plus a row in
     `tooling/lanes/archive.tsv`);
@@ -205,6 +208,8 @@ recorded case on every backend ([conformance](../conformance/typescript.md)).
   See the [log](../records/notebooks/decisions-log.md#team-and-process).
 - **Reporting:** showing every benchmark result, and keeping the user in the
   loop ([log](../records/notebooks/decisions-log.md#the-bar)).
+- **A fix that adds a cost** is read for what the compiler could prove
+  instead (10-29, [log](../records/notebooks/decisions-log.md#the-bar)).
 - **The fast landing model** is approved: precise rules with a fast lane, a
   faster gate, and land-then-verify for code. This page changes when its
   tools land ([log](../records/notebooks/decisions-log.md#gate-and-landing-10-27)).
