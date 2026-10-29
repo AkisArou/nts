@@ -369,11 +369,14 @@ impl<'p> Facts<'p> {
         let layouts = &self.program.layouts;
         let of = |ty: TypeId| layouts.iter().find(|layout| layout.types.contains(&ty));
         let mut depth = 0;
-        let mut at = of(class);
-        // Bounded: a chain of bases is as long as a class hierarchy.
-        while let Some(base) = at.and_then(|layout| layout.base).filter(|_| depth < 64) {
+        let mut at = class;
+        let mut seen = FxHashSet::default();
+        while seen.insert(at) {
+            let Some(base) = of(at).and_then(|layout| layout.base) else {
+                break;
+            };
             depth += 1;
-            at = of(base);
+            at = base;
         }
         depth
     }
@@ -710,4 +713,31 @@ fn push_refusal(func: &mut Func, testing: usize, origin: super::Origin) {
     );
     func.blocks[testing].ops.extend([message, refused]);
     func.blocks[testing].terminator = Terminator::Unreachable;
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn deep_class_guards_keep_the_subclass_ahead_of_its_base() {
+        let mut program = Program::default();
+        for depth in 0u32..=80 {
+            program.layouts.push(super::super::Layout {
+                types: vec![TypeId(depth)],
+                name: format!("Class{depth}"),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: depth.checked_sub(1).map(TypeId),
+            });
+        }
+        let facts = Facts::build(&program, super::super::reachable::Roots::EveryExport);
+        for depth in [8, 65, 80] {
+            assert_eq!(facts.depth(TypeId(depth)), depth as usize);
+            let mut classes = vec![TypeId(depth - 1), TypeId(depth)];
+            classes.sort_by_key(|class| std::cmp::Reverse(facts.depth(*class)));
+            assert_eq!(classes, [TypeId(depth), TypeId(depth - 1)]);
+        }
+    }
 }
