@@ -390,3 +390,70 @@ fn a_declared_base_is_found_after_more_than_64_class_children() {
         );
     }
 }
+
+#[test]
+fn a_const_function_chain_longer_than_eight_hops_keeps_its_body() {
+    for hops in [3, 40] {
+        let mut snapshot = SemanticSnapshot::default();
+        let body = node(
+            &mut snapshot,
+            NodeKind::Syntax(syntax::FUNCTION_DECLARATION),
+            None,
+        );
+        node(&mut snapshot, NodeKind::Syntax(syntax::BLOCK), Some(body));
+        let mut previous = query_symbol(
+            &mut snapshot,
+            "raises",
+            nts_semantic_schema::SymbolFlags::default(),
+            body,
+        );
+        let mut final_initializer = None;
+        for at in 0..hops {
+            let list = node(
+                &mut snapshot,
+                NodeKind::Syntax(syntax::VARIABLE_DECLARATION_LIST),
+                None,
+            );
+            snapshot.nodes[list.0 as usize].flags =
+                nts_semantic_schema::VariableKind::Const.node_flags();
+            let declaration = node(
+                &mut snapshot,
+                NodeKind::Syntax(syntax::VARIABLE_DECLARATION),
+                Some(list),
+            );
+            let named = node(
+                &mut snapshot,
+                NodeKind::Syntax(syntax::IDENTIFIER),
+                Some(declaration),
+            );
+            snapshot.nodes[named.0 as usize].text = Some(format!("alias{at}").into());
+            let initializer = node(
+                &mut snapshot,
+                NodeKind::Syntax(syntax::IDENTIFIER),
+                Some(declaration),
+            );
+            snapshot.nodes[initializer.0 as usize].symbol = Some(previous);
+            let symbol = query_symbol(
+                &mut snapshot,
+                &format!("alias{at}"),
+                nts_semantic_schema::SymbolFlags::default(),
+                declaration,
+            );
+            snapshot.nodes[named.0 as usize].symbol = Some(symbol);
+            previous = symbol;
+            final_initializer = Some(initializer);
+        }
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let probe = FuncBuilder::probe(&indexed);
+        assert_eq!(
+            super::function_behind_const(&probe, previous.0),
+            Some(body),
+            "{hops} hops"
+        );
+        // A cycle has no terminal function and must complete without recursion.
+        snapshot.nodes[final_initializer.unwrap().0 as usize].symbol = Some(previous);
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let probe = FuncBuilder::probe(&indexed);
+        assert_eq!(super::function_behind_const(&probe, previous.0), None);
+    }
+}

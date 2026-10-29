@@ -6798,12 +6798,13 @@ fn const_function_aliases(probe: &FuncBuilder) -> Vec<(u32, u32)> {
 /// `None` where `symbol` is not a `const` alias, or the chain ends anywhere but
 /// a declaration with a body.
 ///
-/// Bounded, as the other alias walks are: a chain is a few hops, and a
-/// precondition that lives in a comment expires without anything failing.
+/// Follow the complete finite symbol chain. A cycle contains no terminal
+/// body, and is detected by identity rather than by an arbitrary hop count.
 fn function_behind_const(probe: &FuncBuilder, symbol: u32) -> Option<NodeId> {
     let record = |symbol: u32| probe.snapshot.symbols.get(symbol as usize);
     let mut at = const_alias_of(probe, *record(symbol)?.declarations.first()?)?;
-    for _ in 0..8 {
+    let mut seen = rustc_hash::FxHashSet::default();
+    while seen.insert(at) {
         let declarations = &record(at)?.declarations;
         if let Some(function) = declarations
             .iter()
