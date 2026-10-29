@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "status": "PASS",
+  "harness": "daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619",
+  "default": "1.4322 402a800000000000\nSINK PASS 4169c9bdc8000000 calls=55059848\n",
+  "allocation": "0.00 bytes/op over 2617801 ops\nSINK PASS 4180aa76e4000000 calls=2637803\n",
+  "files": [
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/java-allocation-smoke/Bench.java",
+      "sha256": "a9babb7fe876a4a93a2dd5847600d43bc413d6a831b1adc5cadc16c0db1725a5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/java-allocation-smoke/Bench.class",
+      "sha256": "18feebba03697cf251739bd4a38d50d36dfcffa243725d29eee13a1141c4ad71"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/java-allocation-smoke/SinkSmoke.java",
+      "sha256": "3bcf964c6cfb7fd4afdf316c66eff8bd2771f289894bcbebd1db006dc5708465"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/java-allocation-smoke/SinkSmoke.class",
+      "sha256": "acd0224828fab687d9e22519d0e3d0566bf0f750bf0b22476bc8f77406f3d7c7"
+    }
+  ]
+}

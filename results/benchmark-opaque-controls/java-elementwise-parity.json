@@ -1,0 +1,940 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-29T11:37:19.014221+00:00",
+  "status": "PASS",
+  "scope": "Executed Java fib/default measurement and elementwise parity on all nine supported columns; allocation-mode smoke pending",
+  "records": [
+    {
+      "name": "fib",
+      "harnessIdentity": "daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619",
+      "expectedChecksum": "4107fa1000000000",
+      "measurements": {
+        "nts C": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 501620.9265,
+          "attempts": null
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 519094.3368,
+          "attempts": null
+        },
+        "nts JVM": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 479923.5096,
+          "attempts": null
+        },
+        "C++": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 289470.6594,
+          "attempts": null
+        },
+        "Java": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 463999.7333,
+          "attempts": null
+        },
+        "node": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 1649414.4237,
+          "attempts": [
+            {
+              "ns": 1669067.4483,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:42.651Z",
+              "end": "2026-10-29T11:29:43.514Z",
+              "cpu5": {
+                "totalTicks": 87,
+                "busyTicks": 1,
+                "busySeconds": 0.01,
+                "busyPercent": 1.1494252873563218,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 1
+              }
+            },
+            {
+              "ns": 1649414.4237,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:43.514Z",
+              "end": "2026-10-29T11:29:44.362Z",
+              "cpu5": {
+                "totalTicks": 85,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 1664794.7667,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:44.362Z",
+              "end": "2026-10-29T11:29:45.219Z",
+              "cpu5": {
+                "totalTicks": 86,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 1675240.7797,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:45.219Z",
+              "end": "2026-10-29T11:29:46.070Z",
+              "cpu5": {
+                "totalTicks": 85,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 1659333.1525,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:46.071Z",
+              "end": "2026-10-29T11:29:46.919Z",
+              "cpu5": {
+                "totalTicks": 85,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        },
+        "Bun AOT": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 537167.6022,
+          "attempts": [
+            {
+              "ns": 537261.0376,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:47.464Z",
+              "end": "2026-10-29T11:29:48.270Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 539137.3226,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:48.270Z",
+              "end": "2026-10-29T11:29:49.085Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 537167.6022,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:49.085Z",
+              "end": "2026-10-29T11:29:49.892Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 537518.1667,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:49.892Z",
+              "end": "2026-10-29T11:29:50.701Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 537402.3602,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:50.701Z",
+              "end": "2026-10-29T11:29:51.511Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        },
+        "Bun JIT": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 752220.1203,
+          "attempts": [
+            {
+              "ns": 758949.0303,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:51.513Z",
+              "end": "2026-10-29T11:29:52.333Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 758569.7669,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:52.333Z",
+              "end": "2026-10-29T11:29:53.154Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 773226.0703,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:53.155Z",
+              "end": "2026-10-29T11:29:53.966Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 755312.8195,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:53.967Z",
+              "end": "2026-10-29T11:29:54.785Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 752220.1203,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:54.785Z",
+              "end": "2026-10-29T11:29:55.606Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        },
+        "ScriptC": {
+          "status": "OK",
+          "checksum": "4107fa1000000000",
+          "ns": 319432.1254,
+          "attempts": [
+            {
+              "ns": 320790.6198,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:56.734Z",
+              "end": "2026-10-29T11:29:57.542Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 322155.4615,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:57.542Z",
+              "end": "2026-10-29T11:29:58.353Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 319837.9178,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:58.353Z",
+              "end": "2026-10-29T11:29:59.146Z",
+              "cpu5": {
+                "totalTicks": 79,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 319432.1254,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:59.146Z",
+              "end": "2026-10-29T11:29:59.937Z",
+              "cpu5": {
+                "totalTicks": 79,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 321059.4881,
+              "checksum": "4107fa1000000000",
+              "start": "2026-10-29T11:29:59.937Z",
+              "end": "2026-10-29T11:30:00.715Z",
+              "cpu5": {
+                "totalTicks": 78,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        }
+      },
+      "executedOfficial": {
+        "status": 0,
+        "signal": null,
+        "start": "2026-10-29T11:29:15.886Z",
+        "end": "2026-10-29T11:29:42.650Z",
+        "cpu5": {
+          "totalTicks": 2676,
+          "busyTicks": 0,
+          "busySeconds": 0,
+          "busyPercent": 0,
+          "userTicks": 0,
+          "niceTicks": 0,
+          "systemTicks": 0,
+          "irqTicks": 0,
+          "softirqTicks": 0
+        }
+      },
+      "sourceAndArtifacts": [
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/benchmarks/common/Bench.java",
+          "sha256": "a9babb7fe876a4a93a2dd5847600d43bc413d6a831b1adc5cadc16c0db1725a5"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/benchmarks/cases/fib/ref.java",
+          "sha256": "f9c380f1278d0dba221cadc1435101a68bd4a169efeccd1de55c492dcf1bc2ef"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/fib/timed-entry.ts",
+          "sha256": "f6d4253895a4dbc8196e236d8448137026cecf3a3ef714eecaa7040c8c84a964"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/bench-typed.ts",
+          "sha256": "f5046e4cd6791bb8628895ec6c0e1bbf414bf24913f803e2ad97759ba54506c5"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.jvm/Bench.class",
+          "sha256": "18feebba03697cf251739bd4a38d50d36dfcffa243725d29eee13a1141c4ad71"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.jvm/Case.java",
+          "sha256": "e58a6a15a178b8947251af13e952e2d130301f751cea75de4ce9faaaa2bc98cd"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.jvm/Case.class",
+          "sha256": "baa2e9e23e43ebdcaf57fa84c2feab4f841144943e1581761ed34a37d7f58783"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.javaref/Bench.class",
+          "sha256": "18feebba03697cf251739bd4a38d50d36dfcffa243725d29eee13a1141c4ad71"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.javaref/Case.java",
+          "sha256": "be3f48fafccc6d8655d594df4466459e58e6b96467934ab16d7f1be42ea2e7dd"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/fib.javaref/Case.class",
+          "sha256": "91f811ffe690e96860d4c9eb27bd419b3f8479a37c2985d42837d2cb131d4415"
+        }
+      ]
+    },
+    {
+      "name": "elementwise",
+      "harnessIdentity": "daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619",
+      "expectedChecksum": "40000035b03f1bc9",
+      "measurements": {
+        "nts C": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 68936.5292,
+          "attempts": null
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 69739.3289,
+          "attempts": null
+        },
+        "nts JVM": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 56011.6844,
+          "attempts": null
+        },
+        "C++": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 68918.6298,
+          "attempts": null
+        },
+        "Java": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 55858.662,
+          "attempts": null
+        },
+        "node": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 542648.7684,
+          "attempts": [
+            {
+              "ns": 543207.9091,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:28.255Z",
+              "end": "2026-10-29T11:35:29.102Z",
+              "cpu5": {
+                "totalTicks": 85,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 542975.3424,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:29.102Z",
+              "end": "2026-10-29T11:35:29.960Z",
+              "cpu5": {
+                "totalTicks": 86,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 543036.4239,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:29.960Z",
+              "end": "2026-10-29T11:35:30.817Z",
+              "cpu5": {
+                "totalTicks": 85,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 542648.7684,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:30.817Z",
+              "end": "2026-10-29T11:35:31.652Z",
+              "cpu5": {
+                "totalTicks": 83,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 543215.9286,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:31.653Z",
+              "end": "2026-10-29T11:35:32.506Z",
+              "cpu5": {
+                "totalTicks": 86,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        },
+        "Bun AOT": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 394563.4484,
+          "attempts": [
+            {
+              "ns": 395028.254,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:33.050Z",
+              "end": "2026-10-29T11:35:33.856Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 394897.5516,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:33.857Z",
+              "end": "2026-10-29T11:35:34.662Z",
+              "cpu5": {
+                "totalTicks": 80,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 395383.5516,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:34.662Z",
+              "end": "2026-10-29T11:35:35.474Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 394563.4484,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:35.474Z",
+              "end": "2026-10-29T11:35:36.286Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 395001.7354,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:36.286Z",
+              "end": "2026-10-29T11:35:37.106Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        },
+        "Bun JIT": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 583380.9419,
+          "attempts": [
+            {
+              "ns": 586942.4911,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:37.108Z",
+              "end": "2026-10-29T11:35:37.917Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 584094.3571,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:37.917Z",
+              "end": "2026-10-29T11:35:38.730Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 584560.609,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:38.730Z",
+              "end": "2026-10-29T11:35:39.506Z",
+              "cpu5": {
+                "totalTicks": 78,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 583380.9419,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:39.507Z",
+              "end": "2026-10-29T11:35:40.329Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 586517.284,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:40.329Z",
+              "end": "2026-10-29T11:35:41.146Z",
+              "cpu5": {
+                "totalTicks": 82,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        },
+        "ScriptC": {
+          "status": "OK",
+          "checksum": "40000035b03f1bc9",
+          "ns": 147118.7544,
+          "attempts": [
+            {
+              "ns": 149488.1804,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:42.267Z",
+              "end": "2026-10-29T11:35:43.066Z",
+              "cpu5": {
+                "totalTicks": 80,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 147118.7544,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:43.066Z",
+              "end": "2026-10-29T11:35:43.870Z",
+              "cpu5": {
+                "totalTicks": 80,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 147329.1753,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:43.870Z",
+              "end": "2026-10-29T11:35:44.674Z",
+              "cpu5": {
+                "totalTicks": 80,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 147567.8535,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:44.674Z",
+              "end": "2026-10-29T11:35:45.477Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            },
+            {
+              "ns": 147345.7774,
+              "checksum": "40000035b03f1bc9",
+              "start": "2026-10-29T11:35:45.477Z",
+              "end": "2026-10-29T11:35:46.284Z",
+              "cpu5": {
+                "totalTicks": 81,
+                "busyTicks": 0,
+                "busySeconds": 0,
+                "busyPercent": 0,
+                "userTicks": 0,
+                "niceTicks": 0,
+                "systemTicks": 0,
+                "irqTicks": 0,
+                "softirqTicks": 0
+              }
+            }
+          ]
+        }
+      },
+      "executedOfficial": {
+        "status": 0,
+        "signal": null,
+        "start": "2026-10-29T11:35:01.202Z",
+        "end": "2026-10-29T11:35:28.255Z",
+        "cpu5": {
+          "totalTicks": 2705,
+          "busyTicks": 0,
+          "busySeconds": 0,
+          "busyPercent": 0,
+          "userTicks": 0,
+          "niceTicks": 0,
+          "systemTicks": 0,
+          "irqTicks": 0,
+          "softirqTicks": 0
+        }
+      },
+      "sourceAndArtifacts": [
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/benchmarks/common/Bench.java",
+          "sha256": "a9babb7fe876a4a93a2dd5847600d43bc413d6a831b1adc5cadc16c0db1725a5"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/benchmarks/cases/elementwise/ref.java",
+          "sha256": "6204600884f626f46d73445fe81c7abe6b000b11c7821ec4e73523c132b12846"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/benchmarks/cases/elementwise/driver.mjs",
+          "sha256": "3eddde8c88b7d355542468e55ca3dfeb550b692df34f10975938cff7fc70d661"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/elementwise/timed-entry.ts",
+          "sha256": "132e5fd6a03416b66536f5a2d685632bb0b4ad9d3b6e2254b8a57916a1d37ca0"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/bench-typed.ts",
+          "sha256": "f5046e4cd6791bb8628895ec6c0e1bbf414bf24913f803e2ad97759ba54506c5"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/elementwise.jvm/Bench.class",
+          "sha256": "18feebba03697cf251739bd4a38d50d36dfcffa243725d29eee13a1141c4ad71"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/elementwise.jvm/Case.java",
+          "sha256": "3bf7831fecad0491eb72399cb1fcee88bc9a5472afcfd7c700135960ed3943e7"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/elementwise.jvm/Case.class",
+          "sha256": "d92372b36850a0d145ee681d1ae954b76155e8adf3e62d3043da5cb7f034dcf3"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/elementwise.javaref/Bench.class",
+          "sha256": "18feebba03697cf251739bd4a38d50d36dfcffa243725d29eee13a1141c4ad71"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/elementwise.javaref/Case.java",
+          "sha256": "be3f48fafccc6d8655d594df4466459e58e6b96467934ab16d7f1be42ea2e7dd"
+        },
+        {
+          "path": "/home/akisarou/.cache/nts-scratch/helper/benchmark-opaque-contract/target/bench/elementwise.javaref/Case.class",
+          "sha256": "91f811ffe690e96860d4c9eb27bd419b3f8479a37c2985d42837d2cb131d4415"
+        }
+      ]
+    }
+  ]
+}

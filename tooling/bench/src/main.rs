@@ -35,6 +35,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use serde::{Deserialize, Serialize};
 
+mod cli;
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
 mod execution;
 mod reference_link;
@@ -423,9 +424,8 @@ fn age_of(pid: u32) -> Option<String> {
 ///
 /// Kept as the default rather than replaced, because building where you measure
 /// is the right discipline and this makes it explicit rather than accidental.
-fn repository_root(args: &[String]) -> Result<Utf8PathBuf> {
-    if let Some(at) = args.iter().position(|arg| arg == "--root") {
-        let given = args.get(at + 1).context("`--root` needs a path after it")?;
+fn repository_root(given: Option<&str>) -> Result<Utf8PathBuf> {
+    if let Some(given) = given {
         return Utf8PathBuf::from(given)
             .canonicalize_utf8()
             .context("locating the repository root named by `--root`");
@@ -437,38 +437,26 @@ fn repository_root(args: &[String]) -> Result<Utf8PathBuf> {
 }
 
 fn main() -> Result<()> {
-    let argv: Vec<String> = std::env::args().skip(1).collect();
+    let args = cli::parse(std::env::args().skip(1))?;
+    if args.command == cli::Command::Help {
+        println!("{}", cli::USAGE);
+        return Ok(());
+    }
     validate_lanes()?;
-    let root = repository_root(&argv)?;
-    if argv
-        .iter()
-        .any(|arg| arg == "--count" || arg == "--count-prepare")
-    {
+    let root = repository_root(args.root.as_deref())?;
+    if args.command == cli::Command::Count {
         bail!("the Wasm backend is being rebuilt on Binaryen; see docs/targets/wasm.md");
     }
-    if let Some(at) = argv.iter().position(|arg| arg == "--render") {
-        let path = argv
-            .get(at + 1)
-            .filter(|next| !next.starts_with('-'))
-            .map_or_else(|| run_file(&root), Utf8PathBuf::from);
-        return render(&root, &path);
-    }
+    let requested = match args.command {
+        cli::Command::Render(path) => {
+            let path = path.map_or_else(|| run_file(&root), Utf8PathBuf::from);
+            return render(&root, &path);
+        }
+        cli::Command::Measure(cases) => cases,
+        cli::Command::Help | cli::Command::Count => unreachable!("handled before setup"),
+    };
     let cases_dir = root.join("benchmarks/cases");
 
-    // A flag's *value* is not a case name. Filtering on the leading dash alone
-    // would leave `--root <path>` looking like a request for a case called
-    // `<path>`, which matches nothing -- and a run with a non-empty `requested`
-    // is a filtered run, so the publish would decline and say it measured only
-    // part of the table. Loud rather than wrong, and still not what was asked.
-    let mut requested: Vec<String> = Vec::new();
-    let mut rest = argv.iter();
-    while let Some(arg) = rest.next() {
-        if arg == "--root" {
-            let _ = rest.next();
-        } else if !arg.starts_with('-') {
-            requested.push(arg.clone());
-        }
-    }
     let mut cases: Vec<Utf8PathBuf> = std::fs::read_dir(&cases_dir)
         .with_context(|| format!("reading {cases_dir}"))?
         .filter_map(|entry| Utf8PathBuf::from_path_buf(entry.ok()?.path()).ok())

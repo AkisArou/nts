@@ -1,0 +1,299 @@
+{
+  "version": 1,
+  "recordedAt": "2026-10-29T11:23:36.363619+00:00",
+  "controlHarness": {
+    "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/bench-opaque.ts",
+    "sha256": "cbc5d180c68187f64b846f8908171845a2f003720a0a886868133bcbce2db240"
+  },
+  "finalTypedHarness": {
+    "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-opaque-20261029/bench-typed.ts",
+    "sha256": "f5046e4cd6791bb8628895ec6c0e1bbf414bf24913f803e2ad97759ba54506c5"
+  },
+  "committedMjs": {
+    "commit": "70c20969cc4a2228942a4eef789772c69d1c056a",
+    "path": "benchmarks/common/bench.mjs",
+    "sha256": "525d5144bf145ce668aa760cc3deb93f993bd9651389b5b30c810efd181dc0aa"
+  },
+  "typedClone": {
+    "assertion": "Exact equality after nine type-only annotations",
+    "annotations": [
+      [
+        "function checksumBits(value) {",
+        "function checksumBits(value: number): string {"
+      ],
+      [
+        "function perfCommand(control, acknowledgement, value) {",
+        "function perfCommand(control: number, acknowledgement: number, value: string): void {"
+      ],
+      [
+        "function runLoop(run, reps) {",
+        "function runLoop(run: () => number, reps: number): number {"
+      ],
+      [
+        "function calibrate(run, checksum) {",
+        "function calibrate(run: () => number, checksum: number): void {"
+      ],
+      [
+        "function count(run, checksum) {",
+        "function count(run: () => number, checksum: number): void {"
+      ],
+      [
+        "export function measure(run) {",
+        "export function measure(run: () => number): void {"
+      ],
+      [
+        "openSync(process.env.NTS_BENCH_COUNT_CONTROL,",
+        "openSync(process.env.NTS_BENCH_COUNT_CONTROL!,"
+      ],
+      [
+        "openSync(process.env.NTS_BENCH_COUNT_ACK,",
+        "openSync(process.env.NTS_BENCH_COUNT_ACK!,"
+      ],
+      [
+        "export function opaqueInput(value) {",
+        "export function opaqueInput(value: number): number {"
+      ]
+    ]
+  },
+  "measuredMode": "Default measure mode; no NTS_BENCH_CALIBRATE or NTS_BENCH_COUNT in controls",
+  "delta": [
+    "--- control typed harness\n",
+    "+++ final typed harness\n",
+    "@@ -71,6 +71,7 @@\n",
+    "     reps = Math.min(reps * 2, 50_000_000);",
+    "   }",
+    "   if (Number.isNaN(sink)) throw new Error(\"unreachable\");",
+    "+  process.stderr.write(\"NTS_BENCH_SINK \" + checksumBits(sink) + \"\\n\");",
+    "   console.log(JSON.stringify({ checksum: checksumBits(checksum), warmup: warmed, nsPerOp: elapsed / reps, reps }));",
+    " }",
+    " ",
+    "@@ -156,6 +157,8 @@\n",
+    "   process.stdout.write(`${best.toFixed(4)} ${bits}\\n`);",
+    " }",
+    " ",
+    "+// Reload a bit-preserving input through shared atomic storage on every call.",
+    "+// A cached argv value alone lets an AOT optimizer hoist a pure workload.",
+    " const opaqueGate = new Int32Array(new SharedArrayBuffer(4));",
+    " const opaqueScratch = new ArrayBuffer(8);",
+    " const opaqueFloat = new Float64Array(opaqueScratch);"
+  ],
+  "sourceBinding": {
+    "assertion": "Exact equality after removing two comment lines and the new calibration-only post-timing stderr sink",
+    "unchanged": [
+      "default measure body",
+      "runLoop body",
+      "opaqueInput body"
+    ],
+    "additionalCalibrationSink": "Outside the timed loop; used only in calibration mode, absent from the 20 default-mode control measurements"
+  },
+  "measuredSourcesAndArtifacts": [
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/bun-new",
+      "sha256": "f3dd9ffe42c75537c40c3274bcb0b4edf9f111e7d36be3be21fa6dee28f5a820"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/bun-old",
+      "sha256": "5f517f9cc36bd7af3191bb6ef08e623f67cfbc01b0201bdc8370ce708e26463f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/new-entry.mjs",
+      "sha256": "9a4c52b3bb9773b7ec03d091f31e47fbd5eabf986beaeafd9355f9ce19dcbde1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/new.ts",
+      "sha256": "a9388da459f5a764233a87acaf26938a2ce6cd7ecf85b452092895324e79105e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/old-entry.mjs",
+      "sha256": "85df01ac371bfce968faf199673493b88d187b6e996f8f6a66769b3996008298"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/old.ts",
+      "sha256": "46f97bc8efddf58ee29a043893e84002959c6378cc6e1b817dd3a7141cb15680"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/scriptc-new",
+      "sha256": "f5ed4b1c01250fa9624c70e504ddbb0d773d492b43725f6d454adee43bb2527e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/absences/scriptc-old",
+      "sha256": "d47735c31f85ca1ee4ab23272648f3427df8974d8ff16febbef089b77ed43e0f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/bun-new",
+      "sha256": "4cfeb4cfe6262fb2952bae99b39e88e6b0ae7070061eed31c32400a0dc266bc7"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/bun-old",
+      "sha256": "c2a1fc1db1d8e778040ed49aa759dbc5806a451c1a29ba0d5874a92c086d812e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/new-entry.mjs",
+      "sha256": "4ea843ae8fd8f54cfda6a51723883b088175c16d7f68b2f987abfdf5ca81c004"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/new.ts",
+      "sha256": "82c0df715375a43614f8577a8dd022ce0f75b4fa43907d6b80497e7bc844f059"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/old-entry.mjs",
+      "sha256": "0a473c78ce00684e3ee3c83318f00b46b098fc691e4ecaf3bd7302ba846ab038"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/old.ts",
+      "sha256": "f666d28dbdd46b39c07d5b4ee127b902429ff93bef2acad80eaa067f288f1768"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/scriptc-new",
+      "sha256": "e1c11a59ae57e4fe37790713cfebd201a867f124755a381ff4413a679df8b0fd"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/accumulate/scriptc-old",
+      "sha256": "3f6b72fb79b5c4f6f4cd9cff7656f50c929404ab205a30a9e666601a2302a48c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/bench-opaque.ts",
+      "sha256": "cbc5d180c68187f64b846f8908171845a2f003720a0a886868133bcbce2db240"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/bun-varying",
+      "sha256": "2790aa1b8631c15307f90aa6e66d922aaadc6004a7f14044109cf05dcc2122ad"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/bun-new",
+      "sha256": "f75238e8ea5cbab172de60d16b38818ae9fcf9e38e9aa37066dab4a32f76df37"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/bun-old",
+      "sha256": "d923d17af48c7303e5aa19c3e90babeff0fda4f26a9f84572cf274d6287a56af"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/new-entry.mjs",
+      "sha256": "915eddbb2664bc97a2fee9e368019ed9432ed4708db0f276145ee14b16e955c9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/new.ts",
+      "sha256": "cf745e9ebb05463240ae009b4bdc4da26942d5b2363ece523bc3c433664a74a5"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/old-entry.mjs",
+      "sha256": "8ac96c6d3293d616b82d4ceb05af9742ac33ac4a639e1dad081443653b0e2208"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/old.ts",
+      "sha256": "f42411949f428b72517163dd17f22e6eb761fc95a1e132114a93692b3751b7df"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/scriptc-new",
+      "sha256": "c9d0121bdc409828cc2a792cdb8102e80e42d325c75db3ba5ebdc2fa5f4f050e"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/event-state/scriptc-old",
+      "sha256": "576a8311101280323a56c1d94932d4e0ed5f1086e5e9abe71e12b5e3161042a1"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/bun-new",
+      "sha256": "44cf2cca4324550946af4cf272513ca889ea84e6fc5bf5340f1a23db0cfe7cfc"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/bun-old",
+      "sha256": "ac9d00c21aff5bf54e267ea3c0650cf994db353abdf8ca54fa992f5797f8577d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/new-entry.mjs",
+      "sha256": "17fbb7e80c6b79efdbefff885e4da4aaeab847e41781a6b7a3343b023abb690b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/new.ts",
+      "sha256": "d6ac164f708bc47ed4cd550b2ef0c7a0da01bf2c7a0cbb8c7888447f9f91083c"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/old-entry.mjs",
+      "sha256": "23dc3d0287e047ffbb65a533c6f484d441b707b53723352047e9e53397ebe704"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/old.ts",
+      "sha256": "e08b69714730a940edce58fe9435f6f761f6afdfca4e0c413ccda5c984d90803"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/scriptc-new",
+      "sha256": "5b2f96e1a59d25f62edff6b046f54fe4aa05fc51e6e903ec1b7b4c6c79f7aa21"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/logical-assignment/scriptc-old",
+      "sha256": "d54f6098de77740d60fe219ee8d17a400d0ad6bf10542cd5ab1b7c0cd4b60f9f"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/bun-new",
+      "sha256": "0fa429540857561f53497e1c26491f65ab88f9feecbba284db2fac6f5ed0658b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/bun-old",
+      "sha256": "02c5d63617e9495b7bcc2bed11913907209ccf61d436ecc02b847b38c9149c70"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/new-entry.mjs",
+      "sha256": "b0527a99e1daa6439cba2eac251293640852d5785d9c1af601a23b4fbd313478"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/new.ts",
+      "sha256": "d8c4a4cf6fe1559de7f246c94e70c6617b10b19a471a0f89016e17cc7d96412d"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/old-entry.mjs",
+      "sha256": "f58c5d047f8b9696a8d4d86913c6f1cdafbc2fdaff51da8a2468e69c297a6b67"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/old.ts",
+      "sha256": "fb2e95d1a51b0edb278b7db772a4c7fb59f2fc58c8488bbcec1524f8cec3e580"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/scriptc-new",
+      "sha256": "02b6c28ac8ed95f56a170bffb310640ee40013d23be52d71c3af5b5a21567d2b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/loop/scriptc-old",
+      "sha256": "00c98b1dd2eaaf5468c7a11c54eab18830a5b2af5a3dcd1a1b284007cf9f78c2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/run-controls.ts",
+      "sha256": "038a9191542741be1ff0a83920a028870eeb6dcfb108cab810a9b207466e9244"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/scriptc-varying",
+      "sha256": "d88a947d5f0dd3254ebf346db039b4ce0d29ba2d84ede10900346b5229601a01"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/varying-entry.mjs",
+      "sha256": "5b730b98ac24ffe69abe75408c491ed38378671800fa7a59768f8fa63860313b"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-comparators/sittings/main-0a072536b-typed-20261029/opaque-control/varying.ts",
+      "sha256": "6f8d065a5788d3aa6dc8bd237f053b31794c313b95487caa42f41831f7037279"
+    }
+  ],
+  "finalPassIdentity": "daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619",
+  "opaqueBitSmoke": {
+    "pass": true,
+    "values": [
+      "0000000000000000",
+      "8000000000000000",
+      "3fb999999999999a",
+      "bfb999999999999a",
+      "40c81cc000000000",
+      "c0c81cc000000000",
+      "0000000000000001",
+      "7fefffffffffffff",
+      "7ff0000000000000",
+      "fff0000000000000",
+      "7ff8000000000000"
+    ],
+    "engines": [
+      "node",
+      "Bun AOT",
+      "Bun JIT",
+      "ScriptC"
+    ],
+    "harness": "daaf5f5777c95bacf03645913dc4deeaf3a8f3baf645bda701552b2227978619"
+  }
+}
