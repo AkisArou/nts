@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { executeWptFixture, loadWptFixtures } from "../runner.ts";
 import { createWebCryptoWptEnvironment } from "./environment.ts";
 import { readWebCryptoManifest } from "./manifest.ts";
+import { WptHungError, reportWptHung } from "../hung.ts";
 
 const root = new URL("../", import.meta.url);
 const manifest = readWebCryptoManifest();
@@ -17,6 +18,7 @@ assert.ok(manifest.fixtures.some((entry) => entry.path.startsWith(prefix)) ||
   manifest.excludedFixtures.some((entry) => entry.path.startsWith(prefix)),
   "The WebCrypto fixture filter must select at least one file");
 let failed = false;
+let hung = false;
 for (const entry of manifest.fixtures.filter((fixture) => fixture.path.startsWith(prefix))) {
   const fixture = raw ? { ...entry, blockedTests: {} } : entry;
   try {
@@ -31,6 +33,13 @@ for (const entry of manifest.fixtures.filter((fixture) => fixture.path.startsWit
       ...(result.error === undefined ? {} : { error: String(result.error), stack: result.error instanceof Error ? result.error.stack : undefined }),
     })) }) + "\n");
   } catch (error) {
+    if (error instanceof WptHungError) {
+      hung = true;
+      reportWptHung(error);
+      process.stdout.write(JSON.stringify({ mode, path: fixture.path, pass: null, fail: null, blocked: null,
+        instrument: error.observation }) + "\n");
+      continue;
+    }
     failed = true;
     const errors = error instanceof AggregateError ? error.errors as unknown[] : [error];
     process.stdout.write(JSON.stringify({ mode, path: fixture.path, pass: null, fail: null, blocked: null,
@@ -41,4 +50,5 @@ for (const entry of manifest.fixtures.filter((fixture) => fixture.path.startsWit
 for (const excluded of manifest.excludedFixtures.filter((entry) => entry.path.startsWith(prefix))) {
   process.stdout.write(JSON.stringify({ mode, ...excluded, status: "not-run", pass: null, fail: null, blocked: null }) + "\n");
 }
-if (failed) process.exitCode = 1;
+if (hung) process.exitCode = 124;
+else if (failed) process.exitCode = 1;

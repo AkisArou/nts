@@ -734,7 +734,9 @@ export class WptHarness {
       done: () => this.closeRegistration(),
       timeout: () => {
         if (!this.explicitTimeout) return;
-        this.observeHung(this.filename, "<explicit timeout>", "explicit timeout");
+        const [test, phase] = this.pending.entries().next().value ?? [];
+        this.observeHung(test?.file ?? this.filename, test?.result.name ?? "<registration>", "explicit timeout",
+          phase === "cleanup" ? test?.result : undefined);
         this.closeRegistration();
       },
       step_timeout: stepTimeout,

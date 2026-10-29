@@ -423,10 +423,9 @@ test("WPT explicit done rejects later registration even while its caller is pend
         promise_test(() => Promise.resolve(), "after done");
       }, "registrar");
     `, "registration-after-explicit-done.js");
-    const results = await harness.finish();
-    assert.equal(results.length, 1);
-    assert.equal(results[0]?.status, "fail");
-    assert.match(String(results[0]?.error), /test registered after done/);
+    await assert.rejects(harness.finish(), (error: unknown) =>
+      error instanceof AggregateError && error.errors.some((entry: unknown) =>
+        /test registered after done/.test(String(entry))));
   }
   const synchronous = new WptHarness({});
   synchronous.run('done(); test(() => {}, "too late");', "synchronous-registration-after-done.js");
@@ -545,19 +544,18 @@ test("WPT explicit_timeout retains external test and registration watchdogs", as
   const harness = new WptHarness({}, {}, 10000, { deadlineScheduler: deadlines.schedule });
   harness.run('setup({explicit_timeout:true}); async_test(() => {}, "unfinished test");', "explicit-timeout-test.js");
   const completion = harness.finish();
-  assert.equal(deadlines.scheduled.length, 2);
-  (await deadlines.at(0)).callback();
-  const results = await completion;
-  assert.equal(results[0]?.status, "fail");
-  assert.match(String(results[0]?.error), /WPT timed out: unfinished test/);
+  const rejectedTest = assert.rejects(completion, (error: unknown) => error instanceof WptHungError &&
+    /explicit-timeout-test.js: unfinished test: test/.test(error.message));
+  deadlines.scheduled.at(-1)!.callback();
+  await rejectedTest;
   assert.ok(deadlines.scheduled.every((deadline) => deadline.cancelled));
 
   const registration = manualDeadlines();
   const pending = new WptHarness({}, {}, 10000, { deadlineScheduler: registration.schedule });
   pending.run('setup({explicit_done:true, explicit_timeout:true});', "explicit-timeout-registration.js");
   const rejected = assert.rejects(pending.finish(), (error: unknown) =>
-    error instanceof AggregateError && error.errors.some((entry: unknown) => /requires a call to done/.test(String(entry))));
-  (await registration.at(0)).callback();
+    error instanceof WptHungError && /explicit-timeout-registration.js: <registration>: registration/.test(error.message));
+  registration.scheduled.at(-1)!.callback();
   await rejected;
   assert.ok(registration.scheduled.every((deadline) => deadline.cancelled));
 });
@@ -578,7 +576,7 @@ test("WPT manual timeout is conditional and explicit_timeout stays enabled once 
       timeout();
     `, "explicit-manual-timeout.js");
     await assert.rejects(harness.finish(), (error: unknown) =>
-      error instanceof AggregateError && error.errors.some((entry: unknown) => /explicitly timed out/.test(String(entry))));
+      error instanceof WptHungError && error.observation.kind === "hung" && /explicit timeout/.test(error.message));
     assert.ok(deadlines.scheduled.every((deadline) => deadline.cancelled));
   }
 });
