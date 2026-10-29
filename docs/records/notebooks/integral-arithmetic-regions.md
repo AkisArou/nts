@@ -66,6 +66,46 @@ No fact from a graph before a rewrite can be looked up against the graph after
 it. Query failure never reruns an unbounded analysis. Unknown is not bottom;
 a missing writer or predecessor cannot become an empty successful union.
 
+## ScriptC design cross-check
+
+ScriptC's historical number-facts design is a reference supplied for this work,
+not source to port: flow-sensitive forward interpretation, an extended-real
+interval with wholeness, may-be-NaN, may-be-negative-zero and literal-spelling
+evidence; representability, wholeness and safe-integer range obligations before
+using an integer slot; and JavaScript transfer semantics. Its old source is not
+present in the frozen PoC tree, so no statement here claims a source-level
+comparison with a current ScriptC implementation.
+
+Its [public runtime-type-check documentation](https://scriptc.dev/docs/limitations#runtime-type-checks)
+describes checking runtime-known values when they enter typed use. That page is
+support for a runtime validation boundary, not evidence for its optimizer's
+internal lattice or a specific literal-type specialization rule. nts's rule is
+explicit: a declared literal type alone supplies no fact about an unchecked
+arrival. The parameter-arrival correction establishes the actual entries.
+
+The producer commit must explain and test these points:
+
+| Obligation | nts certificate and deliberate difference |
+|---|---|
+| Representability | Use the actual JavaScript Number value and the existing source-literal/checked-scalar provenance where a written representation obligation needs it. Never parse a token directly into an integer and skip its JavaScript Number rounding. Literal spelling is provenance attached to its constant or obligation, not a string member joined through every `Facts` value. Missing source evidence cannot certify an exact mathematical source literal. |
+| Wholeness | Require every arriving alternative to be numeric, finite and integer-valued, with NaN excluded independently. `Facts::whole` alone is insufficient: it describes finite members even when infinity is also possible. Unknown, an empty unresolved writer set, and bottom are distinct. |
+| Ordinary integer-slot range | Retain the safe-Number range within `±(2^53−1)` and separately prove the selected machine width. Endpoints stored in `f64` cannot prove an exact wider mathematical product. |
+| Negative zero | Retain `maybe_negative_zero` independently of interval endpoints. Integer representation rejects it unless the specific terminal use has an established sign-discarding proof, such as ToInt32. That permission does not apply to another live use. |
+| JavaScript transfers | Reuse the existing transfers: ToInt32 is truncation/modulo coercion, including NaN/infinity/−0 handling; remainder takes the dividend's sign. Division does not preserve wholeness merely because its inputs are whole. |
+| Graph and joins | Use the existing SSA `flow::Analysis`, guarded block facts, loop caps and complete writer authorities. Do not reproduce an AST environment or trust a checker literal type. A join conservatively keeps NaN and negative-zero possibilities. |
+| Additional region proof | A wider internal integer product may exceed the safe-Number interval only under a distinct checked-width certificate that puts its conversion at the original floating rounding boundary. This is not an ordinary integer-slot ingress fact and does not claim the floating result equals the unrounded product. Dyadic scale belongs to the exact-region consumer; every original prefix and proposed machine prefix is certified separately. |
+| Consumers | The facts are backend-neutral. C, LLVM and JVM consume the same admitted arithmetic; a JVM `int` descriptor is not a substitute producer. Explicit native/JVM ABI guarantees remain distinguishable from unenforced source declarations. |
+
+Required controls include NaN alone, NaN joined with an integral interval,
+positive and negative zero joined together, both infinities, fractional input,
+positive and negative remainders (including a negative exact multiple),
+`0 * Infinity`, underflow to negative zero, division by either zero, literal
+spellings at and beyond the safe-integer boundary, and machine-width extremes.
+Check answers using SameValue/bit-sensitive observables, not `===` alone. Pair a
+rejected ordinary ingress with a valid guarded one; pair an unsafe reordered
+prefix with a conversion that preserves its original rounding point. A source
+assertion or literal-union annotation alone must not change the decision.
+
 ## Two independent proofs
 
 ### Actual numeric ingress and bounds
