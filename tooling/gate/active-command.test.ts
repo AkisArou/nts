@@ -3,7 +3,7 @@ import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from
 import {homedir} from "node:os";
 import {join} from "node:path";
 import {test} from "node:test";
-import {activeCommand,processActivity} from "./active-command.ts";
+import {activeCommand,processActivity,CommandActivitySampler} from "./active-command.ts";
 import {readStepInstrument} from "./step-result.ts";
 import {waitFor} from "./test-wait.ts";
 
@@ -18,6 +18,25 @@ test("process activity parses group identity and all user/sys CPU including reap
   for(const [at,value] of [[2,41],[3,41],[11,5],[12,7],[13,11],[14,13],[19,123]])fields[at]=String(value);
   assert.deepEqual(processActivity(`41 (a name with ) in it) ${fields.join(" ")}`),{group:41,session:41,cpu:36,started:123});
   assert.throws(()=>processActivity("unreadable"),/invalid/);
+});
+
+test("one activity snapshot serves concurrent groups without sharing their progress",()=>{
+  let scans=0;
+  const records=new Map([
+    [41,{group:41,session:41,cpu:10,started:100}],
+    [42,{group:41,session:41,cpu:7,started:101}],
+    [51,{group:51,session:51,cpu:0,started:200}],
+  ]);
+  const sampler=new CommandActivitySampler(owned=>{scans++;assert.deepEqual([...owned],[41,51]);return records;});
+  const observed:number[][]=[[],[]],errors:unknown[]=[];
+  const cancel=[41,51].map((group,index)=>sampler.watch({group,started:group===41?100:200,pollMs:5000,sample:cpu=>observed[index].push(cpu),broken:error=>errors.push(error)}));
+  try{
+    sampler.sample();records.get(42)!.cpu+=10;sampler.sample();
+    assert.equal(scans,2);assert.deepEqual(observed,[[17,27],[0,0]]);assert.deepEqual(errors,[]);
+    records.get(41)!.started++;
+    sampler.sample();assert.equal(errors.length,1);assert.match(String(errors[0]),/identity changed/);
+    assert.deepEqual(observed,[[17,27],[0,0,0]]);
+  }finally{cancel.forEach(stop=>stop());}
 });
 
 test("structured stdout stays separate while command diagnostics are retained",async t=>{
