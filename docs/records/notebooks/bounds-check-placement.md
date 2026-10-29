@@ -87,8 +87,11 @@ supplier and writer, not in asking the checker more.
 
 1. **Calls that cannot change a length keep the relation.** A whole-program
    summary per function: it changes no array's length, and calls nothing that
-   does (closures with known targets and runtime helpers included). This is
-   one fact in `compiler/core` that every backend reads. It would remove
+   does (closures with known targets and runtime helpers included). Writing
+   an element is not such an effect; changing a length is (`push`, `pop`,
+   `splice`, assigning `length`, resizing or detaching a buffer), and a call
+   whose target is unknown stays conservative. This is one fact in
+   `compiler/core` that every backend reads. It would remove
    `spectral-norm`'s `u[j]` check.
 2. **A relational domain instead of one guard lookup.** Constraints between
    values with offsets (`i + c <= n`), learned from the branches that dominate
