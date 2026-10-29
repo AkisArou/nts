@@ -362,7 +362,15 @@ add, in order:
      supply (what a helper reads, writes, retains and calls back), kept by
      hand, to size the contracts of memory stage 0 (runtime);
    - after the call-heavy rows: the cost of the test after each call that may
-     raise, which decides whether table unwinding pays (runtime2).
+     raise, which decides whether table unwinding pays (runtime2);
+   - async calls, once the asynchronous benchmark rows land: a row that awaits
+     a known async function in a loop, beside a control that awaits a real
+     promise, with the emitted code entering the body without an intermediate
+     promise. It is adopted only as a proof in the shared IR that keeps the
+     order of queued microtasks, cleanup and iterator closing, so every async
+     ordering fixture must still agree with node (helper2 for the row,
+     runtime2 for the experiment). Generator-loop fusion needs no experiment
+     while the generator rows already run at C++'s speed.
 3. **Already planned, confirmed:** loop versions behind one entry test (the
    integral regions, being built), the generator protocol (L16), typed
    `JSON.parse` into its layout, helper contracts in memory stage 0, slices
