@@ -813,11 +813,18 @@ From the open-questions audit; each is the register's recommendation.
   function attributes or CPU, and no `!range`. It does carry 15 TBAA tags and
   6 `noalias`. The IR clang makes from nts's C (after `-O2`, so the counts are
   only a guide) has 54 `nsw`/`nuw`, 21 `inbounds`, 12 attribute groups with
-  the CPU, 7 `!range` and 36 TBAA tags. Without no-overflow and in-bounds
-  facts, LLVM cannot widen an `int32` loop counter or reason about the
-  addresses it indexes, which costs tight loops. The LLVM IR is to state what
-  nts proves ([native](../../targets/native.md#two-backends-one-runtime)),
-  measured first by hand-editing the IR of the worst rows.
+  the CPU, 7 `!range` and 36 TBAA tags. The coordinator's guess that these
+  missing facts cause the gap was measured the same day and refuted for the
+  four worst rows. runtime added each fact to the IR by hand and counted
+  instructions over a fixed amount of work (CPU 4, five repeats). No arm
+  changed any count. LLVM over C in instructions is 0.992 for `awfy-sieve`,
+  0.983 for `awfy-permute`, 1.000 for `array-methods` and 1.218 for
+  `json-scan`, against 1.31, 1.14, 1.13 and 1.29 in wall time. So three rows
+  run the same or fewer instructions more slowly, which the cycle counters
+  and the layout-interval instrument are to explain, and only `json-scan`
+  executes more. The LLVM IR is still to state what nts proves
+  ([native](../../targets/native.md#two-backends-one-runtime)), as the design
+  that lets it pass C, but not as the explanation of these rows.
 
 ## Plan (10-29): the Bun and ScriptC studies
 

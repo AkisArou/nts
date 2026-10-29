@@ -413,18 +413,21 @@ add, in order:
    - the JVM-only gaps (`cyclic-churn`, `release-acyclic` and
      `clbg-spectral-norm` on the JVM): the JVM's collector and flags, and
      the object layout, measured per row (runtime2);
-   - **the LLVM backend slower than C** on 15 rows, `awfy-sieve` (1.31) and
-     `json-scan` (1.29) the worst. Its IR has no `nsw` or `nuw`, no
-     `inbounds`, no function attributes or CPU and no `!range`, and its TBAA
-     may be coarser than C's. The worst rows' IR is hand-edited to add what
-     nts proves, and each addition is measured by instruction counts
-     (runtime). The LLVM backend then emits them from the layouts and facts
+   - **the LLVM backend slower than C** on the rows the 10-29 loss record
+     lists. On the four worst, adding by hand the facts nts's IR lacks
+     (`nsw` and `nuw`, `inbounds`, function attributes and the CPU,
+     `!range`, more precise TBAA) changed no instruction count. Where LLVM
+     runs the same instructions more slowly (`awfy-sieve`, `awfy-permute`,
+     `array-methods`), the cycle and branch counters, then the
+     layout-interval instrument, decide whether the cost is real. Where it
+     runs more instructions (`json-scan`), its hot code is compared with C's
+     (runtime). The LLVM backend then emits whatever closes each gap
      (compiler), first to match C, then to pass it
      ([native](targets/native.md#two-backends-one-runtime));
-   - **the C backend slower than LLVM** on 4 rows (`dispatch` 1.64,
-     `logical-assignment` 1.25, `accumulate` 1.20, `generic-classes` 1.08):
-     the same comparison the other way, to find what nts's LLVM IR gives the
-     optimizer that its C loses (runtime, after the LLVM arms).
+   - **the C backend slower than LLVM** on the rows the same record lists
+     (`dispatch` the worst): the same comparison the other way, to find
+     what nts's LLVM IR gives the optimizer that its C loses (runtime, after
+     the LLVM rows).
 3. **Already planned, confirmed:** loop versions behind one entry test (the
    integral regions, being built), the generator protocol (L16), typed
    `JSON.parse` into its layout, helper contracts in memory stage 0, slices
