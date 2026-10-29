@@ -52,5 +52,5 @@ export class QuotaExceededError extends DOMException {
 
   get requested(): number | null { return this.#requested; }
 
-  get [Symbol.toStringTag](): string { return "QuotaExceededError"; }
+  override get [Symbol.toStringTag](): string { return "QuotaExceededError"; }
 }
