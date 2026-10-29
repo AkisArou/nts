@@ -34,7 +34,7 @@ pub fn worker_budget() -> Option<NonZeroUsize> {
 
 pub(crate) fn start() -> Option<NonZeroU16> {
     tsrs_core::runslots::start_worker_pool().map(|count| {
-        NonZeroU16::new(count.get().min(256) as u16)
+        NonZeroU16::new(u16::try_from(count.get().min(256)).expect("256 fits in a u16"))
             .expect("a nonzero native worker budget remains nonzero after clamping")
     })
 }
