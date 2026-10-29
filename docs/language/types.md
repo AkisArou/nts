@@ -89,7 +89,7 @@ representation, and checks it where it can:
 |---|---|
 | between concrete types: an upcast, a class to an interface it satisfies | nothing at run time; the value keeps its identity |
 | an erased value to `number`, `string`, `boolean`, `bigint` or `symbol` | tests the tag |
-| an erased value to a literal type or an `enum` | tests the tag and the value |
+| an erased value to a literal type or an `enum` | tests the tag and the value (the value test is not built yet) |
 | a typed value to a literal type it may not hold, as `n as 64` where `n` is a `number` | nothing at run time, as in node; the value keeps its storage, and the compiler takes no fact from the literal type |
 | an erased value to a class | tests the class, as `instanceof` against it and its subclasses |
 | an erased value to an interface or an object type | no test at the cast; a field access through the result compiles only where every class the value could be supplies that field, and is refused otherwise |
@@ -205,8 +205,7 @@ Until each case meets the policy, a wrong answer that runs is recorded under
   a bound only from a proof over every value that arrives, never from a
   declared type (10-29,
   [log](../records/notebooks/decisions-log.md#language-10-29)). Not built: the
-  value test; the compiler on `main` still reads declared literal types as
-  facts.
+  value test.
 - **A container's narrow representation is licensed by proof, never by its
   static type:** a value read out of a `Map` or `Set` keeps its run-time type
   unless the compiler proves that every writer of that collection stores the

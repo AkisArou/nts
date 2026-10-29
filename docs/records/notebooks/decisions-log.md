@@ -732,3 +732,18 @@ From the open-questions audit; each is the register's recommendation.
   validates casts from run-time-typed values and between program classes, and
   documents no check for a cast between static types. Recorded in
   [types.md](../../language/types.md#decisions).
+
+## Plan (10-29): the Bun and ScriptC studies
+
+- **The studies are audited, not adopted wholesale.** Two cloud agents studied
+  Bun's ahead-of-time compiler (oven-sh/bun #45631) and ScriptC; the user
+  asked for an audit, experiments where an idea's value is unknown, and the
+  outcome in the plan. The coordinator held new optimization starts, not the
+  whole team, during the audit: correctness, infrastructure and web work went
+  on. The merged table is [the audit](aot-studies-audit.md); the decisions
+  are in [plan.md](../../plan.md#from-the-bun-and-scriptc-studies).
+- **Comparators:** the user replaced Bun's JIT with the two ahead-of-time
+  compilers: "add scriptc and bun with AOT this time instead of plain bun".
+  ScriptC runs with its automatic Node islands off, so every column compares
+  native code. The coordinator noted that Bun's author reports AOT losing to
+  its JIT in places, so the JIT may be the stronger rival on some rows.

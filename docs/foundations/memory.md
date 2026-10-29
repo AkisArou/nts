@@ -66,8 +66,8 @@ until when" with their own model. R4(b) works on code after counts are
 inserted and reconstructs ownership from them; after 5,800 lines, all 372
 allocation sites in json-parse are still undecided.
 
-**Known defects (found by an outside review on 2026-10-27, reproduced on
-main, being fixed first):**
+**The defects behind these rules** (each found on `main`, now fixed and held
+by its fixture):
 
 | defect | effect |
 |---|---|
@@ -280,7 +280,12 @@ the program never reads a pointer again, but the collector follows it into
 reclaimed memory. nts's cycle collector walks references, so a reset proof must
 cover the runtime too: no cycle candidate, collector work list, weak structure
 or traced field can reach reclaimed storage, or those edges are cleared first.
-Source-level last use alone is not a proof.
+Source-level last use alone is not a proof. A use after reset is caught at
+run time today: under ASan regions keep no blocks and free lists stop
+recycling, and under `NTS_POISON` a reset fills its blocks with a pattern and
+checks membership. Checking at reset that no cycle candidate or collector work
+list points into the region is the next instrument
+([plan](../plan.md#from-the-bun-and-scriptc-studies)).
 
 ### A region needs two proofs
 
@@ -427,7 +432,7 @@ node and Bun in the same sitting.
 
 | stage | work | rows it must move |
 |---|---|---|
-| 0 | **fix the three known defects first**; the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`); startup time, executable size and peak RSS rows against node and Bun; a macOS cycle test like `gtk-cycles`, recording today's behaviour (it runs when a Mac is available again; there is none now) | none: instruments and fixes |
+| 0 | the three defects above (*fixed*); the runtime contract as a record (ownership of every edge kind: region to region, region to heap, heap to region; helpers that may return an argument; weak observation; collector-safe resets); a memory census (sites by home and reason, counts by site, allocation volume, peak live bytes, bytes held until reset, allocator-reserved bytes); land the six Are We Fast Yet ports; new rows (`tree-teardown`, `sort-objects`, `release-acyclic`, `immutable-update`, `array-copying-methods`, `cyclic-churn`); startup time, executable size and peak RSS rows against node and Bun; a macOS cycle test like `gtk-cycles`, recording today's behaviour (it runs when a Mac is available again; there is none now) | none: instruments and fixes |
 | 1 | release specialized by type; count-free sort; erased-value releases; one count per map key; anchors held only to the last borrow | `sort-objects` below node and Bun (the merge loop's counting is its cost); `release-acyclic` and `cyclic-churn` lose their generic-walker share; `map-entries-top-k` about −5% more; `awfy-towers` below Bun |
 | 2 | the one memory analysis, facts only, as formulated above; its first slice end to end (a parser-shaped workload and a tree or list builder) | none may move; each difference from today's placement explained |
 | 3 | per-site regions; the arena API lands; the JSON parser's `null` placeholders | json-parse below 1.0x node and about 0.75x Bun; `release-acyclic` below node and Bun; `json-build-append` must not regress |

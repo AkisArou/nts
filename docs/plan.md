@@ -319,6 +319,63 @@ proposals wait on research.
   Its products are `target.web()` and `target.wasi()`, with ES-module and
   component products (S-1).
 
+## From the Bun and ScriptC studies
+
+Two studies read Bun's ahead-of-time compiler and ScriptC against nts
+([Bun](records/notebooks/bun-aot.md), [ScriptC](records/notebooks/scriptc.md),
+merged in [the audit](records/notebooks/aot-studies-audit.md)). Their shared
+first idea is nts's own rule: only a proof over every value that arrives and
+every writer picks a narrow representation, never a declared type. What they
+add, in order:
+
+1. **Correctness, before any speedup they suggest:**
+   - a **validation build** that re-checks at run time each fact the compiler
+     used to remove a check (removed bounds checks become named traps,
+     narrowed integers are compared with a double recomputation, unreachable
+     paths trap by name), run over the differential corpus and the five
+     test262 records with sabotage controls that must fire. Prototyped by
+     hand on emitted C first; if it is clean and its overhead fits the
+     nightly full run, it becomes an `nts build` mode run there (compiler,
+     after the erased-literal test);
+   - the adversarial routes as fixtures with one-difference controls on every
+     backend: Bun's method-bivariance and covariant-array cases and ScriptC's
+     variance case (helper2). A bivariant method receiving an erased argument
+     gets a checked conversion at the callee's entry instead of invalid HIR
+     (compiler);
+   - array holes: the behaviour is decided (L4); an experiment on the array
+     rows chooses the mechanism, a reserved NaN or a filled-prefix count
+     maintained by writes (runtime);
+   - at region reset, a check that no cycle candidate or collector work list
+     points into the region, with a sabotage case (runtime).
+2. **Experiments on the rows nts loses,** each on hand-edited emitted code
+   before any compiler change, each shown with every ratio:
+   - `cyclic-churn`: the collector's counters, then an adaptive
+     trigger if repeated visits dominate (runtime);
+   - `json-parse`: a hand-written typed parser row against the
+     hosts' native `JSON.parse`, with and without validation, to size the
+     generated parser (helper2);
+   - `awfy-towers` and `fib`: integer copies of the recursive
+     functions, to decide whether argument ranges are proved through the
+     recursion or guarded at its entry (runtime2);
+   - `sort-objects`, `release-acyclic`, `immutable-update`,
+     `str-split`: profiles, then one fact a fuller helper contract would
+     supply (what a helper reads, writes, retains and calls back), kept by
+     hand, to size the contracts of memory stage 0 (runtime);
+   - after the call-heavy rows: the cost of the test after each call that may
+     raise, which decides whether table unwinding pays (runtime2).
+3. **Already planned, confirmed:** loop versions behind one entry test (the
+   integral regions, being built), the generator protocol (L16), typed
+   `JSON.parse` into its layout, helper contracts in memory stage 0, slices
+   that point into their owner (strings stage D), startup and size rows (P-2),
+   with a scaling test of unused code and a per-byte size report.
+4. **Later, recorded:** per-operation integer speculation, 4-byte references
+   after the memory census, data caches for dynamic objects (with L7), views
+   at crossings, profile-guided builds, compile-time constants, link order.
+5. **Not adopted:** declarations as proofs, observable copies at crossings,
+   UTF-8 storage, ropes or locked builtins without a row, executable surgery,
+   a collector change on an unattributed claim, any interpreter or engine
+   fallback.
+
 ## Benchmarks
 
 - **Are We Fast Yet,** all fourteen, against their own C++ and Java
@@ -333,8 +390,11 @@ proposals wait on research.
   - native: C++;
   - JVM: Java;
   - Wasm: C compiled to Wasm, and AssemblyScript;
-  - every backend: node and Bun;
-  - each at a pinned version, node, Bun, the JDK and clang included (P-4).
+  - every backend: node, Bun's ahead-of-time compiler
+    (`bun build --compile --aot`) and ScriptC's native output with its Node
+    fallback turned off, the two AOT compilers replacing Bun's JIT (10-29);
+  - each at a pinned version, node, Bun, ScriptC, the JDK and clang included
+    (P-4).
 - **Instruction counts** are the regression signal between runs; wall time is
   for the ratios. Every result is shown with its ratios, the machine's
   conditions and the verdict.
@@ -344,13 +404,6 @@ proposals wait on research.
 Noted, not scheduled:
 - `Map<K, number>` values stored unboxed (Bun 3.9× and Java 3.1× faster on
   `map-literal-keys`);
-- integer accumulators, so that `(a + b) | 0` stays in int32: needs
-  container content facts to prove the addend (the guarded form was measured
-  and parked on its compile cost; the row it seemed to lose lies inside that
-  row's layout range);
-- argument ranges through recursion: an index computed as `(3 - from) - to`
-  across recursive calls widens to an unbounded range with `NaN`, so the
-  recursive methods of `awfy-towers` keep double indices and check them twice;
 - `Array.prototype.flat`;
 - intersection-typed parameters, a refusal family;
 - one exit-code convention across commands, and the command line parsed once;

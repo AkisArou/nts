@@ -76,7 +76,7 @@ sends whole arguments to the clone and everything else (`NaN`, `1e300`, `1.5`)
 to the original body (`hir::guards`). A function named by a dispatch table
 keeps the table's signature.
 
-**Truncated sums** (designed). `(a + b) | 0` observes only the low 32 bits of
+**Truncated sums.** `(a + b) | 0` observes only the low 32 bits of
 a sum that is exact when both operands are int32, so it is one wrapping integer
 instruction. Both operands must be proved int32; for an addend read from a
 container, the proof is the container's content summary
