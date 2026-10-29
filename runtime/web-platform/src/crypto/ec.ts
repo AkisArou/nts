@@ -7,7 +7,6 @@ import type { CryptoKeySlots } from "./crypto-key.ts";
 import { ecCurveByteLength } from "./ec-curve.ts";
 import type { EcKeyAlgorithm } from "./ec-key.ts";
 
-const ByteArray = Uint8Array;
 
 function operationError(): DOMException {
   return new DOMException("The elliptic-curve operation failed", "OperationError");
@@ -35,7 +34,7 @@ export function signEc(
   const rLength = signature.r.byteLength;
   const sLength = signature.s.byteLength;
   if (rLength === 0 || rLength > width || sLength === 0 || sLength > width) throw operationError();
-  const result = new ByteArray(width * 2);
+  const result = new Uint8Array(width * 2);
   for (let index = 0; index < rLength; index++) result[width - rLength + index] = signature.r[index]!;
   for (let index = 0; index < sLength; index++) result[width * 2 - sLength + index] = signature.s[index]!;
   return result;
@@ -90,7 +89,7 @@ export function deriveEcBits(
   if (length === null || length === width * 8) return secret;
   const remainder = length % 8;
   const byteLength = (length - remainder) / 8 + (remainder === 0 ? 0 : 1);
-  const result = new ByteArray(byteLength);
+  const result = new Uint8Array(byteLength);
   for (let index = 0; index < byteLength; index++) result[index] = secret[index]!;
   if (remainder !== 0) result[byteLength - 1]! &= 0xff << (8 - remainder);
   return result;

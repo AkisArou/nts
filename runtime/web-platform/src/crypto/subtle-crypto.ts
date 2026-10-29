@@ -249,7 +249,7 @@ export class SubtleCrypto {
         return generateSecretKey(provider, random, normalized, canExport, usages);
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -274,7 +274,7 @@ export class SubtleCrypto {
         return importKeyMaterial(provider, "raw", secret, normalizedImport, canExport, usages);
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
