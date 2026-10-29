@@ -566,3 +566,101 @@ fn constructorless_initialization_keeps_every_ancestor() {
     }
     assert_eq!(probe.constructorless_ancestors(None), Vec::<TypeId>::new());
 }
+
+#[test]
+fn deep_thenables_test_the_nearest_override_first() {
+    use nts_semantic_schema::TypeId;
+    let snapshot = SemanticSnapshot::default();
+    let indexed = super::LoweringSnapshot::new(&snapshot);
+    let mut probe = FuncBuilder::probe(&indexed);
+    for child in 1..=80 {
+        probe
+            .hierarchy
+            .base
+            .insert(TypeId(child), TypeId(child - 1));
+    }
+    for depth in [8, 80] {
+        let thenables = std::rc::Rc::make_mut(&mut probe.thenables);
+        thenables.classes.clear();
+        for class in [depth - 1, depth] {
+            thenables
+                .classes
+                .insert(TypeId(class), super::Thenable::Job(0));
+        }
+        assert_eq!(
+            probe.thenable_candidates(&super::HirType::Erased),
+            [TypeId(depth), TypeId(depth - 1)]
+        );
+    }
+}
+
+#[test]
+fn deep_objc_dispatch_keeps_every_override_in_inheritance_order() {
+    for depth in [8, 80] {
+        let mut snapshot = SemanticSnapshot::default();
+        let mut classes = Vec::new();
+        let mut symbols = Vec::new();
+        for class in 0..=depth {
+            let at = node(
+                &mut snapshot,
+                NodeKind::Syntax(syntax::CLASS_DECLARATION),
+                None,
+            );
+            let symbol = query_symbol(
+                &mut snapshot,
+                &format!("C{class}"),
+                nts_semantic_schema::SymbolFlags::CLASS,
+                at,
+            );
+            if let Some(base) = symbols.last().copied() {
+                let heritage = node(
+                    &mut snapshot,
+                    NodeKind::Syntax(syntax::HERITAGE_CLAUSE),
+                    Some(at),
+                );
+                let applied = node(
+                    &mut snapshot,
+                    NodeKind::Syntax(syntax::EXPRESSION_WITH_TYPE_ARGUMENTS),
+                    Some(heritage),
+                );
+                let name = node(
+                    &mut snapshot,
+                    NodeKind::Syntax(syntax::IDENTIFIER),
+                    Some(applied),
+                );
+                snapshot.nodes[name.0 as usize].symbol = Some(base);
+            }
+            classes.push(at);
+            symbols.push(symbol);
+        }
+        let root_method = declaration(
+            &mut snapshot,
+            classes[0],
+            syntax::METHOD_DECLARATION,
+            Some("m"),
+            true,
+        );
+        for class in [depth - 1, depth] {
+            declaration(
+                &mut snapshot,
+                classes[class],
+                syntax::METHOD_DECLARATION,
+                Some("m"),
+                true,
+            );
+        }
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let mut probe = FuncBuilder::probe(&indexed);
+        probe.hierarchy.objc_classes.clone_from(&classes);
+        let dispatch = probe.objc_dispatch(classes[0], root_method, "m").unwrap();
+        assert_eq!(dispatch.exact.len(), depth + 1);
+        assert_eq!(
+            dispatch
+                .overriders
+                .iter()
+                .map(|arm| arm.tested)
+                .collect::<Vec<_>>(),
+            [classes[depth], classes[depth - 1]]
+        );
+    }
+}

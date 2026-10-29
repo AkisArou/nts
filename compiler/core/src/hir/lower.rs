@@ -42657,11 +42657,7 @@ impl<'a> FuncBuilder<'a> {
             }
             _ => Vec::new(),
         };
-        let depth = |class: TypeId| {
-            std::iter::successors(Some(class), |at| self.hierarchy.base.get(at).copied())
-                .take(64)
-                .count()
-        };
+        let depth = |class: TypeId| self.hierarchy.ancestors(class).count();
         found.sort_by_key(|class| (std::cmp::Reverse(depth(*class)), class.0));
         found
     }
@@ -71389,10 +71385,11 @@ impl<'a> FuncBuilder<'a> {
     /// `None` where no subclass overrides it, and the call is direct.
     fn objc_dispatch(&self, class: NodeId, method: NodeId, member: &str) -> Option<ObjcDispatch> {
         let chain = |from: NodeId| {
+            let mut seen = rustc_hash::FxHashSet::default();
             std::iter::successors(Some(from), |at| {
                 super::native::superclass(self.snapshot, *at)
             })
-            .take(64)
+            .take_while(move |at| seen.insert(*at))
         };
         let mut exact = Vec::new();
         let mut overriders = Vec::new();
