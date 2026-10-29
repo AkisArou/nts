@@ -57,11 +57,24 @@ export class WptHungError extends Error {
   }
 }
 
+function errorDetail(error: unknown): { message: string; stack?: string } {
+  let message: string;
+  try { message = String(error); } catch { message = "<unprintable thrown value>"; }
+  let stack: string | undefined;
+  try {
+    if (typeof error === "object" && error !== null && "stack" in error && typeof error.stack === "string") stack = error.stack;
+  } catch { /* A diagnostic getter cannot turn a hung instrument into a failure. */ }
+  return { message, ...(stack === undefined ? {} : { stack }) };
+}
+
 /** Only the execution boundary publishes: deliberate controls stay local. */
 export function reportWptHung(error: WptHungError, env: NodeJS.ProcessEnv = process.env,
   write: (text: string) => void = text => { process.stderr.write(text); }): void {
   publishHung(error.observation.reason, env);
-  const record = JSON.stringify({ ...error.observation, testResult: error.testResult });
+  const body = error.testResult;
+  const testResult = body === undefined ? undefined : { ...body,
+    ...(Object.hasOwn(body, "error") ? { error: errorDetail(body.error) } : {}) };
+  const record = JSON.stringify({ ...error.observation, testResult });
   if (env.NTS_WPT_HUNG_RESULTS) appendFileSync(env.NTS_WPT_HUNG_RESULTS, record + "\n");
   write(`NOT RUN (hung): ${record}\n`);
 }

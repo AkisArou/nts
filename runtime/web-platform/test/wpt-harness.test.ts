@@ -78,9 +78,14 @@ test("WPT hung transport preserves the typed field and refuses a mutated verdict
   const observations = join(directory, "observations.jsonl"), step = join(directory, "step.json");
   const env = { ...process.env, NTS_WPT_HUNG_RESULTS: observations, NTS_GATE_STEP_RESULT: step,
     NTS_GATE_STEP: "web-platform", NTS_GATE_STEP_ATTEMPT: "control" };
-  const error = new WptHungError("fixture.js", "pending cleanup", "cleanup", { name: "pending cleanup", status: "pass" });
+  const error = new WptHungError("fixture.js", "pending cleanup", "cleanup", {
+    name: "pending cleanup", status: "fail", error: new TypeError("body failed before cleanup"),
+  });
   reportWptHung(error, env, () => {});
   assert.equal(readWptHungResults(observations)[0]?.kind, "hung");
+  const body = JSON.parse(readFileSync(observations, "utf8")).testResult;
+  assert.equal(body.error.message, "TypeError: body failed before cleanup");
+  assert.match(body.error.stack, /TypeError: body failed before cleanup/);
   const command = new URL("./wpt/hung.ts", import.meta.url);
   const run = spawnSync(process.execPath, [command.pathname, observations], { env, encoding: "utf8" });
   assert.equal(run.status, 124, run.stderr);
