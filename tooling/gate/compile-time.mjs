@@ -41,7 +41,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from "./cputime.mjs";
-import { COMPILE_ARMS, compileArm, compileCommand, readCounterTable } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileArm, compileCommand, readCounterTable } from "./compile-counter.ts";
 import { withToken } from "./tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -97,6 +97,10 @@ if (FROM) {
     console.log(`  NOT MEASURED: incompatible counter scope in ${FROM}; attached counts cannot be reused`);
     process.exit(2);
   }
+  if (meta.work_profile !== COMPILE_WORK_PROFILE) {
+    console.log(`  NOT MEASURED: incompatible compiler work profile in ${FROM}`);
+    process.exit(2);
+  }
   if (meta.arm !== ARM) {
     console.log(`  NOT MEASURED: incompatible preparation arm in ${FROM}; expected ${ARM}, found ${meta.arm ?? "unknown"}`);
     process.exit(2);
@@ -121,8 +125,8 @@ const { rows: base, ratio: RATIO } = baseline;
 function lower(module) {
   return withToken(async () => {
     const counted = spawnCounted(NTS, compileCommand(ARM, module), { cwd: ROOT, stdio: "ignore",
-      env: { ...process.env, NTS_CHECKERS: "1", ...FIXED_AMBIENT }, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
-    return counted.measurement;
+      env: { ...process.env, ...FIXED_AMBIENT }, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
+    return counted.measurement.then(row => ({ ...row, work_profile: COMPILE_WORK_PROFILE }));
   });
 }
 
@@ -143,7 +147,7 @@ await Promise.all(Array.from({ length: FROM ? 1 : Math.min(JOBS, modules.length)
   while (next < modules.length) {
     const module = modules[next++];
     const r = FROM ? kept(module) : await lower(module);
-    const problem = counterProblem(r) ?? (r.status !== 0 ? "missing successful command status" : null);
+    const problem = counterProblem(r) ?? (r.work_profile !== COMPILE_WORK_PROFILE ? "incompatible compiler work profile" : null) ?? (r.status !== 0 ? "missing successful command status" : null);
     if (problem) {
       unmeasured.push(`${module}: ${problem}`);
       continue;

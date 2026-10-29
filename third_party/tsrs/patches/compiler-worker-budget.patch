@@ -1,0 +1,240 @@
+diff --git a/crates/tsrs_compiler/src/checkerpool.rs b/crates/tsrs_compiler/src/checkerpool.rs
+index bbabad7..53806c6 100644
+--- a/crates/tsrs_compiler/src/checkerpool.rs
++++ b/crates/tsrs_compiler/src/checkerpool.rs
+@@ -150,25 +150,28 @@ impl std::ops::DerefMut for PooledChecker {
+ // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
+ pub const CHECKER_STACK_SIZE: usize = 512 << 20;
+ 
+-// Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
+-// and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
++// Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index and waits for all of them.
++// The process budget bounds workers. Single-threaded runs execute tasks on the calling thread.
+ fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
+-    if single_threaded || count <= 1 {
++    let workers = tsrs_core::runslots::start_worker_pool().map_or(count, |limit| count.min(limit.get()));
++    if single_threaded || workers <= 1 {
+         (0..count).for_each(task);
+         return;
+     }
+     std::thread::scope(|s| {
+         let task = &task;
+-        let handles: Vec<_> = (0..count)
+-            .map(|i| {
++        let handles: Vec<_> = (0..workers)
++            .map(|worker| {
+                 std::thread::Builder::new()
+-                    .name(format!("checker-{i}"))
++                    .name(format!("checker-{worker}"))
+                     .stack_size(CHECKER_STACK_SIZE)
+                     .spawn_scoped(s, move || {
+-                        tsrs_ast::use_id_blocks();
+-                        task(i);
+-                        // The next pass's thread (or checker) continues in this thread's arena.
+-                        tsrs_core::ptr::release_own_arena();
++                        for i in (worker..count).step_by(workers) {
++                            tsrs_ast::use_id_blocks();
++                            task(i);
++                            // The next pass's thread (or checker) continues in this thread's arena.
++                            tsrs_core::ptr::release_own_arena();
++                        }
+                     })
+                     .expect("failed to spawn checker thread")
+             })
+@@ -713,6 +716,7 @@ impl CheckerPoolImpl {
+         program: &'static Program,
+         previous: Option<&CheckerPoolImpl>,
+     ) -> CheckerPoolImpl {
++        let budget = tsrs_core::runslots::start_worker_pool();
+         // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
+         let checker_count: i64 = if program.single_threaded() {
+             1
+@@ -724,6 +728,7 @@ impl CheckerPoolImpl {
+ 
+         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
+         let checker_count = checker_count.min(program.files.len() as i64).clamp(1, 256) as usize;
++        let checker_count = budget.map_or(checker_count, |limit| checker_count.min(limit.get()));
+ 
+         let inherited_associations =
+             previous.and_then(|previous| inherited_associations(program, checker_count, previous));
+@@ -1964,6 +1969,9 @@ fn default_checker_count(program: &Program) -> i64 {
+ 
+ // `default_checker_count` before the program's files are known: what the machine allows (the file count only lowers it).
+ fn default_checker_count_by_machine() -> i64 {
++    if let Some(limit) = tsrs_core::runslots::worker_budget() {
++        return limit.get().min(256) as i64;
++    }
+     if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
+         return GO_DEFAULT_CHECKERS;
+     }
+@@ -2027,7 +2035,8 @@ pub fn checker_count_upper_bound(
+     } else {
+         default_checker_count_by_machine()
+     };
+-    count.clamp(1, 256) as usize
++    let count = count.clamp(1, 256) as usize;
++    tsrs_core::runslots::worker_budget().map_or(count, |limit| count.min(limit.get()))
+ }
+ 
+ // Checker assignment by locality. Checker state duplication comes from files on different checkers that
+diff --git a/crates/tsrs_compiler/src/program.rs b/crates/tsrs_compiler/src/program.rs
+index 53198d5..df29635 100644
+--- a/crates/tsrs_compiler/src/program.rs
++++ b/crates/tsrs_compiler/src/program.rs
+@@ -501,6 +501,7 @@ const PARSE_THREAD_CAP: usize = 32;
+ pub fn worker_pool() -> &'static rayon::ThreadPool {
+     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
+     POOL.get_or_init(|| {
++        let budget = tsrs_core::runslots::start_worker_pool();
+         if tsrs_core::NO_THREADS {
+             return rayon::ThreadPoolBuilder::new()
+                 .num_threads(1)
+@@ -508,21 +509,26 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
+                 .build()
+                 .unwrap();
+         }
+-        let threads = std::env::var("RAYON_NUM_THREADS")
+-            .ok()
+-            .and_then(|v| v.parse::<usize>().ok())
+-            .filter(|&n| n > 0)
+-            .unwrap_or_else(|| {
+-                std::thread::available_parallelism()
+-                    .map_or(1, std::num::NonZero::get)
+-                    .min(PARSE_THREAD_CAP)
+-            });
++        let threads = budget.map(std::num::NonZero::get).unwrap_or_else(|| {
++            std::env::var("RAYON_NUM_THREADS")
++                .ok()
++                .and_then(|v| v.parse::<usize>().ok())
++                .filter(|&n| n > 0)
++                .unwrap_or_else(|| {
++                    std::thread::available_parallelism()
++                        .map_or(1, std::num::NonZero::get)
++                        .min(PARSE_THREAD_CAP)
++                })
++        });
+         rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
+     })
+ }
+ 
+ // program.go:305
+-pub fn new_program(opts: ProgramOptions) -> &'static Program {
++pub fn new_program(mut opts: ProgramOptions) -> &'static Program {
++    if tsrs_core::runslots::start_worker_pool().is_some_and(|limit| limit.get() == 1) {
++        opts.single_threaded = Tristate::True;
++    }
+     let single_threaded = tsrs_core::NO_THREADS
+         || opts
+             .single_threaded
+diff --git a/crates/tsrs_core/src/runslots.rs b/crates/tsrs_core/src/runslots.rs
+index 730714f..1489cb8 100644
+--- a/crates/tsrs_core/src/runslots.rs
++++ b/crates/tsrs_core/src/runslots.rs
+@@ -18,8 +18,72 @@
+ //! on them.
+ 
+ use std::cell::Cell;
++use std::num::NonZeroUsize;
+ use std::sync::{Condvar, Mutex, OnceLock};
+ 
++/// A process-wide worker limit must be configured before native work starts.
++#[derive(Debug, Clone, Copy, PartialEq, Eq)]
++pub enum WorkerBudgetError {
++    /// An explicit budget has already been configured.
++    AlreadyConfigured,
++    /// A native program, request slot or worker pool has already started.
++    WorkAlreadyStarted,
++}
++
++impl std::fmt::Display for WorkerBudgetError {
++    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
++        formatter.write_str(match self {
++            Self::AlreadyConfigured => "the native worker budget is already configured",
++            Self::WorkAlreadyStarted => "native work started before the worker budget was configured",
++        })
++    }
++}
++
++impl std::error::Error for WorkerBudgetError {}
++
++struct WorkerBudget {
++    limit: Option<NonZeroUsize>,
++    started: bool,
++}
++
++impl WorkerBudget {
++    fn configure(&mut self, limit: NonZeroUsize) -> Result<(), WorkerBudgetError> {
++        if self.started {
++            return Err(WorkerBudgetError::WorkAlreadyStarted);
++        }
++        if self.limit.is_some() {
++            return Err(WorkerBudgetError::AlreadyConfigured);
++        }
++        self.limit = Some(limit);
++        Ok(())
++    }
++
++    fn start(&mut self) -> Option<NonZeroUsize> {
++        self.started = true;
++        self.limit
++    }
++}
++
++static WORKER_BUDGET: Mutex<WorkerBudget> = Mutex::new(WorkerBudget { limit: None, started: false });
++
++/// Set an upper bound shared by native compiler parsing, binding, checking and
++/// request execution slots. Call once, before creating any native program or worker pool.
++/// An explicit budget takes precedence over pool-specific environment settings.
++pub fn configure_worker_budget(limit: NonZeroUsize) -> Result<(), WorkerBudgetError> {
++    WORKER_BUDGET.lock().unwrap_or_else(std::sync::PoisonError::into_inner).configure(limit)
++}
++
++/// Read the configured limit without starting native work.
++pub fn worker_budget() -> Option<NonZeroUsize> {
++    WORKER_BUDGET.lock().unwrap_or_else(std::sync::PoisonError::into_inner).limit
++}
++
++/// Freeze the budget before constructing native programs, pools or request
++/// slots. The lock orders configuration against concurrent first use.
++pub fn start_worker_pool() -> Option<NonZeroUsize> {
++    WORKER_BUDGET.lock().unwrap_or_else(std::sync::PoisonError::into_inner).start()
++}
++
+ struct Slots {
+     in_use: Mutex<usize>,
+     freed: Condvar,
+@@ -35,7 +99,9 @@ fn get_slots() -> &'static Slots {
+     SLOTS.get_or_init(|| Slots {
+         in_use: Mutex::new(0),
+         freed: Condvar::new(),
+-        capacity: std::thread::available_parallelism().map_or(1, std::num::NonZero::get),
++        capacity: start_worker_pool()
++            .unwrap_or_else(|| std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN))
++            .get(),
+     })
+ }
+ 
+diff --git a/crates/tsrs_core/src/runslots_test.rs b/crates/tsrs_core/src/runslots_test.rs
+index e5b2dd5..e966a4f 100644
+--- a/crates/tsrs_core/src/runslots_test.rs
++++ b/crates/tsrs_core/src/runslots_test.rs
+@@ -117,3 +117,19 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
+     run(|| run(|| assert!(HOLDS_SLOT.with(Cell::get))));
+     assert!(!HOLDS_SLOT.with(Cell::get));
+ }
++
++#[test]
++fn a_worker_budget_is_set_once_and_frozen_at_first_use() {
++    use super::{WorkerBudget, WorkerBudgetError};
++    use std::num::NonZeroUsize;
++
++    let mut budget = WorkerBudget { limit: None, started: false };
++    assert_eq!(budget.configure(NonZeroUsize::MIN), Ok(()));
++    assert_eq!(budget.configure(NonZeroUsize::MIN), Err(WorkerBudgetError::AlreadyConfigured));
++    assert_eq!(budget.start(), Some(NonZeroUsize::MIN));
++    assert_eq!(budget.configure(NonZeroUsize::MIN), Err(WorkerBudgetError::WorkAlreadyStarted));
++
++    let mut default = WorkerBudget { limit: None, started: false };
++    assert_eq!(default.start(), None);
++    assert_eq!(default.configure(NonZeroUsize::MIN), Err(WorkerBudgetError::WorkAlreadyStarted));
++}

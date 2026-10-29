@@ -15,6 +15,7 @@ mod program;
 mod semantic;
 mod session;
 mod strings;
+mod workers;
 pub use ast::*;
 pub use cache_replay::{InputChanged, InputObservation};
 pub use config_sources::StrictOptionSource;
@@ -28,6 +29,7 @@ pub use program::{
 pub use semantic::*;
 pub use session::*;
 pub use strings::JsString;
+pub use workers::{WorkerBudgetError, configure_worker_budget, worker_budget};
 
 mod text;
 pub use text::{BytePos, Utf16Pos, Utf16Span};

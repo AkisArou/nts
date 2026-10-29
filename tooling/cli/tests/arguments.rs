@@ -369,6 +369,14 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
         .next()
         .unwrap();
     let checkers = flags(&tokens(checkers));
+    let workers = include_str!("../src/workers.rs")
+        .split("#[cfg(test)]")
+        .next()
+        .unwrap();
+    let checkers: BTreeSet<_> = checkers
+        .into_iter()
+        .chain(flags(&tokens(workers)))
+        .collect();
     consumed
         .get_mut("project")
         .unwrap()

@@ -67,12 +67,15 @@ impl std::fmt::Debug for Session {
 }
 
 impl Session {
-    fn new(options: SessionOptions) -> Self {
+    fn new(mut options: SessionOptions) -> Self {
         assert!(options.cwd.is_absolute(), "native cwd must be absolute");
         assert!(
             options.checker_count.is_none_or(|count| count.get() <= 256),
             "native checker count must be between 1 and 256"
         );
+        if let Some(budget) = crate::workers::start() {
+            options.checker_count = Some(options.checker_count.map_or(budget, |n| n.min(budget)));
+        }
         let case_sensitivity = if tsrs_vfs::osvfs::fs().use_case_sensitive_file_names() {
             CaseSensitivity::Sensitive
         } else {

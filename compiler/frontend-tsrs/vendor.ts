@@ -100,6 +100,9 @@ function verify(checkPatchRecords = true): string {
   const provenance = JSON.parse(readFileSync(join(target, "UPSTREAM.json"), "utf8"));
   if (provenance.commit !== commit) errors.push("UPSTREAM.json and MANIFEST pins differ");
   if (checkPatchRecords && JSON.stringify(provenance.patches ?? []) !== JSON.stringify(patchesFor(commit))) errors.push("UPSTREAM.json and carried patch records differ");
+  if (checkPatchRecords) for (const patch of patchesFor(commit)) {
+    if (!existsSync(join(target, patch.path)) || hash(readFileSync(join(target, patch.path))) !== patch.sha256) errors.push(`missing or modified carried patch copy: ${patch.id}`);
+  }
   if (errors.length) throw new Error(errors.join("\n"));
   return commit;
 }
@@ -151,6 +154,7 @@ if (!source) {
   const generated = (name: string, text: string) => files.set(name, { bytes: Buffer.from(text), mode: 0o644 });
   const sections = ["workspace.package", "workspace.metadata.typescript", "workspace.dependencies", "workspace.lints.rust", "workspace.lints.clippy"];
   applyPatches(files, patches);
+  for (const patch of patches) files.set(patch.path, { bytes: readFileSync(join(adapter, patch.path)), mode: 0o644 });
   generated("Cargo.toml", `# Generated from oxc-project/tsrs ${commit}; ${patches.length ? "local patches disclosed in UPSTREAM.json" : "crate sources are unmodified"}.\n[workspace]\nresolver = "3"\nmembers = ["crates/*"]\n\n${sections.map(section).join("\n\n")}\n`);
   generated(".gitignore", "/target/\n/Cargo.lock\n");
   const version = /^version\s*=\s*"([^"]+)"/m.exec(section("workspace.package"))![1];
@@ -163,7 +167,7 @@ if (!source) {
       .replace("unmodified, with LICENSE and NOTICE", "with the explicit local patches below, LICENSE and NOTICE")
       .replace("compares the copy with the exact upstream objects. Upstream source is never\nformatted or edited as part of an nts change.", "compares the copy with the exact upstream objects plus these reviewed patches.\nA new revision is refused until patch applicability or removal is reviewed.")
       + "\nLocal patches (base revision and exact SHA-256 are in UPSTREAM.json):\n\n"
-      + patches.map((patch) => `- ${patch.id}: ${patch.sha256}. ${patch.rationale} Remove when: ${patch.remove_when}`).join("\n") + "\n");
+      + patches.map((patch) => `- [${patch.id}](${patch.path}): ${patch.sha256}. ${patch.rationale} Remove when: ${patch.remove_when}`).join("\n") + "\n");
   }
   const ordered = [...files].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
   const text = `${commit}\n${ordered.map(([name, file]) => `${hash(file.bytes)}  ${name}`).join("\n")}\n`;

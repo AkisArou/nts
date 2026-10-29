@@ -18,7 +18,71 @@
 //! on them.
 
 use std::cell::Cell;
+use std::num::NonZeroUsize;
 use std::sync::{Condvar, Mutex, OnceLock};
+
+/// A process-wide worker limit must be configured before native work starts.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum WorkerBudgetError {
+    /// An explicit budget has already been configured.
+    AlreadyConfigured,
+    /// A native program, request slot or worker pool has already started.
+    WorkAlreadyStarted,
+}
+
+impl std::fmt::Display for WorkerBudgetError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(match self {
+            Self::AlreadyConfigured => "the native worker budget is already configured",
+            Self::WorkAlreadyStarted => "native work started before the worker budget was configured",
+        })
+    }
+}
+
+impl std::error::Error for WorkerBudgetError {}
+
+struct WorkerBudget {
+    limit: Option<NonZeroUsize>,
+    started: bool,
+}
+
+impl WorkerBudget {
+    fn configure(&mut self, limit: NonZeroUsize) -> Result<(), WorkerBudgetError> {
+        if self.started {
+            return Err(WorkerBudgetError::WorkAlreadyStarted);
+        }
+        if self.limit.is_some() {
+            return Err(WorkerBudgetError::AlreadyConfigured);
+        }
+        self.limit = Some(limit);
+        Ok(())
+    }
+
+    fn start(&mut self) -> Option<NonZeroUsize> {
+        self.started = true;
+        self.limit
+    }
+}
+
+static WORKER_BUDGET: Mutex<WorkerBudget> = Mutex::new(WorkerBudget { limit: None, started: false });
+
+/// Set an upper bound shared by native compiler parsing, binding, checking and
+/// request execution slots. Call once, before creating any native program or worker pool.
+/// An explicit budget takes precedence over pool-specific environment settings.
+pub fn configure_worker_budget(limit: NonZeroUsize) -> Result<(), WorkerBudgetError> {
+    WORKER_BUDGET.lock().unwrap_or_else(std::sync::PoisonError::into_inner).configure(limit)
+}
+
+/// Read the configured limit without starting native work.
+pub fn worker_budget() -> Option<NonZeroUsize> {
+    WORKER_BUDGET.lock().unwrap_or_else(std::sync::PoisonError::into_inner).limit
+}
+
+/// Freeze the budget before constructing native programs, pools or request
+/// slots. The lock orders configuration against concurrent first use.
+pub fn start_worker_pool() -> Option<NonZeroUsize> {
+    WORKER_BUDGET.lock().unwrap_or_else(std::sync::PoisonError::into_inner).start()
+}
 
 struct Slots {
     in_use: Mutex<usize>,
@@ -35,7 +99,9 @@ fn get_slots() -> &'static Slots {
     SLOTS.get_or_init(|| Slots {
         in_use: Mutex::new(0),
         freed: Condvar::new(),
-        capacity: std::thread::available_parallelism().map_or(1, std::num::NonZero::get),
+        capacity: start_worker_pool()
+            .unwrap_or_else(|| std::thread::available_parallelism().unwrap_or(NonZeroUsize::MIN))
+            .get(),
     })
 }
 

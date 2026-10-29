@@ -501,6 +501,7 @@ const PARSE_THREAD_CAP: usize = 32;
 pub fn worker_pool() -> &'static rayon::ThreadPool {
     static POOL: OnceLock<rayon::ThreadPool> = OnceLock::new();
     POOL.get_or_init(|| {
+        let budget = tsrs_core::runslots::start_worker_pool();
         if tsrs_core::NO_THREADS {
             return rayon::ThreadPoolBuilder::new()
                 .num_threads(1)
@@ -508,21 +509,26 @@ pub fn worker_pool() -> &'static rayon::ThreadPool {
                 .build()
                 .unwrap();
         }
-        let threads = std::env::var("RAYON_NUM_THREADS")
-            .ok()
-            .and_then(|v| v.parse::<usize>().ok())
-            .filter(|&n| n > 0)
-            .unwrap_or_else(|| {
-                std::thread::available_parallelism()
-                    .map_or(1, std::num::NonZero::get)
-                    .min(PARSE_THREAD_CAP)
-            });
+        let threads = budget.map(std::num::NonZero::get).unwrap_or_else(|| {
+            std::env::var("RAYON_NUM_THREADS")
+                .ok()
+                .and_then(|v| v.parse::<usize>().ok())
+                .filter(|&n| n > 0)
+                .unwrap_or_else(|| {
+                    std::thread::available_parallelism()
+                        .map_or(1, std::num::NonZero::get)
+                        .min(PARSE_THREAD_CAP)
+                })
+        });
         rayon::ThreadPoolBuilder::new().num_threads(threads).stack_size(256 << 20).build().unwrap()
     })
 }
 
 // program.go:305
-pub fn new_program(opts: ProgramOptions) -> &'static Program {
+pub fn new_program(mut opts: ProgramOptions) -> &'static Program {
+    if tsrs_core::runslots::start_worker_pool().is_some_and(|limit| limit.get() == 1) {
+        opts.single_threaded = Tristate::True;
+    }
     let single_threaded = tsrs_core::NO_THREADS
         || opts
             .single_threaded

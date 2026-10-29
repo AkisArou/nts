@@ -6,12 +6,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { COUNTER_SCOPE, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand } from "./compile-counter.ts";
+import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand } from "./compile-counter.ts";
 import { instructionsWork, spawnCounted } from "./cputime.mjs";
 import { spawnTest, waitFor, TEST_HANG_MS } from "./test-wait.ts";
 
 test("old attached counts and positive but missed-worker counts fail closed", () => {
-  const valid = { counter_scope: COUNTER_SCOPE, instructions: 590879145142, cpu_s: 45.99, status: 0 };
+  const valid = { work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, instructions: 590879145142, cpu_s: 45.99, status: 0 };
   assert.equal(counterProblem(valid), null);
   assert.match(counterProblem({ ...valid, counter_scope: undefined })!, /scope/);
   assert.match(counterProblem({ ...valid, instructions: 319570, cpu_s: 92.90 })!, /implausible/);
@@ -19,14 +19,15 @@ test("old attached counts and positive but missed-worker counts fail closed", ()
   for (const cpu_s of [null, 0, NaN, Infinity]) assert.ok(counterProblem({ ...valid, cpu_s }));
   assert.ok(counterProblem({ ...valid, status: 124 }));
   assert.throws(() => readCounterTable("runtime/node/tty\t0.0\t0.0\n"), /scope/);
-  assert.throws(() => readCounterTable(`# counter-scope: ${COUNTER_SCOPE}\nruntime/node/tty\t0\n`), /invalid/);
-  assert.equal(readCounterTable(`# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/tty\t1.234\n`).rows.get("runtime/node/tty"), 1.234);
+  assert.throws(() => readCounterTable(`# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\nruntime/node/tty\t0\n`), /invalid/);
+  assert.equal(readCounterTable(`# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\n# regression-ratio: 1.10\nruntime/node/tty\t1.234\n`).rows.get("runtime/node/tty"), 1.234);
 });
 
 test("baseline publication refuses missing runs/populations and derives its threshold from the spread", () => {
-  const runs = [1, 2, 3, 4, 5].map(repeat => ({ module: "runtime/example", repeat, counter_scope: COUNTER_SCOPE,
+  const runs = [1, 2, 3, 4, 5].map(repeat => ({ module: "runtime/example", repeat, work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE,
     status: 0, instructions: (100 + repeat) * 1e9, cpu_s: 10, listing_functions: 1, listing_definitions: 1, counter_file: "raw.perf" }));
-  const summary = { counter_scope: COUNTER_SCOPE, complete: true, nts_sha256: "a".repeat(64), modules: [{ module: "runtime/example", runs }] };
+  const summary = { work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, complete: true, nts_sha256: "a".repeat(64), modules: [{ module: "runtime/example", runs }] };
+  assert.throws(() => calibratedTable({ ...summary, work_profile: undefined }, ["runtime/example"]), /incompatible/);
   const published = calibratedTable(summary, ["runtime/example"]);
   assert.equal(published.policy.ratio, 1.20); // max/min spread 3.96%; fourfold margin rounded up.
   assert.equal(readCounterTable(published.text).rows.get("runtime/example"), 103);
@@ -49,11 +50,11 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
     copyFileSync(fileURLToPath(new URL(name, import.meta.url)), join(gate, name));
   }
   const sha256 = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
-  const meta = { counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts: process.execPath };
-  const table = `# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
+  const meta = { work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts: process.execPath };
+  const table = `# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
   writeFileSync(join(gate, "compile-times.tsv"), table);
   writeFileSync(join(kept, "meta.json"), JSON.stringify(meta));
-  const valid = { counter_scope: COUNTER_SCOPE, arm: "nogc", status: 0, signal: null, cpu_s: 10, instructions: 100e9 };
+  const valid = { work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, arm: "nogc", status: 0, signal: null, cpu_s: 10, instructions: 100e9 };
   const check = (row: object) => {
     writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify(row));
     return spawnTest(process.execPath, [join(gate, "compile-time.mjs")], { encoding: "utf8", env: {
@@ -65,6 +66,8 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
     { ...valid, instructions: 319570, cpu_s: 92.90 },
     { ...valid, instructions: null, cpu_s: 0.001 },
     { ...valid, counter_scope: undefined },
+    { ...valid, work_profile: undefined },
+    { ...valid, work_profile: "compiler-workers-v1:2" },
     { ...valid, status: undefined },
   ]) {
     const result = check(row);
@@ -193,12 +196,12 @@ test("preparation arms have distinct commands, tables and complete calibration e
   assert.equal(compileArm(["--arm", "rc"]), "rc");
   assert.throws(() => compileArm(["--arm"]), /requires/);
   assert.throws(() => compileArm(["--arm", "other"]), /requires/);
-  assert.deepEqual(compileCommand("nogc", "subject"), ["hir", "--prepared", "subject"]);
-  assert.deepEqual(compileCommand("rc", "subject"), ["hir", "--prepared", "--rc", "subject"]);
+  assert.deepEqual(compileCommand("nogc", "subject"), ["hir", "--prepared", "--workers", "1", "subject"]);
+  assert.deepEqual(compileCommand("rc", "subject"), ["hir", "--prepared", "--workers", "1", "--rc", "subject"]);
   const runs = [1, 2, 3, 4, 5].map(repeat => ({ arm: "rc" as const, module: "subject", repeat,
-    counter_scope: COUNTER_SCOPE, status: 0, instructions: 100e9 + repeat * 1e6, cpu_s: 10,
+    work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, status: 0, instructions: 100e9 + repeat * 1e6, cpu_s: 10,
     listing_functions: 1, listing_definitions: 1, counter_file: "raw.perf" }));
-  const summary = { arm: "rc" as const, counter_scope: COUNTER_SCOPE, complete: true,
+  const summary = { arm: "rc" as const, work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, complete: true,
     nts_sha256: "b".repeat(64), modules: [{ module: "subject", runs }] };
   const { text, policy } = calibratedTable(summary, ["subject"]);
   assert.equal(policy.ratio, 1.10);
@@ -227,9 +230,9 @@ require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({a
 `);
   chmodSync(nts, 0o755);
   const sha256 = createHash("sha256").update(readFileSync(nts)).digest("hex");
-  writeFileSync(join(kept, "meta.json"), JSON.stringify({ counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts }));
-  writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify({ arm: "nogc", counter_scope: COUNTER_SCOPE, status: 0, cpu_s: 10, instructions: 100e9 }));
-  const table = `# counter-scope: ${COUNTER_SCOPE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
+  writeFileSync(join(kept, "meta.json"), JSON.stringify({ work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts }));
+  writeFileSync(join(kept, "runtime_node_subject.json"), JSON.stringify({ arm: "nogc", work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, status: 0, cpu_s: 10, instructions: 100e9 }));
+  const table = `# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
   writeFileSync(join(gate, "compile-times.tsv"), table);
   writeFileSync(join(gate, "compile-times-rc.tsv"), `# arm: rc\n${table}`);
   const check = (arm: string) => spawnTest(process.execPath, [join(gate, "compile-time.mjs"), "--arm", arm], {
@@ -240,7 +243,7 @@ require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({a
   const rc = check("rc");
   assert.equal(rc.status, 0, rc.stdout + rc.stderr);
   assert.deepEqual(JSON.parse(readFileSync(commands, "utf8").trim()), {
-    args: ["hir", "--prepared", "--rc", "runtime/node/subject"], ambient: FIXED_AMBIENT,
+    args: ["hir", "--prepared", "--workers", "1", "--rc", "runtime/node/subject"], ambient: FIXED_AMBIENT,
   });
   writeFileSync(join(gate, "compile-times-rc.tsv"), `# arm: rc\n${table.replace("subject\t100", "subject\t0.000001")}`);
   assert.equal(check("nogc").status, 0);

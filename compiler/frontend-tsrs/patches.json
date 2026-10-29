@@ -6,5 +6,13 @@
     "sha256": "31522736dd21d79d6c655aee82fdeeef2c35b00f0564cad1718615c8d1917840",
     "rationale": "Retain reported TS1321 while recovering valid yield constituents; expose a computation-free completed-file observation for the scoped-diagnostics work guard.",
     "remove_when": "Drop the semantic hunk independently when an official upstream equivalent passes the permanent controls and completes the raw checker audit with zero unmeasured cases. Retain the read-only observation hunk only until an intended upstream completed-file query exists. Review and re-hash the remaining patch at each change."
+  },
+  {
+    "id": "compiler-worker-budget",
+    "base": "a0db53eabe483062205717f067a49b6ccb3fc868",
+    "path": "patches/compiler-worker-budget.patch",
+    "sha256": "0a03b5a5f974c5a1f238039c717304b76676902e0b841e2d6ac8ee1ce0467ad4",
+    "rationale": "Expose one process-wide compiler worker budget configured once before first use. Parsing, binding, checker work and request execution slots use the same limit, independent of visible CPUs and pool-specific environment variables.",
+    "remove_when": "Remove when an official upstream revision provides an equivalent pre-initialization compiler worker budget with duplicate/late configuration errors and coverage of every compiler pool; re-pin and pass the permanent pool, diagnostic, listing and CPU-mask invariance controls before removing this patch."
   }
 ]

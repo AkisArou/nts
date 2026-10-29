@@ -2,6 +2,10 @@
 // the exec's threads and descendants; the runtime hir population has no child
 // processes. CPU is perf's waited-command user+sys rusage in that same scope.
 export const COUNTER_SCOPE = "exec-inherited-user-instructions-v1";
+// One first-class compiler option owns every native pool. Environment knobs
+// are deliberately absent from this profile identity.
+export const COMPILE_WORKERS = 1;
+export const COMPILE_WORK_PROFILE = `compiler-workers-v1:${COMPILE_WORKERS}`;
 
 export type CompileArm = "nogc" | "rc";
 export const COMPILE_ARMS = {
@@ -18,10 +22,11 @@ export function compileArm(args: readonly string[]): CompileArm {
 }
 
 export function compileCommand(arm: CompileArm, module: string): string[] {
-  return ["hir", "--prepared", ...(arm === "rc" ? ["--rc"] : []), module];
+  return ["hir", "--prepared", "--workers", String(COMPILE_WORKERS), ...(arm === "rc" ? ["--rc"] : []), module];
 }
 
 export interface CounterRow {
+  work_profile?: unknown;
   counter_scope?: unknown;
   instructions?: number | null;
   cpu_s?: number | null;
@@ -47,6 +52,7 @@ export function counterProblem(row: CounterRow): string | null {
 
 export function readCounterTable(text: string, arm: CompileArm = "nogc") {
   if (!text.split("\n").includes(`# counter-scope: ${COUNTER_SCOPE}`)) throw new Error("incompatible compile-times.tsv counter scope; record a fresh five-repeat baseline");
+  if (!text.split("\n").includes(`# work-profile: ${COMPILE_WORK_PROFILE}`)) throw new Error("incompatible compiler work profile; record a fresh five-repeat baseline");
   // Unlabelled legacy tables were recorded only for NoGC. An RC table must
   // identify itself; neither arm may consume the other arm's baseline.
   const recordedArm = text.split("\n").find(line => line.startsWith("# arm: "))?.slice(7) ?? "nogc";
@@ -75,6 +81,7 @@ export interface CalibrationRun extends CounterRow {
   counter_file: string;
 }
 export interface Calibration {
+  work_profile?: string;
   arm?: CompileArm;
   counter_scope: string;
   complete: boolean;
@@ -88,7 +95,7 @@ export interface Calibration {
  * blow-ups must also fail. Raw measurements stay with the policy in results/.
  */
 export function calibratedTable(summary: Calibration, expected: string[]) {
-  if (!summary.complete || summary.counter_scope !== COUNTER_SCOPE || !/^[a-f0-9]{64}$/.test(summary.nts_sha256)) throw new Error("incomplete or incompatible calibration");
+  if (!summary.complete || summary.counter_scope !== COUNTER_SCOPE || summary.work_profile !== COMPILE_WORK_PROFILE || !/^[a-f0-9]{64}$/.test(summary.nts_sha256)) throw new Error("incomplete or incompatible calibration");
   const modules = [...summary.modules].sort((a, b) => a.module < b.module ? -1 : a.module > b.module ? 1 : 0);
   const arm = summary.arm ?? "nogc";
   if (arm !== "nogc" && arm !== "rc") throw new Error("invalid calibration preparation arm");
@@ -96,7 +103,7 @@ export function calibratedTable(summary: Calibration, expected: string[]) {
   const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[2];
   let maxSpread = 0;
   const rows = modules.map(({ module, runs }) => {
-    if (runs.length !== 5 || runs.some(r => r.module !== module || (r.arm ?? "nogc") !== arm || r.status !== 0 || counterProblem(r) !== null)
+    if (runs.length !== 5 || runs.some(r => r.module !== module || (r.arm ?? "nogc") !== arm || r.work_profile !== COMPILE_WORK_PROFILE || r.status !== 0 || counterProblem(r) !== null)
       || JSON.stringify(runs.map(r => r.repeat).sort()) !== "[1,2,3,4,5]"
       || runs.some(r => !Number.isInteger(r.listing_functions) || r.listing_functions! < 1 || r.listing_functions !== r.listing_definitions)
       || new Set(runs.map(r => r.listing_functions)).size !== 1) throw new Error(`incomplete five-repeat listing/count proof: ${module}`);
@@ -106,7 +113,7 @@ export function calibratedTable(summary: Calibration, expected: string[]) {
   });
   const ratio = 1 + Math.max(2, Math.ceil(80 * maxSpread)) / 20;
   const policy = { ratio, observed_max_spread: maxSpread, spread_multiplier: 4, relative_floor: 0.10 };
-  const text = [`# counter-scope: ${COUNTER_SCOPE}`, `# arm: ${arm}`, `# compiler-sha256: ${summary.nts_sha256}`,
+  const text = [`# counter-scope: ${COUNTER_SCOPE}`, `# work-profile: ${COMPILE_WORK_PROFILE}`, `# arm: ${arm}`, `# compiler-sha256: ${summary.nts_sha256}`,
     `# regression-ratio: ${ratio.toFixed(2)}`,
     `# Five-repeat medians; policy/evidence: results/${COMPILE_ARMS[arm].calibration}`,
     `# Rerecord with node tooling/gate/compile-time.mjs --record --arm ${arm}; explain why.`,

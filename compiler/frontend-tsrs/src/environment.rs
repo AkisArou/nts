@@ -53,10 +53,11 @@ impl Environment {
             }
         }
         let settings = format!(
-            "cwd={};lib={:?};checkers={:?};stable=true;history=canonical;capture-before-pool;first-checker;compressed={};shared-graph={}",
+            "cwd={};lib={:?};checkers={:?};workers={:?};stable=true;history=canonical;capture-before-pool;first-checker;compressed={};shared-graph={}",
             options.cwd,
             options.library_path,
             options.checker_count,
+            crate::worker_budget(),
             tsrs_core::COMPRESSED_PTRS,
             tsrs_core::sharedgraph::COMPILED_IN
         );

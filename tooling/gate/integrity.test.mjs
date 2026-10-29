@@ -1,7 +1,7 @@
 import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
-import { COUNTER_SCOPE } from "./compile-counter.ts";
+import { COUNTER_SCOPE, COMPILE_WORK_PROFILE } from "./compile-counter.ts";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -56,7 +56,7 @@ child.on("close",status=>{
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       assert.match(result.stdout, /1 of 1 project\(s\) measured, 1 function\(s\)/);
       const calls = readFileSync(commands, "utf8").trim().split("\n").map(JSON.parse);
-      assert.deepEqual(calls.map(c => c.argv.slice(0, -1)), [["hir", "--prepared"], ["hir"], ["layouts"], ["refusals"]]);
+      assert.deepEqual(calls.map(c => c.argv.slice(0, -1)), [["hir", "--prepared", ...(keep ? ["--workers", "1"] : [])], ["hir"], ["layouts"], ["refusals"]]);
       for (const call of calls) assert.deepEqual(call.ambient, FIXED_AMBIENT);
       const counted = existsSync(counters) ? readFileSync(counters, "utf8").trim().split("\n").map(JSON.parse) : [];
       assert.deepEqual(counted.map(c => c.pid), keep ? [calls[0].pid] : []);
@@ -66,6 +66,7 @@ child.on("close",status=>{
         assert.equal(measured.cpu_s, 0.012);
         assert.equal(measured.counter_scope, COUNTER_SCOPE);
         assert.equal(measured.arm, "nogc");
+        assert.equal(measured.work_profile, COMPILE_WORK_PROFILE);
         assert.equal(JSON.parse(readFileSync(join(arm, "listings/meta.json"), "utf8")).arm, "nogc");
         assert.ok(existsSync(measured.counter_file), "the raw counter file is retained");
         assert.equal(measured.instructions, 123456);
