@@ -48,13 +48,9 @@
 //! argument passed to it observed — which is what stops a loop-carried
 //! accumulator from being quietly assumed safe.
 
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 use super::{BinOp, Func, OpKind, Terminator, UnOp, ValueId};
-
-/// A bound on the fixpoint. The set only grows and is bounded by the value
-/// count, so this is a bug backstop rather than a limit.
-const ROUND_CAP: usize = 64;
 
 /// Values whose zero's sign something in this program can distinguish.
 ///
@@ -118,35 +114,29 @@ pub fn observed(func: &Func) -> FxHashSet<ValueId> {
         }
     }
 
-    // And backward, through everything that carries a zero's sign.
-    for _ in 0..ROUND_CAP {
-        let before = seen.len();
-
-        for index in 0..func.values.len() {
-            let id = ValueId(u32::try_from(index).unwrap_or(0));
-            if !seen.contains(&id) {
-                continue;
-            }
-            for operand in carries_sign(&func.values[index].kind) {
-                seen.insert(operand);
+    // Phi arguments are the remaining backwards edges. Build those once,
+    // sparsely: most values are not phis, and a large straight-line function
+    // needs no per-value vector allocation.
+    let mut incoming: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
+    for block in &func.blocks {
+        for (target, args) in edges(&block.terminator) {
+            for (param, arg) in func.blocks[target as usize].params.iter().zip(args) {
+                incoming.entry(*param).or_default().push(*arg);
             }
         }
-
-        // An argument reaches its block parameter, so an observed parameter
-        // makes every argument that could become it observed too. This is what
-        // keeps a loop-carried accumulator honest.
-        for block in &func.blocks {
-            for (target, args) in edges(&block.terminator) {
-                for (param, arg) in func.blocks[target as usize].params.iter().zip(args) {
-                    if seen.contains(param) {
-                        seen.insert(*arg);
-                    }
-                }
+    }
+    // Every value enters the worklist once and every backwards operand/phi
+    // edge is read once. A depth or block-numbering limit cannot prove absence
+    // of an observable sign: returning a partial set would license losing -0.
+    let mut pending: Vec<ValueId> = seen.iter().copied().collect();
+    while let Some(value) = pending.pop() {
+        for operand in carries_sign(&func.value(value).kind)
+            .into_iter()
+            .chain(incoming.get(&value).into_iter().flatten().copied())
+        {
+            if seen.insert(operand) {
+                pending.push(operand);
             }
-        }
-
-        if seen.len() == before {
-            break;
         }
     }
     seen
@@ -267,6 +257,87 @@ mod tests {
             validation: None,
             written_return_elements: Vec::new(),
         }
+    }
+
+    #[test]
+    fn every_sign_carrying_link_is_observed_regardless_of_depth_or_value_order() {
+        for count in [8_u32, 72, 4096] {
+            for reverse in [false, true] {
+                let at = |index: u32| ValueId(if reverse { count - index } else { index });
+                let mut values = vec![op(OpKind::ConstFloat(0.0)); (count + 1) as usize];
+                values[at(0).0 as usize] = op(OpKind::Param(0));
+                for index in 1..=count {
+                    values[at(index).0 as usize] = op(OpKind::Unary {
+                        op: UnOp::Neg,
+                        operand: at(index - 1),
+                    });
+                }
+                let mut func = one_block(values, Terminator::Return(Some(at(count))));
+                func.blocks[0].ops = (0..=count).map(at).collect();
+                let seen = observed(&func);
+                assert_eq!(
+                    seen.len(),
+                    (count + 1) as usize,
+                    "{count} links, reverse={reverse}"
+                );
+                assert!(
+                    seen.contains(&at(0)),
+                    "the first operand remains sign-sensitive"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn phi_cycles_and_both_branch_arrivals_carry_the_sign_to_every_source() {
+        use crate::hir::BlockId;
+
+        const COUNT: u32 = 80;
+        let mut values = vec![op(OpKind::Param(0)), op(OpKind::ConstFloat(-0.0))];
+        values.extend((0..COUNT).map(|_| op(OpKind::BlockParam(0))));
+        let mut func = one_block(values, Terminator::FellThrough);
+        func.blocks.clear();
+        func.blocks.push(Block {
+            params: Vec::new(),
+            ops: vec![ValueId(0), ValueId(1)],
+            terminator: Terminator::Branch {
+                cond: ValueId(0),
+                then_target: BlockId(1),
+                then_args: vec![ValueId(0)],
+                else_target: BlockId(1),
+                else_args: vec![ValueId(1)],
+            },
+        });
+        for index in 0..COUNT {
+            let value = ValueId(index + 2);
+            let terminator = if index + 1 == COUNT {
+                Terminator::Branch {
+                    cond: ValueId(0),
+                    then_target: BlockId(1),
+                    then_args: vec![value],
+                    else_target: BlockId(COUNT + 1),
+                    else_args: vec![value],
+                }
+            } else {
+                Terminator::Jump {
+                    target: BlockId(index + 2),
+                    args: vec![value],
+                }
+            };
+            func.blocks.push(Block {
+                params: vec![value],
+                ops: Vec::new(),
+                terminator,
+            });
+        }
+        let returned = ValueId(COUNT + 2);
+        func.values.push(op(OpKind::BlockParam(0)));
+        func.blocks.push(Block {
+            params: vec![returned],
+            ops: Vec::new(),
+            terminator: Terminator::Return(Some(returned)),
+        });
+        assert_eq!(observed(&func).len(), func.values.len());
     }
 
     /// `(a * a) | 0` — the product may be `-0` and nothing can tell, because

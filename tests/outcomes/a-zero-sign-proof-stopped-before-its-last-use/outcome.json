@@ -1,0 +1,8 @@
+{
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "checked 29 cases across 1 function(s) | Error: 7 case(s) disagree between the compiled program and node",
+  "node": null,
+  "measured_with": "4b6e7e9d86953848",
+  "source": "measured"
+}
