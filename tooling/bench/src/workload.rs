@@ -324,6 +324,18 @@ mod tests {
             "custom",
             "export function scale(values: number[]): number { return values.length; }",
         ),
+        (
+            "closure",
+            "export const work = (n: number): number => n; export const seed = 1;",
+        ),
+        (
+            "overload",
+            "export function work(n: number): number; export function work(n: string): number; export function work(n: number | string): number { return Number(n); } export const seed = 1;",
+        ),
+        (
+            "alias",
+            "function different(n: number): number { return n; } export { different as work }; export const seed = 1;",
+        ),
     ];
 
     #[test]
