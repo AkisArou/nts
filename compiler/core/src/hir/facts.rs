@@ -115,16 +115,9 @@ pub fn from_jvm_descriptor(descriptor: &str) -> Option<Facts> {
         // `char` is unsigned: a UTF-16 code unit, never negative.
         "C" => whole(0.0, 65_535.0),
         "I" => whole(-2_147_483_648.0, 2_147_483_647.0),
-        // A `float` is finite-ranged but not integral, and it CAN be NaN -- so
-        // the only thing gained over TOP is the bound, and `maybe_nan` stays
-        // true. Saying so is the difference between a fact and a wish.
-        "F" => Some(Facts::new(
-            f64::from(f32::MIN),
-            f64::from(f32::MAX),
-            false,
-            true,
-            true,
-        )),
+        // IEEE float32 also carries both infinities, NaN and negative zero.
+        // Its finite extrema are not bounds on every value Java can return.
+        "F" => Some(Facts::TOP),
         _ => None,
     }
 }
@@ -1736,17 +1729,16 @@ mod jvm_descriptor_tests {
     }
 
     #[test]
-    fn a_float_gains_a_bound_and_nothing_else() {
+    fn a_float_descriptor_keeps_infinities_nan_and_negative_zero() {
         let float = from_jvm_descriptor("F").expect("`F` is a number");
-        // The honest part: a `float` is bounded but is NOT integral and CAN be
-        // NaN. Claiming otherwise would be the kind of fact that is wrong on
-        // exactly the inputs that matter.
         assert!(!float.whole);
-        assert!(float.maybe_nan);
-        assert!(
-            float.hi < f64::INFINITY,
-            "but it is bounded, which TOP is not"
-        );
+        for value in [f64::INFINITY, f64::NEG_INFINITY, f64::NAN, -0.0] {
+            assert!(
+                float.contains(value),
+                "float descriptor lost {value:?}: {float:?}"
+            );
+        }
+        assert_eq!(float, Facts::TOP);
     }
 
     #[test]
