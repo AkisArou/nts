@@ -22944,6 +22944,33 @@ impl<'a> FuncBuilder<'a> {
         Some(at)
     }
 
+    /// Every enclosing piece of this binding's declaration grammar. Nested
+    /// patterns have no fixed depth. Stop at the first owning construct so a
+    /// parameter or body local cannot inherit an outer loop's binding kind.
+    fn binding_parents(&self, declaration: NodeId) -> impl Iterator<Item = NodeId> + '_ {
+        let mut seen = rustc_hash::FxHashSet::default();
+        std::iter::successors(self.node(declaration).parent, |parent| {
+            let node = self.node(*parent);
+            if node.kind == NodeKind::List
+                || matches!(
+                    self.kind_of(*parent),
+                    Some(
+                        syntax::BINDING_ELEMENT
+                            | syntax::OBJECT_BINDING_PATTERN
+                            | syntax::ARRAY_BINDING_PATTERN
+                            | syntax::VARIABLE_DECLARATION
+                            | syntax::VARIABLE_DECLARATION_LIST
+                    )
+                )
+            {
+                node.parent
+            } else {
+                None
+            }
+        })
+        .take_while(move |parent| seen.insert(*parent))
+    }
+
     /// Every node at or below `id`, in source order.
     fn subtree(&self, id: NodeId, into: &mut Vec<NodeId>) {
         into.push(id);
@@ -24204,18 +24231,13 @@ impl<'a> FuncBuilder<'a> {
     /// every time round anyway.
     fn per_iteration_loop(&self, record: &SymbolRecord) -> Option<(NodeId, NodeId)> {
         record.declarations.iter().find_map(|declaration| {
-            let mut at = self.node(*declaration).parent;
-            for _ in 0..8 {
-                let node = at?;
-                match self.kind_of(node) {
-                    Some(syntax::FOR_STATEMENT | syntax::FOR_OF_STATEMENT) => {
-                        return Some((node, *declaration));
-                    }
-                    Some(syntax::BLOCK) => return None,
-                    _ => at = self.node(node).parent,
-                }
-            }
-            None
+            self.binding_parents(*declaration).find_map(|parent| {
+                matches!(
+                    self.kind_of(parent),
+                    Some(syntax::FOR_STATEMENT | syntax::FOR_OF_STATEMENT)
+                )
+                .then_some((parent, *declaration))
+            })
         })
     }
 
@@ -77357,17 +77379,10 @@ impl<'a> FuncBuilder<'a> {
     /// change *refused*. A guard that cannot fire is worse than no guard: it is a
     /// sentence claiming protection.
     fn variable_kind(&self, declaration: NodeId) -> Option<nts_semantic_schema::VariableKind> {
-        let mut at = self.node(declaration).parent;
-        for _ in 0..4 {
-            let parent = at?;
-            if self.kind_of(parent) == Some(syntax::VARIABLE_DECLARATION_LIST) {
-                return Some(nts_semantic_schema::VariableKind::from_flags(
-                    self.node(parent).flags,
-                ));
-            }
-            at = self.node(parent).parent;
-        }
-        None
+        self.binding_parents(declaration).find_map(|parent| {
+            (self.kind_of(parent) == Some(syntax::VARIABLE_DECLARATION_LIST))
+                .then(|| nts_semantic_schema::VariableKind::from_flags(self.node(parent).flags))
+        })
     }
 
     /// A symbol, through any import or re-export that stands for it.
@@ -87997,6 +88012,9 @@ mod collection_tests;
 
 #[cfg(test)]
 mod carried_reference_tests;
+
+#[cfg(test)]
+mod binding_ancestry_tests;
 
 #[cfg(test)]
 mod tests {
