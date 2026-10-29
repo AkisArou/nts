@@ -218,3 +218,32 @@ identifier cases already present in the old bb5 raw audit. TS1109's positive
 paths are unchanged and no listed path is stale. Those entries require
 classification before their checker-bound pin changes; the audit is not
 permission to edit the records or their thresholds without that evidence.
+
+## Microsoft's released TypeScript 7.0.2 on the same family
+
+On 10-29 the coordinator ran the official TypeScript 7.0.2 package (the
+repository's catalog pin, `node_modules/.bin/tsc --version`) on seven
+async-generator bodies, each in a checked JavaScript file with the
+configuration above plus `strict`, and a probe
+`/** @type {number} */ const probe = g();` that prints the inferred
+generator type. `thenable` is the object above; `other` is a second
+callable-`then` object.
+
+| body of `g` | TypeScript 7.0.2 |
+|---|---|
+| `yield thenable;` | TS1321; `AsyncGenerator<never, void, unknown>` |
+| `yield thenable; yield other;` | TS1321 twice; `AsyncGenerator<never, void, unknown>` |
+| `yield 1; yield thenable;` | nil-pointer panic in `getUnionTypeEx` |
+| `yield thenable; yield 1;` | nil-pointer panic in `getUnionTypeEx` |
+| `yield "s"; yield thenable; yield 1;` | nil-pointer panic in `addTypesToUnion` |
+| `yield* [thenable];` | nil-pointer panic creating the TS1322 diagnostic |
+| `yield 1;` (control) | `AsyncGenerator<number, void, unknown>` |
+
+The single-invalid case is clean in Go only because `AppendIfUnique` keeps
+one nil constituent and a one-element union returns it unchanged; any mix
+with a valid yield reaches the union code and panics. The defect is
+therefore TypeScript 7's own, and tsrs ported it faithfully. For mixed
+bodies there is no TypeScript 7 result to match: the carried repair keeps
+the valid constituents, which is a recovery choice, not an established
+oracle result. The cases and raw output are under the coordinator's job
+directory (`tmp/yield-oracle/`).

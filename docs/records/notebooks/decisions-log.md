@@ -897,8 +897,8 @@ From the open-questions audit; each is the register's recommendation.
   single-threaded, with that variable fixed by the gate's environment, and
   the compile-time record refuses a measurement taken otherwise. nts's
   `--workers` option goes, or becomes what upstream lets nts control. The
-  crash patch's read-only hook for one test is the remaining addition
-  outside the rule; the user decides on it.
+  crash patch's read-only hook for two tests is the remaining addition
+  outside the rule, and the user keeps it for now.
 
 ## Plan (10-29): the Bun and ScriptC studies
 
