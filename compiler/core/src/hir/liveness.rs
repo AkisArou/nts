@@ -140,8 +140,59 @@ pub(super) type CalleeStores<'a> = dyn Fn(&Callee) -> Option<Vec<(u32, u32)>> + 
 /// to a call is named by the argument it goes into rather than by all of them.
 /// See [`object_names_with`].
 #[must_use]
+#[expect(
+    clippy::expect_used,
+    reason = "the unbounded control never rejects a charge"
+)]
 pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
+    analyze_using(func, stores, &mut Control::<false> { charge: None })
+        .expect("unbounded liveness cannot exhaust a work budget")
+}
+
+/// The same analysis, with conservative graph/set work charged before it runs.
+/// Exhaustion or a non-converged fixed point is Unknown, never partial liveness.
+/// A unit reserves at most one element visit or set-membership comparison;
+/// charges may overestimate work, and are not instruction or CPU counts.
+#[must_use]
+pub fn analyze_limited(func: &Func, charge: &mut dyn FnMut(usize) -> bool) -> Option<Liveness> {
+    analyze_using(
+        func,
+        &|_| None,
+        &mut Control::<true> {
+            charge: Some(charge),
+        },
+    )
+}
+
+struct Control<'a, const LIMITED: bool> {
+    charge: Option<&'a mut dyn FnMut(usize) -> bool>,
+}
+impl<const LIMITED: bool> Control<'_, LIMITED> {
+    fn take(&mut self, units: usize) -> Option<()> {
+        if !LIMITED {
+            return Some(());
+        }
+        if self.charge.as_mut().is_none_or(|charge| charge(units)) {
+            Some(())
+        } else {
+            None
+        }
+    }
+}
+
+fn analyze_using<const LIMITED: bool>(
+    func: &Func,
+    stores: &CalleeStores<'_>,
+    control: &mut Control<'_, LIMITED>,
+) -> Option<Liveness> {
     let count = func.blocks.len();
+    let values = func.values.len();
+    control.take(
+        values
+            .saturating_mul(values)
+            .saturating_mul(4)
+            .saturating_add(count.saturating_mul(values)),
+    )?;
     let mut live_in: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
     let mut live_out: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
 
@@ -152,7 +203,7 @@ pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
     // immortal header has no count to raise, so a name cannot keep one alive
     // and the frame has to. See `super::undominated_names` for the objects this
     // cannot be done for, which `place_allocations` keeps off the frame.
-    let names = object_names_with(func, stores);
+    let names = object_names_using(func, stores, control)?;
     // A counted handle converted to a type nothing counts -- a `GObject *`
     // passed where C takes a `GTypeInstance *` or a `void *` -- is read through
     // the conversion afterwards, which holds no reference: the handle is live
@@ -195,10 +246,19 @@ pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
         }
     }
 
+    let mut converged = false;
     for _ in 0..ROUND_CAP {
         let mut changed = false;
         // Backward, so a block's successors are usually settled before it.
         for index in (0..count).rev() {
+            // Successor unions, live/used/defined sets, and every possible
+            // frame-name relation are bounded by this function's value set.
+            control.take(
+                values
+                    .saturating_mul(values)
+                    .saturating_add(values.saturating_mul(12))
+                    .saturating_add(1),
+            )?;
             let mut out = FxHashSet::default();
             for successor in func.blocks[index].terminator.successors() {
                 out.extend(live_in[successor.0 as usize].iter().copied());
@@ -240,8 +300,12 @@ pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
             }
         }
         if !changed {
+            converged = true;
             break;
         }
+    }
+    if LIMITED && !converged {
+        return None;
     }
 
     let available = (0..count)
@@ -252,11 +316,11 @@ pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Liveness {
         })
         .collect();
 
-    Liveness {
+    Some(Liveness {
         live_in,
         live_out,
         available,
-    }
+    })
 }
 
 /// Values a block reads, including the arguments its terminator passes on.
@@ -294,18 +358,36 @@ fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
 /// [`analyze`] uses it to keep a *frame* object live for as long as anything
 /// can still reach it; [`super::undominated_names`] uses it to find the objects
 /// for which that is impossible.
+#[expect(
+    clippy::expect_used,
+    reason = "the unbounded control never rejects a charge"
+)]
 pub(super) fn object_names_with(
     func: &Func,
     callee_stores: &CalleeStores<'_>,
 ) -> FxHashMap<ValueId, Vec<ValueId>> {
-    let mut named: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
-    let note = |named: &mut FxHashMap<ValueId, Vec<ValueId>>, alias: ValueId, of: ValueId| {
-        note_name(func, named, alias, of)
-    };
+    object_names_using(func, callee_stores, &mut Control::<false> { charge: None })
+        .expect("unbounded aliases cannot exhaust a work budget")
+}
 
+fn object_names_using<const LIMITED: bool>(
+    func: &Func,
+    callee_stores: &CalleeStores<'_>,
+    control: &mut Control<'_, LIMITED>,
+) -> Option<FxHashMap<ValueId, Vec<ValueId>>> {
+    let mut named: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
+
+    let mut converged = false;
     for _ in 0..ROUND_CAP {
         let mut changed = false;
         for block in &func.blocks {
+            control.take(
+                block
+                    .ops
+                    .len()
+                    .saturating_add(block.params.len())
+                    .saturating_add(1),
+            )?;
             for value in &block.ops {
                 let op = &func.values[value.0 as usize];
                 match &op.kind {
@@ -313,7 +395,7 @@ pub(super) fn object_names_with(
                     | OpKind::Unerase { value: inner, .. }
                     | OpKind::FieldView { value: inner, .. }
                     | OpKind::Convert(inner) => {
-                        changed |= note(&mut named, *value, *inner);
+                        changed |= note_name(func, &mut named, *value, *inner, control)?;
                     }
                     OpKind::FieldSet {
                         object: container,
@@ -325,7 +407,7 @@ pub(super) fn object_names_with(
                         value: stored,
                         ..
                     } => {
-                        changed |= note(&mut named, *container, *stored);
+                        changed |= note_name(func, &mut named, *container, *stored, control)?;
                     }
                     OpKind::FieldGet {
                         object: container, ..
@@ -333,7 +415,7 @@ pub(super) fn object_names_with(
                     | OpKind::ArrayGet {
                         array: container, ..
                     } if op.ty.may_hold_a_reference() => {
-                        changed |= note(&mut named, *value, *container);
+                        changed |= note_name(func, &mut named, *value, *container, control)?;
                     }
                     // **A store a callee makes is a store too.** See
                     // [`names_through_a_call`].
@@ -345,7 +427,8 @@ pub(super) fn object_names_with(
                             &mut named,
                             (*value, callee, args),
                             callee_stores,
-                        );
+                            control,
+                        )?;
                     }
                     _ => {}
                 }
@@ -368,30 +451,40 @@ pub(super) fn object_names_with(
                     let Some(param) = func.blocks[target.0 as usize].params.get(slot) else {
                         continue;
                     };
-                    changed |= note(&mut named, *param, *argument);
+                    changed |= note_name(func, &mut named, *param, *argument, control)?;
                 }
             }
         }
         if !changed {
+            converged = true;
             break;
         }
     }
-    named
+    if LIMITED && !converged {
+        return None;
+    }
+    Some(named)
 }
 
 /// Record that `alias` names whatever `of` is or names. Whether it grew.
-fn note_name(
+fn note_name<const LIMITED: bool>(
     func: &Func,
     named: &mut FxHashMap<ValueId, Vec<ValueId>>,
     alias: ValueId,
     of: ValueId,
-) -> bool {
+    control: &mut Control<'_, LIMITED>,
+) -> Option<bool> {
+    let roots = named
+        .get(&of)
+        .map_or(1, |roots| roots.len().saturating_add(1));
+    let existing = named.get(&alias).map_or(0, Vec::len);
+    control.take(roots.saturating_mul(existing.saturating_add(roots).saturating_add(2)))?;
     let mut roots = named.get(&of).cloned().unwrap_or_default();
     if matches!(func.values[of.0 as usize].kind, OpKind::ObjectNew { .. }) && !roots.contains(&of) {
         roots.push(of);
     }
     if roots.is_empty() {
-        return false;
+        return Some(false);
     }
     let here = named.entry(alias).or_default();
     let mut grew = false;
@@ -401,7 +494,7 @@ fn note_name(
             grew = true;
         }
     }
-    grew
+    Some(grew)
 }
 
 /// The names a call into a body this program has makes. Whether any grew.
@@ -419,12 +512,19 @@ fn note_name(
 /// Only a call into a body this program has: a runtime helper or a native
 /// function says which arguments it keeps (`escape::kept_slots`), and what it
 /// keeps escapes, so is never in the frame for this to protect.
-fn names_through_a_call(
+fn names_through_a_call<const LIMITED: bool>(
     func: &Func,
     named: &mut FxHashMap<ValueId, Vec<ValueId>>,
     (result, callee, args): (ValueId, &Callee, &[ValueId]),
     callee_stores: &CalleeStores<'_>,
-) -> bool {
+    control: &mut Control<'_, LIMITED>,
+) -> Option<bool> {
+    control.take(
+        args.len()
+            .saturating_mul(args.len())
+            .saturating_add(args.len())
+            .saturating_add(1),
+    )?;
     let pairs: Vec<(usize, usize)> = match callee_stores(callee) {
         Some(pairs) => pairs
             .into_iter()
@@ -440,15 +540,15 @@ fn names_through_a_call(
         if let (Some(kept), Some(container)) = (args.get(what), args.get(into))
             && func.values[container.0 as usize].ty.may_hold_a_reference()
         {
-            changed |= note_name(func, named, *container, *kept);
+            changed |= note_name(func, named, *container, *kept, control)?;
         }
     }
     if func.values[result.0 as usize].ty.may_hold_a_reference() {
         for kept in args {
-            changed |= note_name(func, named, result, *kept);
+            changed |= note_name(func, named, result, *kept, control)?;
         }
     }
-    changed
+    Some(changed)
 }
 
 /// Values a block defines: its operations and its own parameters.
@@ -554,6 +654,70 @@ pub(in crate::hir) mod tests {
             result_absent: crate::hir::Absent::Impossible,
             written_return_elements: Vec::new(),
         }
+    }
+
+    #[test]
+    fn bounded_liveness_matches_the_same_unbounded_analysis() {
+        let func = branching();
+        let expected = analyze(&func);
+        let mut charged = 0usize;
+        let actual = analyze_limited(&func, &mut |units| {
+            charged = charged.checked_add(units).expect("small control");
+            true
+        })
+        .expect("complete control");
+        assert!(charged > 0);
+        assert_eq!(actual.live_in, expected.live_in);
+        assert_eq!(actual.live_out, expected.live_out);
+        assert_eq!(actual.available, expected.available);
+        assert!(
+            analyze_limited(&func, &mut |_| false).is_none(),
+            "exhaustion must never return a partial answer"
+        );
+        let mut left = charged - 1;
+        assert!(
+            analyze_limited(&func, &mut |units| {
+                let Some(remaining) = left.checked_sub(units) else {
+                    return false;
+                };
+                left = remaining;
+                true
+            })
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn bounded_liveness_rejects_a_non_converged_reverse_numbered_graph() {
+        let mut func = branching();
+        func.values.truncate(1);
+        func.params.truncate(1);
+        let count = ROUND_CAP + 2;
+        func.blocks = (0..count)
+            .map(|index| Block {
+                params: Vec::new(),
+                ops: if index == 0 {
+                    vec![ValueId(0)]
+                } else {
+                    Vec::new()
+                },
+                terminator: if index == 1 {
+                    Terminator::Return(Some(ValueId(0)))
+                } else {
+                    Terminator::Jump {
+                        target: BlockId(
+                            u32::try_from(if index == 0 { count - 1 } else { index - 1 })
+                                .expect("small graph"),
+                        ),
+                        args: Vec::new(),
+                    }
+                },
+            })
+            .collect();
+        assert!(
+            analyze_limited(&func, &mut |_| true).is_none(),
+            "a fixed-point cap is Unknown even with enough work fuel"
+        );
     }
 
     /// Two objects thrown from two arms and caught at one handler.

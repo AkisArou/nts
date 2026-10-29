@@ -100,6 +100,8 @@ pub mod signatures;
 pub mod simplify;
 pub mod specialize;
 pub mod split;
+/// Backend-neutral eligibility for linear, unpublished string storage.
+pub mod string_accumulators;
 pub mod substring;
 mod typed_signatures;
 pub mod verify;
