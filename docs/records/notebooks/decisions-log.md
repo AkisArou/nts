@@ -30,6 +30,19 @@ Dates are 2026.
   work on a row: "we should always investigate what we can do better,
   leverage profiling tools", and "beating node matters ofcourse, but beating
   ourself matters too!"
+- **Every benchmark run is kept** (10-29): the user found
+  `results/benchmarks/` stale and proposed "full.md always populated with the
+  latest run, and keep an json file or something, with all runs with the
+  appropriate metadata"; agreed with the coordinator's refinement of one
+  immutable record per run rather than one growing file, so parallel landings
+  do not conflict and each run can be cited. `full.md` is rendered from the
+  newest complete run with nts's own best per row
+  ([workflow](../../contributing/workflow.md#decisions)).
+- **Losses are expected while the compiler is unfinished** (10-29): "we might
+  lose, but we have to profile and see why, note it, and possibly
+  add/update/modify the plan." Each loss is profiled, its cause recorded, and
+  it is mapped to the plan item that covers it; the plan changes where none
+  does.
 - **Show every benchmark result** as it is produced: ratios against node and
   Bun, the machine's conditions, and the verdict, losing rows included (10-07,
   10-21).

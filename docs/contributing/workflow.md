@@ -223,6 +223,15 @@ recorded case on every backend ([conformance](../conformance/typescript.md)).
   - every comparator's version is pinned (node, Bun, the JDK and clang),
     every report records the machine's load, and reference numbers are taken
     whenever the landing lock is free and the load is low (P-4).
+- **Every benchmark run is kept** (10-29,
+  [log](../records/notebooks/decisions-log.md#the-bar)): each run writes one
+  record under `results/benchmarks/runs/`, never edited afterwards, holding
+  every cell (time, spread, checksum, status), the bar's verdict per
+  comparator, and the run's metadata (compiler commit, harness identity,
+  comparator builds, machine conditions). `results/benchmarks/full.md` is
+  rendered from the newest complete run, with its conditions in its header and
+  nts's best result per row beside it, so a row slower than nts's own best
+  shows as a regression. A run ends with a commit of its results.
 - **The full run** (10-28, same log entry):
   - a nightly full run, and a weekly one with result caches off; `--touching`
     selects tests only after a test proves that it selects deterministically
