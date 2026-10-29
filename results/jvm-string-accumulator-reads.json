@@ -1,0 +1,347 @@
+{
+  "schema": 1,
+  "subject": "JVM string accumulator UTF-16 reads",
+  "before_compiler": "6bb2c6217755da22e340a60e1b7ac13fdbb8572c",
+  "after_compiler": "b38be359931b532da39e5395eba38d8a72dcf76b",
+  "measured_end_utc": "2026-10-29T00:31:16.348Z",
+  "evidence": "nts-gate-waiting/runtime2-20261027/performance-regression-20261029",
+  "methodology": {
+    "memory": "HostGc",
+    "cpu": 4,
+    "sibling": 5,
+    "admission": "with-lock.sh --wait",
+    "schedule": "three A/B/A brackets per row; geometric A anchor per bracket",
+    "operations_per_child": 128,
+    "warmup_calls": 256,
+    "jvm_flags": [
+      "-XX:-UsePerfData",
+      "-XX:+UseG1GC",
+      "-Xms512m",
+      "-Xmx512m",
+      "-Xbatch",
+      "-XX:-TieredCompilation",
+      "-XX:CompileThreshold=100",
+      "-Xverify:all"
+    ],
+    "counters": "inherited user instructions and cycles, enabled/disabled by acknowledged FIFO after warmup",
+    "allocation": "current Java thread allocated bytes in the same fixed-work loop",
+    "cpu_time": "current Java thread CPU",
+    "comparison": "mean of per-bracket B / sqrt(A_left * A_right)",
+    "before_artifacts": "CLI bytecode required byte-identical to the exact nts-bench preparation",
+    "scope": "Timing is from this paired sitting, not a cross-day comparison."
+  },
+  "jdk": {
+    "release_sha256": "d28a389f59063b3d10f5d49252a39f37c35737384a14cc742005b59df921eb15",
+    "modules_sha256": "3a1ee82e4728fee7a30ac31f9cc9b69bf9f84136af0880900f549db30e722643",
+    "libjvm_sha256": "ad7937cdabd7d09b3de8f4258a2c7111c3066ca87fb9a3704a4adf29bd18d27e"
+  },
+  "validation": {
+    "passed": 831,
+    "failed": 0,
+    "ignored": 3,
+    "groups": 124,
+    "profile": "nts-dev",
+    "checked_index_utf16_alias_comparisons": 60,
+    "old_eligibility_guard_exit": 101,
+    "restored_guard_exit": 0
+  },
+  "units": {
+    "instructions_per_op": "user instructions/op",
+    "cycles_per_op": "user cycles/op",
+    "bytes_per_op": "allocated bytes/op",
+    "cpu_ns_per_op": "thread CPU ns/op",
+    "wall_ns_per_op": "wall ns/op"
+  },
+  "rows": [
+    {
+      "name": "str-append-loop",
+      "metrics": {
+        "instructions_per_op": {
+          "before": 12440078.316339934,
+          "after": 623172.0546875,
+          "ratio": 0.05009390229715908,
+          "delta_percent": -94.9906097702841,
+          "max_anchor_drift_percent": 0.039687379745267926,
+          "pairs": [
+            {
+              "before": 12441531.38433183,
+              "after": 623106.734375,
+              "ratio": 0.05008280051117388,
+              "anchor_drift": 0.0000636145703152291
+            },
+            {
+              "before": 12440379.598913496,
+              "after": 623165.5390625,
+              "ratio": 0.05009216431924033,
+              "anchor_drift": 0.00039687379745267926
+            },
+            {
+              "before": 12438323.965774473,
+              "after": 623243.890625,
+              "ratio": 0.050106742061063025,
+              "anchor_drift": -0.0002493908146748991
+            }
+          ]
+        },
+        "cycles_per_op": {
+          "before": 25522421.76900205,
+          "after": 201243.84895833334,
+          "ratio": 0.007886196644132037,
+          "delta_percent": -99.2113803355868,
+          "max_anchor_drift_percent": 4.996533702637418,
+          "pairs": [
+            {
+              "before": 26239211.230449554,
+              "after": 204189.609375,
+              "ratio": 0.007781850131914261,
+              "anchor_drift": -0.025934128876046958
+            },
+            {
+              "before": 24999359.693008814,
+              "after": 196994.6015625,
+              "ratio": 0.007879985886902153,
+              "anchor_drift": 0.011048296798615187
+            },
+            {
+              "before": 25328694.38354779,
+              "after": 202547.3359375,
+              "ratio": 0.007996753913579702,
+              "anchor_drift": 0.04996533702637418
+            }
+          ]
+        },
+        "bytes_per_op": {
+          "before": 96601241.1875,
+          "after": 147673.1875,
+          "ratio": 0.0015286883034284304,
+          "delta_percent": -99.84713116965716,
+          "max_anchor_drift_percent": 0,
+          "pairs": [
+            {
+              "before": 96601241.1875,
+              "after": 147673.1875,
+              "ratio": 0.0015286883034284304,
+              "anchor_drift": 0
+            },
+            {
+              "before": 96601241.1875,
+              "after": 147673.1875,
+              "ratio": 0.0015286883034284304,
+              "anchor_drift": 0
+            },
+            {
+              "before": 96601241.1875,
+              "after": 147673.1875,
+              "ratio": 0.0015286883034284304,
+              "anchor_drift": 0
+            }
+          ]
+        },
+        "cpu_ns_per_op": {
+          "before": 4776194.654794008,
+          "after": 27214.231770833332,
+          "ratio": 0.005697764543217066,
+          "delta_percent": -99.4302235456783,
+          "max_anchor_drift_percent": 3.4023760573304473,
+          "pairs": [
+            {
+              "before": 4933478.0911404,
+              "after": 28232.21875,
+              "ratio": 0.005722579127431368,
+              "anchor_drift": -0.027782389896425674
+            },
+            {
+              "before": 4683820.084900006,
+              "after": 27321,
+              "ratio": 0.005833059234721496,
+              "anchor_drift": 0.005838347280888945
+            },
+            {
+              "before": 4711285.788341616,
+              "after": 26089.4765625,
+              "ratio": 0.005537655267498336,
+              "anchor_drift": 0.03402376057330447
+            }
+          ]
+        },
+        "wall_ns_per_op": {
+          "before": 4998731.025387168,
+          "after": 37481.247395833336,
+          "ratio": 0.007499453359456082,
+          "delta_percent": -99.25005466405439,
+          "max_anchor_drift_percent": 3.810973838793741,
+          "pairs": [
+            {
+              "before": 5137345.625798975,
+              "after": 38055.5,
+              "ratio": 0.0074076191815654795,
+              "anchor_drift": -0.02568475316223473
+            },
+            {
+              "before": 4931788.199849374,
+              "after": 36780.390625,
+              "ratio": 0.007457820395880614,
+              "anchor_drift": 0.02687033344905232
+            },
+            {
+              "before": 4927059.250513156,
+              "after": 37607.8515625,
+              "ratio": 0.0076329205009221515,
+              "anchor_drift": 0.03810973838793741
+            }
+          ]
+        }
+      },
+      "program_sha256": {
+        "before": "bf6522f211486e750bb57e0acaf2d32e22b8156d56a8f58c98065acf84d179f2",
+        "after": "e3abea84b47b273e9c1a895ab1776269de2c412ebf8e6e3d6ebf8b21747f7286"
+      },
+      "case_sha256": "a98a765c4acddaf8f8d45ead5909661d32dd2e710246a28aa98ed25932b63d00"
+    },
+    {
+      "name": "str-append-length",
+      "metrics": {
+        "instructions_per_op": {
+          "before": 600386.4827656224,
+          "after": 599729.0390625,
+          "ratio": 0.998906881365098,
+          "delta_percent": -0.10931186349020239,
+          "max_anchor_drift_percent": 0.5540792590120747,
+          "pairs": [
+            {
+              "before": 599702.3733208735,
+              "after": 599497.65625,
+              "ratio": 0.9996586355499315,
+              "anchor_drift": -0.0006625570832985428
+            },
+            {
+              "before": 599880.3708301043,
+              "after": 599946.4375,
+              "ratio": 1.00011013307504,
+              "anchor_drift": 0.000059297434668925675
+            },
+            {
+              "before": 601576.7041458896,
+              "after": 599743.0234375,
+              "ratio": 0.9969518754703225,
+              "anchor_drift": 0.005540792590120747
+            }
+          ]
+        },
+        "cycles_per_op": {
+          "before": 195388.62582967375,
+          "after": 196402.34635416666,
+          "ratio": 1.0054032889718865,
+          "delta_percent": 0.5403288971886466,
+          "max_anchor_drift_percent": 4.945944549203873,
+          "pairs": [
+            {
+              "before": 192932.63890538356,
+              "after": 193365.84375,
+              "ratio": 1.0022453683683292,
+              "anchor_drift": -0.023915229908049618
+            },
+            {
+              "before": 190049.58755980417,
+              "after": 193369.015625,
+              "ratio": 1.0174661155954958,
+              "anchor_drift": -0.008427351141773176
+            },
+            {
+              "before": 203183.6510238336,
+              "after": 202472.1796875,
+              "ratio": 0.9964983829518343,
+              "anchor_drift": 0.049459445492038734
+            }
+          ]
+        },
+        "bytes_per_op": {
+          "before": 147673.1875,
+          "after": 147673.1875,
+          "ratio": 1,
+          "delta_percent": 0,
+          "max_anchor_drift_percent": 0,
+          "pairs": [
+            {
+              "before": 147673.1875,
+              "after": 147673.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            },
+            {
+              "before": 147673.1875,
+              "after": 147673.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            },
+            {
+              "before": 147673.1875,
+              "after": 147673.1875,
+              "ratio": 1,
+              "anchor_drift": 0
+            }
+          ]
+        },
+        "cpu_ns_per_op": {
+          "before": 25837.130065957022,
+          "after": 26859.716145833332,
+          "ratio": 1.0393664032548837,
+          "delta_percent": 3.936640325488372,
+          "max_anchor_drift_percent": 1.4911360587081424,
+          "pairs": [
+            {
+              "before": 26072.397234479424,
+              "after": 27807.65625,
+              "ratio": 1.0665554072345056,
+              "anchor_drift": 0.005631161900411907
+            },
+            {
+              "before": 25844.943852799013,
+              "after": 27213.40625,
+              "ratio": 1.052948940612722,
+              "anchor_drift": -0.011064126300461719
+            },
+            {
+              "before": 25594.049110592627,
+              "after": 25558.0859375,
+              "ratio": 0.9985948619174235,
+              "anchor_drift": 0.014911360587081424
+            }
+          ]
+        },
+        "wall_ns_per_op": {
+          "before": 36591.518390235695,
+          "after": 36872.7578125,
+          "ratio": 1.0082552010519656,
+          "delta_percent": 0.8255201051965644,
+          "max_anchor_drift_percent": 5.952943869264882,
+          "pairs": [
+            {
+              "before": 36366.23344373565,
+              "after": 36848.4453125,
+              "ratio": 1.0132598793743766,
+              "anchor_drift": -0.03403278768827456
+            },
+            {
+              "before": 35534.145084156415,
+              "after": 36661.859375,
+              "ratio": 1.0317360749266034,
+              "anchor_drift": 0.0008692601500750463
+            },
+            {
+              "before": 37874.17664281502,
+              "after": 37107.96875,
+              "ratio": 0.9797696488549177,
+              "anchor_drift": 0.05952943869264882
+            }
+          ]
+        }
+      },
+      "program_sha256": {
+        "before": "fa55f81aa334dc4c35cb413ca8a4151d0fc58dd41bd47735fe2d5f0633904bbb",
+        "after": "fa55f81aa334dc4c35cb413ca8a4151d0fc58dd41bd47735fe2d5f0633904bbb"
+      },
+      "case_sha256": "e0e1b9720d5bc2e5b172809a2a7476e318d5298b732d9f8734d652cdb636e045"
+    }
+  ]
+}
