@@ -68,3 +68,11 @@ third_party/    tsrs, typescript (corpus), test262, node, chromium and other pin
 - The frontend is tsrs, called in process; tsgo and every transport to it are gone, with no intermediate steps ([log](records/notebooks/decisions-log.md#frontend-tsrs)).
 - A local patch to the vendored tsrs is allowed only for the two checker crashes it was made for, and goes when an upstream release fixes both.
 - Shipped native programs count references; `NoGc` is for testing only ([log](records/notebooks/decisions-log.md#memory-and-vendored-code-10-22-10-23)).
+- Every analysis converges by construction or fails closed. One that stops
+  early, at a round or work budget, gives everything it did not finish the
+  conservative answer, with a named reason; a cap kept only as a backstop
+  against a bug fails closed too. No analysis publishes an unfinished
+  optimistic answer. A sparse monotone worklist, which reaches its fixed
+  point without a cap, is preferred to any cap. [Memory](foundations/memory.md#principles)'s
+  "fail closed" is this rule for the memory analyses
+  ([log](records/notebooks/decisions-log.md#compiler-10-29)).

@@ -766,6 +766,20 @@ From the open-questions audit; each is the register's recommendation.
 
 ## Compiler (10-29)
 
+- **Every analysis converges or fails closed, compiler-wide.** Two silent
+  wrong answers on `main` that day came from analyses that stopped at a
+  round cap and handed on an unfinished optimistic result: `flow`'s fixpoint
+  and `zero_sign`'s observed set, which lost a negative zero after a chain of
+  72 steps. The coordinator asked the compiler lane to audit every capped
+  loop in core. It found five more that do the same: legacy liveness and
+  object-name closure, ownership freshness, the erased-only check before
+  reference counting, class depth (which orders `instanceof` arms) and the
+  suppliers of an inherited `this`. The rule `memory.md` already set for its
+  analyses now holds for all of them (written into
+  [architecture](../../architecture.md#decisions)). Each site becomes a
+  worklist that converges, or a conservative answer on exhaustion, with a
+  test at the old cap. The memory-safety sites go first.
+
 - **Bounds checks are placed by one relational analysis.** The merge-bound
   fix put back checks that a wrong proof had removed. The user asked for
   smarter placement using TypeScript's static analysis, then left the design
@@ -865,10 +879,13 @@ From the open-questions audit; each is the register's recommendation.
   attributed, kept under `benchmarks/`, and never linked into nts or into a
   program nts builds. Recorded in
   [cloud-agents](../../contributing/cloud-agents.md).
-- **tsrs may send its worker-budget API upstream.** The user approved one
-  pull request to oxc-project/tsrs from the user's account. It carries the
-  generic API that makes the vendored checker's work exact on any CPU mask,
-  so that nts does not carry a private patch.
+- **The checker's worker-budget API stays a local patch.** The API makes the
+  vendored checker's work exact on any CPU mask. The user approved offering
+  it to oxc-project/tsrs, but approves the pull request itself before it
+  opens. Upstream's contribution guide keeps pull requests closed (bug
+  reports go to its issue tracker), so nothing was sent. The vendored copy
+  keeps the patch, and tsrs keeps its unfinished adaptation to upstream's
+  current code on a local branch, untested.
 
 ## Plan (10-29): the Bun and ScriptC studies
 
