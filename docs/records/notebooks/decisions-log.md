@@ -766,6 +766,34 @@ From the open-questions audit; each is the register's recommendation.
 
 ## Compiler (10-29)
 
+- **Delegated decisions, late 10-29.** The user handed the coordinator the
+  open questions of the evening: "take the best decisions you think we
+  should make for all those issues you have mentioned". The coordinator
+  decided:
+  - the carried yield repair matches the JavaScript-era TypeScript's result
+    for mixed valid and invalid yields if that compiler gives one, and is
+    kept as it is otherwise; it goes when an official fix passes the
+    controls;
+  - the delegated `yield*` crash gets no patch; it goes into the upstream
+    report, filed with microsoft/typescript-go as the root cause and then
+    noted to tsrs, posted only after the user approves the exact text;
+  - nts reports any internal panic, in the checker or the compiler, as one
+    clear internal-error report with its phase, file and message and a
+    distinct exit code, never continuing after it;
+  - a solver's structural backstop asserts in debug and test builds even
+    where an optional caller declines in release;
+  - the super-linear lowering work (layouts and override tables rebuilt per
+    function, the hierarchy cloned per entry, `in` scanning every type) is
+    replaced by one shared context built once, after the memory-safety
+    series and before the validation build's activation;
+  - the licence guard's 36 s cost once a CC-BY input is declared is
+    accepted, and narrowing it to projects that can reach an input is a
+    follow-up;
+  - if Babel cannot read caniuse-lite's data as a plain input without
+    compiling its unpacking code, the Babel row stays blocked and recorded;
+  - each worktree keeps only the cargo profiles its workflow builds
+    (AGENTS.md), and `lane status` shows each tree's target size.
+
 - **Every analysis converges or fails closed, compiler-wide.** Two silent
   wrong answers on `main` that day came from analyses that stopped at a
   round cap and handed on an unfinished optimistic result: `flow`'s fixpoint

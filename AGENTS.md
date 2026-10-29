@@ -245,6 +245,9 @@ then a guard once fixed), `tests/memory/`.
 - One cargo target per worktree: two trees sharing one reuse each other's
   compiled crates and run the wrong code. A target is 15–40 GB; delete its
   `debug/incremental` after a test run and check `df -h /` before starting one.
+  Keep only the profiles your workflow builds (tests run in `nts-dev`), and
+  delete one you no longer build whole: on 2026-10-29 a forgotten 77 GB
+  `target/debug` held every lane's landing on the disk floor.
 - A native snapshot of a large program can take gigabytes: cap parallel frontends,
   and check `journalctl -k` for OOM kills before blaming a crash.
 - **Gates run back to back, so heavy work runs beside them:** `nice -n 19`, one
