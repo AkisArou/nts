@@ -421,10 +421,12 @@ add, in order:
        analysis proves, the same fact that lets C use signed arithmetic. It
        changes `awfy-sieve`'s loop shape and its branch misses, not its
        instruction count, and passes C there;
-     - visibility: a definition no outside code can reach is `internal`, and
-       the rest are `dso_local`, so link-time optimization can specialize
-       them as it does for C. This closes `json-scan` and passes C. C gets
-       `static` from the same decision.
+     - linkage: in an executable, a definition the product does not publish
+       is `internal` in LLVM and `static` in C, from one shared decision,
+       so the optimizer can specialize it without relying on link-time
+       internalization. This closes `json-scan` and passes C. A library
+       keeps its external ABI
+       ([native](targets/native.md#two-backends-one-runtime)).
 
      Then every row where one native backend trails the other is measured
      again, and the remaining gaps (`awfy-permute`, `array-methods`,

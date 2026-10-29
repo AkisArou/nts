@@ -20,7 +20,10 @@ Plain TypeScript, and the tests that hold it to its specification:
   and a program nts refuses is kept as it is: the refusal is the finding.
   Only permissively licensed code enters the repository (MIT, BSD, Apache,
   zlib, Boost, ISC, Unicode). A part under the GPL or LGPL is left out, or
-  replaced with original code written without reference to it.
+  replaced with original code written without reference to it. Data under
+  CC-BY-4.0 may be a benchmark's input only: attributed in the case's
+  provenance, kept under `benchmarks/`, and never linked into nts or into a
+  program nts builds.
 - in `tests/typescript/`, a family of self-checking cases that node judges
   (with its row and tags in `FEATURES.md`), where a handoff assigns one.
 

@@ -838,16 +838,37 @@ From the open-questions audit; each is the register's recommendation.
     review licenses only `nsw`, from the same exactness map
     (`core::exact`) that lets C use signed arithmetic, so the shipped
     change carries `nsw` alone, confirmed by a sitting of its own.
-  - `json-scan`: clang's IR from nts's C marks definitions `dso_local`, so
-    link-time optimization internalized `scanNumber` and specialized it to
-    the program's one JSON text. nts's IR does not, so it stayed public and
-    generic. Marked `internal` by hand, LLVM ran 10.431M instructions
-    against C's 10.651M and its own 12.972M.
+  - `json-scan`: link-time optimization internalized `scanNumber` on the
+    C path and specialized it to the program's one JSON text, while the
+    LLVM path kept it public and generic. Marked `internal` by hand, LLVM
+    ran 10.431M instructions against C's 10.651M and its own 12.972M. The
+    coordinator first attributed the difference to `dso_local`. runtime
+    measured that alone and refuted it: with `dso_local` and identical
+    linker resolutions, the LLVM path still kept the function external.
 
-  Both are built in the LLVM backend: `nsw` from the exactness map,
-  `internal` for whatever no outside code can reach, `dso_local` for the
-  rest. C gets `static` from the same reachability decision, so neither
-  backend depends on the linker to find it.
+  Both are built: `nsw` from the exactness map, and a product-aware
+  linkage rule decided by the coordinator on the compiler and runtime
+  lanes' proposal. In an executable, a definition is external only if it
+  is on the product's published entry surface: entry points, names the
+  product publishes, native callbacks and registrations, and functions
+  whose address goes to native code. Everything else, including a
+  module's exports the product does not publish (`scanNumber` is exported
+  but not public API), is `internal` in LLVM and `static` in C, from one
+  shared decision. Generic and shared outputs keep their external ABI. No
+  hidden visibility, and nothing left to link-time internalization.
+
+## Contributors and packages (10-29)
+
+- **CC-BY-4.0 data may be a benchmark's input.** The Babel workload of the
+  Web Tooling Benchmark needs caniuse-lite, which is CC-BY-4.0 and outside
+  the permissive list. The user allowed it as a benchmark input only:
+  attributed, kept under `benchmarks/`, and never linked into nts or into a
+  program nts builds. Recorded in
+  [cloud-agents](../../contributing/cloud-agents.md).
+- **tsrs may send its worker-budget API upstream.** The user approved one
+  pull request to oxc-project/tsrs from the user's account. It carries the
+  generic API that makes the vendored checker's work exact on any CPU mask,
+  so that nts does not carry a private patch.
 
 ## Plan (10-29): the Bun and ScriptC studies
 
