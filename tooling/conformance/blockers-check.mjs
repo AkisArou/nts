@@ -479,6 +479,7 @@ for (const name of worker ? [worker.name] : []) {
   // is a good state for the compiler and an untested state for this check, and
   // the two are worth writing down separately.
   const compileEmitted = (dir, file = "program.c") => {
+    const bundled = bundledDependencies(compiler);
     const cc = spawnSync("clang", [
       "-std=c11", "-c", join(dir, file), "-I", dir,
       "-include", join(ROOT, "runtime/node/internal/nts_node.h"),
@@ -601,6 +602,7 @@ for (const name of worker ? [worker.name] : []) {
     const emitted = /wrote .* to (\S+)/.exec(output);
     const dir = emitted === null ? null : emitted[1];
     if (dir !== null) {
+      const bundled = bundledDependencies(compiler);
       const cc = spawnSync("clang", [
         "-std=c11", "-c", join(dir, "program.c"), "-I", dir,
         "-include", join(ROOT, "runtime/node/internal/nts_node.h"),

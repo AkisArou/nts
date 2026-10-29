@@ -16,7 +16,7 @@ function harness(t: { after: (fn: () => void) => void }, fixtureNames = names) {
   const root = mkdtempSync(join(tmpdir(), "nts-blockers-pool-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const path of ["tooling/conformance", "tooling/gate", "tooling/jvm", "runtime/jvm", "napi", "tmp"]) mkdirSync(join(root, path), {recursive:true});
-  for (const path of ["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "gate/tokens.mjs", "jvm/vm-flags.ts"]) {
+  for (const path of ["conformance/blockers-check.mjs", "conformance/blockers-child.mjs", "conformance/blockers-pool.ts", "conformance/node-deps.mjs", "gate/tokens.mjs", "jvm/vm-flags.ts"]) {
     copyFileSync(join(HERE, "..", path), join(root, "tooling", path));
   }
   copyFileSync(join(HERE, "../../runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
@@ -75,7 +75,11 @@ test("real fixture workers hold one token each, obey admission, and report in fi
   await pool.start();
   t.after(()=>pool.close());
   const ran=h.run(3,{ORDER_BARRIER:"1",NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers",NTS_GATE_CASE_COSTS_DIR:join(h.root,"costs")});
-  await waitFor("all three blocked fixture requests",()=>pool.waiting.length===3);
+  let ended: Awaited<typeof ran> | undefined;
+  void ran.then(result=>{ended=result;});
+  await waitFor("all three blocked fixture requests",()=>pool.waiting.length===3,{
+    stopped:()=>ended ? `fixture workers exited ${ended.status}: ${ended.stderr}` : undefined,
+  });
   assert.equal(readFileSync(h.trace,"utf8"),"", "no compiler before token admission");
   open=true; pool.grant();
   const result=await ran;
@@ -89,6 +93,19 @@ test("real fixture workers hold one token each, obey admission, and report in fi
   assert.equal(pool.peak.get("blockers"),2);
   assert.deepEqual(grants.map(e=>JSON.parse(Buffer.from(e.context.slice(7),"base64url").toString()).project).sort(),
     names.map(n=>`tests/refusals/${n}/tsconfig.json`));
+});
+
+test("a missing worker import exits before token admission and never starts a compiler", async t => {
+  const h=harness(t);
+  rmSync(join(h.root,"tooling/conformance/node-deps.mjs"));
+  const pool=createTokenPool({free:()=>0,claim:()=>1});
+  await pool.start();t.after(()=>pool.close());
+  const result=await h.run(3,{NTS_GATE_TOKENS:pool.addr,NTS_GATE_STEP:"blockers"});
+  assert.notEqual(result.status,0);
+  assert.match(result.stderr,/ERR_MODULE_NOT_FOUND/);
+  assert.match(result.stderr,/node-deps\.mjs/);
+  assert.equal(pool.waiting.length,0);
+  assert.equal(readFileSync(h.trace,"utf8"),"");
 });
 
 test("a changed expectation keeps the serial fixture messages, counts, and nonfatal verdict", async t => {
