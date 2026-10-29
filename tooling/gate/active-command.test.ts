@@ -20,6 +20,12 @@ test("process activity parses group identity and all user/sys CPU including reap
   assert.throws(()=>processActivity("unreadable"),/invalid/);
 });
 
+test("structured stdout stays separate while command diagnostics are retained",async t=>{
+  const {root,env}=fixture(t);
+  const result=await activeCommand(process.execPath,["-e","process.stderr.write('diagnostic\\n');process.stdout.write(JSON.stringify({value:7}));"],{cwd:root,env});
+  assert.equal(result.status,0);assert.deepEqual(JSON.parse(result.stdout),{value:7});assert.equal(result.stderr,"diagnostic\n");assert.ok(result.out.includes("diagnostic\n"));assert.ok(result.out.includes(result.stdout));
+});
+
 test("CPU-busy work remains live without output beyond the idle guard",async t=>{
   const {root,env}=fixture(t),release=join(root,"release");
   const result=await activeCommand(process.execPath,["-e",`const fs=require('node:fs');while(!fs.existsSync(process.argv[1])){};process.stdout.write('complete\\n');`,release],{

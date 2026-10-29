@@ -1,3 +1,4 @@
+import {acquireSubmission} from "./dependency-inputs.ts";
 // What is going on: every worktree, which lane it belongs to, how far it is
 // from main, and what is gating -- and a lane's own tree, made or moved to a
 // new topic.
@@ -164,7 +165,7 @@ async function status(json: boolean, deep = false): Promise<void> {
  * every worktree, so a stash made here is popped by whichever lane pops next.
  * Commit unfinished work as `WIP:` instead, which `land` refuses to land.
  */
-function start(name: string | undefined, topic: string | undefined): void {
+async function start(name: string | undefined, topic: string | undefined): Promise<void> {
   const lane = name ? lanes[name] : undefined;
   if (!name || !lane || !topic) {
     throw new Error(`usage: lane.ts start <lane> <topic>; lanes: ${Object.keys(lanes).join(" ")}`);
@@ -186,6 +187,7 @@ function start(name: string | undefined, topic: string | undefined): void {
     }
     execFileSync("git", exists(branch) ? ["switch", branch] : ["switch", "-c", branch, "main"], { cwd: tree, stdio: "inherit" });
   }
+  await acquireSubmission(root,tree,execFileSync("git",["rev-parse","HEAD"],{cwd:tree,encoding:"utf8"}).trim());
   execFileSync("sh", [fileURLToPath(new URL("./inputs.sh", import.meta.url)), "lane", root, tree], { stdio: "inherit" });
   console.log(`${name}: ${tree.replace(homedir(), "~")} on ${branch}`);
   console.log("  work, build and commit there; its target/ is its own. Land with:");
@@ -195,7 +197,7 @@ function start(name: string | undefined, topic: string | undefined): void {
 const [command, ...rest] = process.argv.slice(2);
 try {
   if (command === "status") await status(rest.includes("--json"),rest.includes("--deep"));
-  else if (command === "start") {root=gitWorktreeRegistry(process.cwd()).root;start(rest[0], rest[1]);}
+  else if (command === "start") {root=gitWorktreeRegistry(process.cwd()).root;await start(rest[0], rest[1]);}
   else throw new Error("usage: node tooling/lanes/lane.ts status [--json] | start <lane> <topic>");
 } catch (e) {
   console.error(`lane: ${(e as Error).message}`);

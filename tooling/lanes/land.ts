@@ -1,3 +1,5 @@
+import {acquireSubmission} from "./dependency-inputs.ts";
+import {ToolingInstrumentError} from "../gate/step-result.ts";
 import { randomUUID } from "node:crypto";
 import {durableRecord} from "./durable-record.ts";
 import {abandonFrozen} from "./train-abandon.ts";
@@ -226,11 +228,14 @@ function treeOnly(tree: string, owed: Owed, short: string): string | null {
   if (run.status !== 0) {
     // The steps that were not green, by name, from the run's own summary.
     const summary = join(dir, "summary.json");
-    const red = existsSync(summary)
-      ? (JSON.parse(readFileSync(summary, "utf8")).steps as { name: string; verdict: string }[])
-          .filter((step) => step.verdict !== "PASS")
-          .map((step) => `${step.name} ${step.verdict}`)
-      : [`the run (exit ${run.status})`];
+    if(!existsSync(summary))throw new ToolingInstrumentError("tooling-setup",`instrument failure: tree-only preflight produced no summary (exit ${run.status}); logs in ${dir}`);
+    let rows:{name:string;verdict:string;reason?:string}[];
+    try{rows=JSON.parse(readFileSync(summary,"utf8")).steps;if(!Array.isArray(rows))throw Error("missing steps");}
+    catch(error){throw new ToolingInstrumentError("tooling-setup",`instrument failure: unreadable preflight summary: ${String(error)}; logs in ${dir}`);}
+    const unmeasured=rows.filter(row=>["INSTRUMENT","NOT RUN"].includes(row.verdict));
+    if(unmeasured.length)throw new ToolingInstrumentError("tooling-setup",`instrument failure: ${unmeasured.map(row=>`${row.name}: ${row.reason??row.verdict}`).join("; ")}; logs in ${dir}`);
+    const red=rows.filter(row=>row.verdict!=="PASS").map(row=>`${row.name} ${row.verdict}`);
+    if(!red.length)throw new ToolingInstrumentError("tooling-setup",`instrument failure: preflight exited ${run.status} without a failed check; logs in ${dir}`);
     fail(`${red.join(", ")} on ${short}: the gate would refuse it (logs in ${dir})`);
   }
   say(`${steps.join(" ")} green on ${short}`);
@@ -1214,6 +1219,7 @@ async function main(): Promise<void> {
   if (dryRun || process.env.NTS_LAND_LOCKED !== "1") {
     const base = git(["rev-parse", "main"], root);
     if (base === sha) fail(`${short} is main already`);
+    await acquireSubmission(root,tree,sha);
     // Without the lock the gate tree is someone else's: the rules are this
     // tree's, over the commits since it left main.
     const from = git(["merge-base", base, sha], root);
@@ -1242,8 +1248,11 @@ if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) 
   try {
     await main();
   } catch (e) {
-    if (!(e instanceof Refused)) throw e;
-    console.error(`land: ${e.message}`);
-    process.exitCode = 1;
+    if(e instanceof ToolingInstrumentError||selectionInfrastructure(e)){console.error(`land: instrument failure: ${e.message.replace(/^instrument failure: /,"")}`);process.exitCode=2;}
+    else if (!(e instanceof Refused)) throw e;
+    else {
+      console.error(`land: ${e.message}`);
+      process.exitCode = 1;
+    }
   }
 }

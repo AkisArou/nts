@@ -1,3 +1,4 @@
+import {acquireRevision,dependencyCache} from "./dependency-inputs.ts";
 import {heldLandings,prepareHeldResolution} from "./held-landings.ts";
 import {queuedLandings} from "./landing-state.ts";
 import { hostEnvironment, launcherPolicyNames } from "../gate/canonical-environment.ts";
@@ -224,6 +225,19 @@ ${reportContext}
   run(s, s.root, ["add", "tooling/gate"]);
   run(s, s.root, ["commit", "-q", "-m", "tree-only rules"]);
 }
+
+test("a real tree-only preflight names unmeasured inputs as an instrument failure",async()=>{
+  const s=scratch();fastGate(s);
+  writeFileSync(join(s.root,"tooling/gate/all.sh"),`set -eu
+mkdir -p "$NTS_GATE_RUN_DIR"
+printf '%s' '{"verdict":"red","steps":[{"name":"tree-check","verdict":"INSTRUMENT","reason":"no test262 checkout"}]}' > "$NTS_GATE_RUN_DIR/summary.json"
+exit 2
+`);
+  run(s,s.root,["add","tooling/gate/all.sh"]);run(s,s.root,["commit","-qm","unmeasured preflight"]);
+  const tree=lane(s,"docs-without-corpus",{"docs/new.md":"doc\n"});
+  const result=spawnTest(process.execPath,[LAND,"HEAD","--dry-run"],{cwd:tree,env:s.env,encoding:"utf8"});
+  assert.equal(result.status,2,result.stdout+result.stderr);assert.match(result.stderr,/instrument failure: tree-check: no test262 checkout/);assert.doesNotMatch(result.stderr,/gate would refuse/);assert.equal(gates(s),0);
+});
 
 test("tree-only changes land without a queue entry or full gate", async () => {
   const s = scratch(); fastGate(s);
@@ -648,12 +662,17 @@ async function landTogether(s: Scratch, trees: string[]): Promise<Landed[]> {
 const gates = (s: Scratch) => (existsSync(s.gates) ? readFileSync(s.gates, "utf8").trim().split("\n").length : 0);
 const onMain = (s: Scratch, path: string) => spawnTest("git", ["cat-file", "-e", `main:${path}`], { cwd: s.root, env: s.env }).status === 0;
 
-test("native inputs link the upstream TypeScript corpus without an external compiler", () => {
+test("native inputs link the upstream TypeScript corpus without an external compiler", async t => {
   const s = scratch();
   const corpus = join(s.root, "third_party/typescript");
   mkdirSync(corpus, { recursive: true });
   writeFileSync(join(corpus, "marker"), "upstream corpus\n");
-  const a = lane(s, "native-inputs", { "pnpm-lock.yaml": "importers: {}\n" });
+  const a = lane(s, "native-inputs", { "package.json": JSON.stringify({name:"corpus-input-control",private:true,packageManager:"pnpm@10.15.0"}), "pnpm-lock.yaml": "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n" });
+  const locked=spawnTest("corepack",["pnpm@10.15.0","install","--offline","--lockfile-only","--ignore-scripts"],{cwd:a,encoding:"utf8",env:{...hostEnvironment(process.env),COREPACK_ENABLE_NETWORK:"0",COREPACK_ENABLE_DOWNLOAD_PROMPT:"0"}});
+  assert.equal(locked.status,0,locked.stdout+locked.stderr);
+  run(s,a,["add","pnpm-lock.yaml"]);run(s,a,["commit","--allow-empty","-qm","canonical empty dependency lock"]);
+  const cache=dependencyCache(s.root);t.after(()=>rmSync(cache,{recursive:true,force:true}));
+  await acquireRevision(s.root,a,"HEAD");
   for (const mode of ["lane", "gate"]) {
     const prepared = spawnTest("sh", [new URL("./inputs.sh", import.meta.url).pathname, mode, s.root, a], { env: s.env, encoding: "utf8" });
     assert.equal(prepared.status, 0, prepared.stderr);

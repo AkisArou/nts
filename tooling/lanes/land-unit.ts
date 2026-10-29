@@ -1,3 +1,5 @@
+import {acquireSubmission} from "./dependency-inputs.ts";
+import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {toolingSliceArgs} from "../gate/tooling-slice.ts";
 import { assertLandingEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Queue an immutable submission in a systemd user unit with the gate's environment.
@@ -41,32 +43,38 @@ try {
   checked("git", ["worktree", "add", "--detach", tree, sha], root);
   // Owed's language lexers and tree checks use this commit's workspace links,
   // just like a lane tree. Prepare them before the pre-queue dry run.
-  checked("sh", [join(tree, "tooling/lanes/inputs.sh"), "lane", root, tree], root);
-  const land = join(tree, "tooling/lanes/land.ts");
-  const preflight = spawnSync(process.execPath, [land, sha, "--dry-run"], { cwd: tree, stdio: "inherit" });
-  if (preflight.error || preflight.status !== 0) {
+  let queued=false;
+  try {
+    await acquireSubmission(repo,tree,sha);
+    checked("sh", [join(tree, "tooling/lanes/inputs.sh"), "lane", repo, tree], repo);
+    const land = join(tree, "tooling/lanes/land.ts");
+    const preflight = spawnSync(process.execPath, [land, sha, "--dry-run"], { cwd: tree, stdio: "inherit" });
+    if (preflight.error || preflight.status !== 0) {
+      throw new Error(`landing preflight ${preflight.error||preflight.status===2?"instrument failure":"failed"}; nothing queued${preflight.error ? `: ${preflight.error.message}` : ""}`);
+    }
+    const systemdArgument=(s:string)=>'"'+s.replaceAll("\\","\\\\").replaceAll('"','\\"').replaceAll("%","%%")+'"';
+    const collector=gateCommand(process.execPath,[cleanup,"--repo",repo,"--post-stop",unit]);
+    const after=[collector.command,...collector.args].map(systemdArgument).join(" ");
+    const client=gateCommand(process.execPath,[land,sha]);
+    checked("systemd-run", [
+      "--user", "--collect", "--quiet", ...toolingSliceArgs(), `--unit=${unit}`, `--working-directory=${tree}`,
+      `--property=StandardOutput=append:${log}`, `--property=StandardError=append:${log}`,
+      "--property=LimitCORE=0",
+      `--property=ExecStopPost=${after}`,
+      `--setenv=NTS_LAND_AUTHOR_BRANCH=${authorBranch}`,
+      `--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,
+      ...(process.env.NTS_LAND_AUTHOR_ADDRESS ? [`--setenv=NTS_LAND_AUTHOR_ADDRESS=${process.env.NTS_LAND_AUTHOR_ADDRESS}`] : []),
+      ...(process.env.NTS_TOOLING_SLICE?[`--setenv=NTS_TOOLING_SLICE=${process.env.NTS_TOOLING_SLICE}`]:[]),
+      ...systemdEnvironment(), client.command, ...client.args,
+    ], root);
     manifest.preparingPid=null;recordManifest();
-    console.log(cleanupSubmission(repo,submission));
-    throw new Error(`landing preflight failed; nothing queued${preflight.error ? `: ${preflight.error.message}` : ""}`);
+    queued=true;
+  } finally {
+    if(!queued){manifest.preparingPid=null;recordManifest();console.log(cleanupSubmission(repo,submission));}
   }
-  const systemdArgument=(s:string)=>'"'+s.replaceAll("\\","\\\\").replaceAll('"','\\"').replaceAll("%","%%")+'"';
-  const collector=gateCommand(process.execPath,[cleanup,"--repo",repo,"--post-stop",unit]);
-  const after=[collector.command,...collector.args].map(systemdArgument).join(" ");
-  const client=gateCommand(process.execPath,[land,sha]);
-  checked("systemd-run", [
-    "--user", "--collect", "--quiet", ...toolingSliceArgs(), `--unit=${unit}`, `--working-directory=${tree}`,
-    `--property=StandardOutput=append:${log}`, `--property=StandardError=append:${log}`,
-    "--property=LimitCORE=0",
-    `--property=ExecStopPost=${after}`,
-    `--setenv=NTS_LAND_AUTHOR_BRANCH=${authorBranch}`,
-    `--setenv=NTS_LAND_SUBMISSION_UNIT=${unit}`,
-    ...(process.env.NTS_LAND_AUTHOR_ADDRESS ? [`--setenv=NTS_LAND_AUTHOR_ADDRESS=${process.env.NTS_LAND_AUTHOR_ADDRESS}`] : []),
-    ...(process.env.NTS_TOOLING_SLICE?[`--setenv=NTS_TOOLING_SLICE=${process.env.NTS_TOOLING_SLICE}`]:[]),
-    ...systemdEnvironment(), client.command, ...client.args,
-  ], root);
-  manifest.preparingPid=null;recordManifest();
+
   console.log(`queued ${sha} as ${unit}\nlog: ${log}`);
 } catch (error) {
-  console.error(`land-unit: ${(error as Error).message}`);
+  console.error(`land-unit: ${error instanceof ToolingInstrumentError?"instrument failure: ":""}${(error as Error).message}`);
   process.exitCode = 1;
 }

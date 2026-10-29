@@ -14,15 +14,16 @@ function fixture(t: { after(fn: () => void): void }) {
   const root = join(directory, "main"), tree = join(directory, "compiler"), home = join(directory, "home");
   const bin = join(directory, "bin"), capture = join(directory, "unit.json");
   mkdirSync(join(root, "tooling/lanes"), { recursive: true });
-  writeFileSync(join(root,".gitignore"),".inputs-ready\n");
+  writeFileSync(join(root,".gitignore"),".inputs-ready\nthird_party/\n");
   mkdirSync(bin);
   writeFileSync(join(bin, "systemd-run"), `#!${process.execPath}\nrequire("node:fs").writeFileSync(process.env.UNIT_CAPTURE, JSON.stringify(process.argv.slice(2)));\n`);
   chmodSync(join(bin, "systemd-run"), 0o755);
   writeFileSync(join(root, "tooling/lanes/land.ts"), `if (!process.argv.includes("--dry-run")) process.exit(99);
 if (!require("node:fs").existsSync(".inputs-ready")) process.exit(98);
-if (process.env.FAIL_PREFLIGHT === "1") process.exit(2);
+if (process.env.FAIL_PREFLIGHT === "1") process.exit(1);
+if (process.env.INSTRUMENT_PREFLIGHT === "1") { console.error("instrument failure: audit: no test262 checkout"); process.exit(2); }
 console.log("preflight passed");\n`);
-  writeFileSync(join(root, "tooling/lanes/inputs.sh"), '#!/bin/sh\ntest "$1" = lane\ntouch "$3/.inputs-ready"\n');
+  writeFileSync(join(root, "tooling/lanes/inputs.sh"), '#!/bin/sh\nset -eu\ntest "$1" = lane\nif [ "${NEED_SHARED_CORPUS:-}" = 1 ]; then test -f "$2/third_party/test262/SENTINEL"; fi\ntouch "$3/.inputs-ready"\n');
   const env: NodeJS.ProcessEnv = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
   Object.assign(env, {
     HOME: home, PATH: `${bin}:${process.env.PATH}`, UNIT_CAPTURE: capture,
@@ -91,4 +92,15 @@ test("a failed detached preflight never starts a unit and removes its own submis
   assert.equal(existsSync(f.capture), false);
   assert.equal(f.git(f.root, "worktree", "list", "--porcelain").split("\n").filter(line => line.startsWith("worktree ")).length, 2);
   assert.match(f.git(f.root,"for-each-ref","--format=%(objectname)","refs/archive/land-submissions"),new RegExp(f.sha));
+});
+
+test("a fresh detached docs launcher gets third-party inputs from the shared checkout",t=>{
+  const f=fixture(t),corpus=join(f.root,"third_party/test262");mkdirSync(corpus,{recursive:true});writeFileSync(join(corpus,"SENTINEL"),"shared input\n");
+  f.git(f.tree,"switch","--detach","HEAD");f.env.NEED_SHARED_CORPUS="1";
+  assert.equal(existsSync(join(f.tree,"third_party/test262")),false);
+  const result=f.launch();assert.equal(result.status,0,result.stdout+result.stderr);assert.ok(existsSync(f.capture));
+});
+test("an instrument preflight is named without calling it a change refusal",t=>{
+  const f=fixture(t);f.env.INSTRUMENT_PREFLIGHT="1";const result=f.launch();
+  assert.equal(result.status,1);assert.match(result.stderr,/instrument failure: audit: no test262 checkout/);assert.match(result.stderr,/landing preflight instrument failure/);assert.doesNotMatch(result.stderr,/gate would refuse/);assert.equal(existsSync(f.capture),false);
 });

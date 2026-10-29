@@ -12,11 +12,15 @@ import type { TestContext } from "node:test";
 
 export const REGISTRY_FIXTURE_PACKAGE = "nts-registry-input-fixture";
 export const REGISTRY_FIXTURE_MARKER = "candidate-registry-input-v1";
+export const SECOND_REGISTRY_PACKAGE = "nts-registry-input-fixture-second";
+export const SECOND_REGISTRY_MARKER = "candidate-registry-input-second-v1";
 export type CommandResult = { status: number | null; stdout: string; stderr: string };
 
-export function command(program: string, args: string[], cwd: string, input?: Buffer): Promise<CommandResult> {
+export function command(program: string, args: string[], cwd: string, input?: Buffer, overrides:NodeJS.ProcessEnv={}): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
-    const child = spawn(program, args, { cwd, env: { ...process.env, CI: "true", NO_COLOR: "1",
+    const env={...process.env,...overrides};
+    for(const key of ["NTS_GATE_STEP","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_ATTEMPT"])delete env[key];
+    const child = spawn(program, args, { cwd, env: { ...env, CI: "true", NO_COLOR: "1",
       HTTP_PROXY: "", HTTPS_PROXY: "", ALL_PROXY: "", NO_PROXY: "127.0.0.1" }, stdio: "pipe" });
     let stdout = "", stderr = "";
     child.stdout.on("data", chunk => { stdout += chunk; });
@@ -70,19 +74,26 @@ export async function registryInputsFixture(t: TestContext,
   const tarball = join(root, "package.tgz");
   await checked("tar", ["-czf", tarball, "-C", join(root, "artifact"), "package"], root);
   const bytes = readFileSync(tarball), integrity = "sha512-" + createHash("sha512").update(bytes).digest("base64");
+  const secondJson={...packageJson,name:SECOND_REGISTRY_PACKAGE};
+  writeFileSync(join(packageRoot,"package.json"),JSON.stringify(secondJson));
+  writeFileSync(join(packageRoot,"index.js"),`export const marker = ${JSON.stringify(SECOND_REGISTRY_MARKER)};\n`);
+  const secondTar=join(root,"second.tgz");await checked("tar",["-czf",secondTar,"-C",join(root,"artifact"),"package"],root);
+  const secondBytes=readFileSync(secondTar),secondIntegrity="sha512-"+createHash("sha512").update(secondBytes).digest("base64");
   const registryRequests: string[] = [];
   let origin = "";
   const registry = createServer((request, response) => {
     const path = new URL(request.url ?? "/", "http://fixture").pathname;
     registryRequests.push(path);
-    if (path === "/" + REGISTRY_FIXTURE_PACKAGE) {
+    const second=path.startsWith("/"+SECOND_REGISTRY_PACKAGE),name=second?SECOND_REGISTRY_PACKAGE:REGISTRY_FIXTURE_PACKAGE;
+    const metadata=second?secondJson:packageJson,content=second?secondBytes:bytes,sri=second?secondIntegrity:integrity;
+    if (path === "/" + name) {
       response.setHeader("Content-Type", "application/json");
-      response.end(JSON.stringify({ name: REGISTRY_FIXTURE_PACKAGE, "dist-tags": { latest: "1.0.0" },
-        versions: { "1.0.0": { ...packageJson, dist: { integrity,
-          tarball: origin + "/" + REGISTRY_FIXTURE_PACKAGE + "/-/package.tgz" } } } }));
+      response.end(JSON.stringify({ name, "dist-tags": { latest: "1.0.0" },
+        versions: { "1.0.0": { ...metadata, dist: { integrity:sri,
+          tarball: origin + "/" + name + "/-/package.tgz" } } } }));
     } else if (path.endsWith("/-/package.tgz")) {
       response.setHeader("Content-Type", "application/octet-stream");
-      response.end(bytes);
+      response.end(content);
     } else { response.statusCode = 404; response.end("fixture registry has no such package"); }
   });
   registry.listen(0, "127.0.0.1");

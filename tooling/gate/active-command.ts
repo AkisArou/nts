@@ -41,7 +41,7 @@ function groupCpu(group:number,started:number) {
   return ticks;
 }
 
-export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;error?:Error;hung?:string;runaway?:string;elapsedMs:number};
+export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;elapsedMs:number};
 type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
@@ -58,7 +58,7 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
     let frequency;
     try{frequency=clockTicks();}catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
     const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]} satisfies SpawnOptions);
-    let out="",last=began,cpu=0,started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,instrument:ToolingInstrumentError|undefined;
+    let out="",stdout="",stderr="",last=began,cpu=0,started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,instrument:ToolingInstrumentError|undefined;
     let timer:ReturnType<typeof setInterval>|undefined;
     const stop=()=>{
       if(!child.pid||child.pid<=1)return;
@@ -75,13 +75,13 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       try{stop();}catch(error){instrument=new ToolingInstrumentError("tooling-cleanup",`${instrument.message}; ${String(error)}`);publishToolingFailure(instrument,options.env);}
       child.stdout.destroy();child.stderr.destroy();
     };
-    child.stdout.on("data",part=>{out+=part;last=performance.now();});
-    child.stderr.on("data",part=>{out+=part;last=performance.now();});
+    child.stdout.on("data",part=>{stdout+=part;out+=part;last=performance.now();});
+    child.stderr.on("data",part=>{stderr+=part;out+=part;last=performance.now();});
     child.on("error",caught=>{error=caught;});
     child.on("close",(status,signal)=>{
       if(timer)clearInterval(timer);
       if(instrument)reject(instrument);
-      else resolve({status,signal,out,error,hung,runaway,elapsedMs:performance.now()-began});
+      else resolve({status,signal,out,stdout,stderr,error,hung,runaway,elapsedMs:performance.now()-began});
     });
     if(!child.pid)return; // spawn's error/close events retain their ordinary meaning.
     try{
