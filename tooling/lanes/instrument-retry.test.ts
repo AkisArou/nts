@@ -34,7 +34,7 @@ test("missing summaries and changed host identities cannot release an instrument
   }
 });
 test("a hung or broken tooling instrument leaves completed assertions and stops automatic retries",()=>{
-  for(const row of [{name:"tooling",verdict:"NOT RUN",instrument:{kind:"hung"}},{name:"tooling",verdict:"INSTRUMENT",instrument:{kind:"tooling-cleanup"}},{name:"unknown",verdict:"INSTRUMENT"}]) {
+  for(const row of [{name:"tooling",verdict:"NOT RUN",instrument:{kind:"hung"}},{name:"compile",verdict:"NOT RUN",instrument:{kind:"runaway"}},{name:"tooling",verdict:"INSTRUMENT",instrument:{kind:"tooling-cleanup"}},{name:"unknown",verdict:"INSTRUMENT"}]) {
     const first=attempt([{name:"real-failure",verdict:"FAIL"},row]);
     assert.equal(retryInstruments(first,()=>assert.fail("no retry"),()=>assert.fail("no memory wait")),first);
   }

@@ -1,6 +1,20 @@
 // A failed instrument is evidence to wait, never evidence against a landing.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
 export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "runaway" | "tooling-setup" | "tooling-cleanup" | "selector-setup"; step: string; attempt: string; reason: string };
+type Disposition={verdict:InstrumentResult["verdict"];disposition:"retry"|"operator-hold"|"verdict"};
+export const INSTRUMENT_DISPOSITIONS={
+  "memory-pressure":{verdict:"INSTRUMENT",disposition:"retry"},
+  "hung":{verdict:"NOT RUN",disposition:"operator-hold"},
+  "runaway":{verdict:"NOT RUN",disposition:"operator-hold"},
+  "tooling-setup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
+  "tooling-cleanup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
+  "selector-setup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
+  "case-budget":{verdict:"FAIL",disposition:"verdict"},
+} as const satisfies Record<InstrumentResult["kind"],Disposition>;
+export function instrumentPolicy(kind:unknown):Disposition|undefined {
+  return typeof kind==="string"&&Object.hasOwn(INSTRUMENT_DISPOSITIONS,kind)
+    ? INSTRUMENT_DISPOSITIONS[kind as InstrumentResult["kind"]] : undefined;
+}
 export class ToolingInstrumentError extends Error {
   readonly kind: "tooling-setup" | "tooling-cleanup";
   constructor(kind: ToolingInstrumentError["kind"], reason: string, options?: ErrorOptions) { super(reason, options); this.kind=kind; this.name="ToolingInstrumentError"; }
@@ -37,7 +51,8 @@ export function readStepInstrument(path: string, step: string, attempt: string):
   let result;
   try { result = JSON.parse(readFileSync(path, "utf8")); }
   catch (error) { if (error.code === "ENOENT") return; throw error; }
-  if (result.version !== 1 || !((result.verdict === "INSTRUMENT" && ["memory-pressure","tooling-setup","tooling-cleanup","selector-setup"].includes(result.kind)) || (result.verdict === "FAIL" && result.kind === "case-budget") || (result.verdict === "NOT RUN" && ["hung","runaway"].includes(result.kind)))
+  const policy=instrumentPolicy(result.kind);
+  if (result.version !== 1 || !policy || policy.verdict!==result.verdict
       || result.step !== step || result.attempt !== attempt || typeof result.reason !== "string" || !result.reason) {
     throw new Error(`invalid instrument result for ${step}`);
   }

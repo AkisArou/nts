@@ -1,10 +1,12 @@
 // Preserve completed evidence while retrying instruments on the frozen tip.
+import {instrumentPolicy} from "../gate/step-result.ts";
 export type StepResult = { name: string; verdict: string; reason?: string; [key: string]: unknown };
 export type Attempt = { summary: { requested: string[]; steps: StepResult[]; identities: any; environment: any; [key: string]: any }; run: string; status: number | null; signal?: string | null; error?: unknown };
 export function needsOperatorHold(row: StepResult): boolean {
   const instrument=row.instrument as {kind?:string;verdict?:string}|undefined;
-  return row.verdict==="INSTRUMENT" && instrument?.kind!=="memory-pressure"
-    || row.verdict==="NOT RUN" && instrument?.kind==="hung";
+  if(!instrument)return row.verdict==="INSTRUMENT";
+  const policy=instrumentPolicy(instrument.kind);
+  return !policy || policy.verdict!==row.verdict || (instrument.verdict!==undefined&&instrument.verdict!==row.verdict) || policy.disposition==="operator-hold";
 }
 export function retryInstruments(first: Attempt, invoke: (steps: string[], attempt: number) => Attempt, hold: (rows: StepResult[]) => void): Attempt {
   let current = first;

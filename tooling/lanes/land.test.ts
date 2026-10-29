@@ -1334,6 +1334,31 @@ fi
   assert.equal(replay.status,0,replay.stderr);
 });
 
+test("a runaway train is held with its reason in lane status, never attributed or halved",async()=>{
+  const s=scratch(),state=join(s.home,".cache/nts-land");
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
+if [ -e "$NTS_GATE_TREE/RUNAWAY" ]; then
+node - "$NTS_GATE_RUN_DIR/summary.json" <<'RUNAWAY'
+const fs=require('node:fs'),file=process.argv[2],summary=JSON.parse(fs.readFileSync(file));
+summary.verdict='red';summary.steps[0]={...summary.steps[0],verdict:'NOT RUN',reason:'fixture command NOT RUN (runaway): used 2 CPU s',instrument:{kind:'runaway',verdict:'NOT RUN'}};
+fs.writeFileSync(file,JSON.stringify(summary));
+RUNAWAY
+exit 2
+fi
+`));
+  run(s,s.root,["add","tooling/gate/pinned.sh"]);run(s,s.root,["commit","-qm","runaway stand-in"]);
+  const tree=lane(s,"runaway",{RUNAWAY:"busy\n",product:"unchanged until measured\n"}),client=land(s,tree);
+  let ended;client.done.then(result=>{ended=result;});
+  await waitFor("the runaway train's operator hold",()=>heldLandings(state).length===1,{stopped:()=>ended?`client ended ${ended.status}: ${ended.out}`:undefined});
+  assert.equal(gates(s),1);assert.equal(states(s).length,0);assert.equal(onMain(s,"product"),false);
+  const view=spawnTest(process.execPath,[new URL("./lane.ts",import.meta.url).pathname,"status","--json"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(view.status,0,view.stderr);const queued=JSON.parse(view.stdout).queue;
+  assert.equal(queued.length,1);assert.equal(queued[0].hold.state,"held");assert.match(queued[0].hold.reason,/runaway.*2 CPU s/);
+  const held=heldLandings(state)[0];
+  const resolved=spawnTest(process.execPath,[LAND,"--refuse-held",`${held.batch.id}:${held.entry.id}`,"--because=runaway control complete"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(resolved.status,0,resolved.stderr);assert.equal((await client.done).status,1);assert.equal(gates(s),1);
+});
+
 test("an unmeasured baseline holds the frozen members without blaming main or halving",async()=>{
   const s=scratch(),state=join(s.home,".cache/nts-land");
   writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE+reportContext+`
