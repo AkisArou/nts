@@ -150,28 +150,25 @@ impl std::ops::DerefMut for PooledChecker {
 // Checkers recurse deeply (the single-threaded CLI runs on a 512 MB stack); each checker thread gets the same.
 pub const CHECKER_STACK_SIZE: usize = 512 << 20;
 
-// Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index and waits for all of them.
-// The process budget bounds workers. Single-threaded runs execute tasks on the calling thread.
+// Go core.WorkGroup as used by the checker pool: runs `task(i)` for every index, each on its own OS thread,
+// and waits for all of them. Single-threaded runs execute the tasks in order on the calling thread.
 fn run_work_group(single_threaded: bool, count: usize, task: impl Fn(usize) + Sync) {
-    let workers = tsrs_core::runslots::start_worker_pool().map_or(count, |limit| count.min(limit.get()));
-    if single_threaded || workers <= 1 {
+    if single_threaded || count <= 1 {
         (0..count).for_each(task);
         return;
     }
     std::thread::scope(|s| {
         let task = &task;
-        let handles: Vec<_> = (0..workers)
-            .map(|worker| {
+        let handles: Vec<_> = (0..count)
+            .map(|i| {
                 std::thread::Builder::new()
-                    .name(format!("checker-{worker}"))
+                    .name(format!("checker-{i}"))
                     .stack_size(CHECKER_STACK_SIZE)
                     .spawn_scoped(s, move || {
-                        for i in (worker..count).step_by(workers) {
-                            tsrs_ast::use_id_blocks();
-                            task(i);
-                            // The next pass's thread (or checker) continues in this thread's arena.
-                            tsrs_core::ptr::release_own_arena();
-                        }
+                        tsrs_ast::use_id_blocks();
+                        task(i);
+                        // The next pass's thread (or checker) continues in this thread's arena.
+                        tsrs_core::ptr::release_own_arena();
                     })
                     .expect("failed to spawn checker thread")
             })
@@ -716,7 +713,6 @@ impl CheckerPoolImpl {
         program: &'static Program,
         previous: Option<&CheckerPoolImpl>,
     ) -> CheckerPoolImpl {
-        let budget = tsrs_core::runslots::start_worker_pool();
         // Go's default is a constant 4; tsrs picks it per machine and program (default_checker_count).
         let checker_count: i64 = if program.single_threaded() {
             1
@@ -728,7 +724,6 @@ impl CheckerPoolImpl {
 
         // Go `max(min(checkerCount, len(files), 256), 1)` on int: a negative or zero count is one checker.
         let checker_count = checker_count.min(program.files.len() as i64).clamp(1, 256) as usize;
-        let checker_count = budget.map_or(checker_count, |limit| checker_count.min(limit.get()));
 
         let inherited_associations =
             previous.and_then(|previous| inherited_associations(program, checker_count, previous));
@@ -1969,9 +1964,6 @@ fn default_checker_count(program: &Program) -> i64 {
 
 // `default_checker_count` before the program's files are known: what the machine allows (the file count only lowers it).
 fn default_checker_count_by_machine() -> i64 {
-    if let Some(limit) = tsrs_core::runslots::worker_budget() {
-        return limit.get().min(256) as i64;
-    }
     if GO_DEFAULT_CHECKER_COUNT.load(std::sync::atomic::Ordering::Relaxed) {
         return GO_DEFAULT_CHECKERS;
     }
@@ -2035,8 +2027,7 @@ pub fn checker_count_upper_bound(
     } else {
         default_checker_count_by_machine()
     };
-    let count = count.clamp(1, 256) as usize;
-    tsrs_core::runslots::worker_budget().map_or(count, |limit| count.min(limit.get()))
+    count.clamp(1, 256) as usize
 }
 
 // Checker assignment by locality. Checker state duplication comes from files on different checkers that

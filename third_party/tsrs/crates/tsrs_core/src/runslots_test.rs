@@ -117,19 +117,3 @@ fn run_limits_concurrency_and_blocking_gives_the_slot_back() {
     run(|| run(|| assert!(HOLDS_SLOT.with(Cell::get))));
     assert!(!HOLDS_SLOT.with(Cell::get));
 }
-
-#[test]
-fn a_worker_budget_is_set_once_and_frozen_at_first_use() {
-    use super::{WorkerBudget, WorkerBudgetError};
-    use std::num::NonZeroUsize;
-
-    let mut budget = WorkerBudget { limit: None, started: false };
-    assert_eq!(budget.configure(NonZeroUsize::MIN), Ok(()));
-    assert_eq!(budget.configure(NonZeroUsize::MIN), Err(WorkerBudgetError::AlreadyConfigured));
-    assert_eq!(budget.start(), Some(NonZeroUsize::MIN));
-    assert_eq!(budget.configure(NonZeroUsize::MIN), Err(WorkerBudgetError::WorkAlreadyStarted));
-
-    let mut default = WorkerBudget { limit: None, started: false };
-    assert_eq!(default.start(), None);
-    assert_eq!(default.configure(NonZeroUsize::MIN), Err(WorkerBudgetError::WorkAlreadyStarted));
-}

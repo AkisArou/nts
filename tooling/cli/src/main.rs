@@ -29,7 +29,6 @@ mod objc_bindings;
 mod objc_imports;
 mod swift;
 mod windows_surface;
-mod workers;
 mod xcframework;
 
 use std::fmt::Write as _;
@@ -658,7 +657,6 @@ INSPECTING
   version      version, snapshot schema, and the native frontend
 
 CHECKER
-  --workers <n>      process-wide compiler worker budget (1..256), set before native work
   --checkers <n>     native checker count (1..256); overrides NTS_CHECKERS
   NTS_CHECKERS       checker count for batch runners (1 per worker process)
                      Default: the native compiler chooses its pool size
@@ -743,7 +741,7 @@ impl std::error::Error for RetiredWasm {}
 /// that is the spelling a person reaches for *after* they know the command
 /// exists, so it is the more likely of the two to be typed.
 fn arguments() -> Result<Option<Vec<String>>> {
-    let mut given: Vec<String> = std::env::args().skip(1).collect();
+    let given: Vec<String> = std::env::args().skip(1).collect();
     let retired = given.first().is_some_and(|command| command == "emit-wasm")
         || (given.first().is_some_and(|command| command == "build")
             && (given
@@ -757,7 +755,6 @@ fn arguments() -> Result<Option<Vec<String>>> {
         usage();
         return Ok(None);
     }
-    workers::configure(&mut given)?;
     Ok(Some(given))
 }
 

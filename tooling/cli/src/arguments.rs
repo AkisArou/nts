@@ -44,9 +44,8 @@ const fn forwarded(name: &'static str, label: &'static str) -> Flag {
 
 const HELP: &[Flag] = &[switch("--help"), switch("-h")];
 const CHECKER_COUNT: Flag = value("--checkers", "1..256");
-const WORKER_BUDGET: Flag = value("--workers", "1..256");
-const CHECKERS: &[Flag] = &[CHECKER_COUNT, WORKER_BUDGET];
-const PROJECT: &[Flag] = &[switch("--no-acquire"), CHECKER_COUNT, WORKER_BUDGET];
+const CHECKERS: &[Flag] = &[CHECKER_COUNT];
+const PROJECT: &[Flag] = &[switch("--no-acquire"), CHECKER_COUNT];
 const ROOTS: &[Flag] = &[value("--entry", "name[,name]"), value("--product", "name")];
 const PROVIDER: &[Flag] = &[switch("--rc")];
 const SHAPE: &[Flag] = &[switch("--main"), switch("--napi"), switch("--glib")];
