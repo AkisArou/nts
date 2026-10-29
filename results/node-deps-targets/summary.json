@@ -1,0 +1,1085 @@
+{
+  "source": "407b253b5df9c2b92183ea7ebbbf90388e77a15d",
+  "profile": "release",
+  "scope": "exec-inherited-user-instructions-v1; GNU time plus every native compiler/archiver/linker descendant",
+  "conditions": {
+    "node": "v24.20.0",
+    "compiler": "clang version 23.1.3",
+    "zig": "0.17.0",
+    "workers": 4,
+    "nice": 19,
+    "affinity": "0-3,6-31",
+    "provenance": "Saved sitting: nice 19 is verified by the recorded systemd unit configuration; affinity was sampled by taskset in the recorder. Priority was not independently sampled at startup."
+  },
+  "compiler": {
+    "baseline_bytes": 47892432,
+    "candidate_bytes": 56527328
+  },
+  "shared_source_files": 2402,
+  "rows": [
+    {
+      "plan": {
+        "name": "windows-x64",
+        "method": "windows",
+        "options": {
+          "arch": "x86_64"
+        },
+        "triple": "x86_64-pc-windows-gnu",
+        "format": "PE32+"
+      },
+      "cold": {
+        "name": "windows-x64-cold",
+        "args": [
+          "build",
+          "<raw-run>/windows-x64/project",
+          "--product",
+          "c"
+        ],
+        "start": "2026-10-29T02:11:04.041Z",
+        "end": "2026-10-29T02:11:43.320Z",
+        "load_before": "54.93 55.43 52.83 30/2697 1525031",
+        "load_after": "45.29 52.89 52.08 25/2656 1537704",
+        "wall_s": 39.278820642,
+        "max_rss_kib": 480400,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 488661353778,
+        "user_s": 120.051536,
+        "sys_s": 23.010775,
+        "cpu_s": 143.062311,
+        "counter_file": "<raw-run>/windows-x64-cold.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "warm": [
+        {
+          "name": "windows-x64-warm-0",
+          "args": [
+            "build",
+            "<raw-run>/windows-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:11:43.375Z",
+          "end": "2026-10-29T02:11:44.485Z",
+          "load_before": "45.29 52.89 52.08 45/2634 1537727",
+          "load_after": "45.29 52.89 52.08 25/2616 1538235",
+          "wall_s": 1.1103768859999983,
+          "max_rss_kib": 83952,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4870150881,
+          "user_s": 0.55988,
+          "sys_s": 0.267498,
+          "cpu_s": 0.8273780000000001,
+          "counter_file": "<raw-run>/windows-x64-warm-0.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-x64-warm-1",
+          "args": [
+            "build",
+            "<raw-run>/windows-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:11:44.486Z",
+          "end": "2026-10-29T02:11:45.169Z",
+          "load_before": "45.29 52.89 52.08 25/2616 1538235",
+          "load_after": "45.29 52.89 52.08 24/2648 1538525",
+          "wall_s": 0.6835801749999955,
+          "max_rss_kib": 84560,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4870491546,
+          "user_s": 0.532216,
+          "sys_s": 0.187896,
+          "cpu_s": 0.7201120000000001,
+          "counter_file": "<raw-run>/windows-x64-warm-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-x64-warm-2",
+          "args": [
+            "build",
+            "<raw-run>/windows-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:11:45.169Z",
+          "end": "2026-10-29T02:11:47.648Z",
+          "load_before": "45.29 52.89 52.08 25/2648 1538525",
+          "load_after": "45.99 52.91 52.10 55/2736 1539100",
+          "wall_s": 2.478868555999994,
+          "max_rss_kib": 82028,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4864339374,
+          "user_s": 0.535436,
+          "sys_s": 0.220175,
+          "cpu_s": 0.755611,
+          "counter_file": "<raw-run>/windows-x64-warm-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-x64-warm-3",
+          "args": [
+            "build",
+            "<raw-run>/windows-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:11:47.649Z",
+          "end": "2026-10-29T02:11:51.932Z",
+          "load_before": "45.99 52.91 52.10 55/2736 1539100",
+          "load_after": "45.99 52.91 52.10 62/2738 1540128",
+          "wall_s": 4.283412117,
+          "max_rss_kib": 85192,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4870408304,
+          "user_s": 0.559329,
+          "sys_s": 0.243045,
+          "cpu_s": 0.8023739999999999,
+          "counter_file": "<raw-run>/windows-x64-warm-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-x64-warm-4",
+          "args": [
+            "build",
+            "<raw-run>/windows-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:11:51.932Z",
+          "end": "2026-10-29T02:11:58.847Z",
+          "load_before": "45.99 52.91 52.10 62/2738 1540128",
+          "load_after": "47.53 53.01 52.14 58/2723 1541499",
+          "wall_s": 6.914360340000006,
+          "max_rss_kib": 85232,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4869779490,
+          "user_s": 0.571513,
+          "sys_s": 0.241852,
+          "cpu_s": 0.8133650000000001,
+          "counter_file": "<raw-run>/windows-x64-warm-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        }
+      ],
+      "llvm": {
+        "name": "windows-x64-llvm",
+        "args": [
+          "build",
+          "<raw-run>/windows-x64/project",
+          "--product",
+          "llvm"
+        ],
+        "start": "2026-10-29T02:11:58.859Z",
+        "end": "2026-10-29T02:12:11.570Z",
+        "load_before": "47.53 53.01 52.14 58/2725 1541501",
+        "load_after": "47.25 52.78 52.07 29/2638 1543991",
+        "wall_s": 12.711386023000006,
+        "max_rss_kib": 175320,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 29880787340,
+        "user_s": 7.006086,
+        "sys_s": 0.447244,
+        "cpu_s": 7.453329999999999,
+        "counter_file": "<raw-run>/windows-x64-llvm.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "artifacts": [
+        {
+          "binary": "<raw-run>/windows-x64/project/.nts/build/c/windows-x86_64/c.exe",
+          "file_bytes": 1704448,
+          "format": "PE32+ executable for MS Windows 6.00 (console), x86-64, 13 sections",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "x86_64-pc-windows-gnu"
+          }
+        },
+        {
+          "binary": "<raw-run>/windows-x64/project/.nts/build/llvm/windows-x86_64/llvm.exe",
+          "file_bytes": 1704448,
+          "format": "PE32+ executable for MS Windows 6.00 (console), x86-64, 13 sections",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "x86_64-pc-windows-gnu"
+          }
+        }
+      ],
+      "archive_bytes": 1966082,
+      "native_objects": 37,
+      "native_cold_wall_s": 8.660447249
+    },
+    {
+      "plan": {
+        "name": "windows-arm64",
+        "method": "windows",
+        "options": {
+          "arch": "aarch64"
+        },
+        "triple": "aarch64-pc-windows-gnu",
+        "format": "PE32+"
+      },
+      "cold": {
+        "name": "windows-arm64-cold",
+        "args": [
+          "build",
+          "<raw-run>/windows-arm64/project",
+          "--product",
+          "c"
+        ],
+        "start": "2026-10-29T02:12:11.598Z",
+        "end": "2026-10-29T02:13:13.011Z",
+        "load_before": "47.25 52.78 52.07 27/2638 1543995",
+        "load_after": "37.44 48.58 50.66 61/2779 1562380",
+        "wall_s": 61.41344704299999,
+        "max_rss_kib": 590832,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 517217679800,
+        "user_s": 109.942203,
+        "sys_s": 22.538116,
+        "cpu_s": 132.480319,
+        "counter_file": "<raw-run>/windows-arm64-cold.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "warm": [
+        {
+          "name": "windows-arm64-warm-0",
+          "args": [
+            "build",
+            "<raw-run>/windows-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:13.060Z",
+          "end": "2026-10-29T02:13:14.107Z",
+          "load_before": "37.44 48.58 50.66 57/2818 1562491",
+          "load_after": "37.44 48.58 50.66 55/2874 1562910",
+          "wall_s": 1.0474310370000022,
+          "max_rss_kib": 85048,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4703860368,
+          "user_s": 0.561344,
+          "sys_s": 0.197285,
+          "cpu_s": 0.758629,
+          "counter_file": "<raw-run>/windows-arm64-warm-0.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-arm64-warm-1",
+          "args": [
+            "build",
+            "<raw-run>/windows-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:14.108Z",
+          "end": "2026-10-29T02:13:15.131Z",
+          "load_before": "37.44 48.58 50.66 53/2874 1562910",
+          "load_after": "37.44 48.58 50.66 44/2859 1563351",
+          "wall_s": 1.0230569250000117,
+          "max_rss_kib": 86236,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4706174162,
+          "user_s": 0.544901,
+          "sys_s": 0.21167,
+          "cpu_s": 0.756571,
+          "counter_file": "<raw-run>/windows-arm64-warm-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-arm64-warm-2",
+          "args": [
+            "build",
+            "<raw-run>/windows-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:15.131Z",
+          "end": "2026-10-29T02:13:16.232Z",
+          "load_before": "37.44 48.58 50.66 44/2859 1563351",
+          "load_after": "37.44 48.58 50.66 64/2814 1563841",
+          "wall_s": 1.1010957679999993,
+          "max_rss_kib": 85888,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4698604017,
+          "user_s": 0.539467,
+          "sys_s": 0.227289,
+          "cpu_s": 0.766756,
+          "counter_file": "<raw-run>/windows-arm64-warm-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-arm64-warm-3",
+          "args": [
+            "build",
+            "<raw-run>/windows-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:16.232Z",
+          "end": "2026-10-29T02:13:17.543Z",
+          "load_before": "37.44 48.58 50.66 64/2814 1563841",
+          "load_after": "38.84 48.69 50.68 50/2869 1564417",
+          "wall_s": 1.3104625210000085,
+          "max_rss_kib": 85164,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4699582096,
+          "user_s": 0.542823,
+          "sys_s": 0.210937,
+          "cpu_s": 0.7537600000000001,
+          "counter_file": "<raw-run>/windows-arm64-warm-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "windows-arm64-warm-4",
+          "args": [
+            "build",
+            "<raw-run>/windows-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:17.543Z",
+          "end": "2026-10-29T02:13:18.560Z",
+          "load_before": "38.84 48.69 50.68 52/2869 1564417",
+          "load_after": "38.84 48.69 50.68 61/2834 1564783",
+          "wall_s": 1.0173939789999857,
+          "max_rss_kib": 84328,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4701334046,
+          "user_s": 0.541101,
+          "sys_s": 0.22331,
+          "cpu_s": 0.7644110000000001,
+          "counter_file": "<raw-run>/windows-arm64-warm-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        }
+      ],
+      "llvm": {
+        "name": "windows-arm64-llvm",
+        "args": [
+          "build",
+          "<raw-run>/windows-arm64/project",
+          "--product",
+          "llvm"
+        ],
+        "start": "2026-10-29T02:13:18.561Z",
+        "end": "2026-10-29T02:13:25.742Z",
+        "load_before": "38.84 48.69 50.68 63/2834 1564783",
+        "load_after": "37.81 48.31 50.55 33/2653 1570058",
+        "wall_s": 7.180811382999993,
+        "max_rss_kib": 198248,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 25329196848,
+        "user_s": 6.011077,
+        "sys_s": 0.390559,
+        "cpu_s": 6.401636,
+        "counter_file": "<raw-run>/windows-arm64-llvm.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "artifacts": [
+        {
+          "binary": "<raw-run>/windows-arm64/project/.nts/build/c/windows-aarch64/c.exe",
+          "file_bytes": 1628160,
+          "format": "PE32+ executable for MS Windows 6.00 (console), ARM64, 13 sections",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "aarch64-pc-windows-gnu"
+          }
+        },
+        {
+          "binary": "<raw-run>/windows-arm64/project/.nts/build/llvm/windows-aarch64/llvm.exe",
+          "file_bytes": 1628160,
+          "format": "PE32+ executable for MS Windows 6.00 (console), ARM64, 13 sections",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "aarch64-pc-windows-gnu"
+          }
+        }
+      ],
+      "archive_bytes": 1994382,
+      "native_objects": 37,
+      "native_cold_wall_s": 3.196889798
+    },
+    {
+      "plan": {
+        "name": "macos-x64",
+        "method": "macos",
+        "options": {
+          "arch": "x86_64",
+          "minimumVersion": "13.0"
+        },
+        "triple": "x86_64-apple-darwin",
+        "format": "Mach-O"
+      },
+      "cold": {
+        "name": "macos-x64-cold",
+        "args": [
+          "build",
+          "<raw-run>/macos-x64/project",
+          "--product",
+          "c"
+        ],
+        "start": "2026-10-29T02:13:25.776Z",
+        "end": "2026-10-29T02:13:33.382Z",
+        "load_before": "37.81 48.31 50.55 35/2654 1570063",
+        "load_after": "36.13 47.61 50.29 24/2622 1571895",
+        "wall_s": 7.605984605999984,
+        "max_rss_kib": 148404,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 44947998749,
+        "user_s": 10.546632,
+        "sys_s": 1.153819,
+        "cpu_s": 11.700451000000001,
+        "counter_file": "<raw-run>/macos-x64-cold.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "warm": [
+        {
+          "name": "macos-x64-warm-0",
+          "args": [
+            "build",
+            "<raw-run>/macos-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:33.407Z",
+          "end": "2026-10-29T02:13:33.982Z",
+          "load_before": "36.13 47.61 50.29 25/2622 1571898",
+          "load_after": "36.13 47.61 50.29 25/2626 1572075",
+          "wall_s": 0.574810931999993,
+          "max_rss_kib": 77296,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4130756575,
+          "user_s": 0.455846,
+          "sys_s": 0.130326,
+          "cpu_s": 0.5861719999999999,
+          "counter_file": "<raw-run>/macos-x64-warm-0.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-x64-warm-1",
+          "args": [
+            "build",
+            "<raw-run>/macos-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:33.982Z",
+          "end": "2026-10-29T02:13:34.597Z",
+          "load_before": "36.13 47.61 50.29 25/2626 1572075",
+          "load_after": "36.13 47.61 50.29 25/2627 1572289",
+          "wall_s": 0.6144485299999942,
+          "max_rss_kib": 77776,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4133535472,
+          "user_s": 0.466089,
+          "sys_s": 0.140882,
+          "cpu_s": 0.6069709999999999,
+          "counter_file": "<raw-run>/macos-x64-warm-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-x64-warm-2",
+          "args": [
+            "build",
+            "<raw-run>/macos-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:34.597Z",
+          "end": "2026-10-29T02:13:35.217Z",
+          "load_before": "36.13 47.61 50.29 25/2627 1572289",
+          "load_after": "36.13 47.61 50.29 25/2626 1572501",
+          "wall_s": 0.6202020900000061,
+          "max_rss_kib": 77492,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4132799017,
+          "user_s": 0.478488,
+          "sys_s": 0.144248,
+          "cpu_s": 0.622736,
+          "counter_file": "<raw-run>/macos-x64-warm-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-x64-warm-3",
+          "args": [
+            "build",
+            "<raw-run>/macos-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:35.217Z",
+          "end": "2026-10-29T02:13:35.826Z",
+          "load_before": "36.13 47.61 50.29 25/2626 1572501",
+          "load_after": "36.13 47.61 50.29 40/2636 1572666",
+          "wall_s": 0.6085313000000023,
+          "max_rss_kib": 77368,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4132934764,
+          "user_s": 0.451617,
+          "sys_s": 0.154961,
+          "cpu_s": 0.606578,
+          "counter_file": "<raw-run>/macos-x64-warm-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-x64-warm-4",
+          "args": [
+            "build",
+            "<raw-run>/macos-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:35.826Z",
+          "end": "2026-10-29T02:13:36.688Z",
+          "load_before": "36.13 47.61 50.29 42/2636 1572666",
+          "load_after": "36.13 47.61 50.29 26/2620 1572897",
+          "wall_s": 0.8623820019999985,
+          "max_rss_kib": 77100,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4133881759,
+          "user_s": 0.477992,
+          "sys_s": 0.134753,
+          "cpu_s": 0.612745,
+          "counter_file": "<raw-run>/macos-x64-warm-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        }
+      ],
+      "llvm": {
+        "name": "macos-x64-llvm",
+        "args": [
+          "build",
+          "<raw-run>/macos-x64/project",
+          "--product",
+          "llvm"
+        ],
+        "start": "2026-10-29T02:13:36.690Z",
+        "end": "2026-10-29T02:13:43.364Z",
+        "load_before": "36.13 47.61 50.29 28/2620 1572897",
+        "load_after": "34.27 46.83 50.01 25/2655 1574619",
+        "wall_s": 6.674883709999994,
+        "max_rss_kib": 148168,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 21933266261,
+        "user_s": 6.354205,
+        "sys_s": 0.265834,
+        "cpu_s": 6.620039,
+        "counter_file": "<raw-run>/macos-x64-llvm.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "artifacts": [
+        {
+          "binary": "<raw-run>/macos-x64/project/.nts/build/c/macos-13-x86_64/c",
+          "file_bytes": 124064,
+          "format": "Mach-O 64-bit x86_64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "x86_64-apple-darwin"
+          }
+        },
+        {
+          "binary": "<raw-run>/macos-x64/project/.nts/build/llvm/macos-13-x86_64/llvm",
+          "file_bytes": 124064,
+          "format": "Mach-O 64-bit x86_64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "x86_64-apple-darwin"
+          }
+        }
+      ],
+      "archive_bytes": 1253608,
+      "native_objects": 37,
+      "native_cold_wall_s": 1.685975808
+    },
+    {
+      "plan": {
+        "name": "macos-arm64",
+        "method": "macos",
+        "options": {
+          "arch": "aarch64",
+          "minimumVersion": "13.0"
+        },
+        "triple": "aarch64-apple-darwin",
+        "format": "Mach-O"
+      },
+      "cold": {
+        "name": "macos-arm64-cold",
+        "args": [
+          "build",
+          "<raw-run>/macos-arm64/project",
+          "--product",
+          "c"
+        ],
+        "start": "2026-10-29T02:13:43.396Z",
+        "end": "2026-10-29T02:13:50.634Z",
+        "load_before": "34.27 46.83 50.01 28/2656 1574625",
+        "load_after": "33.68 46.50 49.89 27/2651 1576378",
+        "wall_s": 7.2371942439999835,
+        "max_rss_kib": 184640,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 44963912443,
+        "user_s": 10.194779,
+        "sys_s": 1.221823,
+        "cpu_s": 11.416602000000001,
+        "counter_file": "<raw-run>/macos-arm64-cold.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "warm": [
+        {
+          "name": "macos-arm64-warm-0",
+          "args": [
+            "build",
+            "<raw-run>/macos-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:50.670Z",
+          "end": "2026-10-29T02:13:51.400Z",
+          "load_before": "33.68 46.50 49.89 27/2651 1576381",
+          "load_after": "33.68 46.50 49.89 31/2648 1576568",
+          "wall_s": 0.7306013460000104,
+          "max_rss_kib": 76868,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4146781650,
+          "user_s": 0.576798,
+          "sys_s": 0.153735,
+          "cpu_s": 0.7305330000000001,
+          "counter_file": "<raw-run>/macos-arm64-warm-0.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-arm64-warm-1",
+          "args": [
+            "build",
+            "<raw-run>/macos-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:51.401Z",
+          "end": "2026-10-29T02:13:52.291Z",
+          "load_before": "33.68 46.50 49.89 32/2648 1576568",
+          "load_after": "32.99 46.14 49.75 25/2634 1576769",
+          "wall_s": 0.8898085009999922,
+          "max_rss_kib": 77548,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4149208727,
+          "user_s": 0.524034,
+          "sys_s": 0.184098,
+          "cpu_s": 0.708132,
+          "counter_file": "<raw-run>/macos-arm64-warm-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-arm64-warm-2",
+          "args": [
+            "build",
+            "<raw-run>/macos-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:52.291Z",
+          "end": "2026-10-29T02:13:52.992Z",
+          "load_before": "32.99 46.14 49.75 25/2634 1576769",
+          "load_after": "32.99 46.14 49.75 28/2634 1576881",
+          "wall_s": 0.7011505910000123,
+          "max_rss_kib": 76064,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4142636967,
+          "user_s": 0.52124,
+          "sys_s": 0.165145,
+          "cpu_s": 0.686385,
+          "counter_file": "<raw-run>/macos-arm64-warm-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-arm64-warm-3",
+          "args": [
+            "build",
+            "<raw-run>/macos-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:52.992Z",
+          "end": "2026-10-29T02:13:53.735Z",
+          "load_before": "32.99 46.14 49.75 27/2634 1576881",
+          "load_after": "32.99 46.14 49.75 27/2633 1577069",
+          "wall_s": 0.7432009390000021,
+          "max_rss_kib": 77812,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4144626620,
+          "user_s": 0.544704,
+          "sys_s": 0.200112,
+          "cpu_s": 0.7448159999999999,
+          "counter_file": "<raw-run>/macos-arm64-warm-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "macos-arm64-warm-4",
+          "args": [
+            "build",
+            "<raw-run>/macos-arm64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:13:53.736Z",
+          "end": "2026-10-29T02:13:54.367Z",
+          "load_before": "32.99 46.14 49.75 27/2633 1577069",
+          "load_after": "32.99 46.14 49.75 27/2633 1577265",
+          "wall_s": 0.6315311079999956,
+          "max_rss_kib": 76884,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4144442533,
+          "user_s": 0.458063,
+          "sys_s": 0.170015,
+          "cpu_s": 0.628078,
+          "counter_file": "<raw-run>/macos-arm64-warm-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        }
+      ],
+      "llvm": {
+        "name": "macos-arm64-llvm",
+        "args": [
+          "build",
+          "<raw-run>/macos-arm64/project",
+          "--product",
+          "llvm"
+        ],
+        "start": "2026-10-29T02:13:54.370Z",
+        "end": "2026-10-29T02:14:00.564Z",
+        "load_before": "32.99 46.14 49.75 26/2634 1577266",
+        "load_after": "32.59 45.84 49.64 26/2627 1578201",
+        "wall_s": 6.194272419999994,
+        "max_rss_kib": 184504,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 21608780283,
+        "user_s": 5.823984,
+        "sys_s": 0.323427,
+        "cpu_s": 6.147411,
+        "counter_file": "<raw-run>/macos-arm64-llvm.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "artifacts": [
+        {
+          "binary": "<raw-run>/macos-arm64/project/.nts/build/c/macos-13-aarch64/c",
+          "file_bytes": 145088,
+          "format": "Mach-O 64-bit arm64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "aarch64-apple-darwin"
+          }
+        },
+        {
+          "binary": "<raw-run>/macos-arm64/project/.nts/build/llvm/macos-13-aarch64/llvm",
+          "file_bytes": 145088,
+          "format": "Mach-O 64-bit arm64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "aarch64-apple-darwin"
+          }
+        }
+      ],
+      "archive_bytes": 1275288,
+      "native_objects": 37,
+      "native_cold_wall_s": 1.613473785
+    },
+    {
+      "plan": {
+        "name": "ios-simulator-x64",
+        "method": "ios",
+        "options": {
+          "arch": "x86_64",
+          "minimumVersion": "17.0"
+        },
+        "triple": "x86_64-apple-ios-simulator",
+        "format": "Mach-O"
+      },
+      "cold": {
+        "name": "ios-simulator-x64-cold",
+        "args": [
+          "build",
+          "<raw-run>/ios-simulator-x64/project",
+          "--product",
+          "c"
+        ],
+        "start": "2026-10-29T02:14:00.601Z",
+        "end": "2026-10-29T02:14:08.902Z",
+        "load_before": "32.59 45.84 49.64 27/2629 1578206",
+        "load_after": "31.72 45.22 49.39 26/2631 1579562",
+        "wall_s": 8.300555212999985,
+        "max_rss_kib": 148632,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 44489166432,
+        "user_s": 12.310278,
+        "sys_s": 1.606223,
+        "cpu_s": 13.916501,
+        "counter_file": "<raw-run>/ios-simulator-x64-cold.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "warm": [
+        {
+          "name": "ios-simulator-x64-warm-0",
+          "args": [
+            "build",
+            "<raw-run>/ios-simulator-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:14:08.938Z",
+          "end": "2026-10-29T02:14:09.639Z",
+          "load_before": "31.72 45.22 49.39 26/2631 1579565",
+          "load_after": "31.72 45.22 49.39 27/2631 1579752",
+          "wall_s": 0.7009636469999968,
+          "max_rss_kib": 76744,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4162003008,
+          "user_s": 0.529896,
+          "sys_s": 0.174236,
+          "cpu_s": 0.704132,
+          "counter_file": "<raw-run>/ios-simulator-x64-warm-0.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "ios-simulator-x64-warm-1",
+          "args": [
+            "build",
+            "<raw-run>/ios-simulator-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:14:09.639Z",
+          "end": "2026-10-29T02:14:10.352Z",
+          "load_before": "31.72 45.22 49.39 27/2631 1579752",
+          "load_after": "31.72 45.22 49.39 25/2632 1579940",
+          "wall_s": 0.7126409929999791,
+          "max_rss_kib": 77552,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4159391724,
+          "user_s": 0.550417,
+          "sys_s": 0.16627,
+          "cpu_s": 0.7166870000000001,
+          "counter_file": "<raw-run>/ios-simulator-x64-warm-1.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "ios-simulator-x64-warm-2",
+          "args": [
+            "build",
+            "<raw-run>/ios-simulator-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:14:10.352Z",
+          "end": "2026-10-29T02:14:11.077Z",
+          "load_before": "31.72 45.22 49.39 25/2632 1579940",
+          "load_after": "31.72 45.22 49.39 28/2639 1580105",
+          "wall_s": 0.7251278210000018,
+          "max_rss_kib": 77232,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4160239856,
+          "user_s": 0.526022,
+          "sys_s": 0.200173,
+          "cpu_s": 0.7261949999999999,
+          "counter_file": "<raw-run>/ios-simulator-x64-warm-2.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "ios-simulator-x64-warm-3",
+          "args": [
+            "build",
+            "<raw-run>/ios-simulator-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:14:11.077Z",
+          "end": "2026-10-29T02:14:11.849Z",
+          "load_before": "31.72 45.22 49.39 30/2639 1580105",
+          "load_after": "31.72 45.22 49.39 27/2647 1580264",
+          "wall_s": 0.7714258939999854,
+          "max_rss_kib": 80224,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4169968185,
+          "user_s": 0.551687,
+          "sys_s": 0.196406,
+          "cpu_s": 0.748093,
+          "counter_file": "<raw-run>/ios-simulator-x64-warm-3.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        },
+        {
+          "name": "ios-simulator-x64-warm-4",
+          "args": [
+            "build",
+            "<raw-run>/ios-simulator-x64/project",
+            "--product",
+            "c"
+          ],
+          "start": "2026-10-29T02:14:11.849Z",
+          "end": "2026-10-29T02:14:12.608Z",
+          "load_before": "31.72 45.22 49.39 29/2647 1580264",
+          "load_after": "31.26 44.90 49.27 25/2615 1580459",
+          "wall_s": 0.7584826369999792,
+          "max_rss_kib": 79972,
+          "counter_scope": "exec-inherited-user-instructions-v1",
+          "instructions": 4168264467,
+          "user_s": 0.562767,
+          "sys_s": 0.193854,
+          "cpu_s": 0.756621,
+          "counter_file": "<raw-run>/ios-simulator-x64-warm-4.perf",
+          "status": 0,
+          "signal": null,
+          "counter_error": null
+        }
+      ],
+      "llvm": {
+        "name": "ios-simulator-x64-llvm",
+        "args": [
+          "build",
+          "<raw-run>/ios-simulator-x64/project",
+          "--product",
+          "llvm"
+        ],
+        "start": "2026-10-29T02:14:12.609Z",
+        "end": "2026-10-29T02:14:17.384Z",
+        "load_before": "31.26 44.90 49.27 25/2615 1580459",
+        "load_after": "31.00 44.62 49.15 27/2648 1581199",
+        "wall_s": 4.77494327399999,
+        "max_rss_kib": 148584,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 22028186099,
+        "user_s": 4.501998,
+        "sys_s": 0.248936,
+        "cpu_s": 4.750934,
+        "counter_file": "<raw-run>/ios-simulator-x64-llvm.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      "artifacts": [
+        {
+          "binary": "<raw-run>/ios-simulator-x64/project/.nts/build/c/ios-17-x86_64/c",
+          "file_bytes": 119824,
+          "format": "Mach-O 64-bit x86_64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "x86_64-apple-ios-simulator"
+          }
+        },
+        {
+          "binary": "<raw-run>/ios-simulator-x64/project/.nts/build/llvm/ios-17-x86_64/llvm",
+          "file_bytes": 119824,
+          "format": "Mach-O 64-bit x86_64 executable, flags:<NOUNDEFS|DYLDLINK|TWOLEVEL|PIE|HAS_TLV_DESCRIPTORS>",
+          "metadata": {
+            "libraries": [
+              "liblibuv.a"
+            ],
+            "node": "24.20.0",
+            "source_sha256": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+            "target": "x86_64-apple-ios-simulator"
+          }
+        }
+      ],
+      "archive_bytes": 1185112,
+      "native_objects": 37,
+      "native_cold_wall_s": 2.176367241
+    }
+  ],
+  "path_scope": "<raw-run> is the retained measurement folder, <repo> its measured checkout and <home> its user home; raw artifacts remain outside git."
+}

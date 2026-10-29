@@ -1,0 +1,531 @@
+{
+  "protocolCorrection": {
+    "reason": "The original validator request reordered flags and created a second key. All original validator rows are rejected; original cold/warm C and LLVM program guards had already passed. Only five corrected validator launches are used here.",
+    "rejected_validation": [
+      {
+        "name": "warm-validation-0",
+        "args": [
+          "node-deps",
+          "<raw-run>/warm-request.json"
+        ],
+        "start": "2026-10-28T23:12:05.189Z",
+        "end": "2026-10-28T23:12:27.679Z",
+        "load_before": "20.48 36.74 34.44 11/1945 4120900",
+        "load_after": "17.75 35.07 33.94 2/1857 4129201",
+        "wall_s": 22.490286649,
+        "max_rss_kib": 141312,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 514001335281,
+        "user_s": 70.334063,
+        "sys_s": 13.72608,
+        "cpu_s": 84.060143,
+        "counter_file": "<raw-run>/warm-validation-0.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      {
+        "name": "warm-validation-1",
+        "args": [
+          "node-deps",
+          "<raw-run>/warm-request.json"
+        ],
+        "start": "2026-10-28T23:12:27.680Z",
+        "end": "2026-10-28T23:12:28.033Z",
+        "load_before": "17.75 35.07 33.94 2/1857 4129201",
+        "load_after": "17.75 35.07 33.94 6/1868 4129267",
+        "wall_s": 0.35359593299999686,
+        "max_rss_kib": 59244,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 7102331466,
+        "user_s": 0.270042,
+        "sys_s": 0.066518,
+        "cpu_s": 0.33655999999999997,
+        "counter_file": "<raw-run>/warm-validation-1.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      {
+        "name": "warm-validation-2",
+        "args": [
+          "node-deps",
+          "<raw-run>/warm-request.json"
+        ],
+        "start": "2026-10-28T23:12:28.033Z",
+        "end": "2026-10-28T23:12:28.386Z",
+        "load_before": "17.75 35.07 33.94 5/1867 4129267",
+        "load_after": "17.75 35.07 33.94 2/1850 4129323",
+        "wall_s": 0.3525377709999957,
+        "max_rss_kib": 58756,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 7102322658,
+        "user_s": 0.271793,
+        "sys_s": 0.064262,
+        "cpu_s": 0.336055,
+        "counter_file": "<raw-run>/warm-validation-2.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      {
+        "name": "warm-validation-3",
+        "args": [
+          "node-deps",
+          "<raw-run>/warm-request.json"
+        ],
+        "start": "2026-10-28T23:12:28.386Z",
+        "end": "2026-10-28T23:12:28.747Z",
+        "load_before": "17.75 35.07 33.94 2/1850 4129323",
+        "load_after": "17.75 35.07 33.94 2/1850 4129365",
+        "wall_s": 0.36077611199999954,
+        "max_rss_kib": 59248,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 7102337969,
+        "user_s": 0.292171,
+        "sys_s": 0.054043,
+        "cpu_s": 0.346214,
+        "counter_file": "<raw-run>/warm-validation-3.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      },
+      {
+        "name": "warm-validation-4",
+        "args": [
+          "node-deps",
+          "<raw-run>/warm-request.json"
+        ],
+        "start": "2026-10-28T23:12:28.747Z",
+        "end": "2026-10-28T23:12:29.100Z",
+        "load_before": "17.75 35.07 33.94 2/1850 4129365",
+        "load_after": "17.75 35.07 33.94 3/1850 4129462",
+        "wall_s": 0.3529894659999991,
+        "max_rss_kib": 58992,
+        "counter_scope": "exec-inherited-user-instructions-v1",
+        "instructions": 7102324409,
+        "user_s": 0.271595,
+        "sys_s": 0.068334,
+        "cpu_s": 0.339929,
+        "counter_file": "<raw-run>/warm-validation-4.perf",
+        "status": 0,
+        "signal": null,
+        "counter_error": null
+      }
+    ]
+  },
+  "program_cache_key": "f5b6618760655250410b73f6d537e612606389660b9957d6e1ff3c78b748ab9c",
+  "source": "3a9d79ffb1af230d7c997a2e064e9875a23401a7",
+  "profile": "release",
+  "scope": "exec-inherited-user-instructions-v1; includes GNU time and all compiler, assembler, archiver and linker descendants",
+  "conditions": {
+    "affinity": "pid 218396's current affinity list: 0-3,6-31",
+    "nice": 19,
+    "workers": 4,
+    "node": "v24.20.0",
+    "compiler": "clang version 23.1.3",
+    "archiver": "LLVM (http://llvm.org/):",
+    "queue": [
+      "gate: land 696bff1f6178 2026-10-28T23:14:03.882Z pid 4145404",
+      "landing: gating; holder nts-land-train-1793227994238-961bdc84; members 1396535405a8 2e122d32414c",
+      "queued: 2",
+      "  1396535405a8 30 min <home>/.cache/nts-land/submissions/helper2-web-chain-pr16-final-1396535405a8-uUp8tO/tree",
+      "  2e122d32414c 30 min <home>/.cache/nts-land/submissions/helper2-web-chain-pr26-final-2e122d32414c-enYJln/tree",
+      "main: f1e2c3719e1e (metadata slow)",
+      "verified: f1e2c3719e1e (gate); product mode strict; 0 pending entry(s)",
+      "shadow: manual only; 2 agreeing batch(es); last agreed",
+      "gate: land 696bff1f6178 2026-10-28T23:14:03.882Z pid 4145404",
+      "last landing: gating 696bff1f6178 at 2026-10-28T23:14:03.882Z"
+    ]
+  },
+  "payload": {
+    "raw_bytes": 38758881,
+    "compressed_bytes": 7835861
+  },
+  "executable": {
+    "baseline": {
+      "file_bytes": 47892432,
+      "text_bytes": 28885494,
+      "rodata_bytes": 7718784
+    },
+    "candidate": {
+      "file_bytes": 56492344,
+      "text_bytes": 29155542,
+      "rodata_bytes": 15958208
+    }
+  },
+  "cold": {
+    "name": "cold-program",
+    "args": [
+      "build",
+      "<raw-run>/project",
+      "--product",
+      "viaC"
+    ],
+    "start": "2026-10-28T23:11:27.967Z",
+    "end": "2026-10-28T23:11:56.475Z",
+    "load_before": "28.70 40.27 35.43 17/2229 4111479",
+    "load_after": "21.95 37.56 34.68 21/1962 4117540",
+    "wall_s": 28.506729515,
+    "max_rss_kib": 334536,
+    "counter_scope": "exec-inherited-user-instructions-v1",
+    "instructions": 541130943417,
+    "user_s": 84.696192,
+    "sys_s": 16.909284,
+    "cpu_s": 101.605476,
+    "counter_file": "<raw-run>/cold-program.perf",
+    "status": 0,
+    "signal": null,
+    "counter_error": null
+  },
+  "warm": [
+    {
+      "name": "warm-program-0",
+      "args": [
+        "build",
+        "<raw-run>/project",
+        "--product",
+        "viaC"
+      ],
+      "start": "2026-10-28T23:11:56.519Z",
+      "end": "2026-10-28T23:11:57.896Z",
+      "load_before": "21.95 37.56 34.68 21/1962 4117567",
+      "load_after": "21.95 37.56 34.68 14/1949 4118417",
+      "wall_s": 1.3766520229999988,
+      "max_rss_kib": 331524,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 23231376931,
+      "user_s": 3.359978,
+      "sys_s": 0.36591,
+      "cpu_s": 3.725888,
+      "counter_file": "<raw-run>/warm-program-0.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null
+    },
+    {
+      "name": "warm-program-1",
+      "args": [
+        "build",
+        "<raw-run>/project",
+        "--product",
+        "viaC"
+      ],
+      "start": "2026-10-28T23:11:57.896Z",
+      "end": "2026-10-28T23:11:59.106Z",
+      "load_before": "21.95 37.56 34.68 14/1949 4118417",
+      "load_after": "21.95 37.56 34.68 15/1950 4119327",
+      "wall_s": 1.2096407450000006,
+      "max_rss_kib": 331908,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 23208718692,
+      "user_s": 3.112577,
+      "sys_s": 0.337073,
+      "cpu_s": 3.44965,
+      "counter_file": "<raw-run>/warm-program-1.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null
+    },
+    {
+      "name": "warm-program-2",
+      "args": [
+        "build",
+        "<raw-run>/project",
+        "--product",
+        "viaC"
+      ],
+      "start": "2026-10-28T23:11:59.106Z",
+      "end": "2026-10-28T23:12:00.308Z",
+      "load_before": "21.95 37.56 34.68 15/1950 4119327",
+      "load_after": "21.39 37.19 34.58 15/1950 4119522",
+      "wall_s": 1.2019531060000008,
+      "max_rss_kib": 340696,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 23264421015,
+      "user_s": 3.137034,
+      "sys_s": 0.318545,
+      "cpu_s": 3.4555789999999997,
+      "counter_file": "<raw-run>/warm-program-2.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null
+    },
+    {
+      "name": "warm-program-3",
+      "args": [
+        "build",
+        "<raw-run>/project",
+        "--product",
+        "viaC"
+      ],
+      "start": "2026-10-28T23:12:00.308Z",
+      "end": "2026-10-28T23:12:01.725Z",
+      "load_before": "21.39 37.19 34.58 14/1950 4119522",
+      "load_after": "21.39 37.19 34.58 14/1953 4119730",
+      "wall_s": 1.4168239089999988,
+      "max_rss_kib": 337044,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 23336789115,
+      "user_s": 3.402744,
+      "sys_s": 0.388098,
+      "cpu_s": 3.790842,
+      "counter_file": "<raw-run>/warm-program-3.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null
+    },
+    {
+      "name": "warm-program-4",
+      "args": [
+        "build",
+        "<raw-run>/project",
+        "--product",
+        "viaC"
+      ],
+      "start": "2026-10-28T23:12:01.725Z",
+      "end": "2026-10-28T23:12:02.836Z",
+      "load_before": "21.39 37.19 34.58 14/1953 4119730",
+      "load_after": "21.39 37.19 34.58 16/1952 4120125",
+      "wall_s": 1.1114142499999944,
+      "max_rss_kib": 331432,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 23228663887,
+      "user_s": 3.033102,
+      "sys_s": 0.325248,
+      "cpu_s": 3.3583499999999997,
+      "counter_file": "<raw-run>/warm-program-4.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null
+    }
+  ],
+  "llvm": {
+    "name": "warm-llvm-program",
+    "args": [
+      "build",
+      "<raw-run>/project",
+      "--product",
+      "viaLlvm"
+    ],
+    "start": "2026-10-28T23:12:02.866Z",
+    "end": "2026-10-28T23:12:05.164Z",
+    "load_before": "21.39 37.19 34.58 14/1952 4120128",
+    "load_after": "20.48 36.74 34.44 10/1941 4120884",
+    "wall_s": 2.298028326,
+    "max_rss_kib": 338208,
+    "counter_scope": "exec-inherited-user-instructions-v1",
+    "instructions": 31311469196,
+    "user_s": 4.180352,
+    "sys_s": 0.400702,
+    "cpu_s": 4.581054,
+    "counter_file": "<raw-run>/warm-llvm-program.perf",
+    "status": 0,
+    "signal": null,
+    "counter_error": null
+  },
+  "validation": [
+    {
+      "name": "corrected-validation-0",
+      "args": [
+        "node-deps",
+        "<raw-run>/corrected-request.json"
+      ],
+      "start": "2026-10-28T23:23:33.068Z",
+      "end": "2026-10-28T23:23:33.742Z",
+      "load_before": "32.93 32.13 33.54 50/2629 220186",
+      "load_after": "32.93 32.13 33.54 39/2567 221535",
+      "wall_s": 0.6723389930000001,
+      "max_rss_kib": 59368,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 7101937208,
+      "user_s": 0.472364,
+      "sys_s": 0.140149,
+      "cpu_s": 0.612513,
+      "counter_file": "<raw-run>/corrected-validation-0.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null,
+      "phases": {
+        "source_validation_s": 0.166529221,
+        "toolchain_validation_s": 0.183290046,
+        "archives_s": 0.283898508
+      }
+    },
+    {
+      "name": "corrected-validation-1",
+      "args": [
+        "node-deps",
+        "<raw-run>/corrected-request.json"
+      ],
+      "start": "2026-10-28T23:23:33.743Z",
+      "end": "2026-10-28T23:23:34.393Z",
+      "load_before": "32.93 32.13 33.54 39/2567 221535",
+      "load_after": "32.93 32.13 33.54 30/2523 222838",
+      "wall_s": 0.6508780269999997,
+      "max_rss_kib": 59060,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 7101960818,
+      "user_s": 0.442773,
+      "sys_s": 0.129035,
+      "cpu_s": 0.5718080000000001,
+      "counter_file": "<raw-run>/corrected-validation-1.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null,
+      "phases": {
+        "source_validation_s": 0.158336944,
+        "toolchain_validation_s": 0.198076793,
+        "archives_s": 0.25461637
+      }
+    },
+    {
+      "name": "corrected-validation-2",
+      "args": [
+        "node-deps",
+        "<raw-run>/corrected-request.json"
+      ],
+      "start": "2026-10-28T23:23:34.394Z",
+      "end": "2026-10-28T23:23:35.120Z",
+      "load_before": "32.93 32.13 33.54 30/2523 222838",
+      "load_after": "35.82 32.74 33.73 60/2544 223780",
+      "wall_s": 0.7258346410000004,
+      "max_rss_kib": 59140,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 7101931481,
+      "user_s": 0.499097,
+      "sys_s": 0.151806,
+      "cpu_s": 0.650903,
+      "counter_file": "<raw-run>/corrected-validation-2.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null,
+      "phases": {
+        "source_validation_s": 0.164109405,
+        "toolchain_validation_s": 0.202864794,
+        "archives_s": 0.309570473
+      }
+    },
+    {
+      "name": "corrected-validation-3",
+      "args": [
+        "node-deps",
+        "<raw-run>/corrected-request.json"
+      ],
+      "start": "2026-10-28T23:23:35.120Z",
+      "end": "2026-10-28T23:23:35.886Z",
+      "load_before": "35.82 32.74 33.73 64/2548 223784",
+      "load_after": "35.82 32.74 33.73 36/2579 224091",
+      "wall_s": 0.7665218890000001,
+      "max_rss_kib": 59148,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 7101919580,
+      "user_s": 0.496221,
+      "sys_s": 0.141674,
+      "cpu_s": 0.637895,
+      "counter_file": "<raw-run>/corrected-validation-3.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null,
+      "phases": {
+        "source_validation_s": 0.157653289,
+        "toolchain_validation_s": 0.207831392,
+        "archives_s": 0.347064534
+      }
+    },
+    {
+      "name": "corrected-validation-4",
+      "args": [
+        "node-deps",
+        "<raw-run>/corrected-request.json"
+      ],
+      "start": "2026-10-28T23:23:35.887Z",
+      "end": "2026-10-28T23:23:36.539Z",
+      "load_before": "35.82 32.74 33.73 32/2579 224091",
+      "load_after": "35.82 32.74 33.73 33/2578 224236",
+      "wall_s": 0.6522210280000004,
+      "max_rss_kib": 59368,
+      "counter_scope": "exec-inherited-user-instructions-v1",
+      "instructions": 7101918508,
+      "user_s": 0.444695,
+      "sys_s": 0.146444,
+      "cpu_s": 0.591139,
+      "counter_file": "<raw-run>/corrected-validation-4.perf",
+      "status": 0,
+      "signal": null,
+      "counter_error": null,
+      "phases": {
+        "source_validation_s": 0.151540713,
+        "toolchain_validation_s": 0.196364249,
+        "archives_s": 0.261612319
+      }
+    }
+  ],
+  "programs": [
+    {
+      "product": "viaC",
+      "needed": [
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "file_bytes": 543592,
+      "text_bytes": 76865,
+      "rodata_bytes": 28552
+    },
+    {
+      "product": "viaLlvm",
+      "needed": [
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "file_bytes": 543552,
+      "text_bytes": 76833,
+      "rodata_bytes": 28552
+    }
+  ],
+  "entries": [
+    {
+      "target": "brotli",
+      "objects": 35,
+      "cold_wall_s": 1.740695278,
+      "archive_bytes": 1732096
+    },
+    {
+      "target": "libuv",
+      "objects": 35,
+      "cold_wall_s": 1.07576129,
+      "archive_bytes": 1549890
+    },
+    {
+      "target": "openssl",
+      "objects": 1138,
+      "cold_wall_s": 20.046352558,
+      "archive_bytes": 19772952
+    },
+    {
+      "target": "zlib",
+      "objects": 15,
+      "cold_wall_s": 0.289630216,
+      "archive_bytes": 246112
+    },
+    {
+      "target": "zlib_adler32_simd",
+      "objects": 1,
+      "cold_wall_s": 0.067491717,
+      "archive_bytes": 5278
+    },
+    {
+      "target": "zlib_data_chunk_simd",
+      "objects": 2,
+      "cold_wall_s": 0.13894642,
+      "archive_bytes": 57582
+    },
+    {
+      "target": "zstd",
+      "objects": 26,
+      "cold_wall_s": 2.216867921,
+      "archive_bytes": 1024358
+    }
+  ],
+  "path_scope": "<raw-run> is the retained raw measurement directory; <repo> is its measured source checkout; <home> is the measured user home. Raw files remain outside git."
+}
