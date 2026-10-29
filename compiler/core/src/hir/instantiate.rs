@@ -54,7 +54,7 @@ use nts_semantic_schema::{
     IndexSignature, NodeId, NodeKind, PropertyRecord, SemanticSnapshot, SignatureId,
     SignatureRecord, SymbolId, TypeId, TypeKind, TypeRecord, syntax,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 use std::cell::{OnceCell, RefCell};
 use std::collections::BTreeMap;
 
@@ -254,7 +254,7 @@ impl<'a> Templates<'a> {
             }
             let mut mentioned = Vec::new();
             for arg in &args {
-                parameters_in(snapshot, *arg, &mut mentioned, 0);
+                parameters_in(snapshot, *arg, &mut mentioned);
             }
             let mentioned: Vec<Owner> = mentioned
                 .iter()
@@ -1332,7 +1332,7 @@ fn one_owner_of(
     ty: TypeId,
 ) -> Option<Owner> {
     let mut mentioned = Vec::new();
-    parameters_in(snapshot, ty, &mut mentioned, 0);
+    parameters_in(snapshot, ty, &mut mentioned);
     let mut seen: Option<Owner> = None;
     for parameter in &mentioned {
         let owner = *owners.get(parameter)?;
@@ -1347,47 +1347,51 @@ fn one_owner_of(
 
 /// The type parameters a type mentions, through arrays, unions, tuples,
 /// functions and instantiations.
-fn parameters_in(snapshot: &SemanticSnapshot, ty: TypeId, into: &mut Vec<TypeId>, depth: u32) {
-    if depth > DEPTH {
-        return;
-    }
-    match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
-        Some(TypeKind::TypeParameter { .. }) => {
-            if !into.contains(&ty) {
-                into.push(ty);
-            }
+fn parameters_in(snapshot: &SemanticSnapshot, ty: TypeId, into: &mut Vec<TypeId>) {
+    // The type graph is finite, but it need not be shallow or acyclic. Every
+    // type enters once, so absence means the complete graph has no parameter;
+    // it never means that a recursion depth stopped the search early.
+    let mut pending = vec![ty];
+    let mut visited = FxHashSet::default();
+    let mut found: FxHashSet<_> = into.iter().copied().collect();
+    while let Some(ty) = pending.pop() {
+        if !visited.insert(ty) {
+            continue;
         }
-        Some(TypeKind::Array(element)) => parameters_in(snapshot, *element, into, depth + 1),
-        Some(TypeKind::Tuple(items) | TypeKind::Union(items) | TypeKind::Intersection(items)) => {
-            for item in items {
-                parameters_in(snapshot, *item, into, depth + 1);
-            }
-        }
-        Some(TypeKind::Function(signature)) => {
-            if let Some(signature) = snapshot.signatures.get(signature.0 as usize) {
-                for parameter in &signature.parameters {
-                    parameters_in(snapshot, parameter.ty, into, depth + 1);
+        match snapshot.types.get(ty.0 as usize).map(|record| &record.kind) {
+            Some(TypeKind::TypeParameter { .. }) => {
+                if found.insert(ty) {
+                    into.push(ty);
                 }
-                parameters_in(snapshot, signature.return_type, into, depth + 1);
             }
-        }
-        // **Whatever its kind, a type's arguments are part of it.** This was
-        // an `Object` arm, and a form the frontend left a placeholder is
-        // `Structured` -- so `WritableWriterState<W>` written inside
-        // `WritableStreamState<W>` mentioned no parameter as far as this
-        // could tell, was taken for a concrete type, and was never
-        // instantiated. Its readers substituted and its layout did not.
-        _ => {
-            for arg in arguments(snapshot, ty) {
-                parameters_in(snapshot, arg, into, depth + 1);
+            Some(TypeKind::Array(element)) => pending.push(*element),
+            Some(
+                TypeKind::Tuple(items) | TypeKind::Union(items) | TypeKind::Intersection(items),
+            ) => {
+                pending.extend(items.iter().rev().copied());
             }
+            Some(TypeKind::Function(signature)) => {
+                if let Some(signature) = snapshot.signatures.get(signature.0 as usize) {
+                    pending.push(signature.return_type);
+                    pending.extend(
+                        signature
+                            .parameters
+                            .iter()
+                            .rev()
+                            .map(|parameter| parameter.ty),
+                    );
+                }
+            }
+            // Arguments also belong to opaque/Structured forms, not only
+            // Object records. This is the same edge policy as the old walk.
+            _ => pending.extend(arguments(snapshot, ty).into_iter().rev()),
         }
     }
 }
 
 pub(super) fn mentions_a_parameter(snapshot: &SemanticSnapshot, ty: TypeId) -> bool {
     let mut found = Vec::new();
-    parameters_in(snapshot, ty, &mut found, 0);
+    parameters_in(snapshot, ty, &mut found);
     !found.is_empty()
 }
 
@@ -1453,6 +1457,66 @@ mod tests {
                 count
             );
         }
+    }
+
+    #[test]
+    fn parameter_presence_and_ownership_cover_deep_and_cyclic_type_graphs() {
+        let mut kinds = vec![
+            TypeKind::TypeParameter {
+                name: "T".into(),
+                is_this: false,
+                constraint: None,
+            },
+            TypeKind::TypeParameter {
+                name: "U".into(),
+                is_this: false,
+                constraint: None,
+            },
+        ];
+        let mut deep = TypeId(1);
+        for _ in 0..40 {
+            kinds.push(TypeKind::Array(deep));
+            deep = TypeId(u32::try_from(kinds.len() - 1).expect("small graph"));
+        }
+        let root = TypeId(u32::try_from(kinds.len()).expect("small graph"));
+        kinds.push(TypeKind::Tuple(vec![TypeId(0), deep]));
+        let mut graph = snapshot(kinds);
+        let owners = FxHashMap::from_iter([
+            (TypeId(0), Owner::Function(NodeId(10))),
+            (TypeId(1), Owner::Function(NodeId(11))),
+        ]);
+        assert!(
+            mentions_a_parameter(&graph, deep),
+            "a deep parameter is not concrete"
+        );
+        assert_eq!(
+            one_owner_of(&graph, &owners, root),
+            None,
+            "a deep second owner cannot be omitted"
+        );
+        // One difference: both parameters really have the same owner.
+        let same = FxHashMap::from_iter([
+            (TypeId(0), Owner::Function(NodeId(10))),
+            (TypeId(1), Owner::Function(NodeId(10))),
+        ]);
+        assert_eq!(
+            one_owner_of(&graph, &same, root),
+            Some(Owner::Function(NodeId(10)))
+        );
+        let cycle = TypeId(u32::try_from(graph.types.len()).expect("small graph"));
+        graph.types.push(TypeRecord {
+            kind: TypeKind::Structured,
+            symbol: None,
+        });
+        graph.type_arguments.insert(cycle, vec![cycle, root]);
+        let mut all = Vec::new();
+        parameters_in(&graph, cycle, &mut all);
+        assert_eq!(all, vec![TypeId(0), TypeId(1)]);
+        graph.type_arguments.insert(cycle, vec![cycle]);
+        assert!(
+            !mentions_a_parameter(&graph, cycle),
+            "a closed parameter-free cycle completes"
+        );
     }
 
     fn snapshot(kinds: Vec<TypeKind>) -> SemanticSnapshot {
