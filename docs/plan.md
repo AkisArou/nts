@@ -349,8 +349,14 @@ add, in order:
      points into the region, with a sabotage case (runtime).
 2. **Experiments on the rows nts loses,** each on hand-edited emitted code
    before any compiler change, each shown with every ratio:
-   - `cyclic-churn`: the collector's counters, then an adaptive
-     trigger if repeated visits dominate (runtime);
+   - `cyclic-churn`: the collector's counters are measured. Every candidate
+     is young, about two thirds of the bytes a collection visits are still
+     live, and nothing is visited twice, so the adaptive trigger's condition
+     does not hold. Its cycles survive many iterations, so resetting a region
+     per iteration is not safe either. Nothing planned targets young
+     candidates that are mostly still live: candidate aging and a trigger
+     that follows the reclaimed share are each measured by hand on emitted C
+     before a mechanism is chosen (runtime);
    - `json-parse`: a hand-written typed parser row against the
      hosts' native `JSON.parse`, with and without validation, to size the
      generated parser (helper2);
@@ -369,8 +375,28 @@ add, in order:
      promise. It is adopted only as a proof in the shared IR that keeps the
      order of queued microtasks, cleanup and iterator closing, so every async
      ordering fixture must still agree with node (helper2 for the row,
-     runtime2 for the experiment). Generator-loop fusion needs no experiment
-     while the generator rows already run at C++'s speed.
+     runtime2 for the experiment);
+   - the generator rows run at C++'s speed but lose to Bun's AOT compiler,
+     so a hand-fused generator loop is measured against it, kept only as a
+     proof in the shared IR that keeps the protocol's order (L16) (compiler).
+   The 10-29 comparator sitting's loss record maps every row below
+   [the bar](README.md#the-bar) to the item that covers it. These are the
+   ones nothing covered:
+   - `str-append-length` loses to all three engines while observing only the
+     length: strings.md's condition for a rope is met, so its first choice,
+     an internal segmented builder that materializes an ordinary string, is
+     built and measured against a rope (runtime2, after the flow landing);
+   - the numeric kernels (`awfy-nbody`, both Mandelbrot rows,
+     `clbg-spectral-norm`, `bytes`, `checksum`, `array-predicates`, `loop`):
+     the hot loop's machine code beside ScriptC's and Bun AOT's, to find the
+     instruction-level difference before any design. Candidates include
+     vectorizing independent iterations without reordering floating-point
+     operations, and integral proofs (compiler);
+   - `pipeline`: a hand-fused map and reduce against the materialized
+     arrays, to size a fusion design (compiler);
+   - the JVM-only gaps (`cyclic-churn`, `release-acyclic` and
+     `clbg-spectral-norm` on the JVM): the JVM's collector and flags, and
+     the object layout, measured per row (runtime2).
 3. **Already planned, confirmed:** loop versions behind one entry test (the
    integral regions, being built), the generator protocol (L16), typed
    `JSON.parse` into its layout, helper contracts in memory stage 0, slices
@@ -398,9 +424,10 @@ add, in order:
   - native: C++;
   - JVM: Java;
   - Wasm: C compiled to Wasm, and AssemblyScript;
-  - every backend: node, Bun's ahead-of-time compiler
-    (`bun build --compile --aot`) and ScriptC's native output with its Node
-    fallback turned off, the two AOT compilers replacing Bun's JIT (10-29);
+  - every backend: node, Bun's JIT and Bun's ahead-of-time compiler
+    (`bun build --compile --aot`) from the same build, and ScriptC's native
+    output with its Node fallback turned off (10-29), each held to
+    [the bar](README.md#the-bar);
   - each at a pinned version, node, Bun, ScriptC, the JDK and clang included
     (P-4).
 - **Instruction counts** are the regression signal between runs; wall time is
