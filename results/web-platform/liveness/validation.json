@@ -1,0 +1,4833 @@
+{
+  "version": 1,
+  "source": "319b3840c2d05736ec210ec730f2cf54e9ae5d89",
+  "base": "52a3153c5cd24249fe42501535a5a7c3d2d09d9a",
+  "compiler_sha256": "a2ae91d52b354777de826392f1b93256ddfd71d9219b5f0ec42427912960c7ba",
+  "host": {
+    "before": {
+      "tests": 12163,
+      "pass": 11493,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 670
+    },
+    "after": {
+      "tests": 12169,
+      "pass": 11499,
+      "fail": 0,
+      "cancelled": 0,
+      "skipped": 670
+    },
+    "added_controls": 6
+  },
+  "wpt": {
+    "unchanged_reports": 629,
+    "fail_to_hung": [],
+    "reports": [
+      {
+        "path": "FileAPI/FileReader/progress_event_bubbles_cancelable.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-array-buffer.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-bytes.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-constructor.any.js",
+        "pass": 67,
+        "fail": 0,
+        "blocked": 6
+      },
+      {
+        "path": "FileAPI/blob/Blob-newobject.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-slice-overflow.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-slice.any.js",
+        "pass": 150,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-stream.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/blob/Blob-text.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/file/File-constructor.any.js",
+        "pass": 49,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/fileReader.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/Determining-Encoding.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/FileReader-event-handler-attributes.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/FileReader-multiple-reads.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_abort.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_error.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_events.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsArrayBuffer.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsBinaryString.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsDataURL.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readAsText.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_readystate.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "FileAPI/reading-data-section/filereader_result.any.js",
+        "pass": 9,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "FileAPI/unicode.html",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "area/legacy.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "area/ordered.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/abort/AbortSignal.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/abort/abort-signal-any.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/abort/event.any.js",
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/abort/timeout.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/AddEventListenerOptions-once.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/AddEventListenerOptions-passive.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/AddEventListenerOptions-signal.any.js",
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/CustomEvent.html",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "dom/events/Event-constructors.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/Event-isTrusted.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "dom/events/Event-returnValue.html",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "dom/events/Event-type.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "dom/events/EventTarget-add-remove-listener.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/EventTarget-addEventListener.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/EventTarget-constructible.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "dom/events/EventTarget-removeEventListener.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "encoding/api-basics.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/api-invalid-label.any.js",
+        "pass": 3421,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/api-replacement-encodings.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/api-surrogates-utf8.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/encodeInto.any.js",
+        "pass": 110,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "encoding/sharedarraybuffer.https.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/backpressure.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/decode-attributes.any.js",
+        "pass": 26,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "encoding/streams/decode-bad-chunks.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/decode-ignore-bom.any.js",
+        "pass": 12,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/decode-incomplete-input.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/decode-non-utf8.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 7
+      },
+      {
+        "path": "encoding/streams/decode-split-character.any.js",
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/decode-utf8.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "encoding/streams/encode-bad-chunks.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/encode-utf8.any.js",
+        "pass": 19,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/streams/readable-writable-properties.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-arguments.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-byte-order-marks.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-copy.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-eof.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-fatal-streaming.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-fatal.any.js",
+        "pass": 36,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-ignorebom.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-labels.any.js",
+        "pass": 15,
+        "fail": 0,
+        "blocked": 207
+      },
+      {
+        "path": "encoding/textdecoder-streaming.any.js",
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textdecoder-utf16-surrogates.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "encoding/textencoder-constructor-non-utf.any.js",
+        "pass": 43,
+        "fail": 0,
+        "blocked": 36
+      },
+      {
+        "path": "encoding/textencoder-utf16-surrogates.any.js",
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/dedicated-worker/eventsource-constructor-no-new.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/dedicated-worker/eventsource-eventtarget.worker.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/event-data.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-close.window.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-constructor-empty-url.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-constructor-non-same-origin.window.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-constructor-stringify.window.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-constructor-url-bogus.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-cross-origin-redirect-origin.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-cross-origin.window.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "eventsource/eventsource-eventtarget.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-onmessage-trusted.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-onmessage.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-onopen.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-reconnect.window.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/eventsource-url.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-bom-2.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-bom-split.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-bom-utf-16.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-bom.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-comments.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-data-before-final-empty-line.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-data.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-event-empty.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-event.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-id-2.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-id-3.window.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-id-null.window.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-id-redirect.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-id.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-parsing.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-retry-empty.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-field-unknown.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-leading-space.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-mime-bogus.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-mime-trailing-semicolon.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-mime-valid-bogus.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-newlines.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-null-character.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/format-utf-8.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/request-accept.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/request-cache-control.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/request-credentials.window.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/request-redirect.window.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "eventsource/request-status-error.window.js",
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/body/cloned-any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/body/formdata.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/body/mime-type.any.js",
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/body/textstream.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/headers/header-setcookie.any.js",
+        "pass": 23,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "fetch/api/headers/headers-basic.any.js",
+        "pass": 20,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "fetch/api/headers/headers-casing.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/headers/headers-combine.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/headers/headers-errors.any.js",
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/headers/headers-forbidden-override.any.js",
+        "pass": 18,
+        "fail": 0,
+        "blocked": 72
+      },
+      {
+        "path": "fetch/api/headers/headers-no-cors.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 8
+      },
+      {
+        "path": "fetch/api/headers/headers-normalize.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/headers/headers-record.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 10
+      },
+      {
+        "path": "fetch/api/headers/headers-structure.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/forbidden-method.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-clone-readable-stream-body.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-clone.sub.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "fetch/api/request/request-constructor-init-body-override.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-consume-empty.any.js",
+        "pass": 13,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "fetch/api/request/request-consume.any.js",
+        "pass": 45,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-disturbed.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "fetch/api/request/request-error.any.js",
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-headers.any.js",
+        "pass": 24,
+        "fail": 0,
+        "blocked": 37
+      },
+      {
+        "path": "fetch/api/request/request-init-001.sub.html",
+        "pass": 50,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "fetch/api/request/request-init-002.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-init-contenttype.any.js",
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-init-priority.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "fetch/api/request/request-init-stream.any.js",
+        "pass": 23,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-keepalive.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/request/request-structure.any.js",
+        "pass": 24,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/json.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "fetch/api/response/response-cancel-stream.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-clone.any.js",
+        "pass": 17,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-consume-empty.any.js",
+        "pass": 13,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "fetch/api/response/response-consume-stream.any.js",
+        "pass": 15,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-error-from-stream.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-error.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-form-data.html",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-from-stream.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-init-001.any.js",
+        "pass": 9,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-init-002.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-init-contenttype.any.js",
+        "pass": 18,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-static-error.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-static-json.any.js",
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-static-redirect.any.js",
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-stream-bad-chunk.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-1.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-2.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-3.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-4.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-5.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-6.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-stream-disturbed-by-pipe.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "fetch/api/response/response-stream-with-broken-then.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 6
+      },
+      {
+        "path": "hr-time/basic.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "hr-time/monotonic-clock.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "html/webappapis/scripting/processing-model-2/unhandled-promise-rejections/promise-rejection-event-constructor.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "html/webappapis/scripting/reporterror.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "performance-timeline/performanceentry-tojson.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/abort.any.js",
+        "pass": 33,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/close-propagation-backward.any.js",
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/close-propagation-forward.any.js",
+        "pass": 30,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/error-propagation-backward.any.js",
+        "pass": 35,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/error-propagation-forward.any.js",
+        "pass": 32,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/flow-control.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/general-addition.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/general.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/multiple-propagation.any.js",
+        "pass": 9,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/pipe-through.any.js",
+        "pass": 43,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/then-interception.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "streams/piping/throwing-options.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/piping/transform-streams.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/queuing-strategies.any.js",
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-byte-streams/bad-buffers-and-views.any.js",
+        "pass": 24,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-byte-streams/construct-byob-request.any.js",
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-byte-streams/enqueue-with-detached-buffer.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "streams/readable-byte-streams/general.any.js",
+        "pass": 98,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "streams/readable-byte-streams/non-transferable-buffers.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "streams/readable-byte-streams/patched-global.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "streams/readable-byte-streams/read-min.any.js",
+        "pass": 23,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "streams/readable-byte-streams/respond-after-enqueue.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-byte-streams/tee.any.js",
+        "pass": 39,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-byte-streams/templated.any.js",
+        "pass": 34,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/async-iterator.any.js",
+        "pass": 40,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "streams/readable-streams/bad-strategies.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/bad-underlying-sources.any.js",
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/cancel.any.js",
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/constructor.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/count-queuing-strategy-integration.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/crashtests/garbage-collection.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/default-reader.any.js",
+        "pass": 29,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/floating-point-total-queue-size.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/from.any.js",
+        "pass": 48,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/garbage-collection.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/general.any.js",
+        "pass": 38,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/owning-type-message-port.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "streams/readable-streams/owning-type-video-frame.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 5
+      },
+      {
+        "path": "streams/readable-streams/owning-type.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 5
+      },
+      {
+        "path": "streams/readable-streams/patched-global.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "streams/readable-streams/reentrant-strategies.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/tee.any.js",
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/readable-streams/templated.any.js",
+        "pass": 91,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transferable/transform-stream-members.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "streams/transform-streams/backpressure.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/cancel.any.js",
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/errors.any.js",
+        "pass": 21,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/flush.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/general.any.js",
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/lipfuzz.any.js",
+        "pass": 20,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/patched-global.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "streams/transform-streams/properties.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/reentrant-strategies.any.js",
+        "pass": 11,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/strategies.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/transform-streams/terminate.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/aborting.any.js",
+        "pass": 65,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/bad-strategies.any.js",
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/bad-underlying-sinks.any.js",
+        "pass": 14,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/byte-length-queuing-strategy.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/close.any.js",
+        "pass": 26,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/constructor.any.js",
+        "pass": 13,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/count-queuing-strategy.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/crashtests/garbage-collection.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/error.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/floating-point-total-queue-size.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/garbage-collection.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/general.any.js",
+        "pass": 16,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/properties.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/reentrant-strategy.any.js",
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/start.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "streams/writable-streams/write.any.js",
+        "pass": 13,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "url/urlencoded-parser.any.js",
+        "pass": 105,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "urlpattern/urlpattern-constructor.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "urlpattern/urlpattern-empty-regexp-group.html",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "urlpattern/urlpattern-hasregexpgroups.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "urlpattern/urlpattern.any.js",
+        "pass": 370,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "urlpattern/urlpattern.https.any.js",
+        "pass": 370,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/clear_all_marks.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/clear_all_measures.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/clear_non_existent_mark.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/clear_non_existent_measure.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/clear_one_mark.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/clear_one_measure.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/entry_type.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/mark-entry-constructor.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "user-timing/mark-errors.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/mark-l3.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "user-timing/mark-measure-feature-detection.html",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/mark-measure-return-objects.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/mark.any.js",
+        "pass": 22,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/measure-l3.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/measure-with-dict.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "user-timing/measure_syntax_err.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/structured-serialize-detail.any.js",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 7
+      },
+      {
+        "path": "user-timing/user-timing-tojson.html",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "user-timing/user_timing_exists.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constants.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 50
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-and-prototype.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-constructor-behavior.any.js",
+        "pass": 46,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-custom-bindings.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 7
+      },
+      {
+        "path": "webidl/ecmascript-binding/es-exceptions/DOMException-is-error.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1000-reason.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1000-reason.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1000-verify-code.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1000-verify-code.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1000.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1000.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1005-verify-code.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1005-verify-code.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1005.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-1005.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-2999-reason.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-2999-reason.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-3000-reason.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-3000-reason.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-3000-verify-code.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-3000-verify-code.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-4999-reason.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-4999-reason.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-Reason-124Bytes.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-Reason-124Bytes.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-delayed.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-delayed.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-onlyReason.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-onlyReason.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-readyState-Closed.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-readyState-Closed.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-readyState-Closing.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-readyState-Closing.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-reason-unpaired-surrogates.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-reason-unpaired-surrogates.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-server-initiated-close.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-server-initiated-close.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-undefined.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Close-undefined.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-asciiSep-protocol-string.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-asciiSep-protocol-string.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-blocked-port.any.js",
+        "pass": 82,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "websockets/Create-extensions-empty.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-extensions-empty.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-http-urls.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-invalid-urls.any.js",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-non-absolute-url.any.js",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-nonAscii-protocol-string.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-nonAscii-protocol-string.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-protocol-with-space.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-protocol-with-space.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-protocols-repeated-case-insensitive.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-protocols-repeated-case-insensitive.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-protocols-repeated.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-protocols-repeated.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-url-with-space.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-url-with-space.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-url-with-windows-1252-encoding.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-array-protocols.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-array-protocols.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-binaryType-blob.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-binaryType-blob.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol-empty.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol-empty.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol-setCorrectly.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol-setCorrectly.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol-string.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol-string.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url-protocol.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Create-valid-url.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-0byte-data.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-0byte-data.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-65K-data.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-65K-data.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-before-open.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-before-open.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-65K-arraybuffer.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-65K-arraybuffer.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybuffer.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybuffer.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-float16.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-float16.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-float32.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-float32.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-float64.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-float64.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-int16-offset.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-int16-offset.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-int32.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-int32.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-int8.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-int8.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint16-offset-length.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint16-offset-length.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint32-offset.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint32-offset.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint8-offset-length.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint8-offset-length.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint8-offset.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-arraybufferview-uint8-offset.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-blob.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-binary-blob.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-data.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-data.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-data.worker.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-data.worker.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-null.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-null.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-paired-surrogates.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-paired-surrogates.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-unicode-data.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-unicode-data.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-unpaired-surrogates.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/Send-unpaired-surrogates.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/basic-auth.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/002.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/002.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/004.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/004.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/005.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binary/005.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binaryType-wrong-value.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/binaryType-wrong-value.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/close-invalid.any.js?default",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/close-invalid.any.js?wss",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/closing-handshake/002.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/closing-handshake/002.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/closing-handshake/003.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/closing-handshake/003.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/closing-handshake/004.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/closing-handshake/004.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/004.html?default",
+        "pass": 161,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/004.html?wss",
+        "pass": 161,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/005.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/005.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/007.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/007.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/008.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/008.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/009.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/009.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/010.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/010.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/011.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/011.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/012.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/012.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/013.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/013.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/014.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/014.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/016.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/016.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/017.html?default",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/017.html?wss",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/018.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/018.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/019.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/019.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/020.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/020.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/021.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/021.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/022.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/022.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/third-param-ignored.any.js?default",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/constructor/third-param-ignored.any.js?wss",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/cookies/cross-origin-cookie-set.html",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/eventhandlers.any.js?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/eventhandlers.any.js?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/extended-payload-length.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/extended-payload-length.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/CloseEvent/clean-close.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/CloseEvent/clean-close.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/CloseEvent/constructor.html",
+        "pass": 2,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/CloseEvent/historical.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-arraybuffer.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-arraybuffer.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-blob.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-blob.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-getter.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-getter.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-setter.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-defineProperty-setter.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-deleting.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-deleting.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-getting.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-getting.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-initial.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-initial.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-large.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-large.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-readonly.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-readonly.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-unicode.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/bufferedAmount/bufferedAmount-unicode.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-basic.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-basic.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-connecting-async.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-connecting-async.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-connecting.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-connecting.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-multiple.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-multiple.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-nested.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-nested.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-replace.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-replace.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-return.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/close/close-return.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/001.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/001.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/002.html?default",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/002.html?wss",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/003.html?default",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/003.html?wss",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 4
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/004.html?default",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/004.html?wss",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/005.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/005.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/006.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/constants/006.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/001.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/001.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/002.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/002.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/004.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/004.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/006.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/006.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/010.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/010.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/011.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/011.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/012.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/012.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/013.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/013.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/014.html?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/014.html?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/015.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/015.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/016.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/016.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/017.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/017.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/018.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/018.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/020.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/events/020.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/extensions/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/extensions/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/protocol/protocol-initial.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/protocol/protocol-initial.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/002.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/002.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/003.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/003.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/004.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/004.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/005.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/005.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/006.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/006.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/007.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/007.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/008.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/readyState/008.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/002.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/002.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/003.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/003.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/004.html?default",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/004.html?wss",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/005.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/005.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/006.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/006.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/007.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/007.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/008.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/008.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/009.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/009.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/011.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/011.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/012.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/send/012.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/002.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/002.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/003.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/003.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/004.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/004.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/005.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/005.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/006.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/006.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/resolve.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/interfaces/WebSocket/url/resolve.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/keeping-connection-open/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/keeping-connection-open/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/mixed-content.https.any.js",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/opening-handshake/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/002.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/002.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/003-sets-origin.worker.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/003.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/003.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/005.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/005.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/006.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/006.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/opening-handshake/received-301-code.html",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/referrer.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/security/001.html?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/security/001.html?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/send-data-isolation.sub.html",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 3
+      },
+      {
+        "path": "websockets/send-many-64K-messages-with-backpressure.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/send-many-64K-messages-with-backpressure.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/stream/tentative/abort.any.js?wss",
+        "pass": 5,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/stream/tentative/backpressure-receive.any.js?wss",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/stream/tentative/backpressure-send.any.js?wss",
+        "pass": 0,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/stream/tentative/close.any.js?default",
+        "pass": 26,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/stream/tentative/close.any.js?wss",
+        "pass": 26,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/stream/tentative/constructor.any.js?wss",
+        "pass": 8,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/stream/tentative/read.any.js?default",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/stream/tentative/read.any.js?wss",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/stream/tentative/remote-close.any.js?default",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/stream/tentative/remote-close.any.js?wss",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 1
+      },
+      {
+        "path": "websockets/stream/tentative/websocket-error.any.js",
+        "pass": 10,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "websockets/stream/tentative/write.any.js?default",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "websockets/stream/tentative/write.any.js?wss",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 2
+      },
+      {
+        "path": "xhr/formdata/append.any.js",
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/constructor.any.js",
+        "pass": 1,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/delete.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/foreach.any.js",
+        "pass": 4,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/get.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/has.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/iteration.any.js",
+        "pass": 3,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/set-blob.any.js",
+        "pass": 6,
+        "fail": 0,
+        "blocked": 0
+      },
+      {
+        "path": "xhr/formdata/set.any.js",
+        "pass": 7,
+        "fail": 0,
+        "blocked": 0
+      }
+    ]
+  },
+  "legacy": {
+    "unchanged_case_records": 2817,
+    "hung": 0,
+    "files": {
+      "FileAPI/blob/Blob-array-buffer.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-bytes.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-constructor.any.js": {
+        "pass": 73,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-newobject.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-slice-overflow.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-slice.any.js": {
+        "pass": 150,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-stream.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/blob/Blob-text.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "FileAPI/file/File-constructor.any.js": {
+        "pass": 49,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/abort/AbortSignal.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/abort/abort-signal-any.any.js": {
+        "pass": 14,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/abort/event.any.js": {
+        "pass": 16,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/abort/timeout.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/AddEventListenerOptions-once.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/AddEventListenerOptions-passive.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/AddEventListenerOptions-signal.any.js": {
+        "pass": 11,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/Event-constructors.any.js": {
+        "pass": 14,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/Event-isTrusted.any.js": {
+        "pass": 0,
+        "fail": 0,
+        "excluded": 1
+      },
+      "dom/events/EventTarget-add-remove-listener.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/EventTarget-addEventListener.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/EventTarget-constructible.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "dom/events/EventTarget-removeEventListener.any.js": {
+        "pass": 0,
+        "fail": 0,
+        "excluded": 1
+      },
+      "encoding/api-basics.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/api-surrogates-utf8.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/encodeInto.any.js": {
+        "pass": 111,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/idlharness.any.js": {
+        "pass": 40,
+        "fail": 0,
+        "excluded": 15
+      },
+      "encoding/streams/backpressure.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/decode-attributes.any.js": {
+        "pass": 26,
+        "fail": 0,
+        "excluded": 2
+      },
+      "encoding/streams/decode-bad-chunks.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/decode-ignore-bom.any.js": {
+        "pass": 12,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/decode-incomplete-input.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/decode-non-utf8.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 7
+      },
+      "encoding/streams/decode-split-character.any.js": {
+        "pass": 11,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/decode-utf8.any.js": {
+        "pass": 12,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/encode-bad-chunks.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/encode-utf8.any.js": {
+        "pass": 19,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/streams/readable-writable-properties.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-arguments.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-byte-order-marks.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-copy.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-eof.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-fatal.any.js": {
+        "pass": 36,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-ignorebom.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-streaming.any.js": {
+        "pass": 32,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textdecoder-utf16-surrogates.any.js": {
+        "pass": 10,
+        "fail": 0,
+        "excluded": 0
+      },
+      "encoding/textencoder-utf16-surrogates.any.js": {
+        "pass": 7,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/event-data.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-constructor-empty-url.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-constructor-url-bogus.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-eventtarget.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-onmessage-trusted.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-onmessage.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-onopen.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-prototype.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/eventsource-url.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-bom-2.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-bom.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-comments.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-data-before-final-empty-line.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-data.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-event-empty.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-event.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-id-2.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-id.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-parsing.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-retry-bogus.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-retry-empty.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-retry.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-field-unknown.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-leading-space.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-mime-bogus.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-mime-trailing-semicolon.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-mime-valid-bogus.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-newlines.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-null-character.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/format-utf-8.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "eventsource/request-accept.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/headers/header-setcookie.any.js": {
+        "pass": 23,
+        "fail": 0,
+        "excluded": 1
+      },
+      "fetch/api/headers/headers-basic.any.js": {
+        "pass": 20,
+        "fail": 0,
+        "excluded": 3
+      },
+      "fetch/api/headers/headers-casing.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/headers/headers-combine.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/headers/headers-errors.any.js": {
+        "pass": 18,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/headers/headers-normalize.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/headers/headers-structure.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/forbidden-method.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/request-constructor-init-body-override.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/request-consume-empty.any.js": {
+        "pass": 13,
+        "fail": 0,
+        "excluded": 1
+      },
+      "fetch/api/request/request-init-002.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/request-init-contenttype.any.js": {
+        "pass": 18,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/request-init-stream.any.js": {
+        "pass": 23,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/request-keepalive.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/request/request-structure.any.js": {
+        "pass": 24,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-cancel-stream.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 4
+      },
+      "fetch/api/response/response-consume-empty.any.js": {
+        "pass": 13,
+        "fail": 0,
+        "excluded": 1
+      },
+      "fetch/api/response/response-error-from-stream.any.js": {
+        "pass": 14,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-error.any.js": {
+        "pass": 10,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-from-stream.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-init-001.any.js": {
+        "pass": 9,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-init-002.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-init-contenttype.any.js": {
+        "pass": 18,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-static-error.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-static-json.any.js": {
+        "pass": 16,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-static-redirect.any.js": {
+        "pass": 11,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/api/response/response-stream-bad-chunk.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/data-urls/base64.any.js": {
+        "pass": 81,
+        "fail": 0,
+        "excluded": 0
+      },
+      "fetch/data-urls/processing.any.js": {
+        "pass": 73,
+        "fail": 0,
+        "excluded": 0
+      },
+      "service-workers/cache-storage/cache-add.https.any.js": {
+        "pass": 22,
+        "fail": 0,
+        "excluded": 1
+      },
+      "service-workers/cache-storage/cache-delete.https.any.js": {
+        "pass": 9,
+        "fail": 0,
+        "excluded": 0
+      },
+      "service-workers/cache-storage/cache-keys.https.any.js": {
+        "pass": 17,
+        "fail": 0,
+        "excluded": 0
+      },
+      "service-workers/cache-storage/cache-match.https.any.js": {
+        "pass": 22,
+        "fail": 0,
+        "excluded": 3
+      },
+      "service-workers/cache-storage/cache-matchAll.https.any.js": {
+        "pass": 16,
+        "fail": 0,
+        "excluded": 0
+      },
+      "service-workers/cache-storage/cache-put.https.any.js": {
+        "pass": 25,
+        "fail": 0,
+        "excluded": 2
+      },
+      "service-workers/cache-storage/cache-storage-keys.https.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "service-workers/cache-storage/cache-storage.https.any.js": {
+        "pass": 10,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/idlharness.any.js": {
+        "pass": 202,
+        "fail": 0,
+        "excluded": 13
+      },
+      "streams/piping/abort.any.js": {
+        "pass": 33,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/close-propagation-backward.any.js": {
+        "pass": 16,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/close-propagation-forward.any.js": {
+        "pass": 30,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/error-propagation-backward.any.js": {
+        "pass": 35,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/error-propagation-forward.any.js": {
+        "pass": 32,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/flow-control.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/general-addition.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/general.any.js": {
+        "pass": 14,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/multiple-propagation.any.js": {
+        "pass": 9,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/pipe-through.any.js": {
+        "pass": 43,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/then-interception.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/throwing-options.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/piping/transform-streams.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/queuing-strategies.any.js": {
+        "pass": 20,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/bad-buffers-and-views.any.js": {
+        "pass": 24,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/construct-byob-request.any.js": {
+        "pass": 16,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/crashtests/tee-locked-stream.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/enqueue-with-detached-buffer.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/general.any.js": {
+        "pass": 101,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/non-transferable-buffers.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/patched-global.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/read-min.any.js": {
+        "pass": 24,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/respond-after-enqueue.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/tee.any.js": {
+        "pass": 39,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-byte-streams/templated.any.js": {
+        "pass": 33,
+        "fail": 0,
+        "excluded": 1
+      },
+      "streams/readable-streams/async-iterator.any.js": {
+        "pass": 40,
+        "fail": 0,
+        "excluded": 1
+      },
+      "streams/readable-streams/bad-strategies.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/bad-underlying-sources.any.js": {
+        "pass": 22,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/cancel.any.js": {
+        "pass": 11,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/constructor.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/count-queuing-strategy-integration.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/crashtests/garbage-collection.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/default-reader.any.js": {
+        "pass": 29,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/floating-point-total-queue-size.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/from.any.js": {
+        "pass": 48,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/garbage-collection.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/general.any.js": {
+        "pass": 38,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/patched-global.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/reentrant-strategies.any.js": {
+        "pass": 10,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/tee.any.js": {
+        "pass": 26,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/readable-streams/templated.any.js": {
+        "pass": 91,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/backpressure.any.js": {
+        "pass": 14,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/cancel.any.js": {
+        "pass": 11,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/errors.any.js": {
+        "pass": 21,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/flush.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/general.any.js": {
+        "pass": 26,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/lipfuzz.any.js": {
+        "pass": 20,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/patched-global.any.js": {
+        "pass": 2,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/properties.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/reentrant-strategies.any.js": {
+        "pass": 11,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/strategies.any.js": {
+        "pass": 10,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/transform-streams/terminate.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/aborting.any.js": {
+        "pass": 65,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/bad-strategies.any.js": {
+        "pass": 7,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/bad-underlying-sinks.any.js": {
+        "pass": 14,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/byte-length-queuing-strategy.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/close.any.js": {
+        "pass": 26,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/constructor.any.js": {
+        "pass": 13,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/count-queuing-strategy.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/error.any.js": {
+        "pass": 5,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/floating-point-total-queue-size.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/garbage-collection.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/general.any.js": {
+        "pass": 16,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/properties.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/reentrant-strategy.any.js": {
+        "pass": 7,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/start.any.js": {
+        "pass": 8,
+        "fail": 0,
+        "excluded": 0
+      },
+      "streams/writable-streams/write.any.js": {
+        "pass": 13,
+        "fail": 0,
+        "excluded": 0
+      },
+      "websockets/stream/tentative/websocket-error.any.js": {
+        "pass": 10,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/append.any.js": {
+        "pass": 7,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/constructor.any.js": {
+        "pass": 1,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/delete.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/foreach.any.js": {
+        "pass": 4,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/get.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/has.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/iteration.any.js": {
+        "pass": 3,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/set-blob.any.js": {
+        "pass": 6,
+        "fail": 0,
+        "excluded": 0
+      },
+      "xhr/formdata/set.any.js": {
+        "pass": 7,
+        "fail": 0,
+        "excluded": 0
+      }
+    }
+  },
+  "compiled": {
+    "c": {
+      "compared": 353,
+      "population": 357,
+      "unchanged_declines": 4
+    },
+    "llvm": {
+      "compared": 353,
+      "population": 357,
+      "unchanged_declines": 4
+    },
+    "jvm": {
+      "compared": 353,
+      "population": 357,
+      "unchanged_declines": 4
+    }
+  },
+  "preflight": [
+    {
+      "name": "before-inputs",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "types",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "instrument-controls",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "controls",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "before-check",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "after-check",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "dry",
+      "status": 0,
+      "signal": null
+    },
+    {
+      "name": "tooling",
+      "status": 0,
+      "signal": null
+    }
+  ],
+  "logs": {
+    "helper2-hung-refreshed-before-check.log": "8be30e658b73a575a7cc7b80c215a64faaa3d73a7f3638acdd28e7e944a4f138",
+    "helper2-hung-refreshed-after-check.log": "c55121a44bc27604fd4d9c3524328739a73ca029d59bb1a4af518d820acb6dba",
+    "helper2-hung-refreshed-tooling.log": "58e4b482cc41e5b6a9c4ef09a0f286c7a18aaed6046ea6f9e984c88d66378571"
+  }
+}
