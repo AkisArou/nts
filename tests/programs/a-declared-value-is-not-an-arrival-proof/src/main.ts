@@ -44,8 +44,18 @@ export function checkedCallback(value: number): number {
 
 function jsClaim(value: 64): number { return value + 1; }
 function jsControl(value: number): number { return value + 1; }
-export function javascriptArrival(value: unknown): number { return jsClaim(value as 64); }
-export function javascriptControl(value: unknown): number { return jsControl(value as number); }
+// This family tests arrival facts. Narrow the tag first: an erased-to-literal
+// assertion now checks membership in nts while node erases it. A typed number
+// asserted to 64 remains unchecked and still supplies no value/range proof.
+// Erased membership and its TypeError have their own literal-assertion guard.
+export function javascriptArrival(value: unknown): number {
+  if (typeof value !== "number") return -1;
+  return jsClaim(value as 64);
+}
+export function javascriptControl(value: unknown): number {
+  if (typeof value !== "number") return -1;
+  return jsControl(value);
+}
 export function erasedArrival(value: number): number { return javascriptArrival(value); }
 export function erasedControl(value: number): number { return javascriptControl(value); }
 
