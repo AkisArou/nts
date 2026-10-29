@@ -1,0 +1,211 @@
+{
+  "source": {
+    "binary": "/home/akisarou/.cache/nts-pins/compiler-literal-membership-6c5004be54ee/nts",
+    "sha256": "41a9b973d691934849b0f7e02cf64173fcdbd299db4d24858bb21518ee33506a",
+    "source": "6c5004be54eed71a94cbb6605a9d5f7af5d5a2b3"
+  },
+  "contract": "Erased literal and enum assertions check strict-equality membership before payload projection; typed casts preserve their value without a check or a declared value fact.",
+  "scope": {
+    "erased_sources": [
+      "unknown",
+      "any",
+      "exported C caller",
+      "exported Java caller",
+      "recovered source erasure"
+    ],
+    "targets": [
+      "numeric literal",
+      "string literal",
+      "numeric union",
+      "string union",
+      "enum",
+      "const enum member",
+      "mixed union",
+      "nullable literal",
+      "boolean literal",
+      "bigint literal"
+    ],
+    "semantic_controls": [
+      "matching values",
+      "typed numeric/string identity",
+      "NaN rejects",
+      "zero admits both signs and preserves reciprocal",
+      "BigInt compares by value",
+      "called cast preserves catch",
+      "finally executes once",
+      "cast failure precedes index effect"
+    ],
+    "json_parse": "existing NTS1100 boundary; not represented as executed coverage"
+  },
+  "before": {
+    "c": {
+      "cases": 130,
+      "native_policy_mismatches": 66,
+      "raw_exit": 1,
+      "families": [
+        "any",
+        "bigint mismatch",
+        "boolean mismatch",
+        "called mixed mismatch",
+        "enum",
+        "finally mismatch",
+        "index null",
+        "index undefined",
+        "member",
+        "mixed other number",
+        "mixed other string",
+        "nullable mismatch",
+        "number",
+        "recovered",
+        "string mismatch",
+        "string union mismatch",
+        "union"
+      ]
+    },
+    "llvm": {
+      "cases": 130,
+      "native_policy_mismatches": 66,
+      "raw_exit": 1,
+      "families": [
+        "any",
+        "bigint mismatch",
+        "boolean mismatch",
+        "called mixed mismatch",
+        "enum",
+        "finally mismatch",
+        "index null",
+        "index undefined",
+        "member",
+        "mixed other number",
+        "mixed other string",
+        "nullable mismatch",
+        "number",
+        "recovered",
+        "string mismatch",
+        "string union mismatch",
+        "union"
+      ]
+    },
+    "jvm": {
+      "cases": 130,
+      "native_policy_mismatches": 66,
+      "raw_exit": 1,
+      "families": [
+        "any",
+        "bigint mismatch",
+        "boolean mismatch",
+        "called mixed mismatch",
+        "enum",
+        "finally mismatch",
+        "index null",
+        "index undefined",
+        "member",
+        "mixed other number",
+        "mixed other string",
+        "nullable mismatch",
+        "number",
+        "recovered",
+        "string mismatch",
+        "string union mismatch",
+        "union"
+      ]
+    }
+  },
+  "after": {
+    "cases_per_backend": 130,
+    "native_providers": [
+      "NoGC",
+      "RC with POISON and ASan/UBSan"
+    ],
+    "native_emitters": [
+      "C",
+      "LLVM"
+    ],
+    "rc_live_objects_and_bytes": 0,
+    "jvm": "separately compiled Java caller, -Xverify:all",
+    "domain_unit_tests": 2,
+    "core_structural_tests": 1,
+    "workspace_all_target_clippy_exit": 0,
+    "matching_and_typed_node_controls": 59
+  },
+  "matrix": {
+    "groups": 268,
+    "passed": 1914,
+    "failed": 0,
+    "ignored": 5,
+    "ignored_lines": [
+      "test hir::lower::implementation_tests::measured_native_and_gtk_declarations_match_the_old_scan ... ignored, full GIR surface: supply NTS_IMPLEMENTATION_PROJECTS",
+      "test no_program_keeps_an_unrequested_reachable_type ... ignored, whole-program corpus capture audit; run explicitly for a frontend switch",
+      "test program::diagnostic_scope_tests::composed_matches_plain_for_corpus_and_interop_configs ... ignored, one-off audit; NTS_SCOPE_CONFIGS is a newline-separated absolute config list",
+      "test program::tests::shared_graph_environment_probe ... ignored, child-process helper for the shared-graph environment test",
+      "test show_generated ... ignored, output for a human, not an assertion"
+    ]
+  },
+  "five_c_records": {
+    "language": {
+      "raw_exit": 0,
+      "summary": [
+        "  pass-count: 6974",
+        "  negatives-accepted: 1315",
+        "         0  REGRESSED",
+        "         0  CHANGED",
+        "         0  MISSING",
+        "  reconciled"
+      ]
+    },
+    "builtins": {
+      "raw_exit": 0,
+      "summary": [
+        "  pass-count: 828",
+        "  negatives-accepted: 185",
+        "         0  REGRESSED",
+        "         0  CHANGED",
+        "         0  MISSING",
+        "  reconciled"
+      ]
+    },
+    "annexb": {
+      "raw_exit": 0,
+      "summary": [
+        "  pass-count: 9",
+        "  negatives-accepted: 1",
+        "         0  REGRESSED",
+        "         0  CHANGED",
+        "         0  MISSING",
+        "  reconciled"
+      ]
+    },
+    "staging": {
+      "raw_exit": 0,
+      "summary": [
+        "  pass-count: 53",
+        "  negatives-accepted: 3",
+        "         0  REGRESSED",
+        "         0  CHANGED",
+        "         0  MISSING",
+        "  reconciled"
+      ]
+    },
+    "harness": {
+      "raw_exit": 0,
+      "summary": [
+        "  pass-count: 17",
+        "  negatives-accepted: 0",
+        "         0  REGRESSED",
+        "         0  CHANGED",
+        "         0  MISSING",
+        "  reconciled"
+      ]
+    }
+  },
+  "evidence": {
+    "directory": "/home/akisarou/.cache/nts-scratch/compiler/erased-literal-membership14",
+    "sha256": {
+      "baseline.json": "3b630634b9c855b7a5918730b0c90a598c78dde8787cd59a824052c01802746d",
+      "focused-final/stdout": "de3c2912777ff903e9242bcd276f2507f0913b55b142c97220b7ef03e69b56d0",
+      "matrix/stdout": "00dd03dc057329b346a9557ad1866d752a733cc87e008b1ee97d9d805e392078",
+      "matrix/stderr": "e5693cd5ace2450d4ca5f05f992260cffb3e0a906a538f2aa170afa95163fe61",
+      "node-controls.json": "2355c5094ce9b56157bacb558fb2a219fe6e60e1296718ef4793929c7e975887"
+    }
+  }
+}
