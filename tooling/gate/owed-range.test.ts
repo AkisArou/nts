@@ -1,8 +1,7 @@
-import {acquireRevision,dependencyCache} from "../lanes/dependency-inputs.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { createServer, type Socket } from "node:net";
@@ -128,14 +127,12 @@ export const allSteps=()=>["tooling"];
 
 test("a rule cannot narrow its own committed range and dirty policy cannot alter it", async t => {
   const directory = mkdtempSync(join(tmpdir(), "owed-range-test-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
-  const repo = join(directory, "repo");
+  const repo = join(directory, basename(directory)+"-repo");
+  t.after(() => {if(existsSync(join(repo,".git")))execFileSync("git",["worktree","remove","--force",repo],{cwd:ROOT,stdio:["ignore","pipe","pipe"]});rmSync(directory, { recursive: true, force: true });});
   const env = { ...process.env, GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
   for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !/GIT_(AUTHOR|COMMITTER)_/.test(key)) delete env[key];
-  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  execFileSync("git", ["clone", "--quiet", "--shared", ROOT, repo], { env, stdio: ["ignore", "pipe", "pipe"] });
-  const cache=dependencyCache(repo);t.after(()=>rmSync(cache,{recursive:true,force:true}));
-  await acquireRevision(repo,repo,"HEAD");
+  const git = (...args: string[]) => execFileSync("git", ["-c","core.hooksPath=/dev/null",...args], { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  execFileSync("git", ["worktree","add","--quiet","--detach",repo,"HEAD"], { cwd:ROOT,env, stdio: ["ignore", "pipe", "pipe"] });
   const base = git("rev-parse", "HEAD");
   const policy = join(repo, "tooling/gate/owed.mjs");
   const original = readFileSync(policy, "utf8");
@@ -161,7 +158,7 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   assert.deepEqual(selectRange(repo, `${base}..${tip}`).checks, selected.checks);
   assert.equal(git("rev-parse", "HEAD"), tip);
   const worktrees = git("worktree", "list", "--porcelain");
-  assert.equal(worktrees.split("\n").filter(l => l.startsWith("worktree ")).length, 1, "endpoint trees are collected");
+  assert.equal(worktrees.split("\n").filter(l => l.startsWith(`worktree ${directory}/`)).length, 1, "the fixture's detached tree remains registered");
   const committed = git("show", `${tip}:tooling/gate/owed.mjs`);
   assert.ok(committed.includes("export function selfTest() {"));
   writeFileSync(policy, committed.replace("export function selfTest() {", 'export function selfTest() { return "broken rule control"; }\nfunction unusedOriginalSelfTest() {'));
@@ -271,12 +268,11 @@ test("transitive imports and rule data both prevent stable-selector narrowing wh
 });
 
 test("the real unchanged selector reaches a newly added census test without a core fallback",async t=>{
-  const directory=mkdtempSync(join(tmpdir(),"owed-real-leaf-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
-  const repo=join(directory,"repo"),env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
-  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
-  execFileSync("git",["clone","--quiet","--shared",ROOT,repo],{env,stdio:["ignore","pipe","pipe"]});
-  const cache=dependencyCache(repo);t.after(()=>rmSync(cache,{recursive:true,force:true}));
-  await acquireRevision(repo,repo,"HEAD");
+  const directory=mkdtempSync(join(tmpdir(),"owed-real-leaf-"));
+  const repo=join(directory,basename(directory)+"-repo"),env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  t.after(()=>{if(existsSync(join(repo,".git")))execFileSync("git",["worktree","remove","--force",repo],{cwd:ROOT,stdio:["ignore","pipe","pipe"]});rmSync(directory,{recursive:true,force:true});});
+  const git=(...args:string[])=>execFileSync("git",["-c","core.hooksPath=/dev/null",...args],{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  execFileSync("git",["worktree","add","--quiet","--detach",repo,"HEAD"],{cwd:ROOT,env,stdio:["ignore","pipe","pipe"]});
   const base=git("rev-parse","HEAD"),path="tooling/census/new-scope-control.test.ts";
   writeFileSync(join(repo,path),"import {test} from 'node:test';test('new leaf',()=>{});\n");git("add",path);git("commit","-qm","new leaf");
   const selected=selectRange(repo,`${base}..HEAD`);
