@@ -1,7 +1,7 @@
 import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
-import { COUNTER_SCOPE, COMPILE_WORK_PROFILE } from "./compile-counter.ts";
+import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS } from "./compile-counter.ts";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -21,7 +21,7 @@ test("integrity executes every listing and counts only a kept prepared child", (
     writeFileSync(compiler, `#!/usr/bin/env node
 import {appendFileSync} from "node:fs";
 const argv=process.argv.slice(2);
-appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv,ambient:Object.fromEntries(["LANG", "LC_ALL", "TZ", "FORCE_COLOR", "TERM"].map(key=>[key,process.env[key]]))})+"\\n");
+appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv,ambient:Object.fromEntries(["LANG", "LC_ALL", "TZ", "FORCE_COLOR", "TERM", "RAYON_NUM_THREADS"].map(key=>[key,process.env[key]]))})+"\\n");
 if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
 `);
     chmodSync(compiler, 0o755);
@@ -56,8 +56,8 @@ child.on("close",status=>{
       assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
       assert.match(result.stdout, /1 of 1 project\(s\) measured, 1 function\(s\)/);
       const calls = readFileSync(commands, "utf8").trim().split("\n").map(JSON.parse);
-      assert.deepEqual(calls.map(c => c.argv.slice(0, -1)), [["hir", "--prepared", ...(keep ? ["--workers", "1"] : [])], ["hir"], ["layouts"], ["refusals"]]);
-      for (const call of calls) assert.deepEqual(call.ambient, FIXED_AMBIENT);
+      assert.deepEqual(calls.map(c => c.argv.slice(0, -1)), [["hir", "--prepared", ...(keep ? ["--checkers", "1"] : [])], ["hir"], ["layouts"], ["refusals"]]);
+      for (const [index,call] of calls.entries()) assert.deepEqual(call.ambient, index===0 && keep ? {...FIXED_AMBIENT,RAYON_NUM_THREADS:"1"} : FIXED_AMBIENT);
       const counted = existsSync(counters) ? readFileSync(counters, "utf8").trim().split("\n").map(JSON.parse) : [];
       assert.deepEqual(counted.map(c => c.pid), keep ? [calls[0].pid] : []);
       if (keep) {
@@ -67,6 +67,7 @@ child.on("close",status=>{
         assert.equal(measured.counter_scope, COUNTER_SCOPE);
         assert.equal(measured.arm, "nogc");
         assert.equal(measured.work_profile, COMPILE_WORK_PROFILE);
+        assert.deepEqual(measured.work_settings, COMPILE_WORK_SETTINGS);
         assert.equal(JSON.parse(readFileSync(join(arm, "listings/meta.json"), "utf8")).arm, "nogc");
         assert.ok(existsSync(measured.counter_file), "the raw counter file is retained");
         assert.equal(measured.instructions, 123456);

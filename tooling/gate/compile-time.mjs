@@ -1,4 +1,4 @@
-import { FIXED_AMBIENT } from "./canonical-environment.ts";
+import { measuredCompileEnvironment } from "./canonical-environment.ts";
 // Did lowering a runtime module regress beyond its calibrated instruction budget?
 //
 //   node tooling/gate/compile-time.mjs            check against compile-times.tsv
@@ -41,7 +41,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from "./cputime.mjs";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileArm, compileCommand, readCounterTable } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, compileWorkProblem, compileArm, compileCommand, readCounterTable } from "./compile-counter.ts";
 import { withToken } from "./tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -97,7 +97,7 @@ if (FROM) {
     console.log(`  NOT MEASURED: incompatible counter scope in ${FROM}; attached counts cannot be reused`);
     process.exit(2);
   }
-  if (meta.work_profile !== COMPILE_WORK_PROFILE) {
+  if (compileWorkProblem(meta)) {
     console.log(`  NOT MEASURED: incompatible compiler work profile in ${FROM}`);
     process.exit(2);
   }
@@ -124,9 +124,11 @@ const { rows: base, ratio: RATIO } = baseline;
 
 function lower(module) {
   return withToken(async () => {
+    const measuredEnvironment=measuredCompileEnvironment(process.env);
+    const work_settings=compileWorkSettings(measuredEnvironment);
     const counted = spawnCounted(NTS, compileCommand(ARM, module), { cwd: ROOT, stdio: "ignore",
-      env: { ...process.env, ...FIXED_AMBIENT }, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
-    return counted.measurement.then(row => ({ ...row, work_profile: COMPILE_WORK_PROFILE }));
+      env: measuredEnvironment, counterFile: join(COUNTERS, `${module.replaceAll("/", "_")}.perf`) });
+    return counted.measurement.then(row => ({ ...row, work_profile: COMPILE_WORK_PROFILE, work_settings }));
   });
 }
 

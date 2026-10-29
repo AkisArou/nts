@@ -161,7 +161,8 @@ import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-proj
 import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { COUNTER_SCOPE, spawnCounted } from "../gate/cputime.mjs";
-import { COMPILE_WORK_PROFILE, compileCommand } from "../gate/compile-counter.ts";
+import { COMPILE_WORK_PROFILE, compileWorkSettings, compileCommand } from "../gate/compile-counter.ts";
+import { measuredCompileEnvironment } from "../gate/canonical-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -1302,7 +1303,9 @@ const run = (args) => slot(() => withToken(() =>
     // The native producer captures anew; there is no producer-cache mode.
     // Only a kept prepared listing supplies the compile-time step's counters.
     const timedRun = KEEP && ADDON.test(args.at(-1)) && args[0] === "hir" && args[1] === "--prepared";
-    const counted = timedRun ? spawnCounted(NTS, compileCommand("nogc", args.at(-1)), { cwd: ROOT, env,
+    const measuredEnvironment=timedRun?measuredCompileEnvironment(env):env;
+    const work_settings=timedRun?compileWorkSettings(measuredEnvironment):undefined;
+    const counted = timedRun ? spawnCounted(NTS, compileCommand("nogc", args.at(-1)), { cwd: ROOT, env:measuredEnvironment,
       counterFile: join(KEEP, `${args.at(-1).replaceAll("/", "_")}.perf`) }) : null;
     const child = counted?.child ?? spawn(NTS, args, { cwd: ROOT, env });
     // Only the prepared listing supplies compile-time's launch-time counters.
@@ -1315,7 +1318,7 @@ const run = (args) => slot(() => withToken(() =>
     child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
     child.on("close", (status, signal) => {
       clearTimeout(timer);
-      cpu.then((counters) => resolve({ ...counters, work_profile: timedRun ? COMPILE_WORK_PROFILE : undefined, status, signal, stdout, stderr }));
+      cpu.then((counters) => resolve({ ...counters, work_profile: timedRun ? COMPILE_WORK_PROFILE : undefined, work_settings, status, signal, stdout, stderr }));
     });
   })));
 
@@ -1343,7 +1346,7 @@ function keep(project, done) {
   if (!KEEP || !ADDON.test(project)) return;
   const name = project.replaceAll("/", "_");
   writeFileSync(join(KEEP, `${name}.txt`), `${done.stdout}${done.stderr}`);
-  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ arm: "nogc", work_profile: done.work_profile, status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null, counter_scope: done.counter_scope ?? null, counter_file: done.counter_file ?? null, counter_error: done.counter_error ?? null, user_s: done.user_s ?? null, sys_s: done.sys_s ?? null }));
+  writeFileSync(join(KEEP, `${name}.json`), JSON.stringify({ arm: "nogc", work_profile: done.work_profile, work_settings:done.work_settings, status: done.status ?? null, signal: done.signal ?? null, error: done.error?.message ?? null, cpu_s: done.cpu_s ?? null, instructions: done.instructions ?? null, counter_scope: done.counter_scope ?? null, counter_file: done.counter_file ?? null, counter_error: done.counter_error ?? null, user_s: done.user_s ?? null, sys_s: done.sys_s ?? null }));
 }
 
 const cost = {};
@@ -1394,7 +1397,7 @@ const started = Date.now();
 const costKey = process.argv.includes("--runtime") ? "integrity-runtime" : "integrity";
 await Promise.all(longestFirst(costKey, projects, (p) => pathOf.get(p) ?? p).map(scan));
 recordCosts(costKey, cost);
-if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), counter_scope: COUNTER_SCOPE, work_profile: COMPILE_WORK_PROFILE, arm: "nogc", projects }, null, 1));
+if (KEEP) writeFileSync(join(KEEP, "meta.json"), JSON.stringify({ nts: NTS, sha256: sha256Of(NTS), counter_scope: COUNTER_SCOPE, work_profile: COMPILE_WORK_PROFILE, work_settings:compileWorkSettings(measuredCompileEnvironment(env)), arm: "nogc", projects }, null, 1));
 
 const key = (v) => `${v.project}\t${v.rule}\t${stable(v.subject)}`;
 const fresh = found.filter((v) => !known.has(key(v))).sort((a, b) => key(a).localeCompare(key(b)));

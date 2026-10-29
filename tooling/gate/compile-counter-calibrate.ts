@@ -1,4 +1,4 @@
-import { FIXED_AMBIENT } from "./canonical-environment.ts";
+import { FIXED_AMBIENT, measuredCompileEnvironment } from "./canonical-environment.ts";
 // Five A/A repetitions of every compile-time module, on one immutable compiler.
 // node tooling/gate/compile-counter-calibrate.ts --run-dir <evidence directory>
 // --record measures then publishes; --publish <summary.json> uses retained raw evidence.
@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as poll } from "node:timers/promises";
 import { Admission } from "./admission.ts";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, COUNTER_SCOPE, compileArm, compileCommand, counterProblem, calibratedTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, counterProblem, calibratedTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -60,14 +60,16 @@ const publish = (summary: Calibration) => {
 const retained = option("--publish");
 if (retained) { publish(JSON.parse(readFileSync(retained, "utf8"))); process.exit(0); }
 if (existsSync(join(out, "summary.json")) || existsSync(join(out, "observations.jsonl"))) throw new Error(`refusing to overwrite evidence in ${out}`);
+const measuredEnvironment=measuredCompileEnvironment(process.env);
+const work_settings=compileWorkSettings(measuredEnvironment);
 const tasks = Array.from({ length: 5 }, (_, repeat) => modules.map(module => ({ module, repeat: repeat + 1 }))).flat();
 const rows: (CalibrationRun & { cpu_s: number; instructions: number })[] = [];
 const admission = new Admission({ report: console.log });
 let next = 0;
 let failed = false;
-writeFileSync(join(out, "provenance.json"), JSON.stringify({ arm, work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, root, commit, nts, sha256,
+writeFileSync(join(out, "provenance.json"), JSON.stringify({ arm, work_profile: COMPILE_WORK_PROFILE, work_settings, counter_scope: COUNTER_SCOPE, root, commit, nts, sha256,
   started: new Date().toISOString(), jobs, repetitions: 5, modules, command: compileCommand(arm, "<module>"),
-  environment: { ...FIXED_AMBIENT },
+  environment: { ...FIXED_AMBIENT, RAYON_NUM_THREADS:measuredEnvironment.RAYON_NUM_THREADS },
   scope_note: "all threads and descendants from exec; these module commands have no process descendants; sum raw cpu_core and cpu_atom" }, null, 2) + "\n");
 await Promise.all(Array.from({ length: jobs }, async () => {
   while (!failed && next < tasks.length) {
@@ -78,7 +80,7 @@ await Promise.all(Array.from({ length: jobs }, async () => {
     const name = `${task.module.replaceAll("/", "_")}-${task.repeat}`;
     const began = performance.now();
     const counted = spawnCounted(nts, compileCommand(arm, task.module), { cwd: root, stdio: ["ignore", "pipe", "pipe"],
-      env: { ...process.env, ...FIXED_AMBIENT }, counterFile: join(out, `${name}.perf`) });
+      env: measuredEnvironment, counterFile: join(out, `${name}.perf`) });
     let stderr = "", partial = "";
     let stated: number | null = null, definitions = 0;
     const listing = createHash("sha256");
@@ -96,7 +98,7 @@ await Promise.all(Array.from({ length: jobs }, async () => {
     counted.child.stderr.on("data", (chunk: Buffer) => { stderr += chunk; });
     const counter = await counted.measurement;
     if (partial) line(partial);
-    const row = { ...task, arm, work_profile: COMPILE_WORK_PROFILE, ...counter, wall_s: (performance.now() - began) / 1000,
+    const row = { ...task, arm, work_profile: COMPILE_WORK_PROFILE, work_settings, ...counter, wall_s: (performance.now() - began) / 1000,
       listing_functions: stated, listing_definitions: definitions, listing_sha256: listing.digest("hex") };
     if (stated === null || stated < 1 || stated !== definitions) row.counter_error = `incomplete listing: ${definitions} definitions, stated ${stated}`;
     writeFileSync(join(out, `${name}.stderr`), stderr);
@@ -117,7 +119,7 @@ const summaries = modules.map(module => {
     median_cpu_s: valid ? median(runs.map(r => r.cpu_s)) : null,
     spread: valid ? Math.max(...counts) / Math.min(...counts) - 1 : null };
 });
-const summary = { arm, work_profile: COMPILE_WORK_PROFILE, counter_scope: COUNTER_SCOPE, commit, nts_sha256: sha256, raw_directory: out,
+const summary = { arm, work_profile: COMPILE_WORK_PROFILE, work_settings, counter_scope: COUNTER_SCOPE, commit, nts_sha256: sha256, raw_directory: out,
   complete: !failed && summaries.every(s => s.valid),
   total_cpu_s: rows.reduce((sum, r) => sum + (r.cpu_s ?? 0), 0),
   maximum_spread: Math.max(...summaries.filter(s => s.valid).map(s => s.spread!)), modules: summaries };

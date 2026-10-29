@@ -20,6 +20,7 @@ export const FIXED_AMBIENT: Readonly<Record<string, string>> = {
   LANG: "C.UTF-8", LC_ALL: "C.UTF-8", TZ: "UTC", FORCE_COLOR: "0", TERM: "dumb",
 };
 export const UNSET_AMBIENT = [
+  "RAYON_NUM_THREADS",
   "LANGUAGE", "NODE_OPTIONS", "NODE_PATH", "NODE_ICU_DATA", "NODE_PENDING_DEPRECATION",
   "NODE_REPL_EXTERNAL_MODULE", "NODE_NO_WARNINGS", "NODE_ENV", "NODE_TEST_CONTEXT", "NO_COLOR",
   "JAVA_TOOL_OPTIONS", "JDK_JAVA_OPTIONS", "JDK_JAVAC_OPTIONS", "_JAVA_OPTIONS", "JAVA_OPTS", "JVM_OPTS", "CLASSPATH",
@@ -37,6 +38,7 @@ const PARENT = new Set([
 ]);
 const HOST = new Set<string>(HOST_CAPABILITIES);
 const EXTRA_POLICY = new Set([
+  "RAYON_NUM_THREADS",
   "CARGO_INCREMENTAL", "CARGO_BUILD_JOBS", "CARGO_BUILD_TARGET", "CARGO_TARGET_DIR",
   "CARGO_ENCODED_RUSTFLAGS", "CARGO_ENCODED_RUSTDOCFLAGS", "RUSTFLAGS", "RUSTDOCFLAGS",
   "RUSTC_WRAPPER", "RUSTC_WORKSPACE_WRAPPER", "RUSTC_BOOTSTRAP", "RUSTUP_TOOLCHAIN", "RUST_TEST_THREADS",
@@ -74,6 +76,11 @@ export function hostEnvironment(launcher: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   host.CARGO_HOME ||= join(host.HOME, ".cargo");
   host.RUSTUP_HOME ||= join(host.HOME, ".rustup");
   return host;
+}
+
+/** Only counted compiler invocations use upstream's fixed Rayon setting. */
+export function measuredCompileEnvironment(base:NodeJS.ProcessEnv=process.env):NodeJS.ProcessEnv {
+  return {...base,...FIXED_AMBIENT,RAYON_NUM_THREADS:"1"};
 }
 
 export function reportLauncherDrops(launcher: NodeJS.ProcessEnv, write: (text: string) => void = text => process.stderr.write(text)): void {

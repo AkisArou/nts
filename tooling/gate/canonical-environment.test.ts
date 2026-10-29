@@ -6,10 +6,20 @@ import { join } from "node:path";
 import { spawnTest } from "./test-wait.ts";
 import {
   assertLandingEnvironment, ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT,
-  FIXED_AMBIENT, gateEnvironment, nodeHeapOomReason, reportEnvironment,
+  FIXED_AMBIENT, gateEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,
 } from "./canonical-environment.ts";
 
 const scratch=join(homedir(),".cache/nts-scratch/canonical-environment-tests");
+
+test("upstream Rayon limits belong only to the measured compile environment",t=>{
+  const {run,base}=fixture(t);
+  const ordinary=gateEnvironment({...base,RAYON_NUM_THREADS:"8"},{run});
+  assert.equal(ordinary.env.RAYON_NUM_THREADS,undefined);
+  const counted=measuredCompileEnvironment(ordinary.env);
+  assert.equal(counted.RAYON_NUM_THREADS,"1");
+  assert.equal(ordinary.env.RAYON_NUM_THREADS,undefined);
+  assert.throws(()=>assertLandingEnvironment({RAYON_NUM_THREADS:"1"}),/RAYON_NUM_THREADS/);
+});
 mkdirSync(scratch,{recursive:true});
 function fixture(t:{after(fn:()=>void):void}) {
   const run=mkdtempSync(join(scratch,"run-"));t.after(()=>rmSync(run,{recursive:true,force:true}));

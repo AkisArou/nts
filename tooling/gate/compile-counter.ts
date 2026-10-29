@@ -2,10 +2,22 @@
 // the exec's threads and descendants; the runtime hir population has no child
 // processes. CPU is perf's waited-command user+sys rusage in that same scope.
 export const COUNTER_SCOPE = "exec-inherited-user-instructions-v1";
-// One first-class compiler option owns every native pool. Environment knobs
-// are deliberately absent from this profile identity.
-export const COMPILE_WORKERS = 1;
-export const COMPILE_WORK_PROFILE = `compiler-workers-v1:${COMPILE_WORKERS}`;
+// Use upstream's single-threaded checker mode and documented Rayon setting.
+export const COMPILE_CHECKERS = 1;
+export const COMPILE_WORK_PROFILE = "upstream-single-threaded-v2:checkers=1;rayon=1";
+export const COMPILE_WORK_SETTINGS = {checkers:1,single_threaded:true,rayon_num_threads:"1"} as const;
+export function compileWorkSettings(env:NodeJS.ProcessEnv) {
+  if(env.RAYON_NUM_THREADS!=="1")throw new Error("compile work profile requires RAYON_NUM_THREADS=1 in the measured environment");
+  return {...COMPILE_WORK_SETTINGS,rayon_num_threads:env.RAYON_NUM_THREADS};
+}
+export function compileWorkProblem(row:{work_profile?:unknown;work_settings?:unknown}):string|null {
+  if(row.work_profile!==COMPILE_WORK_PROFILE)return "incompatible compiler work profile";
+  const settings=row.work_settings;
+  if(!settings||typeof settings!=="object"||!("checkers" in settings)||settings.checkers!==1
+    ||!("single_threaded" in settings)||settings.single_threaded!==true
+    ||!("rayon_num_threads" in settings)||settings.rayon_num_threads!=="1")return "missing upstream single-threaded/Rayon measurement evidence";
+  return null;
+}
 
 export type CompileArm = "nogc" | "rc";
 export const COMPILE_ARMS = {
@@ -22,11 +34,12 @@ export function compileArm(args: readonly string[]): CompileArm {
 }
 
 export function compileCommand(arm: CompileArm, module: string): string[] {
-  return ["hir", "--prepared", "--workers", String(COMPILE_WORKERS), ...(arm === "rc" ? ["--rc"] : []), module];
+  return ["hir", "--prepared", "--checkers", String(COMPILE_CHECKERS), ...(arm === "rc" ? ["--rc"] : []), module];
 }
 
 export interface CounterRow {
   work_profile?: unknown;
+  work_settings?: unknown;
   counter_scope?: unknown;
   instructions?: number | null;
   cpu_s?: number | null;
@@ -38,6 +51,7 @@ export interface CounterRow {
 
 export function counterProblem(row: CounterRow): string | null {
   if (row.error || row.counter_error) return row.error || row.counter_error || null;
+  if(row.work_profile!==undefined){const problem=compileWorkProblem(row);if(problem)return problem;}
   if (row.counter_scope !== COUNTER_SCOPE) return "incompatible counter scope (old attached counts are not measurements)";
   if (row.signal || (row.status !== undefined && row.status !== 0)) return `counter run ended ${row.signal ?? row.status}`;
   const { instructions, cpu_s } = row;
@@ -82,6 +96,7 @@ export interface CalibrationRun extends CounterRow {
 }
 export interface Calibration {
   work_profile?: string;
+  work_settings?: unknown;
   arm?: CompileArm;
   counter_scope: string;
   complete: boolean;
@@ -95,7 +110,7 @@ export interface Calibration {
  * blow-ups must also fail. Raw measurements stay with the policy in results/.
  */
 export function calibratedTable(summary: Calibration, expected: string[]) {
-  if (!summary.complete || summary.counter_scope !== COUNTER_SCOPE || summary.work_profile !== COMPILE_WORK_PROFILE || !/^[a-f0-9]{64}$/.test(summary.nts_sha256)) throw new Error("incomplete or incompatible calibration");
+  if (!summary.complete || summary.counter_scope !== COUNTER_SCOPE || compileWorkProblem(summary) || !/^[a-f0-9]{64}$/.test(summary.nts_sha256)) throw new Error("incomplete or incompatible calibration");
   const modules = [...summary.modules].sort((a, b) => a.module < b.module ? -1 : a.module > b.module ? 1 : 0);
   const arm = summary.arm ?? "nogc";
   if (arm !== "nogc" && arm !== "rc") throw new Error("invalid calibration preparation arm");

@@ -101,7 +101,7 @@ fn option_values_and_inline_forms_keep_their_existing_meaning() {
         arguments::validate(&args(&["deps", "--checkers", "1", "--json"])),
         Ok(false)
     );
-    for deleted in ["--decompose", "--calls", "--constants"] {
+    for deleted in ["--decompose", "--calls", "--constants", "--workers"] {
         assert!(arguments::validate(&args(&["frontend", deleted])).is_err());
     }
     assert!(arguments::takes_value("--backend"));
