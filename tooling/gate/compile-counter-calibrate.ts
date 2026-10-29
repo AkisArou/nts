@@ -26,7 +26,9 @@ const out = resolve(option("--run-dir") ?? mkdtempSync(join(cache, "run-")));
 mkdirSync(out, { recursive: true });
 const jobs = Number(option("--jobs") ?? 4);
 if (!Number.isInteger(jobs) || jobs < 1 || jobs > 8) throw new Error("--jobs must be between 1 and 8");
-for (const input of ["node_modules", "runtime/node/node_modules"]) {
+// The locked workspace install owns the root links. runtime/node is not a
+// pnpm importer; the former copied node_modules tree is no longer an input.
+for (const input of ["node_modules"]) {
   if (!existsSync(join(root, input))) throw new Error(`missing workspace input ${input}; run tooling/lanes/inputs.sh before calibration`);
 }
 const cannot = instructionsWork();

@@ -118,10 +118,12 @@ mod tests {
                 );
             }
             let pool = tsrs_vfs::worker_pool();
-            assert_eq!(
-                pool.current_num_threads(),
+            let expected = if tsrs_core::NO_THREADS {
+                1
+            } else {
                 usize::from(count.map_or(8, NonZeroU16::get))
-            );
+            };
+            assert_eq!(pool.current_num_threads(), expected);
             assert!(std::ptr::eq(pool, tsrs_compiler::worker_pool()));
             return;
         }
