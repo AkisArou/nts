@@ -7,6 +7,9 @@ import { createServer } from "node:http";
 import { fileURLToPath } from "node:url";
 import { createContext, runInContext } from "node:vm";
 import { MessageChannel } from "node:worker_threads";
+import { UpstreamWptExecution } from "./upstream-liveness.ts";
+import { WptHungError, reportWptHung } from "../../../runtime/web-platform/test/wpt/hung.ts";
+let hungFixtures = 0;
 
 // This is the deliberately small testharness.js surface required by the complete,
 // unchanged fixtures named in the manifest. Test and support sources are read from
@@ -245,6 +248,7 @@ function reportPass(path, name) {
 }
 
 function reportFailure(path, name, error) {
+  if (error instanceof WptHungError) throw error;
   failed++;
   const detail =
     error !== null && typeof error === "object" && typeof error.stack === "string"
@@ -258,28 +262,6 @@ function reportNotApplicable(path, name, reason) {
   console.log(`NOT-APPLICABLE ${path} :: ${name}\n  ${reason}`);
 }
 
-async function settleWithCleanups(outcome, cleanups) {
-  let failed = false;
-  let failure;
-  try {
-    await outcome;
-  } catch (error) {
-    failed = true;
-    failure = error;
-  }
-  for (let index = cleanups.length - 1; index >= 0; index--) {
-    try {
-      await cleanups[index]();
-    } catch (error) {
-      if (!failed) {
-        failed = true;
-        failure = error;
-      }
-    }
-  }
-  if (failed) throw failure;
-}
-
 function createWptContext(
   path,
   root,
@@ -289,11 +271,13 @@ function createWptContext(
   seenExcludedTests,
   runtime,
   ownObjectIntrinsic,
+  execution,
 ) {
   let contextIntrinsicTypeError = TypeError;
   let promiseTestQueue = Promise.resolve();
   let registrations = 0;
   function registrationName(name) {
+    execution.progress(name ?? "<unnamed registration>", "registration");
     registrations++;
     return name ?? `unnamed test ${registrations}`;
   }
@@ -498,13 +482,10 @@ function createWptContext(
         };
       }
       const capability = Promise.withResolvers();
-      const timer = setTimeout(
-        () => capability.reject(new Error(`Upstream async test timed out: ${name}`)),
-        5000,
-      );
       const test = {
         step(callback, thisObject = test) {
           try {
+            execution.progress(name);
             return callback.call(thisObject);
           } catch (error) {
             capability.reject(error);
@@ -517,6 +498,7 @@ function createWptContext(
         step_func(callback) {
           return (...args) => {
             try {
+              execution.progress(name);
               return callback.call(test, ...args);
             } catch (error) {
               capability.reject(error);
@@ -527,6 +509,7 @@ function createWptContext(
         step_func_done(callback) {
           return (...args) => {
             try {
+              execution.progress(name);
               callback.call(test, ...args);
               capability.resolve();
             } catch (error) {
@@ -548,12 +531,10 @@ function createWptContext(
           capability.reject(error);
         }
       }
-      const result = capability.promise
-        .finally(() => clearTimeout(timer))
-        .then(
-          () => reportPass(path, name),
-          (error) => reportFailure(path, name, error),
-        );
+      const result = execution.observe(name, capability.promise).then(
+        () => reportPass(path, name),
+        (error) => reportFailure(path, name, error),
+      );
       pending.push(result);
       return test;
     },
@@ -599,6 +580,7 @@ function createWptContext(
         },
         step(callback, thisObject = test) {
           try {
+            execution.progress(name);
             return callback.call(thisObject);
           } catch (error) {
             asynchronousFailure.reject(error);
@@ -608,6 +590,7 @@ function createWptContext(
         step_func(callback) {
           return (...args) => {
             try {
+              execution.progress(name);
               return callback.call(test, ...args);
             } catch (error) {
               asynchronousFailure.reject(error);
@@ -624,19 +607,7 @@ function createWptContext(
       };
       const scheduled = promiseTestQueue.then(async () => {
         const body = Promise.resolve().then(() => fn(test));
-        const timeout = Promise.withResolvers();
-        const timer = setTimeout(
-          () => timeout.reject(new Error(`Upstream promise test timed out: ${name}`)),
-          5000,
-        );
-        try {
-          await settleWithCleanups(
-            Promise.race([body, asynchronousFailure.promise, timeout.promise]),
-            cleanups,
-          );
-        } finally {
-          clearTimeout(timer);
-        }
+        await execution.settle(name, Promise.race([body, asynchronousFailure.promise]), cleanups);
       });
       const result = scheduled.then(
         () => reportPass(path, name),
@@ -740,73 +711,83 @@ async function runFixture(root, path, data, verifiedSupport) {
           : undefined,
       })
     : null;
-  const pending = [];
-  const excludedTests = manifest.notApplicable?.[path] ?? {};
-  const seenExcludedTests = new Set();
-  const source = data.toString();
-  const usesIdlharness = source.includes("META: script=/resources/idlharness.js");
-  const context = createWptContext(
-    path,
-    root,
-    verifiedSupport,
-    pending,
-    excludedTests,
-    seenExcludedTests,
-    fixtureRuntime ?? hostRuntime,
-    usesIdlharness,
-  );
-  const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);
-  for (const match of scripts) {
-    const scriptPath = match[1];
-    const relativePath = scriptPath.startsWith("/")
-      ? new URL(scriptPath.slice(1), root)
-      : new URL(scriptPath, new URL(path, root));
-    const supportPath = relativePath.pathname.slice(root.pathname.length);
-    // In WPT proper `/resources/WebIDLParser.js` is a redirect to the vendored parser.
-    // Node's checkout has the target and not the redirect, so the alias lives here rather
-    // than as a copied file nobody could hash-verify against upstream.
-    const resolved =
-      supportPath === "resources/WebIDLParser.js"
-        ? "resources/webidl2/lib/webidl2.js"
-        : supportPath;
-    const support = verifiedSupport.get(resolved);
-    assert.notEqual(support, undefined, `Unpinned WPT support script: ${resolved}`);
-    runInContext(support.toString(), context, { filename: resolved, timeout: 5000 });
-  }
-  if (typeof context.idl_test === "function") {
-    // `idl_test` reaches for the `.idl` files over `fetch`. They are pinned support here,
-    // so the hook is replaced rather than a network stack being pointed at the filesystem.
-    // Installed after the scripts run because idlharness declares `fetch_spec` itself and a
-    // function declaration would overwrite anything set beforehand.
-    context.fetch_spec = (spec) => {
-      const idl = verifiedSupport.get(`interfaces/${spec}.idl`);
-      assert.notEqual(idl, undefined, `Unpinned WPT IDL: interfaces/${spec}.idl`);
-      return Promise.resolve({ spec, idl: idl.toString() });
-    };
-  }
-  runInContext(source, context, { filename: path, timeout: 5000 });
-  let observed = 0;
-  while (observed < pending.length) {
-    const batch = pending.slice(observed);
-    observed = pending.length;
-    await Promise.all(batch);
-  }
-  const expectedTests = manifest.expectedTests?.[path];
-  if (expectedTests !== undefined) {
-    assert.equal(
-      pending.length,
-      expectedTests,
-      `WPT fixture registered an unexpected number of tests: ${path}`,
+  const execution = new UpstreamWptExecution(path);
+  try {
+    const pending = [];
+    const excludedTests = manifest.notApplicable?.[path] ?? {};
+    const seenExcludedTests = new Set();
+    const source = data.toString();
+    const usesIdlharness = source.includes("META: script=/resources/idlharness.js");
+    const context = createWptContext(
+      path,
+      root,
+      verifiedSupport,
+      pending,
+      excludedTests,
+      seenExcludedTests,
+      fixtureRuntime ?? hostRuntime,
+      usesIdlharness,
+      execution,
     );
-  }
-  assert.deepEqual(
-    [...seenExcludedTests].sort(),
-    Object.keys(excludedTests).sort(),
-    `Stale or unobserved WPT exclusions: ${path}`,
-  );
-  if (fixtureRuntime !== null) {
-    fixtureRuntime.close();
-    installWebPlatformRuntime(hostRuntime);
+    const scripts = source.matchAll(/^\/\/ META: script=(.+)$/gm);
+    for (const match of scripts) {
+      const scriptPath = match[1];
+      const relativePath = scriptPath.startsWith("/")
+        ? new URL(scriptPath.slice(1), root)
+        : new URL(scriptPath, new URL(path, root));
+      const supportPath = relativePath.pathname.slice(root.pathname.length);
+      // In WPT proper `/resources/WebIDLParser.js` is a redirect to the vendored parser.
+      // Node's checkout has the target and not the redirect, so the alias lives here rather
+      // than as a copied file nobody could hash-verify against upstream.
+      const resolved =
+        supportPath === "resources/WebIDLParser.js"
+          ? "resources/webidl2/lib/webidl2.js"
+          : supportPath;
+      const support = verifiedSupport.get(resolved);
+      assert.notEqual(support, undefined, `Unpinned WPT support script: ${resolved}`);
+      execution.vm(support.toString(), context, resolved);
+    }
+    if (typeof context.idl_test === "function") {
+      // `idl_test` reaches for the `.idl` files over `fetch`. They are pinned support here,
+      // so the hook is replaced rather than a network stack being pointed at the filesystem.
+      // Installed after the scripts run because idlharness declares `fetch_spec` itself and a
+      // function declaration would overwrite anything set beforehand.
+      context.fetch_spec = (spec) => {
+        const idl = verifiedSupport.get(`interfaces/${spec}.idl`);
+        assert.notEqual(idl, undefined, `Unpinned WPT IDL: interfaces/${spec}.idl`);
+        return Promise.resolve({ spec, idl: idl.toString() });
+      };
+    }
+    execution.vm(source, context, path);
+    let observed = 0;
+    while (observed < pending.length) {
+      const batch = pending.slice(observed);
+      observed = pending.length;
+      await Promise.all(batch);
+    }
+    const expectedTests = manifest.expectedTests?.[path];
+    if (expectedTests !== undefined) {
+      assert.equal(
+        pending.length,
+        expectedTests,
+        `WPT fixture registered an unexpected number of tests: ${path}`,
+      );
+    }
+    assert.deepEqual(
+      [...seenExcludedTests].sort(),
+      Object.keys(excludedTests).sort(),
+      `Stale or unobserved WPT exclusions: ${path}`,
+    );
+  } catch (error) {
+    if (!(error instanceof WptHungError)) throw error;
+    hungFixtures++;
+    reportWptHung(error);
+  } finally {
+    execution.close();
+    if (fixtureRuntime !== null) {
+      fixtureRuntime.close();
+      installWebPlatformRuntime(hostRuntime);
+    }
   }
 }
 
@@ -846,6 +827,7 @@ console.log(
     passed,
     failed,
     notApplicable,
+    hung: hungFixtures,
   }),
 );
 hostRuntime.close();
@@ -858,4 +840,4 @@ if (fixtureFilter !== undefined && fixtureFilterMatched === 0) {
   console.error(`NTS_WEB_PLATFORM_FIXTURE=${fixtureFilter} selected no fixtures.`);
   process.exit(1);
 }
-process.exit(failed === 0 ? 0 : 1);
+process.exit(hungFixtures ? 124 : failed === 0 ? 0 : 1);

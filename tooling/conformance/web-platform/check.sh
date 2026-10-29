@@ -30,6 +30,9 @@ done
 # wait for their own completion; load cannot turn an eight-second pause into
 # an assertion failure. A hang remains a distinct timeout result (exit 124).
 host=0
+NTS_WPT_HUNG_RESULTS=$(mktemp "${TMPDIR:-${HOME}/.cache}/nts-wpt-hung.XXXXXXXX")
+export NTS_WPT_HUNG_RESULTS
+trap 'command rm -f "$NTS_WPT_HUNG_RESULTS"' EXIT HUP INT TERM
 timeout --kill-after=10s 900s node --expose-gc \
   --import ./runtime/web-platform/host/environment-shim.ts \
   --test \
@@ -189,8 +192,10 @@ timeout --kill-after=10s 900s node --expose-gc \
   runtime/web-platform/test/weak-listener.test.ts || host=$?
 if [ "$host" -eq 124 ] || [ "$host" -eq 137 ]; then
   echo "check.sh: TIMED OUT -- host suite exceeded its outer hang bound." >&2
+  node runtime/web-platform/test/wpt/hung.ts --outer
   exit 124
 fi
+node runtime/web-platform/test/wpt/hung.ts "$NTS_WPT_HUNG_RESULTS"
 if [ "$host" -ne 0 ]; then
   exit "$host"
 fi

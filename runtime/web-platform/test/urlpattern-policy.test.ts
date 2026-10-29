@@ -8,6 +8,7 @@ import { URLPattern } from "../src/urlpattern/url-pattern.ts";
 import type { URLPatternInit, URLPatternInput } from "../src/urlpattern/types.ts";
 import { HostURLPatternURLCapability } from "./urlpattern-provider.ts";
 import { WptHarness } from "./wpt/harness.ts";
+import { WptHungError } from "./wpt/hung.ts";
 
 function runtime(t: TestContext, capability: URLPatternURLCapability = new HostURLPatternURLCapability()) {
   const runtime = createHostNodeWebPlatform();
@@ -268,8 +269,8 @@ test("WPT implicit draining keeps promise timeouts and stale exclusion checks", 
     },
   });
   harness.run('promise_test(() => { started(); return new Promise(() => {}); }, "never settles");', "timeout.js");
-  const rejected = assert.rejects(harness.finish(), (error) => error instanceof AggregateError &&
-    error.errors.some((entry: unknown) => String(entry).includes("pending tests did not complete")));
+  const rejected = assert.rejects(harness.finish(), (error: unknown) => error instanceof WptHungError &&
+    /timeout.js: never settles: test/.test(error.message) && error.observation.kind === "hung");
   await started.promise;
   for (const deadline of [...deadlines]) deadline();
   await rejected;

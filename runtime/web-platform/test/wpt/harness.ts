@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { createContext, Script } from "node:vm";
 import type { Context } from "node:vm";
+import { WptHungError, WptInactivityGuard, wptHostDeadline } from "./hung.ts";
 
 type Callback = (this: unknown, ...args: unknown[]) => unknown;
 type Cleanup = () => unknown;
@@ -173,12 +174,9 @@ export interface WptBlock {
 }
 
 /** Schedule a harness deadline and return its idempotent cancellation. */
-export type WptDeadlineScheduler = (callback: () => void, milliseconds: number) => () => void;
+export interface WptActivity { file: string; test: string; phase: "test" | "cleanup" | "registration" }
+export type WptDeadlineScheduler = (callback: () => void, milliseconds: number, activity?: WptActivity) => () => void;
 
-const hostDeadline: WptDeadlineScheduler = (callback, milliseconds) => {
-  const timer = setTimeout(callback, milliseconds);
-  return () => clearTimeout(timer);
-};
 
 export interface WptHarnessOptions {
   /** Inventory bound, so a recursively generated promise chain cannot starve timers. */
@@ -187,6 +185,8 @@ export interface WptHarnessOptions {
   globalAliases?: readonly string[];
   deadlineScheduler?: WptDeadlineScheduler;
   defaultTestName?: string;
+  /** File inactivity is a generous hang bound, independent of VM execution. */
+  inactivityMilliseconds?: number;
   /** Only a provider with a distinct uncaught-global reporting path may opt in. */
   uncaughtExceptionChannel?: boolean;
 }
@@ -199,18 +199,17 @@ class WptTest {
   private finished = false;
   private readonly cleanups: Cleanup[] = [];
   private readonly timers: ReturnType<typeof setTimeout>[] = [];
-  private timeout: (() => void) | undefined;
-  private readonly timeoutMilliseconds: number;
   private readonly kind: TestKind;
   private readonly harness: WptHarness;
 
-  constructor(harness: WptHarness, name: string, timeout: number, kind: TestKind) {
+  readonly file: string;
+  constructor(harness: WptHarness, name: string, kind: TestKind) {
     this.harness = harness;
     this.result = { name, status: "pass" };
     const completion = Promise.withResolvers<void>();
     this.completed = completion.promise;
     this.resolve = completion.resolve;
-    this.timeoutMilliseconds = timeout;
+    this.file = harness.filename;
     this.kind = kind;
     if (kind !== "promise") this.start();
   }
@@ -218,14 +217,7 @@ class WptTest {
   get closed(): boolean { return this.ending; }
 
   start(): void {
-    if (this.timeout !== undefined || this.ending) return;
-    this.timeout = this.harness.scheduleDeadline(() => {
-      const error = new Error(`WPT timed out: ${this.result.name}`);
-      if (this.ending) {
-        this.harness.cleanupErrors.push(error);
-        this.complete();
-      } else this.fail(error);
-    }, this.timeoutMilliseconds);
+    if (!this.ending) this.harness.progress(this, "test");
   }
 
   add_cleanup(cleanup: Cleanup): void {
@@ -235,6 +227,7 @@ class WptTest {
 
   step(callback: Callback, receiver?: unknown, ...args: unknown[]): unknown {
     if (this.ending) return undefined;
+    this.harness.progress(this, "test");
     const target = arguments.length < 2 ? this : receiver;
     const previous = this.harness.active;
     this.harness.active = this;
@@ -292,7 +285,7 @@ class WptTest {
   done(): void {
     if (this.ending) return;
     this.ending = true;
-    this.timeout?.();
+    this.harness.progress(this, "cleanup");
     for (const timer of this.timers) clearTimeout(timer);
     // WPT invokes cleanup callbacks in registration order, including on failure.
     const pending: Promise<unknown>[] = [];
@@ -316,10 +309,6 @@ class WptTest {
     }
     if (pending.length === 0) this.complete();
     else {
-      this.timeout = this.harness.scheduleDeadline(() => {
-        this.harness.cleanupErrors.push(new Error(`WPT cleanup timed out: ${this.result.name}`));
-        this.complete();
-      }, this.timeoutMilliseconds);
       void Promise.all(pending).then(() => this.complete());
     }
   }
@@ -327,9 +316,11 @@ class WptTest {
   private complete(): void {
     if (this.finished) return;
     this.finished = true;
-    this.timeout?.();
+    this.harness.completed(this);
     this.resolve();
   }
+
+  abandon(): void { for (const timer of this.timers) clearTimeout(timer); }
 }
 
 interface WatchedEvent { readonly type: string; }
@@ -425,6 +416,12 @@ export class WptHarness {
   private readonly registrationDone = Promise.withResolvers<void>();
   private registrationClosed = false;
   private readonly timeout: number;
+  private readonly inactivity: WptInactivityGuard;
+  private readonly pending = new Map<WptTest, "test" | "cleanup">();
+  private readonly notMeasured = Promise.withResolvers<never>();
+  private hung: WptHungError | undefined;
+  private finished = false;
+  filename = "<WPT fixture>";
   readonly scheduleDeadline: WptDeadlineScheduler;
   private readonly globalTimers = new Set<ReturnType<typeof setTimeout>>();
   private readonly defaultTestName: string | undefined;
@@ -450,8 +447,13 @@ export class WptHarness {
       "WPT maxTests must be a positive safe integer");
     assert.ok(Number.isSafeInteger(timeout) && timeout > 0, "WPT timeout must be positive integer milliseconds");
     this.timeout = timeout;
-    this.scheduleDeadline = "deadlineScheduler" in options ? options.deadlineScheduler ?? hostDeadline : hostDeadline;
+    // A VM spin can be observed before finish() installs its race.
+    void this.notMeasured.promise.catch(() => {});
+    this.scheduleDeadline = "deadlineScheduler" in options ? options.deadlineScheduler ?? wptHostDeadline : wptHostDeadline;
     assert.equal(typeof this.scheduleDeadline, "function", "WPT deadline scheduler must be a function");
+    this.inactivity = new WptInactivityGuard((activity, result) =>
+      this.observeHung(activity.file, activity.test, activity.phase, result), this.scheduleDeadline,
+      "inactivityMilliseconds" in options ? options.inactivityMilliseconds : undefined);
     this.context = createContext({ ...globals });
     const fixtureGlobal = new Script("globalThis").runInContext(this.context) as object;
     // Keep the options-object and alias-list forms used by the two drivers.
@@ -466,6 +468,7 @@ export class WptHarness {
       const receiver = this === undefined || this === null ? fixtureGlobal : Object(this);
       const timer = setTimeout(() => {
         harness.globalTimers.delete(timer);
+        harness.touch();
         try { callback.apply(receiver, args); }
         catch (error) { harness.reportError(error); }
       }, delay);
@@ -635,6 +638,7 @@ export class WptHarness {
         const test = this.register(name, "promise");
         if (test.result.status === "blocked") return;
         this.promiseQueue = this.promiseQueue.then(async () => {
+          if (this.hung) return;
           if (this.cleanupErrors.length !== 0 || this.errors.length !== 0) {
             test.fail(new Error("WPT aborted after a harness or cleanup error"));
             return;
@@ -703,8 +707,9 @@ export class WptHarness {
       throw error;
     }
     this.names.add(name);
-    const test = new WptTest(this, name, this.timeout, kind);
+    const test = new WptTest(this, name, kind);
     this.tests.push(test);
+    this.touch();
     const blocked = this.blocks[name];
     if (blocked !== undefined) {
       this.seenBlocks.add(name);
@@ -714,9 +719,16 @@ export class WptHarness {
   }
 
   run(source: string, filename: string, lineOffset = 0): void {
+    if (this.hung) return;
+    this.filename = filename;
+    this.touch();
     try {
       new Script(source, { filename, lineOffset }).runInContext(this.context, { timeout: this.timeout });
     } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "ERR_SCRIPT_EXECUTION_TIMEOUT") {
+        this.observeHung(filename, this.active?.result.name ?? "<fixture script>", "VM execution");
+        return;
+      }
       this.errors.push(error);
       for (const test of this.tests) test.fail(error);
     }
@@ -737,6 +749,7 @@ export class WptHarness {
 
   /** Recheck recorded failures after awaited provider teardown, before file success. */
   assertNoErrors(): void {
+    if (this.hung) throw this.hung;
     if (this.errors.length !== 0 || this.cleanupErrors.length !== 0) {
       throw new AggregateError([...this.errors, ...this.cleanupErrors], "WPT harness failed");
     }
@@ -744,6 +757,32 @@ export class WptHarness {
 
   inTest<T>(test: WptTest, callback: () => T): T {
     return this.asyncTest.run(test, callback);
+  }
+
+  progress(test: WptTest, phase: "test" | "cleanup"): void {
+    if (this.hung || this.finished) return;
+    this.pending.set(test, phase);
+    this.touch();
+  }
+
+  completed(test: WptTest): void {
+    this.pending.delete(test);
+    this.touch();
+  }
+
+  private touch(): void {
+    if (this.hung || this.finished) return;
+    const [test, phase] = this.pending.entries().next().value ?? [];
+    this.inactivity.renew({ file: test?.file ?? this.filename, test: test?.result.name ?? "<registration>",
+      phase: phase ?? "registration" }, phase === "cleanup" ? test?.result : undefined);
+  }
+
+  private observeHung(file: string, test: string, phase: string, result?: WptResult): void {
+    if (this.hung) return;
+    this.hung = new WptHungError(file, test, phase, result);
+    this.inactivity.close();
+    for (const test of this.tests) test.abandon();
+    this.notMeasured.reject(this.hung);
   }
 
   private checkSynchronousResult(result: unknown, description: string): void {
@@ -756,42 +795,41 @@ export class WptHarness {
   private closeRegistration(): void {
     this.registrationClosed = true;
     this.registrationDone.resolve();
+    this.touch();
   }
 
   async finish(): Promise<WptResult[]> {
-    if (this.errors.length !== 0) this.closeRegistration();
-    const cancelRegistrationTimeout = this.scheduleDeadline(() => {
-      this.recordError(new Error(this.explicitDone
-        ? "WPT explicit_done setup requires a call to done()"
-        : "WPT pending tests did not complete before timeout"));
-      this.closeRegistration();
-    }, this.timeout);
-    try {
-      if (this.explicitDone) await this.registrationDone.promise;
-      else {
-        // An outstanding upstream test may register further tests, for example
-        // after loading a JSON corpus. Implicit completion waits for that work;
-        // explicit done() still closes registration immediately when called.
-        while (!this.registrationClosed) {
-          const queue = this.promiseQueue;
-          const count = this.tests.length;
-          await queue;
-          await Promise.all(this.tests.map((test) => test.completed));
-          if (queue === this.promiseQueue && count === this.tests.length) this.closeRegistration();
-        }
-      }
-      cancelRegistrationTimeout();
-      await this.promiseQueue;
-      await Promise.all(this.tests.map((test) => test.completed));
-      for (const name of Object.keys(this.blocks)) {
-        assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
-      }
-      this.assertNoErrors();
-      return this.tests.map((test) => test.result);
-    } finally {
-      cancelRegistrationTimeout();
+    try { return await Promise.race([this.drain(), this.notMeasured.promise]); }
+    finally {
+      this.finished = true;
+      this.inactivity.close();
       for (const timer of this.globalTimers) clearTimeout(timer);
       this.globalTimers.clear();
     }
+  }
+
+  private async drain(): Promise<WptResult[]> {
+    if (this.errors.length !== 0) this.closeRegistration();
+    this.touch();
+    if (this.explicitDone) await this.registrationDone.promise;
+    else {
+      // An outstanding upstream test may register further tests, for example
+      // after loading a JSON corpus. Implicit completion waits for that work;
+      // explicit done() still closes registration immediately when called.
+      while (!this.registrationClosed) {
+        const queue = this.promiseQueue;
+        const count = this.tests.length;
+        await queue;
+        await Promise.all(this.tests.map((test) => test.completed));
+        if (queue === this.promiseQueue && count === this.tests.length) this.closeRegistration();
+      }
+    }
+    await this.promiseQueue;
+    await Promise.all(this.tests.map((test) => test.completed));
+    for (const name of Object.keys(this.blocks)) {
+      assert.ok(this.seenBlocks.has(name), `stale WPT capability exclusion: ${name}`);
+    }
+    this.assertNoErrors();
+    return this.tests.map((test) => test.result);
   }
 }

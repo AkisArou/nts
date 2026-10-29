@@ -50,7 +50,7 @@ export function publishPressure(error: unknown, env: NodeJS.ProcessEnv = process
 export function readStepInstrument(path: string, step: string, attempt: string): InstrumentResult | undefined {
   let result;
   try { result = JSON.parse(readFileSync(path, "utf8")); }
-  catch (error) { if (error.code === "ENOENT") return; throw error; }
+  catch (error) { if (typeof error === "object" && error !== null && "code" in error && error.code === "ENOENT") return; throw error; }
   const policy=instrumentPolicy(result.kind);
   if (result.version !== 1 || !policy || policy.verdict!==result.verdict
       || result.step !== step || result.attempt !== attempt || typeof result.reason !== "string" || !result.reason) {

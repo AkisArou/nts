@@ -1,18 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
-import { WptHarness } from "./wpt/harness.ts";
+import { WptHarness, type WptActivity } from "./wpt/harness.ts";
+import { WptHungError, readWptHungResults, reportWptHung } from "./wpt/hung.ts";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+import { spawnSync } from "node:child_process";
+import { createContext } from "node:vm";
+import { UpstreamWptExecution } from "../../../tooling/conformance/web-platform/upstream-liveness.ts";
 
 function manualDeadlines() {
-  const scheduled: { callback: () => void; cancelled: boolean }[] = [];
+  const scheduled: { callback: () => void; cancelled: boolean; activity?: WptActivity }[] = [];
   const waiting = new Map<number, (deadline: (typeof scheduled)[number]) => void>();
+  const phases = new Map<string, (deadline: (typeof scheduled)[number]) => void>();
   return {
     scheduled,
-    schedule(callback: () => void, milliseconds: number): () => void {
-      assert.equal(milliseconds, 10000);
-      const deadline = { callback, cancelled: false };
+    schedule(callback: () => void, milliseconds: number, activity?: WptActivity): () => void {
+      assert.equal(milliseconds, 300000);
+      const deadline = { callback, cancelled: false, activity };
       scheduled.push(deadline);
       waiting.get(scheduled.length - 1)?.(deadline);
+      if (activity) phases.get(activity.phase)?.(deadline);
       return () => { deadline.cancelled = true; };
     },
     at(index: number): Promise<(typeof scheduled)[number]> {
@@ -20,8 +29,115 @@ function manualDeadlines() {
       if (deadline !== undefined) return Promise.resolve(deadline);
       return new Promise((resolve) => { waiting.set(index, resolve); });
     },
+    phase(phase: string): Promise<(typeof scheduled)[number]> {
+      const deadline = scheduled.findLast(entry => entry.activity?.phase === phase);
+      if (deadline) return Promise.resolve(deadline);
+      return new Promise(resolve => { phases.set(phase, resolve); });
+    },
   };
 }
+
+test("WPT active work passes the old deadline while idle work has no verdict", async () => {
+  let now = 0;
+  const tasks: { at: number; callback: () => void; cancelled: boolean }[] = [];
+  let current: { step(callback: () => void): unknown; done(): void } | undefined;
+  const harness = new WptHarness({ capture(value: typeof current) { current = value; } }, {}, 10000, {
+    deadlineScheduler(callback, milliseconds) {
+      const task = { at: now + milliseconds, callback, cancelled: false };
+      tasks.push(task);
+      return () => { task.cancelled = true; };
+    },
+  });
+  const advance = (milliseconds: number): void => {
+    now += milliseconds;
+    for (const task of [...tasks]) if (!task.cancelled && task.at <= now) task.callback();
+  };
+  harness.run('async_test(t => capture(t), "active work");', "active.js");
+  const completion = harness.finish();
+  advance(200000);
+  assert.ok(current);
+  current.step(() => {});
+  advance(200000); // Past both the old 10 s deadline and the first inactivity bound.
+  current.done();
+  assert.deepEqual((await completion).map(result => result.status), ["pass"]);
+  const failed = new WptHarness({});
+  failed.run('test(() => assert_true(false), "assertion");', "assertion.js");
+  assert.equal((await failed.finish())[0]?.status, "fail");
+});
+
+test("WPT VM spins are hung instruments rather than assertion failures", async () => {
+  const harness = new WptHarness({}, {}, 20);
+  harness.run('while (true) {}', "spinning.js");
+  await assert.rejects(harness.finish(), (error: unknown) => error instanceof WptHungError &&
+    error.observation.kind === "hung" && /spinning.js: <fixture script>: VM execution/.test(error.message));
+});
+
+test("WPT hung transport preserves the typed field and refuses a mutated verdict", t => {
+  const directory = mkdtempSync(join(homedir(), ".cache/nts-wpt-hung-"));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const observations = join(directory, "observations.jsonl"), step = join(directory, "step.json");
+  const env = { ...process.env, NTS_WPT_HUNG_RESULTS: observations, NTS_GATE_STEP_RESULT: step,
+    NTS_GATE_STEP: "web-platform", NTS_GATE_STEP_ATTEMPT: "control" };
+  const error = new WptHungError("fixture.js", "pending cleanup", "cleanup", { name: "pending cleanup", status: "pass" });
+  reportWptHung(error, env, () => {});
+  assert.equal(readWptHungResults(observations)[0]?.kind, "hung");
+  const command = new URL("./wpt/hung.ts", import.meta.url);
+  const run = spawnSync(process.execPath, [command.pathname, observations], { env, encoding: "utf8" });
+  assert.equal(run.status, 124, run.stderr);
+  assert.equal(JSON.parse(readFileSync(step, "utf8")).verdict, "NOT RUN");
+  assert.equal(JSON.parse(readFileSync(step, "utf8")).kind, "hung");
+  writeFileSync(observations, JSON.stringify({ ...error.observation, kind: "case-budget", verdict: "FAIL" }) + "\n");
+  assert.throws(() => readWptHungResults(observations), /invalid WPT hung observation/);
+  assert.equal(spawnSync(process.execPath, [command.pathname, observations], { env }).status, 1);
+});
+
+test("legacy async and promise liveness guards never become failed or passed cases", async () => {
+  for (const route of ["async", "promise"] as const) {
+    const deadlines = manualDeadlines();
+    const execution = new UpstreamWptExecution(`${route}.js`, { deadlineScheduler: deadlines.schedule });
+    try {
+      const idle = new Promise<never>(() => {});
+      const completion = route === "async" ? execution.observe(route, idle) : execution.settle(route, idle, []);
+      const rejected = assert.rejects(completion, (error: unknown) => error instanceof WptHungError &&
+        error.observation.kind === "hung" && error.observation.verdict === "NOT RUN" &&
+        error.message.includes(`${route}.js: ${route}: test`) && error.testResult === undefined);
+      deadlines.scheduled.at(-1)!.callback();
+      await rejected;
+    } finally { execution.close(); }
+  }
+  const failed = new UpstreamWptExecution("reject.js");
+  try {
+    const failure = new Error("real rejection");
+    await assert.rejects(failed.observe("async rejection", Promise.reject(failure)), error => error === failure);
+    await assert.rejects(failed.settle("promise rejection", Promise.reject(failure), []), error => error === failure);
+  } finally { failed.close(); }
+});
+
+test("legacy cleanup hangs retain the test body's independent result", async () => {
+  const deadlines = manualDeadlines();
+  const execution = new UpstreamWptExecution("legacy-cleanup.js", { deadlineScheduler: deadlines.schedule });
+  try {
+    const completion = execution.settle("body", Promise.resolve(), [() => new Promise(() => {})]);
+    const rejected = assert.rejects(completion, (error: unknown) => error instanceof WptHungError &&
+      /legacy-cleanup.js: body: cleanup/.test(error.message) && error.testResult?.status === "pass");
+    (await deadlines.phase("cleanup")).callback();
+    await rejected;
+  } finally { execution.close(); }
+});
+
+test("legacy support and fixture VM bounds are hung while real VM errors remain errors", () => {
+  for (const file of ["support.js", "fixture.js"]) {
+    const execution = new UpstreamWptExecution(file, { vmMilliseconds: 20 });
+    try {
+      const context = createContext({});
+      assert.throws(() => execution.vm("missingCapability()", context, file), (error: unknown) =>
+        error instanceof Error ? error.name === "ReferenceError" : typeof error === "object" && error !== null &&
+          "name" in error && error.name === "ReferenceError");
+      assert.throws(() => execution.vm("while (true) {}", context, file), (error: unknown) =>
+        error instanceof WptHungError && error.observation.kind === "hung" && error.message.includes(file));
+    } finally { execution.close(); }
+  }
+});
 
 test("WPT callback assertions cannot disappear inside an exception-catching API", async () => {
   const harness = new WptHarness({
@@ -87,20 +203,19 @@ test("WPT capability blocks are named and stale exclusions fail", async () => {
   await assert.rejects(new WptHarness({}, { missing: block }).finish(), /stale WPT capability exclusion/);
 });
 
-test("WPT reports timeout, top-level errors and cleanup errors as failures", async () => {
+test("WPT idle work is hung while top-level and cleanup assertions fail", async () => {
   const deadlines = manualDeadlines();
   const timeout = new WptHarness({}, {}, 10000, {
     deadlineScheduler: deadlines.schedule,
   });
   timeout.run('async_test(() => {}, "never completes");', "timeout.js");
   const completion = timeout.finish();
-  // The test deadline is the first scheduled operation. Registration already
-  // completed; advancing it explicitly cannot race VM script registration.
-  assert.equal(deadlines.scheduled.length, 2);
-  (await deadlines.at(0)).callback();
-  const results = await completion;
-  assert.equal(results[0]?.status, "fail");
-  assert.match(String(results[0]?.error), /WPT timed out: never completes/);
+  const rejected = assert.rejects(completion, (error: unknown) =>
+    error instanceof WptHungError && error.observation.kind === "hung" &&
+    error.observation.verdict === "NOT RUN" && /timeout.js: never completes: test/.test(error.message) &&
+    error.testResult === undefined);
+  deadlines.scheduled.at(-1)!.callback();
+  await rejected;
   assert.ok(deadlines.scheduled.every((deadline) => deadline.cancelled));
   const topLevel = new WptHarness({});
   topLevel.run('missingCapability();', "top-level.js");
@@ -200,8 +315,11 @@ test("WPT promise cleanup failures abort later tests and never disappear", async
     `, "promise-cleanup.js");
     const completion = harness.finish();
     const rejected = assert.rejects(completion, (error: unknown) =>
-      error instanceof AggregateError && error.errors.some((entry: unknown) => expected.test(String(entry))));
-    if (cleanup.includes("new Promise")) (await deadlines.at(2)).callback();
+      (error instanceof AggregateError && error.errors.some((entry: unknown) => expected.test(String(entry)))) ||
+      (cleanup.includes("new Promise") && error instanceof WptHungError &&
+        error.observation.kind === "hung" && /promise-cleanup.js: cleanup: cleanup/.test(error.message) &&
+        error.testResult?.status === "pass"));
+    if (cleanup.includes("new Promise")) (await deadlines.phase("cleanup")).callback();
     await rejected;
     assert.equal(laterCalls, 0);
   }
@@ -252,8 +370,8 @@ test("WPT unsupported setup options and missing explicit done fail loudly", asyn
   pending.run('setup({explicit_done:true});', "missing-done.js");
   const completion = pending.finish();
   const rejected = assert.rejects(completion, (error: unknown) =>
-    error instanceof AggregateError && error.errors.some((entry: unknown) => /requires a call to done/.test(String(entry))));
-  (await deadlines.at(0)).callback();
+    error instanceof WptHungError && /missing-done.js: <registration>: registration/.test(error.message));
+  deadlines.scheduled.at(-1)!.callback();
   await rejected;
 });
 

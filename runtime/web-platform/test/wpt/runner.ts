@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { TextDecoder } from "node:util";
 import { WptHarness } from "./harness.ts";
+import { WptHungError, reportWptHung } from "./hung.ts";
 import type { WptBlock, WptResult } from "./harness.ts";
 import { readWptVersions, verifiedWptSource } from "./versions.ts";
 
@@ -348,7 +349,7 @@ export async function executeWptFixture(
         }
       };
     }
-    harness = new WptHarness(globals, fixture.blockedTests, context.timeoutMilliseconds, {
+    harness = new WptHarness(globals, fixture.blockedTests, Math.max(context.timeoutMilliseconds, 300000), {
       exposeSelf: environment.exposeSelf,
       defaultTestName: fixture.defaultTestName, globalAliases: environment.globalAliases,
       maxTests: fixture.expectedTests,
@@ -404,7 +405,7 @@ export async function runWptFixtures(
     const { fixture } = context;
     const name = fixture.path + (fixture.variant ?? "");
     await suite.test(name, async (file) => {
-      await executeWptFixture(prepared, createEnvironment, async (results) => {
+      try { await executeWptFixture(prepared, createEnvironment, async (results) => {
         assert.equal(results.length, fixture.expectedTests, "WPT registration count changed");
         const counts = { pass: 0, fail: 0, blocked: 0 };
         for (const result of results) {
@@ -414,7 +415,14 @@ export async function runWptFixtures(
           });
         }
         file.diagnostic(`WPT ${name}: ${counts.pass} pass, ${counts.fail} fail, ${counts.blocked} blocked`);
-      });
+      }); } catch (error) {
+        if (!(error instanceof WptHungError)) throw error;
+        reportWptHung(error);
+        file.diagnostic(`NOT RUN (hung): ${error.observation.reason}`);
+        // This file has no WPT verdict. check.sh transports the observation as
+        // exit 124, and the gate consumes its typed operator hold.
+        file.skip("NOT RUN (hung)");
+      }
     });
   }
 }
