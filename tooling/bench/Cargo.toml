@@ -20,6 +20,7 @@ nts-codegen-jvm.workspace = true
 nts-codegen-llvm.workspace = true
 nts-core.workspace = true
 nts-frontend-ts.workspace = true
+nts-semantic-schema.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 

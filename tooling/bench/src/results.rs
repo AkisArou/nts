@@ -17,16 +17,17 @@
 use std::collections::BTreeMap;
 use std::fmt::Write as _;
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
 
 use super::{Row, human, lane_matches};
 
 /// The columns kept: the key in `cells.tsv`, and the label a lane filter
 /// matches.
-const COLUMNS: [(&str, &str); 7] = [
+const COLUMNS: [(&str, &str); 8] = [
     ("cpp", "C++"),
     ("nts_c", "nts"),
+    ("nts_f64", "nts f64"),
     ("nts_llvm", "nts (LLVM)"),
     ("nts_jvm", "nts (JVM)"),
     ("java", "Java"),
@@ -42,7 +43,8 @@ const TARGETS: [(&str, &str, &str, &str); 3] = [
     ("jvm", "nts_jvm", "java", "Java"),
 ];
 
-const HEADER: &str = "case\tcolumn\tns_per_call\tmeasured\tcommit\tnote";
+const LEGACY_HEADER: &str = "case\tcolumn\tns_per_call\tmeasured\tcommit\tnote";
+const HEADER: &str = "case\tcolumn\tns_per_call\tmeasured\tcommit\tnote\toutcome";
 
 /// One measured cell: nanoseconds per call, or `None` where the program was
 /// refused.
@@ -52,6 +54,7 @@ struct Cell {
     measured: String,
     commit: String,
     note: String,
+    outcome: Option<super::execution::Outcome>,
 }
 
 /// Where and when a run was made, and what it measured.
@@ -104,19 +107,28 @@ pub(super) fn record(root: &Utf8Path, rows: &[Row], run: &Run<'_>) -> Result<()>
     let dir = root.join("results/benchmarks");
     std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
     let path = dir.join("cells.tsv");
-    let mut cells = read(&path);
+    let mut cells = read(&path)?;
     cells.extend(fresh);
     let mut data = String::from(HEADER);
     data.push('\n');
     for ((case, column), cell) in &cells {
-        let ns = cell
-            .ns
-            .map_or_else(|| "refused".to_owned(), |ns| format!("{ns:.1}"));
+        let ns = cell.ns.map_or_else(
+            || {
+                if cell.outcome.is_some() {
+                    "aborted".to_owned()
+                } else {
+                    "refused".to_owned()
+                }
+            },
+            |ns| format!("{ns:.1}"),
+        );
         let note = cell.note.replace(['\t', '\n'], " ");
         let _ = writeln!(
             data,
-            "{case}\t{column}\t{ns}\t{}\t{}\t{note}",
-            cell.measured, cell.commit
+            "{case}\t{column}\t{ns}\t{}\t{}\t{note}\t{}",
+            cell.measured,
+            cell.commit,
+            serde_json::to_string(&cell.outcome)?
         );
     }
     std::fs::write(&path, data).with_context(|| format!("writing {path}"))?;
@@ -153,7 +165,15 @@ fn cells_of(rows: &[Row], run: &Run<'_>) -> BTreeMap<(String, String), Cell> {
             if ns.is_none() && !explicit_absence {
                 continue;
             }
+            let outcome = row
+                .outcomes
+                .iter()
+                .find(|(column, _)| column.key() == key)
+                .map(|(_, outcome)| outcome.clone());
             let mut note = Vec::new();
+            if let Some(outcome) = &outcome {
+                note.push(outcome.to_string());
+            }
             if key == "cpp" {
                 note.extend(row.cpp_absence.iter().cloned());
             }
@@ -170,6 +190,7 @@ fn cells_of(rows: &[Row], run: &Run<'_>) -> BTreeMap<(String, String), Cell> {
                     measured: run.measured.clone(),
                     commit: run.commit.clone(),
                     note: note.join("; "),
+                    outcome,
                 },
             );
         }
@@ -184,6 +205,7 @@ fn value(row: &Row, key: &str) -> (Option<f64>, bool) {
     match key {
         "cpp" => (row.cpp, row.cpp_absence.is_some()),
         "nts_c" => nts(row.nts),
+        "nts_f64" => nts(row.unspecialized),
         "nts_llvm" => nts(row.llvm),
         "nts_jvm" => nts(row.jvm),
         "java" => (row.java, false),
@@ -193,27 +215,76 @@ fn value(row: &Row, key: &str) -> (Option<f64>, bool) {
     }
 }
 
-fn read(path: &Utf8Path) -> BTreeMap<(String, String), Cell> {
+fn read(path: &Utf8Path) -> Result<BTreeMap<(String, String), Cell>> {
     let mut cells = BTreeMap::new();
-    let Ok(text) = std::fs::read_to_string(path) else {
-        return cells;
+    let text = match std::fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(cells),
+        Err(error) => return Err(error).with_context(|| format!("reading {path}")),
     };
-    for line in text.lines().skip(1) {
+    let mut lines = text.lines();
+    let header = lines.next().context("benchmark cells header is missing")?;
+    ensure!(
+        header == HEADER || header == LEGACY_HEADER,
+        "unsupported benchmark cells header"
+    );
+    for (at, line) in lines.enumerate() {
         let fields: Vec<&str> = line.split('\t').collect();
-        let [case, column, ns, measured, commit, note] = fields.as_slice() else {
-            continue;
+        ensure!(
+            fields.len() == if header == HEADER { 7 } else { 6 },
+            "malformed benchmark cell at line {}",
+            at + 2
+        );
+        let [case, column, ns, measured, commit, note] = fields[..6] else {
+            unreachable!()
         };
-        cells.insert(
-            ((*case).to_owned(), (*column).to_owned()),
-            Cell {
-                ns: ns.parse().ok(),
-                measured: (*measured).to_owned(),
-                commit: (*commit).to_owned(),
-                note: (*note).to_owned(),
-            },
+        let outcome: Option<super::execution::Outcome> = if header == HEADER {
+            serde_json::from_str(fields[6])
+                .with_context(|| format!("invalid benchmark outcome at line {}", at + 2))?
+        } else {
+            None
+        };
+        if let Some(outcome) = &outcome {
+            outcome.validate()?;
+        }
+        let ns = match ns {
+            "aborted" => {
+                ensure!(outcome.is_some(), "aborted cell is missing its outcome");
+                None
+            }
+            "refused" => {
+                ensure!(outcome.is_none(), "refused cell carries a runtime outcome");
+                None
+            }
+            value => {
+                ensure!(outcome.is_none(), "runtime abort must not carry a timing");
+                let ns: f64 = value
+                    .parse()
+                    .context("benchmark cell timing is not numeric")?;
+                ensure!(
+                    ns.is_finite() && ns >= 0.0,
+                    "benchmark cell timing must be finite and nonnegative"
+                );
+                Some(ns)
+            }
+        };
+        ensure!(
+            cells
+                .insert(
+                    (case.to_owned(), column.to_owned()),
+                    Cell {
+                        ns,
+                        measured: measured.to_owned(),
+                        commit: commit.to_owned(),
+                        note: note.to_owned(),
+                        outcome,
+                    }
+                )
+                .is_none(),
+            "duplicate benchmark cell {case}/{column}"
         );
     }
-    cells
+    Ok(cells)
 }
 
 /// One target's table: every case it has a cell for.
@@ -243,9 +314,15 @@ fn render(
         .count();
     let refused = cases
         .iter()
-        .filter(|case| get(case, nts).is_some_and(|cell| cell.ns.is_none()))
+        .filter(|case| {
+            get(case, nts).is_some_and(|cell| cell.ns.is_none() && cell.outcome.is_none())
+        })
         .count();
 
+    let aborted = cases
+        .iter()
+        .filter(|case| get(case, nts).is_some_and(|cell| cell.outcome.is_some()))
+        .count();
     let mut out = String::new();
     let _ = writeln!(out, "# nts ({target}): latest results\n");
     let _ = writeln!(
@@ -255,6 +332,12 @@ fn render(
          Written by `nts-bench`; a row is from its own run.\n",
         cases.len()
     );
+    if aborted > 0 {
+        let _ = writeln!(
+            out,
+            "{aborted} runtime abort(s), with termination and stderr retained in cells.tsv.\n"
+        );
+    }
     let _ = writeln!(
         out,
         "| case | nts | node | nts/node | {named} | nts/{named} | measured |\n| --- | ---: | ---: | ---: | ---: | ---: | --- |"
@@ -264,7 +347,18 @@ fn render(
         let shown = |cell: Option<&Cell>| {
             cell.map_or_else(
                 || "--".to_owned(),
-                |cell| cell.ns.map_or_else(|| "refused".to_owned(), human),
+                |cell| {
+                    cell.ns.map_or_else(
+                        || {
+                            if cell.outcome.is_some() {
+                                "aborted".to_owned()
+                            } else {
+                                "refused".to_owned()
+                            }
+                        },
+                        human,
+                    )
+                },
             )
         };
         let times = |r: Option<f64>| r.map_or_else(|| "--".to_owned(), |r| format!("{r:.2}x"));
@@ -277,7 +371,9 @@ fn render(
         let when = mine.map_or("", |cell| cell.measured.as_str());
         let note = mine
             .filter(|cell| !cell.note.is_empty())
-            .map_or_else(String::new, |cell| format!(" ({})", cell.note));
+            .map_or_else(String::new, |cell| {
+                format!(" ({})", display_note(&cell.note))
+            });
         let _ = writeln!(
             out,
             "| {case} | {} | {} | {}{flag} | {} | {} | {when}{note} |",
@@ -299,6 +395,10 @@ fn render(
     out
 }
 
+fn display_note(note: &str) -> String {
+    note.replace(['\t', '\r', '\n'], " ").replace('|', "\\|")
+}
+
 #[cfg(test)]
 mod tests {
     use super::{BTreeMap, Cell, render};
@@ -309,7 +409,52 @@ mod tests {
             measured: measured.to_owned(),
             commit: "abc".to_owned(),
             note: String::new(),
+            outcome: None,
         }
+    }
+
+    #[test]
+    fn cells_decode_legacy_records_and_fail_closed_on_bad_outcomes() -> anyhow::Result<()> {
+        let path = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../target/bench-cell-decoder-{}.tsv",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(path.parent().expect("cell fixture directory"))?;
+        std::fs::write(
+            &path,
+            format!("{}\na\tnts_c\t1.0\tnow\tpin\t\n", super::LEGACY_HEADER),
+        )?;
+        assert_eq!(
+            super::read(&path)?[&("a".to_owned(), "nts_c".to_owned())].ns,
+            Some(1.0)
+        );
+        let abort = crate::execution::Outcome::RuntimeAbort {
+            termination: crate::execution::Termination::Exit { code: 7 },
+            stderr: "nts: refused: x\n".to_owned(),
+        };
+        let row = format!(
+            "a\tnts_c\taborted\tnow\tpin\tnote\t{}",
+            serde_json::to_string(&abort)?
+        );
+        std::fs::write(&path, format!("{}\n{row}\n", super::HEADER))?;
+        let cells = super::read(&path)?;
+        assert_eq!(
+            cells[&("a".to_owned(), "nts_c".to_owned())].outcome,
+            Some(abort)
+        );
+        assert!(super::render(&cells, "c", "nts_c", ("cpp", "C++")).contains("| a | aborted |"));
+        for bad in [
+            row.replace("\taborted\t", "\t1.0\t"),
+            row.replace("runtime-abort", "unknown-kind"),
+            row.replace("\"code\":7", "\"code\":0"),
+            "a\tnts_c\taborted\tnow\tpin\tnote\tnull".to_owned(),
+            format!("{row}\n{row}"),
+        ] {
+            std::fs::write(&path, format!("{}\n{bad}\n", super::HEADER))?;
+            assert!(super::read(&path).is_err(), "{bad}");
+        }
+        std::fs::remove_file(path)?;
+        Ok(())
     }
 
     #[test]

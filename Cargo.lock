@@ -326,6 +326,7 @@ dependencies = [
  "nts-codegen-llvm",
  "nts-core",
  "nts-frontend-ts",
+ "nts-semantic-schema",
  "serde",
  "serde_json",
 ]

@@ -36,8 +36,10 @@ use nts_frontend_ts::Frontend;
 use serde::{Deserialize, Serialize};
 
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
+mod execution;
 mod reference_link;
 mod results;
+mod workload;
 
 /// One measurement.
 #[derive(Serialize, Deserialize)]
@@ -667,10 +669,11 @@ fn legend(root: &Utf8Path) -> String {
         code costs more than the C++ a person would write, and the reason is worth \
         finding rather than hiding.\n\n\
         `nts (JVM)` is the same TypeScript compiled to class files and run by \
-        `java`. **`refused` is not `--`**: every case is attempted on every \
-        backend, so a missing JVM number is always a construct the lane \
-        declines by name, and a blank would be indistinguishable from the \
-        `Java` column's blank, which means nobody wrote a reference.\n\n\
+        `java`. `refused` means compilation was declined; `aborted` means the \
+        compiled program terminated without a checksum. Its termination and \
+        exact stderr are retained in the per-column outcome in `cells.tsv`, \
+        and the row's note prints the runtime's message. Independent references \
+        and engines still run, and every column that completes must agree.\n\n\
         `Java` is a hand-written reference for the same benchmark, on the same \
         JVM in the same run — the only reference here written in the language \
         the column beside it compiles to, which is what makes `nts (JVM)/Java` \
@@ -937,6 +940,7 @@ struct Row {
     cpp: Option<f64>,
     /// Optional reference dependencies that were unavailable on this host.
     cpp_absence: Option<String>,
+    outcomes: std::collections::BTreeMap<execution::Column, execution::Outcome>,
     /// This compiler's primary lane. **`None` where it refused the program.**
     ///
     /// Non-optional until 2026-09-15, which meant "this compiler cannot compile
@@ -1087,6 +1091,7 @@ const DECLINED: &str = "the JVM backend declined ";
 /// and two harness gaps.
 #[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 enum JvmAbsence {
+    RuntimeAbort,
     /// The backend declined a construct, by name, at emit time.
     Refused,
     /// The backend emitted it and the harness has no way to drive it.
@@ -1155,8 +1160,28 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
     let specialized = out.join(format!("{name}.specialized.c"));
     let plain = out.join(format!("{name}.plain.c"));
     let rendered = out.join(format!("{name}.specialized.ll"));
-    let entry = entry_points(case)?;
-    let specialized_text = emit(&tsconfig, &entry, true, provider, false)?;
+    // Capture once for both the source contract and the first compilation.
+    // Drop the checker snapshot before any timed child runs.
+    let (workload, specialized_text) = {
+        let snapshot = capture_snapshot(&tsconfig)?;
+        let custom = ["driver.cpp", "driver.java", "driver.mjs"]
+            .iter()
+            .all(|driver| case.join(driver).exists());
+        let workload = workload::Workload::from_source(&snapshot, &case.join("case.ts"), custom)?;
+        let program = prepare_snapshot(
+            &snapshot,
+            &workload.roots,
+            true,
+            provider,
+            nts_codegen_common::Backend::C,
+        )?;
+        let text = emit_program(&program, false);
+        (workload, text)
+    };
+    let entry = &workload.roots;
+    if let Ok(numeric) = workload.numeric() {
+        println!("workload: {shown}: {}({})", numeric.callee, numeric.input());
+    }
     let needs_unicode = reaches_unicode(&specialized_text);
     // Whether the program has top-level code to evaluate. `module__init` is
     // emitted only when it does, and calling a function that was never emitted
@@ -1166,7 +1191,7 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
     // every lane of *ours* is absent for one reason -- the program was refused --
     // and the references and the engines still measure, so the row is a real row
     // with `--` in four cells rather than a case that vanished.
-    let refused = missing_entry(&specialized_text, &driver_entries(&entry));
+    let refused = missing_entry(&specialized_text, &driver_entries(entry));
     if let Some(ref name) = refused {
         eprintln!(
             "note: {shown:<16} this compiler refuses `{name}`, so its four columns \
@@ -1176,11 +1201,11 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
     let lowers = refused.is_none();
     std::fs::write(&specialized, &specialized_text)
         .with_context(|| format!("writing {specialized}"))?;
-    std::fs::write(&plain, emit(&tsconfig, &entry, false, provider, false)?)
+    std::fs::write(&plain, emit(&tsconfig, entry, false, provider, false)?)
         .with_context(|| format!("writing {plain}"))?;
     // The second backend is allowed to fail here and further down. Anything it
     // cannot render leaves its column empty rather than taking the row with it.
-    let renderable = match emit(&tsconfig, &entry, true, provider, true) {
+    let renderable = match emit(&tsconfig, entry, true, provider, true) {
         Ok(text) => std::fs::write(&rendered, text).is_ok(),
         Err(_) => false,
     };
@@ -1197,16 +1222,17 @@ fn run_case(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path) -> Result<Measurem
         out,
         name,
         &tsconfig,
-        &entry,
         provider,
         defines,
         &specialized,
         &plain,
         &rendered,
         emission,
+        &workload,
     )?;
-    let (node, bun) = measure_hosts(case, out, name)?;
+    let (node, bun) = measure_hosts(case, out, name, &workload)?;
     Ok(Measurements {
+        workload: Some(workload),
         shown,
         results,
         absences,
@@ -1254,20 +1280,21 @@ fn variants(
     out: &Utf8Path,
     name: &str,
     tsconfig: &Utf8Path,
-    entry: &[String],
     provider: hir::Memory,
     defines: &[&str],
     specialized: &Utf8Path,
     plain: &Utf8Path,
     rendered: &Utf8Path,
     emission: Emission<'_>,
+    workload: &workload::Workload,
 ) -> Result<(Vec<Option<Measured>>, Absences)> {
     let mut results: Vec<Option<Measured>> = Vec::new();
     // Why the JVM column is empty, where it is. Two different absences that a
     // single blank -- or a single `refused` -- would flatten into one.
     let mut jvm_absence: Option<JvmAbsence> = None;
     let mut cpp_absence = None;
-    let driver = native_driver(case, out, name, emission.initializes)?;
+    let mut outcomes = std::collections::BTreeMap::new();
+    let driver = native_driver(case, out, name, emission.initializes, workload)?;
     // Only the lanes asked for. `NTS_BENCH_LANES=jvm` compiles no C++, no C and
     // no LLVM, which is most of a run's wall clock: every other lane goes
     // through `clang -flto` per case and the JVM lane goes through `javac`.
@@ -1335,19 +1362,19 @@ fn variants(
             // program has no classes, which empties the column and leaves the
             // row -- the same bargain the LLVM column keeps.
             Generated::Jvm => {
-                match jvm_case(root, case, out, name, tsconfig, entry, provider) {
-                    Ok(measured) => results.push(Some(measured)),
-                    Err(error) => {
-                        // The backend declining a construct and the harness
-                        // being unable to *call* the program are different
-                        // facts, and only the first is about this compiler.
-                        jvm_absence = Some(if error.to_string().starts_with(DECLINED) {
-                            JvmAbsence::Refused
-                        } else {
-                            JvmAbsence::NoDriver
-                        });
+                let run = jvm_case(root, case, out, name, tsconfig, provider, workload);
+                match observe(run, Generated::Jvm, &mut outcomes) {
+                    Ok(measured) => {
+                        if measured.is_none() {
+                            jvm_absence = Some(JvmAbsence::RuntimeAbort);
+                        }
+                        results.push(measured);
+                    }
+                    Err(error) if error.to_string().starts_with(DECLINED) => {
+                        jvm_absence = Some(JvmAbsence::Refused);
                         results.push(None);
                     }
+                    Err(error) => return Err(error),
                 }
                 continue;
             }
@@ -1366,26 +1393,45 @@ fn variants(
         }
         let built = compile(root, &cpp, &c, &binary, defines, &libraries)
             .and_then(|()| measure(&mut std::process::Command::new(&binary)));
-        match built {
-            Ok(measured) => results.push(Some(measured)),
-            // A refused program does not link, which is what a refusal is
-            // supposed to look like. It empties this column and leaves the row.
-            Err(_) if matches!(variant.generated, Generated::Llvm) => results.push(None),
-            Err(error) => return Err(error),
-        }
+        results.push(observe(built, variant.generated, &mut outcomes)?);
     }
     Ok((
         results,
         Absences {
             jvm: jvm_absence,
             cpp: cpp_absence,
+            outcomes,
         },
     ))
+}
+
+/// Keep program termination apart from a broken compiler, build or tool.
+fn observe(
+    result: Result<Measured>,
+    generated: Generated,
+    outcomes: &mut std::collections::BTreeMap<execution::Column, execution::Outcome>,
+) -> Result<Option<Measured>> {
+    match result {
+        Ok(measured) => Ok(Some(measured)),
+        Err(error) => {
+            if let (Some(column), Some(outcome)) = (
+                execution::Column::from_generated(generated),
+                error.downcast_ref::<execution::Outcome>(),
+            ) {
+                outcomes.insert(column, outcome.clone());
+                Ok(None)
+            } else {
+                Err(error)
+            }
+        }
+    }
 }
 
 /// Why the columns that may be missing are, for one row.
 #[derive(Serialize, Deserialize)]
 struct Absences {
+    #[serde(default)]
+    outcomes: std::collections::BTreeMap<execution::Column, execution::Outcome>,
     jvm: Option<JvmAbsence>,
     #[serde(default)]
     cpp: Option<String>,
@@ -1556,6 +1602,10 @@ fn validate_lanes() -> Result<()> {
 /// anything (`nts-bench --render`).
 #[derive(Serialize, Deserialize)]
 struct Measurements {
+    /// The one source-derived call all generated columns received.
+    /// Absent only in saved runs predating this contract.
+    #[serde(default)]
+    workload: Option<workload::Workload>,
     shown: String,
     results: Vec<Option<Measured>>,
     absences: Absences,
@@ -1645,9 +1695,20 @@ fn measure_hosts(
     case: &Utf8Path,
     out: &Utf8Path,
     name: &str,
+    workload: &workload::Workload,
 ) -> Result<(Measured, Option<Measured>)> {
-    let harness = node_harness(case, out, name)?;
-    let node = measure(std::process::Command::new("node").arg(&harness))?;
+    let harness = node_harness(case, out, name, workload)?;
+    let input: Vec<_> = workload
+        .numeric()
+        .ok()
+        .map(workload::Numeric::input)
+        .into_iter()
+        .collect();
+    let node = measure(
+        std::process::Command::new("node")
+            .arg(&harness)
+            .args(&input),
+    )?;
     // The same source on the other engine. Bun runs `.ts` natively too, so it
     // imports the identical file rather than a copy that could drift.
     // node always runs: it is the oracle every other lane's checksum is compared
@@ -1657,7 +1718,13 @@ fn measure_hosts(
         None
     } else {
         bun_binary()
-            .map(|binary| measure(std::process::Command::new(binary).arg(&harness)))
+            .map(|binary| {
+                measure(
+                    std::process::Command::new(binary)
+                        .arg(&harness)
+                        .args(&input),
+                )
+            })
             .transpose()?
     };
     Ok((node, bun))
@@ -1708,8 +1775,19 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
         lowers,
         node,
         bun,
+        ..
     } = measured;
     let (shown, lowers) = (shown.as_str(), *lowers);
+    for (column, outcome) in &absences.outcomes {
+        outcome.validate()?;
+        if results
+            .get(column.index())
+            .and_then(Option::as_ref)
+            .is_some()
+        {
+            bail!("{} has both a runtime abort and a timing", column.key());
+        }
+    }
     agreed(results, bun.as_ref(), node)?;
 
     // A lane that must run, unless a filter deliberately excluded it. Under
@@ -1725,7 +1803,14 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
         match results.get(at).and_then(Option::as_ref) {
             Some(measured) => Ok(Some(measured.ns_per_op)),
             None if filtered => Ok(Some(f64::NAN)),
-            None if !lowers => Ok(None),
+            None if !lowers
+                || VARIANTS
+                    .get(at)
+                    .and_then(|variant| execution::Column::from_generated(variant.generated))
+                    .is_some_and(|column| absences.outcomes.contains_key(&column)) =>
+            {
+                Ok(None)
+            }
             None => bail!("a variant that must run did not"),
         }
     };
@@ -1740,6 +1825,7 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
         case: shown.to_owned(),
         cpp: optional(2),
         cpp_absence: absences.cpp.clone(),
+        outcomes: absences.outcomes.clone(),
         nts: required(0)?,
         unspecialized: required(1)?,
         node: node.ns_per_op,
@@ -1753,6 +1839,9 @@ fn assemble(measured: &Measurements, filtered: bool) -> Result<Row> {
 
     if let Some(reason) = &row.cpp_absence {
         println!("note: {shown:<16} {reason}");
+    }
+    for (column, outcome) in &row.outcomes {
+        println!("note: {shown:<16} {} {outcome}", column.key());
     }
     note_unsteady_cells(shown, results, &mut row);
 
@@ -1829,14 +1918,12 @@ fn bun_binary() -> Option<Utf8PathBuf> {
 
 /// What the harnesses call, read off the case itself.
 ///
-/// A benchmark is an executable and its entry points are exactly the functions
-/// its `case.ts` exports. Taking them from the file rather than fixing a name
-/// keeps a case free to call its workload whatever the workload is.
-/// What to call and with what, read out of the one place it is written.
+/// The checker supplies one numeric entry and its static numeric seed before
+/// lowering. Legacy cases with a sole numeric export keep that entry name.
 ///
 /// # Why every driver is generated rather than written
 ///
-/// Every case states its workload once, in `case.ts`: the exported function is
+/// Every case states its workload once, in `case.ts`: the numeric `work` function is
 /// what to call and `export const seed` is the argument. Every lane's driver --
 /// the native `bench_run`, the JVM `Case.java`, the node harness -- comes from
 /// those two facts, so a column cannot measure a different workload than the
@@ -1848,8 +1935,7 @@ fn bun_binary() -> Option<Utf8PathBuf> {
 /// the call a single-line `return`. Two lanes coupled through a text format
 /// neither cared about, and a JVM number that moved if the C++ was reformatted.
 ///
-/// The parse is narrow on purpose. Thirty-nine cases share one shape, and a
-/// case that does not match is refused rather than guessed at.
+/// Unsupported or ambiguous contracts fail before a driver is compiled.
 /// The `nts (JVM)` cell, which says *which kind* of missing it is.
 ///
 /// `refused` is a construct this lane declines by name and is the compiler's;
@@ -1867,27 +1953,9 @@ fn jvm_cell(time: Option<f64>, absence: Option<JvmAbsence>) -> String {
         (Some(time), _) => human(time),
         (None, Some(JvmAbsence::NoDriver)) => "no driver".to_owned(),
         (None, Some(JvmAbsence::NotRun)) => "not run".to_owned(),
+        (None, Some(JvmAbsence::RuntimeAbort)) => "aborted".to_owned(),
         (None, _) => "refused".to_owned(),
     }
-}
-
-fn workload(case: &Utf8Path) -> Result<(String, Vec<String>)> {
-    let source = std::fs::read_to_string(case.join("case.ts"))
-        .with_context(|| format!("reading {case}/case.ts"))?;
-    let callee = exported_functions(&source)
-        .into_iter()
-        .next()
-        .with_context(|| format!("{case}/case.ts exports no function to call"))?;
-    let seed = source
-        .lines()
-        .find_map(|line| {
-            let rest = line.trim().strip_prefix("export const seed = ")?;
-            Some(rest.trim_end_matches(';').trim().to_owned())
-        })
-        .with_context(|| {
-            format!("{case}/case.ts declares no `export const seed` and supplies no driver")
-        })?;
-    Ok((callee, vec![seed]))
 }
 
 /// How to compile a case, which is the same answer for all of them.
@@ -1932,16 +2000,17 @@ fn case_tsconfig(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8Path
 /// directory holds no generated file at all. Node resolves an absolute
 /// specifier, which is what makes that possible -- a relative one would have to
 /// resolve from where the importer sits.
-fn node_harness(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8PathBuf> {
+fn node_harness(
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+    workload: &workload::Workload,
+) -> Result<Utf8PathBuf> {
     let supplied = case.join("driver.mjs");
     if supplied.exists() {
         return Ok(supplied);
     }
-    let (callee, arguments) = workload(case)?;
-    let seed = arguments
-        .first()
-        .cloned()
-        .with_context(|| format!("{case}/case.ts declares no `export const seed`"))?;
+    let callee = &workload.numeric()?.callee;
     let common = case
         .parent()
         .and_then(Utf8Path::parent)
@@ -1960,7 +2029,11 @@ fn node_harness(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8PathB
         "// Generated from `case.ts`. Edit that, or add a `driver.mjs` beside it.\n\
          import {{ measure }} from \"{common}\";\n\
          import {{ {callee} }} from \"{case}/case.ts\";\n\n\
-         const seed = Number(process.argv[2] ?? {seed});\n\
+         if (process.argv.length !== 3 || process.argv[2].trim() === \"\") {{\n\
+             throw new Error(\"benchmark input missing: expected one numeric seed argument\");\n\
+         }}\n\
+         const seed = Number(process.argv[2]);\n\
+         if (!Number.isFinite(seed)) throw new Error(\"benchmark input is not a finite number\");\n\
          measure(() => {callee}(seed));\n"
     );
     std::fs::write(&path, &text).with_context(|| format!("writing {path}"))?;
@@ -2014,6 +2087,7 @@ fn native_driver(
     out: &Utf8Path,
     name: &str,
     initializes: bool,
+    workload: &workload::Workload,
 ) -> Result<Utf8PathBuf> {
     use std::fmt::Write as _;
 
@@ -2021,7 +2095,9 @@ fn native_driver(
     if supplied.exists() {
         return Ok(supplied);
     }
-    let (callee, arguments) = workload(case)?;
+    let numeric = workload.numeric()?;
+    let callee = &numeric.callee;
+    let arguments = [numeric.input()];
     let mut text = String::from(
         "// Generated from `case.ts`. Edit that, or add a `driver.cpp` here.\n\
          #include \"harness.h\"\n\n\
@@ -2068,22 +2144,6 @@ fn native_driver(
     Ok(path)
 }
 
-/// The functions a case exports, which are its entry points.
-///
-/// The compiler is told to keep these alive; anything else is reachable from
-/// them or is not needed. This replaces reading the `extern "C"` block of a
-/// hand-written C++ shim, which stated the same fact one language further away.
-fn exported_functions(source: &str) -> Vec<String> {
-    source
-        .lines()
-        .filter_map(|line| {
-            let rest = line.trim().strip_prefix("export function ")?;
-            let name = rest.split('(').next()?.trim();
-            (!name.is_empty()).then(|| name.to_owned())
-        })
-        .collect()
-}
-
 /// One case through the JVM backend: classes, the runtime jar, a generated
 /// driver, and `java`.
 fn jvm_case(
@@ -2092,8 +2152,8 @@ fn jvm_case(
     out: &Utf8Path,
     name: &str,
     tsconfig: &Utf8Path,
-    entry: &[String],
     provider: hir::Memory,
+    workload: &workload::Workload,
 ) -> Result<Measured> {
     use std::fmt::Write as _;
 
@@ -2120,14 +2180,14 @@ fn jvm_case(
     };
 
     let supplied = case.join("driver.java");
-    let workload = if supplied.exists() {
+    let numeric = if supplied.exists() {
         None
     } else {
-        Some(workload(case)?)
+        Some(workload.numeric()?)
     };
     let program = prepared_program(
         tsconfig,
-        entry,
+        &workload.roots,
         true,
         provider,
         nts_codegen_common::Backend::Jvm,
@@ -2169,7 +2229,7 @@ fn jvm_case(
     // Verbatim rather than templated. A driver is twenty lines of Java that
     // belongs next to the case it drives, and inventing a substitution language
     // for the two cases that need one would be the larger mistake.
-    let Some((callee, arguments)) = workload else {
+    let Some(numeric) = numeric else {
         let text =
             std::fs::read_to_string(&supplied).with_context(|| format!("reading {supplied}"))?;
         let driver_path = dir.join("Case.java");
@@ -2180,6 +2240,8 @@ fn jvm_case(
     // a `volatile` field for the reason the C shim makes them `volatile`: a
     // loop-invariant argument lets the JIT hoist the whole call out of the timed
     // loop and report an impressive zero.
+    let callee = &numeric.callee;
+    let arguments = [numeric.input()];
     let mut driver = String::from("public final class Case {\n");
     // Top-level code, before anything is timed.
     //
@@ -2223,7 +2285,7 @@ fn jvm_case(
     let _ = writeln!(
         driver,
         "                return nts.gen.Program.{}({});",
-        nts_codegen_jvm::body::method_name(&callee),
+        nts_codegen_jvm::body::method_name(callee),
         passed.join(", ")
     );
     let _ = writeln!(driver, "            }}\n        }});\n    }}\n}}");
@@ -2514,26 +2576,6 @@ fn defines(line: &str, name: &str) -> bool {
     false
 }
 
-fn entry_points(case: &Utf8Path) -> Result<Vec<String>> {
-    let source = std::fs::read_to_string(case.join("case.ts"))
-        .with_context(|| format!("reading {case}/case.ts"))?;
-    let mut names = exported_functions(&source);
-    if names.is_empty() {
-        bail!("{case}/case.ts exports no function");
-    }
-    // Module evaluation is a root in the same sense the entry point is: nothing
-    // *calls* it, and the program is wrong without it.
-    //
-    // `Roots::Entry` is right that an executable's exports are not roots, and
-    // it dropped this with them. For forty-nine cases that was invisible --
-    // none had module-level state whose initialisation mattered. The fiftieth
-    // did, and it surfaced as a wrong *answer* rather than a link error: five
-    // `const` symbols stayed null, so five distinct map keys collapsed into
-    // one and every lookup hit it.
-    names.push(hir::lower::MODULE_INIT.to_owned());
-    Ok(names)
-}
-
 fn emit(
     tsconfig: &Utf8Path,
     entry: &[String],
@@ -2547,8 +2589,12 @@ fn emit(
         nts_codegen_common::Backend::C
     };
     let program = prepared_program(tsconfig, entry, specialize, provider, backend)?;
+    Ok(emit_program(&program, llvm))
+}
+
+fn emit_program(program: &hir::Program, llvm: bool) -> String {
     if llvm {
-        let emitted = nts_codegen_llvm::emit(&program, nts_codegen_llvm::Platform::SYSV_X86_64);
+        let emitted = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::SYSV_X86_64);
         // Silent by default: the second backend refuses whole categories of
         // program and says so once per function, and twenty cases' worth of
         // that would bury the table printed above it. `NTS_DECLINES=1` asks,
@@ -2559,13 +2605,13 @@ fn emit(
                 eprintln!("  declined: {} {}", diagnostic.code, diagnostic.message);
             }
         }
-        return Ok(emitted.text);
+        return emitted.text;
     }
-    let emitted = nts_codegen_c::emit(&program, nts_core::hir::native::NativeAbi::LP64);
+    let emitted = nts_codegen_c::emit(program, nts_core::hir::native::NativeAbi::LP64);
     for diagnostic in &emitted.diagnostics {
         eprintln!("  {} {}", diagnostic.code, diagnostic.message);
     }
-    Ok(emitted.writer.text().to_owned())
+    emitted.writer.text().to_owned()
 }
 
 /// The middle end, run once and shared by every lane.
@@ -2585,6 +2631,11 @@ fn prepared_program(
     provider: hir::Memory,
     backend: nts_codegen_common::Backend,
 ) -> Result<hir::Program> {
+    let snapshot = capture_snapshot(tsconfig)?;
+    prepare_snapshot(&snapshot, entry, specialize, provider, backend)
+}
+
+fn capture_snapshot(tsconfig: &Utf8Path) -> Result<nts_semantic_schema::SemanticSnapshot> {
     let cwd = Utf8PathBuf::from_path_buf(std::env::current_dir()?)
         .map_err(|_| anyhow::anyhow!("the benchmark directory is not UTF-8"))?;
     let snapshot = Frontend::new(cwd)
@@ -2593,7 +2644,16 @@ fn prepared_program(
     if snapshot.has_errors() {
         bail!("{tsconfig} does not typecheck");
     }
+    Ok(snapshot)
+}
 
+fn prepare_snapshot(
+    snapshot: &nts_semantic_schema::SemanticSnapshot,
+    entry: &[String],
+    specialize: bool,
+    provider: hir::Memory,
+    backend: nts_codegen_common::Backend,
+) -> Result<hir::Program> {
     // A benchmark is an *executable* whose entry point is `work`, and an
     // executable's exports are not roots: nothing outside the program can call
     // them, because there is no outside.
@@ -2610,7 +2670,7 @@ fn prepared_program(
     // program under LTO with `bench_run` as its entry; V8 sees the module and
     // specializes on the types it observes.
     let prepared = match hir::prepare_with(
-        &snapshot,
+        snapshot,
         &hir::Options {
             specialize_numbers: specialize,
             provider,
@@ -3059,7 +3119,7 @@ fn refusal_drift(rows: &[Row], known: &[(&str, &str)]) -> Option<String> {
     use std::fmt::Write as _;
     let mut refused: Vec<&str> = rows
         .iter()
-        .filter(|row| row.nts.is_none())
+        .filter(|row| row.nts.is_none() && !row.outcomes.contains_key(&execution::Column::C))
         .map(|row| row.case.strip_suffix(" (rc)").unwrap_or(&row.case))
         .collect();
     refused.sort_unstable();
@@ -3190,11 +3250,7 @@ const KNOWN_BIMODAL: &[(&str, &str, f64, &str, Basis)] = &[
 fn measure_once(command: &mut std::process::Command) -> Result<Measured> {
     let output = command.output().context("running a benchmark")?;
     if !output.status.success() {
-        bail!(
-            "benchmark exited {}: {}",
-            output.status,
-            String::from_utf8_lossy(&output.stderr)
-        );
+        return Err(execution::Outcome::of(&output)?.into());
     }
     let text = String::from_utf8_lossy(&output.stdout);
     let mut fields = text.split_whitespace();
@@ -3319,6 +3375,7 @@ mod tests {
             case: case.to_owned(),
             cpp: None,
             cpp_absence: None,
+            outcomes: std::collections::BTreeMap::new(),
             nts: Some(1.0),
             unspecialized: Some(1.0),
             node: 1.0,
@@ -3358,11 +3415,93 @@ mod tests {
         }
     }
 
+    #[test]
+    fn runtime_abort_keeps_independent_columns_and_cells() -> anyhow::Result<()> {
+        use super::execution::{Column, Outcome, Termination};
+        let abort = Outcome::RuntimeAbort {
+            termination: Termination::Signal { signal: 6 },
+            stderr: "nts: refused: index 7 is outside [0, 1)\n".to_owned(),
+        };
+        let mut observation = super::Measurements {
+            workload: None,
+            shown: "runtime-abort-control".to_owned(),
+            results: vec![None, None, Some(measured(10.0)), None, None, None],
+            absences: super::Absences {
+                jvm: Some(super::JvmAbsence::RuntimeAbort),
+                cpp: None,
+                outcomes: [Column::C, Column::F64, Column::Llvm, Column::Jvm]
+                    .into_iter()
+                    .map(|column| (column, abort.clone()))
+                    .collect(),
+            },
+            lowers: true,
+            node: measured(20.0),
+            bun: Some(measured(19.0)),
+        };
+        // The saved run retains the typed observation and all independent work.
+        let saved = serde_json::to_string(&observation)?;
+        let reread: super::Measurements = serde_json::from_str(&saved)?;
+        let row = super::assemble(&reread, false)?;
+        assert_eq!(row.cpp, Some(10.0));
+        assert_eq!(row.bun, Some(19.0));
+        assert!(row.nts.is_none());
+        assert_eq!(row.outcomes.get(&Column::C), Some(&abort));
+        assert_eq!(
+            super::refusal_drift(std::slice::from_ref(&row), &[]),
+            None,
+            "a runtime abort is distinct from a compile refusal"
+        );
+        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join(format!(
+            "../../target/bench-abort-cells-{}",
+            std::process::id()
+        ));
+        super::results::record(
+            &root,
+            &[row],
+            &super::results::Run {
+                measured: "test".to_owned(),
+                commit: "test".to_owned(),
+                lanes: None,
+                spoiled: &[],
+            },
+        )?;
+        let cells = std::fs::read_to_string(root.join("results/benchmarks/cells.tsv"))?;
+        let native = cells
+            .lines()
+            .find(|line| line.contains("\tnts_c\t"))
+            .context("missing native cell")?;
+        let fields: Vec<_> = native.split('\t').collect();
+        assert_eq!(fields[2], "aborted");
+        assert_eq!(
+            serde_json::from_str::<Option<Outcome>>(fields[6])?,
+            Some(abort)
+        );
+        assert!(cells.lines().any(|line| line.contains("\tnode\t20.0\t")));
+        assert!(cells.lines().any(|line| line.contains("\tcpp\t10.0\t")));
+        // Missing timings cannot hide a disagreement between columns that ran.
+        observation.results[2]
+            .as_mut()
+            .expect("C++ observation")
+            .checksum = "different".to_owned();
+        assert!(super::assemble(&observation, false).is_err());
+        observation.results[0] = Some(measured(1.0));
+        assert!(
+            super::assemble(&observation, false)
+                .err()
+                .context("contradictory observation was accepted")?
+                .to_string()
+                .contains("both a runtime abort and a timing")
+        );
+        std::fs::remove_dir_all(root)?;
+        Ok(())
+    }
+
     /// A saved run assembles the rows it assembled when it was measured: the
     /// measurements survive the round trip through `run.json`.
     #[test]
     fn a_saved_run_assembles_the_same_rows() {
         let measurements = super::Measurements {
+            workload: None,
             shown: "fib".to_owned(),
             results: vec![
                 Some(measured(10.0)),
@@ -3371,6 +3510,7 @@ mod tests {
                 Some(measured(10.5)),
             ],
             absences: super::Absences {
+                outcomes: std::collections::BTreeMap::new(),
                 jvm: Some(super::JvmAbsence::NotRun),
                 cpp: None,
             },
@@ -3394,6 +3534,7 @@ mod tests {
     fn missing_optional_cpp_library_keeps_a_valid_row_and_its_reason() {
         let absent = "optional C++ libraries unavailable: missing; C++ column is --";
         let measurements = super::Measurements {
+            workload: None,
             shown: "optional-link-control".to_owned(),
             results: vec![
                 Some(measured(1.0)),
@@ -3402,6 +3543,7 @@ mod tests {
                 Some(measured(1.0)),
             ],
             absences: super::Absences {
+                outcomes: std::collections::BTreeMap::new(),
                 jvm: None,
                 cpp: Some(absent.to_owned()),
             },
@@ -3434,6 +3576,7 @@ mod tests {
             let table = root.join("results/benchmarks/full.md");
             std::fs::write(&table, "old table\n").expect("old full table");
             let measurements = super::Measurements {
+                workload: None,
                 shown: "work-guard-control".to_owned(),
                 results: vec![
                     Some(measured(1.5)),
@@ -3443,6 +3586,7 @@ mod tests {
                     Some(measured(if rejected { 11_000.0 } else { 2.0 })),
                 ],
                 absences: super::Absences {
+                    outcomes: std::collections::BTreeMap::new(),
                     jvm: None,
                     cpp: None,
                 },
