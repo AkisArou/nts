@@ -24,11 +24,22 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 ## Two backends, one runtime
 
 - **C** (`nts emit-c`) writes C11 for clang. It is the readable one, and the
-  oracle the LLVM backend is compared against.
+  oracle the LLVM backend's output is compared against.
 - **LLVM** (`nts emit-llvm`) writes textual IR that `clang -x ir` compiles. The
   `nts` binary links no LLVM library, so no LLVM version is pinned into it
   (register [T-2](../open-questions.md#6-bindings-products-toolchains-dependencies)).
   It classifies records passed by value for System V, Win64 and AAPCS64.
+- **LLVM is the frontier native backend, and C is held equally.** Both meet
+  [the bar](../README.md#the-bar) on every row, and a row where LLVM is slower
+  than C is a defect. The LLVM IR states to the optimizer everything nts
+  proves (designed, not built): which accesses cannot alias, from the
+  layouts (type-based alias metadata, alias scopes), that a fresh allocation
+  aliases nothing, which integer operations cannot overflow (`nsw`, `nuw`),
+  which address computations stay inside their object (`inbounds`), which
+  pointers are non-null and dereferenceable, which functions cannot unwind
+  and what memory they touch, the ranges of lengths and integers, and the CPU
+  each function is built for. C can say only part of
+  this, so LLVM is where nts can pass C.
 - Both read one prepared program, emit the same symbols and ABI, and link the
   same runtime, so a program built by either links against the same C. A
   disagreement between the two is a backend bug by construction.

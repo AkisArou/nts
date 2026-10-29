@@ -801,6 +801,23 @@ From the open-questions audit; each is the register's recommendation.
   Order: the compiler lane builds it after the flow fixes have landed and the
   validation build's mode exists, and runtime2's loop versioning takes bounds
   as its second client.
+- **LLVM is the frontier native backend, and C is held equally.** The user:
+  "LLVM is the frontier native lane. C of-course equally." Both meet the bar
+  on every row, and a row where LLVM is slower than C is a defect. In the
+  10-29 comparator sitting the two are even on average (LLVM over C, geomean
+  1.009 over 101 rows), but LLVM is more than 5% slower on 15 rows:
+  `awfy-sieve` 1.31, `json-scan` 1.29, `upcast` 1.21, `awfy-permute` 1.14,
+  `array-methods` 1.13. A likely general cause, found the same day: for
+  `awfy-sieve`, nts's LLVM IR (before optimization) has no `nsw` or `nuw` on
+  its integer arithmetic, no `inbounds` on its address computations, no
+  function attributes or CPU, and no `!range`. It does carry 15 TBAA tags and
+  6 `noalias`. The IR clang makes from nts's C (after `-O2`, so the counts are
+  only a guide) has 54 `nsw`/`nuw`, 21 `inbounds`, 12 attribute groups with
+  the CPU, 7 `!range` and 36 TBAA tags. Without no-overflow and in-bounds
+  facts, LLVM cannot widen an `int32` loop counter or reason about the
+  addresses it indexes, which costs tight loops. The LLVM IR is to state what
+  nts proves ([native](../../targets/native.md#two-backends-one-runtime)),
+  measured first by hand-editing the IR of the worst rows.
 
 ## Plan (10-29): the Bun and ScriptC studies
 

@@ -412,7 +412,15 @@ add, in order:
      arrays, to size a fusion design (compiler);
    - the JVM-only gaps (`cyclic-churn`, `release-acyclic` and
      `clbg-spectral-norm` on the JVM): the JVM's collector and flags, and
-     the object layout, measured per row (runtime2).
+     the object layout, measured per row (runtime2);
+   - **the LLVM backend slower than C** on 15 rows, `awfy-sieve` (1.31) and
+     `json-scan` (1.29) the worst. Its IR has no `nsw` or `nuw`, no
+     `inbounds`, no function attributes or CPU and no `!range`, and its TBAA
+     may be coarser than C's. The worst rows' IR is hand-edited to add what
+     nts proves, and each addition is measured by instruction counts
+     (runtime). The LLVM backend then emits them from the layouts and facts
+     (compiler), first to match C, then to pass it
+     ([native](targets/native.md#two-backends-one-runtime)).
 3. **Already planned, confirmed:** loop versions behind one entry test (the
    integral regions, being built), the generator protocol (L16), typed
    `JSON.parse` into its layout, helper contracts in memory stage 0, slices
