@@ -228,7 +228,7 @@ test("raw import copies after normalization and consumes exact DataView bytes", 
   }, true, ["encrypt"])), dom("DataError"));
 });
 
-test("operation permissions use the hidden slots and do not consult mutable includes", async () => {
+test("operation permissions use the hidden slots and do not consult mutable includes", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const key = await f.hmac(["verify"]);
   key.usages.push("sign");
@@ -492,7 +492,7 @@ test("public key algorithms and JWK objects use Web IDL member order", async () 
   assert.deepEqual(Object.keys(await f.settle(f.subtle.exportKey("jwk", key))), ["alg", "ext", "k", "key_ops", "kty"]);
 });
 
-test("key generation cannot be redirected by a replacement Math.ceil", async () => {
+test("key generation cannot be redirected by a replacement Math.ceil", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const original = Math.ceil;
   let pending: Promise<CryptoKey>;
@@ -506,7 +506,7 @@ test("key generation cannot be redirected by a replacement Math.ceil", async () 
   assert.deepEqual(await f.raw(key), new Uint8Array([255, 255, 128]));
 });
 
-test("wrapping never invokes inherited toJSON hooks", async () => {
+test("wrapping never invokes inherited toJSON hooks", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const key = await f.hmac();
   const wrapping = await f.settle(f.subtle.generateKey({ name: "AES-GCM", length: 128 }, false, ["wrapKey", "unwrapKey"]));
@@ -559,7 +559,7 @@ test("key and buffer IDL conversions precede algorithm getters for operations", 
   assert.equal(f.provider.verifies, 0);
 });
 
-test("Promise helper replacements cannot run after input borrowing or alter early rejection", async () => {
+test("Promise helper replacements cannot run after input borrowing or alter early rejection", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const key = await f.hmac();
   const data = ascii("Hi There");
@@ -587,7 +587,7 @@ test("Promise helper replacements cannot run after input borrowing or alter earl
   assert.equal(calls, 0);
 });
 
-test("WeakMap prototype changes cannot capture hidden CryptoKey state", async () => {
+test("WeakMap prototype changes cannot capture hidden CryptoKey state", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const key = await f.hmac();
   const originalGet = WeakMap.prototype.get;
@@ -615,7 +615,7 @@ test("WeakMap prototype changes cannot capture hidden CryptoKey state", async ()
   assert.deepEqual(captured, []);
 });
 
-test("borrowed CBC data cannot invoke a replacement intrinsic call property", async () => {
+test("borrowed CBC data cannot invoke a replacement intrinsic call property", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const key = await f.settle(f.subtle.generateKey({ name: "AES-CBC", length: 128 }, true, ["encrypt", "decrypt"]));
   const bytes = new Uint8Array([1, 2, 3]);

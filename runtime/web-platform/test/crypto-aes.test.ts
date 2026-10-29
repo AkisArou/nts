@@ -245,7 +245,7 @@ test("AES-CTR low-bit wrap keeps the nonce unchanged and reaches one primitive p
   assert.equal(f.provider.encryptCalls, 1);
 });
 
-test("AES-CTR counter reuse checks ignore Math.ceil changes from algorithm getters", async () => {
+test("AES-CTR counter reuse checks ignore Math.ceil changes from algorithm getters", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const f = fixture();
   const key = await importAes(f, "AES-CTR");
   for (const method of ["encrypt", "decrypt"] as const) {

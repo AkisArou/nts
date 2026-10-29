@@ -367,7 +367,7 @@ test("parameter snapshots do not invoke author buffer, species, or iteration pro
   assert.deepEqual([...result.iv], [1, 2, 3]);
 });
 
-test("numeric conversion uses captured intrinsics after author coercion runs", () => {
+test("numeric conversion uses captured intrinsics after author coercion runs", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const finite = Number.isFinite;
   const truncate = Math.trunc;
   try {
@@ -385,7 +385,7 @@ test("numeric conversion uses captured intrinsics after author coercion runs", (
   }
 });
 
-test("algorithm-name matching does not call a replaced String prototype method", () => {
+test("algorithm-name matching does not call a replaced String prototype method", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const charCodeAt = String.prototype.charCodeAt;
   try {
     const normalized = normalizeAlgorithm({

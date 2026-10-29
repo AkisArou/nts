@@ -165,7 +165,7 @@ test("native AES-CTR handles a partial final block after a counter-field wrap", 
   assert.equal(hex(encrypted.bytes), wrapVectors[0].expected.slice(0, 34));
 });
 
-test("native AES-CTR adaptation ignores late Math replacements", () => {
+test("native AES-CTR adaptation ignores late Math replacements", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const provider = new NodeCryptoProvider();
   const key = secret(provider, new Uint8Array(16));
   const parameters = { name: "AES-CTR", counter: bytes(wrapVectors[0].initial), counterLength: 1 } as const;

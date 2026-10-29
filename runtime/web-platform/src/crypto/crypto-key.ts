@@ -88,15 +88,14 @@ class CryptoKeyState {
 
 const constructorToken = Symbol("CryptoKey construction");
 const keyStates = new WeakMap<object, CryptoKeyState>();
-// A mutable WeakMap.prototype must never receive this private map as its receiver.
-const readKeyState = keyStates.get.bind(keyStates);
-const writeKeyState = keyStates.set.bind(keyStates);
+// Rule 405266cf7: nts programs cannot replace intrinsic methods. Read the
+// private map directly instead of capturing bound copies of its methods.
 
 function keyState(key: unknown): CryptoKeyState {
   if ((typeof key !== "object" || key === null) && typeof key !== "function") {
     throw new TypeError("Value is not a CryptoKey");
   }
-  const state = readKeyState(key);
+  const state = keyStates.get(key);
   if (state === undefined) throw new TypeError("Value is not a CryptoKey");
   return state;
 }
@@ -145,7 +144,7 @@ export function createCryptoKey(
   const slots = new CryptoKeySlots(type, extractable, algorithm, usages, handle);
   const state = new CryptoKeyState(slots);
   const key = new CryptoKey(constructorToken);
-  writeKeyState(key, state);
+  keyStates.set(key, state);
   return key;
 }
 

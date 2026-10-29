@@ -7,14 +7,12 @@
  * byteLength, resizable and detached reads below are the Web IDL slot reads.
  * Fixed class identity supplies the buffer/view brands and typed-array kind.
  */
-const isArrayBufferView = ArrayBuffer.isView;
-const ByteArray = Uint8Array;
-const emptyBytes = new ByteArray(0);
+const emptyBytes = new Uint8Array(0);
 
 export type CryptoBufferSource = ArrayBuffer | ArrayBufferView;
 
 export function cryptoTypedArrayName(view: ArrayBufferView): string | undefined {
-  if (view instanceof ByteArray) return "Uint8Array";
+  if (view instanceof Uint8Array) return "Uint8Array";
   if (view instanceof Int8Array) return "Int8Array";
   if (view instanceof Uint8ClampedArray) return "Uint8ClampedArray";
   if (view instanceof Int16Array) return "Int16Array";
@@ -36,13 +34,13 @@ function requireFixedArrayBuffer(value: unknown): asserts value is ArrayBuffer {
 }
 
 export function toCryptoArrayBufferView(value: unknown): ArrayBufferView {
-  if (!isArrayBufferView(value)) throw new TypeError("Expected an ArrayBufferView");
+  if (!ArrayBuffer.isView(value)) throw new TypeError("Expected an ArrayBufferView");
   requireFixedArrayBuffer(value.buffer);
   return value;
 }
 
 export function toCryptoBufferSource(value: unknown): CryptoBufferSource {
-  if (isArrayBufferView(value)) {
+  if (ArrayBuffer.isView(value)) {
     requireFixedArrayBuffer(value.buffer);
     return value;
   }
@@ -52,7 +50,7 @@ export function toCryptoBufferSource(value: unknown): CryptoBufferSource {
 
 /** Select BufferSource before the dictionary branch of importKey's IDL union. */
 export function isCryptoBufferSource(value: unknown): boolean {
-  return isArrayBufferView(value) || value instanceof ArrayBuffer;
+  return ArrayBuffer.isView(value) || value instanceof ArrayBuffer;
 }
 
 /**
@@ -62,16 +60,16 @@ export function isCryptoBufferSource(value: unknown): boolean {
  * A detached BufferSource has an empty byte sequence (Web IDL #get-buffer-source-copy).
  */
 export function cryptoBytes(source: CryptoBufferSource): Uint8Array {
-  if (!isArrayBufferView(source)) {
+  if (!ArrayBuffer.isView(source)) {
     if (source.detached) return emptyBytes;
-    return new ByteArray(source);
+    return new Uint8Array(source);
   }
   const name = cryptoTypedArrayName(source);
   const buffer = source.buffer as ArrayBuffer;
   if (buffer.detached) return emptyBytes;
   // The common path passes the caller's very view, allocating no wrapper.
   if (name === "Uint8Array") return source as Uint8Array;
-  return new ByteArray(buffer, source.byteOffset, source.byteLength);
+  return new Uint8Array(buffer, source.byteOffset, source.byteLength);
 }
 
 export function cryptoViewByteLength(view: ArrayBufferView): number {
@@ -81,13 +79,13 @@ export function cryptoViewByteLength(view: ArrayBufferView): number {
 
 /** Internal bounds are already checked; intrinsic view slots have fixed layouts. */
 export function cryptoByteSubarray(bytes: Uint8Array, start: number, end: number): Uint8Array {
-  return new ByteArray(bytes.buffer, bytes.byteOffset + start, end - start);
+  return new Uint8Array(bytes.buffer, bytes.byteOffset + start, end - start);
 }
 
 /** Snapshot only when later author code can observe the specification's copy. */
 export function copyCryptoBytes(source: CryptoBufferSource): Uint8Array {
   const bytes = cryptoBytes(source);
-  const result = new ByteArray(bytes.byteLength);
+  const result = new Uint8Array(bytes.byteLength);
   result.set(bytes);
   return result;
 }

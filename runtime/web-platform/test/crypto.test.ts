@@ -62,7 +62,7 @@ function domError(name: string): (error: unknown) => boolean {
   return (error: unknown): boolean => error instanceof DOMException && error.name === name;
 }
 
-test("digest's byte access survives changes to buffer globals during normalization", async () => {
+test("digest's byte access survives changes to buffer globals during normalization", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, async () => {
   const { crypto, scheduler } = fixture();
   const bytes = ascii("abc");
   const originalIsView = ArrayBuffer.isView;

@@ -20,16 +20,13 @@ import {
 import type { JsonWebKeyObject, KeyFormat } from "./jwk.ts";
 import { exportSecretKey, generateSecretKey, importSecretKey, signHmac, verifyHmac } from "./secret-key.ts";
 
-const createPromiseResolvers = Promise.withResolvers.bind(Promise) as typeof Promise.withResolvers;
-const rejectedPromise = Promise.reject.bind(Promise) as typeof Promise.reject;
-
 /**
  * Execute the specification's parallel steps synchronously over native primitives,
  * then settle from one crypto task. Conversion/normalization stays outside this
  * boundary so early IDL errors do not become scheduled operation failures.
  */
 function cryptoTask<T>(scheduler: Scheduler, operation: () => T): Promise<T> {
-  const pending = createPromiseResolvers<T>();
+  const pending = Promise.withResolvers<T>();
   try {
     const result = operation();
     scheduler.enqueue(() => pending.resolve(result));
@@ -99,7 +96,7 @@ export class SubtleCrypto {
         return digest.buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -119,7 +116,7 @@ export class SubtleCrypto {
         return encryptAes(provider, normalized, slots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -139,7 +136,7 @@ export class SubtleCrypto {
         return decryptAes(provider, normalized, slots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -159,7 +156,7 @@ export class SubtleCrypto {
         return signHmac(provider, slots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -181,7 +178,7 @@ export class SubtleCrypto {
         return verifyHmac(provider, slots, signatureBytes, dataBytes);
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -198,7 +195,7 @@ export class SubtleCrypto {
       const normalized = normalizeAlgorithm(identifier, "generateKey");
       return cryptoTask(scheduler, () => generateSecretKey(provider, random, normalized, canExport, usages));
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -219,7 +216,7 @@ export class SubtleCrypto {
       const data = dictionary ? source : cryptoBytes(source);
       return cryptoTask(scheduler, () => importSecretKey(provider, keyFormat, data, normalized, canExport, usages));
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -237,7 +234,7 @@ export class SubtleCrypto {
         return result instanceof JsonWebKey ? toJsonWebKeyObject(result) : result.buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -263,7 +260,7 @@ export class SubtleCrypto {
         return encryptAes(provider, normalized, wrappingSlots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -298,7 +295,7 @@ export class SubtleCrypto {
         return importSecretKey(provider, keyFormat, data, normalizedKey, canExport, usages);
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 }

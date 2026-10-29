@@ -97,7 +97,7 @@ test("JWK sequence members reject primitive iterables and non-iterable objects",
   assert.deepEqual(toJsonWebKey({ key_ops: new String("ab") }).key_ops, ["a", "b"]);
 });
 
-test("sequence conversion captures next once and ignores callback call properties", () => {
+test("sequence conversion captures next once and ignores callback call properties", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   let reads = 0;
   let index = 0;
   const next = function (this: unknown): { done: boolean; value?: string } {
@@ -183,7 +183,7 @@ test("public JWK conversion omits absent members and copies sequence dictionarie
   assert.deepEqual(internal.key_ops, ["sign"]);
 });
 
-test("public JWK conversion creates own fields without inherited setter calls", () => {
+test("public JWK conversion creates own fields without inherited setter calls", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const internal = toJsonWebKey({ alg: "HS256", ext: true, k: "AA", key_ops: ["sign"], kty: "oct" });
   const original = Object.getOwnPropertyDescriptor(Object.prototype, "kty");
   let setterCalls = 0;
@@ -284,7 +284,7 @@ test("wrapped JWK parsing replacement-decodes UTF-8 and accepts a leading BOM", 
   assert.equal(parseWrappedJwk(utf8('{"kty":"oct","alg":"\\ud800"}')).alg, "\ud800");
 });
 
-test("wrapped JWK conversions ignore caller Object and Array string hooks", () => {
+test("wrapped JWK conversions ignore caller Object and Array string hooks", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const originalObjectString = Object.prototype.toString;
   const originalJoin = Array.prototype.join;
   const originalParse = JSON.parse;
@@ -314,7 +314,7 @@ test("generated oct JWK serialization is independent and may pad for AES-KW", ()
   assert.throws(() => serializeWrappedJwk(new JsonWebKey(), false), TypeError);
 });
 
-test("wrapped JWK serialization never calls JSON.stringify or toJSON hooks", () => {
+test("wrapped JWK serialization never calls JSON.stringify or toJSON hooks", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const key = toJsonWebKey({ kty: "oct", k: "AA", alg: "HS256", key_ops: ["sign"], ext: true });
   const originalStringify = JSON.stringify;
   const objectHook = Object.getOwnPropertyDescriptor(Object.prototype, "toJSON");
@@ -335,7 +335,7 @@ test("wrapped JWK serialization never calls JSON.stringify or toJSON hooks", () 
   assert.equal(parseWrappedJwk(encoded).k, "AA");
 });
 
-test("late String, Array and Math replacements do not enter JWK serialization or base64", () => {
+test("late String, Array and Math replacements do not enter JWK serialization or base64", { skip: "rule 405266cf7 (call methods plainly): nts programs cannot redefine intrinsic methods, constructors, or prototypes" }, () => {
   const key = toJsonWebKey({ kty: "oct", k: "AA", alg: "HS256", key_ops: ["sign"], ext: true });
   const originalCode = String.prototype.charCodeAt;
   const originalSlice = String.prototype.slice;

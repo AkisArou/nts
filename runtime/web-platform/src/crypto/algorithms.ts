@@ -5,9 +5,6 @@ import { copyCryptoBytes, cryptoBytes, toCryptoBufferSource } from "./buffer-sou
 import type { CryptoBufferSource } from "./buffer-source.ts";
 import { toCryptoUnsignedInteger } from "./webidl.ts";
 
-const stringCodeUnit = Function.prototype.call.bind(String.prototype.charCodeAt) as
-  (value: string, index: number) => number;
-
 /** Web Cryptography §11. Objects are not converted to dictionaries until normalization. */
 export type AlgorithmIdentifier = string | object;
 
@@ -194,8 +191,8 @@ function algorithmName(algorithm: object): string {
 function equalIgnoringASCIICase(left: string, right: string): boolean {
   if (left.length !== right.length) return false;
   for (let index = 0; index < left.length; index++) {
-    let code = stringCodeUnit(left, index);
-    let expected = stringCodeUnit(right, index);
+    let code = left.charCodeAt(index);
+    let expected = right.charCodeAt(index);
     if (code >= 0x61 && code <= 0x7a) code -= 0x20;
     if (expected >= 0x61 && expected <= 0x7a) expected -= 0x20;
     if (code !== expected) return false;

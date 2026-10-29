@@ -11,11 +11,7 @@ import type { AesCbcParams, AesCtrParams, AesGcmParams, Algorithm } from "./algo
 import { copyCryptoBytes, cryptoByteSubarray, cryptoViewByteLength } from "./buffer-source.ts";
 import type { CryptoKeySlots } from "./crypto-key.ts";
 
-const call = Function.prototype.call.bind(Function.prototype.call) as
-  (callback: Function, receiver: unknown, ...args: unknown[]) => unknown;
-const ByteArray = Uint8Array;
-const byteArraySet = Uint8Array.prototype.set;
-const emptyBytes = new ByteArray(0);
+const emptyBytes = new Uint8Array(0);
 const maximumGcmPlaintextBytes = 2 ** 39 - 256;
 const unsignedLongLongLimit = 2 ** 64;
 
@@ -105,8 +101,8 @@ export function encryptAes(
       const parameters = cbcParameters(algorithm as AesCbcParams);
       // RFC 2315 §10.3: even block-aligned/empty messages receive a full block.
       const padding = 16 - length % 16;
-      const padded = new ByteArray(length + padding);
-      call(byteArraySet, padded, data);
+      const padded = new Uint8Array(length + padding);
+      padded.set(data);
       for (let index = length; index < padded.length; index++) padded[index] = padding;
       return cipherBytes(provider.encrypt(parameters, key.handle, padded));
     }
@@ -120,9 +116,9 @@ export function encryptAes(
       if ("failure" in result || result.tag === null) throw operationError();
       const ciphertextLength = cryptoViewByteLength(result.bytes);
       const tagBytes = cryptoViewByteLength(result.tag);
-      const ciphertext = new ByteArray(ciphertextLength + tagBytes);
-      call(byteArraySet, ciphertext, result.bytes);
-      call(byteArraySet, ciphertext, result.tag, ciphertextLength);
+      const ciphertext = new Uint8Array(ciphertextLength + tagBytes);
+      ciphertext.set(result.bytes);
+      ciphertext.set(result.tag, ciphertextLength);
       return ciphertext;
     }
     case "AES-KW": {

@@ -85,13 +85,6 @@ interface JsonWebKeyInput {
   readonly y?: unknown;
 }
 
-const call = Function.prototype.call.bind(Function.prototype.call) as
-  (callback: Function, receiver: unknown, ...args: unknown[]) => unknown;
-const ByteArray = Uint8Array;
-const push = Array.prototype.push;
-const charCodeAt = String.prototype.charCodeAt;
-const slice = String.prototype.slice;
-const floor = Math.floor;
 const base64url = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
 const hexadecimal = "0123456789abcdef";
 const usageOrder: readonly KeyUsage[] = [
@@ -99,11 +92,11 @@ const usageOrder: readonly KeyUsage[] = [
 ];
 
 function append<T>(values: T[], value: T): void {
-  call(push, values, value);
+  values.push(value);
 }
 
 function codeUnit(value: string, index: number): number {
-  return call(charCodeAt, value, index) as number;
+  return value.charCodeAt(index);
 }
 
 function isObject(value: unknown): value is object {
@@ -115,13 +108,13 @@ function sequence<T>(value: unknown, convert: (item: unknown) => T): T[] {
   if (!isObject(value)) throw new TypeError("A sequence must be an iterable object");
   const method = (value as { readonly [Symbol.iterator]?: unknown })[Symbol.iterator];
   if (typeof method !== "function") throw new TypeError("A sequence must be iterable");
-  const iterator = call(method, value);
+  const iterator = method.call(value);
   if (!isObject(iterator)) throw new TypeError("The iterator must be an object");
   const next = (iterator as { readonly next?: unknown }).next;
   if (typeof next !== "function") throw new TypeError("The iterator next must be callable");
   const result: T[] = [];
   for (;;) {
-    const step = call(next, iterator);
+    const step = next.call(iterator);
     if (!isObject(step)) throw new TypeError("An iterator result must be an object");
     if ((step as { readonly done?: unknown }).done) return result;
     const item = (step as { readonly value?: unknown }).value;
@@ -273,7 +266,7 @@ function base64Digit(code: number): number {
 /** RFC 7515 §2: URL alphabet, no padding or whitespace. */
 export function decodeBase64Url(value: string): Uint8Array {
   if (value.length % 4 === 1) throw new DOMException("Invalid base64url length", "DataError");
-  const result = new ByteArray(floor(value.length * 6 / 8));
+  const result = new Uint8Array(Math.floor(value.length * 6 / 8));
   let accumulator = 0;
   let bits = 0;
   let output = 0;
@@ -393,7 +386,7 @@ function jsonOtherPrime(node: JsonValue): RsaOtherPrimesInfo {
 /** §9 parse a JWK: UTF-8 decode, fresh-realm JSON parsing, then IDL conversion. */
 export function parseWrappedJwk(bytes: Uint8Array): JsonWebKey {
   let text = utf8Decode(bytes, 0, cryptoViewByteLength(bytes));
-  if (codeUnit(text, 0) === 0xfeff) text = call(slice, text, 1) as string;
+  if (codeUnit(text, 0) === 0xfeff) text = text.slice(1);
   const node = parseJsonText(text);
   jsonDictionary(node);
   const result = new JsonWebKey();
@@ -471,7 +464,7 @@ export function serializeWrappedJwk(key: JsonWebKey, padToEight: boolean): Uint8
   text += '"kty":"oct"}';
   // §14.3.11 expressly permits adapting JWK serialization to AES-KW's size.
   if (padToEight) while (text.length % 8 !== 0) text += " ";
-  const result = new ByteArray(text.length);
+  const result = new Uint8Array(text.length);
   for (let index = 0; index < text.length; index++) result[index] = codeUnit(text, index);
   return result;
 }

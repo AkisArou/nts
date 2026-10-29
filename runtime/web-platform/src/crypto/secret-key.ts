@@ -9,7 +9,6 @@ import type { CryptoKey, CryptoKeySlots, KeyAlgorithmObject, KeyUsage } from "./
 import { decodeBase64Url, encodeBase64Url, JsonWebKey, normalizeKeyUsages } from "./jwk.ts";
 import type { KeyFormat } from "./jwk.ts";
 
-const ByteArray = Uint8Array;
 
 interface AesKeyAlgorithmObject extends KeyAlgorithmObject {
   length: number;
@@ -118,7 +117,7 @@ export function generateSecretKey(
   }
   let bytes: Uint8Array;
   try {
-    bytes = new ByteArray((length - length % 8) / 8 + (length % 8 === 0 ? 0 : 1));
+    bytes = new Uint8Array((length - length % 8) / 8 + (length % 8 === 0 ? 0 : 1));
     random.fill(bytes);
   } catch {
     throw new DOMException("Secret key generation failed", "OperationError");
