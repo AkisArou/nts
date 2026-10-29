@@ -1379,72 +1379,142 @@ impl Slots<'_> {
     /// `BigInt.asIntN(64, x)` sits on. A guard narrows along an edge into a
     /// block with that one predecessor, and on through blocks with one
     /// predecessor, which is every `if` and every `&&` chain.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one dependency worklist completes all bigint facts"
+    )]
     fn bigint_ranges(&self, func: &Func, numbers: &Analysis) -> BigRanges {
-        /// Past this many rounds a block parameter that still grows is a loop
-        /// accumulator, and is everything.
-        const WIDEN_AFTER: u32 = 8;
+        // A cycle in verified SSA passes through a block parameter. Widen each
+        // such value after eight actual increases, rather than stopping the
+        // function while later parameters still have optimistic EMPTY ranges.
+        const WIDEN_AFTER: u8 = 8;
         let blocks = func.blocks.len();
         let mut predecessors: Vec<Vec<BlockId>> = vec![Vec::new(); blocks];
+        let mut readers: Vec<Vec<usize>> = vec![Vec::new(); func.values.len()];
+        let mut incoming_edges: Vec<Vec<(BlockId, &[ValueId])>> = vec![Vec::new(); blocks];
         for (index, block) in func.blocks.iter().enumerate() {
-            for successor in block.terminator.successors() {
-                if let Some(into) = predecessors.get_mut(successor.0 as usize) {
-                    into.push(BlockId(u32::try_from(index).unwrap_or(u32::MAX)));
+            for value in &block.ops {
+                if func.value(*value).ty != HirType::BigInt {
+                    continue;
+                }
+                if let Some(source) = bigint_source(func, *value) {
+                    for operand in super::operands_of(&func.value(source).kind) {
+                        readers[operand.0 as usize].push(index);
+                    }
                 }
             }
+            for successor in block.terminator.successors() {
+                let into = successor.0 as usize;
+                if let Some(incoming) = predecessors.get_mut(into) {
+                    incoming.push(BlockId(u32::try_from(index).expect("HIR block index")));
+                    for args in edge_args(&block.terminator, successor) {
+                        incoming_edges[into].push((
+                            BlockId(u32::try_from(index).expect("HIR block index")),
+                            args,
+                        ));
+                        for value in args {
+                            readers[value.0 as usize].push(into);
+                        }
+                    }
+                    if let Terminator::Branch { cond, .. } = &block.terminator {
+                        for value in super::operands_of(&func.value(*cond).kind) {
+                            readers[value.0 as usize].push(into);
+                        }
+                    }
+                }
+            }
+        }
+        for users in &mut readers {
+            users.sort_unstable();
+            users.dedup();
         }
         let mut ranges = BigRanges {
             values: vec![Bounds::EMPTY; func.values.len()],
             refined: vec![FxHashMap::default(); blocks],
         };
-        let mut rounds = vec![0u32; blocks];
-        for _ in 0..(4 * blocks + 16) {
-            let mut changed = false;
-            for index in 0..blocks {
-                let block = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
-                // What the one predecessor knew, and what its branch proves.
-                let refined = match predecessors[index][..] {
-                    [from] => Self::edge_refinements(func, &ranges, from, block),
-                    _ => FxHashMap::default(),
-                };
+        // Only structurally reachable blocks enter the solver. An unreachable
+        // single-predecessor cycle has no entry and cannot supply a fact.
+        let mut pending = std::collections::VecDeque::new();
+        let mut queued = vec![false; blocks];
+        let mut discovered = vec![false; blocks];
+        let mut discover = if blocks == 0 {
+            Vec::new()
+        } else {
+            vec![0usize]
+        };
+        while let Some(index) = discover.pop() {
+            if std::mem::replace(&mut discovered[index], true) {
+                continue;
+            }
+            queued[index] = true;
+            pending.push_back(index);
+            discover.extend(
+                func.blocks[index]
+                    .terminator
+                    .successors()
+                    .into_iter()
+                    .map(|id| id.0 as usize),
+            );
+        }
+        let mut increases = vec![0u8; func.values.len()];
+        while let Some(index) = pending.pop_front() {
+            queued[index] = false;
+            let block = BlockId(u32::try_from(index).expect("HIR block index"));
+            // The entry always has its outside arrival, even if a back edge
+            // also names it. Other single-predecessor blocks inherit guards.
+            let refined = match (index, predecessors[index].as_slice()) {
+                (1.., [from]) => Self::edge_refinements(func, &ranges, *from, block),
+                _ => FxHashMap::default(),
+            };
+            let mut wake = Vec::new();
+            if refined != ranges.refined[index] {
                 ranges.refined[index] = refined;
-                rounds[index] += 1;
-                for (at, param) in func.blocks[index].params.iter().enumerate() {
-                    if func.value(*param).ty != HirType::BigInt {
-                        continue;
+                wake.extend(
+                    func.blocks[index]
+                        .terminator
+                        .successors()
+                        .into_iter()
+                        .map(|id| id.0 as usize),
+                );
+            }
+            for (at, param) in func.blocks[index].params.iter().enumerate() {
+                if func.value(*param).ty != HirType::BigInt {
+                    continue;
+                }
+                let mut passed = Bounds::EMPTY;
+                for &(from, args) in &incoming_edges[index] {
+                    if let Some(arg) = args.get(at) {
+                        passed = passed.join(ranges.get_at(from, *arg));
                     }
-                    let mut passed = Bounds::EMPTY;
-                    for from in &predecessors[index] {
-                        for args in edge_args(&func.blocks[from.0 as usize].terminator, block) {
-                            if let Some(arg) = args.get(at) {
-                                passed = passed.join(ranges.get_at(*from, *arg));
-                            }
-                        }
-                    }
-                    let slot = &mut ranges.values[param.0 as usize];
-                    let mut joined = slot.join(passed);
-                    if joined != *slot && rounds[index] > WIDEN_AFTER {
+                }
+                let slot = &mut ranges.values[param.0 as usize];
+                let mut joined = slot.join(passed);
+                if joined != *slot {
+                    let count = &mut increases[param.0 as usize];
+                    *count += 1;
+                    if *count > WIDEN_AFTER {
                         joined = Bounds::FULL;
                     }
-                    if joined != *slot {
-                        *slot = joined;
-                        changed = true;
-                    }
-                }
-                for &value in &func.blocks[index].ops {
-                    if func.value(value).ty != HirType::BigInt {
-                        continue;
-                    }
-                    let computed = self.bigint_transfer(func, numbers, &ranges, block, value);
-                    let slot = &mut ranges.values[value.0 as usize];
-                    let joined = slot.join(computed);
-                    if joined != *slot {
-                        *slot = joined;
-                        changed = true;
-                    }
+                    *slot = joined;
+                    wake.extend(readers[param.0 as usize].iter().copied());
                 }
             }
-            if !changed {
-                break;
+            for &value in &func.blocks[index].ops {
+                if func.value(value).ty != HirType::BigInt {
+                    continue;
+                }
+                let computed = self.bigint_transfer(func, numbers, &ranges, block, value);
+                let slot = &mut ranges.values[value.0 as usize];
+                let joined = slot.join(computed);
+                if joined != *slot {
+                    *slot = joined;
+                    wake.extend(readers[value.0 as usize].iter().copied());
+                }
+            }
+            for target in wake {
+                if discovered[target] && !std::mem::replace(&mut queued[target], true) {
+                    pending.push_back(target);
+                }
             }
         }
         ranges
@@ -1517,6 +1587,9 @@ impl Slots<'_> {
         block: BlockId,
         value: ValueId,
     ) -> Bounds {
+        let Some(value) = bigint_source(func, value) else {
+            return Bounds::FULL;
+        };
         let get = |operand: ValueId| ranges.get_at(block, operand);
         match &func.value(value).kind {
             OpKind::ConstInt(literal) => Bounds::exact(*literal),
@@ -1527,12 +1600,6 @@ impl Slots<'_> {
                         Bounds { lo, hi }
                     }
                     HirType::BigInt => get(*from),
-                    // The `bigint` an erased value is, where a test proved it is
-                    // one: what made it says, as a uniform closure entry passes
-                    // a written parameter on.
-                    HirType::Erased if matches!(func.value(value).kind, OpKind::Unerase { .. }) => {
-                        self.bigint_transfer(func, numbers, ranges, block, *from)
-                    }
                     _ => Bounds::FULL,
                 }
             }
@@ -1635,6 +1702,24 @@ impl Slots<'_> {
                 Bounds::exact(0).corners(a, i128::checked_sub)
             }
             _ => Bounds::FULL,
+        }
+    }
+}
+
+/// Resolve the same erased uniform-entry views for transfer and dependencies.
+/// A malformed cycle supplies no proof; valid SSA finishes at an actual maker.
+fn bigint_source(func: &Func, value: ValueId) -> Option<ValueId> {
+    let mut at = value;
+    let mut seen = rustc_hash::FxHashSet::default();
+    loop {
+        match &func.value(at).kind {
+            OpKind::Unerase { value: from, .. } if func.value(*from).ty == HirType::Erased => {
+                if !seen.insert(at) {
+                    return None;
+                }
+                at = *from;
+            }
+            _ => return Some(at),
         }
     }
 }
@@ -1861,5 +1946,120 @@ mod tests {
             ),
             vec![Why::Above(8.0)]
         );
+    }
+}
+
+#[cfg(test)]
+mod bigint_convergence_tests {
+    use super::*;
+    use crate::hir::{Absent, Block, ExactArithmetic, Op, Param, ParamShape};
+    use nts_diagnostics::{SourceId, Span};
+    use nts_semantic_schema::{GeneratedReason, Origin};
+
+    fn shifted_loop(count: u32) -> Func {
+        let origin = Origin::generated(
+            Location {
+                file: SourceId(0),
+                span: Span::new(0, 0),
+            },
+            GeneratedReason::AbiProjection,
+        );
+        let op = |kind, ty| Op {
+            kind,
+            ty,
+            origin: origin.clone(),
+        };
+        let mut values = vec![
+            op(OpKind::Param(0), HirType::Bool),
+            op(OpKind::ConstInt(0), HirType::BigInt),
+            op(OpKind::ConstInt(1i128 << 80), HirType::BigInt),
+        ];
+        values.extend((0..count).map(|at| op(OpKind::BlockParam(at), HirType::BigInt)));
+        let params: Vec<_> = (3..3 + count).map(ValueId).collect();
+        let mut shifted: Vec<_> = params.iter().copied().skip(1).collect();
+        shifted.push(ValueId(2));
+        Func {
+            name: "shifted_loop".to_owned(),
+            params: vec![Param {
+                name: "again".to_owned(),
+                ty: HirType::Bool,
+                origin: origin.clone(),
+                shape: ParamShape::Ordinary,
+                known: Facts::TOP,
+                written: None,
+            }],
+            return_type: HirType::BigInt,
+            written_return: None,
+            written_return_elements: Vec::new(),
+            validation: None,
+            result_absent: Absent::Impossible,
+            values,
+            blocks: vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1), ValueId(2)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(1); count as usize],
+                    },
+                },
+                Block {
+                    params,
+                    ops: Vec::new(),
+                    terminator: Terminator::Branch {
+                        cond: ValueId(0),
+                        then_target: BlockId(1),
+                        then_args: shifted,
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                },
+                Block {
+                    params: Vec::new(),
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(Some(ValueId(3))),
+                },
+            ],
+            origin,
+            exported: false,
+            initializes_receiver: false,
+            abstract_declaration: false,
+            async_result: None,
+            frame: None,
+            obligations: Vec::new(),
+            exact: ExactArithmetic::default(),
+        }
+    }
+
+    #[test]
+    fn every_bigint_phi_arrival_is_included_beyond_the_old_round_cap() {
+        for count in [4, 128] {
+            let func = shifted_loop(count);
+            let program = Program {
+                funcs: vec![func],
+                ..Program::default()
+            };
+            assert!(crate::hir::verify::verify(&program).is_ok());
+            let func = &program.funcs[0];
+            let numbers = local_analysis(func, &Written::default());
+            let ranges = Slots::of(&program).bigint_ranges(func, &numbers);
+            let first = ranges.get_at(BlockId(1), ValueId(3));
+            assert_eq!(first.lo, 0);
+            assert!(
+                first.hi >= 1i128 << 80,
+                "all {count} arrivals must reach the first phi: {first:?}"
+            );
+            let obligation = Obligation::new(
+                ValueId(3),
+                BlockId(2),
+                (Scalar::UInt64, None),
+                Into::NativeStore,
+                func.origin.location,
+            );
+            assert!(
+                !exactly_fits(first, &obligation).is_empty(),
+                "the partial range must not license a narrow store"
+            );
+        }
     }
 }
