@@ -137,13 +137,49 @@ proved to hold integers, when it is `int32_t` or `int64_t` (`hir::elements`).
 
 **Reads and writes:**
 
-- **A bounds check unless it is proved away** (`hir::bounds`): by a known
-  length, or by an index the same array's length guards, which is a relation
-  rather than a range: `for (i = 0; i < xs.length; i++)`. An unproved check is
-  a compare and a branch, inline.
+- **A bounds check unless it is proved away** (`hir::bounds`). Today a check
+  is removed where the index's range lies below the array's least length, or
+  where the same array's length guards the index:
+  `for (i = 0; i < xs.length; i++)`, a relation rather than a range. Any call
+  that can run code ends such a relation. An unproved check is one unsigned
+  compare and a branch, inline.
+- **Where checks go** (decided, not built). One analysis in `compiler/core`
+  places every check, so every backend gets the same answer instead of
+  depending on how much its own optimizer inlines:
+  - **relations between values, with constant offsets** (`i + 1 < xs.length`,
+    `j < i < n`). They are learned from the branches that dominate an access,
+    from induction variables, and from allocations: `new Array(n)` has length
+    `n`, and `xs.map(f)` has `xs`'s length. A function that no outside code
+    can call also learns them from every one of its call sites. A length fact
+    belongs to one array or buffer, by its identity.
+  - **The analysis is bounded:** a sparse worklist of difference
+    constraints, with a work budget charged for each edge it adds or relaxes
+    and each join, and bounded offsets. It never closes over all pairs. A
+    relation it cannot prove within the budget is unknown, and its check
+    stays.
+  - **Only an effect that can change a length ends a length fact:** `push`,
+    `pop`, `shift`, `unshift`, `splice`, assigning `length`, a store that can
+    grow, or a buffer resized or detached. It may happen directly, or inside a
+    call whose whole-program summary says it may. Writing an element ends no
+    length fact, and a call whose target is unknown ends them all.
+  - **A loop whose checks the facts cannot remove is versioned:** one test
+    before the loop proves every index in range and runs a copy without
+    checks, and otherwise the checked loop runs. This is the integral regions'
+    loop versioning, with bounds as its second client.
+  - **Checks on one array merge:** `a[i]`, `a[i + 1]` and `a[i + 2]` become a
+    test of `i >= 0` and one of `i + 2`.
+  - **TypeScript's facts are used where they are sound:** the function a call
+    resolves to, a `const` binding, the container's kind, literal indices. A
+    tuple's length, `readonly` and `noUncheckedIndexedAccess` are claims,
+    used only with a proof over every writer.
+  - **Every removed check is re-checked by name** in the validation build.
 - **A read out of range stops by name** today, where JavaScript answers
   `undefined`; by the bounds rule it is to give `undefined`
-  ([Decisions](#decisions)).
+  ([Decisions](#decisions)). Its cold path then produces what the read's uses
+  need (decided, not built). Where every use converts the read to a number,
+  it produces NaN directly, and the value stays an unboxed double. Where the
+  program itself tests the read against `undefined`, on an array with no holes
+  and no stored `undefined`, the bounds check and that test are one branch.
 - **A write at `length` appends** to an array of numbers or other uncounted
   elements, with growth behind a call; a write further out stops by name,
   since a hole has no representation in a dense array. An array of references
@@ -261,3 +297,9 @@ and [objects](../records/notebooks/studies/primitives-objects.md) studies.
   out of range gives `undefined`, as JavaScript answers (X-5, with L4; 10-28,
   [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
   The checks are built; the `undefined` is not.
+- **Bounds checks are placed by one relational analysis** in `compiler/core`,
+  whose rule for what a call ends is a whole-program summary of the effects
+  that can change a length, and loops it cannot clear are versioned
+  ([Reads and writes](#arrays); 10-29,
+  [log](../records/notebooks/decisions-log.md#compiler-10-29),
+  [ideas and census](../records/notebooks/bounds-check-placement.md)).

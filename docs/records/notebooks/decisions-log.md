@@ -764,6 +764,44 @@ From the open-questions audit; each is the register's recommendation.
   documents no check for a cast between static types. Recorded in
   [types.md](../../language/types.md#decisions).
 
+## Compiler (10-29)
+
+- **Bounds checks are placed by one relational analysis.** The merge-bound
+  fix put back checks that a wrong proof had removed. The user asked for
+  smarter placement using TypeScript's static analysis, then left the design
+  to the coordinator: "you decide about bounds check, no discussion needed
+  anymore. its up to you." The decision, written into
+  [objects.md](../../foundations/objects.md#arrays):
+  - one analysis in `compiler/core` serves every backend. It tracks relations
+    between values with constant offsets, learned from dominating branches,
+    induction variables, allocations and, for a function no outside code can
+    call, its call sites;
+  - only an effect that can change a length ends a length fact, directly or
+    through a call's whole-program effect summary. An element write ends
+    none, and a call whose target is unknown ends them all;
+  - loops it cannot clear are versioned, through the integral regions' loop
+    versioning;
+  - checks on one array merge;
+  - the out-of-range path produces NaN where every use is numeric, and shares
+    one branch with the program's own test for `undefined`;
+  - every removed check is re-checked by name in the validation build;
+  - it is bounded, from the compiler lane's review: a sparse worklist of
+    difference constraints with a work budget, never an all-pairs closure, so
+    a chain through many lengths cannot grow quadratically. A relation left
+    unproved when the budget runs out keeps its check.
+
+  Why: the census and the machine code
+  ([notebook](bounds-check-placement.md)) show that a check left in the HIR
+  costs a backend only where its own optimizer cannot finish the proof. clang
+  removes `spectral-norm`'s `u[j]` check after inlining, while the LLVM
+  backend keeps it in both inner loops. A proof made once in the core gives
+  every backend the same result. Go's `prove` pass and LLVM's constraint
+  elimination are the known designs.
+
+  Order: the compiler lane builds it after the flow fixes have landed and the
+  validation build's mode exists, and runtime2's loop versioning takes bounds
+  as its second client.
+
 ## Plan (10-29): the Bun and ScriptC studies
 
 - **The studies are audited, not adopted wholesale.** Two cloud agents studied

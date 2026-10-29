@@ -1,9 +1,11 @@
-# Bounds-check placement: ideas for the discussion
+# Bounds-check placement: the evidence and the ideas
 
-Ideas, not decisions. The user asked for smarter choices about where, when and
-how bounds checks are placed, using TypeScript's static analysis as much as it
-soundly allows (10-29), after the merge-bound fix brought back checks that a
-wrong proof had removed. The fix lands first: a check removed by a wrong proof
+The evidence and ideas behind the bounds decision now in
+[objects.md](../../foundations/objects.md#arrays). The user asked for smarter
+choices about where, when and how bounds checks are placed, using
+TypeScript's static analysis as much as it soundly allows (10-29), after the
+merge-bound fix brought back checks that a wrong proof had removed. The user
+then left the design to the coordinator. The fix lands first: a check removed by a wrong proof
 is a memory-safety hole. The governing design is
 [objects.md](../../foundations/objects.md#decisions) ("The bounds rule": every
 index is proved in range or checked, and a read out of range gives
@@ -143,15 +145,15 @@ supplier and writer, not in asking the checker more.
    tested over the corpus and the test262 records before it ships. It caught
    the merge bug by name, where ASan let a read of allocator padding through.
 
-## For the discussion
+## The decision
 
-- **Recommendation:** replace the single guard lookup with the relational
-  domain (idea 2), with the whole-program effect summary (idea 1) as its rule
-  for what a call removes, and build them in the compiler lane after the flow
-  fixes land. Loop versioning (idea 3) follows on the same facts. Every step
-  is validated by the A3 build and measured per row by instruction counts.
-- **Evidence still to come:**
-  - the list of checks the merge fix brings back, by function and benchmark
-    (runtime2);
-  - which checks reach the machine code of the losing numeric rows (the
-    compiler's machine-code comparison).
+- **Decided (10-29):** the relational domain (idea 2) replaces the single
+  guard lookup. Its rule for what a call ends is the whole-program effect
+  summary (idea 1). The compiler lane builds it after the flow fixes have
+  landed and the validation build's mode exists. Loop versioning (idea 3)
+  uses the same facts, through runtime2's versioning for the integral
+  regions. Ideas 4 to 6 come with it; idea 6 comes with L4's `undefined`.
+  Every step is validated by the A3 build, and measured per row by
+  instruction counts and by the checks left in each backend's machine code.
+- **Evidence still to come:** the list of checks the merge fix brings back,
+  by function and benchmark (runtime2).
