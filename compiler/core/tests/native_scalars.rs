@@ -1804,8 +1804,8 @@ fn enum_parameters_keep_their_written_c_kind_and_oblige_each_caller() {
             let forward = raw
                 .funcs
                 .iter()
-                .find(|func| func.name == "forward")
-                .unwrap();
+                .find(|func| func.name.starts_with("forward"))
+                .unwrap_or_else(|| panic!("{label}: missing forward body: {raw:?}"));
             assert!(
                 forward.params[0].written.is_some(),
                 "{kind} lost its C kind"
