@@ -44,20 +44,34 @@ the 10-29 comparator sitting (main 0a072536b):
 | string code unit | 121 | 66 |
 
 49 of the 104 cases keep at least one check. These are sites in the code, not
-executions, and clang may remove more after inlining. The ones that matter are
-in hot loops. Two examples, both seen in the HIR:
+executions. The ones that matter are in hot loops, and the backend's own
+optimizer removes some of them after inlining. Two examples, seen in the HIR,
+then in the machine code of the sitting's own benchmark executables:
 
 - **`clbg-spectral-norm`**, a losing numeric row: in
   `for (let j = 0; j < u.length; ++j) t += A(i, j) * u[j]` the read `u[j]`
-  keeps its check, because the call to `A` (pure arithmetic, which touches no
-  array) ends the guard's relation. `v[i] = t` keeps its check because, inside
-  `Au`, nothing relates `v`'s length to `u`'s. The planned machine-code
-  comparison for the numeric rows shows whether clang removes the first after
-  inlining `A`. The JVM backend gets the same HIR.
+  keeps its check in the HIR, because the call to `A` (pure arithmetic, which
+  touches no array) ends the guard's relation. `v[i] = t` keeps its check
+  because, inside `Au`, nothing relates `v`'s length to `u`'s.
+  - In the machine code, the C backend's clang inlines `A`, `Au` and `Atu`
+    into `AtAu` and removes the `u[j]` check. Its two unrolled inner loops
+    load directly, and only the `v[i]` stores, once per outer iteration,
+    keep a check.
+  - The LLVM backend keeps a compare and branch to the bounds failure in each
+    inner loop, as well as the store checks.
+  - The JVM backend gets the same HIR.
 - **`awfy-sieve`**: `flags[i - 1]` under `i <= size` and `flags[k - 1]` under
-  `k <= size` keep both checks. Removing them needs two facts: that `size` is
-  `flags.length` (the only caller passes `new Array(5000)` and `5000`), and
-  that `i - 1 < size` follows from `i <= size`, an offset relation.
+  `k <= size` keep both checks in the HIR. Removing them there needs two
+  facts: that `size` is `flags.length` (the only caller passes
+  `new Array(5000)` and `5000`), and that `i - 1 < size` follows from
+  `i <= size`, an offset relation. In the machine code, both the C and the
+  LLVM backend remove both checks after inlining the allocation into the
+  caller, so they cost the native backends nothing today.
+
+So a check left in the HIR is a cost only where the backend's optimizer
+cannot finish the proof, and whether it can depends on that backend's
+inlining. A proof made once in `compiler/core` makes the result the same on
+every backend, the rule the foundations set for every fact.
 
 ## What the checker gives an index
 
