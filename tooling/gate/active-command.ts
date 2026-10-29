@@ -80,6 +80,12 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
     child.on("error",caught=>{error=caught;});
     child.on("close",(status,signal)=>{
       if(timer)clearInterval(timer);
+      // A helper can detach its stdio and outlive the leader without delaying
+      // close. The directly owned group must finish with its command.
+      try{stop();}catch(cause){
+        instrument=new ToolingInstrumentError("tooling-cleanup",`cannot finish command group for ${command}: ${String(cause)}`);
+        publishToolingFailure(instrument,options.env);
+      }
       if(instrument)reject(instrument);
       else resolve({status,signal,out,stdout,stderr,error,hung,runaway,elapsedMs:performance.now()-began});
     });

@@ -66,3 +66,17 @@ test("a grandchild outliving its parent is stopped with the owned group",async t
     try{return /^\d+ \(.+\) Z /.test(readFileSync(`/proc/${pid}/stat`,"utf8"));}catch(error){if(error.code==="ENOENT")return true;throw error;}
   });
 });
+
+test("close reaps a helper whose redirected stdio does not keep the leader open",async t=>{
+  const {root,env}=fixture(t),ready=join(root,"redirected-helper");
+  const helper=join(root,"helper.cjs");
+  writeFileSync(helper,"require('node:fs').writeFileSync(process.argv[2],String(process.pid));process.send('ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);\n");
+  const parent="require('node:child_process').fork(process.argv[1],[process.argv[2]],{stdio:['ignore','ignore','ignore','ipc']}).once('message',()=>process.exit(0));";
+  const result=await activeCommand(process.execPath,["-e",parent,helper,ready],{cwd:root,env});
+  assert.equal(result.status,0);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
+  assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
+  const pid=Number(readFileSync(ready,"utf8"));
+  await waitFor("the helper with redirected stdio to leave its directly owned group",()=>{
+    try{return /^\d+ \(.+\) Z /.test(readFileSync(`/proc/${pid}/stat`,"utf8"));}catch(error){if(error.code==="ENOENT")return true;throw error;}
+  });
+});
