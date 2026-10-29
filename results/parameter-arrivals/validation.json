@@ -1,0 +1,242 @@
+{
+  "version": 1,
+  "source": "c9a99cf195d2",
+  "compiler_sha256": "42f7392060c3860a51d4ec0936190d45f179b90291820c665233bbb8b2d1e547",
+  "complete": true,
+  "passed": true,
+  "rust": {
+    "passed": 1809,
+    "failed": 0,
+    "ignored": 4,
+    "groups": 257,
+    "ignored_tests": [
+      "test hir::lower::implementation_tests::measured_native_and_gtk_declarations_match_the_old_scan ... ignored, full GIR surface: supply NTS_IMPLEMENTATION_PROJECTS",
+      "test no_program_keeps_an_unrequested_reachable_type ... ignored, whole-program corpus capture audit; run explicitly for a frontend switch",
+      "test program::diagnostic_scope_tests::composed_matches_plain_for_corpus_and_interop_configs ... ignored, one-off audit; NTS_SCOPE_CONFIGS is a newline-separated absolute config list",
+      "test program::tests::shared_graph_environment_probe ... ignored, child-process helper for the shared-graph environment test"
+    ]
+  },
+  "phases": [
+    {
+      "name": "fmt",
+      "argv": [
+        "cargo",
+        "fmt",
+        "--check"
+      ],
+      "status": 0,
+      "wall_s": 7.658128261566162
+    },
+    {
+      "name": "clippy",
+      "argv": [
+        "cargo",
+        "clippy",
+        "--workspace",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "status": 0,
+      "wall_s": 1.7707288265228271
+    },
+    {
+      "name": "sanitized-c",
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/compiler/parameter-arrivals-pins/42f7392060c3860a51d4ec0936190d45f179b90291820c665233bbb8b2d1e547/nts",
+        "check",
+        "tests/programs/a-declared-value-is-not-an-arrival-proof/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 9.081611156463623
+    },
+    {
+      "name": "sanitized-llvm",
+      "argv": [
+        "/home/akisarou/.cache/nts-scratch/compiler/parameter-arrivals-pins/42f7392060c3860a51d4ec0936190d45f179b90291820c665233bbb8b2d1e547/nts",
+        "check",
+        "tests/programs/a-declared-value-is-not-an-arrival-proof/tsconfig.json"
+      ],
+      "status": 0,
+      "wall_s": 0.6698250770568848
+    },
+    {
+      "name": "tests",
+      "argv": [
+        "cargo",
+        "test",
+        "--profile",
+        "nts-dev",
+        "--no-fail-fast",
+        "-p",
+        "nts-core",
+        "-p",
+        "nts-codegen-common",
+        "-p",
+        "nts-codegen-c",
+        "-p",
+        "nts-codegen-llvm",
+        "-p",
+        "nts-codegen-jvm",
+        "-p",
+        "nts-frontend-ts",
+        "-p",
+        "nts-frontend-tsrs"
+      ],
+      "status": 0,
+      "wall_s": 1384.027859210968
+    },
+    {
+      "name": "test262-cases",
+      "argv": [
+        "sh",
+        "tooling/gate/all.sh",
+        "--call",
+        "test262-cases"
+      ],
+      "status": 0,
+      "wall_s": 314.9405357837677
+    },
+    {
+      "name": "test262-builtins-cases",
+      "argv": [
+        "sh",
+        "tooling/gate/all.sh",
+        "--call",
+        "test262-builtins-cases"
+      ],
+      "status": 0,
+      "wall_s": 41.34739375114441
+    },
+    {
+      "name": "test262-rest-cases",
+      "argv": [
+        "sh",
+        "tooling/gate/all.sh",
+        "--call",
+        "test262-rest-cases"
+      ],
+      "status": 0,
+      "wall_s": 24.399590730667114
+    }
+  ],
+  "recorded_c_sets": [
+    {
+      "step": "test262-cases",
+      "passed": 6974,
+      "population": 8367,
+      "reconciled": true
+    },
+    {
+      "step": "test262-builtins-cases",
+      "passed": 828,
+      "population": 1034,
+      "reconciled": true
+    },
+    {
+      "step": "test262-rest-cases",
+      "passed": 9,
+      "population": 12,
+      "reconciled": true
+    },
+    {
+      "step": "test262-rest-cases",
+      "passed": 53,
+      "population": 58,
+      "reconciled": true
+    },
+    {
+      "step": "test262-rest-cases",
+      "passed": 17,
+      "population": 17,
+      "reconciled": true
+    }
+  ],
+  "source_family": {
+    "old-c": {
+      "status": 1,
+      "checked": 368,
+      "functions": 19
+    },
+    "old-llvm": {
+      "status": 1,
+      "checked": 368,
+      "functions": 19
+    },
+    "old-jvm": {
+      "status": 1,
+      "checked": 368,
+      "functions": 19
+    },
+    "candidate-c": {
+      "status": 0,
+      "checked": 368,
+      "functions": 19
+    },
+    "candidate-llvm": {
+      "status": 0,
+      "checked": 368,
+      "functions": 19
+    },
+    "candidate-jvm": {
+      "status": 0,
+      "checked": 368,
+      "functions": 19
+    }
+  },
+  "native_sanitizers": {
+    "backends": [
+      "c",
+      "llvm"
+    ],
+    "provider": "RC",
+    "poison": true,
+    "asan": true,
+    "ubsan": true,
+    "checked_each": 368
+  },
+  "superseded_unmeasured_setup": {
+    "reason": "Internal function names supplied to all.sh --call instead of public step names; no conformance case measured. Replaced by corrected records1 run.",
+    "invocations": [
+      {
+        "name": "test262_cases",
+        "argv": [
+          "sh",
+          "tooling/gate/all.sh",
+          "--call",
+          "test262_cases"
+        ],
+        "status": 2,
+        "wall_s": 0.005583286285400391
+      },
+      {
+        "name": "test262_builtins_cases",
+        "argv": [
+          "sh",
+          "tooling/gate/all.sh",
+          "--call",
+          "test262_builtins_cases"
+        ],
+        "status": 2,
+        "wall_s": 0.005019664764404297
+      },
+      {
+        "name": "test262_rest_cases",
+        "argv": [
+          "sh",
+          "tooling/gate/all.sh",
+          "--call",
+          "test262_rest_cases"
+        ],
+        "status": 2,
+        "wall_s": 0.0049321651458740234
+      }
+    ]
+  },
+  "raw": {
+    "broad": "~/.cache/nts-scratch/compiler/widened-map-values/parameter-facts-broad1",
+    "records": "~/.cache/nts-scratch/compiler/widened-map-values/parameter-facts-records1",
+    "source_family": "~/.cache/nts-scratch/compiler/widened-map-values/parameter-facts-agreement2"
+  }
+}
