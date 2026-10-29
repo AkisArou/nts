@@ -208,4 +208,30 @@ mod tests {
             assert!(warning_flags(&root.join("driver.cpp")).unwrap().is_empty());
         });
     }
+    #[test]
+    fn the_same_warning_is_fatal_only_for_an_authored_reference() {
+        fixture(|root| {
+            let source = root.join("ref.cpp");
+            let bytes = b"struct Result { int checksum; int maxflips; }; Result result = {0};\n";
+            std::fs::write(&source, bytes).unwrap();
+            for (origin, success) in [
+                (r#"{"kind":"nts-authored"}"#, false),
+                (
+                    r#"{"kind":"third-party","upstream":["https://example.com/original.cpp"]}"#,
+                    true,
+                ),
+            ] {
+                declare(root, origin);
+                let result = std::process::Command::new("clang++")
+                    .args(["-std=c++20", "-Wall", "-Wextra", "-Werror", "-fsyntax-only"])
+                    .args(warning_flags(&source).unwrap())
+                    .arg(&source)
+                    .output()
+                    .unwrap();
+                assert_eq!(result.status.success(), success);
+                assert!(String::from_utf8_lossy(&result.stderr).contains("missing field"));
+                assert_eq!(std::fs::read(&source).unwrap(), bytes);
+            }
+        });
+    }
 }
