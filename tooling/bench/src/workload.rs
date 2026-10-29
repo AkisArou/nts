@@ -88,6 +88,13 @@ impl Workload {
                 function
             };
             let _ = signature;
+            let symbol = module
+                .exports
+                .iter()
+                .find(|(export, _)| export == *name)
+                .map(|(_, symbol)| *symbol)
+                .context("selected benchmark binding disappeared")?;
+            direct_binding(snapshot, symbol, entry, name)?;
             let seed_symbol = module
                 .exports
                 .iter()
@@ -107,6 +114,37 @@ impl Workload {
         roots.push(hir::lower::MODULE_INIT.to_owned());
         Ok(Self { roots, numeric })
     }
+}
+
+/// A scalar C entry has no closure environment, overload implementation ABI,
+/// or renamed import to guess. Other shapes retain the explicit-driver path.
+fn direct_binding(
+    snapshot: &SemanticSnapshot,
+    id: SymbolId,
+    entry: &Utf8Path,
+    name: &str,
+) -> Result<()> {
+    let symbol = &snapshot.symbols[walk::denoted(snapshot, id).0 as usize];
+    let declarations: Vec<_> = symbol
+        .declarations
+        .iter()
+        .copied()
+        .filter(|id| walk::kind_of(snapshot, *id) == Some(syntax::FUNCTION_DECLARATION))
+        .collect();
+    ensure!(
+        declarations.len() == 1,
+        "{entry}: numeric benchmark requires one direct function declaration; provide explicit drivers"
+    );
+    let declaration = declarations[0];
+    let file = snapshot.nodes[declaration.0 as usize].origin.location.file;
+    ensure!(
+        snapshot.sources[file.0 as usize].display_path == entry
+            && child(snapshot, declaration, "name").and_then(|id| walk::text_of(snapshot, id))
+                == Some(name)
+            && child(snapshot, declaration, "body").is_some(),
+        "{entry}: benchmark binding must name its local implementation; provide explicit drivers"
+    );
+    Ok(())
 }
 
 fn signature(snapshot: &SemanticSnapshot, id: SymbolId) -> Option<SignatureId> {
@@ -247,6 +285,45 @@ mod tests {
     use super::*;
     use camino::Utf8PathBuf;
 
+    const SOURCES: &[(&str, &str)] = &[
+        (
+            "render-first",
+            "export function render(n: number): string { return `result ${n}`; }\nexport function\nwork(n: number): number { return n + 1; }\nexport const seed: number = (13 as 12);",
+        ),
+        (
+            "legacy",
+            "export function scan(n: number): number { return n; } export const seed = 3;",
+        ),
+        (
+            "negative-zero",
+            "export function work(n: number): number { return 1 / n; } export const seed = -(0);",
+        ),
+        (
+            "missing",
+            "export function work(n: number): number { return n; }",
+        ),
+        (
+            "ambiguous",
+            "export function f(n: number): number { return n; } export function g(n: number): number { return n; } export const seed = 1;",
+        ),
+        (
+            "wrong-work",
+            "export function work(n: number): string { return `${n}`; } export function f(n: number): number { return n; } export const seed = 1;",
+        ),
+        (
+            "mutable",
+            "export function work(n: number): number { return n; } export let seed = 1;",
+        ),
+        (
+            "computed",
+            "export function work(n: number): number { return n; } export const seed = Math.random();",
+        ),
+        (
+            "custom",
+            "export function scale(values: number[]): number { return values.length; }",
+        ),
+    ];
+
     #[test]
     fn benchmark_corpus_uses_source_contracts() -> Result<()> {
         let repository = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -309,45 +386,7 @@ mod tests {
         let cases = root.join("benchmarks/cases");
         let output = root.join("generated");
         std::fs::create_dir_all(&output)?;
-        let sources = [
-            (
-                "render-first",
-                "export function render(n: number): string { return `result ${n}`; }\nexport function\nwork(n: number): number { return n + 1; }\nexport const seed: number = (13 as 12);",
-            ),
-            (
-                "legacy",
-                "export function scan(n: number): number { return n; } export const seed = 3;",
-            ),
-            (
-                "negative-zero",
-                "export function work(n: number): number { return 1 / n; } export const seed = -(0);",
-            ),
-            (
-                "missing",
-                "export function work(n: number): number { return n; }",
-            ),
-            (
-                "ambiguous",
-                "export function f(n: number): number { return n; } export function g(n: number): number { return n; } export const seed = 1;",
-            ),
-            (
-                "wrong-work",
-                "export function work(n: number): string { return `${n}`; } export function f(n: number): number { return n; } export const seed = 1;",
-            ),
-            (
-                "mutable",
-                "export function work(n: number): number { return n; } export let seed = 1;",
-            ),
-            (
-                "computed",
-                "export function work(n: number): number { return n; } export const seed = Math.random();",
-            ),
-            (
-                "custom",
-                "export function scale(values: number[]): number { return values.length; }",
-            ),
-        ];
-        for (name, source) in sources {
+        for (name, source) in SOURCES.iter().copied() {
             let dir = cases.join(name);
             std::fs::create_dir_all(&dir)?;
             std::fs::write(dir.join("case.ts"), source)?;
@@ -381,6 +420,9 @@ mod tests {
             ("wrong-work", "contract (number) => number"),
             ("mutable", "seed must be const"),
             ("computed", "static numeric literal"),
+            ("closure", "one direct function declaration"),
+            ("overload", "one direct function declaration"),
+            ("alias", "name its local implementation"),
         ] {
             let error = plan(name, false)
                 .err()
