@@ -12,7 +12,7 @@ import { g_dcgettext, g_dgettext, g_dngettext, g_dpgettext2 } from "c:GLib-2.0";
 import { bind_textdomain_codeset, bindtextdomain, textdomain } from "c:libintl";
 import { setlocale } from "c:locale";
 import { stringFrom } from "c:memory";
-import type { AsNumber, c_ulong } from "@nts/scalars";
+import type { AsNumber, c_int, c_ulong } from "@nts/scalars";
 
 /**
  * The count a plural form is chosen for: C's `unsigned long`, which is what
@@ -38,7 +38,7 @@ export enum LocaleCategory {
 // and these call libc's of the same name.
 
 /** Set the locale of `category`, `""` for the environment's; the locale set, or `null`. */
-function setLocale(category: LocaleCategory, locale: string | null): string | null {
+function setLocale(category: LocaleCategory & c_int, locale: string | null): string | null {
   return stringFrom(setlocale(category, locale));
 }
 
@@ -63,7 +63,7 @@ export function dgettext(domain: string | null, msgid: string): string {
   return g_dgettext(domain, msgid);
 }
 
-export function dcgettext(domain: string | null, msgid: string, category: LocaleCategory): string {
+export function dcgettext(domain: string | null, msgid: string, category: LocaleCategory & c_int): string {
   return g_dcgettext(domain, msgid, category);
 }
 

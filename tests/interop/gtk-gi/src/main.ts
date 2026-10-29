@@ -34,12 +34,13 @@ import { Box, Button, Label, Orientation, init } from "gi:gtk";
 import * as Gio from "gi:gio";
 import { PRIORITY_DEFAULT } from "gi:glib";
 import { GObject, TYPE_STRING, property, signal } from "gi:gobject";
-import type { c_int } from "@nts/scalars";
+import type { c_int, c_uint } from "@nts/scalars";
+import type { CEnum } from "c:types";
 
 class Wider extends Label {
   // The binding's own types: GTK's sizes are C `int`s, and ten more than the
   // largest one stays the largest.
-  vfuncMeasure(orientation: Orientation, forSize: c_int): [c_int, c_int, c_int, c_int] {
+  vfuncMeasure(orientation: CEnum<Orientation, c_uint>, forSize: c_int): [c_int, c_int, c_int, c_int] {
     const [minimum, natural, minimumBaseline, naturalBaseline] = super.vfuncMeasure(orientation, forSize);
     return [Math.min(minimum + 10, 2147483647), Math.min(natural + 10, 2147483647), minimumBaseline, naturalBaseline];
   }

@@ -1779,6 +1779,49 @@ fn refusals(name: &str, source: &str) -> Vec<(String, String)> {
     }
 }
 
+#[test]
+fn enum_parameters_keep_their_written_c_kind_and_oblige_each_caller() {
+    for (label, kind, signature, operation) in [
+        (
+            "gettext-category",
+            "Category & c_int",
+            "declare function native(value: c_int): void;",
+            "function forward(value: Category & c_int): void { native(value); }",
+        ),
+        (
+            "gtk-enum-override",
+            "import(\"c:types\").CEnum<Category, c_uint>",
+            "declare function native(value: c_uint): void;",
+            "class Base { accept(value: import(\"c:types\").CEnum<Category, c_uint>): void { native(value); } }\nclass Override extends Base { accept(value: import(\"c:types\").CEnum<Category, c_uint>): void { native(value); } }\nfunction forward(value: import(\"c:types\").CEnum<Category, c_uint>): void { new Override().accept(value); }",
+        ),
+    ] {
+        for argument in ["6", "x"] {
+            let source = format!(
+                "enum Category {{ ALL = 6 }}\n{signature}\n{operation}\nexport function work(x: number): void {{ forward({argument}); }}"
+            );
+            let snapshot = snapshot(&format!("{label}-{argument}"), &source);
+            let raw = hir::lower::lower(&snapshot).program;
+            let forward = raw
+                .funcs
+                .iter()
+                .find(|func| func.name == "forward")
+                .unwrap();
+            assert!(
+                forward.params[0].written.is_some(),
+                "{kind} lost its C kind"
+            );
+            let errors = refusals(&format!("{label}-checked-{argument}"), &source);
+            if argument == "6" {
+                assert!(errors.is_empty(), "{label}: {errors:?}");
+            } else {
+                assert_eq!(errors.len(), 1, "{label}: {errors:?}");
+                assert_eq!(errors[0].0, "NTS5001", "{label}: {errors:?}");
+                assert!(errors[0].1.contains("any number"), "{errors:?}");
+            }
+        }
+    }
+}
+
 /// TypeScript's own holes into a written kind (`docs/records/notebooks/scalar-numbers.md`, Q1),
 /// each closed: a number that reaches a `Uint8` through one of them is never
 /// taken as fitting. Each beside a control that differs in one thing -- a
