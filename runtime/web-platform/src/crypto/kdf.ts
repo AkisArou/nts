@@ -7,7 +7,6 @@ import type { CryptoKey, CryptoKeySlots, KeyUsage } from "./crypto-key.ts";
 import { JsonWebKey, normalizeKeyUsages } from "./jwk.ts";
 import type { KeyFormat } from "./jwk.ts";
 
-const ByteArray = Uint8Array;
 
 function operationError(): DOMException {
   return new DOMException("The key derivation operation failed", "OperationError");
@@ -78,7 +77,7 @@ export function deriveKdfBits(
     if (algorithm.iterations === 0) throw operationError();
     // PBKDF2 explicitly returns here; HKDF still performs its native operation
     // for zero length, so a native failure there remains observable.
-    if (length === 0) return new ByteArray(0);
+    if (length === 0) return new Uint8Array(0);
     parameters = { name: "PBKDF2", hash: algorithm.hash.name, salt: algorithm.salt, iterations: algorithm.iterations, byteLength };
   } else {
     throw new DOMException("This algorithm cannot derive KDF bits", "NotSupportedError");
