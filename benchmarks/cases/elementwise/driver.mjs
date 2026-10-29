@@ -5,8 +5,11 @@
 // contents compound if it is not, so there is state to reset rather than an
 // expression to write down. `driver.cpp` and `driver.java` are the same escape
 // hatch on the other two lanes.
-import { measure } from "../../common/bench.mjs";
+import { measure, opaqueInput } from "../../common/bench.mjs";
 import { scale } from "./case.ts";
 
 const xs = new Array(4096).fill(1);
-measure(() => scale(xs, 1.0000001));
+measure(() => {
+  xs.fill(1);
+  return scale(xs, opaqueInput(1.0000001));
+});

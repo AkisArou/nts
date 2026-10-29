@@ -17,7 +17,7 @@ import { closeSync, openSync, readSync, writeSync } from "node:fs";
 // shortest round-trip disagree on values like 0.1, and the runner compares
 // checksums as strings. (The timed path spells this inline, as it always
 // has; the counting paths share this spelling.)
-function bits(value) {
+function checksumBits(value) {
   const view = new DataView(new ArrayBuffer(8));
   view.setFloat64(0, value);
   return view.getBigUint64(0).toString(16).padStart(16, "0");
@@ -71,7 +71,8 @@ function calibrate(run, checksum) {
     reps = Math.min(reps * 2, 50_000_000);
   }
   if (Number.isNaN(sink)) throw new Error("unreachable");
-  console.log(JSON.stringify({ checksum: bits(checksum), warmup: warmed, nsPerOp: elapsed / reps, reps }));
+  process.stderr.write("NTS_BENCH_SINK " + checksumBits(sink) + "\n");
+  console.log(JSON.stringify({ checksum: checksumBits(checksum), warmup: warmed, nsPerOp: elapsed / reps, reps }));
 }
 
 function count(run, checksum) {
@@ -93,7 +94,7 @@ function count(run, checksum) {
   closeSync(acknowledgement);
   if (Number.isNaN(sink)) throw new Error("unreachable");
   console.log(JSON.stringify({
-    checksum: bits(checksum),
+    checksum: checksumBits(checksum),
     warmup: warmed,
     n,
     elapsedNs: elapsed,
@@ -146,6 +147,7 @@ export function measure(run) {
   if (Number.isNaN(sink)) {
     throw new Error("unreachable");
   }
+  process.stderr.write("NTS_BENCH_SINK " + checksumBits(sink) + "\n");
   // The sixty-four bits, not the number's text. See the comment in main.cpp:
   // `%.17g` and JavaScript's shortest round-trip disagree on values like 0.1,
   // and the runner compares checksums as strings.
@@ -153,4 +155,16 @@ export function measure(run) {
   view.setFloat64(0, checksum);
   const bits = view.getBigUint64(0).toString(16).padStart(16, "0");
   process.stdout.write(`${best.toFixed(4)} ${bits}\n`);
+}
+
+// Reload a bit-preserving input through shared atomic storage on every call.
+// A cached argv value alone lets an AOT optimizer hoist a pure workload.
+const opaqueGate = new Int32Array(new SharedArrayBuffer(4));
+const opaqueScratch = new ArrayBuffer(8);
+const opaqueFloat = new Float64Array(opaqueScratch);
+const opaqueWords = new Int32Array(opaqueScratch);
+export function opaqueInput(value) {
+  opaqueFloat[0] = value;
+  opaqueWords[0] = opaqueWords[0] ^ Atomics.load(opaqueGate, 0);
+  return opaqueFloat[0];
 }

@@ -1,0 +1,37 @@
+{
+  "version": 1,
+  "controlsTerminal": {
+    "status": 0,
+    "signal": null
+  },
+  "loopCostCount": 20,
+  "scalingCount": 12,
+  "harnessSha256": "cbc5d180c68187f64b846f8908171845a2f003720a0a886868133bcbce2db240",
+  "decision": "Not all engines within observed spread; re-time every JS/ScriptC column under opaque loop. Also strengthen Java sink; guard Java fib input; fix elementwise JS reset adapter.",
+  "oldHotLoop": "call at0x61de2 outsidebackedge0x61e10-61e1c",
+  "newHotLoop": "0x62f10-0x62f72 contains opaqueInput0x62f25 and run0x62f2a",
+  "suspects": {
+    "version": 1,
+    "criterion": "A measured cell more than 10x faster than every other measured column",
+    "completedRows": 76,
+    "suspects": [
+      {
+        "name": "logical-assignment",
+        "column": "ScriptC",
+        "ns": 19.9996,
+        "nextFastestNs": 31406.3763,
+        "factor": 1570.35022200444,
+        "others": {
+          "nts C": 39543.1083,
+          "nts LLVM": 31812.9787,
+          "nts JVM": 56755.3269,
+          "C++": 31406.3763,
+          "Java": 58919.6675,
+          "node": 345633.7431,
+          "Bun AOT": 68297.6256,
+          "Bun JIT": 68308.6933
+        }
+      }
+    ]
+  }
+}

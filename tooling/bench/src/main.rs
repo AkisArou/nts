@@ -2019,24 +2019,19 @@ fn node_harness(
         .context("a case sits two levels below `benchmarks`")?
         .join("common/bench.mjs");
     let path = out.join(format!("{name}.bench.mjs"));
-    // The seed arrives through `process.argv`, not by importing the `const`.
-    //
-    // This is the `volatile` the other two lanes spell with a keyword. An
-    // imported module-level constant is exactly the loop-invariant argument the
-    // native and JVM drivers go out of their way to hide: V8 folds it into the
-    // call, specialises on it, and the row stops measuring the general program.
-    // `argv` is opaque to the optimiser and free, and it is what this harness
-    // did before the drivers were generated.
+    // Parse the source-declared seed once, then reload its bits through the
+    // shared opaque input on every measured call. A loop-invariant argv value
+    // alone lets an AOT optimizer hoist a pure workload out of the timed loop.
     let text = format!(
         "// Generated from `case.ts`. Edit that, or add a `driver.mjs` beside it.\n\
-         import {{ measure }} from \"{common}\";\n\
+         import {{ measure, opaqueInput }} from \"{common}\";\n\
          import {{ {callee} }} from \"{case}/case.ts\";\n\n\
          if (process.argv.length !== 3 || process.argv[2].trim() === \"\") {{\n\
              throw new Error(\"benchmark input missing: expected one numeric seed argument\");\n\
          }}\n\
          const seed = Number(process.argv[2]);\n\
          if (!Number.isFinite(seed)) throw new Error(\"benchmark input is not a finite number\");\n\
-         measure(() => {callee}(seed));\n"
+         measure(() => {callee}(opaqueInput(seed)));\n"
     );
     std::fs::write(&path, &text).with_context(|| format!("writing {path}"))?;
     Ok(path)

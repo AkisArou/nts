@@ -21,10 +21,9 @@
 // recorded with its numbers in `benches/jvm-rows.md` as a decision not yet
 // taken.
 //
-// No `volatile` guard on `n` and none in `ref.cpp` either: the recursion is not
-// something a JIT folds at a constant argument, and `fib` is the one case here
-// whose cost is the calls themselves.
+// Read the measured input through a volatile field, as the other references do.
 final class Ref extends Bench.Work {
+    private static volatile int input = 27;
     static int fib(int n) {
         if (n < 2) {
             return n;
@@ -33,6 +32,6 @@ final class Ref extends Bench.Work {
     }
 
     @Override public double run() {
-        return fib(27);
+        return fib(input);
     }
 }

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "criterion": "A measured cell more than 10x faster than every other measured column",
+  "completedRows": 76,
+  "suspects": [
+    {
+      "name": "logical-assignment",
+      "column": "ScriptC",
+      "ns": 19.9996,
+      "nextFastestNs": 31406.3763,
+      "factor": 1570.35022200444,
+      "others": {
+        "nts C": 39543.1083,
+        "nts LLVM": 31812.9787,
+        "nts JVM": 56755.3269,
+        "C++": 31406.3763,
+        "Java": 58919.6675,
+        "node": 345633.7431,
+        "Bun AOT": 68297.6256,
+        "Bun JIT": 68308.6933
+      }
+    }
+  ]
+}

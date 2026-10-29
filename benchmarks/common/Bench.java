@@ -7,6 +7,8 @@
 // harnesses.
 
 public final class Bench {
+    private static volatile double consumed;
+
     private Bench() {}
 
     /**
@@ -92,6 +94,8 @@ public final class Bench {
         if (Double.isNaN(sink)) {
             throw new AssertionError("unreachable");
         }
+        // Publish the exact accumulated value after timing/counting completes.
+        consumed = sink;
 
         // The sixty-four bits, not the number's text. `Double.toString` gives
         // `1.437497244444425E7` where C's `%.17g` gives `14374972.44444425` and
@@ -206,6 +210,8 @@ public final class Bench {
         if (Double.isNaN(sink)) {
             throw new AssertionError("unreachable");
         }
+        // Publish the exact accumulated value after timing/counting completes.
+        consumed = sink;
         System.out.printf("%.2f bytes/op over %d ops%n", (after - before) / (double) reps, reps);
     }
 }
