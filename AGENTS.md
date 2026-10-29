@@ -98,6 +98,18 @@ answers its members and frees the queue. On 2026-10-28 a withdrawal made by
 stopping a landing's unit killed a running train, and a test that never exited
 held the locks.
 
+**A train whose measurement could not finish is held, not red, and a hold
+never passes by itself.** A step that memory pressure kept from measuring runs
+again on the same train once memory allows, keeping the results that
+completed. A hung tooling file, a broken instrument, a missing, unreadable or
+wrong-commit summary, or an unmeasured baseline holds only that train's
+members, and a landing stacked on one waits with it: nothing is attributed or
+halved, and other landings keep going. `lane status` prints each hold with its
+reason, its run directory and both answers, `land.ts --retry-held <identity>
+--because=<note>` and `--refuse-held`. Until 2026-10-29 a neighbour's memory
+pressure could turn a good landing red, and a test that never exited held
+every lane's landing.
+
 **Never cap the gate's parallelism for a landing:** no `NTS_JOBS`,
 `NTS_GATE_SLOTS` or `NTS_GATE_JOBS` in its environment. The gate sizes itself
 (24 slots on this machine), and its own admission guards memory. The tsrs

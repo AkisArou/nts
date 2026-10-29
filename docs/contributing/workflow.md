@@ -89,8 +89,8 @@ lock of your own. It:
    projects the train owes;
 4. **runs exactly those** with `pinned.sh`, in the one gate tree;
 5. **lands the train only on a green summary** naming its tip, with every owed
-   step passing. On a red train it first runs the failed steps on `main`
-   itself:
+   step passing; a train whose measurement could not finish is held instead
+   (below). On a red train it first runs the failed steps on `main` itself:
    - a step red on `main` is reported as "red on main", and only the landings
      that owe it are refused;
    - otherwise the train is halved, each half running what it owes plus the
@@ -110,6 +110,16 @@ is composed.
 - **A stalled train:** stop its unit by name, then answer it with
   `land.ts --abandon-frozen <owner-id> --because=<reason> --run=<run dir>`,
   which records the reason before it frees the queue.
+- **A held train:** a step that memory pressure kept from measuring runs again
+  on the same train once memory allows, keeping the results that completed.
+  A hung tooling file, a broken instrument, a summary that is missing,
+  unreadable or names another commit, or an unmeasured baseline holds the
+  train instead: only its members wait, and a landing stacked on one waits
+  with it. Nothing is attributed or halved, and other landings keep going.
+  `lane status` prints each held entry with its reason, its run directory and
+  its two answers: `land.ts --retry-held <identity> --because=<note>` queues it
+  again, and `land.ts --refuse-held <identity> --because=<note>` refuses it,
+  recording the note beside the measurement. A hold never passes by itself.
 
 Landings and full runs refuse a missing environment requirement before taking
 the lock. Steps declare capabilities (`jvm`, `android`, `valgrind`), and an
@@ -205,7 +215,11 @@ recorded case on every backend ([conformance](../conformance/typescript.md)).
   - the noise rule: rounds of before, after and before again, over at least 5
     processes; instruction counts decide regressions; wall time has a floor of
     max(3%, twice the spread); and where a row's layout range exceeds the
-    effect, the mean over seeded code layouts decides (P-3);
+    effect, the layout-interval instrument decides (P-3): at least 20
+    independent code and heap layouts per arm, A/B/A brackets in each, and a
+    99% bootstrap interval over the layouts. An interval wholly below zero is
+    an improvement, wholly above zero a regression, and one containing zero is
+    noise ([how to run it](../../tooling/bench/README.md#layout-intervals));
   - every comparator's version is pinned (node, Bun, the JDK and clang),
     every report records the machine's load, and reference numbers are taken
     whenever the landing lock is free and the load is low (P-4).
