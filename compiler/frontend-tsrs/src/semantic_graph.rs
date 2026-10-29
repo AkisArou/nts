@@ -66,6 +66,39 @@ pub struct IndexSignature<'p> {
     pub readonly: bool,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum TupleElementKind {
+    Required,
+    Optional,
+    Rest,
+    Variadic,
+}
+
+#[derive(Debug, Clone)]
+pub struct Tuple<'p> {
+    pub elements: Vec<Type<'p>>,
+    pub element_flags: Vec<TupleElementKind>,
+    /// Required/optional positions before the first rest or variadic element.
+    /// Required suffixes after a spread do not extend this prefix. This is
+    /// neither a minimum length nor a certificate of a runtime array's extent.
+    pub fixed_length: usize,
+    /// The checker's readonly view does not exclude a writable alias.
+    pub readonly: bool,
+}
+
+fn tuple_element_kind(flags: tsrs_checker::ElementFlags) -> TupleElementKind {
+    use tsrs_checker::ElementFlags as F;
+    [
+        (F::Required, TupleElementKind::Required),
+        (F::Optional, TupleElementKind::Optional),
+        (F::Rest, TupleElementKind::Rest),
+        (F::Variadic, TupleElementKind::Variadic),
+    ]
+    .into_iter()
+    .find_map(|(native, owned)| (flags == native).then_some(owned))
+    .expect("native tuple positions have one required, optional, rest or variadic kind")
+}
+
 impl<'p> Type<'p> {
     fn view(self, native: tsrs_core::P<tsrs_checker::Type>) -> Self {
         Self {
@@ -91,13 +124,51 @@ impl<'p> Type<'p> {
     }
     #[must_use]
     pub fn tuple_elements(self) -> Option<Vec<Self>> {
+        self.tuple().map(|tuple| tuple.elements)
+    }
+    #[must_use]
+    pub fn tuple(self) -> Option<Tuple<'p>> {
         self.file.with_checker(|c| {
-            self.native.is_tuple_type().then(|| {
-                c.get_type_arguments_exported(self.native)
+            if !self.native.is_tuple_type() {
+                return None;
+            }
+            let target = self
+                .native
+                .target()
+                .expect("a native tuple reference has its target")
+                .as_tuple_type();
+            let tuple = Tuple {
+                elements: c
+                    .get_type_arguments_exported(self.native)
                     .iter()
                     .map(|&native| self.view(native))
-                    .collect()
-            })
+                    .collect(),
+                element_flags: target
+                    .element_flags()
+                    .into_iter()
+                    .map(tuple_element_kind)
+                    .collect(),
+                fixed_length: target.fixed_length(),
+                readonly: target.is_readonly(),
+            };
+            assert_eq!(
+                tuple.elements.len(),
+                tuple.element_flags.len(),
+                "native tuple types and flags must share one target"
+            );
+            assert_eq!(
+                tuple.fixed_length,
+                tuple
+                    .element_flags
+                    .iter()
+                    .take_while(|flag| matches!(
+                        flag,
+                        TupleElementKind::Required | TupleElementKind::Optional
+                    ))
+                    .count(),
+                "native tuple fixed length must describe its initial fixed prefix"
+            );
+            Some(tuple)
         })
     }
     #[must_use]
@@ -283,5 +354,27 @@ impl<'p> Type<'p> {
                 })
                 .collect()
         })
+    }
+}
+
+#[cfg(test)]
+mod tuple_flag_tests {
+    use super::tuple_element_kind;
+    use tsrs_checker::ElementFlags;
+
+    #[test]
+    #[should_panic(
+        expected = "native tuple positions have one required, optional, rest or variadic kind"
+    )]
+    fn unknown_flags_are_rejected() {
+        tuple_element_kind(ElementFlags::from_bits_retain(1 << 8));
+    }
+
+    #[test]
+    #[should_panic(
+        expected = "native tuple positions have one required, optional, rest or variadic kind"
+    )]
+    fn combined_flags_are_rejected() {
+        tuple_element_kind(ElementFlags::Required | ElementFlags::Optional);
     }
 }

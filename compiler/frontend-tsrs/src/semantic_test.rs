@@ -626,6 +626,79 @@ export type Nothing = {};
 }
 
 #[test]
+fn tuple_shapes_keep_optional_rest_variadic_and_readonly_metadata() {
+    use TupleElementKind::{Optional, Required, Rest, Variadic};
+    for count in [1, 4] {
+        run(options(count), |session| {
+            let checked = session
+                .open(spec(
+                    "export type Fixed = [string, number[]];\n\
+                     export type Optional = readonly [number, string?];\n\
+                     export type Rest = [string, ...number[]];\n\
+                     export type Variadic<T extends unknown[]> = [number, ...T, boolean];\n\
+                     export type Bound = Variadic<[string, number]>;\n\
+                     export type RestSuffix = [...number[], string];\n\
+                     export type OptionalRest = [number?, ...string[]];\n\
+                     export type OnlyVariadic<T extends unknown[]> = [...T];\n\
+                     export type Mapped = Readonly<[number, string?]>;\n\
+                     export type Empty = readonly [];\n",
+                ))
+                .expect("tuple metadata project");
+            let exports = source(&checked).module_symbol().expect("module").exports();
+            let tuple = |name| {
+                exports
+                    .iter()
+                    .find(|entry| matches!(entry.name, SymbolName::Plain(text) if text.utf8() == Some(name)))
+                    .expect("tuple alias")
+                    .symbol
+                    .declared_type()
+                    .expect("alias type")
+                    .tuple()
+                    .expect("tuple shape")
+            };
+            for (name, flags, fixed_length, readonly) in [
+                ("Fixed", vec![Required, Required], 2, false),
+                ("Optional", vec![Required, Optional], 2, true),
+                ("Rest", vec![Required, Rest], 1, false),
+                ("Variadic", vec![Required, Variadic, Required], 1, false),
+                ("Bound", vec![Required; 4], 4, false),
+                ("RestSuffix", vec![Rest, Required], 0, false),
+                ("OptionalRest", vec![Optional, Rest], 1, false),
+                ("OnlyVariadic", vec![Variadic], 0, false),
+                ("Mapped", vec![Required, Optional], 2, true),
+                ("Empty", vec![], 0, true),
+            ] {
+                let shape = tuple(name);
+                assert_eq!(shape.elements.len(), flags.len(), "{name}");
+                assert_eq!(shape.element_flags, flags, "{name}");
+                assert_eq!(shape.fixed_length, fixed_length, "{name}");
+                assert_eq!(shape.readonly, readonly, "{name}");
+            }
+            assert_eq!(
+                tuple("Bound")
+                    .elements
+                    .iter()
+                    .map(|element| element.kind())
+                    .collect::<Vec<_>>(),
+                [
+                    TypeKind::Number,
+                    TypeKind::String,
+                    TypeKind::Number,
+                    TypeKind::Boolean,
+                ],
+                "instantiated position types must stay aligned with their kinds"
+            );
+            let finished = checked.diagnose_fixture_files().finish();
+            assert!(
+                finished.diagnostics().is_empty(),
+                "{:?}",
+                finished.diagnostics()
+            );
+        });
+    }
+}
+
+#[test]
 fn structured_graph_preserves_instantiation_order_members_and_absence() {
     with_graph(|checked| {
         let exports = source(checked).module_symbol().expect("module").exports();
