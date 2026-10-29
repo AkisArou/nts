@@ -33,6 +33,9 @@ fn check() -> Result<bool, Box<dyn std::error::Error>> {
         [config, flag, count] if flag == "--checkers" => (config, count.parse::<NonZeroU16>()?),
         _ => return Err("usage: diagnostics <tsconfig.json> [--checkers N]".into()),
     };
+    // The raw audit uses the same explicit budget for parsing/binding and
+    // diagnostics, rather than allowing spare pools to follow the CPU mask.
+    nts_frontend_tsrs::configure_worker_budget(count)?;
     let cwd = std::env::current_dir()?;
     let mut options = SessionOptions::new(cwd.to_str().ok_or("working directory is not UTF-8")?);
     options.checker_count = Some(count);
