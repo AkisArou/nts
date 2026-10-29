@@ -1,10 +1,18 @@
 // A command's exit decides its result. Silence can only leave it unmeasured.
-import {spawn, type SpawnOptions} from "node:child_process";
+import {execFileSync,spawn, type SpawnOptions} from "node:child_process";
 import {readFileSync,readdirSync} from "node:fs";
-import {publishHung,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
+import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 
 export const COMMAND_IDLE_GUARD_MS=5*60_000;
 export const COMMAND_ACTIVITY_POLL_MS=1000;
+export const COMMAND_CPU_BUDGET_SECONDS=30*60;
+let ticksPerSecond:number|undefined;
+function clockTicks(){
+  if(ticksPerSecond!==undefined)return ticksPerSecond;
+  const value=Number(execFileSync("getconf",["CLK_TCK"],{encoding:"utf8"}));
+  if(!Number.isSafeInteger(value)||value<1)throw new Error("invalid process CPU clock frequency");
+  return ticksPerSecond=value;
+}
 
 export function processActivity(text:string) {
   const end=text.lastIndexOf(")");
@@ -33,8 +41,8 @@ function groupCpu(group:number,started:number) {
   return ticks;
 }
 
-export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;error?:Error;hung?:string;elapsedMs:number};
-type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;
+export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;error?:Error;hung?:string;runaway?:string;elapsedMs:number};
+type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
 /** Own one process group while retaining the caller's cgroup and resource caps.
@@ -45,8 +53,12 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
   return new Promise((resolve,reject)=>{
     const began=performance.now(),idle=options.idleMs??COMMAND_IDLE_GUARD_MS;
     if(!Number.isFinite(idle)||idle<=0)throw new Error("command idle guard must be positive");
+    const budget=options.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS;
+    if(!Number.isFinite(budget)||budget<=0)throw new Error("command CPU budget must be positive");
+    let frequency;
+    try{frequency=clockTicks();}catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
     const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]} satisfies SpawnOptions);
-    let out="",last=began,cpu=0,started:number|undefined,error:Error|undefined,hung:string|undefined,instrument:ToolingInstrumentError|undefined;
+    let out="",last=began,cpu=0,started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,instrument:ToolingInstrumentError|undefined;
     let timer:ReturnType<typeof setInterval>|undefined;
     const stop=()=>{
       if(!child.pid||child.pid<=1)return;
@@ -69,7 +81,7 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
     child.on("close",(status,signal)=>{
       if(timer)clearInterval(timer);
       if(instrument)reject(instrument);
-      else resolve({status,signal,out,error,hung,elapsedMs:performance.now()-began});
+      else resolve({status,signal,out,error,hung,runaway,elapsedMs:performance.now()-began});
     });
     if(!child.pid)return; // spawn's error/close events retain their ordinary meaning.
     try{
@@ -81,6 +93,10 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       timer=setInterval(()=>{
         try{
           const now=performance.now(),measured=groupCpu(child.pid!,started!);
+          if(measured/frequency>=budget){
+            runaway=`command NOT RUN (runaway): ${command}; process-group user+sys CPU ${(measured/frequency).toFixed(3)} s reached its ${budget} s budget`;
+            publishRunaway(runaway,options.env);clearInterval(timer);stop();child.stdout.destroy();child.stderr.destroy();return;
+          }
           // Membership/reaping races can lower a sampled group total. Reset
           // its baseline too, rather than hiding subsequent real CPU work.
           if(measured!==cpu){cpu=measured;last=now;options.onActivity?.({cpu,elapsedMs:now-began,pid:child.pid!});}

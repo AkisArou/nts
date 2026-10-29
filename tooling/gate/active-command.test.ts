@@ -40,6 +40,15 @@ test("an idle command is typed NOT RUN hung while completed exits keep their mea
   assert.equal(failed.status,7);assert.equal(failed.hung,undefined);assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
 });
 
+test("CPU runaway budgets hold a busy loop without manufacturing a verdict",async t=>{
+  const {root,env}=fixture(t),ready=join(root,"busy");
+  const result=await activeCommand(process.execPath,["-e","require('node:fs').writeFileSync(process.argv[1],'ready');while(true){}",ready],{cwd:root,env,idleMs:2000,pollMs:50,cpuBudgetSeconds:0.25});
+  assert.ok(existsSync(ready));assert.equal(result.hung,undefined);
+  assert.match(result.runaway!,/user\+sys CPU .* reached its 0.25 s budget/);
+  const frame=readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control");
+  assert.equal(frame?.verdict,"NOT RUN");assert.equal(frame?.kind,"runaway");
+});
+
 test("a grandchild outliving its parent is stopped with the owned group",async t=>{
   const {root,env}=fixture(t),ready=join(root,"grandchild");
   const grandchild=`require('node:fs').writeFileSync(process.argv[1],String(process.pid));Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`;

@@ -20,7 +20,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { activeCommand } from "../gate/active-command.ts";
-import { publishHung, publishToolingFailure, ToolingInstrumentError } from "../gate/step-result.ts";
+import { publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentError } from "../gate/step-result.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const FLAGS = ["-std=c11", "-fsyntax-only"];
@@ -49,6 +49,7 @@ export async function measure({ project, root, compiler, env, work, cached, cc, 
     mkdirSync(out, { recursive: true });
     const emit = await run(compiler, ["emit-c", project, "--out", out, "--napi"], root, env, activity);
     if (emit.hung) return { category: "hung", why: emit.hung };
+    if (emit.runaway) return { category: "runaway", why: emit.runaway };
     if (emit.error || emit.signal || emit.status !== 0) {
       return { category: "not-measured", why: `emit-c ${emit.signal ?? emit.error?.message ?? `exit ${emit.status}`}: ${emit.out.trim().split("\n").pop()}` };
     }
@@ -58,6 +59,7 @@ export async function measure({ project, root, compiler, env, work, cached, cc, 
   if (bytes === 0) return { category: "not-measured", why: "emit-c wrote no nonempty program.c" };
   const compiled = await run(cc, [...FLAGS, "-I", out, source], root, env, activity);
   if (compiled.hung) return { category: "hung", why: compiled.hung };
+  if (compiled.runaway) return { category: "runaway", why: compiled.runaway };
   if (compiled.error || compiled.signal) {
     return { category: "not-measured", why: `${cc}: ${compiled.signal ?? compiled.error.message}` };
   }
@@ -113,7 +115,7 @@ async function main() {
         work: join(scratch, String(index)), cached: cachedEmission(project, cached, hash),
       }));
       results.set(project, result);
-      if (result.category === "hung") held = `${project}: ${result.why}`;
+      if (result.category === "hung" || result.category === "runaway") held = {kind:result.category,why:`${project}: ${result.why}`};
       timed[project] = (Date.now() - began) / 1000;
     }
   }));
@@ -124,7 +126,7 @@ async function main() {
   for (const [project, result] of [...results].sort()) {
     if (result.category !== "compiles") console.log(`  ${result.category === "rejected" ? "DOES NOT COMPILE" : "NOT MEASURED"}  ${project}: ${result.why}`);
   }
-  if (held) { publishHung(held,env); return 2; }
+  if (held) { (held.kind === "runaway" ? publishRunaway : publishHung)(held.why,env); return 2; }
   return compiled.length === projects.length ? 0 : 1;
 }
 

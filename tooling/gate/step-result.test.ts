@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { CaseBudgetError, PressureError, ToolingInstrumentError, publishHung, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
+import { CaseBudgetError, PressureError, ToolingInstrumentError, publishHung, publishRunaway, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
 import { memoryDisposition, caseBudgetMessage } from "../census/worker-memory.ts";
 test("an aggregate kill is a budget verdict only when the case is exclusive", () => {
   assert.equal(memoryDisposition("aggregate-pressure", "exclusive"), "budget");
@@ -22,6 +22,9 @@ test("hung and broken tooling instruments cannot become ordinary assertion failu
   const path=join(directory,"result.json"),env={NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"one"};
   publishHung("silent test file; prior assertions retained",env);
   assert.equal(readStepInstrument(path,"tooling","one")?.verdict,"NOT RUN");
+  publishRunaway("command used its CPU budget",env);
+  assert.equal(readStepInstrument(path,"tooling","one")?.verdict,"NOT RUN");
+  assert.equal(readStepInstrument(path,"tooling","one")?.kind,"runaway");
   for(const kind of ["tooling-setup","tooling-cleanup"] as const) {
     publishToolingFailure(new ToolingInstrumentError(kind,"no completed measurement"),env);
     const row=readStepInstrument(path,"tooling","one");assert.equal(row?.verdict,"INSTRUMENT");assert.equal(row?.kind,kind);

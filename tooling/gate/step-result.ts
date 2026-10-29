@@ -1,6 +1,6 @@
 // A failed instrument is evidence to wait, never evidence against a landing.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
-export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "tooling-setup" | "tooling-cleanup" | "selector-setup"; step: string; attempt: string; reason: string };
+export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "runaway" | "tooling-setup" | "tooling-cleanup" | "selector-setup"; step: string; attempt: string; reason: string };
 export class ToolingInstrumentError extends Error {
   readonly kind: "tooling-setup" | "tooling-cleanup";
   constructor(kind: ToolingInstrumentError["kind"], reason: string, options?: ErrorOptions) { super(reason, options); this.kind=kind; this.name="ToolingInstrumentError"; }
@@ -13,6 +13,9 @@ function publish(verdict:InstrumentResult["verdict"],kind:InstrumentResult["kind
 }
 export function publishHung(reason:string,env:NodeJS.ProcessEnv=process.env):void {
   publish("NOT RUN","hung",reason,env);
+}
+export function publishRunaway(reason:string,env:NodeJS.ProcessEnv=process.env):void {
+  publish("NOT RUN","runaway",reason,env);
 }
 export function publishToolingFailure(error:ToolingInstrumentError,env:NodeJS.ProcessEnv=process.env):void {
   publish("INSTRUMENT",error.kind,error.message,env);
@@ -34,7 +37,7 @@ export function readStepInstrument(path: string, step: string, attempt: string):
   let result;
   try { result = JSON.parse(readFileSync(path, "utf8")); }
   catch (error) { if (error.code === "ENOENT") return; throw error; }
-  if (result.version !== 1 || !((result.verdict === "INSTRUMENT" && ["memory-pressure","tooling-setup","tooling-cleanup","selector-setup"].includes(result.kind)) || (result.verdict === "FAIL" && result.kind === "case-budget") || (result.verdict === "NOT RUN" && result.kind === "hung"))
+  if (result.version !== 1 || !((result.verdict === "INSTRUMENT" && ["memory-pressure","tooling-setup","tooling-cleanup","selector-setup"].includes(result.kind)) || (result.verdict === "FAIL" && result.kind === "case-budget") || (result.verdict === "NOT RUN" && ["hung","runaway"].includes(result.kind)))
       || result.step !== step || result.attempt !== attempt || typeof result.reason !== "string" || !result.reason) {
     throw new Error(`invalid instrument result for ${step}`);
   }
