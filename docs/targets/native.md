@@ -30,8 +30,9 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
   (register [T-2](../open-questions.md#6-bindings-products-toolchains-dependencies)).
   It classifies records passed by value for System V, Win64 and AAPCS64.
 - **LLVM is the frontier native backend, and C is held equally.** Both meet
-  [the bar](../README.md#the-bar) on every row, and a row where LLVM is slower
-  than C is a defect. The LLVM IR states to the optimizer everything nts
+  [the bar](../README.md#the-bar) on every row, and a row where one of them is
+  slower than the other is a defect of the slower one. The LLVM IR states to
+  the optimizer everything nts
   proves (designed, not built): which accesses cannot alias, from the
   layouts (type-based alias metadata, alias scopes), that a fresh allocation
   aliases nothing, which integer operations cannot overflow (`nsw`, `nuw`),

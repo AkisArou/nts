@@ -420,7 +420,11 @@ add, in order:
      nts proves, and each addition is measured by instruction counts
      (runtime). The LLVM backend then emits them from the layouts and facts
      (compiler), first to match C, then to pass it
-     ([native](targets/native.md#two-backends-one-runtime)).
+     ([native](targets/native.md#two-backends-one-runtime));
+   - **the C backend slower than LLVM** on 4 rows (`dispatch` 1.64,
+     `logical-assignment` 1.25, `accumulate` 1.20, `generic-classes` 1.08):
+     the same comparison the other way, to find what nts's LLVM IR gives the
+     optimizer that its C loses (runtime, after the LLVM arms).
 3. **Already planned, confirmed:** loop versions behind one entry test (the
    integral regions, being built), the generator protocol (L16), typed
    `JSON.parse` into its layout, helper contracts in memory stage 0, slices
