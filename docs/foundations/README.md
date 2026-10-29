@@ -11,9 +11,10 @@ the evidence behind each decision.
 
 ## The bar
 
-- **Faster than node and Bun by a wide margin on every benchmark row**, and as
-  close as possible to each target's own language: C++ for C and LLVM, Java for
-  the JVM, C++ compiled to Wasm for Wasm.
+- **Faster than node and Bun by a wide margin on every benchmark row, never
+  behind Bun's AOT compiler or ScriptC** ([the bar](../README.md#the-bar)), and
+  as close as possible to each target's own language: C++ for C and LLVM,
+  Java for the JVM, C++ compiled to Wasm for Wasm.
 - **Correct first:** node's behaviour is the oracle, down to the last bit of a
   formatted double.
 - **Every speed fact is proved by the compiler,** never declared by the

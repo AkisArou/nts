@@ -23,6 +23,13 @@ Dates are 2026.
   are replaced outright (10-22).
 - **"Beats" means at most 0.8× of node's and Bun's time on a row,** for now;
   each row's bar is set again when that row is worked on (10-27).
+- **The bar names the ahead-of-time compilers** (10-29): "faster than node,
+  faster or at least tie with scriptc and bun aot". Bun's JIT stays a
+  must-beat column, like node, at 0.8×. A tie with Bun AOT or ScriptC "should
+  be row dependent I think. Nonetheless I think ~5%". The bar does not end the
+  work on a row: "we should always investigate what we can do better,
+  leverage profiling tools", and "beating node matters ofcourse, but beating
+  ourself matters too!"
 - **Show every benchmark result** as it is produced: ratios against node and
   Bun, the machine's conditions, and the verdict, losing rows included (10-07,
   10-21).

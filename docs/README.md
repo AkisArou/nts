@@ -8,9 +8,14 @@ result runs, and how it is held to each standard.
 
 ## The bar
 
-- **Faster than node and Bun on every benchmark row:** a row is won at 0.8×
-  their time or better, for now; each row's bar is set again when that row is
-  worked on. nts also comes as close as it can to each target's own language:
+- **Faster than node and Bun on every benchmark row, and never behind the
+  ahead-of-time compilers:** against node and Bun's JIT a row is won at 0.8×
+  their time or better, for now; against Bun's AOT compiler and ScriptC nts is
+  faster or ties, a tie being within about 5% in the same sitting, set per row
+  from its measured spread. Each row's bar is set again when that row is
+  worked on, and meeting it does not end the row: every row is profiled for
+  what more nts can do, and is held to nts's own best result as well as to
+  theirs. nts also comes as close as it can to each target's own language:
   C++ for native code, Java for the JVM, C++ compiled to Wasm for Wasm.
 - **Correct first.** The ECMAScript specification decides what a program
   means, and node what the specification leaves to the host; node is the
