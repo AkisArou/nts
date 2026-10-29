@@ -264,6 +264,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }
@@ -395,6 +396,7 @@ mod rounding_tests {
                 exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
+                validation: None,
                 written_return_elements: Vec::new(),
             };
             let seen = observed(&func);

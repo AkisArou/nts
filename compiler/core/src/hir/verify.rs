@@ -2333,6 +2333,7 @@ fn check_dominance(func: &Func, reachable: &FxHashSet<BlockId>, problems: &mut V
 
 pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
     match kind {
+        OpKind::Validation(witness) => witness.check.operands(),
         OpKind::Optional { defined, payload } => vec![*defined, *payload],
         OpKind::Erase { value, .. }
         | OpKind::TagOf { value }
@@ -2529,6 +2530,7 @@ mod tests {
                 exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
+                validation: None,
                 written_return_elements: Vec::new(),
             }],
             ..Program::default()
@@ -3658,6 +3660,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         };
         let passes_one = Func {
@@ -3687,6 +3690,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         };
         let program = Program {

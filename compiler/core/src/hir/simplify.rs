@@ -449,6 +449,7 @@ fn substitute_rejection(rejection: Option<&mut super::Rejection>, of: impl Fn(Va
 #[allow(clippy::too_many_lines)]
 pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
     match kind {
+        OpKind::Validation(witness) => witness.check.remap(of),
         OpKind::Optional { defined, payload } => {
             *defined = of(*defined);
             *payload = of(*payload);
@@ -883,6 +884,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }

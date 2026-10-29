@@ -936,6 +936,7 @@ fn entry_function(
         exact: rustc_hash::FxHashMap::default(),
         written_return: None,
         result_absent: crate::hir::Absent::Impossible,
+        validation: None,
         written_return_elements: Vec::new(),
     }
 }
@@ -1518,6 +1519,7 @@ fn assembled_resume(
         exact: rustc_hash::FxHashMap::default(),
         written_return: None,
         result_absent: crate::hir::Absent::Impossible,
+        validation: None,
         written_return_elements: Vec::new(),
     }
 }

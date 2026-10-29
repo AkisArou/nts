@@ -30,6 +30,7 @@ fn contract(name: &str) -> Func {
         params: vec![param],
         return_type: HirType::Void,
         written_return: None,
+        validation: None,
         written_return_elements: Vec::new(),
         result_absent: Absent::Impossible,
         values: vec![Op {

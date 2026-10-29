@@ -3524,6 +3524,9 @@ fn render_arms(arms: &[nts_core::hir::FieldArm]) -> String {
 fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
     let ty = render(&op.ty);
     match &op.kind {
+        OpKind::Validation(witness) => {
+            format!("%{index} = validation {witness:?} : {ty}")
+        }
         OpKind::Optional { defined, payload } => {
             format!("%{index} = optional %{}, %{} : {ty}", defined.0, payload.0)
         }

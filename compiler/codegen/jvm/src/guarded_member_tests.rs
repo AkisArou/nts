@@ -66,6 +66,7 @@ fn body(name: &str, receiver: u32) -> Func {
         initializes_receiver: false,
         abstract_declaration: false,
         written_return: None,
+        validation: None,
         written_return_elements: Vec::new(),
         result_absent: Absent::Undefined,
         async_result: None,

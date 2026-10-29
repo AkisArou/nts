@@ -4711,6 +4711,7 @@ fn passing_undefined(name: String, body: &Func, this_at: usize) -> Func {
         exact: rustc_hash::FxHashMap::default(),
         written_return: body.written_return,
         result_absent: crate::hir::Absent::Impossible,
+        validation: None,
         written_return_elements: body.written_return_elements.clone(),
     }
 }
@@ -18446,6 +18447,7 @@ fn erased_call(
         exact: rustc_hash::FxHashMap::default(),
         written_return: None,
         result_absent: crate::hir::Absent::Impossible,
+        validation: None,
         written_return_elements: Vec::new(),
     })
 }
@@ -18576,6 +18578,7 @@ fn refuses_to_cross(
         exact: rustc_hash::FxHashMap::default(),
         written_return: None,
         result_absent: crate::hir::Absent::Impossible,
+        validation: None,
         written_return_elements: Vec::new(),
     }
 }
@@ -18979,6 +18982,7 @@ fn declare_erased_entries(
                 exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
+                validation: None,
                 written_return_elements: Vec::new(),
             },
         ));
@@ -35397,6 +35401,7 @@ impl<'a> FuncBuilder<'a> {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }
@@ -88663,6 +88668,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         });
 

@@ -496,6 +496,7 @@ mod tests {
             exact: hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }

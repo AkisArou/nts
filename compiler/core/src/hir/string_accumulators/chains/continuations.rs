@@ -120,7 +120,8 @@ fn effect(op: &OpKind) -> Effect<'_> {
         | OpKind::Await { .. }
         | OpKind::Yield { .. }
         | OpKind::Suspend { .. }
-        | OpKind::PromiseSubscribe { .. } => Effect::Unsupported,
+        | OpKind::PromiseSubscribe { .. }
+        | OpKind::Validation(_) => Effect::Unsupported,
         // Primitive memory/arithmetic operations have no language-level
         // exceptional continuation. Allocation failure/host refusal is
         // outside JavaScript's catchable value protocol.

@@ -549,6 +549,7 @@ mod tests {
             return_type: STR,
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
             values,
             blocks: vec![Block {

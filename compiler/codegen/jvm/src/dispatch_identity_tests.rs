@@ -61,6 +61,7 @@ fn function(name: &str, receiver: TypeId, calls: Option<&str>) -> Func {
         params,
         return_type: HirType::Erased,
         written_return: None,
+        validation: None,
         written_return_elements: Vec::new(),
         result_absent: Absent::Undefined,
         blocks: vec![Block {

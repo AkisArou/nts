@@ -623,6 +623,7 @@ mod tests {
                     return_type: F64,
                     written_return: None,
                     result_absent: crate::hir::Absent::Impossible,
+                    validation: None,
                     written_return_elements: Vec::new(),
                     values: Vec::new(),
                     blocks: Vec::new(),

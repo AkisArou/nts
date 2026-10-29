@@ -138,6 +138,7 @@ fn function(name: &str, case: Case) -> Func {
         params: Vec::new(),
         return_type: HirType::NUMBER,
         written_return: None,
+        validation: None,
         written_return_elements: Vec::new(),
         result_absent: Absent::Impossible,
         values,

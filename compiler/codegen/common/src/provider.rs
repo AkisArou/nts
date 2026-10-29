@@ -80,6 +80,7 @@ mod tests {
             return_type: HirType::Void,
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
             values: vec![
                 Op {

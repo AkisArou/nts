@@ -69,6 +69,7 @@ fn function(
         exact: std::iter::empty().collect(),
         written_return: None,
         result_absent: Absent::Impossible,
+        validation: None,
         written_return_elements: vec![],
     }
 }

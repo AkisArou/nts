@@ -263,6 +263,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }
@@ -474,6 +475,7 @@ mod tests {
             exact: rustc_hash::FxHashMap::default(),
             written_return: None,
             result_absent: crate::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         };
         assert_eq!(narrow_truncated(&mut it), 2);

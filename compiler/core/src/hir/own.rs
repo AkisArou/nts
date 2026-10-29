@@ -4316,6 +4316,7 @@ mod tests {
             }],
             return_type: super::HirType::Void,
             written_return: None,
+            validation: None,
             written_return_elements: Vec::new(),
             result_absent: Absent::Impossible,
             values: vec![crate::hir::Op {
@@ -4385,6 +4386,7 @@ mod tests {
             params: Vec::new(),
             return_type: super::HirType::Void,
             written_return: None,
+            validation: None,
             written_return_elements: Vec::new(),
             result_absent: Absent::Impossible,
             values: vec![

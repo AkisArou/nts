@@ -66,6 +66,7 @@ pub mod tables;
 pub mod tags;
 pub mod templates;
 pub mod unerase;
+pub mod validation;
 pub mod written_roots;
 pub mod written_storage;
 
@@ -587,6 +588,9 @@ pub struct Func {
     /// otherwise. Every `return` must prove each element fits, and so a
     /// read of that position of a call's result is the kind's range.
     pub written_return_elements: Vec<Option<native::Scalar>>,
+    /// Independent validation coverage, owned by this exact function. The
+    /// ordinary build allocates no ledger; clones copy it with the body.
+    pub validation: Option<Box<validation::Ledger>>,
     /// What the result's null pointer stands for, where the result is a
     /// reference whose type admits an absence: `Null` for a `string | null`
     /// return, `Undefined` for `string | undefined`, `Impossible` otherwise.
@@ -1111,6 +1115,12 @@ impl ArrayFill {
 /// What an operation does.
 #[derive(Debug, Clone, PartialEq)]
 pub enum OpKind {
+    /// A compiler-proof check, outside optimizer fact authority. It answers
+    /// whether the original recipe agrees, and remains effectful until the
+    /// validation materializer inserts its failure edge before ownership.
+    /// Ordinary builds contain none. The boxed description keeps ordinary
+    /// operation storage independent of the number of validation operands.
+    Validation(Box<validation::Witness>),
     /// Construct one possibly-undefined value. A false component discards the
     /// payload value, without consuming its ownership. Both operands remain
     /// live until this operation; no view/move equivalence is implied.
@@ -9126,6 +9136,7 @@ mod tests {
                     exact: rustc_hash::FxHashMap::default(),
                     written_return: None,
                     result_absent: crate::hir::Absent::Impossible,
+                    validation: None,
                     written_return_elements: Vec::new(),
                 }],
                 ..Program::default()
@@ -9259,6 +9270,7 @@ mod tests {
                 exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
+                validation: None,
                 written_return_elements: Vec::new(),
             }],
             globals: Vec::new(),
@@ -9498,6 +9510,7 @@ mod tests {
                 exact: rustc_hash::FxHashMap::default(),
                 written_return: None,
                 result_absent: crate::hir::Absent::Impossible,
+                validation: None,
                 written_return_elements: Vec::new(),
             }],
             globals: Vec::new(),

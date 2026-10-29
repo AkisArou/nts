@@ -278,6 +278,7 @@ fn helper(func: &Func, name: String, run: &[ValueId], boundary: &Cut) -> Func {
         exact: nts_core::hir::ExactArithmetic::default(),
         written_return: None,
         result_absent: nts_core::hir::Absent::Impossible,
+        validation: None,
         written_return_elements: Vec::new(),
     }
 }
@@ -424,6 +425,7 @@ mod tests {
             exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }

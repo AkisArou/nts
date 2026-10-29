@@ -52,6 +52,7 @@ fn function(name: &str, params: &[HirType], returned: HirType, value: Option<Val
         params,
         return_type: returned,
         written_return: None,
+        validation: None,
         written_return_elements: Vec::new(),
         result_absent: Absent::Impossible,
         blocks: vec![Block {

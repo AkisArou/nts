@@ -337,6 +337,7 @@ fn stopped_entry(name: String, contract: &Func, receiver: super::TypeId, message
         params,
         return_type: contract.return_type.clone(),
         written_return: contract.written_return,
+        validation: None,
         written_return_elements: contract.written_return_elements.clone(),
         result_absent: contract.result_absent,
         values,

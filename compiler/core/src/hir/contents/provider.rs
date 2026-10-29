@@ -829,6 +829,7 @@ mod tests {
             exact: FxHashMap::default(),
             written_return: None,
             result_absent: Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         }
     }

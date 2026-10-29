@@ -177,6 +177,7 @@ pub(crate) enum Verdict {
 /// it by. `rendering_tests` holds the two to each other over a whole program.
 pub(crate) fn op_word(kind: &OpKind) -> &'static str {
     match kind {
+        OpKind::Validation(_) => "validation",
         OpKind::Optional { .. } => "optional",
         OpKind::OptionalDefined(_) => "optional.defined",
         OpKind::OptionalPayload(_) => "optional.payload",

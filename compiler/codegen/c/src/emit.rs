@@ -5833,6 +5833,13 @@ fn emit_op(
     let op = func.value(value);
     let name = value_name(value);
     let text = match &op.kind {
+        OpKind::Validation(_) => {
+            return Err(Diagnostic::error(
+                "NTS2007",
+                "validation predicate lowering is not connected",
+                op.origin.location,
+            ));
+        }
         OpKind::Optional { .. } | OpKind::OptionalDefined(_) | OpKind::OptionalPayload(_) => {
             optional::operation(func, value, context)?
         }
@@ -6748,6 +6755,7 @@ mod tests {
             exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         };
         let op = value(i32_ty);
@@ -6806,6 +6814,7 @@ mod tests {
             exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         };
         let calling = |name: &str| Op {
@@ -6932,6 +6941,7 @@ mod tests {
             exact: nts_core::hir::ExactArithmetic::default(),
             written_return: None,
             result_absent: nts_core::hir::Absent::Impossible,
+            validation: None,
             written_return_elements: Vec::new(),
         };
         let defined: rustc_hash::FxHashSet<String> = ["holds".to_owned()].into_iter().collect();

@@ -52,6 +52,7 @@ fn function(
         origin: origin(),
         exported,
         written_return: None,
+        validation: None,
         written_return_elements: vec![],
         result_absent: hir::Absent::Impossible,
         initializes_receiver: false,
