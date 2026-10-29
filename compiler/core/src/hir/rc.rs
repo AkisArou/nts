@@ -435,8 +435,10 @@ fn insert_into(
 fn only_erased(func: &Func, value: ValueId) -> bool {
     let mut erased = false;
     let mut views = vec![value];
-    // Bounded: a chain of views is as long as a class hierarchy.
-    while let Some(at) = views.pop().filter(|_| views.len() < 64) {
+    // Views can fan out, and a queue width says nothing about whether all
+    // uses were examined. Each arena value is queued once, including cycles.
+    let mut queued = rustc_hash::FxHashSet::from_iter([value]);
+    while let Some(at) = views.pop() {
         if func
             .blocks
             .iter()
@@ -455,7 +457,10 @@ fn only_erased(func: &Func, value: ValueId) -> bool {
             match &op.kind {
                 OpKind::Erase { value: erasing, .. } if *erasing == at => erased = true,
                 OpKind::Convert(_) | OpKind::FieldView { .. } if op.ty.counting().is_some() => {
-                    views.push(ValueId(u32::try_from(index).unwrap_or(u32::MAX)));
+                    let view = ValueId(u32::try_from(index).unwrap_or(u32::MAX));
+                    if queued.insert(view) {
+                        views.push(view);
+                    }
                 }
                 // A runtime helper that keeps none of its arguments reads the
                 // object and holds nothing (`runtime::keeps`) -- `nts_gobject_made`,
@@ -2326,6 +2331,78 @@ mod tests {
                 spelling: crate::hir::native::Spelling::Tag,
             },
         ))
+    }
+
+    #[test]
+    fn every_native_use_beyond_64_sibling_views_is_examined() {
+        let ty = objc_handle("NSObject");
+        let mut program = straight(op(OpKind::Param(0), ty.clone()), Vec::new());
+        let func = &mut program.funcs[0];
+        func.values = vec![
+            op(OpKind::Param(0), ty.clone()),
+            op(
+                OpKind::Erase {
+                    value: ValueId(0),
+                    absent: Absent::Impossible,
+                    slots: Absent::Impossible,
+                },
+                HirType::Erased,
+            ),
+        ];
+        for _ in 0..70 {
+            func.values
+                .push(op(OpKind::Convert(ValueId(0)), ty.clone()));
+        }
+        func.values.push(op(
+            OpKind::Call {
+                callee: Callee::Native(std::sync::Arc::new(crate::hir::native::Function {
+                    name: "platform_keeps_the_view".into(),
+                    convention: crate::hir::native::Convention::C,
+                    parameters: vec![crate::hir::native::Type::Pointer(
+                        crate::hir::native::Pointee::Void,
+                    )],
+                    result: crate::hir::native::Type::Void,
+                    retention: vec![crate::hir::native::Retention::Unknown],
+                    roles: vec![crate::hir::native::Role::Plain],
+                    variadic: None,
+                    declared_at: None,
+                    returns_string: None,
+                    returns_array: None,
+                    returns_dictionary: None,
+                    returns_set: None,
+                    send: None,
+                    returns_owned: false,
+                    consumes: Vec::new(),
+                    frameworks: Vec::new(),
+                    libraries: Vec::new(),
+                    defaults: Vec::new(),
+                    result_as: None,
+                    vtable: None,
+                    hresult: false,
+                    result_as_number: false,
+                })),
+                args: vec![ValueId(2)],
+                frame: None,
+            },
+            HirType::Void,
+        ));
+        func.blocks[0].ops = (0..func.values.len())
+            .map(|at| ValueId(u32::try_from(at).expect("small graph")))
+            .collect();
+        func.blocks[0].terminator = Terminator::Return(None);
+        assert!(
+            !only_erased(func, ValueId(0)),
+            "the pending early view reaches native code"
+        );
+        // One difference: the last use is a known runtime reader retaining none.
+        let last = func.values.last_mut().expect("native use");
+        if let OpKind::Call { callee, .. } = &mut last.kind {
+            *callee = Callee::External("nts_gobject_made".into());
+        }
+        assert!(
+            only_erased(func, ValueId(0)),
+            "all consumers are accounted for"
+        );
     }
 
     /// `f(n) { %1 = make(n); ...erase %1, through `views` Converts...; store(erased); later() }`,
