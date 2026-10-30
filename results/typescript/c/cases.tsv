@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":2,"backend":"c","commit":"b23045299eabccee52fc6662c6cf044d8bc885f1","compiler":"f2cc41d24873193c","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":2,"backend":"c","commit":"0814cc837f3bda76a8bd3505f1f847f79326dc71","compiler":"498e919364e3dea6","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/ambient/declare-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
@@ -369,6 +369,36 @@ tests/typescript/objects/shorthand-properties.ts	{"kind":"pass"}
 tests/typescript/objects/spread-copies-own-enumerable.ts	{"kind":"pass"}
 tests/typescript/objects/spread-order.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/objects/super-in-literal-method.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/proofs/bounds-alias-field-shift.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-alias-map-value-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-alias-variable-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-call-direct-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-nested-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-call-recursive-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-callback-for-each-pop.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-callback-map-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-callback-sort-comparator-pops.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-loop-back-edge-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-loop-continue-shifts.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-loop-nested-inner-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-merge-conditional-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-merge-if-else-index.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-merge-switch-fallthrough-index.ts	{"kind":"pass"}
+tests/typescript/proofs/length-alias-field-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: growing an array by its length would leave holes, which have no representation here (4 to 7)"}}
+tests/typescript/proofs/length-alias-nested-array-splice.ts	{"kind":"pass"}
+tests/typescript/proofs/length-alias-variable-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-call-direct-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-call-nested-pop.ts	{"kind":"pass"}
+tests/typescript/proofs/length-call-recursive-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-callback-array-from-push.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/length-callback-filter-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-callback-reduce-pop.ts	{"kind":"pass"}
+tests/typescript/proofs/length-loop-back-edge-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-loop-do-while-pop.ts	{"kind":"pass"}
+tests/typescript/proofs/length-loop-labelled-break-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-merge-if-else-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-merge-logical-and-push.ts	{"kind":"pass"}
+tests/typescript/proofs/length-merge-nullish-push.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/resource-management/await-using.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/resource-management/combination-generic-pool.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/resource-management/disposable-stack.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
