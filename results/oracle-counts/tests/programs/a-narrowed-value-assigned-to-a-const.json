@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-narrowed-value-assigned-to-a-const",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-narrowed-value-assigned-to-a-const/src/main.ts",
+      "signature": "15cdacbbeae447da657a3db07476bf3ca560de811b6461d84c9dc1aaf19a4047",
+      "keys": {
+        "c": "9525f5336f4cf0383b148303501a628b",
+        "jvm": "c4f82bcfb7b88519cec8e06914e2a556",
+        "llvm": "6a118fc387df3af2ea2fea1b59f96fec"
+      },
+      "cases_sha256": "d2ce6d1b31f424bfda3f57e5009774a6c4a3117fd968e874775dc691bc1daf14",
+      "driver_sha256": "cd22aa45c4f11d91f1e148884d488301a0c25eb76502121dd9cab2fc6f996920",
+      "populations": {
+        "aClosureWritesTheBinding": {
+          "count": 29,
+          "cases_sha256": "8f001a3e6662825d8b22ab532e56a6c9638174758a8473ec2687f7ea5cc49479"
+        },
+        "assignedToAConst": {
+          "count": 29,
+          "cases_sha256": "305a8858da27357c35b0c11ffbfa0c82a7adee2a54ffbdfc8d9f61705402dae5"
+        },
+        "capturedInArm": {
+          "count": 29,
+          "cases_sha256": "43de079b7f4577382bd3ab520b6b5cb77174741ab0c9a7c281f3fa5f00276f43"
+        },
+        "capturedOutside": {
+          "count": 29,
+          "cases_sha256": "1112d5f2c4662569861ee4a01cae452db5b4bdc5409503cc884e9cafe98de61d"
+        },
+        "passedAlong": {
+          "count": 29,
+          "cases_sha256": "861228e4bd0e3a4f5a7ba821c3ab88b2b25c39befb135129e7adf34530a5c326"
+        },
+        "readDirectly": {
+          "count": 29,
+          "cases_sha256": "8c7bb9f24764446c4a25cac01467023482ed5fc4034afc7df02706290cc641f6"
+        },
+        "reassignedInArm": {
+          "count": 29,
+          "cases_sha256": "8cb23a8cabf21dbfbe415effd5c14c2a6bac8ffe5c59fd4c7a09a1d2a25bfaff"
+        },
+        "withoutATest": {
+          "count": 29,
+          "cases_sha256": "3f51b44b2949bdac2d2371c241432ded9b551ce2afd22fa1f27639a5f7f78232"
+        }
+      },
+      "complete": true,
+      "count": 232
+    }
+  ]
+}

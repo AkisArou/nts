@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/keyed-closures",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/keyed-closures/src/main.ts",
+      "signature": "7ca3cff9bc5d2587b38c4edc5a57f44d60291228b125acfab66a65e036707e37",
+      "keys": {
+        "c": "3f6e3b8e6d1c49f63a8d43517b152a10",
+        "jvm": "a504408e2b8d5cd981677fff66ef9b63",
+        "llvm": "834c4efad2ce5c95956dd15af7ee3150"
+      },
+      "cases_sha256": "2e0fabc986a87e8e9e7c1e0f629c5cabb9efef7e3def4b6b9750409aab5c6e44",
+      "driver_sha256": "381623fb83796a264773dc15f09ca605059aaac89ae8f99626b57b06b31dd92d",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.076216,
+        0.073755
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-error-view-with-an-actual-optional-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-error-view-with-an-actual-optional-slot/src/main.ts",
+      "signature": "1fdca2c732601b833305b50cbb204f7939ed1902577fa11734dd4af7ebe6c1cb",
+      "keys": {
+        "c": "429fc389e1cc8fa784a372706862f81f",
+        "jvm": "163288bb0bd5ee73b42e6f8ecc4952ab",
+        "llvm": "fea5c769198ff342bfde9d1fa6c93125"
+      },
+      "cases_sha256": "44e799eae4b6e2348e20fcfce2f9a8d88bd5884f14a1e61155e858cc6f792245",
+      "driver_sha256": "9a7f6ad880058f1416b1b88971190790f684a6b9ac251b4ffb6309d5c1c0b28b",
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

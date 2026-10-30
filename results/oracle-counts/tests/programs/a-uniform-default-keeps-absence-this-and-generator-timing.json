@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-uniform-default-keeps-absence-this-and-generator-timing",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-uniform-default-keeps-absence-this-and-generator-timing/src/main.ts",
+      "signature": "73555917ecc9db6bb49aad9703a5c88494eb2d89c189a408eea56512b732f1ff",
+      "keys": {
+        "c": "0056d0745b67a0bc8bc4bff314857495",
+        "jvm": "2455b8feb509592b88c0782d9d92b2f4",
+        "llvm": "ea015ec7a363e8a738c93c0b88742c14"
+      },
+      "cases_sha256": "f816abb113296ccb7d8ef55aeebb8e01de79a51f426f410644989eabac3491e6",
+      "driver_sha256": "14dc575d649d10dc7901ccc07872ef942d3b0376dd2e82762c903635028f91e6",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.078616,
+        0.077863
+      ]
+    }
+  ]
+}

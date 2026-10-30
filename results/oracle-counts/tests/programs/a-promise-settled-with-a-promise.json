@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-promise-settled-with-a-promise",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-promise-settled-with-a-promise/src/main.ts",
+      "signature": "a55b1dc6d4476d25433c6387fe1f897f4eb4a3e3d67fb1e8bfac6aaa39728496",
+      "keys": {
+        "c": "c03fe93565a7d0e26227cf736e431539",
+        "jvm": "d49fcf97ad24651b99a7e8581e589f1d",
+        "llvm": "cce738054779ecf42718e3ed697ccbb2"
+      },
+      "cases_sha256": "482e900f014d97e7bc0be0c4db2d00cfbe9a80e563b7b7316a44412c8eb2bd39",
+      "driver_sha256": "ba457b06c6d9c957f38a5b94b69781a877194edb4d8fe2b6d498ba47eb036deb",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.074596,
+        0.075115
+      ]
+    }
+  ]
+}

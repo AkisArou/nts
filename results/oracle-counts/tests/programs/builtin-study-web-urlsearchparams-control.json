@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-urlsearchparams-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-urlsearchparams-control/src/main.ts",
+      "signature": "6e7772d8c42ab7024fa2be7461b32cb44932855efa3574c7c143f9ea18283945",
+      "keys": {
+        "c": "febf24ba318cf8faf8c0fed028c9b308",
+        "jvm": "9cfae6b98f0489dfe61ec3dad9a89747",
+        "llvm": "5d61731c637a9863db9ea9ceea2ca751"
+      },
+      "cases_sha256": "1c541b11cf47d5deb11f5861c5feccb42e68465a2d635417d037fc0266f4f819",
+      "driver_sha256": "c4b34fa30c01a0cd0d0002717d05df4d474dc6898ae104285873afc3d2dd7148",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

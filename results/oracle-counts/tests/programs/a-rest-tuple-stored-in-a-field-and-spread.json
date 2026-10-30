@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-tuple-stored-in-a-field-and-spread",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-tuple-stored-in-a-field-and-spread/src/main.ts",
+      "signature": "2fe3622dae3f4599eaaae572938a9ab5dccb88b9d2e4f63aa3bc6c89e21b222f",
+      "keys": {
+        "c": "687283b6bced791edc6de6f2c3ec0642",
+        "jvm": "92c19d1769987d441a7c44e838a9cb69",
+        "llvm": "7b8ccc300d3a662532595a9501a78bd9"
+      },
+      "cases_sha256": "7555f62d63b8fbe6287c6dfc678fa135f2c61856a086ca616c1b02c1b92f9f29",
+      "driver_sha256": "d31c91475495c1d65a9dff629207a27c8a716771f43f721c3c39867e352b1b8d",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.082218,
+        0.082404
+      ]
+    }
+  ]
+}

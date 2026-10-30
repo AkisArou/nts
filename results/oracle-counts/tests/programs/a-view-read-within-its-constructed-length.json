@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-view-read-within-its-constructed-length",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-view-read-within-its-constructed-length/src/main.ts",
+      "signature": "828336eaad31278f728407bf0e29b04905229c9750fded13248f018789beecff",
+      "keys": {
+        "c": "d24340fb18f2bc8b7f5a4f9943150fd3",
+        "jvm": "fbd01a9a3aa707bd4e4a39195ebc34cd",
+        "llvm": "9d263865eff81a2ddb4a3309e6444e64"
+      },
+      "cases_sha256": "f9a12128815388051841011a5e336d785f57c910639625f95715dfd0b505c3ea",
+      "driver_sha256": "709a04bf320ce37a52cd0c2dc1484360baf984944de2fe8ee183c013bb2792dd",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077245,
+        0.077663
+      ]
+    }
+  ]
+}

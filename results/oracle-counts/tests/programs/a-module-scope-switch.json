@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-scope-switch",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-scope-switch/src/main.ts",
+      "signature": "8a2421b08e7ac20018b5257b3628fd8db1524d39c5304870fcfa51d9deab3ac5",
+      "keys": {
+        "c": "9030405335edece12c3e3253786a4001",
+        "jvm": "2b04ac432d7834d1ecc8f9550dac91a7",
+        "llvm": "39828c31bbc0582c27ecb0dd57835f69"
+      },
+      "cases_sha256": "8884b72bd7ea1bbc9c1069c7712e80533080dd54be0d7ad40883740a9f27ac9e",
+      "driver_sha256": "3977ef2d5e2aaac444a8a5655354a432a6a3d3ae28098d67985ba708b2e2cff2",
+      "complete": true,
+      "count": 33,
+      "node_cpu_s": [
+        0.074981,
+        0.073859
+      ]
+    }
+  ]
+}

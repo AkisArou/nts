@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/dead-code-is-removed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/dead-code-is-removed/src/main.ts",
+      "signature": "958f605da655acbdc403e248993a267efd1a6a90cf9e5aacdb5f0be399c0718a",
+      "keys": {
+        "c": "9c92cb0207a9018a4e7de0eec42b1e79",
+        "jvm": "e12c6fae510d297266f1062cea2b4c2c",
+        "llvm": "f3930ad53cf2953962168db2a8371d11"
+      },
+      "cases_sha256": "27bc9a96affb78dd24ca29de40528c1bff2e124945498e359caa3abae616b209",
+      "driver_sha256": "4064130a6e8b0f62ce9fba0859cf2f693c96315c658372e5a57e764ac44ba93c",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.072919,
+        0.074749
+      ]
+    }
+  ]
+}

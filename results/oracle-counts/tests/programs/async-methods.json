@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/async-methods",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/async-methods/src/main.ts",
+      "signature": "98bb51682c56b3041c3cde58e4d6f9fd421ddf3706810635aa7ba2eda3877275",
+      "keys": {
+        "c": "d77f542a95c8628c1797ed876d6de112",
+        "jvm": "c7d836ae88878679d1469965f7839fb5",
+        "llvm": "ada2fc6669cfaec00e13e2e7e3ea3308"
+      },
+      "cases_sha256": "ec86f7833acea2463ecd26371fe7701f107e8add4b4f8f52464b7ab75739a5bb",
+      "driver_sha256": "1f9513adec8a2424048b4633011f947a4941e1d92ef73b3e8670fcb096b0b560",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.084132,
+        0.08065
+      ]
+    }
+  ]
+}

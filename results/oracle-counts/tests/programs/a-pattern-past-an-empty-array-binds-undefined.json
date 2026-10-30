@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-pattern-past-an-empty-array-binds-undefined",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-pattern-past-an-empty-array-binds-undefined/src/main.js",
+      "signature": "83d32aa3a2c0c445595ebac6f886eac26a2f4413c36fe36aec32294f1a9861c6",
+      "keys": {
+        "c": "ddf06d42c40b7b13e96789c956acade6",
+        "jvm": "e3128b935c8014d852fa093b038abf66",
+        "llvm": "79c3d088669ef5037f3f8f88325f66c4"
+      },
+      "cases_sha256": "e2330813e7d0903f4c3ec8b0550525b17067970f3c457ca633a282af7f1f7046",
+      "driver_sha256": "f99c0f70779200a3a0de2eb7ad78410886f28d15f908efa6d4912a599b262af6",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.018989,
+        0.016495
+      ]
+    }
+  ]
+}

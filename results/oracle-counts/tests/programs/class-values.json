@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/class-values",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/class-values/src/main.ts",
+      "signature": "e7a0d5d228f565ae85e3155f11f8d0b93acc5fd4e434a30e6f71ecea90ecc920",
+      "keys": {
+        "c": "115954c1a6bb1ab7160b27cd8e9d7509",
+        "jvm": "1e440b1648e71d27944e66cc1b5aad32",
+        "llvm": "06f476d1c7ab8852b96c6acb83f7a510"
+      },
+      "cases_sha256": "75202d6d94b6eb51520c9b46487a3cfb3ed94c7e10fac07a3e8aa34c948fdcb9",
+      "driver_sha256": "4746d83ef6139b7315a0209c1240fbec2b809bf0436d8eda188c1161308d0bd0",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.08101,
+        0.082006
+      ]
+    }
+  ]
+}

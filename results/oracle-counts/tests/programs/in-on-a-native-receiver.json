@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/in-on-a-native-receiver",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/in-on-a-native-receiver/src/main.ts",
+      "signature": "060ff5658a10101dafa818c727024e0f07c7e5b68a4d30e4ed5035edcbbf46c0",
+      "keys": {
+        "c": "594489a00f50034b5c7dad125477ed6b",
+        "jvm": "6a69bed346024966b54bf634c1ac6a95",
+        "llvm": "d0ef7518e5061e948920320f70894168"
+      },
+      "cases_sha256": "1b73dd8459c172ca118037faa022e7ed11b1809945abf7986b8baa1a0cc6a954",
+      "driver_sha256": "2b0756153c54ceb6d2848afa637adcc9c1bb6e32c19f358b36206542a0cc32a4",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.081835,
+        0.080006
+      ]
+    }
+  ]
+}

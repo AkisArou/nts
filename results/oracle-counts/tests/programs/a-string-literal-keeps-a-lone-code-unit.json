@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-literal-keeps-a-lone-code-unit",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-literal-keeps-a-lone-code-unit/src/main.ts",
+      "signature": "e64917b5a8580cdebd724ffa7fb87ef1fb369c5518da8baa3efe582084654a7f",
+      "keys": {
+        "c": "4b2195bfab65ec85f291532ded5a68aa",
+        "jvm": "374bd8589aa4fb6b3dd20fa14aafe415",
+        "llvm": "71efcdd8d645fea375e15dfbcc4972d1"
+      },
+      "cases_sha256": "f44bff79099dbbeed2a2dd5255386818cfef1bfe6491df8a06d25ab965aecd1f",
+      "driver_sha256": "d0b77807e32a33c15124f2d89e05d3459659fbb18d12d373faef34118ba75433",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.076533,
+        0.07842
+      ]
+    }
+  ]
+}

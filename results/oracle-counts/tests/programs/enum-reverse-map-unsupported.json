@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/enum-reverse-map-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/enum-reverse-map-unsupported/src/main.ts",
+      "signature": "c7dec4bf45937c8cd2d433bc46827568c3c741a08e87970c1856f9e2d16506e2",
+      "keys": {
+        "c": "3736e8a08a56c6a6dadd653c354d1610",
+        "jvm": "7aa437eba3fbc2f468f503c34f1ce6b7",
+        "llvm": "f9924298623497a1b3c3ee770a173038"
+      },
+      "cases_sha256": "42809cbc852ff5767e9c1b3181faac720d68ee0bfb4921ae110f229b390500da",
+      "driver_sha256": "638e9eb09f1ae4e799bac69bf1430b5c9a18d95637dc9e848c73f8a4ef08d3f0",
+      "populations": {
+        "atAComputedIndex": {
+          "count": 29,
+          "cases_sha256": "9e3e45a73a4035862f200ee0c07ac656c8b6ef34d9cc96fede6fa3281d49e0e3"
+        },
+        "atAValueNoMemberHas": {
+          "count": 29,
+          "cases_sha256": "c7df1a64171b247f5f06624c5b86d706a8028c06741cbd835655cc9501444265"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

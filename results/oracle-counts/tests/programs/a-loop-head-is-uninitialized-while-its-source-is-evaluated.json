@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-loop-head-is-uninitialized-while-its-source-is-evaluated",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-loop-head-is-uninitialized-while-its-source-is-evaluated/src/main.ts",
+      "signature": "7af22eef393bb852d7e3f0561f273eea1ddde9f79bd2d741411802abdadf992b",
+      "keys": {
+        "c": "5fed2fa137a39c81d277e8b04aa8b389",
+        "jvm": "582c21a384e275d4d1496d3690dc6829",
+        "llvm": "60172e336ba788c6aabdb980c08fc408"
+      },
+      "cases_sha256": "3cd6c51b8e107484589473f124bac53dfe8442a105ffcbd20722fc31d4f6d3af",
+      "driver_sha256": "6ab4b1d2178caa2883bb05b24a892595cb3a6868d8b784f9b7b2d25f79dfdae1",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.068862,
+        0.067361
+      ]
+    }
+  ]
+}

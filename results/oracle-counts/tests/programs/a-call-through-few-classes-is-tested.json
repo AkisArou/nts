@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-call-through-few-classes-is-tested",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-call-through-few-classes-is-tested/src/main.ts",
+      "signature": "728db1b2b9b1bd1dcc5905e441f783f45ef099dbb299c150eff118fad5753d04",
+      "keys": {
+        "c": "fd82f45c853956b58b4e1bd94d767f0d",
+        "jvm": "9993e39b651510519ad304fcf21fc8da",
+        "llvm": "ea97d24b6fdf234b3bd04077f34de96a"
+      },
+      "cases_sha256": "ea49c91ff39372e9d1826eaf3727eb389c03af0a095b5aab2c8753f1cc7d3e8b",
+      "driver_sha256": "a630de554d89c1ae739e5df584ae54ff551dd9dfd5c63552fdc35b1e5fb0a8c7",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.105062,
+        0.104591
+      ]
+    }
+  ]
+}

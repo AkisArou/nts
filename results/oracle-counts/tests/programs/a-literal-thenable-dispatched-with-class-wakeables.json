@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-literal-thenable-dispatched-with-class-wakeables",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-literal-thenable-dispatched-with-class-wakeables/src/main.ts",
+      "signature": "c8da7e37b4a7637cce170c85d1e5328fc5d63190217c9176e859448c1312dc6e",
+      "keys": {
+        "c": "2564143b2a5a5ff1762edb270fdaadb4",
+        "jvm": "a00699291f46afb628eb8a96a0daddb3",
+        "llvm": "ae07f5a64d005b4244af716f4e0627fa"
+      },
+      "cases_sha256": "9839cd0964ad05439142ec2ea967262901526a02587ea6e8048738f57250439f",
+      "driver_sha256": "31d5855c8ad301f27d3c664774272b50bdc079fcaa3f7fb4c90aabe18150bed0",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075792,
+        0.076389
+      ]
+    }
+  ]
+}

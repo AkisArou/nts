@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-blob-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-blob-control/src/main.ts",
+      "signature": "f6bd2d5637b833d3bf1f446aa5499623caddd5a9f6a4968e8ecd8bdffa4476d6",
+      "keys": {
+        "c": "8ae2ac4d554b3a2c6df1cdfebac53b9d",
+        "jvm": "bcc1c3a8ed39559c7f4542027fa9c336",
+        "llvm": "ea7889084daaef14e5364551bb3cc53e"
+      },
+      "cases_sha256": "0c9aed836f18791e2ea6e700548031b179e118ab68fb10b31f6220fadfc2012c",
+      "driver_sha256": "60f9acd087879bf2ae054db79194f461f2559a70f44c1a51ccd3d007d9ed4cbb",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

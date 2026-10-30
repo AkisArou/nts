@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-element-collected-through-its-iterator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-element-collected-through-its-iterator/src/main.ts",
+      "signature": "2834e5da4eb301682326d0d33322153a467bb9176e12f5c5f58c9e447358c7cd",
+      "keys": {
+        "c": "179476bdd09816419c4eab4a61ee2764",
+        "jvm": "7d4ae0153e2b53fa03a1a1cd49e9ec61",
+        "llvm": "992e1ade670d5bf2536e17f83370fada"
+      },
+      "cases_sha256": "f02f8145e263b09ac93c04702975b06d0148b1df45aab65310e1e760aafd2693",
+      "driver_sha256": "ec23019c3c4f6366740a6c46049db0ccf90e5cce2caea9877b954e8e8c08ec9a",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.077937,
+        0.080799
+      ]
+    }
+  ]
+}

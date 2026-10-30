@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-table-key-updated-in-place",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-table-key-updated-in-place/src/main.ts",
+      "signature": "6b30ad9ef2f7f5ebb257abde5ac5f332323cddd16ca531fe053afa2d1c1a0203",
+      "keys": {
+        "c": "f5eec42e999c54b6e6b94e51876092c0",
+        "jvm": "2b8cf965326eaf717aea0da36528d0f6",
+        "llvm": "74deac758ba93a8ebb8899e02d2c9a73"
+      },
+      "cases_sha256": "95e0ac79d65b93dacaf9e09670a693736e4f23dee0ee77032a30627397065b9a",
+      "driver_sha256": "c1e176630fc886caa24d73b97dcb8408ba9e3bdd91a10afb7ae113c6f2b6f281",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.106944,
+        0.106344
+      ]
+    }
+  ]
+}

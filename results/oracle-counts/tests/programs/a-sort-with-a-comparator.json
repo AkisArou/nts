@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-sort-with-a-comparator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-sort-with-a-comparator/src/main.ts",
+      "signature": "30fb65c6dc76facec67d43ad6c72a54059dc82145ecd19668c4cc4abe9855ca6",
+      "keys": {
+        "c": "254adf691c4279687a07b26379285ff4",
+        "jvm": "ab30e2c1a867514bef86729bde9970a1",
+        "llvm": "a52234700285267043bfa51b0a74d04e"
+      },
+      "cases_sha256": "b3f0bd08dd3dc1609e3d7e92e745e465123a8c76142a69cf249e4328dff53afe",
+      "driver_sha256": "118cd3b0484c01ba88bb60e2c25e8440de7adff6bca88e29e3afcfc9bdb7216f",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.102771,
+        0.101195
+      ]
+    }
+  ]
+}

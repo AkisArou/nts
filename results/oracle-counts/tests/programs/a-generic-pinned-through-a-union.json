@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-pinned-through-a-union",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-pinned-through-a-union/src/main.ts",
+      "signature": "e95d4250f7674a2983ed71cb47f123683867912c411db1d83100e157f3c64337",
+      "keys": {
+        "c": "4f9922a9e0f2b8af0e09c420e9b99d50",
+        "jvm": "c86ae83a568be4c982592bbf354c9f32",
+        "llvm": "5f977cb1af1a9fc0f75db1b86150db99"
+      },
+      "cases_sha256": "09870699b6954e95a44e778c78f736aece5b431c3795c2797352614dda337ce8",
+      "driver_sha256": "992d3e2d90cf595b7973bd8a072ea024472a3bcba187fba624f4813589fe1df0",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075055,
+        0.07487
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bigint-compared-with-a-symbol",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bigint-compared-with-a-symbol/src/main.ts",
+      "signature": "975bbc3c0f5e4f5a6d7270b698a401c1ef2d8ae92f48eac93563f8ff276cf78d",
+      "keys": {
+        "c": "91b6a88125ad453a64a91ed00f466023",
+        "jvm": "ca50bd9e22428dfdf8b4c446605445b6",
+        "llvm": "da079f9eaada34fe89572813748ceb56"
+      },
+      "cases_sha256": "10df5e58eddcfebc1f6ac5297b97171abb1e788b3c1e23d1056e6dace99c4605",
+      "driver_sha256": "caaa44283aece567fb0484e3987a45df24496f55a3aa8ad9ad1a5602e244f2a2",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.06723,
+        0.068287
+      ]
+    }
+  ]
+}

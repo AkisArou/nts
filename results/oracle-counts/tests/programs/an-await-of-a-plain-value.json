@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-await-of-a-plain-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-await-of-a-plain-value/src/main.ts",
+      "signature": "d4e0f90f268382548ecaf06750927797d11d694179f51cb326db9e8a54c9c32c",
+      "keys": {
+        "c": "aaa615aea8f8e30ce599709804080037",
+        "jvm": "7bba854111378cb36fd1591f8219ed8f",
+        "llvm": "48e4827e38c68c87fdbe7ad7578f6dce"
+      },
+      "cases_sha256": "6e75c80aff5205ef348b1e5c4325ebc57ce9d961cf1dc7dc3fbd5b9b2f236857",
+      "driver_sha256": "3343aa36c9a72e13119357d08364d33cdaad449dafffca6febfa5172eb6e0a2d",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.077151,
+        0.075149
+      ]
+    }
+  ]
+}

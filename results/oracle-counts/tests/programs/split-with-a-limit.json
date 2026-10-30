@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/split-with-a-limit",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/split-with-a-limit/src/main.ts",
+      "signature": "97d5aceaf01879813c6a1eed9749dd4fabb4fffcb5f1828438d6b034e5003a52",
+      "keys": {
+        "c": "1fb394e7bf72b676030b3af81f95c378",
+        "jvm": "81d1f1232e9c4703724a50d5a105b87c",
+        "llvm": "9ad78b723e89b55ff99d8afd5160d88c"
+      },
+      "cases_sha256": "a9a2b56e1048dcde631deef0fa7f97958199c856a2bc91aea65a6550e9f816cc",
+      "driver_sha256": "cba56828570925b7bc37b3dd1705cefa698ba6a79e392656ff8eb06a425cd2ad",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.073028,
+        0.071917
+      ]
+    }
+  ]
+}

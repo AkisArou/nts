@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-table-copied-into-an-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-table-copied-into-an-array/src/main.ts",
+      "signature": "600ff7624e94dbc02b4b28aec6218cff76df5d6b773dfaa9e207b3ddda660de4",
+      "keys": {
+        "c": "08beb61f6e0228331583d5943a42042d",
+        "jvm": "13aa5f7a02f76501889caab028986c73",
+        "llvm": "fd8d0752c2899a5af60aa2447cf39a1b"
+      },
+      "cases_sha256": "5e03b20a0086f4362f64edae846df1505c1a9d764cd5b82546a23150804da197",
+      "driver_sha256": "0efe5dc53873998ecb79ca294bc38c6523bc215748a97a89666889c1a89843e9",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.096588,
+        0.098265
+      ]
+    }
+  ]
+}

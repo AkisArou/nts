@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-var-declared-twice",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-var-declared-twice/src/main.ts",
+      "signature": "c76525211f6d4ae4316c04116f76eacae9f330015cb56a5ee3d3a793a704b407",
+      "keys": {
+        "c": "0309241786334e0d8777af7538a26e4c",
+        "jvm": "1d7eb3838f118c6ab41e4c7f9cd0c445",
+        "llvm": "e357a6b02eb5bdae829f009f2ed50424"
+      },
+      "cases_sha256": "9b2f1ff326dd611092c4dbc5ffd8b0a02de27c669120964f48eaedb735149f8e",
+      "driver_sha256": "4f79ff09b819a8233456bab32177595b61a4cec639afc9a145b908c16f829f3a",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.077767,
+        0.079007
+      ]
+    }
+  ]
+}

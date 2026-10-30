@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-taken-as-a-value-that-reads-its-own-this",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-taken-as-a-value-that-reads-its-own-this/src/main.ts",
+      "signature": "b04c482f317c0ca4706d88d6669543b24e20602f2d0d46d675617506f2b8c2ec",
+      "keys": {
+        "c": "15b4d0499446a695f72fc2fccffc5999",
+        "jvm": "6d6a1e18dc9c5fc8f11e8444b63f0985",
+        "llvm": "fc7b4a6c40dc09270bf602e2f06afd7d"
+      },
+      "cases_sha256": "c1506b7a11f783234e4588ebfe99a431ccbd19da7c8d082252ff21e468761ebf",
+      "driver_sha256": "d1f6a775f320d6634b119b33ae233fefd300d47c6e18d686405a59050d312aa8",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.081808,
+        0.083064
+      ]
+    }
+  ]
+}

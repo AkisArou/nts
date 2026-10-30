@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tuple-of-references-on-wasm",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tuple-of-references-on-wasm/src/main.ts",
+      "signature": "70524a931696e7fb5d947b439b1509ec0ef62da23a4ae2830246542ce44a8e6e",
+      "keys": {
+        "c": "16244d09f9178ecd115ee289929937bf",
+        "jvm": "e2b9f4b17a086bef88e9beb865f82699",
+        "llvm": "3f19865cdec4a15d1efa873615b7e7cd"
+      },
+      "cases_sha256": "7c37ad436f4c9fdfdaa10cd80bb5c799c28eaf1c2a2baf0d5bafa3bc87113740",
+      "driver_sha256": "2b85673c7be814e1d084f4816ec91f95e2a0c1e1ad927c875ceca66edafcf1be",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075297,
+        0.080492
+      ]
+    }
+  ]
+}

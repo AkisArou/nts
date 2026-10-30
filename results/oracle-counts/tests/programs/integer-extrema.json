@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/integer-extrema",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/integer-extrema/src/main.ts",
+      "signature": "a93e540b909e8bccb149cd51f7b95939360bc7a88055611a0873b869cfb84e58",
+      "keys": {
+        "c": "bfc412910caa361cb2d1576a4bfa14f6",
+        "jvm": "ad3b5cb864348451b4b4a2a8926e5bb9",
+        "llvm": "c33ad7f74142d665e1e5a629b7c6c72b"
+      },
+      "cases_sha256": "325c8df981640921e24f317b90d9765f977c874a0dafe3ef0f5b4dd0d67e001b",
+      "driver_sha256": "51ec0e82f64f42d479492d76d2d1c84287514af49434170b10200422949fb8ca",
+      "complete": true,
+      "count": 406,
+      "node_cpu_s": [
+        0.084651,
+        0.080608
+      ]
+    }
+  ]
+}

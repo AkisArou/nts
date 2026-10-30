@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/generic-classes-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/generic-classes-unsupported/src/main.ts",
+      "signature": "496a290eebc18037f7086e407bf2560bdf2c91484ccbd054dc24cb11f92c5785",
+      "keys": {
+        "c": "edee85bb4d0977ccec15b9cebd9b5438",
+        "jvm": "92321a0009a39da9da3879c413c66a1b",
+        "llvm": "675c01dcde29b64c08b01a65facb6ded"
+      },
+      "cases_sha256": "4e2206a88266bd425a43e95e9bac212dce0a687c91d1cac54f51f3de1a68af0f",
+      "driver_sha256": "a4c20e85d27bd731aefbe9f83e2448d55ead932780c26535e3e08f07441470f2",
+      "populations": {
+        "genericMethod": {
+          "count": 29,
+          "cases_sha256": "4e2206a88266bd425a43e95e9bac212dce0a687c91d1cac54f51f3de1a68af0f"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

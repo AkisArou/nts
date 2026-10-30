@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-async-return-at-its-payload-type",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-async-return-at-its-payload-type/src/main.ts",
+      "signature": "840051430e8b1a6918f89e8580c83fa03553e77b94c5acdef10dc41d5ba638b9",
+      "keys": {
+        "c": "cae93a3990888349387b6899355695b2",
+        "jvm": "52edf933e94e0dfc9999dd52ba8797c6",
+        "llvm": "a5cdb126aabb2a93d68a7cdfca9b4042"
+      },
+      "cases_sha256": "444f00b570daeeff9b48e4c3151fba65ece74e53fe9650f3fb96520656e62211",
+      "driver_sha256": "b2176fde5a93dcc509353fff448574a01a851abb546edca9b915f3e75bc980d9",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.074979,
+        0.074979
+      ]
+    }
+  ]
+}

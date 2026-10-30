@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-private-name-is-a-brand",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-private-name-is-a-brand/src/main.ts",
+      "signature": "ab895af677bb37682c7a0fe4540899b721012e58ba7c4567b84dcd6879fb804c",
+      "keys": {
+        "c": "52bc0ec3f174b1bfd42b34b052691ebc",
+        "jvm": "3ccd4d0f0f090b473f837cd0750639b0",
+        "llvm": "3d2db9da03ad4b22640a1e1e1af71b5b"
+      },
+      "cases_sha256": "6dda5b32831153ee232965c148cff23542f088d2aff308621ef32e123ebbf498",
+      "driver_sha256": "b70ee5b558674e461edc3face581f3d4edc7aaf292906b82d0c64b5fd10f8565",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.077206,
+        0.077921
+      ]
+    }
+  ]
+}

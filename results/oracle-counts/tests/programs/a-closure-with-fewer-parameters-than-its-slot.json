@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-with-fewer-parameters-than-its-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-with-fewer-parameters-than-its-slot/src/main.ts",
+      "signature": "9d1497d9762859eb2cacbea01bf25ae8fe2e8493cbe7d6604ebcfd27fc51aabd",
+      "keys": {
+        "c": "eef2002a00b569001a9232deb7236000",
+        "jvm": "dabcffc4f028754bac0ebbf97b9d09f8",
+        "llvm": "2be1e2c501f2f37329c1c7c33a9de6c9"
+      },
+      "cases_sha256": "7cc4453530180c44423f348ae40bed210e54d4163e918a73c311bd3d6ad13143",
+      "driver_sha256": "2e24a8c32d8f6d8c1e6f294a0f4861b4e3cc57cbac954368a38df5bae97c6c99",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.081625,
+        0.081339
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/modifiers-on-a-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/modifiers-on-a-field/src/main.ts",
+      "signature": "0a4b3a902447ef5a4b5f098ebe62ff3d0fd38f003830152a0d57e0ffd22c8121",
+      "keys": {
+        "c": "e814c996a3285e7fbdcfdd66d91011b6",
+        "jvm": "ac9cbce1dcb8b46eb4063c1b42207f6d",
+        "llvm": "2bf538582ed3e7f3487a54ba78e3bef3"
+      },
+      "cases_sha256": "0b4c8230f05b05502b0ccd2e015d7b5d5bf0fd16f8eb1792ae35768605b672f3",
+      "driver_sha256": "89f02d31c2bef9a21d16c82544c7fcbdc89be5a9cc505fc0f53afcfd13b19e95",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.074861,
+        0.075947
+      ]
+    }
+  ]
+}

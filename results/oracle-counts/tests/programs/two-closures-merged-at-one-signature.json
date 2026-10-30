@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-closures-merged-at-one-signature",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-closures-merged-at-one-signature/src/main.ts",
+      "signature": "2ec5b42eb95b8904aefb8b30a1faffbd71bf75719982f2ce3e0d529d289ba581",
+      "keys": {
+        "c": "c8e5171585903ae33aeab4b4d8ae9de6",
+        "jvm": "e8b3f9f4d353915d35ccead45b570f74",
+        "llvm": "0f3d51ad5c3b6ab4b8aa9b5bd2f5fc80"
+      },
+      "cases_sha256": "d02b84be38719dabc799ef6a7ef41a9b9355d4e82b63296e27ed9f58587b15f7",
+      "driver_sha256": "14da59f66479d897c7d6b2a559ef5b1f52c8b4a96f8ab70e8d8d4114e861b1a1",
+      "complete": true,
+      "count": 3,
+      "node_cpu_s": [
+        0.078704,
+        0.075696
+      ]
+    }
+  ]
+}

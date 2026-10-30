@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-read-that-answered-bounds-its-index",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-read-that-answered-bounds-its-index/src/main.ts",
+      "signature": "d88ddf69265ef9179cc1cf1d5ba2ab9cc7a3f0657f494cd566ad39810b32937b",
+      "keys": {
+        "c": "d0f2012409ad5b3ca6836167fac4db5d",
+        "jvm": "36f184317733bc0d5deedb8f760a6d04",
+        "llvm": "d3387274a3bfd72dd385e1376a97330b"
+      },
+      "cases_sha256": "218472818304adb1188b217991de18146b313780bbb59e70c0811bd87c88e3b3",
+      "driver_sha256": "22c081b31e9bba28a2f61e389a0a4448769621d833f2bcd5793a978cd8390a67",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075973,
+        0.075164
+      ]
+    }
+  ]
+}

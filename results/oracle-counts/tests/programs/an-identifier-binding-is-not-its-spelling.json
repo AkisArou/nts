@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-identifier-binding-is-not-its-spelling",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-identifier-binding-is-not-its-spelling/src/main.ts",
+      "signature": "295788f8c8a9eb08c797fa2423cf0ebd5c861712419a87c1181edcc39aa660e9",
+      "keys": {
+        "c": "88f3e3bd5c69334b23a4b78e2e88dc66",
+        "jvm": "d2c89c7a45c886e354e3798d798607a0",
+        "llvm": "d6d197a4a861a0d2e7f63a461b2c3370"
+      },
+      "cases_sha256": "5bc069967a24182babc12b1316b958a0c3d9e875db3fc7ae6b1d44b8e6a08173",
+      "driver_sha256": "acc23b766f118be8e4440caff9e5ceb79102e45e75a660ada4f94c016576374f",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.07608,
+        0.078333
+      ]
+    }
+  ]
+}

@@ -162,7 +162,11 @@ fn binary() -> PathBuf {
 /// the strongest sabotage in the C suite once looked clean.
 fn run(binary: &Path, tsconfig: &Path, runtime: Option<&Path>) -> bool {
     let mut command = std::process::Command::new(binary);
-    command.arg("check").arg(tsconfig).env("NTS_BACKEND", "jvm");
+    command
+        .arg("check")
+        .arg(tsconfig)
+        .arg("--json")
+        .env("NTS_BACKEND", "jvm");
     match runtime {
         Some(jar) => command.env("NTS_JVM_RUNTIME_JAR", jar),
         None => command.env_remove("NTS_JVM_RUNTIME_JAR"),
@@ -170,8 +174,15 @@ fn run(binary: &Path, tsconfig: &Path, runtime: Option<&Path>) -> bool {
     let Ok(output) = command.output() else {
         return false;
     };
-    let text = String::from_utf8_lossy(&output.stdout);
-    output.status.success() && text.contains("agreed on every case")
+    let Ok(report) = serde_json::from_slice::<serde_json::Value>(&output.stdout) else {
+        return false;
+    };
+    output.status.success()
+        && report["status"] == "agrees"
+        && report["counts"]["compared"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+        && report["counts"]["compared"] == report["counts"]["expected"]
 }
 
 /// `from`'s files and directories, recreated under `to`.

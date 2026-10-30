@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tofixed-digit-count-is-truncated",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tofixed-digit-count-is-truncated/src/main.ts",
+      "signature": "f570b7ff498a0dbe64fb2b937c546f97320948a5adadfa58bbb087207ddb497a",
+      "keys": {
+        "c": "86707dd5a84c5eaa578f97cfeae5bc0d",
+        "jvm": "7dfb7aa14c4ae75b28c8067702ccd35a",
+        "llvm": "018628740d926c4eb45bc9fbadbcb014"
+      },
+      "cases_sha256": "fe8d9cdfc922236aa6d5374c70790190237004c54f746200ddfc1f36e9e82cc0",
+      "driver_sha256": "fbaf22c48073806baaa752eb8e051465e38477557aceb472ee3e12428629c8a0",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.100394,
+        0.107433
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/unions",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/unions/src/main.ts",
+      "signature": "36ee03d85134ba4d29fc5fdc541a6e65ccf77f64f12d42c9e1d9e8aa1e98f63a",
+      "keys": {
+        "c": "5afb202832bc2a0fe2a8b1c960302693",
+        "jvm": "5d2770dbd52558a8219e60ea9db62bdf",
+        "llvm": "9716b242030883c0fd5887b66f23dce7"
+      },
+      "cases_sha256": "f43bc7070d8e518adb163bcacfdbd8fa07c37d3c6780e5ad72a43b08609207ad",
+      "driver_sha256": "276f6f13f0917ff71ed96a53f729c3ab4c6d3207ae303fa5dd9ee9e333b7bac9",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.074356,
+        0.074689
+      ]
+    }
+  ]
+}

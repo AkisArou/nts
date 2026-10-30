@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-accumulator-that-wraps-past-int32-max",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-accumulator-that-wraps-past-int32-max/src/main.ts",
+      "signature": "759de87fc5d93f3f43ad976977849f11ee2bf88c541b8c2ef6cb25a9490d378f",
+      "keys": {
+        "c": "ca016439aa0c3e5b69f9194e2d809250",
+        "jvm": "2828166f9591f2ef4e43921611d96749",
+        "llvm": "49195c1c2294025f6f0a66f726bf5aae"
+      },
+      "cases_sha256": "38fcb66f0d9ac96406d2c27bc1837a3573c290659bec69a66e3a07fcc69ed06b",
+      "driver_sha256": "a8f7a612e8689ddafc843e9f7ade20cd2e15fa70fe6988e1a8c9a5688006c17c",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077089,
+        0.074216
+      ]
+    }
+  ]
+}

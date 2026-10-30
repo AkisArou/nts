@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-interface-call-uses-its-dispatch-contract",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-interface-call-uses-its-dispatch-contract/src/main.ts",
+      "signature": "4ecfb3f38187580bad2f92253557eb6bf067d18866af2183da0187d10352198f",
+      "keys": {
+        "c": "991ea384fe91c2453fde030e6c8759f0",
+        "jvm": "98f81acd1a45f9a5add2fe26cfa63363",
+        "llvm": "83427d462847234ad011465b16bc9eb2"
+      },
+      "cases_sha256": "72efd55faddc06f56b21019ddd1d6fa5c93304577f94eb57a90a6e949c492535",
+      "driver_sha256": "3030db792a5293fde9f580c26290d5bf404a2de5632a8434565eb73db24122f3",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.080532,
+        0.078913
+      ]
+    }
+  ]
+}

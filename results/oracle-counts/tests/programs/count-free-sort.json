@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/count-free-sort",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/count-free-sort/src/main.ts",
+      "signature": "c21db54f0fc3b57283eb50cf18165492c9d75061c0be49f5c38d61c941942601",
+      "keys": {
+        "c": "172d243ab3b36f17daaab4baea2a5a8f",
+        "jvm": "75a3932849ce717bfde5618bcae2d70d",
+        "llvm": "1b26eb924b440d81047be9fc12f111d9"
+      },
+      "cases_sha256": "57c52149da7f467ddce04be4661517c5de8f309879d47ff5400e8242c35756a0",
+      "driver_sha256": "e3b88a06b4582e4933fd50880128670e3df474bf31b6eb5abcd625ea8b62084e",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.083372,
+        0.084748
+      ]
+    }
+  ]
+}

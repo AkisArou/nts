@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/signatures",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/signatures/src/main.ts",
+      "signature": "bf60b7b215ddadd19cca3618bb86c621d08787df2bc8938411c6b3a3f145bb59",
+      "keys": {
+        "c": "e2433d4c4fbf07d4810d4afed0532c9b",
+        "jvm": "af3bdb5820854b8dc78583a7207c8053",
+        "llvm": "663ce8f767cafbd674119141eceeedb6"
+      },
+      "cases_sha256": "baf409fc5e4799ed641f2b7f79c5e38e5836654d59e14d5db4cfeb7b58808f6d",
+      "driver_sha256": "6bb78b7c6c850e16f00a2d972f7e2aca68f4940596cb14f7fd6d5d82a3bc20bb",
+      "complete": true,
+      "count": 63,
+      "node_cpu_s": [
+        0.068996,
+        0.068698
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-pushed-into-an-unknown-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-pushed-into-an-unknown-array/src/main.ts",
+      "signature": "7a31e500aa5e03253d5724a5ac610229cdf0ca742f09523ad7665039d512d2f9",
+      "keys": {
+        "c": "8db2f7697231d3e05aa0521bffff01e1",
+        "jvm": "411441c711f7e1abb2f1988f37ff96cb",
+        "llvm": "21a99bbf3ae4ef09cb50c79f5ea54a9f"
+      },
+      "cases_sha256": "cb8417baa6066d0387ab2918316d36ad45e8d0f17516447c544a0bee8465b218",
+      "driver_sha256": "0969eec6b6d859a7466c84a6eeff7c5b7806448b665a2cfc594e8b84c61caed9",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.082829,
+        0.08161
+      ]
+    }
+  ]
+}

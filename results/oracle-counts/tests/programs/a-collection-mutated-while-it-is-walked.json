@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-collection-mutated-while-it-is-walked",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-collection-mutated-while-it-is-walked/src/main.ts",
+      "signature": "42b744a20611b6ee9e6b352e4ac6046811ddb32d6df4e73ec638d623f77b7ee2",
+      "keys": {
+        "c": "756ea975a911a766ded9fb333db454b8",
+        "jvm": "ed7268ba596efb7025487a4484f62587",
+        "llvm": "5051daf3d1b863138bb902c3874e0c41"
+      },
+      "cases_sha256": "ed91833f2a16c04598330d85a329aa7a0211d5b5684f5875a44f3d0e69e6e2af",
+      "driver_sha256": "912f7b73aa1dd0fa180fe191d51af11268b0e6d5886fdc5f77e8d5aae6610e6f",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.086208,
+        0.084741
+      ]
+    }
+  ]
+}

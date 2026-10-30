@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/absent",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/absent/src/main.ts",
+      "signature": "ddb9d00b8308f5fc672402212cb53664cc438c6f08db5ed7d9734a9d0c1b9d94",
+      "keys": {
+        "c": "afdca1068cc7df065a2ab46441a32a49",
+        "jvm": "e6ac5d4f0d4de3bbc2d590fd39dfd6c5",
+        "llvm": "b57ea329992fe7dd0b821cdee274e9db"
+      },
+      "cases_sha256": "0e7db852c02d4c24d094a573fce74cd34e70262364529f0cdd2ab8adc350041f",
+      "driver_sha256": "fb4d1dfb89f36403fba98fad2f4ba77c1b37c1b2381944c225d88226f3b65f6b",
+      "complete": true,
+      "count": 580,
+      "node_cpu_s": [
+        0.124237,
+        0.120281
+      ]
+    }
+  ]
+}

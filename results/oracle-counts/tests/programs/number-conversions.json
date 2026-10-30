@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/number-conversions",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/number-conversions/src/main.ts",
+      "signature": "942b848b13431bb9df4af0ef8726956c864484a427ae8dd656b1e0694fcbcfc0",
+      "keys": {
+        "c": "e5e28c5a4ec6a8680aca8a63619e47f3",
+        "jvm": "31efb793cc7c684dffea7627841ac96f",
+        "llvm": "d55a621ad5633063c278be5ce1c9d5b4"
+      },
+      "cases_sha256": "e42c02c0abbfc0b7a1045a00a59f4f1a4920da1423dcf509e01e28570f66b6a9",
+      "driver_sha256": "61dcb16112af5bbc60066c373f2ae8d882f0a69cf99d743cc40664fefb58de52",
+      "complete": true,
+      "count": 358,
+      "node_cpu_s": [
+        0.077146,
+        0.077724
+      ]
+    }
+  ]
+}

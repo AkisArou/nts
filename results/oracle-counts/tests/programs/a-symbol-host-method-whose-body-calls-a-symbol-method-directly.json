@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-symbol-host-method-whose-body-calls-a-symbol-method-directly",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-symbol-host-method-whose-body-calls-a-symbol-method-directly/src/main.ts",
+      "signature": "7d3e555a9a2b7afbb3645a247bbbfa29bcad4c15ce6a34cfbb1bf7747f3862dd",
+      "keys": {
+        "c": "c317105cd6ad09acdc7af6fac131d902",
+        "jvm": "c8edc79cec2c33f092c1c0fc69bc0ae8",
+        "llvm": "ed306f16169774de62721d399c66cd85"
+      },
+      "cases_sha256": "2fd54acf1c46ff0e0fc2f5d7fd01beae37506edd6fd8d96e10e5edbc3934d390",
+      "driver_sha256": "dd5855065838ede9ea42333c16617064fbcec324f55093c7de77e76e7f1270c9",
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

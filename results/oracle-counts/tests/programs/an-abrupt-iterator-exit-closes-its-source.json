@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-abrupt-iterator-exit-closes-its-source",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-abrupt-iterator-exit-closes-its-source/src/main.ts",
+      "signature": "f01f2e1187fb695b271d3447317b0031e61018ecdd653f09f300296a31812e39",
+      "keys": {
+        "c": "6f6fd75d04df6c0d0080d70fca6d4bb1",
+        "jvm": "d15b26ade98303efd48c080c794069b7",
+        "llvm": "50dae8b348b0fcaef96cf6e582835fce"
+      },
+      "cases_sha256": "58cee278ef4f4552e906679e96c0a1357bba993046990676b0045598d8c9d574",
+      "driver_sha256": "518c18d1a66e7814d9cdcbd4ec580ad4bcb485fcb544160c1994fc5ddd397463",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.078032,
+        0.076065
+      ]
+    }
+  ]
+}

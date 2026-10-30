@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bigint-compared-with-a-bigint",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bigint-compared-with-a-bigint/src/main.js",
+      "signature": "cb5ad303b3b508b147d589a086e523923e80024292a05967939af82cc6375fc0",
+      "keys": {
+        "c": "b4e697dda5af36bbc36b324c188dd324",
+        "jvm": "9743611ad2f5e5c59352d95d6de2e79b",
+        "llvm": "33e86bdfc7d0e44fde3a213e28aa661d"
+      },
+      "cases_sha256": "0f17406835baf79eaf4749aa1d8d5dc6cc7812745aa1a5243bb791a1b84b36d3",
+      "driver_sha256": "e852358117a963aa6a0693be7d7cb333e577a038378e27def2b36424d7dbd96a",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.013462,
+        0.014522
+      ]
+    }
+  ]
+}

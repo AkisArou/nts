@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-read-of-a-cut-binding",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-read-of-a-cut-binding/src/main.ts",
+      "signature": "864408553e5756f4b3c6732c4b9384149f76de78dc94767cd94af3d29d963932",
+      "keys": {
+        "c": "db98552d455152a8fdf07393a55e2ab5",
+        "jvm": "5ffb2d558b446ec52a950e9f68c78f9a",
+        "llvm": "2364f8136f1391d4d0ff1cd261f5850f"
+      },
+      "cases_sha256": "3c9edbb9d906d318c34826d34d424ea8c63bb8c7575abcb84c5de8c06ceff10d",
+      "driver_sha256": "93a21f8d382283c98268a3d9a20210bfc932926f09fde4d083801838496bf65d",
+      "populations": {
+        "control": {
+          "count": 29,
+          "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb"
+        },
+        "labelLength": {
+          "count": 29,
+          "cases_sha256": "ddcf4ee130159658e6deb242359f9b874459033ca9c5acbdfa35f5b6189f29d7"
+        },
+        "sized": {
+          "count": 29,
+          "cases_sha256": "10605eb750f97bc8a121467f03c9ad029ec286545c3ec8b7aaae5ecf2dd44c0a"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

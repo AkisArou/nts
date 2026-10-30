@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-an-interface-inherits-from-another",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-an-interface-inherits-from-another/src/main.ts",
+      "signature": "a1a2fa98c1802574c0edf168a229ad87711c5abeb3571b42e8db3f8d325e37d5",
+      "keys": {
+        "c": "e9ef52f2d435bbda39df76cc4ce64dcd",
+        "jvm": "5f7ca6fc54f17de677b9f6e1ba6261f0",
+        "llvm": "dc3e7dd48cf0ef7305ab12b22c5968ef"
+      },
+      "cases_sha256": "ec833a624ba17a3c752221f0966e4d154d697f730be9e814ca25663ee87052c4",
+      "driver_sha256": "63d24a37958ebb5e9301f4f27775f9a6dbe201d4edfff5286c86763aebcf1874",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07611,
+        0.076807
+      ]
+    }
+  ]
+}

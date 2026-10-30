@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-cast-reads-a-field-another-layout-holds",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-cast-reads-a-field-another-layout-holds/src/main.ts",
+      "signature": "93f1f106a1fb6553ac21511e9c65b9688e94cd371bef0d39cee2b6ac343266c2",
+      "keys": {
+        "c": "4563fd9ae3bf7682c4d79857cbb97e18",
+        "jvm": "0ac912ba245bb00f607a9b2a65095a91",
+        "llvm": "09818c90d97cf6e2b0c0145cc6ee6a49"
+      },
+      "cases_sha256": "c795625ca7d47d0c46b7787271f687bc6d95c90185099c3b0bea79b4fa7762e7",
+      "driver_sha256": "59b4f6b2e5b846cb68cb6e7eedbd7fe0a27ca01f915643358616d7dac8a156f3",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.078024,
+        0.075962
+      ]
+    }
+  ]
+}

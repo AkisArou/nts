@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-of-bigints",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-of-bigints/src/main.ts",
+      "signature": "4c7fd9e861a7b38cde0a8dd0d8c9de7a3584575e7b62828141e4e2c3ec6eb058",
+      "keys": {
+        "c": "c65e35030efdb74cb662266c41b47be2",
+        "jvm": "88e6136d550f534a686a8b92317130a2",
+        "llvm": "1638d54979fdb8e17989bf568f0ffb69"
+      },
+      "cases_sha256": "b63b84204eab6cdaf3cbe696c3003453bdb6a4f3e8e5195ff0fcd068e3747578",
+      "driver_sha256": "5dec5c2cc214f5870f0f6d6f59d02f2abd18e29bfcb103e02dfe666da074a876",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077109,
+        0.076676
+      ]
+    }
+  ]
+}

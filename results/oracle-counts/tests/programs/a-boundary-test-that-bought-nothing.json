@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-boundary-test-that-bought-nothing",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-boundary-test-that-bought-nothing/src/main.ts",
+      "signature": "77898e175efb65cb3ae005ad937eaaf58c4fe195b0a3b784a23019bed42a8abb",
+      "keys": {
+        "c": "23b056c90bacbe078b598fb1e51f053b",
+        "jvm": "a8c495041ef5a56af3bb7c427ae77de6",
+        "llvm": "5523bd590d18268284ad9bd5124013c6"
+      },
+      "cases_sha256": "b5f92f98dad3317f4ef74bc719486d2bdcbd1ee1042c7f30e1d40a7740994d7d",
+      "driver_sha256": "1c8e69d0acbc69d22ac2462900f6b41503ea12fd21174eeebcd68b60d761f302",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.074362,
+        0.077071
+      ]
+    }
+  ]
+}

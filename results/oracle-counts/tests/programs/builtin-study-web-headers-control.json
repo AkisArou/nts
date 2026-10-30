@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-headers-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-headers-control/src/main.ts",
+      "signature": "f8da8a36fb53aec789ee3acda48e5d4582ab725f061f330f3e8b886796d9d167",
+      "keys": {
+        "c": "0f999be9081f365ec0819cbe3eb62c1c",
+        "jvm": "e1261c59ea3fae41c9826c4cb22d07b8",
+        "llvm": "ab6f8484375ef7106c26ae8eeaa6c8ab"
+      },
+      "cases_sha256": "8b79cecc7944f0c8c0ef4d6eb802eaf294a63c3de9d61d552cfff092e239a748",
+      "driver_sha256": "1a6e448c8e03d8ba2b54fdaf94bc9733aeb3735f9bfc4fba4a356d1d4c63cac4",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

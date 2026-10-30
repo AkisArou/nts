@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tuple-of-references-destructured-in-a-walk",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tuple-of-references-destructured-in-a-walk/src/main.ts",
+      "signature": "16be52124a25f0f4381a7b3c6991cf3e4e8e10a92b0b600881cf768e3cf0f63e",
+      "keys": {
+        "c": "73f7a94e462695a74bd8aa886785cda6",
+        "jvm": "bfff57c7f8e1198a3cc8ceaf480d9206",
+        "llvm": "54623c17ea9e4399c0d6f0058835ee2f"
+      },
+      "cases_sha256": "02e092be5e46d2506a72300bff48ac3808fa18fd1fcb6c9573366faa7240493d",
+      "driver_sha256": "7243e62abd7ea709f656060d1bff20af2fe7a96d8d9a6a09ee29b5c7aae9c2e4",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.0766,
+        0.075467
+      ]
+    }
+  ]
+}

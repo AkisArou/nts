@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-branch-nothing-can-enter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-branch-nothing-can-enter/src/main.ts",
+      "signature": "2f00f37e37811140f16c3118df4bca56e1bc47a3191f52b837df667c84f6ca00",
+      "keys": {
+        "c": "ce4fe667f0d957b9988453651500111c",
+        "jvm": "1cbbbadde706d79090d29b3ef53007cb",
+        "llvm": "c138bf6f012d2609db930ff78de0e222"
+      },
+      "cases_sha256": "7eef656cfcf9abea708ee214e539d61191f8e181a51b76e0f82c0c9f940667bd",
+      "driver_sha256": "ed583b8287318db1f30ecae0ba0431bbc214df81f7aff9e22570a1f185f2a5ba",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.081171,
+        0.080603
+      ]
+    }
+  ]
+}

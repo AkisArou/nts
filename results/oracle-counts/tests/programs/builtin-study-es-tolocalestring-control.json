@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-tolocalestring-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-tolocalestring-control/src/main.ts",
+      "signature": "81da978f14bf800ad87671308b77c24ba1e390534219669c9490d291a6dfffe0",
+      "keys": {
+        "c": "4ef5b756d0d9fd44de0dc6c729cad238",
+        "jvm": "f9dc5084993e87b0c9fad829cd922820",
+        "llvm": "c02abeafac988336372d33f64caeff1d"
+      },
+      "cases_sha256": "e7215a3bc9979fb7757e2bc710c85acc9a3155f09c7c11517e4bb88a2cf03f41",
+      "driver_sha256": "b8151e26223dba1d6207eb5106d712f8975d4a8b2221db9e1202de8ed4bb4b84",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

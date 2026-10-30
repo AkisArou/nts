@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-parameter-property-over-a-base-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-parameter-property-over-a-base-field/src/main.ts",
+      "signature": "3152aab377b50fb2d124a4c8dcec4af31d3190f379cf84bc6e92ba0d849e7352",
+      "keys": {
+        "c": "4fd5d2af1e345ae04021f74d7e4348f1",
+        "jvm": "0180d49d4fcd9baae92f4891c87ce61f",
+        "llvm": "9447434886a91c27a48f47924b942f69"
+      },
+      "cases_sha256": "fb3a0c57a9bc6486754f3f57c050502aa75cf5df53d801f49ae98eb95925ea06",
+      "driver_sha256": "c9e8c604aa4a1899946c6dcc14f7c20262ab2c147b4ab1a56f923ac664d84c59",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.07684,
+        0.077076
+      ]
+    }
+  ]
+}

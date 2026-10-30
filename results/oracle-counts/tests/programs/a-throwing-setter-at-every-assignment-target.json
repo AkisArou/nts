@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throwing-setter-at-every-assignment-target",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throwing-setter-at-every-assignment-target/src/main.ts",
+      "signature": "aea09eaeb1a73bf0305a7017cb34421b3d183e3fcf696b5e23ff97f7a7dcf610",
+      "keys": {
+        "c": "464fbc777e0a624b6cc9afc785eeeda8",
+        "jvm": "2b74c5211ff13e81da3310250d3cb441",
+        "llvm": "9f94b7dab8fe00b1d3cda67f62a613e1"
+      },
+      "cases_sha256": "65c3e3cc49a28121586538585db497206615bbd5c2347b69faa3bcf02642f787",
+      "driver_sha256": "8e844d1027bfaa0fca766aa31e017d73647b0562e9539493ce7f0bf48799fdbc",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.085545,
+        0.081877
+      ]
+    }
+  ]
+}

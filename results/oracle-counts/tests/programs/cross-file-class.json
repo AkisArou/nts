@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/cross-file-class",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/cross-file-class/src/main.ts",
+      "signature": "5d47cb589dcc08a2834712807373a3729d5cc2529d6db86a86c375c35cdb0369",
+      "keys": {
+        "c": "eab3bbae793285bbf826c830ac7af8cb",
+        "jvm": "58cc273e5b45e0835834fb6a14118c48",
+        "llvm": "ed60bfa31636c5e144b74724f2df957b"
+      },
+      "cases_sha256": "1a1eabb2142c8b5ae93ffc6ab71596b097964b7212cf877da2c41cd82e6d39a5",
+      "driver_sha256": "b602ef21e54f2f6afd57d790d3c0d42f2cf2cded823e85c2c494a349924b9f01",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.080184,
+        0.082801
+      ]
+    }
+  ]
+}

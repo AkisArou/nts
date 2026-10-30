@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/clbg-fannkuch-redux",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/clbg-fannkuch-redux/case.ts",
+      "signature": "9e56f81886984147e37d23b08b42f037fb0aea28ed7ed0ce53ed8f5e45cd541e",
+      "keys": {
+        "c": "f2071870aed696b200e5f5f964365205",
+        "jvm": "8f3bd8ca0695673ccfed590e7d27a822",
+        "llvm": "17cd85d0998faa85cdef756b52bc202d"
+      },
+      "cases_sha256": "fd8d7d23600b9e7413999586829dfdeda7169f32347f6af20ce76c69f99cca6a",
+      "driver_sha256": "75f06329456babbad7f5819322982c8669d00d3556b598f71e3dfda1a649c1a5",
+      "input_domain": {
+        "identity": "cfb562431fa51038bdccde1394f18435",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "The permutation counter requires whole positive sizes; bound factorial work within the Node recorder's budgets while covering benchmark seed 8 and published size 7.",
+                "max": 9,
+                "integer": true,
+                "allowNaN": true
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "The permutation counter requires whole positive sizes; bound factorial work within the Node recorder's budgets while covering benchmark seed 8 and published size 7.",
+                "max": 9,
+                "integer": true,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 12,
+          "cases_sha256": "0cf7725ec27306460792ddc07b5aa4b4acb91ecabd594668d086200027d2fe14"
+        },
+        "work": {
+          "count": 12,
+          "cases_sha256": "6a7a88c3b387210bfd550ecb916a36fca997a8299ed720aa10a7e9ae6b44fd3c"
+        }
+      },
+      "complete": true,
+      "count": 24
+    }
+  ]
+}

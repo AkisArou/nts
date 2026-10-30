@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/idioms",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/idioms/src/main.ts",
+      "signature": "d410e2529421059f40cd042adcf8bebd8edce7eddc29db87a1d0da0f04a2d399",
+      "keys": {
+        "c": "34c1dcb5db3fe60a626dbbdfcffc9463",
+        "jvm": "7e9ac0a982344878cb4249f22ceb5ef3",
+        "llvm": "bfd92b0d8424a904f77c3ada77faeb52"
+      },
+      "cases_sha256": "f050f48b9553097efed89df4dcd7c0bcf7b95e64e4d0bec5ca95a26c257b0c72",
+      "driver_sha256": "c1ad5cb8013be2c90ad1a099e0d63e4345d1ff138780eadf47c154b6916a9b14",
+      "complete": true,
+      "count": 175,
+      "node_cpu_s": [
+        0.080625,
+        0.078292
+      ]
+    }
+  ]
+}

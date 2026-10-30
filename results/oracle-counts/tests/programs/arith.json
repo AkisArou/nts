@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/arith",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/arith/src/main.ts",
+      "signature": "9d4f6f613ccb7d6f94eb094c11e0f5bf7880aa7917f1ffb84b6160072d13ca6e",
+      "keys": {
+        "c": "3ea91cc2ea2c8725ed3242af1c236aa1",
+        "jvm": "4104ba3f235d0c998e4cfab9fb959b18",
+        "llvm": "8978eaab34dff98e3518d606668ac5f0"
+      },
+      "cases_sha256": "82db744119073fab6ef91402705a5b1069076248d2b8afaf091e5c756ed01397",
+      "driver_sha256": "380500a78a0854d6b45e27a18936acfa8e14fb1a1aa69ca88062f96b26ac9f37",
+      "complete": true,
+      "count": 446,
+      "node_cpu_s": [
+        0.076992,
+        0.076509
+      ]
+    }
+  ]
+}

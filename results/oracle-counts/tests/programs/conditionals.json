@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/conditionals",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/conditionals/src/main.ts",
+      "signature": "23586fe6634facef5c389210a7523701b33f9ab8b0d24ab0581bdbeeff38b1fd",
+      "keys": {
+        "c": "ab2cc9a3cebfb5c9b4d898f3958051cd",
+        "jvm": "21d7ccc5db874430d9b96cfa3d77d302",
+        "llvm": "1d446ac639d220c4aeb2b6792279242e"
+      },
+      "cases_sha256": "c9fbe79c23b644a2364df50b1a7027bb48e29350d23d154e9966ce5d9b8a4ce1",
+      "driver_sha256": "fb8459d65611b5c299d05627ff367762657106d8c5808b26f4890a6bae7e91ed",
+      "complete": true,
+      "count": 209,
+      "node_cpu_s": [
+        0.073631,
+        0.076339
+      ]
+    }
+  ]
+}

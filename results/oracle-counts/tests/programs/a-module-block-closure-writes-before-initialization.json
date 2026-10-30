@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-block-closure-writes-before-initialization",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-block-closure-writes-before-initialization/src/main.ts",
+      "signature": "2bd6a303340a83b486143c92e1efba1e0bf30ad0f43d22a5b862d262f6e1a494",
+      "keys": {
+        "c": "2a96339d6b960e50895c83aa9b5fefb2",
+        "jvm": "5d3a3cac1b45d412b249f98445df1183",
+        "llvm": "c2b06f85db8f65338c78e88dec08b0dc"
+      },
+      "cases_sha256": "082846c72774cce937714320a9d2d49e62fca9db3ab976842cb4881f2453e162",
+      "driver_sha256": "adf88b743fb2ac7a79c0d84bcc4128b6918c8bcc53170073039b2d596287bbc3",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.066214,
+        0.065145
+      ]
+    }
+  ]
+}

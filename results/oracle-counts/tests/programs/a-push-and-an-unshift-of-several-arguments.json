@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-push-and-an-unshift-of-several-arguments",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-push-and-an-unshift-of-several-arguments/src/main.ts",
+      "signature": "83e718f9d5aec1e8a6bca327d04250b6d5e966915380e08fef95426fdd24330b",
+      "keys": {
+        "c": "232d29a7437a420b83351220acf5d1e7",
+        "jvm": "6c77b460756db661dce9b4aae5b770a7",
+        "llvm": "43d8c24ce3e77d23d8971c0ad103e076"
+      },
+      "cases_sha256": "52ece52286c4ffd935114021ab43ce2dae719c178b4f428b0f4165f288243720",
+      "driver_sha256": "dcc8f09af5201b2569237a1f725f0f2d969fb39573b75372d4145eaa17222e20",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075034,
+        0.077356
+      ]
+    }
+  ]
+}

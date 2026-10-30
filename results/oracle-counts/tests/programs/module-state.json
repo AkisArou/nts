@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-state",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-state/src/main.ts",
+      "signature": "edf8f3dad0d71ea5ca9ced8eb80c79d015c1410e9fce0062cb9c66ee6b1726ca",
+      "keys": {
+        "c": "88a0a88fada467fda8c49ae50778e3d8",
+        "jvm": "ac0d34b83371ddc14e871e6a40fc4517",
+        "llvm": "39ab0cf50248684dfbb17889198e83bf"
+      },
+      "cases_sha256": "f4ee76d877beb42b6ce439f001bc944a0a4b82945f790156f5f2b8e9662feca0",
+      "driver_sha256": "627c2c62bb82c8904eba20e77dadb6ddb74104811a9dafb1caf3dde0b5652047",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.073067,
+        0.073721
+      ]
+    }
+  ]
+}

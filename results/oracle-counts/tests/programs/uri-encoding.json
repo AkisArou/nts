@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/uri-encoding",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/uri-encoding/src/main.ts",
+      "signature": "bc384a2139d7e84832d64504b59c097a01764373287801f6d6fa3876c3901ba0",
+      "keys": {
+        "c": "42b25947fe8cad9512a67cde7065eda3",
+        "jvm": "ab5ceb06f2959fea00821af6244e17c8",
+        "llvm": "219752686db26773a25a8d3b141d1f38"
+      },
+      "cases_sha256": "1ac6c165eb7df0a72297b4abcd6f5c965f363975c2124f91346bf1965e5d483b",
+      "driver_sha256": "8da289ebaa97a307c6ce4066b8e8b4b70a8ff6d090743a46d63b1cd5d7247ac8",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.076316,
+        0.081272
+      ]
+    }
+  ]
+}

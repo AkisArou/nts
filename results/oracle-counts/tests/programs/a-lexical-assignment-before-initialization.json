@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-lexical-assignment-before-initialization",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-lexical-assignment-before-initialization/src/main.ts",
+      "signature": "ea08e21f6df61e4d5d307005c51fabd3332b2417f433834ff6787be53f48602e",
+      "keys": {
+        "c": "21ef17413f849c723332a15a83382809",
+        "jvm": "a21f613287ba58f17dfc13b0f806a6ef",
+        "llvm": "267087a000edca9c7aa0fa9d0a53e70d"
+      },
+      "cases_sha256": "7179f42a652623e92c9eef70febc7f31ed96faff0fe28629f7862b164e93bedf",
+      "driver_sha256": "0c8b3e3acc4d3b41998ea76019e8736eec56f14d9fc93e85845088a542aec2a3",
+      "complete": true,
+      "count": 928,
+      "node_cpu_s": [
+        0.07473,
+        0.074489
+      ]
+    }
+  ]
+}

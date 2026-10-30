@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-record-keyed-by-strings-built-at-run-time",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-record-keyed-by-strings-built-at-run-time/src/main.ts",
+      "signature": "a02b5e6a721904cf44d1dff9ca5a3cc44807bee369040afb1559e7df7ca1f9f4",
+      "keys": {
+        "c": "2aa9f663bcb9a6e41132adaa1cc996d4",
+        "jvm": "11e579c4bc96bb9e0b985c3f8b3fda0c",
+        "llvm": "86326cf0db86eedd0ac2fcd058bec0c7"
+      },
+      "cases_sha256": "07268ac9929698ce82c755e2db19f27b45232b5da425d0051a678bd68bab1068",
+      "driver_sha256": "bc9a8243aba0b4f0994f1a341303a767d7807d610be1234f62c35bcc3c4beb9a",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075444,
+        0.074733
+      ]
+    }
+  ]
+}

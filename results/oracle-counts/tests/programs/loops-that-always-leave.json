@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/loops-that-always-leave",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/loops-that-always-leave/src/main.ts",
+      "signature": "7268dba3e2b7c0e61a52c8c908d414350b3c8c0259b5c2aa594cf01108922337",
+      "keys": {
+        "c": "fd82363009b3f51bb493f0a9485b3d5d",
+        "jvm": "52d159ced7d06cf94379ad8f35194305",
+        "llvm": "bbd3480f28d95099ad85a30b694854a9"
+      },
+      "cases_sha256": "ef20c82eb2381d5b9d2af25240db067f32db99e53ff00cf3dfbe8dd8a80331fc",
+      "driver_sha256": "358ebdfb7632a35a89ea6d1a710f375514fad00d179d1befa91f1a71ec3c0323",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.074276,
+        0.079666
+      ]
+    }
+  ]
+}

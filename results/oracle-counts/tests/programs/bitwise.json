@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/bitwise",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/bitwise/src/main.ts",
+      "signature": "ef7fe9abf4088d579fc95b1173410ea08b8c85c92ba48797eb2a4e2dd9af86d4",
+      "keys": {
+        "c": "ce1a8e954c98f466f16c0feba81e3e00",
+        "jvm": "3d056e2f5e6b2d20ec444d83afcd6994",
+        "llvm": "0e85d552a89ff7a2c92fec6362f70e9d"
+      },
+      "cases_sha256": "30c2b30b5b4a4f68bb8b2eba06a8d731acd0af899daa7c58ee73e41eb5809e62",
+      "driver_sha256": "d5d3c8edfd77f9394b86af96fa05b9c9593af7d7b22d8069c0274ccc57b897c6",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.075949,
+        0.078057
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throw-that-stays-in-its-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throw-that-stays-in-its-function/src/main.ts",
+      "signature": "f48271c713c05c8d466662aa875cb6ac0246f2568125034bcf6026f86f7c0c4f",
+      "keys": {
+        "c": "c6032ad03821ee364a0be6b72fd74099",
+        "jvm": "ed4656d3adae2f9da3a63e1db0986200",
+        "llvm": "67e7c100daa359303535102a013448c9"
+      },
+      "cases_sha256": "f446ebdf7cbb102dd174de5e94366648a17ee43c49d76038d476d8e1d14ed7e7",
+      "driver_sha256": "e54a193d19dfe1208b883ad76f6b612ecebaedaf76f865d0533b230fbbeb6ea1",
+      "complete": true,
+      "count": 696,
+      "node_cpu_s": [
+        0.106799,
+        0.111081
+      ]
+    }
+  ]
+}

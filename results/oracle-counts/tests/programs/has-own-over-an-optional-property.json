@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/has-own-over-an-optional-property",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/has-own-over-an-optional-property/src/main.ts",
+      "signature": "2863ccc8a811ff9033bf88c4cdf6eb7b5393e7305474fe8e761e9cde10f8133b",
+      "keys": {
+        "c": "7e07237778872f57d983a11b5481e916",
+        "jvm": "f2b762cfc3ce3f0b674e48e5f04f5ab9",
+        "llvm": "32ede27f1765085c3fc75440ada90e10"
+      },
+      "cases_sha256": "e08b33ae31d5f185c6aa5b7e0e7f29732922ce1e7ba62993ded94f401a6ec793",
+      "driver_sha256": "add6e9e64f6d9ad2fe749cb7c921bf7aa2b87b848e3ac51b3ee43efef853f465",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.074401,
+        0.075308
+      ]
+    }
+  ]
+}

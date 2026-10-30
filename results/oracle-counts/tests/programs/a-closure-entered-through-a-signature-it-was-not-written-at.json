@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-entered-through-a-signature-it-was-not-written-at",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-entered-through-a-signature-it-was-not-written-at/src/main.ts",
+      "signature": "e51a22d522b1c2dc079853db2c9839d85822e292530f64d634d25d19c3036bb6",
+      "keys": {
+        "c": "822850d1940c84054921b1cb16176d41",
+        "jvm": "032990c8c0f7061f56e544118db165d5",
+        "llvm": "fa42d3a4288504acc2d53e24c028ea32"
+      },
+      "cases_sha256": "76ae1e4d8216de0770dcd258fcdf070e1efa8c3d784728134135c67ce5ff838e",
+      "driver_sha256": "cd034fdcc24216424c66fc167f0f760c5c3916cf7a0a14f942be2cb4139802fb",
+      "complete": true,
+      "count": 6,
+      "node_cpu_s": [
+        0.086414,
+        0.087456
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-interface-heritage-type-keeps-structural-dispatch",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-interface-heritage-type-keeps-structural-dispatch/src/main.ts",
+      "signature": "4a0a9a60ea1ad4377b03a1b59b81e4aa90bc173e58c3b8dcf10e3b1858861d2b",
+      "keys": {
+        "c": "62a76fab4d24d61eb55dfe2ab1a07d1a",
+        "jvm": "118fe8ca14351ab1988657b116587d31",
+        "llvm": "f1b3aa4be9248c4465362af476db771f"
+      },
+      "cases_sha256": "4539c7467db6dd77fb46b37e4e9891408b44a750b5aa449d10c49e5debd18380",
+      "driver_sha256": "20aee864add04a409ea10731ea51830186344c0cb2053a7f6c0bd0d4fe291171",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.080021,
+        0.080051
+      ]
+    }
+  ]
+}

@@ -1,0 +1,98 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-declared-value-is-not-an-arrival-proof",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-declared-value-is-not-an-arrival-proof/src/main.ts",
+      "signature": "136d74f097e575865cb583323c6fb18201d830cc38e2a0f2874b4d645d30ba25",
+      "keys": {
+        "c": "cd7f9e7edef416920444305c5d55d792",
+        "jvm": "ccb27333bbe337771f3bde603cc417ef",
+        "llvm": "e17e0825c04b9327502f997de3652d8b"
+      },
+      "cases_sha256": "47d7066c5193703231a169d530632e98dbc88932d609db0bf97574c7d5bcdbb4",
+      "driver_sha256": "3510a6f46a39acc0308c5756f18aadf59a78ffd9e2462f4a7101e85cfbb3cb33",
+      "populations": {
+        "callbackArrival": {
+          "count": 29,
+          "cases_sha256": "8513bdaa14306751563aedae1230e0d8c8524f7cea4d83dae3bbf06bfb2c0b61"
+        },
+        "callbackArrivalControl": {
+          "count": 29,
+          "cases_sha256": "139faafd382233825ff9df6732f98f14fb83c98f9955687385da09fd94f23eb6"
+        },
+        "checkedCallback": {
+          "count": 29,
+          "cases_sha256": "6ebcd9de5b01add8e76c79d81898e8ec0f4cee3e003565cfe15a9c1a74a51797"
+        },
+        "claimControl": {
+          "count": 29,
+          "cases_sha256": "c0f7333867ec4baf43474592c2abdce4ad779edcc6071166c0ed669647e103b4"
+        },
+        "claimed": {
+          "count": 30,
+          "cases_sha256": "7e86432ec23e27cf50bd59469e60c334495a191af4ee864d745206a95722112d"
+        },
+        "enumArrival": {
+          "count": 29,
+          "cases_sha256": "560202605e45d72d1e0e6ff91619422c0cfb4198f7e6d576778583c3c2d56f43"
+        },
+        "enumClaim": {
+          "count": 30,
+          "cases_sha256": "7258872e1d22081f27b64e35b7435d9a93f4a0a4ef47e27fc14ddc2dbaee3b0c"
+        },
+        "enumControl": {
+          "count": 29,
+          "cases_sha256": "3b18389bb147619a01b6e0960c2e4e60a767d510af52f3e3d25ee8eba6d3f6e7"
+        },
+        "erasedArrival": {
+          "count": 29,
+          "cases_sha256": "21af7feaa3648db0628de5273026248317d4f35cdb09422b81c88f7b5613769a"
+        },
+        "erasedControl": {
+          "count": 29,
+          "cases_sha256": "6033158e6222123d6af6aa9303d0bd7b5290daeb6630ced6fd3e68f64710c0de"
+        },
+        "literalArrival": {
+          "count": 29,
+          "cases_sha256": "9765f5e45a8d51d7c5a70a38785a58f6aae388181e6bb41e16395ee2f2ada8b1"
+        },
+        "literalControl": {
+          "count": 29,
+          "cases_sha256": "9a117eb34caaf0413c593db87649eadb9ca5cf892789e5d9965e310a9c4e2216"
+        },
+        "provenCaller": {
+          "count": 1,
+          "cases_sha256": "9542ac83312e1fa0336d56e5415701c0f7a1b6e2d5e4c282d6d165d45f3aad18"
+        },
+        "stringArrival": {
+          "count": 5,
+          "cases_sha256": "258638644743fc5869b95483dbb2bfb0f905cf856929c34c055d60d429ab5e0f"
+        },
+        "stringClaim": {
+          "count": 5,
+          "cases_sha256": "0148ab413f1f1a31cca185acee29d2e4db7b0e5177cbb1cd0cbf6d2b631ae5c7"
+        },
+        "stringControl": {
+          "count": 5,
+          "cases_sha256": "082ceeeba61cd7864f0287a70f0b1c52633c5edce1c18e8f963f994decfbabe5"
+        },
+        "unionArrival": {
+          "count": 29,
+          "cases_sha256": "2e5d82f82ce7f3af60883469a1924d0102e7f5bfc3598ec62280f7f6f2395870"
+        },
+        "unionClaim": {
+          "count": 29,
+          "cases_sha256": "e8f82efe4c9a354db3c7ef8f7392a2cd1abdf34ebe863e1c7c47bdec647bdeb9"
+        },
+        "unionControl": {
+          "count": 29,
+          "cases_sha256": "11cb136516ab002483184ab8ff15f5a381c1b9585b716f7de812f8f154fe7b6b"
+        }
+      },
+      "complete": true,
+      "count": 453
+    }
+  ]
+}

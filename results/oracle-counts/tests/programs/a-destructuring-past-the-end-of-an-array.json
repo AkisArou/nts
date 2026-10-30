@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-destructuring-past-the-end-of-an-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-destructuring-past-the-end-of-an-array/src/main.ts",
+      "signature": "58a3e9f587511f8082b6708edd406a2580f5aad3e0088f8e875ecfda0143050e",
+      "keys": {
+        "c": "44a30b84f443fd0b4293b0509f7df47d",
+        "jvm": "d1a0c4c9b62388d0fc3666f81716c4ba",
+        "llvm": "655e23bf340973f38e5b8ab839d9faaa"
+      },
+      "cases_sha256": "d80ffd3040307a8f858f3c099ac508c14dfb7556e2e31ad8564c13634a85fce3",
+      "driver_sha256": "2ceabb016ec2759337cf4dde0fdcff8b47793142f82dd503827fd68603c4c365",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07611,
+        0.077016
+      ]
+    }
+  ]
+}

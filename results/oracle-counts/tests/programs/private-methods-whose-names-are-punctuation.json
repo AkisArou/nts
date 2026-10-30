@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/private-methods-whose-names-are-punctuation",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/private-methods-whose-names-are-punctuation/src/main.ts",
+      "signature": "8a69c89197ab5dd02593a04487c89e038e6e157f36260fc7acb97ef7f2634f64",
+      "keys": {
+        "c": "1ae7c47e7da280a5e5571af49383df18",
+        "jvm": "8fa56a9eb9ad408d93b7874a825dd276",
+        "llvm": "b823dc4c3e1fc0110b3a357f0a315410"
+      },
+      "cases_sha256": "99962a463e1740d2115f657e4426985cb8fa3e84444a6c662bd143105a380eba",
+      "driver_sha256": "0632230de3851f9e90c31d949349f511640ef9a8b247c0e304543cb71958f0c8",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.076151,
+        0.074074
+      ]
+    }
+  ]
+}

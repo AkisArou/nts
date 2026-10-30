@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-template-literal-type-is-a-string",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-template-literal-type-is-a-string/src/main.ts",
+      "signature": "fa4ea032ef5d123e63597c70fe21a9f9ae32afc6bda65582a0d313b818b132ff",
+      "keys": {
+        "c": "459da8e1c13ac30753d9983bb8b870f3",
+        "jvm": "63db98e9f8964d6b62fca32c6922254f",
+        "llvm": "3f11a3785a184e9891089cab19cb6c5f"
+      },
+      "cases_sha256": "e3f7268a4eaeb1364d9629c67d4c5342dd46fbcdf1e5e74ba4b6544f16bdcb37",
+      "driver_sha256": "8db4c99c73c25d129e3004fe0862ce981d7284b77edd48b34d4a916806bde992",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.073822,
+        0.074888
+      ]
+    }
+  ]
+}

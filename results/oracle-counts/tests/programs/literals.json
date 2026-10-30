@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/literals",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/literals/src/main.ts",
+      "signature": "e6832ce34c76e00e8dbf3900b6c74737f0e68c5b9615f6b18c6ede897136cbed",
+      "keys": {
+        "c": "7a27acbf0fd04a53206e0190d88f860d",
+        "jvm": "4bfbd54d65b6d652bb995c6e5ffee65d",
+        "llvm": "1292504a352b78394157ed6941cdc2aa"
+      },
+      "cases_sha256": "b4014971e616ae4f3d25712760ac2a355a9208f301bf4759cc8db8f3a36b374d",
+      "driver_sha256": "9f2222fce8983f4755b0ba5c8fd6bc39d6447d94bb0f2fbb52066b60822e45a2",
+      "populations": {
+        "fixed": {
+          "count": 30,
+          "cases_sha256": "be17da26b55cfb463a5b3f479d65670437d334bc087f7bba1b29993a107cc0a9"
+        },
+        "loose": {
+          "count": 29,
+          "cases_sha256": "8811c93958fe55db4b8f9931c4d23163633de85179dcd05afaaf980f1daaf257"
+        },
+        "plain": {
+          "count": 29,
+          "cases_sha256": "6eb336a0765e29f488e992fe663e08080d2c64ca1fd2260885d88b2dfdea88f2"
+        },
+        "weigh": {
+          "count": 29,
+          "cases_sha256": "f2a87d6a5c479bf0faf0e62a67846c3c8c0e87a9bca40a77b7ee4418c922c5b1"
+        }
+      },
+      "complete": true,
+      "count": 117
+    }
+  ]
+}

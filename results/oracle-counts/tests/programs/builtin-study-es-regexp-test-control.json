@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-regexp-test-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-regexp-test-control/src/main.ts",
+      "signature": "b3b33f279e225339b05a54b8f075f0cefec5d2e4c412d2abe2fddbf2486aba5c",
+      "keys": {
+        "c": "68ae06a32dd212f8fba0368cb09d4f97",
+        "jvm": "fc4617800274a8146cf398006b911bda",
+        "llvm": "69fb0942665b394b1d26f694de56955e"
+      },
+      "cases_sha256": "2bb8f96a15db99f382abfe8e7f5824b19783e64a03ed7866f67a4e770445231d",
+      "driver_sha256": "c2515cdae2edac7fb0b5b3f771f791058fc30d18a37985bca842b05533feca92",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

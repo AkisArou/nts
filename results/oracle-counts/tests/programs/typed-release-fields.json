@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/typed-release-fields",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/typed-release-fields/src/main.ts",
+      "signature": "43cda2d17410c2cd23fe3c8c85d6da8549641ac2fcaa342ba24f697efd5b17e1",
+      "keys": {
+        "c": "aedd08ca9e87949b01fdfe187c9c2bae",
+        "jvm": "2867cebdce24c6426a2a8d0321d9a2a9",
+        "llvm": "dade5c3ff21bb912b0df846cb94533fc"
+      },
+      "cases_sha256": "105668e2495161014bd4a7fbf169e8fa018f36ae3db3197dacbf19f562b9dcb1",
+      "driver_sha256": "80872a18ee817d3294e6307f8700ea3dfa674d42f69b7131fa40e4c14f094928",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.084846,
+        0.086606
+      ]
+    }
+  ]
+}

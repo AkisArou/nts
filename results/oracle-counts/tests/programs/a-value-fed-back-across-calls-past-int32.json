@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-value-fed-back-across-calls-past-int32",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-value-fed-back-across-calls-past-int32/src/main.ts",
+      "signature": "3045c97b7e1a91055e2092e2e6e169dc3aa28f5fe1a599a2ddda2d9319ae9c97",
+      "keys": {
+        "c": "dda27806a03676a3697fe9cbe8c0d711",
+        "jvm": "8721622c95cb9c14388f9ffc4cb7b506",
+        "llvm": "e4725c99f84c60cb5ea77c354235aed7"
+      },
+      "cases_sha256": "c37b13ae9b65df6fa854c45968045e16e7236c17f9f77a70a857c94686eee146",
+      "driver_sha256": "4799d6b3712a5024e65b7deea486d5949ce0558be9b2cb51cad20aff7db9a845",
+      "complete": true,
+      "count": 2,
+      "node_cpu_s": [
+        0.076914,
+        0.074947
+      ]
+    }
+  ]
+}

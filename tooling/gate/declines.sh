@@ -25,24 +25,23 @@
 # Not reported: the hostile-pool cases a *compiled program* declines at run time.
 # Those are the harness doing its job on every example and they drown the signal
 # forty lines deep, which is how the first version of this was useless.
-set -u
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+cd "$root"
 bin=${NTS_BIN:-./target-jvm/release/nts}
-{ ls -d tests/programs/*/tsconfig.json; ls target/bench/*.tsconfig.json; } |
-  xargs -P 8 -n 1 sh -c '
-    d=$1
+for config in tests/programs/*/tsconfig.json target/bench/*.tsconfig.json; do
+  [ ! -f "$config" ] || printf "%s\n" "$config"
+done |
+  xargs -r -P 8 -n 1 sh -c '
+    bin=$1
+    root=$2
+    d=$3
     case "$d" in *"/invalid/"*|*"/unsupported/"*) exit 0 ;; esac
     n=$(basename "$d" .tsconfig.json)
     [ "$n" = tsconfig.json ] && n=$(basename "$(dirname "$d")")
-    out=$(NTS_CHECKERS=1 NTS_BACKEND=jvm '"$bin"' check "$d" 2>&1)
-    # `NTS` narrows this to the *backend* declining a function. `nts check`
-    # also reports how many hostile-pool cases the compiled program declined at
-    # run time -- an index a `!` promised was in range and was not -- and those
-    # are the harness working, on every example, all the time.
-    # A `not emitted:` line carries the place before the code and a `declined:`
-    # line does not, so the token between them is optional here. NOTE: this
-    # block is inside a single-quoted `sh -c`, so a comment in it may not
-    # contain an apostrophe -- one closed the string and the step reported
-    # `declined:: command not found`.
-    hit=$(printf "%s" "$out" | grep -m1 -E "not emitted: ([^[:space:]]+ )?NTS|declined: NTS")
-    [ -n "$hit" ] && printf "%-26s %s\n" "$n" "$(printf "%s" "$hit" | sed "s/^ *//")"
-  ' _
+    # Backend-stage fields exclude runtime declines without reading sentences.
+    hit=$(NTS_CHECKERS=1 NTS_BACKEND=jvm node "$root/tooling/differential/check-report.ts" project backend-refusals "$bin" "$d") || exit $?
+    if [ -n "$hit" ]; then
+      printf "%-26s %s\n" "$n" "$(printf "%s\n" "$hit" | head -n 1)"
+    fi
+  ' _ "$bin" "$root"

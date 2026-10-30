@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-abort-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-abort-control/src/main.ts",
+      "signature": "cc5fb5be50d9ade5294f55e8ee449ec84769d763516c431eb87f527b16e1765d",
+      "keys": {
+        "c": "6d738a92212be4a1102d6fd7ed87bc3e",
+        "jvm": "96aea9a6a77ea8df6a86bf7e27ff599b",
+        "llvm": "56a943cb1670139f7f8886c20bc9c1ed"
+      },
+      "cases_sha256": "376f8be804e5b5758d0a0726d64c03da0e4735e5192b71fe31f1133d46ba7998",
+      "driver_sha256": "c32aab590bd0fd7e1cb955b68b31f4fdf771c46d1bf31a0ebefc2553f706b74d",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

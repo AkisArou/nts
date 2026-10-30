@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-null-assigned-to-a-record-entry",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-null-assigned-to-a-record-entry/src/main.ts",
+      "signature": "24a4515c12c6db21ada13e5f836ea7761af2b0627aca9c34bbd633684f4fbc0c",
+      "keys": {
+        "c": "b276bbbd16f2be72351c47edc9097e98",
+        "jvm": "b0d285e312c47fd478fcc17966dae6a8",
+        "llvm": "0e567052ae5cf2df70262c1f6a05c897"
+      },
+      "cases_sha256": "f84e26cdbd2ccd2f6bd621f621b80d82cf2087467d8bea8af0a4c728b25e6feb",
+      "driver_sha256": "81cb85a20f31681102d80a601f3ece9c2a8af2dd180d0be1fa69ee3ea2b2cb19",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.072191,
+        0.074681
+      ]
+    }
+  ]
+}

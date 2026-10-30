@@ -20,7 +20,7 @@ fn check_every_case(fixture: &str, cases: usize, functions: usize) {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     let output = Command::new(env!("CARGO_BIN_EXE_nts"))
         .current_dir(root)
-        .args(["check", &format!("tests/programs/{fixture}")])
+        .args(["check", &format!("tests/programs/{fixture}"), "--json"])
         .env("NTS_BACKEND", "c")
         .env("NTS_RC", "0")
         .output()
@@ -28,16 +28,13 @@ fn check_every_case(fixture: &str, cases: usize, functions: usize) {
     let stdout = String::from_utf8_lossy(&output.stdout);
     let stderr = String::from_utf8_lossy(&output.stderr);
     assert!(output.status.success(), "{stdout}\n{stderr}");
-    assert!(
-        stdout.contains(&format!(
-            "checked {cases} cases across {functions} function(s)"
-        )),
-        "every export must compare: {stdout}\n{stderr}"
-    );
-    assert!(
-        stdout.contains("agreed on every case"),
-        "{stdout}\n{stderr}"
-    );
+    let report: serde_json::Value =
+        serde_json::from_slice(&output.stdout).expect("versioned check report");
+    assert_eq!(report["version"], 1);
+    assert_eq!(report["status"], "agrees", "{stdout}\n{stderr}");
+    assert_eq!(report["counts"]["compared"], serde_json::json!(cases));
+    assert_eq!(report["counts"]["expected"], serde_json::json!(cases));
+    assert_eq!(report["counts"]["functions"], serde_json::json!(functions));
     assert!(
         !stderr.contains("NTS1001") && !stderr.contains("NTS1003"),
         "the declared interface's original body must compile too: {stderr}"

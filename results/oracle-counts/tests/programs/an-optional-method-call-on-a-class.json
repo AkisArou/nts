@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-method-call-on-a-class",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-method-call-on-a-class/src/main.ts",
+      "signature": "367da6d55cc5eccb838b26f67fe49f8e281ee10ff909ee260fa8169fa063e419",
+      "keys": {
+        "c": "0c80db4d0250b8bd26b4b13b164d0b1d",
+        "jvm": "0ddbc6e434b381f332815ca1aaed189d",
+        "llvm": "4b977b81630aa000a406b5bb54cb4c0d"
+      },
+      "cases_sha256": "1a885dc4d2fa0526efc37bb506b7b5ffd79d4cc1511fde29f8b2fbc676f445b9",
+      "driver_sha256": "1b9c0437c6ebc737ce29ca24ec1ff3fcb35ddaafa4e285eb774ffb009be21c34",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075999,
+        0.074569
+      ]
+    }
+  ]
+}

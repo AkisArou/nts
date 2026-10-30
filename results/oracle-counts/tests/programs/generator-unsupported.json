@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/generator-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/generator-unsupported/src/main.ts",
+      "signature": "1348b7a5df7d1b1815c36bf2a207d8c73018f1c407eb1b9fcb33684ad891d5f8",
+      "keys": {
+        "c": "93b931fdb90b2c8b78d1b1685cb357b1",
+        "jvm": "094d74e5846decdc86a7adb7c2e0d992",
+        "llvm": "be6f91114a82b75dc068431cc352f858"
+      },
+      "cases_sha256": "86076ddb747af947a08a7a580eac32afc3c77ec118061a3bd12930b85121f417",
+      "driver_sha256": "fd88f697d9b0dd11ba275f9a0199ab63848c7a9de93798b9c39de996fe05936c",
+      "populations": {
+        "abandonedWalk": {
+          "count": 29,
+          "cases_sha256": "8dd07f3c272e8223b6d1440bd603dc0bb3ff03fce3d79cb0fb92ef329cf078be"
+        },
+        "yieldsNothing": {
+          "count": 29,
+          "cases_sha256": "58984b4ee85b01f5aeb67dd585f38dd2067824cf82a83df90cbac49fcf75319f"
+        },
+        "yieldValue": {
+          "count": 29,
+          "cases_sha256": "9233a08b8eaebe5e1f0c45173733a53517fb0c9bd6474adad14bf547a2c55bef"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

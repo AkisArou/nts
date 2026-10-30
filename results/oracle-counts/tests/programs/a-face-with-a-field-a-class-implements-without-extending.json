@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-face-with-a-field-a-class-implements-without-extending",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-face-with-a-field-a-class-implements-without-extending/src/main.ts",
+      "signature": "b1d92b66a2673c35bc3ad40f4000c5778c912b8249d4d5cfe2bbcd743d12d4a7",
+      "keys": {
+        "c": "fee5bb0e2e567e5851c0148f2181833e",
+        "jvm": "46681f2edad1356872256e8ef72b161a",
+        "llvm": "8090ac6460a3c986d3e58bd2852896d8"
+      },
+      "cases_sha256": "c5043ed2986f82e6e3b54ce0216959a98055947da782840575c00a86447a7492",
+      "driver_sha256": "34f52d9c0696567e9fdcf3629fce90a16f43437bbf6c3c618598cea8fd02b5c3",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.075733,
+        0.075551
+      ]
+    }
+  ]
+}

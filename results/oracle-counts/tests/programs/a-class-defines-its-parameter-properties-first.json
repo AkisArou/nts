@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-defines-its-parameter-properties-first",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-defines-its-parameter-properties-first/src/main.ts",
+      "signature": "76b9d985606eb27308356600729138716c880bc4b3da630c70cb0f8d222b53e3",
+      "keys": {
+        "c": "a56711bebbfcda6312c7eaac2836f135",
+        "jvm": "d2d132604540d6489a1bf21a8b5e9240",
+        "llvm": "6500f245905797dfa19b3b590448e185"
+      },
+      "cases_sha256": "57a5775ecca8ca09ee94fe954d9e86204baf584a795bc8d89cbca4bae94865b9",
+      "driver_sha256": "54fbada36984bb0bd5f4c6311357d1da6689cd34bd02875eed9255b9716af00e",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.081232,
+        0.080936
+      ]
+    }
+  ]
+}

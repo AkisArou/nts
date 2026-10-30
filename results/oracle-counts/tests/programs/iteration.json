@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/iteration",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/iteration/src/main.ts",
+      "signature": "b59b6ad447b7b3d18e38544ccdf8a13bf05b493007a9a76b915e99d3dcc13be1",
+      "keys": {
+        "c": "588428bf67a9c9bd648ddfdb08fa7885",
+        "jvm": "229baf41e421c5552ac47b8c26ba7324",
+        "llvm": "c93ebdc0bb0180075f4e00d0c05ba771"
+      },
+      "cases_sha256": "e9e2fed13628aab40f9fb9aaa161092e0a6a739709f6d4b18a8767db547332a8",
+      "driver_sha256": "b802d9cf16e2d51d0fde53298bdd9fe0f014baaed2746bd5277e62d570530f5a",
+      "complete": true,
+      "count": 899,
+      "node_cpu_s": [
+        0.142885,
+        0.140768
+      ]
+    }
+  ]
+}

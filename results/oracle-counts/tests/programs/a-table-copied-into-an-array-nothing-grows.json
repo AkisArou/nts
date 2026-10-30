@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-table-copied-into-an-array-nothing-grows",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-table-copied-into-an-array-nothing-grows/src/main.ts",
+      "signature": "be8db36fa68df4502f6955af41058a693f6719d901cdbf260d43af02d6fc96c2",
+      "keys": {
+        "c": "1698d3302a39591f5a1c0a0846a084b0",
+        "jvm": "63c7ab6e8309b8e30624084e49ddc151",
+        "llvm": "a18ae53f0cd232c442f2dba864e9ea8e"
+      },
+      "cases_sha256": "05e5fc653bbb811710fde8a7172c9c7c414a807bf7378d13b5ead516a66fabdd",
+      "driver_sha256": "0396c2c565640d00a1712749561eb10fedf0dff1af612022fd0c576d42b95945",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.079651,
+        0.077105
+      ]
+    }
+  ]
+}

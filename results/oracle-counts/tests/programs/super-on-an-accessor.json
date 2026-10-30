@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/super-on-an-accessor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/super-on-an-accessor/src/main.ts",
+      "signature": "a28cf5471dce1a432569b707b947d8fd050aa11ca0c6f6ac18044c5cf359ee12",
+      "keys": {
+        "c": "fd54d08e7ee54327b691f234a7cbb0ee",
+        "jvm": "a5bdc9475d210ac3c58dbdeaeab14af5",
+        "llvm": "f4e213c5cd1b408df8140f43cf414e47"
+      },
+      "cases_sha256": "646589fd69ade8306791d8f5e7e078292edc39f684f8a55f51f03ad325bcac8c",
+      "driver_sha256": "68fa950589608ea5ec12e889bd98338a0aebf1d6d086358be1cdf62bb69b8e0e",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076998,
+        0.076597
+      ]
+    }
+  ]
+}

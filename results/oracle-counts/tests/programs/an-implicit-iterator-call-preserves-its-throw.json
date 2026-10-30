@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-implicit-iterator-call-preserves-its-throw",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-implicit-iterator-call-preserves-its-throw/src/main.ts",
+      "signature": "6d76a330967f3051aaa806087db914eb59ebe89874668d38ff4557a800cc870d",
+      "keys": {
+        "c": "be549ac669e3fb31201fb724b06f9c42",
+        "jvm": "d8eac6da04b04a53534eb7f04f5d711d",
+        "llvm": "5c0cec25b0d22c9d4695a077625dda4f"
+      },
+      "cases_sha256": "f7f8d8dc4fb85af237af37a2e76babcfe5817109180eefdcee39cd9cfedf8b85",
+      "driver_sha256": "60966a170161292a11a05ea4514d491336233cb10546f09310836d2e7a246937",
+      "complete": true,
+      "count": 551,
+      "node_cpu_s": [
+        0.108192,
+        0.103197
+      ]
+    }
+  ]
+}

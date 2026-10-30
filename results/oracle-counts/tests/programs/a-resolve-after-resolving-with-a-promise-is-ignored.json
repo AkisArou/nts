@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-resolve-after-resolving-with-a-promise-is-ignored",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-resolve-after-resolving-with-a-promise-is-ignored/src/main.ts",
+      "signature": "38f7f31f22840532b3e16402ece8b0f31dca88ad6b8771990e8173e7d0bf60d0",
+      "keys": {
+        "c": "fd9362eead54804e9505f8a89569e6c0",
+        "jvm": "4f6fb50abf65be00db7cc05f6e83c2b7",
+        "llvm": "6b2212b082e51aef6f9957289a3ddb5a"
+      },
+      "cases_sha256": "80a9c93ccfc68080662367adcbf72e051b781b2c072d2d1ee9f5cd831ae10af0",
+      "driver_sha256": "51634dd0aed9a2bb5555293229389834929bc0ae19be6e02af7f980990fefc13",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.081429,
+        0.080497
+      ]
+    }
+  ]
+}

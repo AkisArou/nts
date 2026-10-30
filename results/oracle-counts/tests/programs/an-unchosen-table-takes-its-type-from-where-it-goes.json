@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-unchosen-table-takes-its-type-from-where-it-goes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-unchosen-table-takes-its-type-from-where-it-goes/src/main.ts",
+      "signature": "02b1a44a285561422494b1c15d05fe3107ef4b8f681f0a4794609f6855f3f46d",
+      "keys": {
+        "c": "0c301c63e13d3684039742d2d8a1c122",
+        "jvm": "f096de80c6a41364023257012fe898fc",
+        "llvm": "394b5bea8a908e7647373ffee28c4888"
+      },
+      "cases_sha256": "4aceef1e7cba82e50487359c251e2cd3cba60bf410aed4efefba8f7f8e7fa630",
+      "driver_sha256": "83caf646d3802a027d607f86a36ce88f924ca37d1c71a52e9d4a0e4e74986efd",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.090803,
+        0.09387
+      ]
+    }
+  ]
+}

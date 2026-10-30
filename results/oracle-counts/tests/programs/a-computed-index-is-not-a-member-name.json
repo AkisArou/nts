@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-computed-index-is-not-a-member-name",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-computed-index-is-not-a-member-name/src/main.ts",
+      "signature": "dad1e15bbd9733c23229243ef9638a277ef845604d8113fd8ae9b56f7c01a24c",
+      "keys": {
+        "c": "965c41c2901d8f14f29981274d8ff1c2",
+        "jvm": "97e57e1348d5e1b95aa7267703509205",
+        "llvm": "ea2da3d77942ab8eaeabe15706c82e35"
+      },
+      "cases_sha256": "280ef4baf9cef6020ba2f7e467a48d04da297f3e04068aea9f9196f5441499ca",
+      "driver_sha256": "f8d8f5516d43bb712eff88d868e5b0cea093e0843608722b03190ee75e21eb80",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076135,
+        0.076955
+      ]
+    }
+  ]
+}

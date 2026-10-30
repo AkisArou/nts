@@ -1,0 +1,82 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-functions",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-functions/src/main.ts",
+      "signature": "211a7cfe09e5659055258954822eb84ab65d671bd854f6be8c3058d42626f9df",
+      "keys": {
+        "c": "a185909c073bf8dc69704e12705476fc",
+        "jvm": "820560d4e2e1362ce859cdff77ba1ee3",
+        "llvm": "ee77496676574bfeecb809faba2ee8a3"
+      },
+      "cases_sha256": "494bedcdfbc3a5e7eca993cb6988992b48c4960bdbe5b02243e5e1589868ab0c",
+      "driver_sha256": "b6dab7ba70488933b91f8bc2279c7f537d0f7abb2210c7f6a088064f36c5fb7e",
+      "populations": {
+        "alias": {
+          "count": 29,
+          "cases_sha256": "cbee0113c0e9a8ea7170ff447500eabd3080bc43324dc87e7dd41e1d37b82660"
+        },
+        "blockBody": {
+          "count": 29,
+          "cases_sha256": "6e9647c0c3ee652e5351c410c7684cf4cc69860cb8c13fcfcedd264470fda38e"
+        },
+        "called": {
+          "count": 29,
+          "cases_sha256": "a91ea3889833ed32248f605b15de6f482f3c98a2f17a2c290350982aa30ac023"
+        },
+        "chained": {
+          "count": 29,
+          "cases_sha256": "408877559df478206950d6189794088abdd22634821064010c29c2d27377eca0"
+        },
+        "declaredBeforeItsCallee": {
+          "count": 29,
+          "cases_sha256": "cbdcc045c1a61876b23c2bdc4bbc9121a8a19ae968669282c92dc3f35755250a"
+        },
+        "exported": {
+          "count": 29,
+          "cases_sha256": "ba66e04699a26c201a4ef631db3f61b200b5a6d2183006c9e34d1c2141061395"
+        },
+        "identity": {
+          "count": 29,
+          "cases_sha256": "df030c58b6c7cfb75bcff5c219e0a24921502f8ce98c29eefadf1232f3bd920e"
+        },
+        "negate": {
+          "count": 29,
+          "cases_sha256": "3ca88029242b6866d51f81f26c58caabbb432da49c06ea57ffb201505eba0bed"
+        },
+        "noParameters": {
+          "count": 29,
+          "cases_sha256": "1dc7b71d51566f9f579a40f258725d5eff27b3c8a7ff6d1e139fadd910416363"
+        },
+        "passedAsAnArgument": {
+          "count": 29,
+          "cases_sha256": "bbc82720cd967251ee01783ff475678f1b7d96f29db8e9b1e4ac6c8a2242c8aa"
+        },
+        "readsAGlobal": {
+          "count": 29,
+          "cases_sha256": "1684bebd14a6a27159fd521c53f1bdd3b8161c21d269e6d386b0168bf701097b"
+        },
+        "recursive": {
+          "count": 29,
+          "cases_sha256": "28554fad6b46692914e603d0d979e2dc46a6431a66f0b11395e4bb5edcaa58d9"
+        },
+        "returnsNothing": {
+          "count": 29,
+          "cases_sha256": "63e70d9f10bfc24e21ebfcf32c3b3d1ad08f50656211bbc9e84939e6d635f080"
+        },
+        "strings": {
+          "count": 29,
+          "cases_sha256": "246ce63ac803013ed3bbb8a3ddbaa74b65282122347c050a7d9682af192a7f18"
+        },
+        "twoParameters": {
+          "count": 29,
+          "cases_sha256": "b28e9d8ae7006646b9548d4069a2341283a56542e667b1a10e3f0ae5c02e133f"
+        }
+      },
+      "complete": true,
+      "count": 435
+    }
+  ]
+}

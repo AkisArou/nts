@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-structuredclone-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-structuredclone-control/src/main.ts",
+      "signature": "bcfb9cd1e53df6f669e4adbd91ef5b515d8cd0d57fcfc1ccd4f2d27c1e70146b",
+      "keys": {
+        "c": "e6045ec01b76c395ed1ea17c1d2f0395",
+        "jvm": "e9d574c66559d593128226e2e3556f6e",
+        "llvm": "7aed150f61e6197d9367ba81d851db35"
+      },
+      "cases_sha256": "94d775eaffab78c7ad51bbd6a0a7e23b33abfe427504ce8631e7a59d30d57bda",
+      "driver_sha256": "963029d3948d92afbdfeace0916e00d3fe659c9c23fea653e49728d4fedf6efb",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

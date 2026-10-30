@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/key-order-through-an-extended-interface",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/key-order-through-an-extended-interface/src/main.ts",
+      "signature": "f878371ac419f302d381cac5bfc2459da4444636627d3a5d6c0d5719aa6cfbe0",
+      "keys": {
+        "c": "35c19383befed750b8a7a8a8af2220e9",
+        "jvm": "f0f756870871f61b2bcfd7f5a9a91c69",
+        "llvm": "3925fedc4e721ec930fa105f0ad699a7"
+      },
+      "cases_sha256": "9e66b8e0ba8ddd9d7623189ee4a6294ecf47cb28f36fe2befe0416efc0734ad4",
+      "driver_sha256": "86354aa912cab633bc7374374cf2c9ee324a3a0b852e17dd6a4a058aa72594a4",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.080135,
+        0.077514
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/the-provided-error-classes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/the-provided-error-classes/src/main.ts",
+      "signature": "6a2a18e00c57372b807e4cdf086044d1d70b91869cb70de8c8dc5266643e840e",
+      "keys": {
+        "c": "75bdb635e8a8efa78c15c8c21037070e",
+        "jvm": "48c4d38794b0c9db63487884595d312b",
+        "llvm": "fe40d77d8336d4799437fb17d0ca070d"
+      },
+      "cases_sha256": "9343bb1f1051ef664861ad86bb133b50a1efb2a1a970fb13f33ccb73664d3fd1",
+      "driver_sha256": "9a42153753491cceaab994e5a76dbec3f10f986609a480f4fb522506da0dff48",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.095145,
+        0.087521
+      ]
+    }
+  ]
+}

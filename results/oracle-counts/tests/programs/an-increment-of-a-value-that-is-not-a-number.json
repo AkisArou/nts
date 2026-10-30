@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-increment-of-a-value-that-is-not-a-number",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-increment-of-a-value-that-is-not-a-number/src/main.ts",
+      "signature": "b71540f86440aa0fd855b9973994a9923fd86e3d26fe72ae2b34aa1e59f51d07",
+      "keys": {
+        "c": "2bfc235271ff0a06f9780bcef640561f",
+        "jvm": "6064b1648655b4bd219381d4acef8c7f",
+        "llvm": "df648c05300dd8bbde4ba136aa909875"
+      },
+      "cases_sha256": "3dfd34f154ea861f67b17161201392f45fa015adc5551581ae6cc0bd03a85eea",
+      "driver_sha256": "6fa22779d787a2c5a359195f420586784a9e2fcf80a8f452e327988490c31284",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.081742,
+        0.081257
+      ]
+    }
+  ]
+}

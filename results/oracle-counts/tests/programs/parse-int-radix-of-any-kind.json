@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/parse-int-radix-of-any-kind",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/parse-int-radix-of-any-kind/src/main.ts",
+      "signature": "0654897ca70b11017f623e355cd65b0f75dc9394385c135cf5ba2840da732d7b",
+      "keys": {
+        "c": "56df3e43b346811e0e92071b9a9e1439",
+        "jvm": "d0b6177cc690b80d025b65036f4323ae",
+        "llvm": "626dde2e78ab9174cf3441f3e8e891db"
+      },
+      "cases_sha256": "4c90a6d74963c0990056d7657b29595b463e4da0effde243c2043ad59c444cdd",
+      "driver_sha256": "050569c82f0677676332018e7268bd9020223dc993c6dba629f03502f032a5cf",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.065076,
+        0.064628
+      ]
+    }
+  ]
+}

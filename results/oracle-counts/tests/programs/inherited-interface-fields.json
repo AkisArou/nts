@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/inherited-interface-fields",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/inherited-interface-fields/src/main.ts",
+      "signature": "970edd7df0ad86f41e04ed69f26fb2421953d1d2746450624528d22f4140b00b",
+      "keys": {
+        "c": "c27ac3e9efc4a158eac994a6ac1e6a3e",
+        "jvm": "2e65e5ed9371abdfc108e80c7e5c25ba",
+        "llvm": "704e6edeac021b7cda4acd66db197054"
+      },
+      "cases_sha256": "e9f4f09f382ac5889b9639f3697a580e104bece328108909966eadcb1b8c38ef",
+      "driver_sha256": "30add5598f7724aeb6e7933f0de2468f99f41ffde46c8b84be33f7c9af4cf9b7",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.079082,
+        0.082508
+      ]
+    }
+  ]
+}

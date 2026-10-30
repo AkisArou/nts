@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-whose-constants-are-prototype-getters",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-whose-constants-are-prototype-getters/src/main.ts",
+      "signature": "939d05153b8590a0349a1a7decc8345c4699b14f14ebe07a589610fc77b880c3",
+      "keys": {
+        "c": "fb5ada4f7a7635beb0dac4dfead9ff89",
+        "jvm": "dfdd39b105ab7a0daab29b2c21f69cfe",
+        "llvm": "5f517f07d363e6a582581e5215d457ce"
+      },
+      "cases_sha256": "b0bfae056b3ebfa6bd065c066fc0f57e7fb3babfaff52038e7b0bd6f5f000b6d",
+      "driver_sha256": "57e4ff496ca94d41556d9550d3528fec96e8844c33336eaf371e597c90157cd3",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073809,
+        0.073626
+      ]
+    }
+  ]
+}

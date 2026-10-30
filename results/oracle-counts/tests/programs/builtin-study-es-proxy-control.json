@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-proxy-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-proxy-control/src/main.ts",
+      "signature": "cabb97c3f8bd278a3330ea60484d3c82f16b031a5d56973e91a6958fb32762b8",
+      "keys": {
+        "c": "d9195f8e41a92d255c0ef3bf87a22a21",
+        "jvm": "db70b25538ff33c4118c9269022b6958",
+        "llvm": "b92f14066bbefdd7fc32f5b7f9f7b9be"
+      },
+      "cases_sha256": "a2fb57a51b97efee58fbc5054e00b7b1348ccca264c1609bb98855cbd12e6fca",
+      "driver_sha256": "9051b1f771d0199553a6c92e26ae527c5451bc8ce1c282b212a562e347955da3",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

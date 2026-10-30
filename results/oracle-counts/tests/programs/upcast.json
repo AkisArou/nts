@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/upcast",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/upcast/src/main.ts",
+      "signature": "6c6f66745e198cf5ca61cbb654556d048fd797526b7678f73920fea38911f9b4",
+      "keys": {
+        "c": "67b22ce12d3e91388f259ef013f288e6",
+        "jvm": "91dce1292edc3cc0bba9b7fec6a67663",
+        "llvm": "7d3dff7124ebd8012b69404e0f8c001b"
+      },
+      "cases_sha256": "5f1d3768ab5380639e7f6c29fac2e9e3433421cc6331eec01f7d75af76af7502",
+      "driver_sha256": "e44707634b9ed83d7408287f1e6eecf507d1054bf94119eb18809ec3adabd6b9",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.078015,
+        0.07881
+      ]
+    }
+  ]
+}

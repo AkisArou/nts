@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/many-closures",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/many-closures/src/main.ts",
+      "signature": "6ae7d8d81ffebda659353459a6d453421bdc4b080aa0529ba8ad2ddc4ef59d05",
+      "keys": {
+        "c": "a7a53a88be5758f9b7050f666b1ee71b",
+        "jvm": "661c0fe57cefeeaeaef3148679998063",
+        "llvm": "0e571511aab6f7889d54f9b5ba292164"
+      },
+      "cases_sha256": "b8a2a59fa5d44b81ad568664b4f48bda1aaccebdf1caec563cba662e6a17576c",
+      "driver_sha256": "b635d54db2531d768146f5c64a2be73ad678b7b054173fd0cfc6dab315c3b84d",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.082277,
+        0.078514
+      ]
+    }
+  ]
+}

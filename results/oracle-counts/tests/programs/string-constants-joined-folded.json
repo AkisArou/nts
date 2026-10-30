@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/string-constants-joined-folded",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/string-constants-joined-folded/src/main.ts",
+      "signature": "ee15f6f72b4be22a3c8dce39e9475f545eb1fdb3f6885361a60f60ab0b7f0de1",
+      "keys": {
+        "c": "64f095a2c1d4f459237a0a120671f0b1",
+        "jvm": "aabb6455866e5ec0267a6f39b64d54d3",
+        "llvm": "71827630467d441245e2b2de6769f846"
+      },
+      "cases_sha256": "ba694da44ffbea4fefad34aa320fb74011c44343450c9bd552d0a325f96b82f5",
+      "driver_sha256": "838648b3bd2969b8750bfd20c07151ab6bb89d34eaad45800b8146d85bf6ba28",
+      "complete": true,
+      "count": 60,
+      "node_cpu_s": [
+        0.073562,
+        0.077375
+      ]
+    }
+  ]
+}

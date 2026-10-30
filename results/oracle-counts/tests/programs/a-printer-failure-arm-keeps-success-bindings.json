@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-printer-failure-arm-keeps-success-bindings",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-printer-failure-arm-keeps-success-bindings/src/main.ts",
+      "signature": "8ba9db45ff751d6df431af69b11272a6528e808ca7d0e605a236dc721e8e38fe",
+      "keys": {
+        "c": "c2ed3b01e953f9acbe661e878bb067ab",
+        "jvm": "498f656202fd31a64ed3306d726ac0ca",
+        "llvm": "3430dc62f25f7a1b91e552e7de4e7879"
+      },
+      "cases_sha256": "f8d73fa786c53ef75477a1b167f08258f88c269d11d63b229063518f677e9a61",
+      "driver_sha256": "a31ce1a2760600fe7d4e78c92bd62ac33c4d4da7732ab38e8774662047abae48",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076441,
+        0.076636
+      ]
+    }
+  ]
+}

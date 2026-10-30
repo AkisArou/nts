@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/mathops",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/mathops/src/main.ts",
+      "signature": "cf0ea3e915c71c7f046bbc3955066bf8bf2316061fdfc2fc141b75a09f2e24c4",
+      "keys": {
+        "c": "61674542d9be9a14f82659073326d73b",
+        "jvm": "d374499fdfb6b4d3e81fa75486dac0a9",
+        "llvm": "ef85d21dbe3d5b79ee46a09d1d9cecd1"
+      },
+      "cases_sha256": "dbdfe395fa45da3c160341f4b2bf54d4cc08ebd17cabcfa4d0e0d2e1afd76c0e",
+      "driver_sha256": "df875dd3aa9906298bb4b9d395c540fc21bbe2909d0ea2a93d548c628b76d59b",
+      "populations": {
+        "clampIndex": {
+          "count": 58,
+          "cases_sha256": "baec00d8d7509ad868fb3ecc602159bfc1c526ca4341d33b8cac84f1189271d4"
+        },
+        "distance": {
+          "count": 58,
+          "cases_sha256": "6b526be2de95c4c94c6bf01ca05c334ba4a953f4ea9d277aadbbd8e87237c2fa"
+        },
+        "hyperbolic": {
+          "count": 29,
+          "cases_sha256": "3017deca93fdc65a68c49027555acb275f315b0ec213c5453fe1e18c7e4e08a0"
+        },
+        "narrowest": {
+          "count": 87,
+          "cases_sha256": "66e88c6af09fc6a75c92c4e10c3b721e02372e7e25044d54d69f73ede8776f91"
+        },
+        "root": {
+          "count": 29,
+          "cases_sha256": "d3c49f6a00e35ce8cc23d6be9a56e370bcc9e6da57fd3e7cb16fb450d12aa696"
+        },
+        "rounded": {
+          "count": 29,
+          "cases_sha256": "04cdd0cec6e5d98bc66ef0966680215c5b1f133336e33757903947ed7751e027"
+        },
+        "shard": {
+          "count": 29,
+          "cases_sha256": "3cc3decc815563a48d284a78a7abca40d16e7d9712e02f800d0f60dcfcd45daa"
+        },
+        "widest": {
+          "count": 87,
+          "cases_sha256": "9f55558c17150204b805ea124e119fe0ed0e23007d398a7b671c940784fc6a0d"
+        }
+      },
+      "complete": true,
+      "count": 406
+    }
+  ]
+}

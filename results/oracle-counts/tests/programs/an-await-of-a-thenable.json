@@ -1,0 +1,78 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-await-of-a-thenable",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-await-of-a-thenable/src/main.ts",
+      "signature": "629d2a0e0fdcbaacd8c7a4fbcaf88087c00af908d04ad10b5ff9fa1339814c24",
+      "keys": {
+        "c": "30e1c4b3f3e7eeea4cc182f5ff657485",
+        "jvm": "2823ba34ed430c1a4b8f2f20c642877c",
+        "llvm": "0be1020c936ba1809de6181b83e41673"
+      },
+      "cases_sha256": "8eac87c1dced240c598db9bb63a560b05a8c17d5241a2ee9465c0d14974c3c84",
+      "driver_sha256": "f04149bc07ebe25529f1583cf8a0df7283ec21645a9289f78b1ceef250d8478e",
+      "populations": {
+        "aPromise": {
+          "count": 29,
+          "cases_sha256": "43f1bb0db2f21dda44d4f22dfa677fd9e3be98932aee631b2712bce4e2466850"
+        },
+        "asItsBase": {
+          "count": 29,
+          "cases_sha256": "ff29e02ec54bdc35fc06cad639a10c45cedce38f44aa8aa0b608a2410fa857c8"
+        },
+        "aVoidThenable": {
+          "count": 29,
+          "cases_sha256": "6788fd60d46b68e3a22faeb4b19850f0df791d7525d8e841fe6b8acdcd29e2bf"
+        },
+        "firstCallWins": {
+          "count": 29,
+          "cases_sha256": "af179110c8f7b97015f5fc0dc105ffbc4be0af4c096d09ebc0c7725b12c7e150"
+        },
+        "late": {
+          "count": 29,
+          "cases_sha256": "9fd6f9250469c4cd2e3d99ebd57f830a45db9563c2aabfad10ae13ae1c3e0bea"
+        },
+        "lockedInByAThenable": {
+          "count": 29,
+          "cases_sha256": "53ef8ed3481207f1e168fbb1d82def49d58798f4cd480a4c24439a040d227b66"
+        },
+        "nested": {
+          "count": 29,
+          "cases_sha256": "266107c7415b9aae9bb367fc3ae6760f491be4597d5a658f417ee2a8fea90dbd"
+        },
+        "ordering": {
+          "count": 29,
+          "cases_sha256": "ab318461b674fab327e96d22e9cffbcb7c1d92ee24d8aec7c11e02ecf3167985"
+        },
+        "plain": {
+          "count": 29,
+          "cases_sha256": "6eb336a0765e29f488e992fe663e08080d2c64ca1fd2260885d88b2dfdea88f2"
+        },
+        "rejects": {
+          "count": 29,
+          "cases_sha256": "4a543920cd0d11772844e867703fa492036a6522f70fffdac39fcabab98928df"
+        },
+        "resolvedWith": {
+          "count": 29,
+          "cases_sha256": "1c6d4ef9f16a5b22732ca18dc7b2afeab2b796d1990c99fde883cd6a48183b91"
+        },
+        "resolves": {
+          "count": 29,
+          "cases_sha256": "654bb809f42e2816d10572fa0abb33c46fc783fc81b219be55d5fce2be651339"
+        },
+        "returned": {
+          "count": 29,
+          "cases_sha256": "e28eb89e11a5dc4a1720e5085e4704de1351c94f1ea0185d00f4d42fe14c6240"
+        },
+        "throwsInThen": {
+          "count": 29,
+          "cases_sha256": "4b0e55e39fade7d49d837c80a584f90f86e0e52b1421ecbc797d1b3ffc42ffb6"
+        }
+      },
+      "complete": true,
+      "count": 406
+    }
+  ]
+}

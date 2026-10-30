@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-misfit-dispatched-through-an-interface",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-misfit-dispatched-through-an-interface/src/main.ts",
+      "signature": "ab13b51258a6782db87d6c4b3ee91292d200dec00ffef390160c3b48a334a69c",
+      "keys": {
+        "c": "d65716cb6d998840f2e4df96fe86b4af",
+        "jvm": "a37520ef4dbe03776cc803a2ec02dbec",
+        "llvm": "0546b6354dbe187a75ab5472e18a19bd"
+      },
+      "cases_sha256": "e98682b0341a00dd84b716e5fb637b1edf2727cb994ab9cf2eb5aba6a2d42154",
+      "driver_sha256": "b2496f82db114f5800144e8d126fdfc81a9823ca3d7afd9e98bef64eef514d5a",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077866,
+        0.07605
+      ]
+    }
+  ]
+}

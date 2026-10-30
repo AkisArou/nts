@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/nullish",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/nullish/src/main.ts",
+      "signature": "b971147afd8557db26f2832a3d76e01560d05a4adbf58a00bf409bffbaee6f09",
+      "keys": {
+        "c": "1b8bbfd0a46f3eb3def88edf3aaabab3",
+        "jvm": "714b1b891ac535197651133ce8322a06",
+        "llvm": "70fd06d3f8f84e061a3fce65622634d6"
+      },
+      "cases_sha256": "e93b14266f67326bc3b113a2ae80be51001a11bec6a3d9079740225157adb2e3",
+      "driver_sha256": "66ecd7e6197b5b17cd1a69c388d11baf5ae2c1082eac74ff457372bd4af28aa8",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.078094,
+        0.072895
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-one-unit-string-compared-as-a-unit-read",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-one-unit-string-compared-as-a-unit-read/src/main.ts",
+      "signature": "ece6d2b60067bdc0ebc3c09a0ccfb73e5888d720ce4a78c67bbe71fbd44361dc",
+      "keys": {
+        "c": "5fd93798701d4f23de8e121aff054175",
+        "jvm": "12e53049b70522f1df05cfbc51ac16ea",
+        "llvm": "a6ab2909fce0e358afcea7efc05ff2ac"
+      },
+      "cases_sha256": "cc0ec1afe941859fb7d4be68b3809e8eb3f691a79c9f2d05c51f1fc6b4a3c2e6",
+      "driver_sha256": "cac4d2f39528eb441a7fc2bfbb260f5e93cf07b4b54cfbcaf8b9e505401ec084",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.077381,
+        0.075047
+      ]
+    }
+  ]
+}

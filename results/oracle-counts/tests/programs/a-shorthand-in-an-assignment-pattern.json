@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-shorthand-in-an-assignment-pattern",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-shorthand-in-an-assignment-pattern/src/main.ts",
+      "signature": "6d9cea84ea055a7e41ee743d891cf755240591b314a4fdc632bee345b515198f",
+      "keys": {
+        "c": "1ec8dd85c7cdfa604d99122bac7fc09b",
+        "jvm": "f7621439f6f10c8073d1a36e113b9be8",
+        "llvm": "bd24af2e5429a0b3fd4d102de589b7e4"
+      },
+      "cases_sha256": "61c993261b15334d69b7bded243235debd40dcb2547d62b15367b8e429634db6",
+      "driver_sha256": "f5fdc1be74a370cba11c1bb90a2090cf853ad1b636c4b610b6661897328a85da",
+      "complete": true,
+      "count": 235,
+      "node_cpu_s": [
+        0.082417,
+        0.081862
+      ]
+    }
+  ]
+}

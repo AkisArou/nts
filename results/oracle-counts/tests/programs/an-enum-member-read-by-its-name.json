@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-enum-member-read-by-its-name",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-enum-member-read-by-its-name/src/main.ts",
+      "signature": "400d8b92f99fe98f8d3b0f70df53a83163b3c62c60a4f6d6bb4c7650b9ca5376",
+      "keys": {
+        "c": "cb435834afaf153e6839401862bc095d",
+        "jvm": "ec69e4fde82dec5707d409bb4721ab55",
+        "llvm": "b2e7c12d52540d43f480280c2994377c"
+      },
+      "cases_sha256": "d4aeb812ad1ff5dd968ed57db24cf353a9ecb1d63a0903f20740ddf5de768aa6",
+      "driver_sha256": "2bc09a20ee316186fcaab587c3c6cd6b565f04144028dbe45079911011e20479",
+      "populations": {
+        "aConstEnumByDot": {
+          "count": 29,
+          "cases_sha256": "abec07983b5d89f64095600b46e3156bdd2d8e6d9ee4277670d0d0db8d1a3468"
+        },
+        "aConstEnumByName": {
+          "count": 29,
+          "cases_sha256": "57de0edb4da7be8160399c125af998aab3ec4d17f4348c3ba225ffcdea5baa8b"
+        },
+        "aPlainEnumByDot": {
+          "count": 29,
+          "cases_sha256": "40587d40a1fa633cc04a3246eaefc9a59bb5d2a873b7bd0f3680e5abd0eaad95"
+        },
+        "aPlainEnumByName": {
+          "count": 29,
+          "cases_sha256": "d7f6f17144c47af869eb50787c3d61d46e16cf6019b020c3becb2e46de2dd55b"
+        },
+        "aStringMemberByDot": {
+          "count": 29,
+          "cases_sha256": "4da524b7def28430a030d02e91072a9812ddcfd144d8339be711ed3a473c1bf8"
+        },
+        "aStringMemberByName": {
+          "count": 29,
+          "cases_sha256": "489e4c3b9b6aa5e52887371b469e41600c1fd33d11b815831daefbab8d8f75bf"
+        },
+        "theReverseMappingAtAComputedIndex": {
+          "count": 29,
+          "cases_sha256": "a5e9a9cb7856dd64b5a2e30d480e3e3574996dbd15a2dbf49f1ffa8e46800aa0"
+        },
+        "theReverseMappingAtAConstant": {
+          "count": 29,
+          "cases_sha256": "e9a1c9cda3adf80ef38029d625623eb430225686d1d0d3902ecc5091e0fbd849"
+        }
+      },
+      "complete": true,
+      "count": 232
+    }
+  ]
+}

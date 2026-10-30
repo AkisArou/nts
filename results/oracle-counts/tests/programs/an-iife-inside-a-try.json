@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-iife-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-iife-inside-a-try/src/main.ts",
+      "signature": "a45062e11e46f1f52223e755d5fc677905ac462645b89225ad67c1c3ebf5e605",
+      "keys": {
+        "c": "c350950c78cf4d051483d85b1b06b915",
+        "jvm": "be3e4043ecc005416d8159fc4fa00e6c",
+        "llvm": "482386769fdeeae97cb6b0555fac2d74"
+      },
+      "cases_sha256": "1d98b85da21c4fe335e6ed4ad04699e9305a7600170a68158194ab642397eeb2",
+      "driver_sha256": "e4d1d75e83a33f5ded9e007818c0095971819a47d5534fa22961db312eeb4213",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.081583,
+        0.078138
+      ]
+    }
+  ]
+}

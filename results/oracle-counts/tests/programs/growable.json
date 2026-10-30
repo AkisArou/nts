@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/growable",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/growable/src/main.ts",
+      "signature": "bc149251b384f49fda35337ca74fa2bd2194d041174a2c6b3ffb9bbc97837ca0",
+      "keys": {
+        "c": "44856b86ad4a03da1f2f0c033dbd8a4f",
+        "jvm": "47289578900ffba56ed7ab2ad1d708a1",
+        "llvm": "2f19f3168b7e82aa2351da7c69642134"
+      },
+      "cases_sha256": "590743de61d58b5a11b24b6a35551fa0420469c314eb03d4f218e7f1f0ae7022",
+      "driver_sha256": "f60d231c28cb5cb2701b5e0e5b5a70eb01aafb75242f95dc672c0c7aa21b5f0b",
+      "complete": true,
+      "count": 978,
+      "node_cpu_s": [
+        0.137672,
+        0.132724
+      ]
+    }
+  ]
+}

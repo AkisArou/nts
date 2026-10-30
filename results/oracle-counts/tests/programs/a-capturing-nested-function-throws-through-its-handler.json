@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-capturing-nested-function-throws-through-its-handler",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-capturing-nested-function-throws-through-its-handler/src/main.ts",
+      "signature": "8b1a15716309bf98eeff77b3c0ad7104f490bc719a2648409a483a6ddd75e52d",
+      "keys": {
+        "c": "3fea68ec9691b6c3b6fc9886e20490fa",
+        "jvm": "63540da46c0e8fe9722ceb1ffe394615",
+        "llvm": "65c5eabcaaab9e52df0290d44380b2c5"
+      },
+      "cases_sha256": "50c06e3cb496ac58943b86c84cf29c9ebb13e457df9636dc92be8eb3e19b3bc0",
+      "driver_sha256": "238d2ee95912e68fd9bd315da9a115f867010588dfb65511ca52528e3a27e9c0",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.082865,
+        0.081464
+      ]
+    }
+  ]
+}

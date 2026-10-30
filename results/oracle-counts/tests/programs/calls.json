@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/calls",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/calls/src/main.ts",
+      "signature": "122b30884366a2992cbb1d4a838e70e5531d478df1f75d84338506a233e7a91e",
+      "keys": {
+        "c": "19b972defc7f7e9b57d51d22aa55c6f1",
+        "jvm": "81246c90b62fc4702d0bd8756f587f39",
+        "llvm": "c921015e32efba2c1a3a90ce222b310f"
+      },
+      "cases_sha256": "125b8c8563d06473521ddb6b11ddaf2b86da512a7dc8045e08f6b555e1466da9",
+      "driver_sha256": "55115395d419df2c50eb522d32e617b59e92466948192923b03c961af43ca7d3",
+      "populations": {
+        "widen": {
+          "count": 29,
+          "cases_sha256": "125b8c8563d06473521ddb6b11ddaf2b86da512a7dc8045e08f6b555e1466da9"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

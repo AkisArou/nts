@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-empty-array-literal-in-an-optional-property",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-empty-array-literal-in-an-optional-property/src/main.ts",
+      "signature": "312c4b7e0fdd495a2496b81b4a20e887edc5287dcda89f19dc4cd054e1362442",
+      "keys": {
+        "c": "ca8bfe4f6d4d35e13ae36670db00b987",
+        "jvm": "1abd6dcb5ec53a102eedb057c3fc1824",
+        "llvm": "a5565cc2d989a34095e1f10d4928c934"
+      },
+      "cases_sha256": "80a8b4952467f9604991d88e076480cb8228bd93d41fb5cc6839e7bdf9b41f7c",
+      "driver_sha256": "68c2a5af561ecc8bdded64546c1356f0e34d14b536b6980fc9329375590632ad",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075096,
+        0.076699
+      ]
+    }
+  ]
+}

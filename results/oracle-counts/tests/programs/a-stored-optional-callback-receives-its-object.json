@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-stored-optional-callback-receives-its-object",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-stored-optional-callback-receives-its-object/src/main.ts",
+      "signature": "8032f91dbac4b494bc9ae4ee1ea3b139b7f3cae76aef3fc44b1d6aed598dba05",
+      "keys": {
+        "c": "8fa4c47228305f490c35ddbfd4dd7a6d",
+        "jvm": "90958758626ef21f6986d4097c995904",
+        "llvm": "2f2e8de54f8427bd6ff1d2b6a297e3e0"
+      },
+      "cases_sha256": "334db2f3a23faa5f2ab5cb32dbf9c27e14b4548ad4b5059759f58d0b3855ca5a",
+      "driver_sha256": "7e4338b0a06056a7a2ca5c19e43f937eb0ef438b67eab9fbcf070701bc5ef0c5",
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

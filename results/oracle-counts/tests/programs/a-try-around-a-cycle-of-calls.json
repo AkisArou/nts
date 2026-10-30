@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-try-around-a-cycle-of-calls",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-try-around-a-cycle-of-calls/src/main.ts",
+      "signature": "f6622cb208579d0e99eef43075f0268c6b1de208e1b2c6e7b9296184369c8f2d",
+      "keys": {
+        "c": "3a529e3c3834adfeecb0945351c1c316",
+        "jvm": "bc612fae991b32a03970749352c5bcf4",
+        "llvm": "0682bd14ef443b99476858ad52e7b5e9"
+      },
+      "cases_sha256": "5b114cac706d3e09cff8e0d73083b74d3e0c34ac5f5eff72628db4a718e212bd",
+      "driver_sha256": "eb80fd3e21b33eaa1c3709f35415bdc72f695a8b714ce5ae34040d0b1c30ec35",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075565,
+        0.077288
+      ]
+    }
+  ]
+}

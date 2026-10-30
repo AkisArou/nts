@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tuple-argument-keeps-undefined-when-erased",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tuple-argument-keeps-undefined-when-erased/src/main.ts",
+      "signature": "c62baba6ded10822a0b9a465606e7ef9fed448fe4e11959863b0bfef7245488e",
+      "keys": {
+        "c": "18305dcfd2f1b38c8ae451ab222ee7c4",
+        "jvm": "2130b37d4cf98855e4ede9698f2f0133",
+        "llvm": "5e73dc2eeb14348a97ac041984428133"
+      },
+      "cases_sha256": "c9bcbeda0fd14e0404cdb2e819fc3475e69928ff3bbde06a2af0bcfb4bb51c6b",
+      "driver_sha256": "42bd9f65cc913cfc30d61ac40b36b23a0e109b44fe6014b1d6cd458b54c305c0",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077352,
+        0.078971
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bound-function-evaluates-arguments-beyond-its-parameters",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bound-function-evaluates-arguments-beyond-its-parameters/src/main.ts",
+      "signature": "1f8087d8720ccba42a2e03ebd3de42bc962eb88d967b5959b5762eb4d11fca26",
+      "keys": {
+        "c": "62d21385b77e3495cb2717eef65a814e",
+        "jvm": "081537310f1bce86e31257fa011bc0e8",
+        "llvm": "e76386f2c88135c4359a29369f594f34"
+      },
+      "cases_sha256": "119e3c1a7ee40e6ea43c278585d23eab515387fc1d3c5a439191bd4aa574f498",
+      "driver_sha256": "af35e701c4e5e837466753aa3c03cf2183099519b80b109d10c992764b713ce1",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.070835,
+        0.07063
+      ]
+    }
+  ]
+}

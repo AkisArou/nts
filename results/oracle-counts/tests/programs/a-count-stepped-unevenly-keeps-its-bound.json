@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-count-stepped-unevenly-keeps-its-bound",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-count-stepped-unevenly-keeps-its-bound/src/main.ts",
+      "signature": "27928855c04ab333c4528cdee712bbd5bb7ae3ad9d25455c5a9b4de5a6471ca2",
+      "keys": {
+        "c": "db4e69e99f97e524fc6dc06593c4dfe4",
+        "jvm": "ed920eac982e40ba28a0f63070d75013",
+        "llvm": "4c9436f43b1fcfb221dbdfedc295090b"
+      },
+      "cases_sha256": "1fc5fdaddcec20cc8a13d079a3e3ae91aa12b77244dd42c9541f3fe9a08da6d4",
+      "driver_sha256": "61b28dda46b696f75259c4996682bbfeff59acda308e33dd81273d08d67b32c4",
+      "complete": true,
+      "count": 49,
+      "node_cpu_s": [
+        0.084342,
+        0.086728
+      ]
+    }
+  ]
+}

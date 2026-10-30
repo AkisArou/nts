@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-dropped-object-whose-callback-captures-it",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-dropped-object-whose-callback-captures-it/src/main.ts",
+      "signature": "403f4bca492621c34836947514f6bad2cd298ddaba327c6b7628bb8d38aa91bc",
+      "keys": {
+        "c": "959c25b8f0a825be37f9b38fb29b2d3d",
+        "jvm": "97bdde6389a8fa464a4ac7c9662dc197",
+        "llvm": "3637c9f29e4fe8a0237da0c14db7f842"
+      },
+      "cases_sha256": "02ffc3af99dda89f15229df82673b9af415d5c8d71bbfd61eb072f6659225bcc",
+      "driver_sha256": "4b621e330f75526d906d7b3d77a5fd3f3cb1d80893683235e66980014b728881",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.126743,
+        0.123299
+      ]
+    }
+  ]
+}

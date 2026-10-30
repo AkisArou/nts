@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/math-imul-multiplies-in-32-bits",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/math-imul-multiplies-in-32-bits/src/main.ts",
+      "signature": "4f6f5e1caae3163650997cc4eb2ff8995f6f3cb922bbcbed019c729f77533bbe",
+      "keys": {
+        "c": "fc93b8c17280b9424ab70841faef6218",
+        "jvm": "e34b951e24be24f8a27a8910d7297130",
+        "llvm": "4e664aaafe18ce9aac24c011144aecbf"
+      },
+      "cases_sha256": "c052e28e00b85de5caff6cc01ebaea3406cd1eecdf6a4c2d9e9c786765edfa4c",
+      "driver_sha256": "6a5a2b314f4d52de0033c985f9922722ecf75e8d6a1523799d8f2a09b212f6ea",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.072031,
+        0.073183
+      ]
+    }
+  ]
+}

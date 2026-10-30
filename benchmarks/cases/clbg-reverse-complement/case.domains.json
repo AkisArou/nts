@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "functions": {
+    "render": {
+      "n": {
+        "max": 1024,
+        "allowNaN": true,
+        "reason": "Larger generated FASTA inputs exhaust Node's heap under the oracle's 2 GiB address-space budget; retain the benchmark seed 1000, NaN, negatives and fractions."
+      }
+    },
+    "work": {
+      "n": {
+        "max": 1024,
+        "allowNaN": true,
+        "reason": "Larger generated FASTA inputs exhaust Node's heap under the oracle's 2 GiB address-space budget; retain the benchmark seed 1000, NaN, negatives and fractions."
+      }
+    }
+  }
+}

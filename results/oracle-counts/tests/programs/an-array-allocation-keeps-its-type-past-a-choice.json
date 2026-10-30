@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-allocation-keeps-its-type-past-a-choice",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-allocation-keeps-its-type-past-a-choice/src/main.ts",
+      "signature": "dcc7d040e3ae2681c18d765f977c813f8d56393300e27c4ce0ed58aac2a441ec",
+      "keys": {
+        "c": "259edcd9ff6c85489ba128bf4e224ebe",
+        "jvm": "608afecb0540aa875614b04f97dc8b85",
+        "llvm": "98773ed7410efa3d627e20b811dbc1c4"
+      },
+      "cases_sha256": "742bc3faf40f1342a5722912dcd5cf0001c400f176c3bf2d9d66e7626a665098",
+      "driver_sha256": "4365c44cc6976f5a925bd8f7fa15df1cd5c10e80f44382db1017338fd37105bd",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.102048,
+        0.101068
+      ]
+    }
+  ]
+}

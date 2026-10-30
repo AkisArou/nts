@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-refused-printer-keeps-unrelated-conversions",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-refused-printer-keeps-unrelated-conversions/src/main.ts",
+      "signature": "2d4d1b1f67a2ed0b4456dea1719564f774cc32813fd791a1d8f61b1cb4f544a7",
+      "keys": {
+        "c": "1254e1feafbb286a2b88c7d15b147d15",
+        "jvm": "26ec002796afe71b536ac876f7068f6a",
+        "llvm": "253c4ca3ca87dec647f5eb22741eeecd"
+      },
+      "cases_sha256": "1b4e779bdebe3aaeaa35744ef2264ec11fa43febda3f1f26c01b36281094ff99",
+      "driver_sha256": "a6b9ad4442ed43d8640cd462ecb9c854bb505f0477de90fca724fb15f9a8988d",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07661,
+        0.074038
+      ]
+    }
+  ]
+}

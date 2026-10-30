@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-remainder-of-two-integers-answered-as-a-number",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-remainder-of-two-integers-answered-as-a-number/src/main.ts",
+      "signature": "367557929ffe422d1baf02817d70ef8976648e4f29d4ca2798baa1b8f45cedae",
+      "keys": {
+        "c": "6682c1f5a4d1124740cc21eee1923e68",
+        "jvm": "fa2aaf84ba1bcd1e3a82681fd99831e0",
+        "llvm": "2f5a256f743626121ef6fb5e6de98fea"
+      },
+      "cases_sha256": "006648e2c5e426004f71960582294f96cddc21d79c3913c7f4e117f23164a9e9",
+      "driver_sha256": "66473715c8de3ccd87bf30128e9e87a209a4da67636ae9356396a08598b4c7d0",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.078874,
+        0.078832
+      ]
+    }
+  ]
+}

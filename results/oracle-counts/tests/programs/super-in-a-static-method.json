@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/super-in-a-static-method",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/super-in-a-static-method/src/main.ts",
+      "signature": "30ab8d05f96e3eb60de8591efdb3213f169d6317b86d3a5c984a51a409335111",
+      "keys": {
+        "c": "7a3b0ebbf84e6b12c4bc404fce23f3c3",
+        "jvm": "55323ddde91ca60fc958c9d908dd7e93",
+        "llvm": "7505f38b8490ee517c954c5c6c11f6ae"
+      },
+      "cases_sha256": "827e2a5b6eb68b0cc1891ffa185cb51d946b3ba9d2b3d6ccb9e2632eed019d33",
+      "driver_sha256": "6afa0ed9cec66775fb185ac7c200be4feff7d565c4f95ff16cd9405dde158c82",
+      "complete": true,
+      "count": 88,
+      "node_cpu_s": [
+        0.0751,
+        0.07251
+      ]
+    }
+  ]
+}

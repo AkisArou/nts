@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-intrinsic-helper-passed-as-a-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-intrinsic-helper-passed-as-a-function/src/main.ts",
+      "signature": "0926746a081c5871f2ad8dd9065430dba78d07491a02c4973035e4d3ddd64a58",
+      "keys": {
+        "c": "b6d62bdf42d17690fa9747e269156c98",
+        "jvm": "8aace7bbc563cf608d2d9d08006329da",
+        "llvm": "d0434197f85d0d0b50de577863b0ef6d"
+      },
+      "cases_sha256": "4c6b6caa11aaf4ff788bbe22afd3959dd54c5b8cdda3cb4495f152a5d8b08bf1",
+      "driver_sha256": "555137b0e5ad257692e036304ea7385a34c43350bffedf86e91db06c1fe552c0",
+      "complete": true,
+      "count": 155
+    }
+  ]
+}

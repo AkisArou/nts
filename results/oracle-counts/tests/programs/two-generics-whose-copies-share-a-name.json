@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-generics-whose-copies-share-a-name",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-generics-whose-copies-share-a-name/src/main.ts",
+      "signature": "98cef64308f9dd5de5101307fa82ab60a1c806ed7fece719e8073b24ff5abca6",
+      "keys": {
+        "c": "9ddc3e9909a2b9aaecf94c1d0dcf44a9",
+        "jvm": "7a2f9d0e42f58bd6e465919ea08b6c32",
+        "llvm": "9485e0bd30f15612e93227e86cf7ff19"
+      },
+      "cases_sha256": "7e8e6e183ebf79e604e191bea3ded81b603dcb68d31d7713f2a922c60804e7d7",
+      "driver_sha256": "046edf8517beb01218079b627d890a34647b9c7c5ba5a7bed92f5861542507ae",
+      "complete": true,
+      "count": 150,
+      "node_cpu_s": [
+        0.073882,
+        0.079398
+      ]
+    }
+  ]
+}

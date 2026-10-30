@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-re-overridden-covariant-method-through-its-root",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-re-overridden-covariant-method-through-its-root/src/main.ts",
+      "signature": "f1ec3c6eb186c05d124a198ec041806832cc3aba78f69eadf3bf1d731480168e",
+      "keys": {
+        "c": "ef99a45f3cba1b290d8b00da53f956a7",
+        "jvm": "da7937743a12c84e75dc1d25df78196c",
+        "llvm": "cfdb48dbbd1dbfd51171f80aa9e0e944"
+      },
+      "cases_sha256": "65c0074238b4211b7930a3a39512b6d0fdfe3b1383cb393709ae6cf27c07451e",
+      "driver_sha256": "babd307c13dfcdb40915799e5d9dbef08e1cf324e3ab487901944c0f3ca8758b",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074085,
+        0.075277
+      ]
+    }
+  ]
+}

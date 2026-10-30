@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/fluent-this",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/fluent-this/src/main.ts",
+      "signature": "fbd9af3e8ba3d43f2994c78085f2f28eaddd0cea4e1106c4ff6e2aa82e7e80bb",
+      "keys": {
+        "c": "889be00ba01f6d629a2a42165abdb55e",
+        "jvm": "34975a8fa0d232cfba4654560064de35",
+        "llvm": "468fae693f9899cbb30e9ec798ab680e"
+      },
+      "cases_sha256": "ecda446a6de969ca19ff55f50f2dd2fe01cba4f8182a62893c28a0e71a3a6620",
+      "driver_sha256": "3477c1b5c5335d2cba281f1316aa04d1948177cdcca14af8be6e74f586bb7d71",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075673,
+        0.078162
+      ]
+    }
+  ]
+}

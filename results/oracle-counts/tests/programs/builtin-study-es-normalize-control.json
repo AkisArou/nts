@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-normalize-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-normalize-control/src/main.ts",
+      "signature": "a6e652273dd65836014507376484dce4041e2c8fcb3ca1c40d7bae4bff8ed192",
+      "keys": {
+        "c": "7e5aa27cd93c2456f04623fab2c8ee3e",
+        "jvm": "362c0ee9b85313d073a8a549e5cc5ec2",
+        "llvm": "2be30fc23e410e3265fea7a2d81cc421"
+      },
+      "cases_sha256": "b75840680ab7864e3a5906223071a871dd38e9c0fcef3df6c6442e082e7630ae",
+      "driver_sha256": "1136143465ee791a1f44b14d1781ef913e625407ca0ddb6c2c12845a14bf4706",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

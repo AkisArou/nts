@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/shift-counts-outside-five-bits",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/shift-counts-outside-five-bits/src/main.ts",
+      "signature": "e658abfe74a89c3ed7b76752886ef193fbde4547a42d3a0d9be71f667857d904",
+      "keys": {
+        "c": "534181ec3c25eca322e908960c0d2701",
+        "jvm": "c56d6e45610feecaed1a70b34a378ae9",
+        "llvm": "20f1dbdc67b068b3ba3c93bbfe07f6f8"
+      },
+      "cases_sha256": "9f82925b7f80605f5653f140befd78c95fc8012ff405acbc5af90e00f7430456",
+      "driver_sha256": "7f3eed496eb5f2d4ef8faf52a2f955ba1511ee3550233477801fd980e54cb3f7",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.072311,
+        0.072065
+      ]
+    }
+  ]
+}

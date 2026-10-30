@@ -36,6 +36,7 @@ use std::fmt::Write as _;
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
+use check_report::{FailureKind, annotate, with_failure};
 use nts_codegen_common::Backend;
 use nts_core::hir::facts::Facts;
 use nts_core::hir::{self, HirType};
@@ -43,13 +44,16 @@ use nts_frontend_ts::Frontend;
 
 mod artifact_shadow;
 mod case_costs;
+pub mod check_report;
 mod domains;
 mod objects;
 mod oracle_coverage;
 mod oracle_exclusions;
 #[cfg(test)]
 mod oracle_protocol_tests;
+mod oracle_records;
 mod oracle_run;
+mod source_contracts;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
 ///
@@ -127,12 +131,6 @@ const MEMORY_MB: u64 = 2048;
 /// [`bounded_native`]) and bounds each allocation instead, at the size `--as`
 /// leaves one.
 const PROGRAM_MAPS_MB: u64 = 32;
-
-/// How many times the compiled program may end before the run gives up.
-///
-/// A handful is a program with a few assertions this pool falsifies. Hundreds is
-/// something else, and continuing to restart would take all day to say so.
-const REFUSALS: usize = 16;
 
 /// A compiled arm's child, bounded in both dimensions.
 ///
@@ -244,6 +242,19 @@ impl Scratch {
     fn holding(path: Utf8PathBuf) -> Self {
         Self { path }
     }
+
+    fn for_check() -> Result<Self> {
+        static CHECKS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+        let path = Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .map_err(|path| anyhow::anyhow!("temp dir is not utf-8: {}", path.display()))?
+            .join(format!(
+                "nts-check-{}-{}",
+                std::process::id(),
+                CHECKS.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+            ));
+        std::fs::create_dir_all(&path).with_context(|| format!("creating {path}"))?;
+        Ok(Self::holding(path))
+    }
 }
 
 impl Drop for Scratch {
@@ -262,8 +273,11 @@ impl Drop for Scratch {
 /// `double f(double)` and letting the linker sort it out reads a `bool` return
 /// as whatever eight bytes happen to be in the return register, which produced a
 /// page of disagreements that were entirely this harness's fault.
+#[derive(Clone)]
 struct Testable {
     name: String,
+    /// The published source name and the emitted ABI symbol can differ.
+    binding: Option<String>,
     returns: HirType,
     /// What a null result stands for (`Func::result_absent`): the driver prints
     /// `null` for a `string | null` export's null pointer, and `undefined`
@@ -275,6 +289,10 @@ struct Testable {
 }
 
 impl Testable {
+    fn binding(&self) -> &str {
+        self.binding.as_deref().unwrap_or(&self.name)
+    }
+
     fn tuples(&self) -> Vec<Vec<f64>> {
         self.input_pools.as_ref().map_or_else(
             || tuples(&self.params),
@@ -474,19 +492,28 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         testable,
         ..
     } = prepare_check(tsconfig, source, backend)?;
-    let coverage = oracle_coverage::resolve(&entry, backend, &testable)?;
+    let coverage = oracle_coverage::resolve(&entry, backend, &testable).map_err(|error| {
+        with_failure(
+            error,
+            FailureKind::OracleCoverage,
+            prepared.diagnostics.iter().map(Into::into).collect(),
+            oracle_coverage::root_and_source(&entry).map(|(_, source)| source),
+        )
+    })?;
     if testable.is_empty() {
-        return Ok(Report::default());
+        return Ok(Report {
+            refusals: prepared.diagnostics.iter().map(Into::into).collect(),
+            ..Report::default()
+        });
     }
 
-    let dir = Utf8PathBuf::from_path_buf(std::env::temp_dir())
-        .map_err(|path| anyhow::anyhow!("temp dir is not utf-8: {}", path.display()))?
-        .join(format!("nts-check-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).with_context(|| format!("creating {dir}"))?;
-    let dir = Scratch::holding(dir);
+    let dir = Scratch::for_check()?;
     let dir = &dir.path;
 
-    let mut refused = Vec::new();
+    let compiled = source_contracts::compiled(&testable, &prepared.program);
+    let (execution_indices, mut refused) = source_contracts::alignment(&testable, &compiled)?;
+    let unavailable = refused.len();
+    let mut runtime_refused = Vec::new();
     let mut aborts = Vec::new();
     // Cases the program did not finish in time. Counted rather than filed as
     // declines, because those are different facts; see `stopped_with`.
@@ -495,31 +522,60 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     // `render`, because a JVM program is a directory of classes driven by
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
-    let native = match backend {
-        Backend::Jvm => run_jvm(
-            dir,
-            &prepared.program,
-            &snapshot.sources,
-            &testable,
-            &mut refused,
-            &mut aborts,
-            &mut timeouts,
-        )?,
-        Backend::C | Backend::Llvm => run_native(
-            dir,
-            &prepared.program,
-            &snapshot.sources,
-            &testable,
-            &mut refused,
-            &mut aborts,
-            &mut timeouts,
-        )?,
+    let mut native = if compiled.is_empty() {
+        Run {
+            results: Vec::new(),
+            output: Vec::new(),
+            thrown: Vec::new(),
+        }
+    } else {
+        let execution = match backend {
+            Backend::Jvm => run_jvm(
+                dir,
+                &prepared.program,
+                &snapshot.sources,
+                &compiled,
+                &mut runtime_refused,
+                &mut aborts,
+                &mut timeouts,
+            ),
+            Backend::C | Backend::Llvm => run_native(
+                dir,
+                &prepared.program,
+                &snapshot.sources,
+                &compiled,
+                &mut runtime_refused,
+                &mut aborts,
+                &mut timeouts,
+            ),
+        };
+        execution.map_err(|error| annotate(error, FailureKind::Execution))?
     };
+    refused.extend(
+        runtime_refused
+            .into_iter()
+            .map(|index| execution_indices[index]),
+    );
+    for (index, _) in &mut native.thrown {
+        *index = execution_indices[*index];
+    }
+    refused.sort_unstable();
     let engine = case_costs::measure("oracle.total", || {
         run_node(dir, &entry, &testable, &snapshot.sources, &coverage)
-    })?;
+    })
+    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
-    let mut report = report(&native, &engine, &testable, &refused, &approximate);
+    let mut report = report(
+        &native,
+        &engine,
+        &testable,
+        &refused,
+        &approximate,
+        !compiled.is_empty(),
+    );
+    report.unavailable = unavailable;
+    report.node_received = engine.results.len();
+    report.refusals = prepared.diagnostics.iter().map(Into::into).collect();
     report.aborts = aborts;
     report.timeouts = timeouts;
     // A timed-out case still has to leave a gap on this side so the node side
@@ -539,7 +595,6 @@ struct PreparedCheck {
     prepared: hir::Prepared,
     entry: Utf8PathBuf,
     testable: Vec<Testable>,
-    input_domain: Option<domains::RecordedDomain>,
 }
 
 struct CasePopulation {
@@ -547,6 +602,7 @@ struct CasePopulation {
     testable: Vec<Testable>,
     exclusions: oracle_exclusions::Policy,
     input_domain: Option<domains::RecordedDomain>,
+    source_exports: Vec<String>,
 }
 
 fn prepare_check(
@@ -555,9 +611,9 @@ fn prepare_check(
     backend: Backend,
 ) -> Result<PreparedCheck> {
     let provider = match backend {
-        Backend::Jvm => {
-            nts_codegen_common::provider::host_gc("jvm", counting()).map_err(anyhow::Error::msg)?
-        }
+        Backend::Jvm => nts_codegen_common::provider::host_gc("jvm", counting())
+            .map_err(anyhow::Error::msg)
+            .map_err(|error| annotate(error, FailureKind::Preparation))?,
         Backend::C | Backend::Llvm => {
             if counting() {
                 hir::Memory::ReferenceCounting
@@ -566,17 +622,9 @@ fn prepare_check(
             }
         }
     };
-    let snapshot = case_costs::measure("capture", || source.snapshot(tsconfig))?;
-    if snapshot.has_errors() {
-        for diagnostic in &snapshot.diagnostics {
-            eprintln!(
-                "{}",
-                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
-            );
-        }
-        bail!("the program does not typecheck");
-    }
-
+    let snapshot = capture(tsconfig, source)?;
+    let population =
+        case_population(&snapshot).map_err(|error| annotate(error, FailureKind::SourcePlan))?;
     // Reference counting compiles the program *and* the runtime for it. Both
     // halves matter and they have to agree: the provider decides what the
     // compiler emits, not only what the runtime does with it, so selecting one
@@ -591,7 +639,12 @@ fn prepare_check(
         raw.into_prepared(&hir::PreparationOptions::from(&options))
     }) {
         Ok(prepared) => prepared,
-        Err(unprepared) => bail!("{}", unprepared.render(&snapshot.sources)),
+        Err(unprepared) => {
+            return Err(annotate(
+                anyhow::anyhow!(unprepared.render(&snapshot.sources)),
+                FailureKind::Preparation,
+            ));
+        }
     };
     let mismatches =
         nts_codegen_common::provider::host_gc_diagnostics(&prepared.program, backend.name());
@@ -602,10 +655,13 @@ fn prepare_check(
                 nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
             );
         }
-        bail!(
-            "{} HostGc preparation declined counting markers",
-            backend.name()
-        );
+        return Err(check_report::declined(
+            format!(
+                "{} HostGc preparation declined counting markers",
+                backend.name()
+            ),
+            &mismatches,
+        ));
     }
     for diagnostic in &prepared.diagnostics {
         eprintln!(
@@ -614,13 +670,12 @@ fn prepare_check(
         );
     }
 
-    let selection = case_costs::span("select_exports");
     let CasePopulation {
         entry,
         testable,
         exclusions,
-        input_domain,
-    } = case_population(&snapshot, &prepared.program)?;
+        ..
+    } = population;
     let excluded = testable
         .iter()
         .map(|one| {
@@ -639,39 +694,68 @@ fn prepare_check(
         );
     }
 
-    drop(selection);
     case_costs::event(serde_json::json!({"event":"population", "functions":testable.len()}));
     Ok(PreparedCheck {
         snapshot,
         prepared,
         entry,
         testable,
-        input_domain,
     })
 }
 
-/// Capture the actual backend population and its Node driver without executing
-/// either arm. Differential tooling uses this to record reproducible coverage.
-/// The plan shares capture, preparation, selection and case generation with
-/// [`check`]; it is not a second model of the hostile pool.
+fn capture(
+    tsconfig: &Utf8Path,
+    source: &mut Frontend,
+) -> Result<nts_semantic_schema::SemanticSnapshot> {
+    let snapshot = case_costs::measure("capture", || source.snapshot(tsconfig))
+        .map_err(|error| annotate(error.into(), FailureKind::Capture))?;
+    if snapshot.has_errors() {
+        for diagnostic in &snapshot.diagnostics {
+            eprintln!(
+                "{}",
+                nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic)
+            );
+        }
+        return Err(with_failure(
+            anyhow::anyhow!("the program does not typecheck"),
+            FailureKind::Typecheck,
+            snapshot
+                .diagnostics
+                .iter()
+                .map(|diagnostic| {
+                    check_report::Refusal::at(diagnostic, check_report::RefusalStage::Typecheck)
+                })
+                .collect(),
+            None,
+        ));
+    }
+
+    Ok(snapshot)
+}
+
+/// Capture the source population and its Node driver without lowering bodies.
+/// The checker signatures, selection and case generation are shared with
+/// [`check`]; backend refusals cannot change which Node calls are measured.
 ///
 /// # Errors
 ///
-/// Returns the same capture, preparation and selection errors as [`check`].
+/// Returns capture and source-contract errors, independently of body refusals.
 pub fn oracle_plan(
     tsconfig: &Utf8Path,
     source: &mut Frontend,
     backend: Backend,
 ) -> Result<serde_json::Value> {
-    let checked = prepare_check(tsconfig, source, backend)?;
+    let snapshot = capture(tsconfig, source)?;
+    let checked = case_population(&snapshot)?;
     let (cases, signature) = oracle_population(&checked.testable);
     let key = oracle_case_key(backend, &cases, &signature)?;
     let absolute = checked.entry.canonicalize_utf8()?;
-    let mut plan = serde_json::json!({"version":1,"backend":backend.name(),
+    let mut plan = serde_json::json!({"version":2,"backend":backend.name(),
         "source":corpus_source(&absolute),"source_digest":oracle_coverage::source_digest(&absolute)?,
         "entry":absolute,"seed":null,
         "generator_version":1,"generator_digest":oracle_generator_digest(),
         "case_key":key,"case_count":cases.len(),"cases":cases,"signature":signature,
+        "source_exports":checked.source_exports,
         "driver":driver(&format!("file://{absolute}"), &checked.testable, Engine::Node),
         "resolver":RESOLVE_TS});
     if let Some(domain) = checked.input_domain {
@@ -738,10 +822,7 @@ fn pool_options(backend: Backend, provider: hir::Memory) -> hir::Options<'static
     }
 }
 
-fn case_population(
-    snapshot: &nts_semantic_schema::SemanticSnapshot,
-    program: &hir::Program,
-) -> Result<CasePopulation> {
+fn case_population(snapshot: &nts_semantic_schema::SemanticSnapshot) -> Result<CasePopulation> {
     let entry = entry_module(snapshot)?;
     let importable = exports_of(snapshot, &entry);
     // A module that exports `then` *is a thenable*. `await import(m)` sees the
@@ -762,40 +843,22 @@ fn case_population(
     }
     let exclusions = oracle_exclusions::for_entry(&entry)?;
     let domains = domains::Domains::load(&entry, snapshot)?;
-    let testable: Vec<Testable> = program
-        .funcs
-        .iter()
-        .filter(|func| func.exported)
-        // Exported by the *entry* module, not merely by some module. `exported`
-        // marks a root of the whole program, and node imports one file: a
-        // function another module exports is a root here and `undefined` there,
-        // so driving it threw `m.f is not a function` and the run died before
-        // it compared anything. `tests/programs/nested` had never been checked.
-        .filter(|func| importable.contains(func.name.as_str()))
-        .filter(|func| {
-            drivable(&func.return_type) && func.params.iter().all(|param| drivable(&param.ty))
-        })
-        .map(|func| {
-            Ok(Testable {
-                name: func.name.clone(),
-                excluded_tuples: exclusions.tuples_for(&func.name),
-                input_pools: domains.pools_for(func)?,
-                returns: func.return_type.clone(),
-                result_absent: func.result_absent,
-                params: func
-                    .params
-                    .iter()
-                    .map(|param| (param.ty.clone(), param.known))
-                    .collect(),
-            })
-        })
-        .collect::<Result<_>>()?;
+    let mut testable = Vec::new();
+    let mut expected = std::collections::BTreeSet::new();
+    for contract in source_contracts::exported(snapshot, &entry)? {
+        if let Some(case) = source_contracts::cases(snapshot, &contract, &domains, &exclusions)? {
+            expected.insert(contract.name);
+            testable.push(case);
+        }
+    }
+    source_contracts::validate(&expected, &testable)?;
 
     Ok(CasePopulation {
         entry,
         testable,
         exclusions,
         input_domain: domains.recorded(),
+        source_exports: expected.into_iter().collect(),
     })
 }
 
@@ -1060,6 +1123,7 @@ mod workload_exclusion_guards {
             .into_iter()
             .map(|name| Testable {
                 name: name.to_owned(),
+                binding: None,
                 returns: HirType::NUMBER,
                 result_absent: nts_core::hir::Absent::Impossible,
                 params: vec![(HirType::NUMBER, Facts::TOP)],
@@ -1336,7 +1400,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             // TypeScript function called `round` is `round_` in the object file.
             // Declaring it here by its TypeScript name would either not link or,
             // worse, link against `<math.h>`.
-            nts_codegen_c::c_identifier(&one.name),
+            nts_codegen_c::c_identifier(one.binding()),
             if params.is_empty() {
                 "void".to_owned()
             } else {
@@ -1389,7 +1453,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             let (built, args, given_back) = arguments(one, &tuple);
             let call = format!(
                 "{}({})",
-                nts_codegen_c::c_identifier(&one.name),
+                nts_codegen_c::c_identifier(one.binding()),
                 args.join(", ")
             );
             // A returned reference is the caller's, and this driver is the
@@ -1883,10 +1947,13 @@ fn render(
                     nts_diagnostics::diagnostic_line(sources, diagnostic)
                 );
             }
-            bail!(
-                "the LLVM backend declined {} function(s)",
-                rendered.diagnostics.len()
-            );
+            return Err(check_report::declined(
+                format!(
+                    "the LLVM backend declined {} function(s)",
+                    rendered.diagnostics.len()
+                ),
+                &rendered.diagnostics,
+            ));
         }
         let path = dir.join("program.ll");
         std::fs::write(&path, &rendered.text)?;
@@ -1918,6 +1985,28 @@ fn render(
         std::fs::write(&path, emitted.writer.text())?;
         path
     })
+}
+
+fn require_emitted(
+    diagnostics: &[nts_diagnostics::Diagnostic],
+    sources: &[nts_diagnostics::SourceFile],
+) -> Result<()> {
+    for diagnostic in diagnostics {
+        eprintln!(
+            "  not emitted: {}",
+            nts_diagnostics::diagnostic_line(sources, diagnostic)
+        );
+    }
+    if diagnostics.is_empty() {
+        return Ok(());
+    }
+    Err(check_report::declined(
+        format!(
+            "the backend declined {} function(s), listed above; nothing can be checked until they are removed or supported",
+            diagnostics.len()
+        ),
+        diagnostics,
+    ))
 }
 
 fn run_native(
@@ -1956,24 +2045,7 @@ fn run_native(
     // driver below still calls it -- so the run died at the linker with an
     // undefined reference and no hint of which construct was behind it. The
     // lowering's refusals were printed all along; these were not.
-    for diagnostic in &emitted.diagnostics {
-        eprintln!(
-            "  not emitted: {}",
-            nts_diagnostics::diagnostic_line(sources, diagnostic)
-        );
-    }
-    if !emitted.diagnostics.is_empty() {
-        // Stop here rather than at the linker. The driver calls every function
-        // the *lowering* produced, and one the backend then declined to write
-        // is an undefined reference -- which reports a symbol name and nothing
-        // about the construct, and takes the whole run down with it however
-        // many other functions were fine.
-        bail!(
-            "the backend declined {} function(s), listed above; nothing can be \
-             checked until they are removed or supported",
-            emitted.diagnostics.len()
-        );
-    }
+    require_emitted(&emitted.diagnostics, sources)?;
     let generated = render(dir, program, backend, &emitted, sources)?;
     // The runtime, plus the Unicode tables when this program converts case.
     // Every `.c` among them goes on the command line below, so a helper that
@@ -2064,7 +2136,10 @@ fn run_native(
             .context("running clang")
     })?;
     if !build.status.success() {
-        bail!("clang: {}", String::from_utf8_lossy(&build.stderr));
+        return Err(annotate(
+            anyhow::anyhow!("clang: {}", String::from_utf8_lossy(&build.stderr)),
+            FailureKind::NativeBuild,
+        ));
     }
 
     // Restarted past whatever ends it. A case can trap -- an out-of-range index
@@ -2143,7 +2218,9 @@ fn collect_restarting(
     let mut thrown: Vec<(usize, String)> = Vec::new();
     let mut from = 0;
     let mut restarts = 0;
-    while from < total && restarts <= REFUSALS {
+    // Every restart advances `from` by at least one. The finite case list
+    // bounds the work; a fixed restart cap would silently abandon its tail.
+    while from < total {
         // One file per spawn, in this run's own directory: two lanes run at
         // once, and two writers appending to one file interleave into a
         // plausible-looking result set. **The spawner truncates, the harness
@@ -2277,24 +2354,7 @@ fn run_jvm(
     timeouts: &mut usize,
 ) -> Result<Run> {
     let emitted = case_costs::measure("jvm.emit", || nts_codegen_jvm::emit(program));
-    for diagnostic in &emitted.diagnostics {
-        eprintln!(
-            "  not emitted: {}",
-            nts_diagnostics::diagnostic_line(sources, diagnostic)
-        );
-    }
-    if !emitted.diagnostics.is_empty() {
-        // The same rule the C arm keeps: stop here rather than at the point of
-        // use. A method the backend declined is *absent*, and the harness
-        // reflects for it by name -- so the failure would arrive as a
-        // `NoSuchMethodException` naming a method and nothing about the
-        // construct behind it.
-        bail!(
-            "the backend declined {} function(s), listed above; nothing can be \
-             checked until they are removed or supported",
-            emitted.diagnostics.len()
-        );
-    }
+    require_emitted(&emitted.diagnostics, sources)?;
     let jar = case_costs::measure("jvm.toolchain", || write_jvm_artifacts(dir, &emitted))?;
 
     // The cases, as data. Generating and compiling a driver per case set would
@@ -2346,7 +2406,7 @@ fn run_jvm(
         let _ = write!(
             cases,
             "nts-check v2 {} {} {at} {returns} {} {}",
-            nts_codegen_jvm::body::method_name(&one.name),
+            nts_codegen_jvm::body::method_name(one.binding()),
             one.name,
             if one.result_absent == nts_core::hir::Absent::Null {
                 "null"
@@ -2837,6 +2897,12 @@ pub struct Report {
     /// Cases the compiled program declined to answer -- an index its `!`
     /// promised was in range and was not, most often.
     pub refused: usize,
+    /// Cases with no available compiled binding, included in `refused`.
+    pub unavailable: usize,
+    /// Delivered Node result rows from the complete shared source population.
+    pub node_received: usize,
+    /// Compiler refusals with stable identifiers, separate from rendered prose.
+    pub refusals: Vec<check_report::Refusal>,
     /// Cases that differed in the last bits of a result the specification
     /// leaves approximate, and were accepted for that reason. Reported rather
     /// than swallowed: a tolerance nobody can see is a tolerance nobody can
@@ -2878,12 +2944,28 @@ impl Report {
     }
 }
 
+fn output_disagreements(ours: &[String], theirs: &[String]) -> Vec<(String, String)> {
+    let mut disagreements = Vec::new();
+    for at in 0..ours.len().max(theirs.len()) {
+        let mine = ours.get(at).map_or("(no line)", String::as_str);
+        let node = theirs.get(at).map_or("(no line)", String::as_str);
+        if mine != node {
+            disagreements.push((
+                format!("output {at}: {mine}"),
+                format!("output {at}: {node}"),
+            ));
+        }
+    }
+    disagreements
+}
+
 fn report(
     native_run: &Run,
     engine_run: &Run,
     testable: &[Testable],
     refused: &[usize],
     approximate: &std::collections::HashSet<String>,
+    compare_output: bool,
 ) -> Report {
     // The native side skipped the cases it refused, so the node side's lines
     // are dropped at the same indices to line the two up again. Dropping rather
@@ -2959,22 +3041,17 @@ fn report(
     // The program's own output, compared on its own now that results have a
     // channel of theirs: line for line, and a line one side printed and the
     // other did not is a disagreement, not a trailing detail.
-    let (ours, theirs) = (&native_run.output, &engine_run.output);
-    for at in 0..ours.len().max(theirs.len()) {
-        let mine = ours.get(at).map_or("(no line)", String::as_str);
-        let node = theirs.get(at).map_or("(no line)", String::as_str);
-        if mine != node {
-            disagreements.push((
-                format!("output {at}: {mine}"),
-                format!("output {at}: {node}"),
-            ));
-        }
+    if compare_output {
+        disagreements.extend(output_disagreements(&native_run.output, &engine_run.output));
     }
     Report {
         functions: testable.len(),
         checked: checked + answered_where_we_threw,
         expected: results.len(),
         refused: refused.len() - answered_where_we_threw,
+        unavailable: 0,
+        node_received: engine_run.results.len(),
+        refusals: Vec::new(),
         approximated,
         disagreements,
         aborts: Vec::new(),
@@ -3408,6 +3485,44 @@ mod result_channel {
         }
     }
 
+    #[test]
+    fn every_case_after_many_legitimate_declines_is_still_executed() {
+        for declines in [16, 24] {
+            let dir = scratch(&format!("many-declines-{declines}"));
+            let expected = (0..=declines)
+                .map(|at| format!("f {at} "))
+                .collect::<Vec<_>>();
+            let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+            let starts = std::cell::RefCell::new(Vec::new());
+            let run = collect_restarting(
+                &dir,
+                &expected,
+                &mut refused,
+                &mut aborts,
+                &mut timeouts,
+                |from, path| {
+                    starts.borrow_mut().push(from);
+                    let mut output = exited("");
+                    if from < declines {
+                        std::fs::write(path, "").expect("empty declined result");
+                        output.status = std::process::ExitStatus::from_raw(6);
+                        output.stderr = b"nts: refused: control assertion\n".to_vec();
+                    } else {
+                        std::fs::write(path, format!("f {from} 7\ndone 1\n"))
+                            .expect("final result");
+                    }
+                    Ok(output)
+                },
+            )
+            .expect("collect all cases");
+            assert_eq!(*starts.borrow(), (0..=declines).collect::<Vec<_>>());
+            assert_eq!(refused, (0..declines).collect::<Vec<_>>());
+            assert_eq!(run.results, [format!("f {declines} 7")]);
+            assert!(aborts.is_empty(), "{aborts:?}");
+            assert_eq!(timeouts, 0);
+        }
+    }
+
     const RESULTS: [&str; 2] = ["f 0 ", "f 1 "];
 
     fn expected() -> Vec<String> {
@@ -3555,6 +3670,7 @@ mod pairing {
     fn one() -> Vec<Testable> {
         vec![Testable {
             name: "f".to_owned(),
+            binding: None,
             returns: HirType::Void,
             result_absent: nts_core::hir::Absent::Impossible,
             params: Vec::new(),
@@ -3586,6 +3702,7 @@ mod pairing {
             &testable,
             &[],
             &HashSet::new(),
+            true,
         );
         assert_eq!(got.expected, 2);
         assert_eq!(got.expected, super::oracle_population(&testable).0.len());
@@ -3597,7 +3714,7 @@ mod pairing {
     fn a_throw_where_node_answered_is_a_disagreement() {
         let compiled = run(&[], &[(0, "nts: uncaught TypeError: x")]);
         let node = run(&["f 0 4"], &[]);
-        let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
+        let got = report(&compiled, &node, &one(), &[0], &HashSet::new(), true);
         assert_eq!(
             got.disagreements,
             vec![(
@@ -3614,7 +3731,7 @@ mod pairing {
     fn a_throw_where_node_threw_is_still_skipped() {
         let compiled = run(&[], &[(0, "nts: uncaught RangeError: r")]);
         let node = run(&["f 0 threw"], &[]);
-        let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
+        let got = report(&compiled, &node, &one(), &[0], &HashSet::new(), true);
         assert_eq!(
             got.disagreements,
             [] as [(std::string::String, std::string::String); 0]
@@ -3628,7 +3745,7 @@ mod pairing {
     fn a_refusal_where_node_answered_is_still_skipped() {
         let compiled = run(&[], &[]);
         let node = run(&["f 0 undefined"], &[]);
-        let got = report(&compiled, &node, &one(), &[0], &HashSet::new());
+        let got = report(&compiled, &node, &one(), &[0], &HashSet::new(), true);
         assert_eq!(
             got.disagreements,
             [] as [(std::string::String, std::string::String); 0]

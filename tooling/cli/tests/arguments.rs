@@ -144,6 +144,7 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
                 "check",
                 "tests/programs/a-cast-reads-a-field-another-layout-holds",
                 "--no-acquire",
+                "--json",
             ])
             .env("NTS_BACKEND", "jvm")
             .env("NTS_RC", "0");
@@ -155,13 +156,21 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         if counting {
             assert!(!output.status.success(), "{stdout}\n{stderr}");
-            assert!(stderr.contains("jvm declines --rc"), "{stdout}\n{stderr}");
+            let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(report["status"], "error");
+            assert_eq!(report["error"]["kind"], "preparation");
+            assert!(
+                report["error"]["message"]
+                    .as_str()
+                    .unwrap()
+                    .contains("jvm declines --rc")
+            );
         } else {
             assert!(output.status.success(), "{stdout}\n{stderr}");
-            assert!(
-                stdout.contains("checked 87 cases across 3 function(s)"),
-                "{stdout}\n{stderr}"
-            );
+            let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert_eq!(report["status"], "agrees");
+            assert_eq!(report["counts"]["compared"], 87);
+            assert_eq!(report["counts"]["functions"], 3);
         }
     }
 }
@@ -355,6 +364,7 @@ fn reader_groups() -> BTreeMap<&'static str, BTreeSet<String>> {
     group("shape", &["from_flags"]);
     group("listing", &["hir_preparation"]);
     group("build", &["build", "output_root"]);
+    group("check", &["check"]);
     group("bind-c", &["bind_c"]);
     group("bind-objc", &["bind_objc", "bind_objc_project"]);
     group("bind-gir", &["bind_gir"]);
@@ -403,7 +413,7 @@ fn declarations_match_the_options_the_legacy_command_readers_consume() {
         let groups: &[&str] = match command.name {
             "frontend" => &["project", "frontend"],
             "build" => &["project", "build", "roots", "provider"],
-            "check" => &["project", "counting"],
+            "check" => &["project", "counting", "check"],
             "types" | "refusals" | "layouts" | "modules" => &["project"],
             "bind-c" => &["bind-c"],
             "bind-objc" => &["bind-objc"],

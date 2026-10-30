@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bigint-at-module-scope",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bigint-at-module-scope/src/main.ts",
+      "signature": "e3fba401a88d8070a1d721df70f927283be1cc833163207886fc24d986360426",
+      "keys": {
+        "c": "47f6b51026f0a80776add990b43b5d0c",
+        "jvm": "9485e8f5afe0973cbc6f47866b2beb66",
+        "llvm": "72b3c107bb4f8e21379483673e199d66"
+      },
+      "cases_sha256": "2edc507ba7d1165c325c364b1a9506a4c781b8ce15127c02028b23d978a73b70",
+      "driver_sha256": "6e7a0bcb8e1859ac5864525b11cd56ed3fffc12ec09aed51395bc7c6228d9466",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.073614,
+        0.07395
+      ]
+    }
+  ]
+}

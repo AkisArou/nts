@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/map-entries-top-k",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/map-entries-top-k/case.ts",
+      "signature": "39686447083eb2c6eddb2d1a8413fc183be341da6d06a3ffc83823c5303436d5",
+      "keys": {
+        "c": "d9fa4751e66107e882fd9354d23da50a",
+        "jvm": "bfb30480c5d0dd6ffe5c794a1cd1c791",
+        "llvm": "ceb31e93a2040898fa5021fad54536d6"
+      },
+      "cases_sha256": "41a2cc61cafa670d5783077709f07b82fb5cd9eaa85d193cfa68c624410113ac",
+      "driver_sha256": "7a508f124d261f8975f8a4b55a3e6e37754a10d8a663cdeac8c5c41ac32bad03",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.081624,
+        0.08345
+      ]
+    }
+  ]
+}

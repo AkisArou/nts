@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/destructuring",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/destructuring/src/main.ts",
+      "signature": "aa44f98a7ba84922f622275711c6906152c87fb7fe9db081abd44acfebe6a9ab",
+      "keys": {
+        "c": "06121c8f88d8393448f49690ab36450b",
+        "jvm": "fcdad9556c9b5621b798984f0a26932e",
+        "llvm": "1844236bc35af5dbfe030565e4a070ff"
+      },
+      "cases_sha256": "69bc5df3707a63d3bda41d5999e36d65cfd2a5854f4c5f4666a2eeddad34f820",
+      "driver_sha256": "bcde8de03a55940f769fb6300f66844f94d070e6bb5fb81d5aeacc313eeb012a",
+      "complete": true,
+      "count": 754,
+      "node_cpu_s": [
+        0.103682,
+        0.107409
+      ]
+    }
+  ]
+}

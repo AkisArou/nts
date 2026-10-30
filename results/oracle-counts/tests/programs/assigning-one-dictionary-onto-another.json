@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/assigning-one-dictionary-onto-another",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/assigning-one-dictionary-onto-another/src/main.ts",
+      "signature": "acd2aed5af36cbee83ffd689c1dc77b98456935788fa16ad7309e6e85f88f687",
+      "keys": {
+        "c": "00e85d7a27bfd71bf2c85404dd0c2771",
+        "jvm": "1bfffc644eb80c703396d0dbdf5b8f03",
+        "llvm": "5f12605e5b6d17cb0eacb75010bb008b"
+      },
+      "cases_sha256": "6cae44d3e7949939328114f9243216d5e82454f3a6c6777386cae0228f9ac4a7",
+      "driver_sha256": "a7d2ca35a541577e9034f78d900cfb75715157d74de791d8f454a592cb0998f4",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079166,
+        0.074687
+      ]
+    }
+  ]
+}

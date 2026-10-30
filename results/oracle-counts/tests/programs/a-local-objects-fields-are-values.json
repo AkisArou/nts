@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-local-objects-fields-are-values",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-local-objects-fields-are-values/src/main.ts",
+      "signature": "9e4880ea94c86a6416255ab93d71de4b45db9326014d01475d4222f688493e72",
+      "keys": {
+        "c": "4a4ef756ced91cca5495ad8ddb06bbc6",
+        "jvm": "ce1133d831a0ad513dbf2be5cae7af2d",
+        "llvm": "7d94047a9b38e667b9c031bf5ec1feb0"
+      },
+      "cases_sha256": "544d3866ff090466f161be12fda01570cc21dff52e5db12e7908ac2190e43878",
+      "driver_sha256": "fe9c327dd1997e12f89ce78f1dcf22e091d89e75403523dcd972478d1898f87b",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.07859,
+        0.078195
+      ]
+    }
+  ]
+}

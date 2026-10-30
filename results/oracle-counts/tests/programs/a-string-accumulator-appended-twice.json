@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-accumulator-appended-twice",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-accumulator-appended-twice/src/main.ts",
+      "signature": "4495833a98e25ddeaf17fb5070d29d634cb759cb837a27f25ac394150651c184",
+      "keys": {
+        "c": "90749ff2e08a2b84cce898079463e0b6",
+        "jvm": "8a6d0972698e360804225f4b89962605",
+        "llvm": "a9516006539d9c29f4b0d05a7569248e"
+      },
+      "cases_sha256": "4a766f432460c1642afb337e97f3c24f294a6b98403ced152a8375e23adf27dd",
+      "driver_sha256": "4334150f65e74e132563e456498e43c650927043e257b3e12d52b6d345a3c460",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.07597,
+        0.074001
+      ]
+    }
+  ]
+}

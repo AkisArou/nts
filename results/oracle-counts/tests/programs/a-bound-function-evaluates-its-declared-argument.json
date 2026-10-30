@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bound-function-evaluates-its-declared-argument",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bound-function-evaluates-its-declared-argument/src/main.js",
+      "signature": "68f373209639c088340f196b8623901d402ac15a9b1571cf85f2b87a1d24dc8c",
+      "keys": {
+        "c": "78785f7c5119cd3f6f595aaee03758c8",
+        "jvm": "c531ab4a080684f46aa12e70d86cfd56",
+        "llvm": "32e5a61f31f403afabbf83117ec7e7e8"
+      },
+      "cases_sha256": "48b0bb0d1a223b2b50afc6c350cfc55eeb5856b4716ee4a8c65be99da4c3ad2d",
+      "driver_sha256": "748bd082a04dd002811399822a2b3591d0639231eae40bcee6a8fc40ed8fb0a8",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.015775,
+        0.014788
+      ]
+    }
+  ]
+}

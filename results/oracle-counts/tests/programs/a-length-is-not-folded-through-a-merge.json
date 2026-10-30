@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-length-is-not-folded-through-a-merge",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-length-is-not-folded-through-a-merge/src/main.ts",
+      "signature": "d310bdc84dfc121d9b965cda7144b15e3f8173287e9735ec8bb52aa6c67ab61d",
+      "keys": {
+        "c": "bbfd7d7a7efd18528235921abf0760f3",
+        "jvm": "5036f8825ad109f0a32a07cc4adfe747",
+        "llvm": "5c2dcbd57d00d57f7dd4e1cb52287433"
+      },
+      "cases_sha256": "6c96166486c25b5624b6d176d02b5de0938bd09dbc8c40b8766b33908719d44d",
+      "driver_sha256": "a882623722288d9b86d7d963ca52665ac632c123c9da754ed3b298e41922b6ab",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076608,
+        0.078258
+      ]
+    }
+  ]
+}

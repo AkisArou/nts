@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-push-takes-a-spread-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-push-takes-a-spread-array/src/main.ts",
+      "signature": "927eec21f3a7d23fa82b1b479eb2bbdb2fec1bf73f985434d8e635d0b98c1752",
+      "keys": {
+        "c": "dcc5bbc36bc66d1c7164972333043c06",
+        "jvm": "2e2a0cd7e63349997e688a5fa4d073aa",
+        "llvm": "05777e99f7e59abb486422898ed2b253"
+      },
+      "cases_sha256": "d4f40ece37f0e2d8af8973235d72c958d3b79b977bbd662f69c6eaef708dc46a",
+      "driver_sha256": "3e6ab41785999ce9a77f327f9bc52993b5f67f30670527a7fbed622c4f34dbbb",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075893,
+        0.078788
+      ]
+    }
+  ]
+}

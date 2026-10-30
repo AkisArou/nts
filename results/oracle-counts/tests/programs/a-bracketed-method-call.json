@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bracketed-method-call",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bracketed-method-call/src/main.ts",
+      "signature": "691630e0aba4d5ca8f56a4bc85fc63e42aeae0fd9fb9be81fc19191067232d6d",
+      "keys": {
+        "c": "31473b1b4e89e41a53cc5a73867c10f7",
+        "jvm": "71b0a298ba1cfdb70bdb03dd28857bbd",
+        "llvm": "931388fa80f82e2bbfea6047eb63e081"
+      },
+      "cases_sha256": "a8954ec2f5d51e3168d112123dc63371dbf0527890ee09d71cd3fda4df2140ae",
+      "driver_sha256": "bee0fa8bc076983d7238e0551ae8b7e0eefde17e21e28b7de852c9b232daa297",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.078663,
+        0.078084
+      ]
+    }
+  ]
+}

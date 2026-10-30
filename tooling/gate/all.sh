@@ -306,7 +306,7 @@ sweep() {
   # way the two can be talking about the same run.
   out=$(./tooling/sweep/run.sh 2>&1)
   status=$?
-  printf '%s\n' "$out" | grep -E "checked|agreed|disagree|not emitted" | sed 's/^/  /'
+  printf '%s\n' "$out" | sed 's/^/  /'
   return $status
 }
 
@@ -1034,6 +1034,9 @@ backend_examples() {
   # It is a *ceiling* rather than a floor because the right direction is down.
   # Deterministic across runs, checked twice on two backends before it was
   # written here.
+  # The source-plan audit adds thirteen partial subjects whose refused
+  # exports were previously omitted. The ten existing partial subjects keep
+  # every prior comparison; the measured combined ceiling is now twenty-three.
   ceiling=${4:-}
   # **Under `exact`, the examples allowed not to agree, each by name.** An
   # anonymous slack is what a ratcheting floor is, and it absorbs the next wrong
@@ -1042,6 +1045,11 @@ backend_examples() {
   # allowance absorbs only itself. When it agrees again the step says to remove
   # it rather than failing, since going red on a fix is the wrong direction.
   allowed=${5:-}
+  # Source-owned plans retain these deliberate lowering boundaries instead
+  # of reporting an empty compiled-body population. This allowance applies
+  # only to typed all-unavailable observations, never to wrong answers,
+  # aborts, backend failures or incomplete checks for the same names.
+  unavailable_allowed="array-from-unsupported calls dates-unsupported enum-reverse-map-unsupported generator-unsupported generic-classes-unsupported mathops-unsupported using-unsupported"
 
   # **A count from this glob is a fact about the working tree, not about a
   # commit.** `ls tests/programs/*/tsconfig.json` sees another session's *untracked*
@@ -1073,6 +1081,7 @@ backend_examples() {
   #   ok <name>                  agreed on every case it compared
   #   partial <name> TAB why     agreed, and the program *declined* some cases
   #   bare <name>                nothing to check
+  #   unavailable <name> TAB why measured Node calls, no compiled bindings
   #   no <name>                  disagreed, aborted, declined by the backend,
   #                              invalid HIR, or does not typecheck
   #   unmeasured <name> TAB why  anything else; the step fails outright
@@ -1089,12 +1098,10 @@ backend_examples() {
   # lines above:
   #
   # **`bare` is in neither `passed` nor `total`.** Nothing to drive, so `check`
-  # exits 0 without comparing an answer. Twelve do today: seven `*-unsupported`
-  # that exist to document a refusal, and `advanced`, `calls`, `classes`, `jsx`
-  # and `types`, which export only type predicates, generics and classes -- no
-  # scalar surface for the hostile pool. Adding `using-unsupported` and raising
-  # three floors by one failed all three on 2026-09-18: do the arithmetic before
-  # touching a floor.
+  # exits 0 without comparing an answer. Classes and type-only exports
+  # without a scalar surface stay here. A scalar export whose lowering is
+  # unavailable instead retains its measured Node population and is printed
+  # under the separate named boundary above.
   #
   # **`partial` passes and has a ceiling.** A decline is often the designed
   # answer (`x!` on `undefined` aborts here where node answers `undefined`), but
@@ -1129,10 +1136,16 @@ backend_examples() {
   partial=$(grep -c '^partial ' "$results" || true)
   bare=$(grep -c '^bare ' "$results" || true)
   unmeasured=$(grep -c '^unmeasured ' "$results" || true)
+  unavailable=$(grep -c '^unavailable ' "$results" || true)
+  unavailable_names=$(awk '/^unavailable /{printf " %s", $2}' "$results")
   total=$((passed + $(grep -c '^no ' "$results" || true)))
   behind=$(awk '/^no /{printf " %s", $2}' "$results")
   printf '  %s of %s examples agree with node %s\n' "$passed" "$total" "$said"
   [ "$bare" -gt 0 ] && printf '  %s compared nothing\n' "$bare"
+  if [ "$unavailable" -gt 0 ]; then
+    printf '  %s Node populations measured without compiled bindings:\n' "$unavailable"
+    awk -F'\t' '/^unavailable /{ sub(/^unavailable /, "", $1); printf "    %-40s %s\n", $1, $2 }' "$results"
+  fi
   if [ "$partial" -gt 0 ]; then
     printf '  %s compared only part of their cases:\n' "$partial"
     awk -F'\t' '/^partial /{ sub(/^partial /, "", $1); printf "    %-40s %s\n", $1, $2 }' \
@@ -1151,6 +1164,23 @@ backend_examples() {
     rm -f "$results"
     return 1
   fi
+  unexpected_unavailable=""
+  for name in $unavailable_names; do
+    case " $unavailable_allowed " in
+      *" $name "*) ;;
+      *) unexpected_unavailable="$unexpected_unavailable $name" ;;
+    esac
+  done
+  if [ -n "$unexpected_unavailable" ]; then
+    printf '  ^ unrecorded unavailable source bindings:%s\n' "$unexpected_unavailable" >&2
+    rm -f "$results"
+    return 1
+  fi
+  for name in $unavailable_allowed; do
+    if [ -f "tests/programs/$name/tsconfig.json" ] && ! grep -q "^unavailable $name[[:space:]]" "$results"; then
+      printf '  ^ %s no longer has an all-unavailable population: review its named boundary\n' "$name"
+    fi
+  done
   rm -f "$results"
   # The names, whenever there are any -- not only when the floor is breached.
   #
@@ -1286,7 +1316,7 @@ llvm_rc() { ( NTS_BACKEND=llvm NTS_RC=1; export NTS_BACKEND NTS_RC
   # 392 -> 393, no allowance, on 2026-10-07: `this-in-a-field-initializer`
   # agrees under counting since a kept parameter is released where it dies
   # (a2), so the counting floor equals its sibling's again.
-  backend_examples 393 "through the LLVM backend, counting" exact 10 ); }
+  backend_examples 393 "through the LLVM backend, counting" exact 23 ); }
 
 # The floor was 80 of 89 until six examples that *compare nothing* stopped being
 # counted as agreements -- `advanced`, `calls`, `classes`, `jsx`,
@@ -1345,7 +1375,7 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # 393 -> 663, 2026-10-21: the official LLVM step in landing gate
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/llvm.log.
-  backend_examples 676 "through the LLVM backend" exact 10 ); }
+  backend_examples 676 "through the LLVM backend" exact 23 ); }
 # The third backend, against the same oracle and with the same ratchet.
 #
 # No `jvm-rc` sibling: TypeScript objects live in the platform collector's
@@ -1618,7 +1648,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # concurrently.
   out=$(./tooling/sweep/run.sh "$PWD/target/sweep-jvm" 2>&1)
   status=$?
-  printf '%s\n' "$out" | grep -E "checked|agreed|disagree" | sed 's/^/  /'
+  printf '%s\n' "$out" | sed 's/^/  /'
   [ "$status" -eq 0 ] || return 1
   #
   # **308 -> 319, 2026-09-25**, from the same run as the two LLVM floors, and
@@ -1659,7 +1689,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # 622 -> 663, 2026-10-21: the official JVM step in landing gate
   # b535ed908510 measured 663 of 663, the same ten partials.
   # Evidence: ~/.cache/nts-scratch/jvm/floors-b535ed908/jvm.log.
-  backend_examples 676 "through the JVM backend" exact 10 ); }
+  backend_examples 676 "through the JVM backend" exact 23 ); }
 corpus() {
   node tooling/gate/corpus.ts "$root" core
 }

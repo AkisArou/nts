@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-cycle-late",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-cycle-late/src/main.ts",
+      "signature": "ed75ce19ca17288dd7fd6a788760d8bb5f0832bb378a52497153275c9e7280c7",
+      "keys": {
+        "c": "424b0945a0f0230c67bda5230de17b22",
+        "jvm": "81a8d56701613e758985a905e9551b94",
+        "llvm": "46f57176fbde99fb461b31d4a80c41c0"
+      },
+      "cases_sha256": "b3f9066018cec96cdbdb3540db20974a26af05d8a8d3db811c83262666741616",
+      "driver_sha256": "a404e458841ba0af422832447e1d5bb223072b8a0bd6fb5d87a620be4184724d",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.07284,
+        0.072266
+      ]
+    }
+  ]
+}

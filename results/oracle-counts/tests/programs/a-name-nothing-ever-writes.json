@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-name-nothing-ever-writes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-name-nothing-ever-writes/src/main.ts",
+      "signature": "11c176754ff069d80c51e30de0e48a18a3ed0979aa9b3717f946916d51fbf2ba",
+      "keys": {
+        "c": "4adfa22fbceb4f5feaa01166dbc8c498",
+        "jvm": "c8fc9eb3b8d1642581d969f0f60a7b14",
+        "llvm": "8997305424aa38c9bac327e8c54c9610"
+      },
+      "cases_sha256": "9b53f6c0550047540233dfd22f563c08019e4472d364e7c8319cdb8e487072e5",
+      "driver_sha256": "23c8173662c46804c12b87fe015003a19ff70fdd360ce85444e2a996a4977dcf",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.077094,
+        0.076907
+      ]
+    }
+  ]
+}

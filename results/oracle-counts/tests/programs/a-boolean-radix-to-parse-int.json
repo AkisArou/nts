@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-boolean-radix-to-parse-int",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-boolean-radix-to-parse-int/src/main.ts",
+      "signature": "c3d0c1819381bd1aba427e91d6825f4c49928416216e454cbf489460cb9d81c7",
+      "keys": {
+        "c": "7374f17fb7941cf0d04f272a0322c2e1",
+        "jvm": "411a2164b8801bf3cfe98494b264d432",
+        "llvm": "58827258d9563de19e03262350641fbc"
+      },
+      "cases_sha256": "da7f5b8a5753c886ae436db0f6b7a889283e18a5dbba58b1cc7ad54673152f75",
+      "driver_sha256": "2ca65751bb7497ff31ef224efd6b99d2d1524e7982d08733444002c6a88817b8",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.062873,
+        0.066259
+      ]
+    }
+  ]
+}

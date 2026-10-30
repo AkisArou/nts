@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-grown-in-place-is-found-by-its-new-text",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-grown-in-place-is-found-by-its-new-text/src/main.ts",
+      "signature": "d7bbc48cd2b049fec8d054a2f932747d41b821e50e59dfbe9a7e1bbf31ad17d7",
+      "keys": {
+        "c": "624aa2223c1bd0ad32567e5629adbd80",
+        "jvm": "5d444d1e15ae0c88ba1b6a397ccc0a7e",
+        "llvm": "2f35ee82b3cdac3aa1533c2dd3bbda78"
+      },
+      "cases_sha256": "2ad5b195602ebe7c748ce569d417f2a934b2191e40a33c5f4fa0b59be5434b1b",
+      "driver_sha256": "4a94fbd2d3ec1ce7e658c5898edd2d51388c200d0d43718df471786d71ea3301",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075782,
+        0.074202
+      ]
+    }
+  ]
+}

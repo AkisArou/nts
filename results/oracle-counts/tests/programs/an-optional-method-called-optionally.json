@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-method-called-optionally",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-method-called-optionally/src/main.ts",
+      "signature": "dc2e80b2c5aeceb9672dd0961007095beaa2d0fd71c56d05b23fe0156fe71511",
+      "keys": {
+        "c": "e335661f48439edf46a636aaa1f6791a",
+        "jvm": "774df2cac4785f796b994a7404465f0a",
+        "llvm": "4eff9c0f7f911c5f48a5ff141fb2607a"
+      },
+      "cases_sha256": "c116e1853358681aaca76cc0a14564e43f1a6061b36972773da49487f50e176c",
+      "driver_sha256": "517d7374a93829a412c2938f3319cf16b18f2ee6618dad5cde49fe63e6486d0c",
+      "complete": true,
+      "count": 406,
+      "node_cpu_s": [
+        0.095945,
+        0.098217
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-temporal-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-temporal-control/src/main.ts",
+      "signature": "5cba9ad1b275f33ca956e3db61e27899eea580f8c92e2e252a80d71a379fb2e2",
+      "keys": {
+        "c": "a90e8e12e71445089c818f6e0f8008d2",
+        "jvm": "dec5268c7299ef846a2f3a3bae8cbba0",
+        "llvm": "3b9565ffed0e7bf0174c307a0c933c9b"
+      },
+      "cases_sha256": "bce697efd2352626be38767b14b9b7d9d327f9b3e017af67662790a6dc2f1881",
+      "driver_sha256": "e08c84d8a5d2456683f4ca821cb24b52df6b93c3025ba5d452a991a0c672e073",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

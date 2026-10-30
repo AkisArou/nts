@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/pushing-onto-an-array-of-erased-elements",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/pushing-onto-an-array-of-erased-elements/src/main.ts",
+      "signature": "188e6cc2a7d425fbebf212a540302d34cc1456b029ac59fa273dc774c8b89a78",
+      "keys": {
+        "c": "2c161ec0151279d7dbff3b0d8e6b60ad",
+        "jvm": "0b52da763b1d6450ed6c6903eec4103c",
+        "llvm": "58e5f0c9f3913605af475225b7774dde"
+      },
+      "cases_sha256": "978b0769c5630f098477143274a15f3a8c2182eb446f10eb0683359d80bdfd0a",
+      "driver_sha256": "061f22b2617566446bde7efdac3d55e5f1cda394741d1576e6e8345171bd1c3a",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075538,
+        0.075429
+      ]
+    }
+  ]
+}

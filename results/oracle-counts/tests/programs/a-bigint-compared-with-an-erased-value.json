@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bigint-compared-with-an-erased-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bigint-compared-with-an-erased-value/src/main.ts",
+      "signature": "6cd690d0ce22c3af6d4fd6a8a08b805456ef3fb8ef13dc8e8d0db1f478078acc",
+      "keys": {
+        "c": "b621011e9f7191ada8bafcca39d4d774",
+        "jvm": "fad1fbcedade2c6e98910b5cf1e4c7dc",
+        "llvm": "737ca86109eee9754d59167c0d295ddf"
+      },
+      "cases_sha256": "cd6b86a748e09cd5da8119dafc5eccfbae9dc59b537b5032c501daf92741609c",
+      "driver_sha256": "358762b56f61791c06ba42ebb267a5f61d11a898c13a5e1df079d8e10d6ad7ab",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.073303,
+        0.075829
+      ]
+    }
+  ]
+}

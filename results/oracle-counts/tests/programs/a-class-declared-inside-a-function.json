@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-declared-inside-a-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-declared-inside-a-function/src/main.ts",
+      "signature": "466433d93b0683a0dce67a837254e85daf6ea992d04b9b78d7a88889956dcffe",
+      "keys": {
+        "c": "9f8df7c05112e139b32f075b515610fa",
+        "jvm": "886f72f56b4986a9ac9e17423b21dbe3",
+        "llvm": "675cfb3b2119c9091e6f6f7eeafca852"
+      },
+      "cases_sha256": "269fe4daef18bcb49c1e808b49d7b630ce9b17428997048a8664a7bf9f5747e3",
+      "driver_sha256": "696392aaf25854e78d706bc0d29873ceda9143bccf02bf42462ca474b1133d47",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074479,
+        0.082308
+      ]
+    }
+  ]
+}

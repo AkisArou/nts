@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-javascript-pattern-over-null",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-javascript-pattern-over-null/src/main.ts",
+      "signature": "c1c2ef606054b3c44477f62d13f89eaf2f689190d897ebd0dc6174689f095f8b",
+      "keys": {
+        "c": "3bb64a6b29d2b2f5fcd560f42597e05e",
+        "jvm": "51378297a4ec069a8371a5d3c7d8a503",
+        "llvm": "20f5388b03b574445c962e9981f4dac0"
+      },
+      "cases_sha256": "c8050b4afc9366de12314f2b09e87559228c6d7e0667da1613732079cc32d57d",
+      "driver_sha256": "af2cecd10f28b2626a0daea26ac0bd8371befdc338b3f6bfd49a9711eef5e4d0",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075606,
+        0.074721
+      ]
+    }
+  ]
+}

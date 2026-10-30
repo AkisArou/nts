@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/calls-a-region-could-serve",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/calls-a-region-could-serve/src/main.ts",
+      "signature": "4250dd0d410509fa695ffd66a4142cb762a749f6474ba16345fa090c75b84702",
+      "keys": {
+        "c": "77ccf5cc8c6e359cd706e6b1a5c67bf7",
+        "jvm": "96b68836280906b569e72ba2785d4ae2",
+        "llvm": "efe60bb41e6c0a597e64d9f8a2fda6a1"
+      },
+      "cases_sha256": "cf981d4f4b28dc7629e52e3e2def17430bd8de2dec0100ab3c8b148b5097baaa",
+      "driver_sha256": "a289d906164fa171b22554a97d9fb9dde0cea5546bb028521c4c3f543884c42f",
+      "complete": true,
+      "count": 435
+    }
+  ]
+}

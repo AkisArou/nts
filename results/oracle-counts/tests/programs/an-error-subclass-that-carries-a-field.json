@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-error-subclass-that-carries-a-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-error-subclass-that-carries-a-field/src/main.ts",
+      "signature": "678e5e9ca8c56e18fed85e7f122e6ae0fe1a8f7ea1ecd2898e8678d71eb20e7b",
+      "keys": {
+        "c": "ef259eb5cee19c153298ae5640fb74ce",
+        "jvm": "c07c659579893e3abad5680d2e382685",
+        "llvm": "608a41b8f3b283591cde1c3414743695"
+      },
+      "cases_sha256": "8e52fd7b0de8028b624bb6c27e432f61983d4dfc74e64ed8250baef4f5f9b3f2",
+      "driver_sha256": "6d377f3a83da903e85fe6f941a1f3ef0a883779e4db7cf554fc4c46838dcbe15",
+      "complete": true,
+      "count": 348,
+      "node_cpu_s": [
+        0.08483,
+        0.082314
+      ]
+    }
+  ]
+}

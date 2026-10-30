@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/async-finally",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/async-finally/src/main.ts",
+      "signature": "224ff80a5da3911008be71805451c3f66eab9d2ee63b9f57145c3a270601ebf8",
+      "keys": {
+        "c": "fc88d1965c813ec935de6de39069455b",
+        "jvm": "8991d549bf57085bd39d4c1ae645061f",
+        "llvm": "7b9a01555b493f9c40e4861c33dfffb5"
+      },
+      "cases_sha256": "51797596bb56fbe9f8653371a70afba3a452566a330d37b443b098cf64591272",
+      "driver_sha256": "4524df0f70444dd5b70ca9e21c8d5b59d49dd172ab629e9f82000bd50a4aadf8",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075652,
+        0.076574
+      ]
+    }
+  ]
+}

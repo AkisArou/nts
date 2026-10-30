@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/shared-names",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/shared-names/src/main.ts",
+      "signature": "a60b8740c97af97d3dbd971fb548f70b74c868e23455d37b5a171b5b8d378a55",
+      "keys": {
+        "c": "962e90dbc796e43291f4ddf47433f892",
+        "jvm": "29fceefa196c3370decdff19d0a208a4",
+        "llvm": "f3cd2c55554ee4693e743997201b1e4a"
+      },
+      "cases_sha256": "ea2fb493f9e25f8a2409d8a04e8229e33a011cdd09a0b2ee551bc6e8e0187da3",
+      "driver_sha256": "8130f0bc37d02ef22691ad69d7576371428a9792c65502d09d2676e9417a465f",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074072,
+        0.074977
+      ]
+    }
+  ]
+}

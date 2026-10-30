@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/promise-with-resolvers",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/promise-with-resolvers/src/main.ts",
+      "signature": "f1b0b0b41bd1c720a9039d06b7bcc273dd4e34a025e82392caa0f082cd62fcfc",
+      "keys": {
+        "c": "c38bb16cb87ec88c673e9e4d3627b842",
+        "jvm": "37669657bf2718ea54a3862cd2e02020",
+        "llvm": "9c819183485a1bb3b2ea5e21f1b31eb8"
+      },
+      "cases_sha256": "aa26e831ba65e0403065b5a987625c86efd5f4fa2f10e37ccf2ca4b6581fc177",
+      "driver_sha256": "de7de0ec1e0335bdf9e4bb07e72d477f30af7cf3b72101858711ff794c213207",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.079129,
+        0.079858
+      ]
+    }
+  ]
+}

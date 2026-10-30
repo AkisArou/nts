@@ -4,7 +4,7 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use anyhow::{Context, Result, ensure};
 use camino::Utf8Path;
-use nts_core::hir::{Func, HirType};
+use nts_core::hir::{HirType, facts::Facts};
 use nts_semantic_schema::{SemanticSnapshot, TypeId, TypeKind};
 use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Serialize};
@@ -192,31 +192,30 @@ impl Domains {
         })
     }
 
-    pub(super) fn pools_for(&self, function: &Func) -> Result<Option<Vec<Vec<f64>>>> {
-        let Some(parameters) = self.functions.get(&function.name) else {
+    pub(super) fn pools_for_parameters(
+        &self,
+        name: &str,
+        params: &[(String, HirType, Facts)],
+    ) -> Result<Option<Vec<Vec<f64>>>> {
+        let Some(parameters) = self.functions.get(name) else {
             return Ok(None);
         };
         for name in parameters.0.keys() {
             ensure!(
-                function
-                    .params
-                    .iter()
-                    .any(|parameter| &parameter.name == name),
-                "domain parameter {}.{name} has no lowered parameter",
-                function.name
+                params.iter().any(|parameter| &parameter.0 == name),
+                "domain parameter {name} has no source parameter"
             );
         }
-        function
-            .params
+        params
             .iter()
-            .map(|parameter| {
-                let pool = super::inputs(&parameter.ty, parameter.known);
-                let Some(domain) = parameters.0.get(&parameter.name) else {
+            .map(|(parameter, ty, known)| {
+                let pool = super::inputs(ty, *known);
+                let Some(domain) = parameters.0.get(parameter) else {
                     return Ok(pool);
                 };
                 domain
-                    .project(&pool, &parameter.ty)
-                    .with_context(|| format!("domain for {}.{}", function.name, parameter.name))
+                    .project(&pool, ty)
+                    .with_context(|| format!("domain for {name}.{parameter}"))
             })
             .collect::<Result<Vec<_>>>()
             .map(Some)

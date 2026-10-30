@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-through-a-face-too-many-classes-move",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-through-a-face-too-many-classes-move/src/main.ts",
+      "signature": "7bf7a7387956995cabc75d07db35401d42a5a63be197648466750b687ed71543",
+      "keys": {
+        "c": "267233b581bc5cceab2aa19f51645e2d",
+        "jvm": "6206d84bcad9629dfd208a6d79c62558",
+        "llvm": "b1f8e53cc5531fa923c0b0799c49b4c0"
+      },
+      "cases_sha256": "0f07655446008a4b04baa49470af5b7273015f52a860357644c8e31ad75f58d8",
+      "driver_sha256": "06ba6f2c2b53580624ccd7456d2ea0890b201445d3f1d0656fc0394022d39c9d",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.081188,
+        0.084725
+      ]
+    }
+  ]
+}

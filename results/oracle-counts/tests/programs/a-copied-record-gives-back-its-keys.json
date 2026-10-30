@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-copied-record-gives-back-its-keys",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-copied-record-gives-back-its-keys/src/main.ts",
+      "signature": "3bfe4e3fbb5813ed1d385f45b59f0c375d892900085b31849a185d6c3bf83914",
+      "keys": {
+        "c": "c0c55a5c2bbe43dff8083ea4321fd9fc",
+        "jvm": "5d4f12c9eb469afaf98e57a8df1740c7",
+        "llvm": "7a7bdf55b45a6267c9f08666c3fad760"
+      },
+      "cases_sha256": "fb8410d97d9e9437d0b95d07d72f106a34c512cf39a9cfb3b1d0dfc115909ec4",
+      "driver_sha256": "bed9439e76af17decac230f8d3e7e130f42f576777b6d7d9777a57a04b54f554",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074188,
+        0.075699
+      ]
+    }
+  ]
+}

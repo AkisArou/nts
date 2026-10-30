@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-callee-off-a-call-cycle-keeps-its-bound",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-callee-off-a-call-cycle-keeps-its-bound/src/main.ts",
+      "signature": "ac4946f537d60aa53713342609deaeefab03895436845c941285b6a2ce965755",
+      "keys": {
+        "c": "2a35312ef4f61dcab7a0d4579d04c424",
+        "jvm": "07c1588e5cf2e445b58a6b389478e621",
+        "llvm": "540a41d132cdcd251a43f19ddb60181f"
+      },
+      "cases_sha256": "bb5ff20555d1fd0395133d4a58e979cac5158041a300b88f598ba69302735666",
+      "driver_sha256": "75c2b54c411dac6e16dd57c11136e43510934d2295295cddd1930d1fb9013a0d",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.082598,
+        0.082821
+      ]
+    }
+  ]
+}

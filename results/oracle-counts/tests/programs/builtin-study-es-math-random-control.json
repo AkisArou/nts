@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-math-random-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-math-random-control/src/main.ts",
+      "signature": "b390aca6402ef060fd41ed07de095e468c1a289f92c686157055752ad43dc56f",
+      "keys": {
+        "c": "40c6d3f441ffeea194059cc7a2ce4885",
+        "jvm": "abf6a6b7045b7856610e8018e26145c6",
+        "llvm": "8590a998c1d30372987d073d2af7528f"
+      },
+      "cases_sha256": "3ba42b5222d2e9ebfe9cef615cafdc4be4db784535ee66b1d63b490cbb668f2c",
+      "driver_sha256": "525cb6178a688c6a261b996b7cfccf244cc4247ae6dda2ff6d616911220dbb8f",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-merged-optional-string-runs-its-uniform-default",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-merged-optional-string-runs-its-uniform-default/src/main.ts",
+      "signature": "a738699aa0ae23a83159d9ae5d6470235620afee294b9918c29c6fad4c41c2b7",
+      "keys": {
+        "c": "7ad986dbd855d7170ebf987125d13e72",
+        "jvm": "ffef495506d865567e5089f720c38680",
+        "llvm": "e8de54f6dd40ec7c134119529eb796e1"
+      },
+      "cases_sha256": "c7cbd1a9d6ab3687f2fe55c29eab34d0add7c7a15f32ea29d069cd2aee2c3857",
+      "driver_sha256": "2546201d7fc10be91cccdf675088de62c6b6b63fb9539b738a92d3880f199053",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07322,
+        0.074335
+      ]
+    }
+  ]
+}

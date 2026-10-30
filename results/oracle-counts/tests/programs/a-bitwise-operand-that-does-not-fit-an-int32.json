@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bitwise-operand-that-does-not-fit-an-int32",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bitwise-operand-that-does-not-fit-an-int32/src/main.ts",
+      "signature": "c3d4afef8c53cbaf2fc94efcca20a832156d1f5b77c9c2a4c721e94f448d7544",
+      "keys": {
+        "c": "85fa9b005f4030d548d826c39199803b",
+        "jvm": "f28cf50f1348a3763122f6987f17a7e8",
+        "llvm": "220975db0f1ccf39a53f1b02d6a18110"
+      },
+      "cases_sha256": "2b2915f18adbcc5028861b21ee9124a873c634f765eae4ef56a215411cdf2e6e",
+      "driver_sha256": "a17d29262ef0ee934ffb9db9f3e4118337fe64a23c8be01ed52bf2f4292210a0",
+      "complete": true,
+      "count": 89,
+      "node_cpu_s": [
+        0.079413,
+        0.072578
+      ]
+    }
+  ]
+}

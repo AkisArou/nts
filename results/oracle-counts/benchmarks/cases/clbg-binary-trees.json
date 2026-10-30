@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/clbg-binary-trees",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/clbg-binary-trees/case.ts",
+      "signature": "c918c2edca20c27f07e06f5c30e6222dac0c032f512add56f833ca5842600d0f",
+      "keys": {
+        "c": "783e680085d164bbb2d7693c7d9ce9b1",
+        "jvm": "d6189ec10db831ef03a985e091e269fd",
+        "llvm": "65b79e5648d33df9c461985e726801a9"
+      },
+      "cases_sha256": "d6b4e443f2d7e7e447b21217debca2279cae6d772c0a9ff1e3a0303587c2fb94",
+      "driver_sha256": "c185a329b90baec58abd40b8bc5d4d856fef5eb9b7d49e4b5586135cbd60afb4",
+      "input_domain": {
+        "identity": "88a49008c35ee1ef118b0f9ecd25b99a",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Bound exponential tree construction within the Node recorder's memory and CPU budgets while covering benchmark seed 12 and published depth 10.",
+                "max": 14,
+                "integer": false,
+                "allowNaN": true
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Bound exponential tree construction within the Node recorder's memory and CPU budgets while covering benchmark seed 12 and published depth 10.",
+                "max": 14,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 18,
+          "cases_sha256": "ed603544ff66bc3a804c88c6810c64959b577fcb2e79cc7865be6587343ba1c5"
+        },
+        "work": {
+          "count": 18,
+          "cases_sha256": "3f9f50abdca3ea0ba24ba9fc2f7d24402ece199b43522cfc70c25e1e7dc0e0fe"
+        }
+      },
+      "complete": true,
+      "count": 36
+    }
+  ]
+}

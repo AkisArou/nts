@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-subclass-on-the-stack-written-through-its-base",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-subclass-on-the-stack-written-through-its-base/src/main.ts",
+      "signature": "6a1122e59b2ed6a5da983497600a7ad7bb593d0efe290bff3aa410b1b47fdb4b",
+      "keys": {
+        "c": "0982d9f786960824b60d69b6eedb6a82",
+        "jvm": "1c4e691caa191a37ee1e771255f42c5c",
+        "llvm": "a4e0d4060377c411c955b03eba0a3b2c"
+      },
+      "cases_sha256": "8c6019f173cf7542bbd0bd9ddeb784dee18861f65c02efa667cc1d79d15e9280",
+      "driver_sha256": "973bcb549b9ce4172aa89c59c7d7b05295609b59ac77a28a8360c493ec12956d",
+      "complete": true,
+      "count": 31,
+      "node_cpu_s": [
+        0.076362,
+        0.075784
+      ]
+    }
+  ]
+}

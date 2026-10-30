@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-read-after-its-own-write",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-read-after-its-own-write/src/main.ts",
+      "signature": "47389ca5cfb6e6942c9d709e11773889d3009ca06b16413de0205daa4c9c3dbe",
+      "keys": {
+        "c": "0ce1f800e01e2fc647f5bee5af5f224f",
+        "jvm": "c81c6524df67906caed86af9fd0d15d7",
+        "llvm": "2a4fc9950dac240596c7519edfbae15c"
+      },
+      "cases_sha256": "f34cb6ca2e45ff34af7060d92ff501b72b2e863b6e4462f172482c6718c65f2b",
+      "driver_sha256": "277d384cc0cefbb889df9e89ccefb0fa953a9903abb6e46d75e3117f41745145",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.084957,
+        0.085858
+      ]
+    }
+  ]
+}

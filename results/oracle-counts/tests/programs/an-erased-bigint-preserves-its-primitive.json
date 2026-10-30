@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-erased-bigint-preserves-its-primitive",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-erased-bigint-preserves-its-primitive/src/main.ts",
+      "signature": "0d3dba52dae60ba7c2760d4482a17187324ddc5e75f2ac14b1c256269a2345f1",
+      "keys": {
+        "c": "89dc456e69910c767b70516dcfeda02a",
+        "jvm": "6aeb87428e5626ad32282ff5aa1b1cd3",
+        "llvm": "30e5840af5ee7c562e20cee3d5425004"
+      },
+      "cases_sha256": "98657ba03e7191df3eebc14c505fcae68c29145a35076c11703e3f52fbad1a2e",
+      "driver_sha256": "9cf698c22ab527ae0b4e4ffee5f18770bcc12a6f0bc4c704a885f1dee56447a4",
+      "complete": true,
+      "count": 522,
+      "node_cpu_s": [
+        0.098906,
+        0.098174
+      ]
+    }
+  ]
+}

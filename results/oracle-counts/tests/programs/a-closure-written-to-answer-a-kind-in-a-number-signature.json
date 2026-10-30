@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-written-to-answer-a-kind-in-a-number-signature",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-written-to-answer-a-kind-in-a-number-signature/src/main.ts",
+      "signature": "187c38ce22c3c7a5e4d88fd7d1ce1d1f489b6ba3d9fdd3a0393eb3057b411c3d",
+      "keys": {
+        "c": "eae3addcd3f282b64628ffb8c9b6673d",
+        "jvm": "3bb3728370d0cc730d84201e172f6761",
+        "llvm": "8fadc6a51a50a49e4c0f8cd17629b2e5"
+      },
+      "cases_sha256": "ba7d33b8be22cae0c5a3c7425a9af442d10499ba0573dd587e2ab1f6b3e531cc",
+      "driver_sha256": "174230648ea9835994d5fc62955d013d3c7a4b7e9df1bcb7185dd37a364c83d9",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.083682,
+        0.079077
+      ]
+    }
+  ]
+}

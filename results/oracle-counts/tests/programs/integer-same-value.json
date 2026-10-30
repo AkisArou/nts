@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/integer-same-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/integer-same-value/src/main.ts",
+      "signature": "7c0410bacd667270532423bf7a556f28faae1527897b8e1ab7dc1eaee3f58055",
+      "keys": {
+        "c": "934eb54789e012c8015187ea89e2a444",
+        "jvm": "c0bca03856b2963cf38611e205fafb63",
+        "llvm": "172705de0afd9a2aaca17409f9cc297c"
+      },
+      "cases_sha256": "9d1ccf621936b8b974224be7ea3d0ccf5f6e88ed53f686975415be51b12328a2",
+      "driver_sha256": "e51998382b060ff63fd50e5bb5ba32c946e9dbeb604eef659575596ae269b292",
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

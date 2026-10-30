@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-property-named-with-a-quote",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-property-named-with-a-quote/src/main.ts",
+      "signature": "420168cd22ac6a393c526e5c6ca7d8f5bdc4ac29485d474b15092f8306b36f33",
+      "keys": {
+        "c": "f029f3cad87f034404cee18d6b67ce54",
+        "jvm": "0891998505dd911c3938dd28ffbf5b81",
+        "llvm": "877e3ac89616096e48ca1fafc08c70bc"
+      },
+      "cases_sha256": "cc671b28e633491beb6e41df75dede6e8e519530bc0f65d913b6753591067084",
+      "driver_sha256": "2e9a95bfc9a85bfe0399afb3d9fe2808343265ae536997e7865925d22720c99c",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077319,
+        0.077869
+      ]
+    }
+  ]
+}

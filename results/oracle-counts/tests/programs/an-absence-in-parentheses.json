@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-absence-in-parentheses",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-absence-in-parentheses/src/main.ts",
+      "signature": "cb075da0ff0ec1302c76c4b044c173ff56db074f0e0191228ecdeec3707e2d72",
+      "keys": {
+        "c": "5f28ffe25a60700a9f9f7e96530883a4",
+        "jvm": "a961c9218a3983f93d12ec08dee584c2",
+        "llvm": "926772d4a3b78bc992530279755a0360"
+      },
+      "cases_sha256": "e0e705bbc3d4a67ebbadfc5e4ff8eab215b2f906788d5892aaefefa0308243c3",
+      "driver_sha256": "3952ff536ded903c38b7643cddcf2fa59bc8924f3c294fbac1d2b52f024aee2c",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076693,
+        0.07744
+      ]
+    }
+  ]
+}

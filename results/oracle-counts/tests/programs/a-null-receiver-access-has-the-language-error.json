@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-null-receiver-access-has-the-language-error",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-null-receiver-access-has-the-language-error/src/main.ts",
+      "signature": "6b8ab91785e0aefdd12ea5d86990aca1d2db98a3def94de6f9d3dd65b854da46",
+      "keys": {
+        "c": "28c883a15058d86aa4c592963bfd0fcd",
+        "jvm": "a224b08ea293a23d2a112ffb7c0eb556",
+        "llvm": "e951a142f4332863bfc7be6b91ba8a91"
+      },
+      "cases_sha256": "ca5c3c649ee02c1d1c3cc5bd5d6d9190e315c45966d6ee0e28e61198bb191260",
+      "driver_sha256": "6d5cc870e67a7d134c82832b29a5f7d9a2f3d6656af45351a68eb5cae2a8761e",
+      "complete": true,
+      "count": 957,
+      "node_cpu_s": [
+        0.145981,
+        0.145018
+      ]
+    }
+  ]
+}

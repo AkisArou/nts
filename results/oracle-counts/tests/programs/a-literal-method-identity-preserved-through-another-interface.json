@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-literal-method-identity-preserved-through-another-interface",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-literal-method-identity-preserved-through-another-interface/src/main.ts",
+      "signature": "5ac157dc3aa3e3022081083d82226939ce493c442cd5589602795bc5b45581ab",
+      "keys": {
+        "c": "364e2a200d32a33a38ba284439e7157d",
+        "jvm": "9a87471305bbe33b5efdcfa78aa7a874",
+        "llvm": "4c0423757d358d78667316323793f9e5"
+      },
+      "cases_sha256": "fa1ed19e26d50f849aced1ad4d5387cd0142b24009295372315652ccb0d46dfd",
+      "driver_sha256": "042174a8be55cd0f085d8d635fc458abc9733edd2f78f7421783fa41f2eb1849",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074953,
+        0.074082
+      ]
+    }
+  ]
+}

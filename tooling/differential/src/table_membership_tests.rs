@@ -207,6 +207,7 @@ fn all_three_results_agree_on_every_backend() {
         .iter()
         .map(|(name, _, _)| Testable {
             name: (*name).into(),
+            binding: None,
             returns: HirType::NUMBER,
             result_absent: Absent::Impossible,
             params: Vec::new(),

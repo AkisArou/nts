@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/getter-returning-undefined",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/getter-returning-undefined/src/main.ts",
+      "signature": "3f8a1d8d18278292241e10251c9ab31953bba8d3ae8c6077ca6026d31ed6a31f",
+      "keys": {
+        "c": "64d395a8a88bf0202b25d49c7c10107f",
+        "jvm": "5d73c957676ee51669c1238d8122eddb",
+        "llvm": "d67a8c0bbc3070a99862c25be90e9a8f"
+      },
+      "cases_sha256": "e7b8d37e191bfefb4d120dc4b58291ad2d2185ae5792e7a2db7d6688d4ce5219",
+      "driver_sha256": "66ed642737cb61afea016ee7e817af9e337220696619765ed252d4f5b6d5a2cf",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.074932,
+        0.075123
+      ]
+    }
+  ]
+}

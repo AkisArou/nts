@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-number-written-as-its-shortest-digits",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-number-written-as-its-shortest-digits/src/main.ts",
+      "signature": "545830a17029c8ddceb86a18e05a0b8904666ff983fd748565df108da825223a",
+      "keys": {
+        "c": "eb94a9daac4e8e9d9a0305532ace980c",
+        "jvm": "d70d29f734cb940efb4656b95d06cef9",
+        "llvm": "5989a88079b0a8c3b0b3b6fb7fca3b3d"
+      },
+      "cases_sha256": "2be8c27211b72f009df168839f0423f2f8f530567f972178d6e5e2e978a0fdfe",
+      "driver_sha256": "db96a3a06dd1d53412012822dd241e163f6f95216c7fd78cb953548c633560cd",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075668,
+        0.074197
+      ]
+    }
+  ]
+}

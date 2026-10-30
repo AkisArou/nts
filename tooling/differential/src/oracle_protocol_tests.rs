@@ -17,6 +17,7 @@ fn directory(label: &str) -> Scratch {
 fn case(name: &str, asynchronous: bool) -> Testable {
     Testable {
         name: name.to_owned(),
+        binding: None,
         returns: if asynchronous {
             HirType::Managed(hir::ManagedType::Promise(Box::new(HirType::NUMBER)))
         } else {

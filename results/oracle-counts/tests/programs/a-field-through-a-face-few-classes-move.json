@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-through-a-face-few-classes-move",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-through-a-face-few-classes-move/src/main.ts",
+      "signature": "6781e70b0688d7c3402f836399ea7420be6f2ba966bfca0882dc6bfce778dae0",
+      "keys": {
+        "c": "0b981a57383fc645aed9aa4240f463e3",
+        "jvm": "e28d186fefd26cc62e13414eeb28aa75",
+        "llvm": "2c13dcdfaeb1de78c67d145d13904a14"
+      },
+      "cases_sha256": "4dd12cd6bb88ac40a8411f132df52de14fc9c36285a086d8fdcffd0f9e5f5372",
+      "driver_sha256": "cbc91f411e2d0e193af3954750d9a06cb5ec8b71d06dfe2011888c03da11e8f2",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.080996,
+        0.078031
+      ]
+    }
+  ]
+}

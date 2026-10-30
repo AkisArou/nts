@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-nested-pattern-missing-a-reference-element",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-nested-pattern-missing-a-reference-element/src/main.js",
+      "signature": "aeb57ef6f9e0583cb6787e3011892c29fa1489c822c139628936acbe459c5e0d",
+      "keys": {
+        "c": "a60be65218d4f5d9132714db90afd10b",
+        "jvm": "be6d5c4a3806eb44debb62dfdb96f01d",
+        "llvm": "7689d4a02deb523fa634cbe68beac372"
+      },
+      "cases_sha256": "91edab5aef8d3a89aac2e52696d31d8c2bf6eafeadc7b8b7226483d918809ae8",
+      "driver_sha256": "7cb31b5d51f10a8e8bc97cf3c7a69459fc88754ceca70f87423436ff9f8de6bd",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.014641,
+        0.015954
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-literal-interface-method-has-two-callback-contracts",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-literal-interface-method-has-two-callback-contracts/src/main.ts",
+      "signature": "fee4c9559f9b7d016c1a0f44808d0d3fe7dd17d0873629b57146eaff5e5cf018",
+      "keys": {
+        "c": "8f99119bead1e4b2bf94c1381da844f1",
+        "jvm": "0d7b4ace9bacc0dcedb3b568e3193e00",
+        "llvm": "84d3f921320e46242eaf79e52cbe383b"
+      },
+      "cases_sha256": "45b63298d895c316a0f8033408261c91bd79fd116afdcc53f31b221b83c5965c",
+      "driver_sha256": "fd09034f809d1d4d67e80fe3df78f6a8ea2f72162c5a44d2195fa12ceae07b1f",
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

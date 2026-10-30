@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-negated-instanceof-guard",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-negated-instanceof-guard/src/main.ts",
+      "signature": "cc149666aad284b02b73fe5f752c69e82b666818c2ac800cb52eef28cd97f036",
+      "keys": {
+        "c": "6806d41f2e43c57c65d90dde6c7c075e",
+        "jvm": "6662be5e22b3808660566da89fc5d93f",
+        "llvm": "2736da4678d647665c72d85b92cf5ccc"
+      },
+      "cases_sha256": "828f2fe18052fd2d52f3b7e71c816195e109b9295a1a0185465d0467f1ac2316",
+      "driver_sha256": "5290427c519bc66b6e208cd16040e48ed481daa7a826ddce7ca120b92168b7aa",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079044,
+        0.077883
+      ]
+    }
+  ]
+}

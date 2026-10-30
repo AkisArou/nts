@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-name-that-holds-a-function-is-called-directly",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-name-that-holds-a-function-is-called-directly/src/main.ts",
+      "signature": "3afc64b484df6eaed805658236e0874edabdaae09add2ffa5bba2562ee49df51",
+      "keys": {
+        "c": "2567f92a23c6a66cae9a0e7365a327f7",
+        "jvm": "d18df535facd3443e5e7385c073d78d0",
+        "llvm": "1b8c77c2df6c4c672043013c79b19a4b"
+      },
+      "cases_sha256": "ed8170992f5f8af0549a9fe5a41e8dc5b1be74ea12262d3f92ad17914949d266",
+      "driver_sha256": "94633f72dc57fa172bf943db0a944a58e99fd0a515fa16bf07ec0236fcaf458b",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075353,
+        0.074612
+      ]
+    }
+  ]
+}

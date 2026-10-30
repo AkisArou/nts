@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/parameters-bound-where-the-call-answers",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/parameters-bound-where-the-call-answers/src/main.ts",
+      "signature": "7b1cbb4d3d005b726ae2746a5e4c28d682884ee3d299efd308b9b22ac4106822",
+      "keys": {
+        "c": "0e809ea8d4033cf3226a1c27e10e2b7b",
+        "jvm": "f3f8e6ecbecff1098f8121b5326bf1dd",
+        "llvm": "d49d921c31b03f4cef8663f6c4b7f7a9"
+      },
+      "cases_sha256": "b40161ad882f813adee4a6993a91a6917661f418f42c17a2654b33f5957ffee2",
+      "driver_sha256": "056ecb60a2c90335c5f69e1f5ee99b9b9bc089f961af5540fee222ed6a4429c9",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.068003,
+        0.067172
+      ]
+    }
+  ]
+}

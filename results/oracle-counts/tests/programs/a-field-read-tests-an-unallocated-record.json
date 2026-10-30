@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-read-tests-an-unallocated-record",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-read-tests-an-unallocated-record/src/main.ts",
+      "signature": "f2283fae5a1d90ded4259184669e55d8f880e150b04c1331cfff1890c3b92184",
+      "keys": {
+        "c": "c2e16b8ca4fc5e7b39dde424498f345d",
+        "jvm": "d8d56601862248f78d05aed503669fcf",
+        "llvm": "12c65e895adcce073ff16d2422402449"
+      },
+      "cases_sha256": "92efe64209c0b758fb443c29a355a01d670c0edb670e483cfc775f3dab1de0ef",
+      "driver_sha256": "7fb1ed6e8f6586f58426dd704a05f8e413983c528cb3e57d1738039af4851637",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073677,
+        0.076235
+      ]
+    }
+  ]
+}

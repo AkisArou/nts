@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/json-stringify-of-omitted-members",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/json-stringify-of-omitted-members/src/main.ts",
+      "signature": "2658f78a8f1aed53700c7af1f811e29fe6ccb8d91d92dd5c26e01f4caf0be696",
+      "keys": {
+        "c": "5eab77524330d7ef5a077264576a4e84",
+        "jvm": "12ccdbe229e8fcf9a240f56ed620d7c4",
+        "llvm": "cac2f2ed7bae455c0f4763b9806e78d8"
+      },
+      "cases_sha256": "16d91e304445da5a385ee5cc23da5cf47c9f0a3a0ec9521f08df8ce127bf6da0",
+      "driver_sha256": "a179d5b5ef20210a3faa08f81b0bb7949e6fdb2bdf67228ec89b7a211309500c",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.098362,
+        0.098143
+      ]
+    }
+  ]
+}

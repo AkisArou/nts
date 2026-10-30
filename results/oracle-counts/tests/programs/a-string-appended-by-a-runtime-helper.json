@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-appended-by-a-runtime-helper",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-appended-by-a-runtime-helper/src/main.ts",
+      "signature": "76415f13ab4be8b08f2f2c57c56f308d8f1730c60a8a68273957347fb7a93201",
+      "keys": {
+        "c": "d84ca4dd01daaa8897e99b5423aa65dd",
+        "jvm": "f42ea2cf77d73d9d3c603ea684cf984e",
+        "llvm": "0778c01c99992a6052168d7e7df9cfac"
+      },
+      "cases_sha256": "f9b63db59169e3d3e1a51ef5e9e324e9492be38e2a1524db5507077c2f90fd1f",
+      "driver_sha256": "4d2da4b73fe8bd3a120268d707b3e919c1d8efbb78b877d2a632ae35a1dc8c02",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.074429,
+        0.074995
+      ]
+    }
+  ]
+}

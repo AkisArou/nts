@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-folded-boolean-constant",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-folded-boolean-constant/src/main.ts",
+      "signature": "8eb0f29f57be89c9aed48a76c28bcdfcb74aa2921d9dedfc4f95bbb2128afae4",
+      "keys": {
+        "c": "7d21ab49260496316ac7262cf829aad8",
+        "jvm": "83bd1b50ad281195918a69fca0fdd261",
+        "llvm": "4e5e3fec624216d193470b04000b6bda"
+      },
+      "cases_sha256": "e72ace41fd03399caf31d0307a743402d31c58d271f85aeefec049fe40b1b652",
+      "driver_sha256": "d43cade8ee1bdc12706689f25f2e6ffdaab720e1b0313e3ef83ef153f36a5b33",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.079204,
+        0.079617
+      ]
+    }
+  ]
+}

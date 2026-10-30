@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/borrowed-traversal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/borrowed-traversal/src/main.ts",
+      "signature": "db05a3d1836e413a90e05cee471e96e03913cd93be0a796721d6382a015d880e",
+      "keys": {
+        "c": "ddbe564b1dd6a9416c587efcfc9a6618",
+        "jvm": "c3a2881342766db771cdb2ffec86bee6",
+        "llvm": "59918a8cfeb309069a8fb27e6b573825"
+      },
+      "cases_sha256": "f91fba35b2f68f081cf0abd45aff06f58a22c945353bfa08def3d66518f31d18",
+      "driver_sha256": "450c3f584feca6656741e58eb74b5421dff2415fb00acbf9711d03164e59b885",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.115611,
+        0.117802
+      ]
+    }
+  ]
+}

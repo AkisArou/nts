@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-constructor-that-never-calls-super",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-constructor-that-never-calls-super/src/main.ts",
+      "signature": "52c3cf2f33a818c18a575b29a45bffe1d7299ff5c9e80d88254f12c953e1802b",
+      "keys": {
+        "c": "0bdc2f4c25d15b0283f1673341ca733c",
+        "jvm": "9c5419f54257c33dc83a924dcebf4bdf",
+        "llvm": "ccce798f39128250d131386ff9b29dc3"
+      },
+      "cases_sha256": "28a347baf2faf72fe583b12bd90b35967ed87004870f97cbd36d74d3027b52b9",
+      "driver_sha256": "fea7dec43a47d40c979ea616abb5ac6e41ff41bb6efdad6542a960e5edec7f2d",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.080384,
+        0.081072
+      ]
+    }
+  ]
+}

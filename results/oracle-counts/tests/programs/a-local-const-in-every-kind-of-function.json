@@ -1,0 +1,46 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-local-const-in-every-kind-of-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-local-const-in-every-kind-of-function/src/main.ts",
+      "signature": "f655d85acc0982108598c17c3b0fbc8683e455e5cad1e2a235e5be58caff58fd",
+      "keys": {
+        "c": "75fd0a7576cf5903a1cbcd92cac1ba87",
+        "jvm": "622b98887ea0df67e8cc765e484a0dca",
+        "llvm": "5dfb2ff1693b30f86e53c84c5e3ea9ef"
+      },
+      "cases_sha256": "ca4759a9fde4474153c07be8512604b0b381ea4f9e8f9d36cb897b01aa577a35",
+      "driver_sha256": "a56f27bbe451076aba5989200b4890c7da8d08046ea86097f30cfe371fe3aa3c",
+      "populations": {
+        "addOne": {
+          "count": 29,
+          "cases_sha256": "c30c4dbc813f5cb72a24409541acf8484537bf120b98dbbd54e02ab3503c48ad"
+        },
+        "addTwo": {
+          "count": 29,
+          "cases_sha256": "3af557b3136c29157b4cfac59c46e44c93571bf020a6c8e2809712f004feb4a5"
+        },
+        "atModuleScope": {
+          "count": 29,
+          "cases_sha256": "6f2d34fc37d32b8b5b67d4e5d7e9ee0a7a543f0ed8760efbbb2422413166d3ad"
+        },
+        "inAFunctionDeclaration": {
+          "count": 29,
+          "cases_sha256": "2c7ef41348d13efa60bbb60a6cebe608b1e6325e91cf4594f45d748caa25c85a"
+        },
+        "throughAnAccessor": {
+          "count": 29,
+          "cases_sha256": "1570b8453627d23aef8da0ae2b19e2ad43c1f18bddd62aebb9ac1668b643aac7"
+        },
+        "throughAnArrow": {
+          "count": 29,
+          "cases_sha256": "61304192901828787cf0d4a13f45277823ee69f4f9f26c2f0d79d816fcf8df0e"
+        }
+      },
+      "complete": true,
+      "count": 174
+    }
+  ]
+}

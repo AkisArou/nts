@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-inferred-array-literal-at-its-binding",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-inferred-array-literal-at-its-binding/src/main.ts",
+      "signature": "7ba1c2857f99612c591a9cab202c9c95c560d65f6fd0614801241ac0416abb59",
+      "keys": {
+        "c": "4ae6d699556aff7282ae8ad5768971d0",
+        "jvm": "cb0d6fb840314592c9d0dfec2f7b5ba6",
+        "llvm": "2a81658fe4b74914504363ef431d4e18"
+      },
+      "cases_sha256": "39500318f9aeb57caee9e3dfe09bc9036a5d1f431569ebb40e1d1e367a9c5b57",
+      "driver_sha256": "ceb675d5ff234f93ecaf76434de146465e115bfff8388911ba890b5e1e5fb2e1",
+      "populations": {
+        "annotated": {
+          "count": 29,
+          "cases_sha256": "044feff199191581ea9017d1f1e070d9e3695731bd8470b122db67dc09532b42"
+        },
+        "grown": {
+          "count": 29,
+          "cases_sha256": "b9dbd7cf8b3f5fbe8be4a1718915617e689a1fc325e2b68f7c9051bbb8e1655a"
+        },
+        "passed": {
+          "count": 29,
+          "cases_sha256": "83721609a1292018574874a99fb5d9096418a91eed146a94cdf5fc18fbc525c9"
+        },
+        "readBack": {
+          "count": 29,
+          "cases_sha256": "24503e90cd7e98cdc9bfb914503dcb0bc0d94cc380cdc28f087f36866736f39c"
+        },
+        "written": {
+          "count": 29,
+          "cases_sha256": "66b15a52151f24391c955af681c51b416bf683255108e0e659cef326916c32e2"
+        }
+      },
+      "complete": true,
+      "count": 145
+    }
+  ]
+}

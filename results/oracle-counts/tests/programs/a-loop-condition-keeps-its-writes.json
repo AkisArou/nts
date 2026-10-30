@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-loop-condition-keeps-its-writes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-loop-condition-keeps-its-writes/src/main.ts",
+      "signature": "e9ac409daa5c9ae484311008765aff9d1061885fd98bf719e92d669599cb2e81",
+      "keys": {
+        "c": "caeeeaf2e8f9e4b390854f513337d9e5",
+        "jvm": "65d0ba5fd56b6b029a9a47572ba88272",
+        "llvm": "caf9a43bf6c5647e29a54c91fdfeddfa"
+      },
+      "cases_sha256": "3f0a56af10b845757c8ffcd56da40eda95dbfdffe0e5a9890f35230f44e14de0",
+      "driver_sha256": "6049195825ec692d14befc7b110e5445052cf1881059ca136b1047ac1b4680e1",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.07519,
+        0.07434
+      ]
+    }
+  ]
+}

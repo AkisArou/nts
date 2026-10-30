@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-async-parameter-named-like-its-frame-state",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-async-parameter-named-like-its-frame-state/src/main.ts",
+      "signature": "f1cd44683e863a6d12043ce3a595fe29dd70164d31b7d5b0fa56485c52dca89e",
+      "keys": {
+        "c": "3661b886c02bfa99a5d79d5dac99917b",
+        "jvm": "3b223a0d7c1137bc7c8768131c96745f",
+        "llvm": "def353689503a46240934b97cc49c9ba"
+      },
+      "cases_sha256": "a7b2c094dcd411da35769775cbe0267efbe16fbd52907b0621bf493e854767b3",
+      "driver_sha256": "4cac9b4612ac8e38f458b069d6dfddcec89a825bd69d92d8961addd8f9ceba75",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076585,
+        0.074762
+      ]
+    }
+  ]
+}

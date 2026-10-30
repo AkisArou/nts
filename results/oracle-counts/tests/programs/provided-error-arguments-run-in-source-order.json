@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/provided-error-arguments-run-in-source-order",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/provided-error-arguments-run-in-source-order/src/main.ts",
+      "signature": "020c64e7cdfa2c996400ef182be784e3fa1328051e0e54e1557425306a776487",
+      "keys": {
+        "c": "47a30a64937706d886b80667860f0f67",
+        "jvm": "0edf2183f8267719df08d07e188a534e",
+        "llvm": "532c02c53f6c69e4588142caebfc05b6"
+      },
+      "cases_sha256": "64fb3ff41ceffb7f7a2a0a782f0e9c6d27f0588763a30ea95cda9c99a3982b6b",
+      "driver_sha256": "1ac13cbaa7d6f1616cddf0cb742580a811680af8bd9b8dd6bee4c60bc56dd071",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.076468,
+        0.076699
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-dom-window-alert-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-dom-window-alert-control/src/main.ts",
+      "signature": "d020ac925e8a68bac53db23ae921de0de5cb1faf6b89820ce6d2e03cac0137bd",
+      "keys": {
+        "c": "a325e3f71bdb2fb5078f60b75db093b6",
+        "jvm": "c75aa27b3923c5fc760b6bb50d14e30d",
+        "llvm": "8724c25fa1bc25600783ad5ceb893cbf"
+      },
+      "cases_sha256": "216e62329062be1b15fa28c8da172a125454d7f0644d1730b9dce257edc205f9",
+      "driver_sha256": "244bf5bcf412917e92d6c222709babdcc7c16fb726e22fc70ad65f688eb4c5e2",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

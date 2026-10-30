@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-call-on-an-array-element-inside-a-closure",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-call-on-an-array-element-inside-a-closure/src/main.ts",
+      "signature": "75453354bfbb34959a909cd023d5cf330f59dcbbb5498a90806d41338c51fcb0",
+      "keys": {
+        "c": "42e80bf4a90f08ef50bc7a8a8c951df4",
+        "jvm": "d2ad9c9f3d66394ded2ed8a5682951b9",
+        "llvm": "7923a9e817689860301baab0498d50ff"
+      },
+      "cases_sha256": "64231acd4f7ed51f3dc23c58afba4ff81c3ad6c7addbe25263cfc99211955869",
+      "driver_sha256": "692567802de37bc09ff91b1e7537fa9b8f6beaa5d59e39069f1f3115de7443a3",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075009,
+        0.076105
+      ]
+    }
+  ]
+}

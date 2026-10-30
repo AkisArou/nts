@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-static-member-named-prototype-throws",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-static-member-named-prototype-throws/src/main.ts",
+      "signature": "11d0badc291200a020de5a4fa72c6612c5340ff4cfbca2f551c405b03914f9eb",
+      "keys": {
+        "c": "d55481e69832bd38dc0a8de63c593d22",
+        "jvm": "745f5220b7f8ad6b1c2522b6d8a8b230",
+        "llvm": "eddaa580fede2512a15e4ec1035cc8c0"
+      },
+      "cases_sha256": "c6732fa819906f8bbb4d75705cf28c35cc52cecaf27b77bde8161e0e18a8c1cb",
+      "driver_sha256": "d4382e869cc30a7eeefe6f5ef3e21eb03840162b5ea454aec1c2ee677b96d7f3",
+      "populations": {
+        "calledInATry": {
+          "count": 29,
+          "cases_sha256": "409f2e7fe3d350f160f204509f8d151e50c3c0bd11b70531d000eee5803ab5b9"
+        },
+        "constantKey": {
+          "count": 29,
+          "cases_sha256": "92f3a53e1e4bd5a2614e0170b8f03d9e788cb51142739c8dae92d2b5fcf851ea"
+        },
+        "earlierInitializer": {
+          "count": 29,
+          "cases_sha256": "146593f19aa348add31862027ea07be4220ec6ed10e89e31ca8107920e9f1af4"
+        },
+        "expressed": {
+          "count": 29,
+          "cases_sha256": "5e969123fdf42346a66c22fb45bdd119cac51da5a84cd2c6984a16fe18065971"
+        },
+        "field": {
+          "count": 29,
+          "cases_sha256": "ec1b3a480613cb1a3aa727740bd7859104567e640659c0b286ac4bebc1b9418a"
+        },
+        "getter": {
+          "count": 29,
+          "cases_sha256": "9027668bf1328d6fa707706901b932f760529576e73a377eddf0276063aed665"
+        },
+        "method": {
+          "count": 29,
+          "cases_sha256": "d6a8dd8e78c435255f7ca3a7163ad78c5e02cc79f3d1f6ee5681b946bd540c36"
+        }
+      },
+      "complete": true,
+      "count": 203
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-literal-method-that-captures",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-literal-method-that-captures/src/main.ts",
+      "signature": "ea4bf555b1ea83abad1412ca43066b013f5502b04e46715c09784fbb95556a14",
+      "keys": {
+        "c": "29a1c47f84b8d669541fb1e518fd1681",
+        "jvm": "de84cccf5195c00fcaebcf74cc2b4410",
+        "llvm": "37ec8b1d94b81bf09e8d251e7e6487a8"
+      },
+      "cases_sha256": "84d6dc80ea7bf446be6f2693d449964b3f1def0aee5c6e1f2fbc4cb64d1d7137",
+      "driver_sha256": "359828182779e477900cbe0970779b85f51af8469efc2cc89d055d02780c0cf2",
+      "complete": true,
+      "count": 435,
+      "node_cpu_s": [
+        0.086446,
+        0.084691
+      ]
+    }
+  ]
+}

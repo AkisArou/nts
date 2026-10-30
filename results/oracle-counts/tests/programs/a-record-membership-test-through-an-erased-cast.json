@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-record-membership-test-through-an-erased-cast",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-record-membership-test-through-an-erased-cast/src/main.ts",
+      "signature": "467bdcf67ae9827c83af8a56bc84bce832001d5916bee00664c24481c95dd9f9",
+      "keys": {
+        "c": "e3495bc85a83581926b1836cb50a138a",
+        "jvm": "24a0762074483bd2b7dd09b5d3763f50",
+        "llvm": "ed0e3b14b5aa8e13ecbf18af65aa3820"
+      },
+      "cases_sha256": "58131a4df0190215d0b3e2783033dac716b2de229f7771312f331a719e3c3185",
+      "driver_sha256": "098ab0bb555634dbc509903806e6d616c567cabd2e7ba6b9679b75f0e16fbe6d",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.079991,
+        0.074481
+      ]
+    }
+  ]
+}

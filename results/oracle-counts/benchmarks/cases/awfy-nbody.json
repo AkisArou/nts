@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/awfy-nbody",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/awfy-nbody/case.ts",
+      "signature": "80e2fa4046251d5bc86799537b87e0a4e7ffb7b93b7a64a9d98d7df6b271e5e9",
+      "keys": {
+        "c": "df52276f47fddd9e22cc4c3fb71e8a83",
+        "jvm": "77a0f7e38805ec0d48c5f111cdac2356",
+        "llvm": "0f7a01e551fcadd2267c33146188f9ca"
+      },
+      "cases_sha256": "98cbb13ae435edb12673e69490edd3bd03e67936622bb14203a84815cdda0966",
+      "driver_sha256": "88071f662c23553d8aca984bef4df6b985c433b95ca2e53e800de855c8bfb380",
+      "complete": true,
+      "count": 17,
+      "node_cpu_s": [
+        2.113017,
+        2.08813
+      ]
+    }
+  ]
+}

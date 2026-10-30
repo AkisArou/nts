@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-literal-past-the-jvm-method-limit",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-literal-past-the-jvm-method-limit/src/main.ts",
+      "signature": "154a8c5c076e8b9a8f2e40eb0da3619934cd1a245051c23ee9a50a79216baa16",
+      "keys": {
+        "c": "91d78ac1256178b544a70a412d49331d",
+        "jvm": "e781d5da09f0c8e9fd210868e1c7a2af",
+        "llvm": "d202b24e50ebd6aeb9cc74c141f3da46"
+      },
+      "cases_sha256": "ed7bc3e1d210aaa9d4e60a1ab85db537bc48a070a9e1b5704654b9a47133b8f6",
+      "driver_sha256": "ac71b92a09a0ea3b289181fb943104bb9fc806832ce5924fe78e957d1b4e8911",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.176925,
+        0.169393
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-abrupt-protocol-exit-preserves-the-close-completion",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-abrupt-protocol-exit-preserves-the-close-completion/src/main.ts",
+      "signature": "0c624834f2bd078cf85194a2a71ef0917b4162925b2111afb7bc3b7e0807fe6b",
+      "keys": {
+        "c": "d76dcc819d662f197c0f2eae7043872e",
+        "jvm": "96f0a5733ec572ad650725c723d074f4",
+        "llvm": "b7cda432be9fd127418b7a0d7ba899af"
+      },
+      "cases_sha256": "22011f6ea0f4b6ea4b4beb1ca07ab4b1e1d19a1aff16a7ff7e5807226ad3cbb4",
+      "driver_sha256": "b95310b5b39feeddfabdb0c6adacd459fdb7f483992708010f22755afa101060",
+      "complete": true,
+      "count": 2668,
+      "node_cpu_s": [
+        0.198106,
+        0.193112
+      ]
+    }
+  ]
+}

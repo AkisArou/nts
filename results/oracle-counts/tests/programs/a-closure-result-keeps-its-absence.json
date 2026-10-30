@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-result-keeps-its-absence",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-result-keeps-its-absence/src/main.ts",
+      "signature": "254f19fed5a8123ee5518a5771154d25e164340b0fa138154167ba27dfe0d62f",
+      "keys": {
+        "c": "6293142f7362a71d3d1dabcff4503850",
+        "jvm": "6533b330036d606293d035f34bbe0acb",
+        "llvm": "efae4e6f27c921e63f85940d987183dd"
+      },
+      "cases_sha256": "f05bd731e9d7bec23048c8c04459df11780e29b607eb85448cd171a5d656d0da",
+      "driver_sha256": "c0f392fe315cc2df8434ca2dd30552d940832a5e1e5358c4fcfd4cd203123b57",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.080681,
+        0.079087
+      ]
+    }
+  ]
+}

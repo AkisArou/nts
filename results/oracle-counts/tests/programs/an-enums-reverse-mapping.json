@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-enums-reverse-mapping",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-enums-reverse-mapping/src/main.ts",
+      "signature": "97e94310ed96aeb2e5a24eeb580eca334a01e72fe7f67719306c6ca6b857bfa4",
+      "keys": {
+        "c": "f6a3eecd2e06e499cf704ceb70f503ed",
+        "jvm": "9f75e5849e74e50138bbc9f07818097b",
+        "llvm": "ab3d23ff7443f41ba909fcd11e17fd3e"
+      },
+      "cases_sha256": "346617324f04845667faccd719dbace20a572a7f39860f6976591ceef6838f39",
+      "driver_sha256": "139bf6868cce5d51b3b141e0ba01a9c604a8f40ecf3242158892c3f872a74f62",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.07711,
+        0.076039
+      ]
+    }
+  ]
+}

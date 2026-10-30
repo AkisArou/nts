@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-field-uses-define-semantics",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-field-uses-define-semantics/src/main.ts",
+      "signature": "56d3fd7604bf0017a38293e7eeb74a343d030ada1531815cc8d156bd188c20e7",
+      "keys": {
+        "c": "e43c78aec1adc541b60d8359f4079dc9",
+        "jvm": "e2718a8d4fee9709570625b0b8dc976f",
+        "llvm": "39735aa49ae433334248dd6f851ca977"
+      },
+      "cases_sha256": "887de9ab9cdf2f56b1250901fec2445cca2dc77179d8b8523a63c8a0074d689a",
+      "driver_sha256": "d2f58f57422b9912efe2b5a4570b5f18eeda59d81e037f7dbc37326137125f0a",
+      "complete": true,
+      "count": 1,
+      "node_cpu_s": [
+        0.073632,
+        0.0731
+      ]
+    }
+  ]
+}

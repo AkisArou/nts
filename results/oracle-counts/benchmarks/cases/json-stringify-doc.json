@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/json-stringify-doc",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/json-stringify-doc/case.ts",
+      "signature": "8c2634c62a83e4a368d44c99f159c7ccf8e2ebc4dceb35103c007b1e4e057a0f",
+      "keys": {
+        "c": "6591bb1c9c7f89fd7d9bd2cc5bf94548",
+        "jvm": "d0ce6ffd911914bf0dd827af3113998d",
+        "llvm": "847590772e0fbb326c86f0b65b3bd601"
+      },
+      "cases_sha256": "bb0babbb0ea2cdb207e9d5be9a569b9cbd9140842ca388165f77b69b2843dd34",
+      "driver_sha256": "2064cc69d16a43f89ae57a53fb24856fff654002d8d5797bbf6ddfb3635306aa",
+      "complete": true,
+      "count": 21,
+      "node_cpu_s": [
+        2.085026,
+        2.061565
+      ]
+    }
+  ]
+}

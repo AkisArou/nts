@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-unknown-parameter-narrowed-in-two-arms",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-unknown-parameter-narrowed-in-two-arms/src/main.ts",
+      "signature": "b8a46f26be81dbea47162314be74a808a2888f1219ab05f89ad7ed7269c1ddd8",
+      "keys": {
+        "c": "9b523913efa977a4f427de8df0c48ce7",
+        "jvm": "5bba889fbe99b8c116e4dcf862aa46fb",
+        "llvm": "697807cdf2ec452020d8f6fadb14219c"
+      },
+      "cases_sha256": "3841aad9bcc8f23d8eb449029b91f3873a9fe21299e4d7ecac8aa3f3f9ac8194",
+      "driver_sha256": "f796108b5d0c29fbb6a95f0686eb8fcee8a0dae888165569484cbcc005098c20",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077502,
+        0.074005
+      ]
+    }
+  ]
+}

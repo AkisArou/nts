@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-constructor-runs-after-its-surrounding-declarations",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-constructor-runs-after-its-surrounding-declarations/src/main.ts",
+      "signature": "56665d6ca5bd76ef10934143a656716f3931aa0aca3af5ceb7b34a14681d4553",
+      "keys": {
+        "c": "b65546f1ee5d457922c7980497b18473",
+        "jvm": "906275a485af302893b85f96aab69988",
+        "llvm": "8e7fc0e5eec409b27df16dc5fa8b51d6"
+      },
+      "cases_sha256": "9c620e52092205200531eb372e1e907e4cfc883c3e2dafeb10b01ba69dc18cb1",
+      "driver_sha256": "d811847c2bb04f462d16635798089d6934c16b3d19d99868b77896b0cd585993",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07934,
+        0.078313
+      ]
+    }
+  ]
+}

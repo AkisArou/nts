@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-intl-number-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-intl-number-control/src/main.ts",
+      "signature": "2ea4510654b8e7aa4c51ad981465cfdfd615e23e174a0ed27991eb602b6e6f6d",
+      "keys": {
+        "c": "16448d1f4db824eba0408de56f189a91",
+        "jvm": "beef4c58ee90afb840a4373c933f3b2d",
+        "llvm": "91df9e69980f9032fe32b15f4350a5d3"
+      },
+      "cases_sha256": "4dfc1c7a0f0b9046d82669f563e6fb3309657dc4dd90b1d0b4c8b8cf2b252393",
+      "driver_sha256": "c9fdd21f959a329bbd9eeb33fea0c8608e1c8bd1ec6692449a374b3f32868902",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

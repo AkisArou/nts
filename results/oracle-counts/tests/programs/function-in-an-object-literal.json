@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/function-in-an-object-literal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/function-in-an-object-literal/src/main.ts",
+      "signature": "c86fbd2630d2936d413d9a1bff847b5c1892e9ccb5e7275b727b0d20e1aa40c3",
+      "keys": {
+        "c": "1ea615c168cd051c142916b01ec5ec4b",
+        "jvm": "a23adac56444f7d11a4221817f6a2154",
+        "llvm": "5443e5201ba7a0d6dd633b4acff454a6"
+      },
+      "cases_sha256": "d86e9a0b134a825d4d6537fe0eeae078bd8f0678cf65a946e42bebbb5d9c69a2",
+      "driver_sha256": "454c72d0ab3b6cf450a1f34ddb23b02f78d203480eb23bd26683c0d8cfc5c9ab",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.072333,
+        0.075723
+      ]
+    }
+  ]
+}

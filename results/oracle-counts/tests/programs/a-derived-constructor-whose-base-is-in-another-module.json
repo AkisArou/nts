@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-derived-constructor-whose-base-is-in-another-module",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-derived-constructor-whose-base-is-in-another-module/src/main.ts",
+      "signature": "a94119a33ed1ca07ed5f62a53c58d875290db26cace9bc86d1c15c70d529b048",
+      "keys": {
+        "c": "08fc76c878b052d2afbd49ab68cd28e2",
+        "jvm": "c39f48e79406d2689c6244886498c878",
+        "llvm": "f1c732f6ea276f8cdb10865b53c59b22"
+      },
+      "cases_sha256": "e352738ba4b5eb96d4150cafdd4e5a988f3b77540d7da573b6124d98d870a898",
+      "driver_sha256": "26b364b8fcc132841b06fad399cf61ce0a65c5b658ced7e2de2f5351358a06a4",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.080725,
+        0.079615
+      ]
+    }
+  ]
+}

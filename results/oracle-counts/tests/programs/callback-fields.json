@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/callback-fields",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/callback-fields/src/main.ts",
+      "signature": "6c88dda551bb1e870ce9f81620348a48059479c91eb6581237f2e959f12d66a6",
+      "keys": {
+        "c": "052b436f24d2afd21fe052b1cbd826bc",
+        "jvm": "8e1428396f4eb87c5230a567c3fa11bd",
+        "llvm": "98e523703ac80d35000e8ef41d665f06"
+      },
+      "cases_sha256": "2571041b14f520bce83f14bbba85d81bc6fe7ce1987447e9ebb56a9fb4b288bd",
+      "driver_sha256": "0054217b1cd81b89a838a2409e44ad763110919966c7c8db1ecaff1d1cb10d14",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.077901,
+        0.076877
+      ]
+    }
+  ]
+}

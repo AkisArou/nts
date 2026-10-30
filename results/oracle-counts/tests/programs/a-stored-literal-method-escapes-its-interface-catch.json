@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-stored-literal-method-escapes-its-interface-catch",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-stored-literal-method-escapes-its-interface-catch/src/main.ts",
+      "signature": "3c2a4506db5338690072a317bfc3cc9fcbcfedc92b29b929596169e2fd2ce873",
+      "keys": {
+        "c": "f7c979a1c853ba74ea188abd9c328b0a",
+        "jvm": "2374b81c78e96f7430c456462609ff1d",
+        "llvm": "0f556e848407401dcd3d970e86b3634d"
+      },
+      "cases_sha256": "8b0d90e30771b36c540b529ae801b997bd6073fb84cf0fa33ecaed0160319fb8",
+      "driver_sha256": "61cf1506aa7deb47286d209d70328e8decb4bc0cab85acf6f6090e14c47cc110",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.081382,
+        0.077285
+      ]
+    }
+  ]
+}

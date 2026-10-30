@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-apply-whose-list-has-an-arity",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-apply-whose-list-has-an-arity/src/main.ts",
+      "signature": "9136625e71dd736026cdc6def25db4c21af978f2bb20bfaae87535062f334ee8",
+      "keys": {
+        "c": "c5c2bbca1cbc746ec58dbe5607a51965",
+        "jvm": "7c85358366bdf96c8951a1fe7479c769",
+        "llvm": "0e2941fe1c29691a760fa420f42530d5"
+      },
+      "cases_sha256": "a6cb49f47529181b2240a98ba94e009e8c619a75810bf60a125c81c4450af10b",
+      "driver_sha256": "6b7c6f526d29092caaa384b7e0b616c8d87144486f7c5014eaf213492b45e110",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075932,
+        0.075702
+      ]
+    }
+  ]
+}

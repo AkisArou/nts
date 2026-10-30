@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-in-test-on-an-interface-held-by-a-class-that-has-the-key",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-in-test-on-an-interface-held-by-a-class-that-has-the-key/src/main.ts",
+      "signature": "93d5da7f95b47b8c2f43ff13320913f5ceb5fec4f4733969897f4b6a78610e81",
+      "keys": {
+        "c": "a65e49de2bcae45335a8bcc0edb0657d",
+        "jvm": "2176a66bdaad6f046333f90c03d3da7d",
+        "llvm": "4861c7a156dec57f8746772b7a6b4c6e"
+      },
+      "cases_sha256": "86fb79f5c68bfec589d3f30d2fa718a2f15cd5345a426a10ec5ba5c9c9d8167a",
+      "driver_sha256": "16f08eb942755f757166a42e985ec986c7d2bcb797e1a79d3b90946eb52a2d85",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.076867,
+        0.075551
+      ]
+    }
+  ]
+}

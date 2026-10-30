@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-var-declared-after-it-is-assigned",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-var-declared-after-it-is-assigned/src/main.ts",
+      "signature": "bf71929ae9fed3083df4d12f143afddeb7b4e919cdcb20611026e67baaaed1c5",
+      "keys": {
+        "c": "d67da6fb9866e47285378aace6523ff7",
+        "jvm": "cdd8782c28155889caf6d8819bf1ef4b",
+        "llvm": "f143fb24a281b76b529277aca71f28b4"
+      },
+      "cases_sha256": "e7fd782b7f6413e14be771d85d4dfa416df17465628bcb497940198ab14a0b99",
+      "driver_sha256": "402cf98e7af734299dbfe15304cc9db2dadceb153e7bea65db8a984c6d3d6dbe",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.073988,
+        0.072472
+      ]
+    }
+  ]
+}

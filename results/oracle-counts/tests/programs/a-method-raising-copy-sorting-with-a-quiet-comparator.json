@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-raising-copy-sorting-with-a-quiet-comparator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-raising-copy-sorting-with-a-quiet-comparator/src/main.ts",
+      "signature": "17459620cbf22f6bec90e4be5538fd71034a4f49325ccb7cfee54072f15585c4",
+      "keys": {
+        "c": "09548f1393e5dfa2651241895eb11d57",
+        "jvm": "eb7e2d9ef35ceacf72878166f828c2f0",
+        "llvm": "8928ac211282ded43e57ca95359abf7f"
+      },
+      "cases_sha256": "91e3700259f2e9ec4b6f80d35420d2c57b033ecd9503c2e5f72d42c15cf1dcac",
+      "driver_sha256": "40664e7ab920d38aeb4ec1ad269be757445d44acab9b81bea05e8c3f3c6932ee",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075197,
+        0.073701
+      ]
+    }
+  ]
+}

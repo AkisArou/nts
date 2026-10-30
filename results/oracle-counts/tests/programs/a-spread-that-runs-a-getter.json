@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-spread-that-runs-a-getter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-spread-that-runs-a-getter/src/main.ts",
+      "signature": "66b3483ac6c1b0399d586cd94e52db50b32970980ddf5bb5ec6b0ba6ec1b9b5e",
+      "keys": {
+        "c": "c32c9aa7daff0e34c6dd97b4e8c79f75",
+        "jvm": "820ab5fa76496ae1741fdaea368c4902",
+        "llvm": "4d48d0d0edc94016953f34f2e4e85f04"
+      },
+      "cases_sha256": "a2369d131422aa27374566c8b67cc663d2cbffe2ea30160e8b6ddd98e9020b01",
+      "driver_sha256": "9d25de1d1ef5fcd2957a3923e30b15dc690de3313554bc818a536867e08c3e99",
+      "complete": true,
+      "count": 63,
+      "node_cpu_s": [
+        0.079283,
+        0.080338
+      ]
+    }
+  ]
+}

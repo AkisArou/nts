@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-number-radix-to-parse-int",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-number-radix-to-parse-int/src/main.js",
+      "signature": "ed6d62711a970b20a6e0648f79e00889cc4079894c50d8ac3e15b92b2e683b21",
+      "keys": {
+        "c": "cad28b3cf56a50d7f917724a74319128",
+        "jvm": "5f802e54f1ca034f8426fef8742b2787",
+        "llvm": "c329b46750b31bc215b61af336c1d7ad"
+      },
+      "cases_sha256": "0a945b156e8f9db0d793132e03522cdff2d8ac070fc10b204990631fdd2f92cb",
+      "driver_sha256": "aa39fac68a0c62395d00b38ed9536ce8e6ba97a4d8c5f296068d0df07631b76b",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.013346,
+        0.014297
+      ]
+    }
+  ]
+}

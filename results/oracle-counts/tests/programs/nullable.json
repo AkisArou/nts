@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/nullable",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/nullable/src/main.ts",
+      "signature": "5bc2a4cf1a621bdd7d7ab72c20a9c548f39b208617a703503c7a2f9bf79bb409",
+      "keys": {
+        "c": "3d07f94cc94cab62519a530c555d7cac",
+        "jvm": "7e0420a0a02bc1ce4e1b967e8787eaf6",
+        "llvm": "23d137d13c4d4a6d875918c37b39e65f"
+      },
+      "cases_sha256": "012ad7168b5300ffc0f0a9aaf546d80faf948a7969c783a4f073a93f7af2eafc",
+      "driver_sha256": "88ca62089e4c5b1169426b8e9577faf7163e320ccd3f7c47c8fddd754746a1d0",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.109988,
+        0.110567
+      ]
+    }
+  ]
+}

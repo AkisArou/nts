@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/parse-int",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/parse-int/src/main.ts",
+      "signature": "758f8c060b5fdee0dce78aac225532442b19d6dd3101b4f0859620f8ac47d65d",
+      "keys": {
+        "c": "6f1513dd34206b168ec9d688c618c998",
+        "jvm": "b6d5bd560dc1e662d42dcbfa0e3c7d0b",
+        "llvm": "7acbc15a931bc9df5c33249103ba8b25"
+      },
+      "cases_sha256": "eb80e6a0e25d89658de7bbb1fdd8925ae326824c04a3da5ad378287a5fa22959",
+      "driver_sha256": "46a2db811a76b48e3d80a907b931b0396e8fda167b46d2230b57615a8788d8f5",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.074257,
+        0.075479
+      ]
+    }
+  ]
+}

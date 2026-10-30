@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-url-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-url-control/src/main.ts",
+      "signature": "4d5dcd5f6d5b745973eeeb1e98fc0905a9f2094289f9809537400c37b69f5c0f",
+      "keys": {
+        "c": "afa3142a5f24e1f5aae1f036fb9d7e92",
+        "jvm": "e8a82cf88f32e1ab33b2407cea32e335",
+        "llvm": "35b127c1f3357697452b9f145e9cd748"
+      },
+      "cases_sha256": "f104e159bbb55d16281b31a9114ea449ee1451e38c6d88825569cc1ec06538c2",
+      "driver_sha256": "b82727202e8f2a69b90dae53ee572358ffd999dc6270b1f0ec09b02ac3eff671",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

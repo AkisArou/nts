@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-literal-with-optional-properties",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-literal-with-optional-properties/src/main.ts",
+      "signature": "7a5fc83f83314205a83566ed9e551b1b3bc8376d3d91a3774372e9d0322431ae",
+      "keys": {
+        "c": "0136fa13ac4d43f054cc0235b7167e99",
+        "jvm": "7f684f8a76ea256ccac1f1c0d6b03b63",
+        "llvm": "fe4c43acefdc34ebd9ebb8102134428b"
+      },
+      "cases_sha256": "18830c199032e153e655c71fca5735cb45631bf97144d25a66b4d954e62d9e21",
+      "driver_sha256": "489bfe2f0695db4f839427c81cc8af7757c1b8641c336ed911fbadd01e2006e5",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.07942,
+        0.078509
+      ]
+    }
+  ]
+}

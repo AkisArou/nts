@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-symbol-key-inside-a-generic-class",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-symbol-key-inside-a-generic-class/src/main.ts",
+      "signature": "8f4c2decb64181dc5c04a3fbb6a2ed3465cab032c089cf5e5fa3e245d0e346b8",
+      "keys": {
+        "c": "4f7f2161ef0fd8f7e272e49135d9cff5",
+        "jvm": "7b6a77b19cf1f16467dcca95353096c1",
+        "llvm": "f361ac9c9c893171933f77915a8cef59"
+      },
+      "cases_sha256": "637d322d8570b7ead756f5e614e69ec24bcbb2256ad0d09dfb74c6ed67ee68bf",
+      "driver_sha256": "0724441177f67de7601dff21b58b332b09ac4379cc8f0ef25159cda4549120aa",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075793,
+        0.074818
+      ]
+    }
+  ]
+}

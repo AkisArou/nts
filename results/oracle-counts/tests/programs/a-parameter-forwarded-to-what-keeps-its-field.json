@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-parameter-forwarded-to-what-keeps-its-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-parameter-forwarded-to-what-keeps-its-field/src/main.ts",
+      "signature": "97098decc0c1068436d0f0a2e8c2399a30b16f761474e5958b2a0b95c624580e",
+      "keys": {
+        "c": "e6da455f449f348c0698f2dd90f46015",
+        "jvm": "175797d5c5b376297cfb3d2204f5c7b8",
+        "llvm": "ea6688828b397ad0917367761306ca69"
+      },
+      "cases_sha256": "dff7f43f6ff5b905ca404203d4ac65e197e1079b572f84dcde85e64778fdbfe1",
+      "driver_sha256": "bbd7086fd0a42edec18b9f395318db4b0d57df62b837c23f0922900ff059e52d",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074645,
+        0.074509
+      ]
+    }
+  ]
+}

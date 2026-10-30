@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/assignment-through-an-accessor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/assignment-through-an-accessor/src/main.ts",
+      "signature": "b8f98b9c5141ec4a353ebd8b8deefdcb9f87d84e59850c7ac907abb3207f7292",
+      "keys": {
+        "c": "d50ddc21ad83bc2c5a5e2e6194c88881",
+        "jvm": "6a0f835c5ccab0f0c3fc727162d03604",
+        "llvm": "4f2d2d0f0cffbc8735751f09eaa3fc76"
+      },
+      "cases_sha256": "241ca4a854be22984396673510cc14b87059cd71d88e1b316c468ecce0844769",
+      "driver_sha256": "bd4658499bd12e42e5a611c71a8019cc0561f907cae4df0bd989b2ae1ab8012d",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.079253,
+        0.076874
+      ]
+    }
+  ]
+}

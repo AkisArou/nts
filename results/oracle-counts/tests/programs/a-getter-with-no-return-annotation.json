@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-getter-with-no-return-annotation",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-getter-with-no-return-annotation/src/main.ts",
+      "signature": "3fc7ac9c3300a9d6888f4451a5ebcf9f47f15cef7874270e8f0ee2284b4965c6",
+      "keys": {
+        "c": "bd9b09fdf5ec70bb27d41ff1482cde8b",
+        "jvm": "145c1d7b25d5a4cf1708c26083b2b53e",
+        "llvm": "e573c3d6a234625b2cb313f1083d4d49"
+      },
+      "cases_sha256": "fa2a5686061e1b9f2876dea6bde10bd5ced1d7197175a01200d43f87e71fa0f5",
+      "driver_sha256": "ece2475d27c936bc9a4b6d6a1b61233fc260153c01caaee426de92f704253242",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.079103,
+        0.076318
+      ]
+    }
+  ]
+}

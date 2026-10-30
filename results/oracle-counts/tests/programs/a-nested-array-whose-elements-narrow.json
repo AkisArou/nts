@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-nested-array-whose-elements-narrow",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-nested-array-whose-elements-narrow/src/main.ts",
+      "signature": "5a88ea8dcea9dc6e9abcb86526b914d0bb0457e74a282530e4d1c82432c58f93",
+      "keys": {
+        "c": "3a6036bb69c8a48b915c9e2dfdaa08c5",
+        "jvm": "593f8400ab896e840af30b14714a7f08",
+        "llvm": "2d9673d0cc6d74ec014e48215ba7418e"
+      },
+      "cases_sha256": "edd1db22137f2be08211f7aad29042aab230c6b67247f86faeea844638afb718",
+      "driver_sha256": "a6091a8cb684b3ac2f4ab258f02c66545ed558383e2d2de0ebd4c4f25515160c",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076247,
+        0.077411
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/map-keys-compare-by-same-value-zero",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/map-keys-compare-by-same-value-zero/src/main.ts",
+      "signature": "74ea50c03e790655d653e8d326e98af370c646576a91d23ecb6c47b8fcf9c30c",
+      "keys": {
+        "c": "cfa22af335b29e63e0d60b16317b04bb",
+        "jvm": "279e5c36cd8e5a19dbfb6d1dcb13e180",
+        "llvm": "5a7257554d8febb9810a0fc3042cef3b"
+      },
+      "cases_sha256": "4cf16a29ff240e021d746ae8730048a681f9754833b4e987e30f3bb4afa8ddfc",
+      "driver_sha256": "6c33e77b048eda34ac8bd2523b47e3d0b42c7341b6206c46f650a4721a22c285",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075061,
+        0.072239
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-hole-in-a-destructuring-pattern",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-hole-in-a-destructuring-pattern/src/main.ts",
+      "signature": "b060540c25fa1097a578987114124dfff6344985aaa791850555ea67c81f8bd3",
+      "keys": {
+        "c": "2bb9bf519e9675dce146709add1be477",
+        "jvm": "b1d88ee6bdebf9fb5fe5fff48b9dd4bc",
+        "llvm": "92074e75725a5873582a0a0c8973bc44"
+      },
+      "cases_sha256": "f851457337f887d25726feb0a956fa931e15112cbd0a3faa9df0ac72a8dc6e2a",
+      "driver_sha256": "300fb1c17ae29858381b5bfdf2a4807b4feafa9ff5a16ed0e274470c8fca3179",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.073331,
+        0.07259
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-postfix-increment-in-a-loop-condition",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-postfix-increment-in-a-loop-condition/src/main.ts",
+      "signature": "696639db89df7ab91cc051ad3c962fa3c206c866a4fa9ac1811397b4cc746025",
+      "keys": {
+        "c": "e9774e8eb9a43726bb092e83771b0329",
+        "jvm": "c80a6cfd71f2b0fc6a58f7fd2f00f687",
+        "llvm": "1194514deb026e1cdd0f4c286390c5df"
+      },
+      "cases_sha256": "2e5c44d1b0e76af74d596c9474ca164c27a7e0156f7add7ae9c3e6d35a15b5cc",
+      "driver_sha256": "03188865f86b8eb2c823d608f936ac210ab909d3d46ad62115e3cd4c9d48f168",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074792,
+        0.073775
+      ]
+    }
+  ]
+}

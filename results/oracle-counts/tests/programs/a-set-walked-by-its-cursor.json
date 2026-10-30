@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-set-walked-by-its-cursor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-set-walked-by-its-cursor/src/main.ts",
+      "signature": "560825935a68d55948b1d27fcdb980fbbaa289e2ff1e75b3305b62eebfbaf33f",
+      "keys": {
+        "c": "8f2323db63e602e8426ba6db5482d5e2",
+        "jvm": "6a7ab858c3248eeba958f9b5065ce0c9",
+        "llvm": "5e9b1a19d582b2b7d8d1a6c10a5bb7d1"
+      },
+      "cases_sha256": "0a3a7fe1dd43a2709f04a102bacf6b912ef65018dec590bb3b5b77ab236f2934",
+      "driver_sha256": "8f65ba142490fb8b17a866da4cf8308147f4cec839a029d5ea967faf13b4bac8",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077207,
+        0.076711
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-cast-reads-the-concrete-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-cast-reads-the-concrete-field/src/main.ts",
+      "signature": "ad5b3ff72685ab694ca1289b3c04be53b3a42c53ac21e8cfbe32a3c97f37764f",
+      "keys": {
+        "c": "f29bbde98fab0127913bcadb561116f3",
+        "jvm": "fa4c34d71bb21e1590be76829dbaa314",
+        "llvm": "c8babcaecdecf3f3a7b684772d2e3d66"
+      },
+      "cases_sha256": "ea019b40cdd0a9389f4f418754d0179ec28f678b07b82f78c317246e07081663",
+      "driver_sha256": "dab423ec6d4c4ada82b026fda80f96f412ca59b587c44dcfd4c481a1a51797ca",
+      "complete": true,
+      "count": 348,
+      "node_cpu_s": [
+        0.079457,
+        0.084156
+      ]
+    }
+  ]
+}

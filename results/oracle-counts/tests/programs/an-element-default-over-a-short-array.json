@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-element-default-over-a-short-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-element-default-over-a-short-array/src/main.ts",
+      "signature": "46190a71a17925238327c52f5aeb207087ad7b869776c1220913aa797bba8709",
+      "keys": {
+        "c": "883e86739bbe9533e09e09596cc19876",
+        "jvm": "1ebcefebec8f7841ed7426959f01f4a3",
+        "llvm": "139aac4ee3527d6236ad864f1cd51980"
+      },
+      "cases_sha256": "cf758481d4fb56c69596ec87ed5c3a2d4db4fdfbfee258e4c859047e5f1b2e7c",
+      "driver_sha256": "879a56b06f3910a88a7ae07f35b07ca77bf847b8f4b5f083c2acfe4be76d4142",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.078378,
+        0.079763
+      ]
+    }
+  ]
+}

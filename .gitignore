@@ -95,3 +95,8 @@ tsconfig.windows.json
 # platform-surface fixes the solution build failed on every project, so nothing
 # was ever written and there was nothing to ignore.
 .types/
+
+# The per-fixture directory is the oracle authority. A comparison-private
+# legacy view and atomic-publication staging are derived and untracked.
+/results/oracle-counts.json
+/results/.oracle-record-*/

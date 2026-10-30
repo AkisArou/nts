@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-classes-one-descriptor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-classes-one-descriptor/src/main.ts",
+      "signature": "8c9188b01366b8d0b51113343dbf9d9497d02fbe13da20bebe572dfde835ee9a",
+      "keys": {
+        "c": "ebdaec63a4e89b033def29b9168c53c6",
+        "jvm": "ad35efa60fcd3b0c262b8ee553a139f1",
+        "llvm": "397808dcc05673a1c936f1112bbe23ce"
+      },
+      "cases_sha256": "9165c5f78f496cb275c1ddfb12c9b24ef0a6c3e4429ad8871d7c5d26a9545b04",
+      "driver_sha256": "1f6367ea5caf958e929d417f2e9095938addb6c01e3bfdb8957335e554f2a90d",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.083646,
+        0.083954
+      ]
+    }
+  ]
+}

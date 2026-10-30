@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-destructuring-assignment-in-a-loop",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-destructuring-assignment-in-a-loop/src/main.ts",
+      "signature": "35bad7e6e14d1f453cb3cab8e77633b2554d8f0a882657cfef058f5c36471eff",
+      "keys": {
+        "c": "4108145bb7a9d610b56af37af3f058e6",
+        "jvm": "bee70642497ef450aff94223b1382303",
+        "llvm": "e6fff89bfaa53938ec8b04027ce5e8fd"
+      },
+      "cases_sha256": "bc3feda666f887c90eec54e9c3b55d16cef578923f43afa040c4dda36c1f381a",
+      "driver_sha256": "5c650514bffa143023ada3dd0dae9818bbe4180e4b6db6bcdd7495fe0f526efd",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.079849,
+        0.075121
+      ]
+    }
+  ]
+}

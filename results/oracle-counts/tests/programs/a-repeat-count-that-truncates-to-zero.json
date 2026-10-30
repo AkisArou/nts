@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-repeat-count-that-truncates-to-zero",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-repeat-count-that-truncates-to-zero/src/main.ts",
+      "signature": "9760b149005454021b984ce6b4bd15bebd0a3b1dc93d03e53b642a00a5e5b99a",
+      "keys": {
+        "c": "43120748062c7c73916f51e8dce96c24",
+        "jvm": "65a518757bc840f5cfb3a90508e102d8",
+        "llvm": "84c4daa9fb156aa10b03f7c7cef387f1"
+      },
+      "cases_sha256": "8c95031d1496a0f6209fc2158a29394044bf689ecd435831cc9d30588111fbf7",
+      "driver_sha256": "e35a906da8a6b575c98b3c7fbfdc68f5097fb021eb6cee98db1712d5f8619f46",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076507,
+        0.073485
+      ]
+    }
+  ]
+}

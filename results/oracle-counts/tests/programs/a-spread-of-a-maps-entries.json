@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-spread-of-a-maps-entries",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-spread-of-a-maps-entries/src/main.ts",
+      "signature": "5e9cd3866dc1edff279c8d7bec9927beaa0ff1cb5175876054c96101ed6fb471",
+      "keys": {
+        "c": "b86173fa3a6ec9d3453bd9b71a841df4",
+        "jvm": "408937d0ab9a9e28c22c374f80c66b70",
+        "llvm": "6a108d82c3717a81ccb886f8ebab6bac"
+      },
+      "cases_sha256": "e802d46489cc8ee232d876424de1a81bbf9bf9902811d628cb81e7fc5367d6c4",
+      "driver_sha256": "545b0a2d3a8e53b7ad0db644bb71677bceee8e537a2ee682521d463143ca48ec",
+      "complete": true,
+      "count": 1,
+      "node_cpu_s": [
+        0.072741,
+        0.072467
+      ]
+    }
+  ]
+}

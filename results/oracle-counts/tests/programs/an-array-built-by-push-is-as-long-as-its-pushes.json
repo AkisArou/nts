@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-built-by-push-is-as-long-as-its-pushes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-built-by-push-is-as-long-as-its-pushes/src/main.ts",
+      "signature": "1a889d423548b386e46aa1c4dcc06074cb420929fb597ee936f4599c8ddac2f9",
+      "keys": {
+        "c": "23d1edf3acf6da739e98219e0b02f0fa",
+        "jvm": "ec52af6a911edb87e08f8ed0bc04baf3",
+        "llvm": "28c0d82b73be0b5da1941dc282735a3c"
+      },
+      "cases_sha256": "172b81b9206436def765957f3e8af555936997b22edcb07afe67a38579bd5be9",
+      "driver_sha256": "eb0cf79cd9a6660ce2222785ac96fe1cf37f1f696c5f601de2e177158ff58010",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.081344,
+        0.087353
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-event-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-event-control/src/main.ts",
+      "signature": "002f3b1f3f36b740f67ac92a7fb7ab43585aea90912c01821b2122df8fedaa03",
+      "keys": {
+        "c": "7e829a0e14ae4873505542f106cdce2c",
+        "jvm": "ac920f4b29627706df7b1ad9ec5614e1",
+        "llvm": "413fbbaf282d318128a8c96ec326b67a"
+      },
+      "cases_sha256": "929485c5de9db62341549a7ae34f9adced10e8c8d5d7db1fe0a7fb1d45a5a83b",
+      "driver_sha256": "688d0d1de4fd0fe27c22b79073a73209ba8d6d47694965efa8e624470a50960d",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

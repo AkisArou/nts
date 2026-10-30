@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-lone-surrogate-in-a-string-literal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-lone-surrogate-in-a-string-literal/src/main.ts",
+      "signature": "02a6f39ed7fa24a05f8a01132aa95753d9d1bc18545cd3229a4f206edefb219c",
+      "keys": {
+        "c": "68db59f0d2a0fbcac6f1eb6a317f7718",
+        "jvm": "1c7deaecfb4f24bc3c8260993aac798e",
+        "llvm": "ec77f911cf7b76512e3527e0c2bac0a8"
+      },
+      "cases_sha256": "1def286d90b980200fc93a5eb57458569d6a65c86d05d1f0cb340954a10576ea",
+      "driver_sha256": "37be8eb263a4d89ea6886753a3a690d918d81ba6799a77075135f3340d1d7aee",
+      "complete": true,
+      "count": 5
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-loop-bound-that-sizes-a-view-stays-integer",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-loop-bound-that-sizes-a-view-stays-integer/src/main.ts",
+      "signature": "565afdc55a09d915f7423f7ba1cba333573b5ad94849e058c0db22e0bd598ad0",
+      "keys": {
+        "c": "9ed9c6c888b6b8289ed02a13a5fdaa35",
+        "jvm": "d946a12f1b2e585d1fedc287be7ebf72",
+        "llvm": "fdcffdb0fd694fe221fdfef3571ce658"
+      },
+      "cases_sha256": "63381f2b59f85dfb5144032bb650efd3a54e4a5763de6e1ce8738aaaaef75df9",
+      "driver_sha256": "5ff57d9451fe831aee81f3d5daf0c3e8bba4f32c1ee8698a2f6d1526d030d639",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.080257,
+        0.07872
+      ]
+    }
+  ]
+}

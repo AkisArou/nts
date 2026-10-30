@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-of-nothing",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-of-nothing/src/main.ts",
+      "signature": "b9fe220f9cfc188c1fa956d18eeb7c52067bf3945105884f81d9c0a6564f9820",
+      "keys": {
+        "c": "9f04fff6f1f3c1afc5dd5c56edb98af7",
+        "jvm": "8845c759a23645df456257dacb3dd197",
+        "llvm": "5da2637fc36dd9fa8345869a818c1f6d"
+      },
+      "cases_sha256": "efed80cf8f9b080943bbf8950ce8761e41b277c0e17cc33c72de9949e63646ca",
+      "driver_sha256": "a4416cbbe377ccf6a9cd148c72eff6b372fc768a8524f1a96acee5671088e78c",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076586,
+        0.074249
+      ]
+    }
+  ]
+}

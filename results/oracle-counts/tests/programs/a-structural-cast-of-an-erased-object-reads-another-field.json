@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-cast-of-an-erased-object-reads-another-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-cast-of-an-erased-object-reads-another-field/src/main.ts",
+      "signature": "9958400361ca5a0d48ba56890857ff4766c64d9c6b3f423847a57bec4fb52f57",
+      "keys": {
+        "c": "4541502f4e95c8f54f7cf4775e9bedd8",
+        "jvm": "2abe9fd2b139163f4f46a46d8474c444",
+        "llvm": "9cc8812b7367e76d6ce6de6810f1cf63"
+      },
+      "cases_sha256": "b830c508ea26df2127a4216ed26a02b3525f6c833c56b553846e19b0e85fc4a3",
+      "driver_sha256": "d3b43cef58b9115ec2662ecfeabd4e8c358f085c096b283237c4e6ca9679e770",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.076955,
+        0.075807
+      ]
+    }
+  ]
+}

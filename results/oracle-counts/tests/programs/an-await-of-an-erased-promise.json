@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-await-of-an-erased-promise",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-await-of-an-erased-promise/src/main.ts",
+      "signature": "70d9d133de9a20a2346978c049aad07d4ceac26f8faec265e78f92c92a58ab4d",
+      "keys": {
+        "c": "22717663705a32c2c77859faf54bc6dd",
+        "jvm": "e67a98ef070c385314a6a266bee80731",
+        "llvm": "b1a8c9f45e570e3464961b3bc39da238"
+      },
+      "cases_sha256": "b0a085865c4a59437bbf48b80c6adfe9c3164e11f75f159df1e6741e69d36471",
+      "driver_sha256": "66864dc84697eb577570ead97f0e61809975c78d3bc88efb8c5c3da95dddee00",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.076051,
+        0.074724
+      ]
+    }
+  ]
+}

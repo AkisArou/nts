@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/names-outside-ascii-on-every-backend",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/names-outside-ascii-on-every-backend/src/main.ts",
+      "signature": "7390b3d86425a8cb6adf6a647980ca02044a0b8d4c14ada3a121bace4dd48e77",
+      "keys": {
+        "c": "2ffae9b16041ec5204d65e9a9f5de48e",
+        "jvm": "59dd4ca430060862c0951a8f2912a630",
+        "llvm": "2442565d6b60d4dbc584b27638c94574"
+      },
+      "cases_sha256": "b21061ffedf4c8d555bad263a6f94abd231c8b665ebabb10963333ea1f1eac2e",
+      "driver_sha256": "cb4c99d712775a64f51ead099bf1548fa9c1a3cc759b13d9dd4dfd6ce3deaacf",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075074,
+        0.077105
+      ]
+    }
+  ]
+}

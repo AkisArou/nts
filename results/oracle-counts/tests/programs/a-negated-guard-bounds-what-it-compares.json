@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-negated-guard-bounds-what-it-compares",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-negated-guard-bounds-what-it-compares/src/main.ts",
+      "signature": "5205a0bc09bbd066f412dabda618b26e3f442e8da7374e7b7e2f8052f59613df",
+      "keys": {
+        "c": "c5abc34959b9607567a73e0cbb9510dd",
+        "jvm": "d4a148b2369272bc727ad7f0b0e8aba9",
+        "llvm": "23b8615943458e67b5a064852ea4b4b0"
+      },
+      "cases_sha256": "fdfce1bfea21ec983cfd3e52f588b233e57bf7594bd5fc6f69876fbeeefddf99",
+      "driver_sha256": "df07a9052fc9a2a6df431480e26b2c6955ae0514dbab88d7e52f9b37ee9e522e",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073453,
+        0.073187
+      ]
+    }
+  ]
+}

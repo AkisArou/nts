@@ -48,10 +48,8 @@ pub(super) fn resolve(
     let count = ids.len();
     if let Some((root, source)) = root_and_source(entry) {
         let command = record_command(&source);
-        let path = root.join("results/oracle-counts.json");
-        let table: Value = serde_json::from_slice(&std::fs::read(&path).with_context(|| {
-            format!("oracle not measured: missing count table {path}; run: {command}")
-        })?)?;
+        let table = super::oracle_records::read(&root, &source)
+            .with_context(|| format!("oracle not measured: {source}; run: {command}"))?;
         validate(
             &table,
             &source,

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-classes-of-one-shape-print-their-own-text",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-classes-of-one-shape-print-their-own-text/src/main.ts",
+      "signature": "a5844a3b4e78abe0466242ea12e0c314b0ea43ab0794cb4137e70e3cc80ecd74",
+      "keys": {
+        "c": "86ab6bad71e6b158622cbda2c09e6018",
+        "jvm": "257e29f35ff81098cf90f151373b4b2a",
+        "llvm": "885776bac4836b92ebd7e591537748f2"
+      },
+      "cases_sha256": "fb93a69d3b9f4b74b53f8710be12d50e59988a709b73c47e88159a25744b3a95",
+      "driver_sha256": "c02219d19d775451e0b2a09cd6d078594477201bdd4dcfb4603eaeb737752b66",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.078456,
+        0.076151
+      ]
+    }
+  ]
+}

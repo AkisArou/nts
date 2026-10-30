@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-interface-raising-call-reaching-a-quiet-and-a-narrower-implementor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-interface-raising-call-reaching-a-quiet-and-a-narrower-implementor/src/main.ts",
+      "signature": "28bcb3e316091eef246962e0a944e19e95ae1c7d5b2e51f903446f4c23a619d0",
+      "keys": {
+        "c": "ab702ab7a8e6575095b376c81910ba03",
+        "jvm": "07c86bbedd7211402cb37f47e2b05d67",
+        "llvm": "8d294858f849d6e4a061850a888edbb9"
+      },
+      "cases_sha256": "aa970669644fa729d2d56e938d558b5b535cb1d82e7d9d8360144abdbf74bf08",
+      "driver_sha256": "ed5db5babce70bcb93865a057d9f7cf7e247e3551e92ff59a57dfed81b689362",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.077433,
+        0.076127
+      ]
+    }
+  ]
+}

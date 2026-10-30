@@ -22,11 +22,11 @@ use nts_core::hir::{self, Callee, HirType, ManagedType, OpKind};
 
 fn lowered(name: &str) -> hir::lower::Lowered {
     let tsconfig = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-        .join("../../tests/programs")
+        .join("../../tests")
         .join(name)
         .join("tsconfig.json")
         .canonicalize_utf8()
-        .unwrap_or_else(|_| panic!("tests/programs/{name} is checked in"));
+        .unwrap_or_else(|_| panic!("tests/{name} is checked in"));
     let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
         .with_checkers(std::num::NonZeroU16::MIN)
         .snapshot(&tsconfig)
@@ -57,7 +57,7 @@ fn externals(lowered: &hir::lower::Lowered) -> Vec<&str> {
 /// and the reason this is a managed type rather than a class.
 #[test]
 fn a_date_is_its_own_representation() {
-    let lowered = lowered("dates");
+    let lowered = lowered("programs/dates");
     assert_eq!(lowered.diagnostics, [], "nothing in the fixture is refused");
     assert!(
         lowered
@@ -85,7 +85,7 @@ fn a_date_is_its_own_representation() {
 /// entry points for one answer is two chances to make them disagree.
 #[test]
 fn get_time_and_value_of_are_one_operation() {
-    let lowered = lowered("dates");
+    let lowered = lowered("programs/dates");
     let calls = externals(&lowered);
     assert!(
         calls.contains(&"nts_date_new"),
@@ -116,16 +116,20 @@ fn get_time_and_value_of_are_one_operation() {
 ///   capability for, and which no differential could check if it had one.
 #[test]
 fn what_is_refused_and_why() {
-    let lowered = lowered("dates-unsupported");
-    let said: Vec<&str> = lowered
-        .diagnostics
+    let fixtures = [
+        lowered("programs/dates-unsupported"),
+        lowered("refusals/a-clock-read-through-date-now"),
+        lowered("refusals/a-clock-read-through-the-date-constructor"),
+    ];
+    let said: Vec<&str> = fixtures
         .iter()
+        .flat_map(|lowered| &lowered.diagnostics)
         .map(|d| d.message.as_str())
         .collect();
     assert_eq!(
         said.len(),
         6,
-        "every export of the fixture is refused, in {said:?}"
+        "every export of the date and clock fixtures is refused, in {said:?}"
     );
     for (needle, why) in [
         ("toISOString", "the differential cannot see"),
@@ -149,8 +153,10 @@ fn what_is_refused_and_why() {
             "and says why -- `{why}` is missing from `{found}`"
         );
     }
-    assert!(
-        lowered.program.funcs.is_empty(),
-        "and nothing was emitted for any of them"
-    );
+    for lowered in &fixtures {
+        assert!(
+            lowered.program.funcs.is_empty(),
+            "and nothing was emitted for any of them"
+        );
+    }
 }

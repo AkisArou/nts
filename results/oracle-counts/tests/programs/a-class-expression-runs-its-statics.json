@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-expression-runs-its-statics",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-expression-runs-its-statics/src/main.ts",
+      "signature": "5f8339caac89943210a5f5213cc37f6fa319b6850680db23b20b30f634bacf74",
+      "keys": {
+        "c": "cae900fe075df5f781e36c0d006100f4",
+        "jvm": "f972fa3afa7b0b4453360f4f4b09fceb",
+        "llvm": "e7189f9ea1f1e81435d67e8a476268f1"
+      },
+      "cases_sha256": "9551c37a150ad0fd9a74d2eab909bc9ec100a6cc4634b53cb845c5fead418602",
+      "driver_sha256": "e21c482883fdcfd8b2656b32de8a1bbcbca3df313c20edcbcd83f39eaf42ae59",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.077986,
+        0.083363
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/enums",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/enums/src/main.ts",
+      "signature": "ce14f7f0ccf30f574a5ea81d98caa7bd1de3adcebdedaaa4171eca349a23641d",
+      "keys": {
+        "c": "b51bc623ac0d78ece8c064a9a1d8b6b5",
+        "jvm": "9671c6e513200102271b71a83a1c42c5",
+        "llvm": "bcf9ae8b7b888884c557cfc2a61201e1"
+      },
+      "cases_sha256": "a72c796780318d51a3fe10225b7d1fcfd16dd7d5eef228e2b11d29a1365d2676",
+      "driver_sha256": "b6a162363cece1e3386d21c21226ae18454bcf9fe07ecb2377372864bf3691b4",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.076821,
+        0.076365
+      ]
+    }
+  ]
+}

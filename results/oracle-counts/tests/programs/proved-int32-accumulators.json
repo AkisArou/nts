@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/proved-int32-accumulators",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/proved-int32-accumulators/src/main.ts",
+      "signature": "3764cd3ff82a3c1fdfa0d4a34b9135a7d59f6e78059aa28934a4492230210f4e",
+      "keys": {
+        "c": "0b3ed3488fd729132f527300f6fa7812",
+        "jvm": "7ec0ecc12702e8c7ef433279719bf1a6",
+        "llvm": "1efe32ae0683836be2220931f1d257e9"
+      },
+      "cases_sha256": "9215ae69c6658927021e35554d7f7ad7c09f0aada743670992d0f5bb0893a27e",
+      "driver_sha256": "58fcae2a4eb99e8857dceb9022cfce2190623bee384611be4203c598b93eb815",
+      "complete": true,
+      "count": 348
+    }
+  ]
+}

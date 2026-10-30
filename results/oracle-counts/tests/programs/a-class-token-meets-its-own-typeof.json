@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-token-meets-its-own-typeof",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-token-meets-its-own-typeof/src/main.ts",
+      "signature": "5b24b46f13d597cb7a7b729943d67fc4b746478ab6898ddf2a562fa8114913fa",
+      "keys": {
+        "c": "3a7a06377c1a43f7c78b2dff722c1b4f",
+        "jvm": "cc504061676732b23b0b41880da1e7f7",
+        "llvm": "418329778d993751387799a66652e40d"
+      },
+      "cases_sha256": "47feb7a4d9839fb9b90e9a3e2620f8b0370e7ce41053b3c02af005d7ca61d0ec",
+      "driver_sha256": "8a938f14a18961f0239dff577b124733ff315b5e2ccf1ed96097703892fec73c",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.087499,
+        0.078384
+      ]
+    }
+  ]
+}

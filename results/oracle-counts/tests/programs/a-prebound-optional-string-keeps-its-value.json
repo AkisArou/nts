@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-prebound-optional-string-keeps-its-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-prebound-optional-string-keeps-its-value/src/main.ts",
+      "signature": "cc3e716986f2608ee3071ea166e38ede871adae53ecff35c304cf3f5ca26eabb",
+      "keys": {
+        "c": "690f6baac6dad8dff875881f4fd71956",
+        "jvm": "f0677a4a41522d263e47db0162ed720d",
+        "llvm": "b56176eaf9f42ba4ae3b40b8cf6ae3bf"
+      },
+      "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb",
+      "driver_sha256": "4dd8654f286eeab7db5a1689d3a52870d3f0841a9e8e1f237b5407743978a2a1",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.072348,
+        0.073529
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/string-of-a-symbol-in-an-erased-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/string-of-a-symbol-in-an-erased-slot/src/main.ts",
+      "signature": "220a2b2a75fac362fb73b4bc945d5e4158230571996d1f2f9775fa3fa3a3ba44",
+      "keys": {
+        "c": "d528eed0610f56898dbc247c0ddfb0e9",
+        "jvm": "ac8642051bbbf58280268c8e6b546b03",
+        "llvm": "14e76ceece497df55d79f6401f0c4700"
+      },
+      "cases_sha256": "3e84d839a4f1a55e9567fe698c9e9c697cc6de1a76cf086c33fe06f0e583b07a",
+      "driver_sha256": "7da26ff43271c391716da3f544d3b46fc18757dfb24e5dd3c314d6fe19eca73e",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.07707,
+        0.073866
+      ]
+    }
+  ]
+}

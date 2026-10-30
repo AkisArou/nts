@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/tonights-features-together",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/tonights-features-together/src/main.ts",
+      "signature": "808c2a9e0bc3a993d5f83b5027118969f4206ad3075198ccc57958ae30516ec7",
+      "keys": {
+        "c": "1d6b18639bfdcefffc1197d5a2c8d2b4",
+        "jvm": "2c50202ac6798abd7431bf828e446283",
+        "llvm": "c6490fd477ccb8fc264b056ecda019ab"
+      },
+      "cases_sha256": "5536f100418162353f03d343254549e420ef6e61f87b4260fe4c858006df2eec",
+      "driver_sha256": "aba639df46b2aa14547bcf377b7b8bdd75cee82ae30d3160fd921244300645c0",
+      "complete": true,
+      "count": 266,
+      "node_cpu_s": [
+        0.085306,
+        0.086186
+      ]
+    }
+  ]
+}

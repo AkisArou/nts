@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-adapted-to-a-structural-interface",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-adapted-to-a-structural-interface/src/main.ts",
+      "signature": "cbc54e2d9dc97faa296b5c7fd0a69d27dc05733542a355707426d3f233944871",
+      "keys": {
+        "c": "0ad922cdf87c17d84eb634deee3292ef",
+        "jvm": "63d1d8800d91034d478640d545f65acd",
+        "llvm": "39870b10620c1ac3fecca8f4599a9b13"
+      },
+      "cases_sha256": "a0f9dc210a5ee1cb447d4ccdb50c8eeddeeb193d3dd0506ab6f554ff7c7a37f6",
+      "driver_sha256": "bb05fae207c9a82fc4728f46f71383c587ef0ff2b7b6ec9f354b92d978b68668",
+      "complete": true,
+      "count": 406,
+      "node_cpu_s": [
+        0.102055,
+        0.105961
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-recursion-bounded-by-its-base-case",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-recursion-bounded-by-its-base-case/src/main.ts",
+      "signature": "ab125d2115ed90231ba2807d459f840008b2537d6502e7d5d9888ca418630180",
+      "keys": {
+        "c": "ec870475f3321fa851229682e4a6f2be",
+        "jvm": "9aa64ce4d0e5be21d2775d44a4417c92",
+        "llvm": "4eb20cea0e07e206d6ad57b7e5c521f7"
+      },
+      "cases_sha256": "f69dfaaa090040891a5f795506fe0833eed8932e64cf92fe92b3fbf30ed86483",
+      "driver_sha256": "e04a7c116ca1171062504869d84ffcea3428785f0656fac983ae269859979dee",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.07392,
+        0.073812
+      ]
+    }
+  ]
+}

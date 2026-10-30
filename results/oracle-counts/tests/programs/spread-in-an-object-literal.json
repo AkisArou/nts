@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/spread-in-an-object-literal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/spread-in-an-object-literal/src/main.ts",
+      "signature": "37afc47c032db4ae56b226ab8c208d2b045fea247ed4051f7cc60b9c08cefbdc",
+      "keys": {
+        "c": "e8c21c9fdecd21074795e4955af90166",
+        "jvm": "89a5434debf3eb0872093c9278489395",
+        "llvm": "8292bc8c08bb24b24b34522f20afb3b5"
+      },
+      "cases_sha256": "b8750f4ab67389cfb5120c21b690076b7e358e1c6ba9851c6b21208beeec98ee",
+      "driver_sha256": "435a8a47d2a34b4ecf524b620032a398a6894966e29c677b7ff62fd38d9a8dc8",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.081362,
+        0.081988
+      ]
+    }
+  ]
+}

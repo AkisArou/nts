@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/symbol-keys",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/symbol-keys/case.ts",
+      "signature": "76f54bae6fb6f2891907f0a35e2a6c83626fc30d5de50a8a134d06b70b7728c7",
+      "keys": {
+        "c": "5b268f15e3d33f759439b004359dbae3",
+        "jvm": "9a03ba9391e0bf3c011415da60845058",
+        "llvm": "22dc3a8f83e227a802b81ee8db5d5292"
+      },
+      "cases_sha256": "e47f785fe0a0a0a5ff18381a5fc77e505c8b5f81ce3e5e9ed4aa02ee1bc32040",
+      "driver_sha256": "957526b2e948ead3f6dc9ad72adc51e442626a8d1d931d1e7d4cedfe081a9379",
+      "complete": true,
+      "count": 28,
+      "node_cpu_s": [
+        0.082193,
+        0.084836
+      ]
+    }
+  ]
+}

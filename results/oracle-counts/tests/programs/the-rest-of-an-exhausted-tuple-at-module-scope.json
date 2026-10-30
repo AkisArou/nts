@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/the-rest-of-an-exhausted-tuple-at-module-scope",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/the-rest-of-an-exhausted-tuple-at-module-scope/src/main.ts",
+      "signature": "4a66b7a0c6b3779f492d175dec010740af546e590b5b665145ee62a0e5bfd153",
+      "keys": {
+        "c": "a7d7c2e0b5f92fa8e93253c913df80dc",
+        "jvm": "177072a7f302ab07d1363273e46912ac",
+        "llvm": "d27a0644066b152ec80428e99e86a3ab"
+      },
+      "cases_sha256": "9168f6c82ead5535697fb5dbd5d90337aef9ce09615ed1aedf52105e57b8994f",
+      "driver_sha256": "9b0b59a1847a3ae2b9ed36c0b98f2bef2d90f94c9c1681427878c345d655d044",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.072277,
+        0.074914
+      ]
+    }
+  ]
+}

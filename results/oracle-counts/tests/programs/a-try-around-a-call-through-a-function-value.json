@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-try-around-a-call-through-a-function-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-try-around-a-call-through-a-function-value/src/main.ts",
+      "signature": "f921c36436ef4a39145966e0b935b7855bd1bb74afdbbbd2387a919daf488c9c",
+      "keys": {
+        "c": "6e7679d16640f2ac14f4a6c67bfc71ae",
+        "jvm": "da3ed8bdc2b8aa6f7444c45d7266ab05",
+        "llvm": "06a05723e6cb4343c29a58981e58f52b"
+      },
+      "cases_sha256": "82c5642e07f56e9c259880cd37202ee70cc4a12cc0248025f528d1b23e60dafb",
+      "driver_sha256": "3a0723d8dfa40893c622854d852eb3addd40d74bf47a7aa4256163f19c2dcde9",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075483,
+        0.08079
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-this-parameter-the-body-never-reads",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-this-parameter-the-body-never-reads/src/main.ts",
+      "signature": "acdc15615d4b7b2492a9768bc01c3eb728afc81c40146bbb04ef83e240425713",
+      "keys": {
+        "c": "d9fd8e9d041c3bda9d49411bfb90faf5",
+        "jvm": "b15e8d06453d163c4b311acae3a765e8",
+        "llvm": "50c4d2de834a4cfae14acacba1e8c39c"
+      },
+      "cases_sha256": "886aafe96b056c31a05f914dfcc3481aeb587595966fd0541e3a87fd1016f1a1",
+      "driver_sha256": "e91fa469b949e6695b7609686d573dd12313f51c4f058a5cb5d914a5652ba468",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076298,
+        0.075816
+      ]
+    }
+  ]
+}

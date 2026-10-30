@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-parameter-written-as-a-union-of-tuples",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-parameter-written-as-a-union-of-tuples/src/main.ts",
+      "signature": "4e2c05ca2c8d9c404ed87286759e104cb6607fa15b8349ef1582c18ac0d855a3",
+      "keys": {
+        "c": "76fa229fc8592789cd73eb524ff0e998",
+        "jvm": "c8bf14a2fe31a845d0d957199f8782cd",
+        "llvm": "08a274cddf568c52622631e53b726627"
+      },
+      "cases_sha256": "0cc129fe6b82372b212868f5666359556b104d84fd35a627dd578bfba88ff955",
+      "driver_sha256": "e4c62b8af155d4147ee9ad8123de14791c731006f48a9aec1c7f9003021338cd",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076438,
+        0.075794
+      ]
+    }
+  ]
+}

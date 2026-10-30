@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-uniform-default-keeps-its-parameter-environment",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-uniform-default-keeps-its-parameter-environment/src/main.ts",
+      "signature": "7098417681571cf318560fbdf3c136d8dd2089a4c9df3a9ab84d98071410314f",
+      "keys": {
+        "c": "e5b06b59e8598c2e501ac392647d8b3f",
+        "jvm": "2ce000e642cb46377f12f596bf546fdc",
+        "llvm": "1186f6b09852a64514ba150eb30be0b6"
+      },
+      "cases_sha256": "e75bcbc682a18acced6fb529d5ea33f5278cf3cdbf8f2c71e58aeb48e0070172",
+      "driver_sha256": "c404038bf52e780e4bd59c9a2ef36d2491fdab83e7119c5069f824c62c2421a3",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.07646,
+        0.074424
+      ]
+    }
+  ]
+}

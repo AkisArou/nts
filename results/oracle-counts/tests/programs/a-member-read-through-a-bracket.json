@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-member-read-through-a-bracket",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-member-read-through-a-bracket/src/main.ts",
+      "signature": "e1b9c5fb2bdaf12010176c7df099b3fa61c7f1e71c6779982c8d517aad7e361f",
+      "keys": {
+        "c": "f20435b86bb6f0841d1652c477eeb45b",
+        "jvm": "8ccda68569e8c44353483b3c96f13957",
+        "llvm": "27fae343ed732219f1477cacb75c80dc"
+      },
+      "cases_sha256": "cd75b7314fd2e2daad32853821382b38a9526c9fd204b9ef0f85ea0c815d0f68",
+      "driver_sha256": "d1aa7620bf12160b4efd9a874922520f37ee2e40a7c47c235b18f88d3b2c6001",
+      "populations": {
+        "absBracket": {
+          "count": 29,
+          "cases_sha256": "907e7db3a8a550810818efaf3e5ce4d77db9b721aa31ef8e601086f27ef63ad9"
+        },
+        "absDot": {
+          "count": 29,
+          "cases_sha256": "af558d3b7e9dfaea58915805120f5206a399cade1e052c3578eee6abc40c9412"
+        },
+        "errorBracket": {
+          "count": 29,
+          "cases_sha256": "e795632cdef0422cf8c950e495d7703cb27fe9376afae5a4de87a36fde520821"
+        },
+        "fromCharCodeBracket": {
+          "count": 29,
+          "cases_sha256": "3807486b0719a812482359acc547afc5d06babf32f0ace7f9ac81d0cfd8d3f7d"
+        },
+        "fromCharCodeDot": {
+          "count": 29,
+          "cases_sha256": "b1b8833183e6d3ff6eba10a71304bf02ab9204ddd187a3248958c5fcfa42618c"
+        },
+        "isNaNBracket": {
+          "count": 29,
+          "cases_sha256": "9002b86ff62d82b71596f4f4ce97eb3688df31a74dcf99003ea0739317fbe431"
+        },
+        "isNaNDot": {
+          "count": 29,
+          "cases_sha256": "1e3475ef3a3184844f40840289bc1c3e767d7cb7479c2d2e923dfbccc4d4ec53"
+        },
+        "maxBracket": {
+          "count": 29,
+          "cases_sha256": "8c607e839cb53ed1357af9a237c6361a8a37ef03d08da7fbabe5e8cb96187630"
+        },
+        "viaVariable": {
+          "count": 29,
+          "cases_sha256": "33b93979c026da46cd2278eed80e1aa3e9e5eec5604f602306422a0f6d8b8cd0"
+        }
+      },
+      "complete": true,
+      "count": 261
+    }
+  ]
+}

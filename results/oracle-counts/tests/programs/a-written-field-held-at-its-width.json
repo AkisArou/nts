@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-written-field-held-at-its-width",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-written-field-held-at-its-width/src/main.ts",
+      "signature": "3720c139b594e16498e8259d380211c0d71667bddd289ff193385950ee23b4d8",
+      "keys": {
+        "c": "20728fb9602e45cc07925f2d7dc271fd",
+        "jvm": "6cc6de596e1622c7ac3769a7ae0dd3bd",
+        "llvm": "dd6339948b78e3b8f45e968e8944e8a9"
+      },
+      "cases_sha256": "91038aca348086fd96462e438043aaea15f10cd93dd1bebf4cd637eb888ad019",
+      "driver_sha256": "3aa3d7fc080dbee5a3394718e3d89e4d335cdd601f2937aafe536d55d71e7c42",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079495,
+        0.081014
+      ]
+    }
+  ]
+}

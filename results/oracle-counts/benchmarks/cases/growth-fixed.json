@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/growth-fixed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/growth-fixed/case.ts",
+      "signature": "5c1a93cd376cf025f9ca7b68b8b5a973a14a5d4712ead6da49cb362b502fbcfd",
+      "keys": {
+        "c": "e50434003802b0da5b8f9652e5eedc84",
+        "jvm": "38db33d425a8bb67ffb0f9b6d77517c4",
+        "llvm": "99c88e4df66f2c79fe61c0747600ea59"
+      },
+      "cases_sha256": "8e84c6ae4fc3c22ca7caad42e4402d4e29f0a551cd26a6314dfbe8040f2ece64",
+      "driver_sha256": "0dad1e93f5e14f1963c3f90174a0a47cca506ae1c5d535d6624c94a0f2626dfc",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.08955,
+        0.086282
+      ]
+    }
+  ]
+}

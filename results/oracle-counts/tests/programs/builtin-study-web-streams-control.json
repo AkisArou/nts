@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-streams-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-streams-control/src/main.ts",
+      "signature": "ba0b2cabc4564a3289f9b2ffd3d4db02aa7d9a169331f48c0ef628f75cf002de",
+      "keys": {
+        "c": "c5fa5ab1abc4a8c0a1c2f74c319f1cbe",
+        "jvm": "6a457005d6a679d581c019765090b828",
+        "llvm": "f0c411cbf24677683c9af4242c1f3231"
+      },
+      "cases_sha256": "8811ced23e15250b2318a9f048911cb6f357910e7eef06b2767272ad7ce336ee",
+      "driver_sha256": "9bda36252d3b6830fdaf690a7c30aaf9b23a59d60c6230e5bc43b90575a86044",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

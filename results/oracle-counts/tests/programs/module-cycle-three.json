@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-cycle-three",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-cycle-three/src/main.ts",
+      "signature": "196d074e84d134ad58063aaf56b531cd64a0240d49a190351c3c9b9b210b4d89",
+      "keys": {
+        "c": "ce6f11f323879c307a95e50e8a403f40",
+        "jvm": "b96f7b377fc2bb4ebc490cc142448687",
+        "llvm": "a50c4ee474577394468bfcdecd4e4029"
+      },
+      "cases_sha256": "c173b0da9e03ce9198231b035712922dd4259339a009474a6c41ddccb0ace31e",
+      "driver_sha256": "7169b00c3aefa88203548afab36bd885ab8df0286030987922a86fbb206714c5",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.073682,
+        0.072564
+      ]
+    }
+  ]
+}

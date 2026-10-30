@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-member-named-with-two-underscores",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-member-named-with-two-underscores/src/main.ts",
+      "signature": "92a0bf9e12d7635c6ff8450333bd65a2bb4727760d802c12a9d19179ea1bc1eb",
+      "keys": {
+        "c": "6847a299e4ca01ef6be07abc25977814",
+        "jvm": "7787280c75588861187c937e1a1eb33a",
+        "llvm": "cbbdeccb86b10549810ce9bc7edba889"
+      },
+      "cases_sha256": "0a879406f25114060e047c8774e5b24b10d434bdebe6a44b92d706b3f3a8ec8e",
+      "driver_sha256": "d85688644a08d2a8885a460fd14a70c5e1558cb910e8c6ddae753f045a01fe49",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075501,
+        0.076053
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-binding-does-not-name-an-anonymous-class",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-binding-does-not-name-an-anonymous-class/src/main.ts",
+      "signature": "fcdf5890ceb769be1a6e04445b602c0058ec772847ee50c62a565735b925659f",
+      "keys": {
+        "c": "0c55122f70422051a1957afea332d360",
+        "jvm": "437bcb7940ed1dd158033071699d23cd",
+        "llvm": "b9a98cfa2d577650a52aa1dd426b8d17"
+      },
+      "cases_sha256": "117c6a68725dd0c51f4fba0e1a7eda4751b6f62869dfc813146c28c105b3f8dd",
+      "driver_sha256": "f78dd02c637096b1428cddcf77833744746aa546a9745c2d38a11f556ededaf8",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.081535,
+        0.081248
+      ]
+    }
+  ]
+}

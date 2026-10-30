@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/three-kinds-of-member-key",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/three-kinds-of-member-key/src/main.ts",
+      "signature": "15975a7c76010d8e100ed950efa4d54e98f670b4d57e4c3e27ccfe4f1dc893a4",
+      "keys": {
+        "c": "fefbbfaf1514079aacab7cfb02901f77",
+        "jvm": "1b85b1ce0af5318c3e8b5a5ce7d0c64c",
+        "llvm": "4a586b29ccf6d1e279dec9d5b326f451"
+      },
+      "cases_sha256": "77c709e8bbd39f9d627ea897be0cea829ed6ed07eb292748af5d1b9c42702646",
+      "driver_sha256": "902d91d70f58ed2f9c2f25e1b5826ead5094d583c746c0d10028a45d6223946a",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075451,
+        0.075583
+      ]
+    }
+  ]
+}

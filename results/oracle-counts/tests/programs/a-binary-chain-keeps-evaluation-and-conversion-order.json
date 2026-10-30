@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-binary-chain-keeps-evaluation-and-conversion-order",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-binary-chain-keeps-evaluation-and-conversion-order/src/main.ts",
+      "signature": "7679529e0b31d1ff8329f7b5721e43403f6f6dbe89f852fca0950e49c0d12cc2",
+      "keys": {
+        "c": "d690c704d41740de78ac9b2d7f2bd1a1",
+        "jvm": "81d892e39cc3977117399c03968b8ebf",
+        "llvm": "251e88a2ea2472ae33101ba5a27a6e8e"
+      },
+      "cases_sha256": "604fcf2088339b6194a3b96b774034366f47cb1b5bbfaaa802f27af4f67ee3dd",
+      "driver_sha256": "00732338acfc245df3081fdb0eacf8831ff164c6df747e2375cd8ca57d075a34",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.088298,
+        0.083988
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-stored-and-compared",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-stored-and-compared/src/main.ts",
+      "signature": "6b0fbcceaaddcccbc7784abccedaa45a2469dde5602fcbd6b822026680731c62",
+      "keys": {
+        "c": "2039da86dd18d6c516d29707349b266c",
+        "jvm": "38395ee68dd15c732f6451cbfc34aeb7",
+        "llvm": "389f17f729ad7f83e5ede3ef75244587"
+      },
+      "cases_sha256": "b4b909090f14598d511b002b75ab9dfa98cd245d4b0e8e5f38f7248d75f6f966",
+      "driver_sha256": "1d3ada04a01d33dbae38fac43f571bcbb985cc63b769d59ae6bdfa6aba28fcd8",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.084509,
+        0.079191
+      ]
+    }
+  ]
+}

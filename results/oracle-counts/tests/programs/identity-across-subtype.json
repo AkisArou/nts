@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/identity-across-subtype",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/identity-across-subtype/src/main.ts",
+      "signature": "4ee764d3f6abb8aeaf34ebcc628c7c46a0f750cd54c835dfb70e08a860e204fc",
+      "keys": {
+        "c": "7638c164638eaf8d20bfc5d5a6a66deb",
+        "jvm": "0689a4fc9476be424d277930f2ee78e1",
+        "llvm": "5fe78f72698f24e91e1a797125955738"
+      },
+      "cases_sha256": "a186a90d768917550dcb34de3abe48dc930fcd270684e0718b206e76947d6ba7",
+      "driver_sha256": "bc4606b36cc38a56980623716feea32e5c6b78c0008df07dc255f0227e107dfe",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076082,
+        0.075811
+      ]
+    }
+  ]
+}

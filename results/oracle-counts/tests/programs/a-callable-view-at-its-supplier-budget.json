@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-callable-view-at-its-supplier-budget",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-callable-view-at-its-supplier-budget/src/main.ts",
+      "signature": "e962077fa0119587797a43d3d048ce127df01493b199d6fd4d555ad49898864f",
+      "keys": {
+        "c": "4f462cc9f6a5d9d6edb3c95424b2a9d4",
+        "jvm": "c3a805289bd212c207b2ebd4d941f916",
+        "llvm": "f8154005c5ca2f572f1aef81b1a027b9"
+      },
+      "cases_sha256": "b3d47823b1854dcc5a851161541fa80dbb76aa22799eb59bbf1422352ab147e9",
+      "driver_sha256": "b22f84fcf20a6e9e83c61dbc0bcd2d36088d654c63064928c0fba6d8c60aac58",
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

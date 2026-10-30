@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-stack-object-whose-key-is-not-an-identifier",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-stack-object-whose-key-is-not-an-identifier/src/main.ts",
+      "signature": "d6a4c9a254fd1f1d6fcf44894c1b7bd77625aaa44b75a0798c44f0b969135e83",
+      "keys": {
+        "c": "51010cc09990f2233ea34f0591afa2ba",
+        "jvm": "434c6e5d9fd14f6ab4fe8090aaeef478",
+        "llvm": "97b296515fb30f9af146b4502a3725ab"
+      },
+      "cases_sha256": "42347891c29e614549151e47f1694aa4154b7ce9ce9382aca370de9a3a742620",
+      "driver_sha256": "f977f31893660a4e29fbf39be635b824e3af00ade65c7fb9bb70b10d17171d7b",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076597,
+        0.074901
+      ]
+    }
+  ]
+}

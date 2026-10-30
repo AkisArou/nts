@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/clbg-reverse-complement-controls",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/clbg-reverse-complement-controls/src/main.ts",
+      "signature": "8f7c959c3f17030c6b3e23c70c864d5863d66921074af38066ae52d9810850c2",
+      "keys": {
+        "c": "8643a593bb7130492f428532d31149f1",
+        "jvm": "8ce22a5b3b5d04f5bc267d0ff716c118",
+        "llvm": "ca8c8f8e8bbcead9f6f720107c283cee"
+      },
+      "cases_sha256": "8a91239020d9849feccfe02e69a852bccd8fbf3405090409c1544c8e6eb3199d",
+      "driver_sha256": "138fe00944c6af4e02abe476f044de18c48f50288c2ffb0101b05b79fe782122",
+      "populations": {
+        "arrayIndex": {
+          "count": 29,
+          "cases_sha256": "973bba651ce6b8f7f903c3868cf59dcdba22ebb88090296412070769fe3b363a"
+        },
+        "explicitByte": {
+          "count": 29,
+          "cases_sha256": "e00c85bb30def7fa26015a83c728fd8337d5ca8e35f9e5f77e72df5669d2eb41"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

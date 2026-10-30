@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-globalthis-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-globalthis-control/src/main.ts",
+      "signature": "0e1007545e0500f09812253c2e8f0932d9e315a980aca6d9c00ea33c6d5330ee",
+      "keys": {
+        "c": "30ba8fbce81aebc4d7764e00e748bf9a",
+        "jvm": "33ebce8b262e0f6f7f15e05a7ce33958",
+        "llvm": "02a232984a0d23ca0a0ef154e73889ee"
+      },
+      "cases_sha256": "722668d52bbac049a8617b791cb96aec85eb5b3086939e934caed1f706376bb5",
+      "driver_sha256": "c741897ed545f6d4567e262acb46dfb9b057300e35fc54d9a6d459fa9205f4de",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

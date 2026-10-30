@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-hoisted-var-typeof-through-a-closure",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-hoisted-var-typeof-through-a-closure/src/main.ts",
+      "signature": "272d14ec9cceebb1026acd1dfce78c193348ff51bcc5dede69ce5af16f452217",
+      "keys": {
+        "c": "66881d25d4bb24684585b8946ef840cc",
+        "jvm": "090918d693f19dc15b021e2d6b603eff",
+        "llvm": "93da8ba547e8e004d1c99d303261c721"
+      },
+      "cases_sha256": "9e369ac916e7404b3a0db23daa9432fe768a12619eb88425d4dcbdbfbea36eae",
+      "driver_sha256": "251045d8698564532df7fbeb13d275ecf8346e36f48dcded6dcd61506f517dbd",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076108,
+        0.071282
+      ]
+    }
+  ]
+}

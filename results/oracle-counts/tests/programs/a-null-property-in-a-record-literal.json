@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-null-property-in-a-record-literal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-null-property-in-a-record-literal/src/main.ts",
+      "signature": "24a4515c12c6db21ada13e5f836ea7761af2b0627aca9c34bbd633684f4fbc0c",
+      "keys": {
+        "c": "b276bbbd16f2be72351c47edc9097e98",
+        "jvm": "b0d285e312c47fd478fcc17966dae6a8",
+        "llvm": "0e567052ae5cf2df70262c1f6a05c897"
+      },
+      "cases_sha256": "f84e26cdbd2ccd2f6bd621f621b80d82cf2087467d8bea8af0a4c728b25e6feb",
+      "driver_sha256": "d509772316df0a3ffc75a9f118514914ffe115db7bba1dd7fb88d1c0ddd68dfd",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.073137,
+        0.076428
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tuple-of-references-with-defaults",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tuple-of-references-with-defaults/src/main.ts",
+      "signature": "32a11ac6cdce14f2667f8808d98058f3309369e63c24dd417f3fb737dda25f11",
+      "keys": {
+        "c": "eac1126cea8dc4cbf07b982ecf48621a",
+        "jvm": "73e1fed5195d7fc6a980685d9445ceeb",
+        "llvm": "b59abcc96b1d5af79d6738ca2a3e854d"
+      },
+      "cases_sha256": "75e95e3eaa091ac5d943e63e348f7e9b19e63534321610cf87301b49aaf1e819",
+      "driver_sha256": "21cce96bd80ba4db87b99e7d688e47b2d1a3d9609c739172d7ad1b0896b335b0",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.079222,
+        0.07807
+      ]
+    }
+  ]
+}

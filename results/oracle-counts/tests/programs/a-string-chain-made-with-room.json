@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-chain-made-with-room",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-chain-made-with-room/src/main.ts",
+      "signature": "140cfbb642014237abc70a6b3e1b96414cd38853f9e0c77b4db0097264101186",
+      "keys": {
+        "c": "20297a5b91a57dc89d49dea417dfb9df",
+        "jvm": "5ed35b6b63d8526c710035d80a14374d",
+        "llvm": "214a57f39ed7dc54e3a6d709e5ec248f"
+      },
+      "cases_sha256": "2c3f4a0b9c64400ab14af14f61e4fdd9473c3c81a14e5e10878c95d4f10b0f1a",
+      "driver_sha256": "adc4beee9e06aa799a5499845f5920d5d01c1d0301a8fb2cc50575632f2dc122",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.079829,
+        0.080773
+      ]
+    }
+  ]
+}

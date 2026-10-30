@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-domexception-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-domexception-control/src/main.ts",
+      "signature": "7b3acbe864a9ca558848969de7f1c51859066df03d4cf85f017e629aeec396d6",
+      "keys": {
+        "c": "ae2b5b49ac04fde433fd08bd48805792",
+        "jvm": "b9b37a611ff1f03579b782e34ee0b4bf",
+        "llvm": "0087a2beb49283427d94a23ea9fd87f5"
+      },
+      "cases_sha256": "431271d9fece36dd423922c32a29f30bb44b0f9649d75f79486f1ad81502ab0a",
+      "driver_sha256": "2f98b268d95c0d5d5de21a8fe453b826b24b7540c4174da3ddf02e9f338094ee",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

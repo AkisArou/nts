@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-literal-method-replacement-proved-through-a-private-helper",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-literal-method-replacement-proved-through-a-private-helper/src/main.ts",
+      "signature": "0877f6ba0da724bb43e46b0086788e507801823a77ae98f4f50077db38973002",
+      "keys": {
+        "c": "2d7a0f93650a0e3fe96620ddf651d0ff",
+        "jvm": "e88f128f35dace8b9854486297fd40e0",
+        "llvm": "6639946f81e462346995e759270ab9fd"
+      },
+      "cases_sha256": "44e799eae4b6e2348e20fcfce2f9a8d88bd5884f14a1e61155e858cc6f792245",
+      "driver_sha256": "2eb17cb4b58743282c4cddb7f957c72d1adbe9b8bf36dafa4391f3afcf2160c8",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.07155,
+        0.073073
+      ]
+    }
+  ]
+}

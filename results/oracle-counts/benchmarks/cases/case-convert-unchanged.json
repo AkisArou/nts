@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/case-convert-unchanged",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/case-convert-unchanged/case.ts",
+      "signature": "133ca860adb49d3f384daa46f4db9d5c8b771b06b3c792dbcb136332dcf5892c",
+      "keys": {
+        "c": "115d09a118e3214da27af89adc99aec7",
+        "jvm": "fe98524594279d0f3e0230c87c322612",
+        "llvm": "42a01b0f505542985ed00ada937efe06"
+      },
+      "cases_sha256": "5acaa82f147c8c410a2ab5107df37d3979fafc94de7f0d3ff94d4160104e7e0a",
+      "driver_sha256": "937403f15814839c01c49f5721c1a108ed66712cc8a52ec469918ca50e846793",
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

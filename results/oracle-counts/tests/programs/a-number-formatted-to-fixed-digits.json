@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-number-formatted-to-fixed-digits",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-number-formatted-to-fixed-digits/src/main.ts",
+      "signature": "05ad5a2764d277ec447e710bc669daec6f68fda0b1916f279a66ff0aee48e89d",
+      "keys": {
+        "c": "925d059ef33b5598e1115066a52820be",
+        "jvm": "f810d323784941536d9d149735b60cc7",
+        "llvm": "4564c4d92d762e1c342d97c6eb881428"
+      },
+      "cases_sha256": "c63c6bdf31d99a7b39437c7a78e7493b152a3d2d6d6c921478363bf49b79c44e",
+      "driver_sha256": "7f3be5b4a0c0e1eb30987334179671269ed16cf8f633142472c293475888ef82",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.081304,
+        0.079069
+      ]
+    }
+  ]
+}

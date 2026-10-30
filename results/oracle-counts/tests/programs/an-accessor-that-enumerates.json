@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-accessor-that-enumerates",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-accessor-that-enumerates/src/main.ts",
+      "signature": "864096573814d3467339b112dae6638af3f2d423f91924771180737151532136",
+      "keys": {
+        "c": "31fed05f7d8cd4599278b8ddfc86921d",
+        "jvm": "c281042e0e3a4cb0daa84dd7a3672e0e",
+        "llvm": "934b145ccb946544d6613b932a994376"
+      },
+      "cases_sha256": "c8fd66f9b35988baaf229733d1f4ec1ab4552a19f5b15249c70f530566df5090",
+      "driver_sha256": "789ddf81c8643b0e68a1ffdf0f815e9f64fdbe5eac63ae98ed47e7ddb6b6de1c",
+      "complete": true,
+      "count": 274,
+      "node_cpu_s": [
+        0.087436,
+        0.085436
+      ]
+    }
+  ]
+}

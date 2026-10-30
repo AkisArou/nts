@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-frame-object-a-constructor-stores",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-frame-object-a-constructor-stores/src/main.ts",
+      "signature": "930d42b46d1948a035944bd2511c5c2c8be995afb58f264045c29457225393ac",
+      "keys": {
+        "c": "543b3bb8ef505a816b9ad2bfa71cf07d",
+        "jvm": "a5d4138dfe74a5ed8844d6f7af403694",
+        "llvm": "82e12973246148035d7dbdf959bb6ce1"
+      },
+      "cases_sha256": "07bfdc48922bcaa8b6b3ad21a3428c1f7fa737fe12d3a24b7abf04c0ab03b656",
+      "driver_sha256": "dc9904d6754fca009610d62ed16b3f171a2d54ecb38ec6c3f1a685c2cf9878b1",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075839,
+        0.07442
+      ]
+    }
+  ]
+}

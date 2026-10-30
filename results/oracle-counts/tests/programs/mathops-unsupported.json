@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/mathops-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/mathops-unsupported/src/main.ts",
+      "signature": "0385f21d803c15b91b21b3e438249d412e25d78b20ff284cee60bbef01805c12",
+      "keys": {
+        "c": "67409d1f33510c7bec89b8e0ca421795",
+        "jvm": "028f1b863198d6cc85864c7260e62a50",
+        "llvm": "bd9424ed8a1f3a95b5423cab0154b2b4"
+      },
+      "cases_sha256": "38567bd7dcba67c56e067e0b1a647d9060bebac3f726e1594732db5a6263a94d",
+      "driver_sha256": "137e073c747e1b539b07dbd7a9f4f42006d8b8582aaa3489877faf7da072c52f",
+      "populations": {
+        "areaCosh": {
+          "count": 29,
+          "cases_sha256": "ddc07ceba476a31fbaa7b6752a849268b7f8d45a6dabf4952b5d7f0a0abea191"
+        },
+        "areaSinh": {
+          "count": 29,
+          "cases_sha256": "9dfce2dc49c95f21ea8e2ed0ae616a54d654972a531a58efec8c9c56f1e64f6a"
+        },
+        "areaTanh": {
+          "count": 29,
+          "cases_sha256": "d6f8044ee3ba6be958161ab00449aa3989351b1e76c87803045e8ffacdd68396"
+        },
+        "leadingZeros": {
+          "count": 29,
+          "cases_sha256": "af24c17ed276195da2840b8ed88972023c542d8017ba7108a383d1ad4de9245c"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

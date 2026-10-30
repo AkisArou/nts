@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-through-a-union-of-classes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-through-a-union-of-classes/src/main.ts",
+      "signature": "2ce06867e96fc3f4fb0dc29048bdf359f4538278399573aa222851a93a806b2e",
+      "keys": {
+        "c": "791247f0b01be7389e04f2c8884a7300",
+        "jvm": "7588b511b76b16053a1e6fdcb9eec126",
+        "llvm": "06f184e12f3ee605bab61c25acb1daf3"
+      },
+      "cases_sha256": "6ad4381d6b4115c04c24818a619ff804a76042d5fca6c3a8d426b6ffe6a0f065",
+      "driver_sha256": "7283e9e3499523e7bc30d7f545f4770066753ceaf7c98e0242c9b05f0cf235c3",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076159,
+        0.075058
+      ]
+    }
+  ]
+}

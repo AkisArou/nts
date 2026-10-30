@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-javascript-file-typed-by-jsdoc",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-javascript-file-typed-by-jsdoc/src/main.js",
+      "signature": "ce5e7c4a4f75abacd1d7dfcb6f3e2f381c3906ee363daab3ae2d78a3c814c9a7",
+      "keys": {
+        "c": "83c5b332c787bfe9b753f36c1b09cdf7",
+        "jvm": "7c598154a66c06f4a85caa99fc9c8545",
+        "llvm": "b061c7d00b2fc431e2e72fc2aed82221"
+      },
+      "cases_sha256": "5268814a00230f4df0f16634cf0ffde9467b0dec3399ce047b77d0ce6eccbfe7",
+      "driver_sha256": "8b8331540c949f85d77c52758a7b8f37702e87e53567951ca2ae5b917736acd2",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.014507,
+        0.013663
+      ]
+    }
+  ]
+}

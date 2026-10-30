@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/in-on-a-record",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/in-on-a-record/src/main.ts",
+      "signature": "1efcf7d57bf77cdc8e97c7c34ef27e1c2de0fa17dabfc10c799bb043c7a20d95",
+      "keys": {
+        "c": "3bb484ed2aa286f23159523da17a93a9",
+        "jvm": "9ae044ec425f301e356338b95f70d42f",
+        "llvm": "5e151aae523cac68b718aebcea142d3b"
+      },
+      "cases_sha256": "cb246e0ff0ea8731ce8e8b4bf5605d14792dd6469a03278c9b8cf1dc289fc6da",
+      "driver_sha256": "422cac8ccaf686eed5792f0145896e0c56af9b74a4f1779ae143e44465e31408",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075239,
+        0.075975
+      ]
+    }
+  ]
+}

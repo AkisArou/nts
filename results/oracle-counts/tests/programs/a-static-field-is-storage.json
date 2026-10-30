@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-static-field-is-storage",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-static-field-is-storage/src/main.ts",
+      "signature": "11c52074a1c76f9b5ba96d38c60a7dc10b67bfd7516b7d6fa25c31f94ab214f0",
+      "keys": {
+        "c": "e9f771ec162317aafabe71b0a8273d87",
+        "jvm": "1fcf42d308f2be4e52b12f216c74b26e",
+        "llvm": "1dfef2cd0c353fddc36c878bb9128736"
+      },
+      "cases_sha256": "5efde148a157a2bdc4d50e14de0b1dddeaa40627eceb4c9854ca3695e578fca1",
+      "driver_sha256": "bf04d4522c93d796e5397f318cd7ff9c245f5ced50904aa5c4e9669c864f527f",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.075994,
+        0.075959
+      ]
+    }
+  ]
+}

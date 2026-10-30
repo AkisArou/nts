@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-split-in-a-program-that-grows-an-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-split-in-a-program-that-grows-an-array/src/main.ts",
+      "signature": "f21527ffc676f54f42fb9e800b42a2a3c9df6839e9d928289f491dec5121ab00",
+      "keys": {
+        "c": "824e0365ce0f33f0944b2cf2acdd65d9",
+        "jvm": "d770a13203cd64858b0b4ff67e0a91e5",
+        "llvm": "d90c6a80448ec19272c4183c88f901e4"
+      },
+      "cases_sha256": "9c30de429be38cb31bec21a66d2b9e369d6f7b563a8f5dc54e808e32ad062462",
+      "driver_sha256": "c983293aa38dd2b4013f678210095e15da20cdd855085f34f53bd131c9aef417",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079476,
+        0.076476
+      ]
+    }
+  ]
+}

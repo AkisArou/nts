@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-function-value-keeps-one-erased-root",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-function-value-keeps-one-erased-root/src/main.ts",
+      "signature": "c4fbfe409808de71a85f95e3ad334f7d7c648b029b671ff44cbf578492ebc864",
+      "keys": {
+        "c": "328cb4fd9fa8b50de67bf976973e4dc5",
+        "jvm": "4211171620e7bf514bdb95c44e0b9c7b",
+        "llvm": "e3b73d4305ce4dfd95495bf495cda5a3"
+      },
+      "cases_sha256": "f674175d8f00292d9e5e0a9c61b9d1d2ec6db4fd3f36e5b6d3c2ea196217099a",
+      "driver_sha256": "a73d1529e7b47255a90d234ab2b60d63868296c90509c4a547795f9f56aa6c7c",
+      "complete": true,
+      "count": 503,
+      "node_cpu_s": [
+        0.100944,
+        0.095084
+      ]
+    }
+  ]
+}

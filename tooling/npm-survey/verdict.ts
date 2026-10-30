@@ -4,11 +4,9 @@
 // compiled with *nothing calling it*, so the compiler prunes what no root
 // reaches and never walks it. A zero here is not a pass.
 import { readFile, writeFile, readdir } from "node:fs/promises";
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import type { Vendored } from "./vendor.ts";
+import {runCheck, Outcome as CheckOutcome} from "../differential/check-report.ts";
 
-const run = promisify(execFile);
 const HERE = new URL("./", import.meta.url).pathname;
 const REPO = new URL("../../", import.meta.url).pathname.replace(/\/$/, "");
 const NTS = process.env["NTS_BIN"] ?? REPO + "/target/release/nts";
@@ -78,25 +76,14 @@ for (const v of vendored) {
   const configPath = v.root + "/nts-tsconfig.json";
   await writeFile(configPath, JSON.stringify(config, null, 1));
 
-  let out = "";
-  try {
-    const r = await run(NTS, ["check", configPath], {
-      env: { ...process.env, NTS_CHECKERS: "1" },
-      timeout: 120_000,
-      maxBuffer: 64e6,
-      cwd: REPO,
-    });
-    out = r.stdout + r.stderr;
-  } catch (e) {
-    const err = e as { stdout?: string; stderr?: string; message?: string };
-    out = (err.stdout ?? "") + (err.stderr ?? "") + (err.message ?? "");
+  const {record: observation} = await runCheck(NTS, configPath, {cwd: REPO,
+    env: {...process.env, NTS_CHECKERS: "1"}});
+  if ((observation.outcome === CheckOutcome.NOT_MEASURED && observation.report?.error?.kind !== "typecheck") || observation.outcome === CheckOutcome.INVALID_HIR) {
+    throw new Error(`npm survey not measured: ${v.name}: ${observation.first}`);
   }
-
-  const tsErrors = [...new Set([...out.matchAll(/^(?:\S+ )?(TS\d+)/gm)].map((m) => m[1]!))];
-  const refusals = [...out.matchAll(/refused: (?:\S+ )?NTS\d+ (.*)$/gm)].map((m) =>
-    m[1]!.replace(/ is not supported by this lowering yet$/, ""),
-  );
-  const outcome: Outcome = tsErrors.length
+  const tsErrors = [...new Set(observation.refusals.filter(one => one.stage === "typecheck").map(one => one.code))];
+  const refusals = observation.refusals.filter(one => one.stage !== "typecheck").map(one => one.message);
+  const outcome: Outcome = tsErrors.length || observation.outcome === CheckOutcome.NO_TYPECHECK
     ? "typecheck-failed"
     : refusals.length
       ? "refused"

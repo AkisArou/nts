@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-intl-datetime-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-intl-datetime-control/src/main.ts",
+      "signature": "f63b396f0e2b49050997e1f8fcb8fb6aa397d6d0d90eca6fb58b9b009bba2104",
+      "keys": {
+        "c": "cc79d3cf860528bfde2cd5e6d018a24e",
+        "jvm": "1087ab8a399f618562dc0eaad3491cf2",
+        "llvm": "0137e6225f7716238b4b31e1ab3702b7"
+      },
+      "cases_sha256": "c5a31e26d05e34a1b0a9d6776e1678054bfedfd61a66700fd505db33ae682eb2",
+      "driver_sha256": "200d87dd90821ae00db8c65f6ec362f15bd6eedab2030e2c839ab033a3f4b5bd",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

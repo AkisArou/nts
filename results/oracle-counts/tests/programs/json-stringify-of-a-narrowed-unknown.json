@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/json-stringify-of-a-narrowed-unknown",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/json-stringify-of-a-narrowed-unknown/src/main.ts",
+      "signature": "ef8a5400ea35a66eb91ef01190c66a594e32f0b7ecc7a04e4aa6cbbc3b855cd7",
+      "keys": {
+        "c": "4d8404575c7864f1e51f7f6960aa94bc",
+        "jvm": "27f13b25fbbc976461f2461d5933a7d2",
+        "llvm": "5654f4716863b5c778a4e9637e52cda7"
+      },
+      "cases_sha256": "9fb4f679aa6b88e1981b912cd6a340186d62d0f1120d5f15e88e38d642a58510",
+      "driver_sha256": "57b43f55866fe42d07b58c9e39da068b872b1874e71b10029c1751b9e562e71d",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.07548,
+        0.075581
+      ]
+    }
+  ]
+}

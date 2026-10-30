@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-date-iso-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-date-iso-control/src/main.ts",
+      "signature": "783c5d09abd86672a020673f9802569d2d88711d5820dbb3ea22082a5c717436",
+      "keys": {
+        "c": "6fc5d13e9096acb3cdd19f0c56f37394",
+        "jvm": "3852990a441a3c84205bfed1a2fc5624",
+        "llvm": "23a37aabb4e8103a2e72d35ee308492e"
+      },
+      "cases_sha256": "b6c80ab47dfb070184fe638b4cb88f0aef8d285acfe88bbdb66e925e2e015fdd",
+      "driver_sha256": "f924da6cf00776f3d0de09f4ce88b6abaae2a496083e14000edde297a19e2e73",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

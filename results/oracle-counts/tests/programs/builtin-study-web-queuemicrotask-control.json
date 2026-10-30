@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-queuemicrotask-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-queuemicrotask-control/src/main.ts",
+      "signature": "e1d28745e9f310ddd04777622c67ebdd8a4ba148274962bdac37f610981182b5",
+      "keys": {
+        "c": "a942474a43d71189ad650544fe6fd327",
+        "jvm": "a637c0d66adb8028cef99808d3b2e5c3",
+        "llvm": "06cefb938a5596cc98e5142b47d288a6"
+      },
+      "cases_sha256": "4895bc1330b2dc23b58bbdefe532388ad984e9bef1c18b748be6d5171b1c13c4",
+      "driver_sha256": "5612f3a603b008231c5af9a50954134c5e6c22aa4f2546712a2624ea4d6c6a1d",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

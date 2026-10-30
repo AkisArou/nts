@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throwing-sort-comparator-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throwing-sort-comparator-inside-a-try/src/main.ts",
+      "signature": "6e776b1befde2c223b5657201fd3cdc95e40175f80a42f45ac26f6b24e2b5dd8",
+      "keys": {
+        "c": "8c371d3d2ae0667fb0baa82023123d63",
+        "jvm": "23425217ce727c6d008f0a75abbb10e8",
+        "llvm": "25f6e0751044450240a41297b904203b"
+      },
+      "cases_sha256": "ff99dde454b39a4ec5a0f759126411a3c2f9cd1fec8590d06707386eeba5fc58",
+      "driver_sha256": "9f1c698d851d8b4498e42cc7e7343ec591413e762f495015227f4ebb8fc2c5a3",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.078482,
+        0.075226
+      ]
+    }
+  ]
+}

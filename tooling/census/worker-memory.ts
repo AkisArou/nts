@@ -10,6 +10,7 @@ import { basename, join } from "node:path";
 import { PressureError, CaseBudgetError } from "../gate/step-result.ts";
 import { recordAggregatePeak } from "../gate/case-costs.ts";
 import { toolingSlicePrefix } from "../gate/tooling-slice.ts";
+import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
 
 const CGROUP = "/sys/fs/cgroup";
 const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
@@ -290,7 +291,8 @@ export function serialRun(tools): void {
   process.exit(result.status ?? 1);
 }
 
-export function compileSync(tools, command: string, args: readonly string[], options) {
+// Both execution APIs share the same cgroup observations and attribution.
+function compilerInvocation(tools, command: string, args: readonly string[], options) {
   const noAddressLimit = ["-c", 'ulimit -c 0; exec "$0" "$@"', command, ...args];
   if (inResidentWorker()) {
     const boundary = process.env.NTS_CENSUS_WORKER_GROUP!;
@@ -298,10 +300,11 @@ export function compileSync(tools, command: string, args: readonly string[], opt
     const before = events(boundary);
     const aggregateBefore = events(aggregate, true).oom;
     if (process.env.NTS_CENSUS_ACTIVE_CASE) writeFileSync(process.env.NTS_CENSUS_ACTIVE_CASE, `${[command, ...args].join(" ")}`);
-    const result = spawnSync("sh", noAddressLimit, options);
-    const cause = memoryCause(before, events(boundary), aggregateBefore, events(aggregate, true).oom);
-    const memoryKilled = compileMemoryResult(cause, process.env.NTS_CENSUS_CASE_CONCURRENCY === "exclusive", command, args, Number(process.env.NTS_CENSUS_RUN_MAX_BYTES), Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES));
-    return { ...result, memoryKilled, residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
+    return {command:"sh",args:noAddressLimit,options,close:()=>{},finish:(result)=>{
+      const cause = memoryCause(before, events(boundary), aggregateBefore, events(aggregate, true).oom);
+      const memoryKilled = compileMemoryResult(cause, process.env.NTS_CENSUS_CASE_CONCURRENCY === "exclusive", command, args, Number(process.env.NTS_CENSUS_RUN_MAX_BYTES), Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES));
+      return { ...result, memoryKilled, residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
+    }};
   }
   // Standalone callers are bounded too. Serial runners and parallel census
   // workers enter a scope once, then compile without a per-case bus round trip.
@@ -315,14 +318,32 @@ export function compileSync(tools, command: string, args: readonly string[], opt
   const scope = worker.scope("sh", noAddressLimit);
   const before = worker.counters();
   const aggregateBefore = worker.run.aggregateOoms();
-  let result;
-  try {
-    result = spawnSync("systemd-run", scope.argv, { ...options, env: { ...scope.env, ...options.env } });
-    if (!worker.ready(scope)) throw new Error(`resident cap: compiler scope failed before entry: ${result.stderr ?? result.error?.message ?? "no diagnostic"}`);
-  } finally {
-    worker.stop(scope);
-  }
-  const cause = memoryCause(before, worker.counters(), aggregateBefore, worker.run.aggregateOoms());
-  const memoryKilled = compileMemoryResult(cause, true, command, args, worker.run.budgetBytes, worker.bytes);
-  return { ...result, memoryKilled, residentLimitBytes: worker.bytes, residentRunBytes: worker.run.budgetBytes };
+  let closed=false;
+  const close=()=>{if(!closed){closed=true;worker.stop(scope);}};
+  return {command:"systemd-run",args:scope.argv,options:{...options,env:{...scope.env,...options.env}},close,finish:(result)=>{
+    try{
+      if (!worker.ready(scope)) throw new Error(`resident cap: compiler scope failed before entry: ${result.stderr ?? result.error?.message ?? "no diagnostic"}`);
+    }finally{close();}
+    const cause = memoryCause(before, worker.counters(), aggregateBefore, worker.run.aggregateOoms());
+    const memoryKilled = compileMemoryResult(cause, true, command, args, worker.run.budgetBytes, worker.bytes);
+    return { ...result, memoryKilled, residentLimitBytes: worker.bytes, residentRunBytes: worker.run.budgetBytes };
+  }};
+}
+
+export function compileSync(tools, command: string, args: readonly string[], options) {
+  const invocation=compilerInvocation(tools,command,args,options);
+  try{return invocation.finish(spawnSync(invocation.command,invocation.args,invocation.options));}
+  finally{invocation.close();}
+}
+
+/** Activity and CPU bounds replace wall deadlines without changing OOM policy. */
+export async function compileActive(tools, command: string, args: readonly string[], options: Partial<Parameters<typeof activeCommand>[2]> = {}) {
+  if("timeout" in options)throw new Error("compileActive does not accept wall-clock verdict deadlines");
+  const invocation=compilerInvocation(tools,command,args,options);
+  try{
+    const result=await activeCommand(invocation.command,invocation.args,{...options,cwd:options.cwd??process.cwd(),env:invocation.options.env??process.env});
+    const measured=invocation.finish(result);
+    if(!measured.memoryKilled&&(result.hung||result.runaway))throw new CommandNotMeasuredError(result);
+    return measured;
+  }finally{invocation.close();}
 }

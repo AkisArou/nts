@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-union-whose-members-disagree-about-where",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-union-whose-members-disagree-about-where/src/main.ts",
+      "signature": "12fd51558d46f3e51424696dcbd19de28f54b6bc06198f89b58e0a98fb00751c",
+      "keys": {
+        "c": "6f3d13c21bcea7acd47ab295a184f077",
+        "jvm": "410ab6536b0296d40f9d0afe81e5d576",
+        "llvm": "52d4b2c82bb4a164abeb9ae93ccb379c"
+      },
+      "cases_sha256": "01e557a6f9df970b3422130606e136f57a54f8c6385eb79c545d7c47a2fdf9dc",
+      "driver_sha256": "a67fa5c7dd89b21a59ab86de4daf62497fb890f1f54a6b6d6d803231437fd8bc",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076215,
+        0.075064
+      ]
+    }
+  ]
+}

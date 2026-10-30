@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-callable-view-selects-its-actual-supplier",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-callable-view-selects-its-actual-supplier/src/main.ts",
+      "signature": "02de91fb43e35b4fe150aad9196c443d3274cc3fd46b2ab7df1083c75bbbe791",
+      "keys": {
+        "c": "4ad51fbec0d4557030f1b4f6618ab436",
+        "jvm": "59f2fbd6bd7a80fef67ec141670b0fef",
+        "llvm": "db4e7ff858528ff37a3a9f537498c039"
+      },
+      "cases_sha256": "b68256e08719292cd2263e26ca6a8d5e3803f3a4544a1f73d4ec8b8db74828a9",
+      "driver_sha256": "52de35690681ecfc03f1a7f9fcc60a2c0ea931f692353574209034739a76413b",
+      "complete": true,
+      "count": 174
+    }
+  ]
+}

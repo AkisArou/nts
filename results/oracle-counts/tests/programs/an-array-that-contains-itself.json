@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-that-contains-itself",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-that-contains-itself/src/main.ts",
+      "signature": "d72ac2bfe6f115f82ca93fc90a6f5f1016e933338f849daf9ee7d6c69be1ee3e",
+      "keys": {
+        "c": "78b2eb58722089fae5ae5d9fca2da0a3",
+        "jvm": "d6c5b6fff94d9c4704ab07b93a52e503",
+        "llvm": "5c2ab2356b77ffc7eb7ca479494f1ca5"
+      },
+      "cases_sha256": "c0b7e32f46415d9853dad328a7ce40aeb265516f090307983b4a0ca34f7bd39f",
+      "driver_sha256": "8feb7ad41d021760e80dadac6f548ab353203a654a6db088b8ae8beb798af0ed",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075984,
+        0.073699
+      ]
+    }
+  ]
+}

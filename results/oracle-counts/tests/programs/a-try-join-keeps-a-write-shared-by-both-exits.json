@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-try-join-keeps-a-write-shared-by-both-exits",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-try-join-keeps-a-write-shared-by-both-exits/src/main.ts",
+      "signature": "540372667d9b326925953002072fd03a5b8d72932a22e9559794ef77f34514b4",
+      "keys": {
+        "c": "8e326a1e04ea0d7344346e6954325634",
+        "jvm": "067eec48e83e232fd9e1f1e008499f05",
+        "llvm": "76a450e384c197e88a41547d3ef7cf75"
+      },
+      "cases_sha256": "db8fd41b29f2ebf5839cd45942c2cb98cf48a0a525e2a45bd14f85d274e23373",
+      "driver_sha256": "14dcc67aae13d65e6138e4d6851515eb14177ff786cdc8535a60661726b3a890",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075127,
+        0.074054
+      ]
+    }
+  ]
+}

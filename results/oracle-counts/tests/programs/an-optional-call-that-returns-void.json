@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-call-that-returns-void",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-call-that-returns-void/src/main.ts",
+      "signature": "732d0d688a9c8313652b940448246ae059ad47e3f79ae47c98cbd63d724a3ae0",
+      "keys": {
+        "c": "404b0802f45e5fba34a7c2c25d4209f9",
+        "jvm": "32fbcfd0b91a11408e3e3b1b798f865a",
+        "llvm": "5498739f541f64f8ac862a53db027a56"
+      },
+      "cases_sha256": "cb5d8d85cf6572797313cb9a20ac6f377c7b51992799287d24d98dd2aa503350",
+      "driver_sha256": "e9fca12e3fe68304f70b6fde4e85c2410b917c6a3f710232ec1a55010ad2f128",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07749,
+        0.076709
+      ]
+    }
+  ]
+}

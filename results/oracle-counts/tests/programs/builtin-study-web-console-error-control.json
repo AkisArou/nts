@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-console-error-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-console-error-control/src/main.ts",
+      "signature": "758a753dde57f6ccb384b5686f6b815cbd0df3db14898dd43884e1fa0344fb75",
+      "keys": {
+        "c": "b9d33b3fbb4178967a645ac4b13cde38",
+        "jvm": "728a12406148d9e21cf61eaae28c9701",
+        "llvm": "101c8c23757873241292b65b17c114c0"
+      },
+      "cases_sha256": "e660b396f957c3812defaf2ce570c1c4af6596441d7cab0992ec3f0f0a1c3bc9",
+      "driver_sha256": "f5d20280f7fd4e4e64cae542bc9bf1448a6c1d17d65e2baf8b4161926479247b",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

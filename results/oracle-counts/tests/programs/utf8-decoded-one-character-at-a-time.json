@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/utf8-decoded-one-character-at-a-time",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/utf8-decoded-one-character-at-a-time/src/main.ts",
+      "signature": "5343385875c086af878ff6ee3affd531209f683b48ca57741865d329ec828c62",
+      "keys": {
+        "c": "fc4e3719d0878c19e8dd66a4d3a975da",
+        "jvm": "8c0ac0dbb430d4044a05e97194582631",
+        "llvm": "bdfb691250be85c43feb294cdf0b215e"
+      },
+      "cases_sha256": "1e48e95960a0af6beb82a26e61a44e50c7bbbf6858eda4990e106e893c604110",
+      "driver_sha256": "4dacf952b0d0b948872c7c52571a53bfad4a74bb4d95b240cbb04846acb08ac4",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.086629,
+        0.089765
+      ]
+    }
+  ]
+}

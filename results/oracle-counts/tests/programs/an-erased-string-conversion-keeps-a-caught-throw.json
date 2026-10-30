@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-erased-string-conversion-keeps-a-caught-throw",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-erased-string-conversion-keeps-a-caught-throw/src/main.ts",
+      "signature": "9b235164c99f32dcc418e5c84d07fbd577ed911ccfb541ae1066dca668ec5eff",
+      "keys": {
+        "c": "38987f2024019fdb9b42975b1d2efd5f",
+        "jvm": "23a3d77a939f19da7420f1f2d464032e",
+        "llvm": "daba9b7202a8882c35290a619344341f"
+      },
+      "cases_sha256": "95b28419a2d96a71630382951c85689a5d97e9eb758fb3cbf7a58b411b25e1df",
+      "driver_sha256": "f50fe931b77854dbc7e96a814a11698e260651e63eca4ed891b510130ce7dd70",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.076825,
+        0.076638
+      ]
+    }
+  ]
+}

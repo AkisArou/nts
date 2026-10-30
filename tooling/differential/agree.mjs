@@ -74,7 +74,7 @@
 // wrong answer, or a change. Exit 2: something could not be measured, or the
 // tool could not start.
 
-import { execFileSync, spawn } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync,
@@ -86,36 +86,18 @@ import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
 import { newlyRecordedProjects, newBeforeProject, fullyMeasuredAgreement } from "./new-projects.ts";
+import { runCheck, reportCheckFailure, checkFailurePolicy, decodeCheck, Outcome } from "./check-report.ts";
+export { Outcome } from "./check-report.ts";
+import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
 const CACHE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "nts-agree");
-// One example's whole differential: lowering, a C build, two runs. The largest
-// take seconds; this bounds a hang, not a slow case.
-const TIMEOUT_MS = 300_000;
-
-/** The outcomes, in the words `nts check` uses for them. */
-export const Outcome = Object.freeze({
-  AGREES: "agrees",
-  PARTIAL: "agrees on what it compared",
-  NOTHING: "nothing to check",
-  DISAGREES: "disagrees",
-  ABORTED: "aborted",
-  ALL_DECLINED: "declined every case",
-  BACKEND_DECLINED: "backend declined",
-  INVALID_HIR: "invalid HIR",
-  NO_TYPECHECK: "does not typecheck",
-  NOT_MEASURED: "not measured",
-});
 /** Outcomes that are a wrong or missing answer about the program. */
 const WRONG = new Set([
   Outcome.DISAGREES, Outcome.ABORTED, Outcome.ALL_DECLINED, Outcome.BACKEND_DECLINED, Outcome.INVALID_HIR,
   Outcome.NO_TYPECHECK,
 ]);
-/** A refusal *caused by* another -- "because it calls", "this statement is skipped". */
-// The optional token after `refused: ` is the diagnostic's place, which
-// `nts check` prints since the locator moved into `nts-diagnostics`.
-const CASCADE = /^ {2}refused: (?:\S+ )?NTS100[35] /;
 /** Outcomes that compared something and found no difference. */
 const AGREEING = new Set([Outcome.AGREES, Outcome.PARTIAL]);
 
@@ -126,72 +108,16 @@ const NOT_DIFFERENTIAL = new Map([
   ["unsupported", "exists to document refusals"],
 ]);
 
-/**
- * One `nts check` run, as a record. `status` is the exit code (null if it was
- * killed), `out` its stdout and stderr together.
- *
- * Keyed on the lines `check` in `tooling/cli/src/main.rs` prints and the
- * errors `nts_differential::check` raises. A message this does not recognise
- * is NOT MEASURED with its first line, never a pass and never a disagreement.
- */
-export function classify(status, out) {
-  const count = (re) => Number(re.exec(out)?.[1] ?? 0);
-  const reached = /^checked (\d+) of (\d+) cases/m.exec(out);
-  const full = /^checked (\d+) cases across/m.exec(out);
-  const record = {
-    status,
-    missingPopulation: /oracle not measured: (?:recorded count for )?(.+?) \([a-z]+\) (?:has no unique recorded population|is not its full generated count)/.exec(out)?.[1] ?? null,
-    checked: Number(reached?.[1] ?? full?.[1] ?? 0),
-    expected: Number(reached?.[2] ?? full?.[1] ?? 0),
-    declined: count(/^(\d+) case\(s\) the compiled program declined/m),
-    timeouts: count(/^(\d+) case\(s\) ran out of time/m),
-    // Lowering's refusals: each one can take a function out of what is driven.
-    // `check` prints the cascades too, and `tooling/gate/example-refusals`
-    // counts roots only -- the same example reads 3 here and 1 there, by
-    // design, so both are kept and both are printed.
-    refused: out.split("\n").filter((line) => line.startsWith("  refused: ")).length,
-    refusedRoots: out.split("\n").filter((line) => line.startsWith("  refused: ") && !CASCADE.test(line)).length,
-    // What the two sides answered where they differ, verbatim: two runs that
-    // disagree *differently* are two different answers. Not the harness's
-    // own `node stopped part-way:`, which shares the `  node ` prefix.
-    answers: out.split("\n").filter((line) =>
-      /^ {2}(?:nts {2}|node |the compiled program aborted: )/.test(line) && !line.startsWith("  node stopped part-way: ")),
-    // The oracle died before its `done` line -- a hostile pool value can run
-    // node out of heap. The cases after it are unreached on both sides, which
-    // `checked` already says; the message carries node's GC log, so it is
-    // counted, never compared.
-    oracleStopped: out.split("\n").filter((line) => line.startsWith("  node stopped part-way: ")).length,
-  };
-  const first = out.split("\n").find((line) => line.trim() !== "")?.trim().slice(0, 120) ?? "(no output)";
-  const outcome = (() => {
-    if (status === 0) {
-      if (/^nothing to check/m.test(out)) return Outcome.NOTHING;
-      // The verdict line, in either spelling: `check` says how many it compared
-      // when that is fewer than there were, and a log from before it did not.
-      if (!/^agreed on every case(?: it compared: \d+ of \d+)?$/m.test(out)) return Outcome.NOT_MEASURED;
-      const whole = record.checked === record.expected && record.declined === 0 && record.timeouts === 0;
-      return whole ? Outcome.AGREES : Outcome.PARTIAL;
-    }
-    if (status === null) return Outcome.NOT_MEASURED;
-    if (/disagree between the compiled program and node/.test(out)) return Outcome.DISAGREES;
-    if (/the compiled program aborted \d+ time/.test(out)) return Outcome.ABORTED;
-    if (/no case was checked: all \d+ declined/.test(out)) return Outcome.ALL_DECLINED;
-    // The Wasm backend counts the shapes it declined: a function, or a public
-    // surface it cannot publish.
-    if (/the (?:LLVM |Wasm )?backend declined \d+ (?:function|shape)/.test(out)) return Outcome.BACKEND_DECLINED;
-    if (/invalid HIR/.test(out)) return Outcome.INVALID_HIR;
-    // A workspace dependency that will not resolve is not a typecheck
-    // regression: `tests/programs/library` in a worktree. Same keys as the gate.
-    if (/TS2307|TS6059/.test(out)) {
-      record.unresolved = true;
-      return Outcome.NOT_MEASURED;
-    }
-    if (/does not typecheck|refusing to proceed/.test(out)) return Outcome.NO_TYPECHECK;
-    return Outcome.NOT_MEASURED;
-  })();
-  const said = record.unresolved ? "needs an installed workspace; cannot resolve here" : first;
-  delete record.unresolved;
-  return { outcome, ...record, first: said };
+/** Decode a completed check through its explicitly selected interface. */
+export function classify(status, out, format = "json-v1", stderr = "") {
+  return decodeCheck(format, status, out, stderr);
+}
+
+function unmeasuredRecord(status, error) {
+  return {outcome: Outcome.NOT_MEASURED, status, checked: 0, expected: 0,
+    declined: 0, unavailable: 0, timeouts: 0, refused: 0, refusedRoots: 0,
+    answers: [], oracleStopped: 0, missingPopulation: null,
+    first: String(error).slice(0, 120), incomplete: error};
 }
 
 /**
@@ -214,10 +140,17 @@ export function verdict(name, r) {
       return `ok ${name}`;
     case Outcome.PARTIAL:
       return r.declined > 0
-        ? `partial ${name}\t${r.declined} declined, ${r.checked} of ${r.expected} compared`
+        ? `partial ${name}\t${[
+          ...((r.report?.counts?.runtime_declined ?? r.declined - (r.unavailable ?? 0)) > 0
+            ? [`${r.report?.counts?.runtime_declined ?? r.declined - (r.unavailable ?? 0)} runtime declines`] : []),
+          ...(r.unavailable > 0 ? [`${r.unavailable} calls without compiled bindings`] : []),
+          `${r.checked} of ${r.expected} compared`,
+        ].join(", ")}`
         : `ok ${name}`;
     case Outcome.NOTHING:
       return `bare ${name}`;
+    case Outcome.UNAVAILABLE:
+      return `unavailable ${name}\t${r.unavailable} calls without compiled bindings; ${r.expected} Node calls measured`;
     case Outcome.DISAGREES:
     case Outcome.ABORTED:
     case Outcome.BACKEND_DECLINED:
@@ -233,6 +166,7 @@ export function verdict(name, r) {
 export function same(a, b) {
   // `oracleStopped` is left out: see `classify`.
   return a.outcome === b.outcome && a.checked === b.checked && a.expected === b.expected &&
+    (a.format !== "json-v1" || b.format !== "json-v1" || a.unavailable === b.unavailable) &&
     a.declined === b.declined && a.timeouts === b.timeouts && a.refused === b.refused &&
     a.answers.join("\n") === b.answers.join("\n");
 }
@@ -275,67 +209,40 @@ export function describe(r) {
   return parts.join(", ");
 }
 
-// **Seen to classify before it is trusted.** Driven with the text `check`
-// prints, copied from `tooling/cli/src/main.rs` rather than paraphrased: a test
-// inventing its own wording agrees with itself about a format nothing emits.
+// Exercise fields and mutations before collecting any corpus result.
 function selfTest() {
-  const agreed = classify(0, "checked 261 cases across 9 function(s)\nagreed on every case\n");
-  if (agreed.outcome !== Outcome.AGREES || agreed.checked !== 261 || agreed.expected !== 261) return `a full agreement read as ${JSON.stringify(agreed)}`;
-  const partial = classify(0,
-    "4 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\n" +
-    "checked 20 of 24 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case\n");
-  if (partial.outcome !== Outcome.PARTIAL || partial.declined !== 4 || partial.checked !== 20 || partial.expected !== 24) return `four declines read as ${JSON.stringify(partial)}`;
-  // The same run as `check` prints it now, which names the coverage on the
-  // verdict line itself; the line above is a log from before that.
-  const counted = classify(0,
-    "4 case(s) the compiled program declined -- an index its `!` promised was in range and was not, most often; node answers `undefined` there and the two have nothing to compare\n" +
-    "checked 20 of 24 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case it compared: 20 of 24\n");
-  if (counted.outcome !== Outcome.PARTIAL || counted.declined !== 4 || counted.checked !== 20 || counted.expected !== 24) return `the counted verdict line read as ${JSON.stringify(counted)}`;
-  const nothing = classify(0, "nothing to check: no exported function has scalar arguments and a scalar result\n");
-  if (nothing.outcome !== Outcome.NOTHING) return `nothing to check read as ${nothing.outcome}`;
-  const wrong = classify(1, "checked 3 cases across 1 function(s)\n  nts  f 1 -> 2\n  node f 1 -> 3\nError: 1 case(s) disagree between the compiled program and node\n");
-  if (wrong.outcome !== Outcome.DISAGREES || wrong.answers.length !== 2) return `a disagreement read as ${JSON.stringify(wrong)}`;
-  const aborted = classify(1, "checked 3 cases across 1 function(s)\n  the compiled program aborted: f 1\nError: the compiled program aborted 1 time(s) for a reason that is not the program correctly declining its input\n");
-  if (aborted.outcome !== Outcome.ABORTED || aborted.answers.length !== 1) return `an abort read as ${JSON.stringify(aborted)}`;
-  const every = classify(1, "3 case(s) the compiled program declined -- ...\nchecked 0 of 3 cases; the rest were not reached\nError: no case was checked: all 3 declined, so the two sides were never compared.\n");
-  // Verbatim, from `tests/programs/a-slot-typed-exactly-undefined`: one root, two cascades.
-  const cascaded = classify(0, "  refused: NTS1001 a call inside a `try` whose `throw` would not reach this handler\n" +
-    "  refused: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and ...\n" +
-    "  refused: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
-    "checked 87 cases across 3 function(s)\nagreed on every case\n");
-  if (cascaded.refused !== 3 || cascaded.refusedRoots !== 1) return `one root and two cascades read as ${cascaded.refusedRoots} of ${cascaded.refused}`;
-  // **And the same example's text today**, which carries the place `nts check`
-  // prints since the locator moved into `nts-diagnostics`. Both shapes are kept:
-  // the pair above is what a log saved before that change holds, and a reader
-  // that took only one of them would either break on today's output or stop
-  // reading yesterday's. The cascade test is what the optional token guards --
-  // `refused` counts the prefix and would not have noticed.
-  const located = classify(0,
-    "  refused: tests/programs/a-slot-typed-exactly-undefined/src/main.ts:98:14: NTS1001 a call inside a `try` whose `throw` would not reach this handler: through a function value, which has no raising copy to call is not supported by this lowering yet\n" +
-    "  refused: tests/programs/a-slot-typed-exactly-undefined/src/main.ts:96:10: NTS1003 `runner` cannot be compiled because it calls `Closure0#call`, and a call inside a `try` ...\n" +
-    "  refused: tests/programs/a-slot-typed-exactly-undefined/src/main.ts:107:14: NTS1003 `awaitedThenRejected` cannot be compiled because it calls `runner`, and ...\n" +
-    "checked 87 cases across 3 function(s)\nagreed on every case\n");
-  if (located.refused !== 3 || located.refusedRoots !== 1) return `a located root and two cascades read as ${located.refusedRoots} of ${located.refused}`;
-  if (every.outcome !== Outcome.ALL_DECLINED) return `every case declined read as ${every.outcome}`;
-  // Exit 0 without the verdict line is a run that stopped early, not agreement.
-  if (classify(0, "checked 3 cases across 1 function(s)\n").outcome !== Outcome.NOT_MEASURED) return "a run with no verdict line read as measured";
-  if (classify(1, "Error: failed to load the requested project: Permission denied\n").outcome !== Outcome.NOT_MEASURED) return "a frontend that never started read as a verdict";
-  const regressed = attribute(agreed, { ...agreed, outcome: Outcome.PARTIAL, checked: 257, declined: 4 });
-  if (regressed !== "REGRESSED") return `four new declines under an agreement attributed as ${regressed}`;
-  const traded = attribute({ ...partial, outcome: Outcome.PARTIAL }, wrong);
-  if (traded !== "REGRESSED") return `declines traded for a disagreement attributed as ${traded}`;
-  if (attribute(wrong, { ...wrong, answers: ["  nts  f 1 -> 4", "  node f 1 -> 3"] }) !== "CHANGED") return "a different wrong answer was not CHANGED";
-  // Verbatim from `node_results` in the differential.
-  const stopped = classify(0, "  node stopped part-way: 371 result(s), no `done` line (<--- Last few GCs --->)\n" +
-    "checked 361 of 377 cases; the rest were not reached (a pool value in a loop bound will do that)\nagreed on every case\n");
-  if (stopped.outcome !== Outcome.PARTIAL || stopped.answers.length !== 0 || stopped.oracleStopped !== 1) return `node stopping read as ${JSON.stringify(stopped)}`;
-  const reach = { ...agreed, checked: 87, expected: 87, refused: 3 };
-  if (attribute(agreed, reach) !== "REGRESSED") return "three new refusals and fewer cases compared was not REGRESSED";
-  if (attribute(reach, agreed) !== "FIXED") return "three refusals cleared and more cases compared was not FIXED";
-  if (verdict("x", partial) !== "partial x\t4 declined, 20 of 24 compared") return `a decline projected as ${verdict("x", partial)}`;
-  if (verdict("x", { ...partial, declined: 0, timeouts: 3 }) !== "ok x") return "a comparison short only of timeouts is not the gate's ok";
-  if (!verdict("x", every).startsWith("unmeasured x\t")) return "every case declined projected as a floor-absorbable verdict";
-  if (!verdict("x", classify(1, "error TS2307: Cannot find module\n")).endsWith("needs an installed workspace; cannot resolve here")) return "an unresolved workspace lost its reason";
+  const value = (status, expected, compared, declined = 0, unavailable = 0) => ({
+    version: 1, status, counts: { functions: expected ? 1 : 0, expected, compared,
+      runtime_declined: declined, unavailable, timeouts: 0, approximated: 0, disagreements: 0, aborts: 0 },
+    oracle: {expected, received: expected, complete: true}, refusals: [], disagreements: [], aborts: [], error: null,
+  });
+  const read = (report) => classify(["agrees", "partial", "nothing", "all_unavailable"].includes(report.status) ? 0 : 1, JSON.stringify(report));
+  const agreed = read(value("agrees", 261, 261));
+  if (agreed.outcome !== Outcome.AGREES || agreed.checked !== 261) return "agreement fields were not read";
+  const partial = read(value("partial", 24, 20, 4));
+  if (partial.outcome !== Outcome.PARTIAL || verdict("x", partial) !== "partial x\t4 runtime declines, 20 of 24 compared") return "decline fields were not read";
+  const unavailable = read(value("all_unavailable", 3, 0, 0, 3));
+  if (unavailable.outcome !== Outcome.UNAVAILABLE || unavailable.expected !== 3 || verdict("x", unavailable) !== "unavailable x\t3 calls without compiled bindings; 3 Node calls measured") return "unavailable bindings were treated as agreement";
+  const every = read(value("all_declined", 3, 0, 3));
+  if (!verdict("x", every).startsWith("unmeasured x\t")) return "runtime-only total decline was absorbed by the floor";
+  const wrongValue = value("disagrees", 3, 3);
+  wrongValue.counts.disagreements = 1;
+  wrongValue.disagreements.push({compiled: "f 1 2", node: "f 1 3"});
+  const wrong = read(wrongValue);
+  if (wrong.outcome !== Outcome.DISAGREES || wrong.answers.length !== 2) return "structured disagreement was lost";
+  const cascaded = value("agrees", 87, 87);
+  cascaded.refusals = ["NTS1001", "NTS1003", "NTS1005"].map(code => ({stage: "lowering", code, message: "unavailable"}));
+  const roots = read(cascaded);
+  if (roots.refused !== 3 || roots.refusedRoots !== 1) return "diagnostic codes lost refusal roots";
+  if (attribute(agreed, unavailable) !== "REGRESSED") return "lost bindings were not attributed as regression";
+  if (attribute(partial, wrong) !== "REGRESSED") return "a disagreement was not attributed as regression";
+  if (attribute(wrong, {...wrong, answers: ["different"]}) !== "CHANGED") return "changed answers were ignored";
+  for (const mutation of ["agreed on every case\n", JSON.stringify({...value("agrees", 3, 3), version: 2}),
+    JSON.stringify(value("agrees", 3, 0, 3))]) {
+    let refused = false;
+    try { classify(0, mutation); } catch { refused = true; }
+    if (!refused) return "a legacy-text or contradictory JSON mutation was accepted";
+  }
   return null;
 }
 
@@ -348,7 +255,7 @@ if (broken) {
   process.exit(2);
 }
 if (args.includes("--self-test")) {
-  console.log("  self-test: every outcome classified from verbatim `nts check` text; declines under an agreement attributed as a regression");
+  console.log("  self-test: every outcome classified from structured fields, with malformed-output controls; declines under an agreement attributed as a regression");
   process.exit(0);
 }
 
@@ -476,6 +383,11 @@ if (examples.length === 0) {
 mkdirSync(join(CACHE, "tmp"), { recursive: true });
 const scratch = mkdtempSync(join(CACHE, "tmp", "run-"));
 const env = { ...process.env, NTS_CHECKERS: "1", TMPDIR: scratch };
+let oracleRoot;
+try { oracleRoot = comparisonOracleRoot(ROOT, binaries, join(CACHE, "tmp")); }
+catch (error) { console.log(`  NOT MEASURED: oracle compatibility: ${error.message}`); process.exit(2); }
+process.on("exit", () => oracleRoot.dispose());
+if (oracleRoot.legacy) console.log("  legacy oracle view: comparison-private checkout; removed after this run");
 process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
 for (const signal of ["SIGINT", "SIGTERM"]) process.on(signal, () => process.exit(130));
 
@@ -485,22 +397,23 @@ const JOBS = Number(process.env.NTS_AGREE_JOBS ??
   Math.max(1, Math.min(8, availableParallelism(), Math.floor(freemem() / 1.5e9))));
 
 /** One `nts check`, classified. */
-const check = (pinned, example) =>
-  new Promise((done) => {
-    const child = spawn(pinned.pinned, ["check", join("tests/programs", example, "tsconfig.json")], {
-      cwd: ROOT,
-      env: { ...env, NTS_GATE_CASE_BINARY_SHA: pinned.hash },
+const check = async (pinned, example) => {
+  const checkEnv = {...env, NTS_GATE_CASE_BINARY_SHA: pinned.hash};
+  delete checkEnv.NTS_GATE_STEP_RESULT;
+  try {
+    const {record, incomplete} = await runCheck(pinned.pinned, join("tests/programs", example, "tsconfig.json"), {
+      cwd: oracleRoot.forBinary(binaries[pins.indexOf(pinned)]), env: checkEnv,
     });
-    let out = "";
-    child.stdout.on("data", (chunk) => (out += chunk));
-    child.stderr.on("data", (chunk) => (out += chunk));
-    const timer = setTimeout(() => child.kill("SIGKILL"), TIMEOUT_MS);
-    child.on("error", (error) => { clearTimeout(timer); done(classify(null, `${error.message}\n`)); });
-    child.on("close", (status, signal) => {
-      clearTimeout(timer);
-      done(classify(signal ? null : status, signal ? `killed by ${signal}\n${out}` : out));
-    });
-  });
+    return {...record, incomplete};
+  } catch (error) { return unmeasuredRecord(null, error); }
+};
+
+function incompleteExit(records, completedFailures) {
+  const errors = records.filter(record => record.outcome === Outcome.NOT_MEASURED)
+    .map(record => record.incomplete ?? new Error(record.first));
+  const chosen = errors.find(error => checkFailurePolicy(error, completedFailures).disposition !== "verdict") ?? errors[0] ?? new Error("a comparison was incomplete");
+  return reportCheckFailure(chosen, process.env, completedFailures);
+}
 
 // A count over this glob is a fact about the working tree, not a commit: say
 // which examples only this tree has.
@@ -577,7 +490,7 @@ if (pins.length === 1) {
   const wrong = all.filter(([, r]) => WRONG.has(r.outcome)).length;
   const unmeasured = all.filter(([, r]) => r.outcome === Outcome.NOT_MEASURED).length;
   console.log(`  ${wrong === 0 && unmeasured === 0 ? "every example that compared anything agrees with node" : `${wrong} wrong, ${unmeasured} not measured`}, in ${seconds()} s`);
-  process.exit(wrong > 0 ? 1 : unmeasured > 0 ? 2 : 0);
+  process.exit(unmeasured > 0 ? incompleteExit(all.map(([, record]) => record), wrong) : wrong > 0 ? 1 : 0);
 }
 
 // Two binaries: confirm each difference, then attribute it.
@@ -587,6 +500,11 @@ for (const example of differing) {
   const [before, after] = runs.get(example);
   const again = [await check(pins[0], example), await check(pins[1], example)];
   const isNew = newBeforeProject(example, newProjects, before);
+  const unfinished = [after, again[1], ...(!isNew ? [before, again[0]] : [])].filter(record => record.outcome === Outcome.NOT_MEASURED);
+  if (unfinished.length) {
+    verdicts.push({example, tag: "NOT MEASURED", before, after, unfinished});
+    continue;
+  }
   if (!same(before, again[0]) || !same(after, again[1]) || (isNew && !newBeforeProject(example, newProjects, again[0]))) {
     verdicts.push({ example, tag: "UNSTABLE", before, after, note: !same(before, again[0]) ? "before disagrees with itself" : "after disagrees with itself" });
     continue;
@@ -622,4 +540,8 @@ const failing = count("REGRESSED") + count("CHANGED") + count("UNSTABLE");
 const unmeasured = count("NOT MEASURED") + bothUnmeasured.length;
 console.log(`  ${examples.length - differing.length} unchanged, ${count("FIXED")} fixed, ${count("REGRESSED")} regressed, ` +
   `${count("CHANGED")} changed, ${count("UNSTABLE")} unstable, ${count("NEW")} not comparable (new), ${unmeasured} not measured, in ${seconds()} s`);
-process.exit(failing > 0 ? 1 : unmeasured > 0 ? 2 : 0);
+const unfinishedRecords = [
+  ...verdicts.filter(v => v.tag === "NOT MEASURED").flatMap(v => v.unfinished ?? [v.before, v.after]),
+  ...bothUnmeasured.map(example => runs.get(example)[1]),
+];
+process.exit(unmeasured > 0 ? incompleteExit(unfinishedRecords, failing) : failing > 0 ? 1 : 0);

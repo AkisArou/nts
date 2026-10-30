@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-fixed-view-over-a-resizable-buffer",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-fixed-view-over-a-resizable-buffer/src/main.ts",
+      "signature": "7a482ce6f7a311d1784c8026e3de1a225d49e919a840de10cf3bda30256083a2",
+      "keys": {
+        "c": "43c3dbae051625e518f33ac4e11e4cf1",
+        "jvm": "5e4c104a5319fc62e1c2833da5d326a8",
+        "llvm": "ee934045c6a09ae57665baef5258bab1"
+      },
+      "cases_sha256": "6ec4583f5e5272f6cbad42b4e0966c5bcc0b7628c3425d60a6a572ee7afc7709",
+      "driver_sha256": "0266ba5b3e13842d3f99ae303d36e3f92f78f4cb346de2c8bd7f0008daae1891",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077974,
+        0.079394
+      ]
+    }
+  ]
+}

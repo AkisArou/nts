@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-identifier-c-cannot-spell",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-identifier-c-cannot-spell/src/main.ts",
+      "signature": "510b9594213168e8beb798355f8c8fefec0c5735b3b75fd9073c9483b81e6764",
+      "keys": {
+        "c": "c80d977bbd13f83d5feb4cf15390fcfa",
+        "jvm": "dd2fc80534ccaf9ee6c8b3a6ca2ba897",
+        "llvm": "516a8ddf2f6dc4ca1af11681e5f4b5b1"
+      },
+      "cases_sha256": "ae1cd9dc4711f82850c7931f73224259cb03f3e280ebda0d5ce1aa635ca09bcb",
+      "driver_sha256": "8d3dc05bd8a772e5aa71f698f36cb69595fdbb5456bd68c3c75ae0f4b7fe7c0c",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.078548,
+        0.0774
+      ]
+    }
+  ]
+}

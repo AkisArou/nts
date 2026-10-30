@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/the-order-own-properties-enumerate-in",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/the-order-own-properties-enumerate-in/src/main.ts",
+      "signature": "5a9d8257a51f43c217369248daa568018d7d57b12293f94bc197bc4d154e139b",
+      "keys": {
+        "c": "414639c312d1bc6a4f23675dfd0cfb55",
+        "jvm": "10fedc6a3c264fc1c8fdda30bf476e56",
+        "llvm": "2e6c0d3bc71603ff5091ee93b5dccb94"
+      },
+      "cases_sha256": "f054d79ee5aa8e06e8ef80578d44740bd8fcced483c05d5e55626efd15de6f5a",
+      "driver_sha256": "329c3deb6baf72070e5feab51b3d6456bf0fed315391def0153a2de5c544c149",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.084969,
+        0.08853
+      ]
+    }
+  ]
+}

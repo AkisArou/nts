@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-decided-condition-a-closure-changes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-decided-condition-a-closure-changes/src/main.ts",
+      "signature": "7319d300806bb2e5c2c4755f28aabb8bbe8bf3ff5c96da17f92fbc8f0a8b2965",
+      "keys": {
+        "c": "03816f27ba2a18fe83b5c45cf46ca8b6",
+        "jvm": "b4dece4618639a836f731126cba069b7",
+        "llvm": "0e9f9dcae0dfc492148446d95632a65a"
+      },
+      "cases_sha256": "9c8c42d4cfbb776eefd22b3c954da5ad97e299b495d7f9007de94e291bb3ce26",
+      "driver_sha256": "9adfd4a13e554dc4ba63ffb7b5456cc58da13793f815ee688e3b81e6357a398c",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.078362,
+        0.076665
+      ]
+    }
+  ]
+}

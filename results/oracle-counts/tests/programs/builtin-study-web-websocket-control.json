@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-websocket-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-websocket-control/src/main.ts",
+      "signature": "c223d8785bc5baf267f360eb57f51a82ed7162ee9ea96ba1e593834278b5d71f",
+      "keys": {
+        "c": "6342722776cf956cb9d5c23ff0ab77ba",
+        "jvm": "146b600d02310677c65a6271f9878ecf",
+        "llvm": "0ad391c70407f6d5ae9821486f0b1799"
+      },
+      "cases_sha256": "56828c55936cc9166e54f1d999401d9f218eb45ec09568bb2a768357eb0e00a0",
+      "driver_sha256": "4e04810f84f7f47873405a1939a6535979c1bf38d9e04ee8f7a9a4ad2fe205a6",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

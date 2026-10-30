@@ -7,7 +7,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
 import { Admission } from "../gate/admission.ts";
-import { compileSync, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
+import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -51,7 +51,7 @@ console.log(JSON.stringify({ peak, group: run.group }));`;
   assert.equal(existsSync(join(CGROUP, group)), false);
 });
 
-test("compiler reserves 32 GiB under a resident cap while executed programs retain RLIMIT_AS", (t) => {
+test("compiler reserves 32 GiB under a resident cap while executed programs retain RLIMIT_AS", async (t) => {
   t.after(() => memoryRun().close());
   const code = "import mmap,resource; held=mmap.mmap(-1,32*1024**3,flags=mmap.MAP_PRIVATE|mmap.MAP_ANONYMOUS,prot=mmap.PROT_READ|mmap.PROT_WRITE); print(resource.getrlimit(resource.RLIMIT_AS)[0])";
   const tools = { memoryCapKb: 64 * 1024 };
@@ -61,9 +61,37 @@ test("compiler reserves 32 GiB under a resident cap while executed programs reta
   assert.equal(compiled.status, 0, compiled.stderr);
   assert.equal(compiled.stdout.trim(), "-1", "compiler inherits no RLIMIT_AS");
   assert.equal(compiled.memoryKilled, false);
+  const active = await compileActive(tools, "python3", ["-c", code]);
+  assert.equal(active.status, compiled.status, active.stderr);
+  assert.equal(active.stdout, compiled.stdout);assert.equal(active.memoryKilled, false);
+  assert.equal(active.residentLimitBytes, compiled.residentLimitBytes);
+  assert.equal(active.residentRunBytes, compiled.residentRunBytes);
   const executed = spawnTest("sh", capped(tools, "python3", ["-c", "import resource; print(resource.getrlimit(resource.RLIMIT_AS)[0])"]), { encoding: "utf8" });
   assert.equal(executed.status, 0, executed.stderr);
   assert.equal(executed.stdout.trim(), String(64 * 2 ** 20));
+});
+
+test("resident async compiles retain explicit CPU and inactivity supervision", t => {
+  const directory = scratch(); t.after(() => rmSync(directory, {recursive: true, force: true}));
+  const activeModule = new URL("../gate/active-command.ts", import.meta.url).href;
+  const memoryModule = new URL("./worker-memory.ts", import.meta.url).href;
+  const code = `import assert from 'node:assert/strict';import {mock} from 'node:test';
+const real=await import(${JSON.stringify(activeModule)});let expected;
+mock.module(${JSON.stringify(activeModule)},{namedExports:{...real,activeCommand:(command,args,options)=>{
+ for(const key of ['idleMs','pollMs','cpuBudgetSeconds','onActivity'])assert.equal(options[key],expected[key],key+' was dropped');
+ return real.activeCommand(command,args,options);
+}}});
+const {compileActive,memoryRun}=await import(${JSON.stringify(memoryModule)});
+const env={...process.env,NTS_GATE_STEP:'resident-bridge',NTS_GATE_STEP_ATTEMPT:'control',NTS_GATE_STEP_RESULT:${JSON.stringify(join(directory, "instrument.json"))}};
+try{
+ expected={idleMs:1000,pollMs:50,cpuBudgetSeconds:0.1,onActivity(){}};
+ await assert.rejects(compileActive({memoryCapKb:64*1024},'python3',['-c','while True: pass'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='runaway');
+ expected={idleMs:500,pollMs:50,cpuBudgetSeconds:10,onActivity(){}};
+ await assert.rejects(compileActive({memoryCapKb:64*1024},'python3',['-c','import time;time.sleep(3600)'],{env,...expected}),e=>e instanceof real.CommandNotMeasuredError&&e.kind==='hung');
+}finally{memoryRun().close();}
+console.log('resident bounds retained');`;
+  const result = spawnTest(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "-e", code], {encoding: "utf8"});
+  assert.equal(result.status, 0, result.stdout + result.stderr); assert.match(result.stdout, /resident bounds retained/);
 });
 
 test("a compiler OOM loses only its in-flight case and restarts that worker", { timeout: TEST_HANG_MS }, async (t) => {

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-slot-typed-exactly-undefined",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-slot-typed-exactly-undefined/src/main.ts",
+      "signature": "d2e5be047be3373a6fcdd929558fa3d75bd21e886717e5ede8e8405032436ce9",
+      "keys": {
+        "c": "5637ba3066aa7edd5e22663c27a0b88d",
+        "jvm": "aca9fbe9e49a372c63971b7bf50da65a",
+        "llvm": "5e5710296f236a91bc48bc4989ffb05f"
+      },
+      "cases_sha256": "0ae29336ff07fa752c0f0957c2d6b0baf3e18c8b1b9c9b7207ac765f51591a8b",
+      "driver_sha256": "48a875a26c7e53adc26aee5e1ff63bb7d7738474dc6a5a90b5b2503748cd2a43",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076285,
+        0.07753
+      ]
+    }
+  ]
+}

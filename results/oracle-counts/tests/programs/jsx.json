@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/jsx",
+  "rows": [
+    {
+      "kind": "no-oracle",
+      "source": "tests/programs/jsx/src/main.tsx",
+      "signature": "643d5437104296e21d906ecb15b2c96ad278f20cfc4af53b12bb6069bd853726",
+      "keys": {
+        "c": "5d1408ba34c03f447edce2d0023e51ce",
+        "jvm": "7ed434541369ac06a151465c66551527",
+        "llvm": "508788283aa4851bf70ab22d15acdb77"
+      },
+      "cases_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+      "driver_sha256": "d64f032e2fcdb777e887e3d9ec0c7fbad2c5009f1732fb797fa955967ba656ed",
+      "source_digest": "6d8a847d7e41514b89c442649b22ffb2",
+      "reason": "no generated cases; node cannot load .tsx directly"
+    }
+  ]
+}

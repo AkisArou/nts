@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throw-from-a-method-of-a-class-in-another-module",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throw-from-a-method-of-a-class-in-another-module/src/main.ts",
+      "signature": "7f56d7985ccf7b2ed8bb9e7894808ac1a57e6d47e5593adc92e261a2c309f37e",
+      "keys": {
+        "c": "aa456e7705a5ce746321c269eebf9ab3",
+        "jvm": "ddbbcb6cc28b7847bf282afe5003ce39",
+        "llvm": "5409806b800d0d5245ff59fcdb792f19"
+      },
+      "cases_sha256": "e9cc96d4e5a113c7e0d4205d51b73ce2d504d8ced0f86d116ef83d64f753e1a0",
+      "driver_sha256": "437eaea850d88b269745763d5c2c5c715cdeac3837f1932fb981eec9bac32709",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.077897,
+        0.080517
+      ]
+    }
+  ]
+}

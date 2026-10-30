@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throwing-accessor-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throwing-accessor-inside-a-try/src/main.ts",
+      "signature": "ff79a8483a34d17e5ac348b7a4b3979c3b71de8fa1195a6143a4ec5b03655cc0",
+      "keys": {
+        "c": "8988d54c7fa6f9c62058eb30cb671319",
+        "jvm": "4e1a72ac7c1d8d32c81b45bd77b08f25",
+        "llvm": "41f12b90c8e58af97839d01e49fcec9f"
+      },
+      "cases_sha256": "ab3a826f7d04e0d1433d8bcdde72f15569b1d9960b0ac429374c61321aa6c48e",
+      "driver_sha256": "795b4224f2ddd044d539d9a599b98bf82d2046db61c0af717bfade134c8a7bda",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.082775,
+        0.081173
+      ]
+    }
+  ]
+}

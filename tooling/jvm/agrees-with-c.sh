@@ -20,7 +20,7 @@
 #
 # The check is therefore not "do they agree with node" but **"where they
 # disagree with node, do they disagree identically"**. The differential already
-# prints both sides of every disagreement, so the two runs' `nts ` lines are
+# exposes both sides of every disagreement, so the compiled-answer fields are
 # directly comparable and no second harness is needed.
 #
 # # Why this was invisible
@@ -81,14 +81,14 @@ TS
 JSON
 fi
 
-# The `nts ` half of every disagreement, which is this compiler's own answer.
-# The `node ` half is deliberately dropped: it is the same on both runs by
+# The compiled half of every disagreement, which is this compiler's own answer.
+# The node half is deliberately dropped: it is the same on both runs by
 # construction, so including it would make the diff pass for a reason that has
 # nothing to do with the backends.
 for backend in c jvm; do
-  NTS_BACKEND=$backend NTS_CHECKERS=1 \
-    "$nts" check "$config" > "$work/$backend.out" 2>&1 || true
-  grep -E '^  nts ' "$work/$backend.out" | sed 's/^ *nts  *//' | sort > "$work/$backend.answers"
+  NTS_BACKEND=$backend NTS_CHECKERS=1 node "$root/tooling/differential/check-report.ts" \
+    project compiled-answers "$nts" "$config" > "$work/$backend.out"
+  sort "$work/$backend.out" > "$work/$backend.answers"
 done
 
 c_lines=$(wc -l < "$work/c.answers" | tr -d ' ')

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-recovered-erased-value-keeps-its-absence",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-recovered-erased-value-keeps-its-absence/src/main.ts",
+      "signature": "c9243015a21f0dfc03ab711070d4600190deb5d1e420ff8c7dbfa4f025b4ce3c",
+      "keys": {
+        "c": "0e99564d5fd865fa0666e194554dff53",
+        "jvm": "20755f035c42822f79a51b4e634e553a",
+        "llvm": "9b3020b64f0977d7e62ca9d1cbda163e"
+      },
+      "cases_sha256": "9d26e1a2ab9da70bdd127b964a8aebd43e49357d8417e4df14b3124ba8d2079f",
+      "driver_sha256": "e34a39cfcbc81cb202502735df29ca2b095b195b999da3ad19436a694c2efac9",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.074745,
+        0.074447
+      ]
+    }
+  ]
+}

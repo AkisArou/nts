@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-from-set-bounds",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-from-set-bounds/src/main.ts",
+      "signature": "8bfdf52ce83a7a46cb9347b07ad5e4420a9dc782750e330fca44ff64d4534516",
+      "keys": {
+        "c": "f4e1e0524c66a3bb1d68c8699bb5ab1f",
+        "jvm": "f51e8ce695f72710a21ace7621e29ed4",
+        "llvm": "5828f25b8c24f5599d0deace72d5a37b"
+      },
+      "cases_sha256": "54fc8377fc42982022c48f728c7f48d6065d967fe08d2372516454f18860d553",
+      "driver_sha256": "6c624fa25a25325bf51d34109844478399caf10f19552367fa0c1faa770138ae",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075274,
+        0.073562
+      ]
+    }
+  ]
+}

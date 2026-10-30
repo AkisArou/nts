@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-recovered-callable-keeps-its-function-tag",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-recovered-callable-keeps-its-function-tag/src/main.ts",
+      "signature": "cebac551f5ae30951f8f43f44ec43f74913c9b5682569cb78946ea9b44a8a7f7",
+      "keys": {
+        "c": "f890dda0d56ba358bf972574d2124866",
+        "jvm": "ad5d3e655c1a10986a4a7172d561009f",
+        "llvm": "454408d258a09949c1f925ed91ce15f7"
+      },
+      "cases_sha256": "1f274d1d13ac9bbd642b49ed4c82c204440d34cbf9d75c07672efd1a4d77372b",
+      "driver_sha256": "2865076a9f802b963dca872b9b3a444bb951be0858f231012e07d3d92e495558",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076364,
+        0.076868
+      ]
+    }
+  ]
+}

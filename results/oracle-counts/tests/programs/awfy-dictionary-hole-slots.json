@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/awfy-dictionary-hole-slots",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/awfy-dictionary-hole-slots/src/main.ts",
+      "signature": "1541155583a75b2f8eb90611c8d62a0a798bfc60cc4eac0421dbc0786dbaa273",
+      "keys": {
+        "c": "a6990efc7eebd63f9b3aa04f3888e85b",
+        "jvm": "9b48c71f72ab79af63eb75e16b92659c",
+        "llvm": "fe7feb24c4f868e9e4887d8f305ea6ff"
+      },
+      "cases_sha256": "94ee44d0bfbecadef22e27f74bc55797932e37b35a676c0ec79d277d45de66d3",
+      "driver_sha256": "2a4f5f57b7d1a867dea247c186e1c65af218b49c703fd7c79b3f7a4f2f78b95d",
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

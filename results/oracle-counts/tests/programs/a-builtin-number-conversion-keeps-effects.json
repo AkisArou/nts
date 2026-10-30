@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-builtin-number-conversion-keeps-effects",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-builtin-number-conversion-keeps-effects/src/main.ts",
+      "signature": "99721b853619288afd3e1bcd68669d4e0ff269f145e8c40a62d33bc4b7ca93cf",
+      "keys": {
+        "c": "bca38198ec0b30eecda639551ec2c09c",
+        "jvm": "c0b9d71bf7a1dd0d6698c6ed58ba6faa",
+        "llvm": "93b5a5d6e9525707424e1ebfeb983a95"
+      },
+      "cases_sha256": "1a41c705c39eff7be73a942fee4377194dbc7a246210279f57a06614ebdc0afe",
+      "driver_sha256": "fa793fe51a4b16018a8b044540e39b7c7bef2ed19ba09949b673a0b6fc33286a",
+      "complete": true,
+      "count": 464,
+      "node_cpu_s": [
+        0.092947,
+        0.09008
+      ]
+    }
+  ]
+}

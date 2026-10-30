@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-numeric-key-read-by-a-literal-the-checker-rounds",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-numeric-key-read-by-a-literal-the-checker-rounds/src/main.ts",
+      "signature": "eae1947609a55a39713723e63f109a86618015a95f5db43213e0c1e48a6c0f8d",
+      "keys": {
+        "c": "b3ea4eba2d6e4e79fc9a7e8d967cc9e5",
+        "jvm": "9f4e3658d0dd95f915e116a79427974b",
+        "llvm": "633c245d60615f9fa46c3de7d8552b12"
+      },
+      "cases_sha256": "096f19a09bf2e2cdf52c61aa16e498375058893f1e5671262e050448234cd3f2",
+      "driver_sha256": "f67af6b5647f530bd5cab7167a10790809becac2d4d9f0781dd16195d688a3ca",
+      "complete": true,
+      "count": 2
+    }
+  ]
+}

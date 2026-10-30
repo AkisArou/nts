@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-index-proved-by-literal-callers",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-index-proved-by-literal-callers/src/main.ts",
+      "signature": "e7d21990334938d4957f6285b77791f776aa4516bb9d06cdab2df3d30ecc298c",
+      "keys": {
+        "c": "f6b05b2b8096c586f6a68ba772dece70",
+        "jvm": "36aa8a8d7fbddacdaa97e51dbcc46c67",
+        "llvm": "7bfeb79b5cb2291b3a4362e1e61bd54a"
+      },
+      "cases_sha256": "3ab3d62811e3f75b6d92a8b04a4b21b82fca5a484051560624aa2e2578662e08",
+      "driver_sha256": "a301e12f0baedcaae2cced9b5b3a39066549af060ad66bc8995ebcc1b2635705",
+      "populations": {
+        "viaCastIndex": {
+          "count": 29,
+          "cases_sha256": "3ab3d62811e3f75b6d92a8b04a4b21b82fca5a484051560624aa2e2578662e08"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

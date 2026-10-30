@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/in-on-an-object-a-native-answers-for",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/in-on-an-object-a-native-answers-for/src/main.ts",
+      "signature": "5cb35ab56135dd3d29bcac4c2d22788030b9227959d6bb6dcbff37721af4e54e",
+      "keys": {
+        "c": "1aba756b7d00f819b5c0a8562bb1a2bd",
+        "jvm": "ca286da3ae65593ff19ec665f01e01a3",
+        "llvm": "704f83b67370e3b645b37098993ef5a0"
+      },
+      "cases_sha256": "698dd00fa6a4a1637c38f09d165cbcb1f62bc249ae14f2f00ba95f428839e467",
+      "driver_sha256": "43aa6269e912518793aa3c3135313ed4066fd7ed9c229948a079b4595f9c149d",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.099969,
+        0.092411
+      ]
+    }
+  ]
+}

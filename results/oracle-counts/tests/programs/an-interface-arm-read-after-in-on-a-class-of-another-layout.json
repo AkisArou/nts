@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-interface-arm-read-after-in-on-a-class-of-another-layout",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-interface-arm-read-after-in-on-a-class-of-another-layout/src/main.ts",
+      "signature": "843c063eaae23885e6ae82aca56387335d44240b5b365eedb8ed69c5e1d27a90",
+      "keys": {
+        "c": "f13d6a6517008323c54ec7132e3649e4",
+        "jvm": "390c70c6f8d09c1129daec1284e4c31c",
+        "llvm": "238d7a62d9e10664f4ee25f84d4ef833"
+      },
+      "cases_sha256": "8ce60bf2e3d2bf238a99d228c6346051fb9422fbbe87238397abc12947e46649",
+      "driver_sha256": "d593a37a6fa39048e0dd8ee5254c2c24b2ee5ebdd216a5320c23772fb30b2334",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.07689,
+        0.075867
+      ]
+    }
+  ]
+}

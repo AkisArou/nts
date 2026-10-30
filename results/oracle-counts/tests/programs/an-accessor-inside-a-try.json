@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-accessor-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-accessor-inside-a-try/src/main.ts",
+      "signature": "cc861464bbeec2b225cdf9591bf36404f77e8446e545be72d5e76ec1c2d40215",
+      "keys": {
+        "c": "bb2558414b78303ef57ad4b89330805e",
+        "jvm": "e7bd14a24b7c075eceb9c349e3d9e757",
+        "llvm": "1c3fc9965ea41c42a0f8c8b84a8b0bb1"
+      },
+      "cases_sha256": "231e60bed6dc7bf7e05188d2c2d4e4081ff3b6a806ed68ff75e064fefb1c8953",
+      "driver_sha256": "8ef3a7c549fe0839041cad41fed565dfc2687d460a0fecb8d1bd7e1a93df86b2",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075217,
+        0.077612
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-conversion-through-valueof-under-plus",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-conversion-through-valueof-under-plus/src/main.ts",
+      "signature": "481680f06c43ab5f54060c417e020b24f8dce8497170bf617967be83b767c9fc",
+      "keys": {
+        "c": "f043a29ebfa9b33fc31b440e23e3140b",
+        "jvm": "65f490afad6fd934970e7a83547bd8ef",
+        "llvm": "5f028ed99790b23aeb803329ccda4518"
+      },
+      "cases_sha256": "0b27937f41c8d7ef77436c1162851d1f9d27c3d88849b90d27b202bdb2f8e262",
+      "driver_sha256": "4d273a5a0e1debeff1ed34540b34e0a7b2d34027180757ac45d75bfaf7a2b8a8",
+      "complete": true,
+      "count": 406,
+      "node_cpu_s": [
+        0.086183,
+        0.086314
+      ]
+    }
+  ]
+}

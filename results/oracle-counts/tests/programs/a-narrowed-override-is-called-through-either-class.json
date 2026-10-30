@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-narrowed-override-is-called-through-either-class",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-narrowed-override-is-called-through-either-class/src/main.ts",
+      "signature": "7f083cdbf3b17308d4763f6d8beb95339338bf153e8c53c4a079ac994761cf03",
+      "keys": {
+        "c": "b12aadbe065728de63945357d29aa7ce",
+        "jvm": "fd72692727ba576fe1ae78caffc1791c",
+        "llvm": "146a903d5e17d4c849e9a0ef4586939b"
+      },
+      "cases_sha256": "e6f7bd48c86a77d59239c7fb31f971d48b1f01ffb3f8f313f9db3c4b6587661d",
+      "driver_sha256": "9f5a13052ba335a8d63e8640b1915631f0e57ca755781dc350e7a9eb34e13bd4",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074886,
+        0.074804
+      ]
+    }
+  ]
+}

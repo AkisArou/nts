@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/induction-boundary-near-start",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/induction-boundary-near-start/src/main.ts",
+      "signature": "8e64e9eeff763f0cc0bd629716a94cda07a381cfeb4aa06550e8df8a3c1be6f4",
+      "keys": {
+        "c": "bc805b7a4598bb5e2cdb98d25885086f",
+        "jvm": "73cb416757d6a905a4b39547f08d35f6",
+        "llvm": "c12bec7b26c5a5312c6205281e88e0c1"
+      },
+      "cases_sha256": "2a224eac2f41052707b926866367aa5811738c5c6cb38fab90b2bb23bb602b1e",
+      "driver_sha256": "8abaa658c139f3c17516629efa7fa3eba03ae26edeb60c0442a486b44dba406c",
+      "complete": true,
+      "count": 4,
+      "node_cpu_s": [
+        0.072769,
+        0.071642
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/syntax-error",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/syntax-error/src/main.ts",
+      "signature": "6265dfaeb664d89ff8b6df640197689ee73490020c5a666944cbfa53afe8e92a",
+      "keys": {
+        "c": "95a151cc2c6b6ef01f1ebd44d89ba75c",
+        "jvm": "55a44cb31d7f49301a59633b3ad2bf5d",
+        "llvm": "87b8dd3a0b6d402fa47d4b0912bc21bb"
+      },
+      "cases_sha256": "32ffd6ed23ae81b9a7344194bcf68b9bc645c3b14cde92448a865ced66a83a22",
+      "driver_sha256": "14cf98a61663885a1507277793abe2e349b32980419d86c95b86a15459b80523",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075178,
+        0.075374
+      ]
+    }
+  ]
+}

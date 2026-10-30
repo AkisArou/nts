@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/dates-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/dates-unsupported/src/main.ts",
+      "signature": "d9a0b4fdbb556b24d3b4cbd70e6299546340da543d5d371fb0c00dcafc5284fa",
+      "keys": {
+        "c": "85798599d1ecc169f02cf016977e40f0",
+        "jvm": "23cd908649212edd417e0d9e714cca11",
+        "llvm": "eb2a4f64a4d80d05affcfcf03f8743e1"
+      },
+      "cases_sha256": "dca49283af96514417da123662175d70f6089f879704663681a21052fbfa5568",
+      "driver_sha256": "60c53b12a57fd261cf8f235b72e89c766f9e70c7a3758aecf207d845998eb8e0",
+      "populations": {
+        "formatted": {
+          "count": 29,
+          "cases_sha256": "f5941c740e1ee225f9ca301e425c6ed61a4e8bd29b4751d482175a1fb2f1e245"
+        },
+        "localHours": {
+          "count": 29,
+          "cases_sha256": "4e5cb8949decfccedbaed0c1376fb126680230b7fa770c928b869531c27e889c"
+        },
+        "localYear": {
+          "count": 29,
+          "cases_sha256": "92295865c0509cf4d015c4516b9a374e77122b2860d6c07d53c907684d26bc83"
+        },
+        "theOffset": {
+          "count": 29,
+          "cases_sha256": "ccdc244e6088cc76512982eb41daa86023116193a7638dea973da2ef041f4fd2"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

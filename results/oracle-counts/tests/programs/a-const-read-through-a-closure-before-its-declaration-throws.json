@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-const-read-through-a-closure-before-its-declaration-throws",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-const-read-through-a-closure-before-its-declaration-throws/src/main.ts",
+      "signature": "524eb41b14811fda68c121473bcbba4df9f05db29fd3626bfaf11aa7939e11b6",
+      "keys": {
+        "c": "16b8f89de0445538814122f7b799969c",
+        "jvm": "9ac79d1616bbb7c80a6ff8f2f0fbff4b",
+        "llvm": "33e03b37d4861a7b6653ece11ff961ec"
+      },
+      "cases_sha256": "e0c48d193df356bd5a4ffc022ad0b44eea1cc26edba41d80309e7f112736519b",
+      "driver_sha256": "ad8d4ff9a87bb806cddb4d4d6b8ccb6da5f26bff1411f59f6360dd8a9009193b",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073291,
+        0.074921
+      ]
+    }
+  ]
+}

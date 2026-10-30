@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-absence-a-table-holds-keeps-its-tag",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-absence-a-table-holds-keeps-its-tag/src/main.ts",
+      "signature": "f066ecb6e372558cc788bb05a3a4f954d90623ed1feb10e9a234816a1e1ab88c",
+      "keys": {
+        "c": "0d7db3388ba771e7819442d56bc02fe7",
+        "jvm": "2fad5c1f28ed99fb503ca2d9f708d77e",
+        "llvm": "7ae555393a38a5c3880db87c363d70ef"
+      },
+      "cases_sha256": "da2fa160548741b08fbe425b2a3ab5aec608fffce52c6a2cdf8a2bf7988cf9ce",
+      "driver_sha256": "eed436c22bba7245468a5c3ecfa2c962b211e748b04235f6c96c9763a9a88766",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.084375,
+        0.079045
+      ]
+    }
+  ]
+}

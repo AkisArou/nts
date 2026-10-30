@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-union-of-classes-whose-fields-narrow",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-union-of-classes-whose-fields-narrow/src/main.ts",
+      "signature": "77a70b1b2b268c738fdea9766ef2fc6ad106f994f5d3bb402698bc0b6527192c",
+      "keys": {
+        "c": "7e417a3405de36329cd75d9ba256dfac",
+        "jvm": "56fd4f6712545980d1e047a2009064f2",
+        "llvm": "62ad74b640a1ad33c459f27917b5d8dc"
+      },
+      "cases_sha256": "9c7745ef78e203f6b7fa3072f77144455c04eb5e5dd8a598f071fe4a8e5a9bcc",
+      "driver_sha256": "f23bc179aac8a49b60c49744207c6300db9b030d120cb4979af64612d33880e2",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.076358,
+        0.079568
+      ]
+    }
+  ]
+}

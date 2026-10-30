@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-native-error-assertion-keeps-provided-ancestry",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-native-error-assertion-keeps-provided-ancestry/src/main.ts",
+      "signature": "2267e11a023c0148803ed120339ed0f490f319b77339dfdefa17a650204691f5",
+      "keys": {
+        "c": "53540b9df2a6011233497c0fc9f4cead",
+        "jvm": "f78896d1091cf2a78f7a491489681f74",
+        "llvm": "b37237eb78baab2e48adef87657756e4"
+      },
+      "cases_sha256": "e2f9b98ccf0570b99f4385034b6131165c27e518691d59e0f7d15dfeed497d19",
+      "driver_sha256": "0c5849233d5c1180e032a9070b3dce73960c6b02eda436da986344ac742193ee",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076891,
+        0.07756
+      ]
+    }
+  ]
+}

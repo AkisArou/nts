@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bare-return-where-a-value-is-declared",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bare-return-where-a-value-is-declared/src/main.ts",
+      "signature": "503023dde329d964a8534413f4f7b14eeaffa9917c61975222d93065fdb4d7e4",
+      "keys": {
+        "c": "478c9cac687650798cee58e2bdc61b85",
+        "jvm": "c9d16c5992b4694af524433a0226a6c6",
+        "llvm": "139c52d2b1115d8dc670de91c2383918"
+      },
+      "cases_sha256": "1e2d95583bcdfa82cce8d315884cfe057389ae3e7d78f2060bc9a39e4f41c7b6",
+      "driver_sha256": "2ac80640f8585f3a15bab0dff020dacbb88935d21148474f59caa3a2609a4dea",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079918,
+        0.080348
+      ]
+    }
+  ]
+}

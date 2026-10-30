@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/awfy-mandelbrot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/awfy-mandelbrot/case.ts",
+      "signature": "5baf3d61f11f195da4f7b337143414bd8ad3f7fd3a35b9b55e0760772d4dd09a",
+      "keys": {
+        "c": "3e60218f9961d0802c2331830fa8aeb5",
+        "jvm": "aa2544b650d7fcf09db79330dcc63a5f",
+        "llvm": "5bf9977cc066e479815fdc159c13acfc"
+      },
+      "cases_sha256": "7b62b139632202e5c8ec6f242f0d57e9d83cca70ba7d2ebb3bec99819376af24",
+      "driver_sha256": "29421044d8d52d658ad564fe5b0b832898ae4e3c9cccaa03b673037d91027533",
+      "complete": true,
+      "count": 23,
+      "node_cpu_s": [
+        1.85109,
+        2.213402
+      ]
+    }
+  ]
+}

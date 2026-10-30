@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-number-table-holds-its-numbers-unboxed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-number-table-holds-its-numbers-unboxed/src/main.ts",
+      "signature": "0cd38cb3dd0c01fd9df999903e2c333380c659f36d34eaca1ef0963383feae8e",
+      "keys": {
+        "c": "3a13b6e2f019e4faa1f487951eb1f456",
+        "jvm": "90597f8f9824e0314d3282b4c75297a0",
+        "llvm": "66ad226366349734c9440cefe4598616"
+      },
+      "cases_sha256": "79cd6e10d6040df61d972b5738f800052969a919fc79ea5f889332ceffe7cd5a",
+      "driver_sha256": "1f1c2c11b29c832e2de1d163c066f50a75bbcb253bdfeef80bda06a72ffc9c21",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.074722,
+        0.076681
+      ]
+    }
+  ]
+}

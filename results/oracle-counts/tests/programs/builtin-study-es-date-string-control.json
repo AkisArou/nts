@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-date-string-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-date-string-control/src/main.ts",
+      "signature": "719ed4c399b0c5914b96386977b46bacdea79c57bf3817ed64bbfccc5c5be780",
+      "keys": {
+        "c": "a3ab192eb7e5e0e822601466de55e2aa",
+        "jvm": "95448399451eb58bec4d550880a7829d",
+        "llvm": "253d955cb9aadb02bed0d845e88d0bdc"
+      },
+      "cases_sha256": "73ec8f630af42601ca685fceeaadb12ab4c7819d7e393d49e4f791eaa3f2d093",
+      "driver_sha256": "b4fdd2bef23f0a324cf020e13866708f61a024cc4c4fe9fb491e9da9a892fcee",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

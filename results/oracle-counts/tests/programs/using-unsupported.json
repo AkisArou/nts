@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/using-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/using-unsupported/src/main.ts",
+      "signature": "a2a6508c0a1d3707d71b4ab6f52e10bf415c9dcb048c597987771026d8e319b1",
+      "keys": {
+        "c": "550fac1c2d6ab6ade902f9a8aaefc107",
+        "jvm": "3d7be7ee2454eb41b2d4c56d0021a350",
+        "llvm": "6b6c20579d23c0e675b924f6ed6def90"
+      },
+      "cases_sha256": "4afbde2566a19d9b1456d89ece778f694f37563332211b09cb21c9cc46283ed2",
+      "driver_sha256": "83fd4d3b1733b3a3983ff030a1a1805742e441e195f31080947cd396829b8e0d",
+      "populations": {
+        "scoped": {
+          "count": 29,
+          "cases_sha256": "f5921355618fa68a103ba577a8a9d1a61b79a82908012958cd34403ec10de9fc"
+        },
+        "twoOfThem": {
+          "count": 29,
+          "cases_sha256": "43443b35e266dcac74bb735fbb3a3c71459217396497439a15dbc2db56ef0a1a"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

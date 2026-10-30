@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-atob-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-atob-control/src/main.ts",
+      "signature": "b44b5a5276847a527702bc9c65cb7f539872c0cdec70292297ba43bd8b7c1642",
+      "keys": {
+        "c": "0756b6fcbf95abbd5a643356804120d2",
+        "jvm": "4932ea89ba20c701ca2b9775eff0373f",
+        "llvm": "1b9e0ea8c4ef6ce9aea8eed3b3bf10f4"
+      },
+      "cases_sha256": "83dfd01272f9e757181b00f54aa710c149c1f7e2291b3ce64282ec4d3eef9c1a",
+      "driver_sha256": "2ee0de46a28881e5505ed02253750e620a3214ee11efa92ce2ead01c9b7b4964",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

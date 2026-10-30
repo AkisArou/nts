@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-spread-into-a-rest-parameter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-spread-into-a-rest-parameter/src/main.ts",
+      "signature": "d74fb08ed63b2be7024299218dfcb57de86b7bfd3620ad407fc0c94d7ba09ed5",
+      "keys": {
+        "c": "d2a3d8bc4950ec4243e38931677af302",
+        "jvm": "aa666e60b917c00b4ce6d7ea5abc4df6",
+        "llvm": "83a4a0378da3598c34a4381de533782b"
+      },
+      "cases_sha256": "fbbeff6451d1a73d8a424af6012aa33b9989fb592f1dc8508a302d6d043338ae",
+      "driver_sha256": "49309ffb93be23a6f23a1e1c97cc45bf43f7dbe269c76fc59cdacd65aeb388ea",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.078899,
+        0.073647
+      ]
+    }
+  ]
+}

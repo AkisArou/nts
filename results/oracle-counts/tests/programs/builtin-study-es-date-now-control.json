@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-date-now-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-date-now-control/src/main.ts",
+      "signature": "7eadda3acdadb7144b47cceff4a94d0b68c925e344acf557c4a8569fe5306cbc",
+      "keys": {
+        "c": "173f713c5dabb961fcde7f0607058022",
+        "jvm": "b68b3e6756f5a83c99256f19934319b9",
+        "llvm": "34b55f4bdbb87ce1801564d8883f5e9b"
+      },
+      "cases_sha256": "02fd6efcfc017221edac92ca412c4b296ad35c484e50637ee9e34ba48b3e1825",
+      "driver_sha256": "6fca7eb340981a150ce910e7454651af550cd643e67fdba269496e864026b26c",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

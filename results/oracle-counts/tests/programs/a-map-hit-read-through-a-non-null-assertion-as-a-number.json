@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-map-hit-read-through-a-non-null-assertion-as-a-number",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-map-hit-read-through-a-non-null-assertion-as-a-number/src/main.ts",
+      "signature": "7c81634dfc2b8d6c4f5f7b537a034c253193759d156f116ac5bef9591ab1591d",
+      "keys": {
+        "c": "d9fd6950bb86e1f6c7af7893670e3895",
+        "jvm": "227bea5580489daddeea6b0f6c974c81",
+        "llvm": "688c16ed3899306d0168e67b55f1e945"
+      },
+      "cases_sha256": "d1cf0c1ab8770751882fbccbc8a9a1005b647805571788df96d9c2d41862825c",
+      "driver_sha256": "8e8556de305308db084dc4d37a9ac4d792393b41ef25712ffc0de81642511ec0",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.07449,
+        0.074057
+      ]
+    }
+  ]
+}

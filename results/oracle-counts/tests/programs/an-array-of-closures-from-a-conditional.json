@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-of-closures-from-a-conditional",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-of-closures-from-a-conditional/src/main.ts",
+      "signature": "fab9f4fd0cde22d88faec4e258035ab390af128575d8b63d052a51d12def26a3",
+      "keys": {
+        "c": "df59c2e46a6d4b0ab94b387524c58e67",
+        "jvm": "dfbea3fe62fe43afe240c44f8cd171d9",
+        "llvm": "305976c6f2c17f7e89270e8f831bb764"
+      },
+      "cases_sha256": "f229af07aca123acfb4ffa9f52c1f50050375f7839908a63f62684a16366df36",
+      "driver_sha256": "57dd47b4fa3f7eff001497cc8aa66ba98b7a4a7d6dd25f58da0525b37a40e1bf",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075707,
+        0.073004
+      ]
+    }
+  ]
+}

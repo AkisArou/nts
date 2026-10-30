@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-symbol-key-is-not-a-string-key",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-symbol-key-is-not-a-string-key/src/main.ts",
+      "signature": "218d0ce18ad7637efedf31946eb48525fe8af183224d012e832ac6fb08d7c8f3",
+      "keys": {
+        "c": "676881c87eb7bfc406d825c421764858",
+        "jvm": "f60eddd5fa106e5ab669f5e3bf1ecc35",
+        "llvm": "f1fa96fab1d8c6ac253819fec8df2e86"
+      },
+      "cases_sha256": "25d9085bd36f0be7c6484dcc3df6dbbdd3819433c78401b846c8880baa546ad6",
+      "driver_sha256": "0a22babbb9b5b5d872d38d044a7f7695a77bec7da8b0ae9976f41a5f44e0573c",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075668,
+        0.075801
+      ]
+    }
+  ]
+}

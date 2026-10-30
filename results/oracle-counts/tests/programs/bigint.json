@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/bigint",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/bigint/src/main.ts",
+      "signature": "bf8553322b27bb92c773c415557a31fcf7b841707c3e54feacab194a236c7f44",
+      "keys": {
+        "c": "b5dd9500c9f8d810455b0e0c26c3cd35",
+        "jvm": "589df302cf7a2c5d976a6a293fe4daf2",
+        "llvm": "28edaf83660d5104d2d5755605755fde"
+      },
+      "cases_sha256": "6be7971b3c9bd7998516e402cc77cee1d882f4559d7e63a526dd1eab277e25f4",
+      "driver_sha256": "123fd2de94ba46be5a0be982e49958b620b753ffcb117388f7451d0ea74bcbca",
+      "complete": true,
+      "count": 435,
+      "node_cpu_s": [
+        0.106478,
+        0.108835
+      ]
+    }
+  ]
+}

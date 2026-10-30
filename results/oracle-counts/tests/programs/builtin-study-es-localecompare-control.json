@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-localecompare-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-localecompare-control/src/main.ts",
+      "signature": "941ecf772f55669078cf04baf2bae79a8d96d898ec64b329c30f389ebe9cdd56",
+      "keys": {
+        "c": "1ac2818a5514d4d8796dd669a78d8498",
+        "jvm": "c9e1f76441d5ef01cb0591c82637b73d",
+        "llvm": "ad18a4b4f8a9c1be90e26f68a49165ba"
+      },
+      "cases_sha256": "60823dcddf39563340f4d2c5a7dd5e2732fc6b997f3b8697e12340dc05796428",
+      "driver_sha256": "83b899b8092fde3c16d34a6ad38670de791961a5fe7f13de2362640925690319",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

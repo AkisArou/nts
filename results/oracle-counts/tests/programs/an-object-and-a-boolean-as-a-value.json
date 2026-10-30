@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-and-a-boolean-as-a-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-and-a-boolean-as-a-value/src/main.ts",
+      "signature": "4b6490b788d3a3fc69d6d2b602d9dff8286f912d3c9af8baf5bc317b651b4c78",
+      "keys": {
+        "c": "e60276a64b31f68dd72493363ce2060a",
+        "jvm": "e8e7c7046325101092af38bd151f3b9f",
+        "llvm": "24b97fe8e2a0843fc40cbe792f789bd0"
+      },
+      "cases_sha256": "0b62030879208d2e2b637c15f2df60409d6d75226fba0bd08d3ce96924005418",
+      "driver_sha256": "f8c88fefb047a51045eb7a6d9d616708569b261078bea5faab90a7cc24d1c90a",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.078413,
+        0.077298
+      ]
+    }
+  ]
+}

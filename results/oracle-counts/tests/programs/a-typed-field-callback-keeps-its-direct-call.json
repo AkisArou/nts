@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-typed-field-callback-keeps-its-direct-call",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-typed-field-callback-keeps-its-direct-call/src/main.ts",
+      "signature": "d051271a144a3d2948080dc799aaebeaf42320b99b58c7bcebe6e0e791e63709",
+      "keys": {
+        "c": "7a20924f56c5191825d41a65ac1be467",
+        "jvm": "db6027c6f03b95a090e015c4acb10338",
+        "llvm": "f7e4f1debe2ecf17f9ef183a713f9c5e"
+      },
+      "cases_sha256": "8e8c84e4c3f18a2a10832eb80ba08406a0a83a3cee6b2fdd74b958d92437b550",
+      "driver_sha256": "9288586edcf39e51ff85edeb9d8a03ef4a4303a28e0c1139c43134057f8b8e27",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.076458,
+        0.076068
+      ]
+    }
+  ]
+}

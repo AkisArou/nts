@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-coerced-number-keeps-its-guards-bound",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-coerced-number-keeps-its-guards-bound/src/main.ts",
+      "signature": "6bdd1374c8d965535b752a7ec60c90462ea228746ff2ea56290f001961acb0b5",
+      "keys": {
+        "c": "d1d634d7ee3a422af655805724876349",
+        "jvm": "1087415c285b3f3f753ce9f846bb26bd",
+        "llvm": "a1a8fe522e463f47d78ec331ea9708db"
+      },
+      "cases_sha256": "99839a9354bab10b982a93d0c4eedc103e1d0c9a3ab7ba54adf37a048b8d4182",
+      "driver_sha256": "7a2305966e04fdde7142bef080b5b69d55450cdbb5a8911cdfd147a6cb3b948e",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.080328,
+        0.077729
+      ]
+    }
+  ]
+}

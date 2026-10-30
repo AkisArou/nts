@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/typed-array-subclass-methods",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/typed-array-subclass-methods/src/main.ts",
+      "signature": "92f12e46ed7e7e2f7ff937dc3707d0c2d401191a88bd02fca4a382b6f91a8424",
+      "keys": {
+        "c": "edcc5162986cb59b19701cdb63b1fcd7",
+        "jvm": "13c1864ac9b31e9f840abed41eccaa88",
+        "llvm": "89927c170c2c6673401650602939ab12"
+      },
+      "cases_sha256": "f7aa83a27955261c14db27cc642a844201d037960a36f793d0f8e2444cef787d",
+      "driver_sha256": "4bad7e2a4c5b16e466efd936c194640a033e6e0cf8aaf7e53f5878938ee5ae17",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.080017,
+        0.077718
+      ]
+    }
+  ]
+}

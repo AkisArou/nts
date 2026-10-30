@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-pattern-parameter-before-scalars",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-pattern-parameter-before-scalars/src/main.ts",
+      "signature": "94dfe46f8012c320bc3d2101a19d1d09dd9459ede70c0cb8853bbacb42029152",
+      "keys": {
+        "c": "5e1efe51eaba9ef9e1a7349e5cb7e53d",
+        "jvm": "80edbb965dbcb3bedcbe9e4d1f8393d3",
+        "llvm": "42b9c65e7bb205d8c144690c807f04e5"
+      },
+      "cases_sha256": "a6b2b203fb05ec0cf748fefbee59804ffa7252d1a07832ddb37683ef9152e94d",
+      "driver_sha256": "8a0b13be552e710a2dae8bf8074dc3f41fd91eee5aef59a4aeab7246854e7946",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.08116,
+        0.077866
+      ]
+    }
+  ]
+}

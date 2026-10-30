@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-view-read-within-its-constructed-length-after-a-transfer",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-view-read-within-its-constructed-length-after-a-transfer/src/main.ts",
+      "signature": "f5c697990f9c51f430f749316e28a148d5eedf28213936f6a924c5f4b0d76c08",
+      "keys": {
+        "c": "16340e7a18e4124d6bc1fc6742fe8a86",
+        "jvm": "b7295902e5c7eecc617384322cecdb4a",
+        "llvm": "c35dc07c3948873c1221315197a5c975"
+      },
+      "cases_sha256": "6d9eeaf02810ce831dc255c0318065972c0fe70ac7cb880abc3943574891c40d",
+      "driver_sha256": "48768d35fb7b040572f7f50e917486b83a60ee5c17c9ac6a014d247223967152",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.078299,
+        0.077586
+      ]
+    }
+  ]
+}

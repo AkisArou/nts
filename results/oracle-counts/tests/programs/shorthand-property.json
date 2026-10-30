@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/shorthand-property",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/shorthand-property/src/main.ts",
+      "signature": "75ad654ff8cd5b420f487c8f1bdcfc67d892ca433e3e287551a3788abe21afbd",
+      "keys": {
+        "c": "40765ac03fe85b4b62021ed9cf5a366a",
+        "jvm": "bb40b6aa245311f7ae632eb18d2a0b45",
+        "llvm": "e99646b51302137dcf5ec7dc2c3ad14a"
+      },
+      "cases_sha256": "ab118b6031fbceba6073e331c59544549b01f6ca1d303fbf7ad7e3f90ced39c5",
+      "driver_sha256": "2364fa5737081c11dc19af100f3b9c3ffab96765f84fb4b3af2364974800dc2f",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076234,
+        0.074751
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/map-word-counts",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/map-word-counts/case.ts",
+      "signature": "439cfe11ca03a8cb71d25f21be9fcbd0bdddc9811d484f4f7bcc1ae730e26df0",
+      "keys": {
+        "c": "1c83fdf8d4457302fdd159e308b197eb",
+        "jvm": "c46570d5ed0b70b0fd8cc235e486186b",
+        "llvm": "09c39024dd669e4cadc2e3e07608ee3a"
+      },
+      "cases_sha256": "9a7fca93bde5cc3bdc64c64f4ee5d91405388b586aab017faf50432cbc69ebab",
+      "driver_sha256": "fa8fb0a866668fc3e6457538b7cc663b1ff9f2b72a7d6e694f70e08fe1c6eca3",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.078185,
+        0.07836
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-call-through-a-typed-alias-is-planned-for-its-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-call-through-a-typed-alias-is-planned-for-its-function/src/main.ts",
+      "signature": "2e11af2523715aba39f4240e87a06b66333257138b478acb0ae1956858936ea2",
+      "keys": {
+        "c": "4eb9e209488b512957ad9aaa001dd797",
+        "jvm": "abbb8c91051562d17bbfc69733bd8ef6",
+        "llvm": "1955289830c31030431947546407defe"
+      },
+      "cases_sha256": "d83a34d5e4d481e1bee194c2e52d036014215ffb479b7009be25c3f5680eacbe",
+      "driver_sha256": "ba8259c55bb68b8c5c466848005ca917e12ea7a31c64a0e33aec4f7b75860c43",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.08408,
+        0.080377
+      ]
+    }
+  ]
+}

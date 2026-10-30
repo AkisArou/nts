@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-accumulator-read-once-a-lifetime",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-accumulator-read-once-a-lifetime/src/main.ts",
+      "signature": "8ed72654017c7bcb4476bb34188e0a69a312e5a2d46a65be649619781fe8dcae",
+      "keys": {
+        "c": "02fd59d9b5bda5cb374fd18da4741ef9",
+        "jvm": "b6aabbd53aead171f9118e7529447f39",
+        "llvm": "901ddbb677d51293c530cb7e2647dbf0"
+      },
+      "cases_sha256": "2274915d98bb6f906ea8477f37669ebec7d460166b0b81c44ce0f735fe277370",
+      "driver_sha256": "8a831d0ae3ab3251e1ebcffe16777e43c1250d957e9b8147c4ab544376be6dc2",
+      "complete": true,
+      "count": 290,
+      "node_cpu_s": [
+        0.084297,
+        0.082456
+      ]
+    }
+  ]
+}

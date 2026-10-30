@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/overloads",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/overloads/src/main.ts",
+      "signature": "6e4e5acd0dc3514d8475d88b7345e69124ffedb979e15ec393fddae1b9a7ceee",
+      "keys": {
+        "c": "2b8dd869c97193fadc588b212ad7c779",
+        "jvm": "d3205a3d7188c00bb78c77042b056802",
+        "llvm": "e5242be34f957ceed8acc7e382a69777"
+      },
+      "cases_sha256": "a54636a0d9fa0e6ae5539890cdf01a2b544a7c487c7201ced1e55b0d2d2b9302",
+      "driver_sha256": "0bb1254fb26dcec3a7b0ad0abe0bfdcc29dc22695902af32fea1b931831703ef",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.078523,
+        0.077601
+      ]
+    }
+  ]
+}

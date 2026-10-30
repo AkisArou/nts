@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/key-order-follows-the-program",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/key-order-follows-the-program/src/main.ts",
+      "signature": "7770a206b71b1335e038be590088ef1fa1e9f7211317d54e052c40c6c8b19b4e",
+      "keys": {
+        "c": "4f4af50f5cb1ab7539a76b227998c739",
+        "jvm": "6d6e2e27a57911227170bc5db92b2d51",
+        "llvm": "cb898c348e7884da5c9702e3b53ae51b"
+      },
+      "cases_sha256": "5e66f02c891e1a28f421e0ab1f833521c6db046c05081a3500382f83d66e3852",
+      "driver_sha256": "ee8315f63e87e6416a2cdb22d8fe9d8e79eca44c9732141bde028ffc27a06d55",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.077339,
+        0.076802
+      ]
+    }
+  ]
+}

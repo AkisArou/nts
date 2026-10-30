@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-local-objects-reference-fields-are-values",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-local-objects-reference-fields-are-values/src/main.ts",
+      "signature": "98bce9cfb1e6b8fabd3f880997828c70548857b71fa9d07bcd668dc6f7d5d4ab",
+      "keys": {
+        "c": "e77d1eeb6d9341285ded3dc8a2185b7c",
+        "jvm": "54910e43e839faea05c3acc52b6b086d",
+        "llvm": "ada0cc1ab1ab6a58a039f7ba073f0f77"
+      },
+      "cases_sha256": "59f17338daf7bd77730c42507e94e5d24afd53eb63440bcceec6af9df1ea381b",
+      "driver_sha256": "a6599fd3c395defba014c903261f7bf65b4a833ea3599fb2c5bf5265434a29ef",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.077716,
+        0.078769
+      ]
+    }
+  ]
+}

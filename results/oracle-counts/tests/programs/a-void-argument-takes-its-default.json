@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-void-argument-takes-its-default",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-void-argument-takes-its-default/src/main.ts",
+      "signature": "055ce9829cb65a5a81440198251854475dbb31be5d6a2c4b0ce7e37ff264a60c",
+      "keys": {
+        "c": "f4fc73b734780a536842dba20ff6813f",
+        "jvm": "e4587a14d24de65e28322166b419b0f9",
+        "llvm": "86b29f42b373d378827590342ce9abac"
+      },
+      "cases_sha256": "d396dfa98bca03b9090174bd07981cb9c1642c19e3d200fe79fcc17b0fa41363",
+      "driver_sha256": "973069c0f960c8af9bb8740466aa20c1cc9b815e620147124499471eb89fb58a",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075683,
+        0.074318
+      ]
+    }
+  ]
+}

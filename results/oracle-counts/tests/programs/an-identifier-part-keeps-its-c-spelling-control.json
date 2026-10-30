@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-identifier-part-keeps-its-c-spelling-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-identifier-part-keeps-its-c-spelling-control/src/main.js",
+      "signature": "072e29bedab37b32d878afa30d2668267662010155e68582fa8d5fc908b7b5d3",
+      "keys": {
+        "c": "2f136d38b1811c4343c50defb6ec79e6",
+        "jvm": "2db6aa9e0e7be6f412546c1cc268e15d",
+        "llvm": "5192003ee3ad95e8b975ae0fe61c822d"
+      },
+      "cases_sha256": "5bf0d107826be846debb193a317a55a89feca09dbd901890f7fa6e8486793dd5",
+      "driver_sha256": "26dd31faa878ccaf81b1bff3973788ed9ac127695654a89d5dda3ce9f4aa1d60",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.014925,
+        0.015106
+      ]
+    }
+  ]
+}

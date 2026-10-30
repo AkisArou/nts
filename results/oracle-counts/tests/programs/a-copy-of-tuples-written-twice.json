@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-copy-of-tuples-written-twice",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-copy-of-tuples-written-twice/src/main.ts",
+      "signature": "31d1a5a0ac5767218398fcaab7c7b12955d03c9aae1119dfa71752525fb1bb87",
+      "keys": {
+        "c": "ccae5a3ce71435657876135af1d15b1d",
+        "jvm": "3aadc39bde3f4ea2611c16e9295fde8a",
+        "llvm": "537911cac4ce0a2fc681d5af8ab48acd"
+      },
+      "cases_sha256": "7d31d4382e0f8749525702ed63b3fe33412ca2513ff2b2038910a5d4299558d5",
+      "driver_sha256": "06203c46671f9f341a0f7cfc46047fcf61f8085db9c53af184cecf0ed29a5481",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.07502,
+        0.073491
+      ]
+    }
+  ]
+}

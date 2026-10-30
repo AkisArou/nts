@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/clbg-k-nucleotide",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/clbg-k-nucleotide/case.ts",
+      "signature": "62779641598bd6442a05908d486b07dbfc9b789e593f56abf200936a3ebe61e9",
+      "keys": {
+        "c": "3d773e03040c84ba4e99ee1e17d33482",
+        "jvm": "ab6c5d2a824da34a333a74bbc6d7b04f",
+        "llvm": "b7a443278ea5f05d5e276dca1d862d43"
+      },
+      "cases_sha256": "329a174c689659060e7b253a130b7ba450ee1246f11aeb9a8c859ccc1d393bb1",
+      "driver_sha256": "d6d202dc0c48266194a74413f9adf834f951302271ec31fed2e04eefc8728d71",
+      "input_domain": {
+        "identity": "04d70ad4cd0f10d78a244d5a269c64cc",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Bound the generated FASTA strings and k-mer tables within the Node recorder's budgets; cover benchmark seed and published input 1000.",
+                "max": 32768,
+                "integer": false,
+                "allowNaN": true
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Bound the generated FASTA strings and k-mer tables within the Node recorder's budgets; cover benchmark seed and published input 1000.",
+                "max": 32768,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 25,
+          "cases_sha256": "36edf82a3ec8ea22672a11e22cfeb3fdacb67fa5353e8455931fad1260e73cba"
+        },
+        "work": {
+          "count": 25,
+          "cases_sha256": "1f18f84b635afc96bbcb5fa7c50f9a21b24e4aedd6b3355dc3722e10d8b211d1"
+        }
+      },
+      "complete": true,
+      "count": 50
+    }
+  ]
+}

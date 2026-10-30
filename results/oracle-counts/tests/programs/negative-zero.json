@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/negative-zero",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/negative-zero/src/main.ts",
+      "signature": "45c891211bc18e79a51852d85ea5c5db847a24e68b0a92e627c6dddaa55c909d",
+      "keys": {
+        "c": "63010a1876ccdd3c3295c1527fd0a8b1",
+        "jvm": "ec0458d127d11ebb26f396da561e5afd",
+        "llvm": "5ce3391a580b75847f88608bfb7908df"
+      },
+      "cases_sha256": "52e54d48fc085146f7be24677edb580b85ad4ded6820c1c481f9b03edb67d195",
+      "driver_sha256": "e1ea9649e7c0d42b67a6ebeb88d3d327f6fe5606f92b185cebdfcdef3c9cb190",
+      "complete": true,
+      "count": 554,
+      "node_cpu_s": [
+        0.089483,
+        0.089839
+      ]
+    }
+  ]
+}

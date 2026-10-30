@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/math",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/math/src/main.ts",
+      "signature": "d10f47d605005b2a761be200ad42ebb8d801110a32595c521fd55727cf367cc8",
+      "keys": {
+        "c": "138c58bba1b6b211d63838343be2e88a",
+        "jvm": "d309da2a421c98010f540ad055f695c2",
+        "llvm": "d0c23cd8f1f1fd1dab0c9b0ae5286e82"
+      },
+      "cases_sha256": "fcf5e134fbcd88e8ebc53363239933f8367bef38b2443f1661b14848127b55f0",
+      "driver_sha256": "39984cb826027e9df17095e916ff8262bc4b808c11986dd4622e76d1a334dd46",
+      "complete": true,
+      "count": 812,
+      "node_cpu_s": [
+        0.08193,
+        0.079343
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bound-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bound-function/src/main.ts",
+      "signature": "a1682f1f72e219b8fad78c248a226be58ccc48fe6be6a214dca5ef55e6dd7e21",
+      "keys": {
+        "c": "a93017a28ad96d3b0feff38e2779d8f0",
+        "jvm": "493f22e700ea3ab155aa9ea53161e667",
+        "llvm": "663354d2a03e45b74a8f2bb73978bd5b"
+      },
+      "cases_sha256": "7a2951b414f6d4450e0bb64b17bbca2cf37a9e212228c03156dc56b30065e6c8",
+      "driver_sha256": "8af6e3bf8909d2989b4fa262907b259f61e93abed8e5fc13a45800af5fc25062",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.080631,
+        0.081843
+      ]
+    }
+  ]
+}

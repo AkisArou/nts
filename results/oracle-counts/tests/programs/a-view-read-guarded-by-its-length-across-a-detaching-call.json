@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-view-read-guarded-by-its-length-across-a-detaching-call",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-view-read-guarded-by-its-length-across-a-detaching-call/src/main.ts",
+      "signature": "283125786070e42a03640aecdcb9c45164d25aa288c1accaf79e98de42a290d6",
+      "keys": {
+        "c": "9c3b2f4d370e0e584d401f8f507f5655",
+        "jvm": "932f40e0e22e39e2e73b783d5dd2bdb3",
+        "llvm": "5c060cd3f8b2cdd83468a4b919ae4d77"
+      },
+      "cases_sha256": "ec45f56a8395e54e7f31187fe9e06b0b112a204a308454e870b8dd96e0797f9b",
+      "driver_sha256": "dceb84664378ba33a2f6d0a9065e9aef7b0cbccd921624013306dfaa9c594624",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.093484,
+        0.085004
+      ]
+    }
+  ]
+}

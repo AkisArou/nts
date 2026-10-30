@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-type-predicate-that-narrows",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-type-predicate-that-narrows/src/main.ts",
+      "signature": "7105c17b3ca63cf86d20e8c444d79a8541c54c0067d3235212b9165bd853de58",
+      "keys": {
+        "c": "6169be4352d7045361acb2c0cddd4d3a",
+        "jvm": "4760bf1dba6bae3cfa4dd861de840e03",
+        "llvm": "53d06802a6680c8db6086594d3213845"
+      },
+      "cases_sha256": "67a77be6818ac8247bfa83e2ca62dedda9455ba76c6a24bae3342bd53456ab51",
+      "driver_sha256": "cc29a2d73994567ebbe0de23b24e81f28bb4a23eccf77dbc67ca13c8320c8fc5",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076212,
+        0.077892
+      ]
+    }
+  ]
+}

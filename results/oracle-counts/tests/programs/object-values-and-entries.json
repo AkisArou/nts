@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/object-values-and-entries",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/object-values-and-entries/src/main.ts",
+      "signature": "ca7f2d3027462d6377260845ec810213c6e70cd8c4b194ae587390f2cba4bf20",
+      "keys": {
+        "c": "864ccf1a14c4f272a8fa1eca9625b106",
+        "jvm": "73c5106b11455f87a8b484b15790eea4",
+        "llvm": "cd448c7b387c35b1430112850fa4a494"
+      },
+      "cases_sha256": "5c10a1a74b0ac4a66722ab8d9aeebd464ab39accd02e7f0578cdcae635b993c1",
+      "driver_sha256": "1c85c1836f45d0518558542d93ad7cd699042ab89885a5748338f35344b96c76",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.075269,
+        0.075358
+      ]
+    }
+  ]
+}

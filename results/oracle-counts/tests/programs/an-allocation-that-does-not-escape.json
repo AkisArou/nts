@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-allocation-that-does-not-escape",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-allocation-that-does-not-escape/src/main.ts",
+      "signature": "20363d05e55bb51c5ec22e7ff175fcbaa8b88afaf351e90c23ec0d5661478091",
+      "keys": {
+        "c": "a174f258f2a75ac8b0796cfcd01b2a6b",
+        "jvm": "26d9d88ec950153e555dcd6f1719f638",
+        "llvm": "fab898ccb91f43f592c21f769a762ddb"
+      },
+      "cases_sha256": "4df25a976bedb0fac20931550105ef646703fc205f6a2fc5e3389d282f103cd7",
+      "driver_sha256": "91fb8ce95982a7976052bde5019d7c966099b8a6558061f7d3674094cc728471",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075951,
+        0.077091
+      ]
+    }
+  ]
+}

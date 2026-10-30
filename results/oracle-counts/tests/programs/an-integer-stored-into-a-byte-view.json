@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-integer-stored-into-a-byte-view",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-integer-stored-into-a-byte-view/src/main.ts",
+      "signature": "51ea7e0c8bdee7193960ed62699716263a41dab04a18caa92a8c98a04910e5d6",
+      "keys": {
+        "c": "fcfa751b4d16c9929da259f9162edf99",
+        "jvm": "246da813270d97cd057e35cf743b13d4",
+        "llvm": "228e706ba08b36f264f9d96523c64831"
+      },
+      "cases_sha256": "3ef26fa2d7ce464720b568e35cbcf3680f88efa0c4c9ccb5bd0bfe3f72a33f85",
+      "driver_sha256": "c0f51d74bb9f0b16cc436598a0f745f86668ccb75b96ebdb44d3b22b49941938",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.079209,
+        0.076333
+      ]
+    }
+  ]
+}

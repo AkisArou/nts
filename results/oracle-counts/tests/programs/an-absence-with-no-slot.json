@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-absence-with-no-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-absence-with-no-slot/src/main.ts",
+      "signature": "f8caeb3f89591238d09a73d7df1d0740f999f049bdfcd4d0a4bebfc1bfd43c2c",
+      "keys": {
+        "c": "ed47573ee0c7bcc42f3d6bb669a00d66",
+        "jvm": "c6d6c5890250d3a0582fd5993cc968a4",
+        "llvm": "8ad41b1409d0570dc07ae672466c1285"
+      },
+      "cases_sha256": "298ed53b3523febc99b843586c9bd60eaa5971a35be672620e3ef4496f482b9d",
+      "driver_sha256": "45993b644f65902203559fb53cc6b863003edc30c1f52297d1ae21b8252b6048",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.083619,
+        0.080741
+      ]
+    }
+  ]
+}

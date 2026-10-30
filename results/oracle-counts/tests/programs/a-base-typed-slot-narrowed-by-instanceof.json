@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-base-typed-slot-narrowed-by-instanceof",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-base-typed-slot-narrowed-by-instanceof/src/main.ts",
+      "signature": "ffbc07681c05aa837482ae97bfbd1246849b5a44b952175871193e45ee0f04a8",
+      "keys": {
+        "c": "c05837863f6043acf1f47ea8b6274356",
+        "jvm": "8df159239bf3daae66bc0593a0ad816b",
+        "llvm": "3879e085204e1e333252906749d39f18"
+      },
+      "cases_sha256": "d52685f4b42fcb3a1724381481b6d9c099090fac666641ff94f883f4736ed893",
+      "driver_sha256": "22ed1ec1c1d4b95edc3cbf4ea8347238c5d1088eb9cb1740915cec918903bef6",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076686,
+        0.076426
+      ]
+    }
+  ]
+}

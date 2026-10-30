@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-binding-that-only-holds-null",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-binding-that-only-holds-null/src/main.ts",
+      "signature": "ce2f056f6d72c715ca603ca2c891e9cbe15ee9c3ff5288ed2d1125fa86c46836",
+      "keys": {
+        "c": "bad939c51dcd7652d5ad6f87e06a0d3e",
+        "jvm": "49dc971e2725bacc03393a6f4f8b4c36",
+        "llvm": "0d67c1565c3af1eb110670a39a556fb3"
+      },
+      "cases_sha256": "c4842235eff4fc9c6fc757a5570cd07ecca37fef5116d2657bec2ea316df05f0",
+      "driver_sha256": "7a1531afb7d32393161dd53a0ce8912cf960536edeab1fae854fcfe0c7c5ccc7",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.080462,
+        0.080733
+      ]
+    }
+  ]
+}

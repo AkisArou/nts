@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/upcast-to-base",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/upcast-to-base/src/main.ts",
+      "signature": "9e706fea0a31853fc0961335ac5213d86a74ae92aa1a4b363302e567140d0619",
+      "keys": {
+        "c": "b718dde139549d9d00449c94f28bd9d5",
+        "jvm": "0eccd6ea7bdb83e1ee08b75638773c0b",
+        "llvm": "66f0d73e22b9c6458c8d7b67d9eeb4ac"
+      },
+      "cases_sha256": "a758cd67e83939fa055b91ea26009e1a6eaa2c6d380a98a680204763b0a7d565",
+      "driver_sha256": "891039c280006b3d45b940dd3528ceaeaeee9b6ed9a9d4f4257e2fc143ddb3f3",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073759,
+        0.073436
+      ]
+    }
+  ]
+}

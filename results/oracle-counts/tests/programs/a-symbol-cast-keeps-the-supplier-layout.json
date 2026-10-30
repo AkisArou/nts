@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-symbol-cast-keeps-the-supplier-layout",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-symbol-cast-keeps-the-supplier-layout/src/main.ts",
+      "signature": "0b4ad9fdc4e10096f7b23d24530898c219438424bd092ea68ae7494726db14c4",
+      "keys": {
+        "c": "2c0773993439a482228188c93c281263",
+        "jvm": "c9f72daf91d44cfb7542cc4d260a11f2",
+        "llvm": "2ae0b394e5a53422e9589b39d6ae76d3"
+      },
+      "cases_sha256": "6ce3988590a36f79130cc7ec7c67b8b682c2889bf8ee6184f7f80d8afaa9024a",
+      "driver_sha256": "79e22f5e08fbea49660f1a7d442722a03846d61af28561d2deef212fc98252db",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074983,
+        0.075758
+      ]
+    }
+  ]
+}

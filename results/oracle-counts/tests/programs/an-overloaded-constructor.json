@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-overloaded-constructor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-overloaded-constructor/src/main.ts",
+      "signature": "308eb7a3601a11a8e51f839184f6a743a6d8ecb71a99683ab1663680add87cd7",
+      "keys": {
+        "c": "7b5e5e7a58e65d6ffa686f586933d477",
+        "jvm": "842093b8a452147218c96dbfe22ae8f6",
+        "llvm": "f096d9e4cbf7ca3e60254f70ba5c17ac"
+      },
+      "cases_sha256": "33e965b749311320ae5fce128ebe29030857cdd1cffc53144e313aeacec0ecfb",
+      "driver_sha256": "2b2535a7f5fa3f69d62eb7ade95eaac62c900de3458e9611dfb16edece861e5b",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.084262,
+        0.079386
+      ]
+    }
+  ]
+}

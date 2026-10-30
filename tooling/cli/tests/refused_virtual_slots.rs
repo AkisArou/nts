@@ -58,6 +58,7 @@ fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
         .join("../../compiler/core/tests/programs/refused-virtual-slot-arity/tsconfig.json");
     let result = Command::new(env!("CARGO_BIN_EXE_nts"))
         .arg("check")
+        .arg("--json")
         .arg(fixture)
         .env("NTS_BACKEND", "jvm")
         .env_remove("NTS_RC")
@@ -67,18 +68,20 @@ fn a_refused_fewer_parameter_override_keeps_its_jvm_dispatch_abi() {
     let stdout = String::from_utf8_lossy(&result.stdout);
     let stderr = String::from_utf8_lossy(&result.stderr);
     assert!(!result.status.success(), "a refused input must stop");
+    let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+    assert_eq!(report["status"], "aborted", "{stdout}\n{stderr}");
+    assert_eq!(report["counts"]["compared"], 57);
+    assert_eq!(report["counts"]["expected"], 58);
+    assert_eq!(report["counts"]["aborts"], 1);
     assert!(
-        stdout.contains("checked 57 of 58 cases"),
-        "{stdout}\n{stderr}"
+        report["aborts"][0]
+            .as_str()
+            .unwrap()
+            .contains("`RefusedNarrow#read` was refused:")
     );
-    assert!(
-        stdout.contains("`RefusedNarrow#read` was refused:"),
-        "{stdout}\n{stderr}"
-    );
-    assert!(stderr.contains("aborted 1 time(s)"), "{stdout}\n{stderr}");
-    assert!(
-        !stdout.contains("  nts  ") && !stdout.contains("  node "),
-        "{stdout}\n{stderr}"
+    assert_eq!(
+        report["disagreements"].as_array().unwrap().as_slice(),
+        &[] as &[serde_json::Value]
     );
 }
 
@@ -92,6 +95,7 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
         let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
         command
             .arg("check")
+            .arg("--json")
             .arg(&fixture)
             .env("NTS_BACKEND", backend)
             .env_remove("NTS_RC")
@@ -99,27 +103,23 @@ fn refused_virtual_receivers_stop_on_every_backend_and_controls_finish() {
         let result = command.output().unwrap();
         let stdout = String::from_utf8_lossy(&result.stdout);
         let stderr = String::from_utf8_lossy(&result.stderr);
-        assert!(
-            stdout.contains("3 case(s) the compiled program declined"),
-            "{backend}: {stdout}\n{stderr}"
-        );
-        assert!(
-            stdout.contains("checked 113 of 116 cases"),
-            "{backend}: {stdout}\n{stderr}"
-        );
-        assert!(
-            !stdout.contains("  nts  ") && !stdout.contains("  node "),
-            "{backend}: controls must agree: {stdout}\n{stderr}"
+        let report: serde_json::Value = serde_json::from_slice(&result.stdout).unwrap();
+        assert_eq!(report["status"], "aborted", "{backend}: {stdout}\n{stderr}");
+        assert_eq!(report["counts"]["runtime_declined"], 3);
+        assert_eq!(report["counts"]["compared"], 113);
+        assert_eq!(report["counts"]["expected"], 116);
+        assert_eq!(report["counts"]["aborts"], 3);
+        assert_eq!(
+            report["disagreements"].as_array().unwrap().as_slice(),
+            &[] as &[serde_json::Value]
         );
         assert!(
             !result.status.success(),
             "{backend}: a missing feature must stop: {stdout}\n{stderr}"
         );
-        assert!(
-            stderr.contains("aborted 3 time(s)"),
-            "{backend}: {stdout}\n{stderr}"
-        );
-        assert_eq!(stdout.matches("the compiled program aborted: nts: refused at run time: `Refused#value` was refused: `eval` is never provided: it evaluates source text, and a program compiled ahead of time carries no evaluator").count(), 3, "{backend}: {stdout}\n{stderr}");
+        for reason in report["aborts"].as_array().unwrap() {
+            assert!(reason.as_str().unwrap().contains("nts: refused at run time: `Refused#value` was refused: `eval` is never provided"), "{backend}: {stdout}\n{stderr}");
+        }
     }
     std::fs::remove_dir_all(scratch).unwrap();
 }

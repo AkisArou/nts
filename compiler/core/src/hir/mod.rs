@@ -68,6 +68,7 @@ pub mod templates;
 pub mod unerase;
 pub mod validation;
 pub mod written_roots;
+pub mod written_scalar;
 pub mod written_storage;
 
 mod bridges;

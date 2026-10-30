@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-implicit-literal-iterator-call-keeps-its-throw",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-implicit-literal-iterator-call-keeps-its-throw/src/main.ts",
+      "signature": "f993e7587ee09285384280e06181cf75f81ab5fd08a4622a7bd8992469e6d990",
+      "keys": {
+        "c": "206c24dd14abb60d3bf8ee3e6a8fae39",
+        "jvm": "538e8caf5ab24f4890114bdfdcee70bd",
+        "llvm": "f4c2827774cf2292e1f15adfdd5538a0"
+      },
+      "cases_sha256": "ecbdf8fbd28651fea4485296ac0aa0d7bf6701df6063a9b138eba0cc10f59af8",
+      "driver_sha256": "195164cd70f2e41688693a3de1b43afb28293f87e2a0557ca710434fe5ba74fa",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.079277,
+        0.07754
+      ]
+    }
+  ]
+}

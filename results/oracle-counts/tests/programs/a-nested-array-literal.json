@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-nested-array-literal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-nested-array-literal/src/main.ts",
+      "signature": "25fc472283d888587662411852b39646f15ad04e9d4cb1071d45a6077a5d6808",
+      "keys": {
+        "c": "c36dcc1d21a7d5406bd15eaa77e9c3ac",
+        "jvm": "451ff2b95c5a97d7ea9b5bfcc40ad22e",
+        "llvm": "8458fafc1561cf33c0a9ef290c745c1b"
+      },
+      "cases_sha256": "c6cd44a4e362456b6199499d22846e78c105287de3adabedd8c36b814df911d2",
+      "driver_sha256": "c00ae5586eaa382a00d6be86574cf23143288a68a9bb6b95e55bd58095458fa3",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.074854,
+        0.074399
+      ]
+    }
+  ]
+}

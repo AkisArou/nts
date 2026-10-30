@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/standard-stream-writes-share-console-order",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/standard-stream-writes-share-console-order/src/main.ts",
+      "signature": "41fc09c6e8816df2e3e3d6070880db0a2eb715fc69b2086c1af6128a5206af6f",
+      "keys": {
+        "c": "17bee44c53d114e0a87bf704b358975b",
+        "jvm": "a7487ebea3fc85ce1993877ff2418d63",
+        "llvm": "bcf46654bce4c6d6d983f3aa4fbbfd5b"
+      },
+      "cases_sha256": "912ded5a0b9f1405246ae3966bad43e3f42de398c5b6a8177a37ad0f51f18f22",
+      "driver_sha256": "ab7d5fcfab14a0e763d8428b4ad7cad3392c25062b5b93663c91f4b4092e2d0c",
+      "complete": true,
+      "count": 20
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-identifier-part-keeps-its-c-spelling",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-identifier-part-keeps-its-c-spelling/src/main.js",
+      "signature": "72d6c1a162668f7b7378454db60108492003150549e94de2f5ab8345af4c899f",
+      "keys": {
+        "c": "3780d96cecdbcf093534c32114415c90",
+        "jvm": "ad6ebfc462dbf206ab29bd39f26052ce",
+        "llvm": "08eda5682c65d7342951ae5dbadfddff"
+      },
+      "cases_sha256": "09d0845c6833f5d497ac616b60c2dd9b7ccf6610ea9de13508ccf0a6353f7293",
+      "driver_sha256": "007866a77f98cbd1ae655db2bc51f75b71657eaeb53446f274a1891e1a27ae19",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.014916,
+        0.015788
+      ]
+    }
+  ]
+}

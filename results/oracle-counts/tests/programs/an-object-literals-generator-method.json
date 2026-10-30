@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-literals-generator-method",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-literals-generator-method/src/main.ts",
+      "signature": "58bd2e44d6e60323d29f0c8f88831d5ac7289743df5120cdea8a8c46a8dbf24b",
+      "keys": {
+        "c": "ae946dccc5f7fae789a59c8aa82b08f2",
+        "jvm": "c7dd10476f5b45d808d87fc16bf0836a",
+        "llvm": "b39fa17309aa24876670116629cbbf28"
+      },
+      "cases_sha256": "f3014d4c6116de56ac15ae6500112fbbcefda28601cc09b74d9f78691b82427a",
+      "driver_sha256": "87e3d42c3adac3bfc221466a8a7f53cdb118053b8fb205ab4994007bab3de28b",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074385,
+        0.073469
+      ]
+    }
+  ]
+}

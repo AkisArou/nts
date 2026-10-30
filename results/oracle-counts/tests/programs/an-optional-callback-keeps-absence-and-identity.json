@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-callback-keeps-absence-and-identity",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-callback-keeps-absence-and-identity/src/main.ts",
+      "signature": "7c3849c7debbf1c25c278befc89a1f97f101d004e18f2af1377128ffbb157788",
+      "keys": {
+        "c": "5f6d595d4447242077b4bbb4c24a3088",
+        "jvm": "ca7900b675cbf6b2f7f734f6e079ae76",
+        "llvm": "4a0a5935f7d52272de26cf2c0d86c5b5"
+      },
+      "cases_sha256": "123f334bf95ce9a0c8dc9961ea611aa27141d6ebaa6e4046aab8e6216f9719ae",
+      "driver_sha256": "fe08dcb09283e1cdc7378b7714ce8281e84f7365d223ca47683db4a40cc01947",
+      "complete": true,
+      "count": 145
+    }
+  ]
+}

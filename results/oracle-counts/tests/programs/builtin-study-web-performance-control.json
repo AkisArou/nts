@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-performance-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-performance-control/src/main.ts",
+      "signature": "de0a84c26b65be55892360322fade9b09f20dc9d9ccd73481e0a58b6bba0040a",
+      "keys": {
+        "c": "82347000c6b861f5c0011577d1cf2d5d",
+        "jvm": "584171e521718b3490598540f1eb3beb",
+        "llvm": "412dadebc93bbed1147450d2cf3a402c"
+      },
+      "cases_sha256": "db2b84afd1d4f05739ff4203dd2b64480177cf6244c2bdf1cd1c73e4056881ae",
+      "driver_sha256": "3be3265856c02824669180989df65ce20ae1043f6b384fc3c176839784c597f1",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

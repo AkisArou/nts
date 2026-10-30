@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/promise-all-in-a-program-that-grows-an-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/promise-all-in-a-program-that-grows-an-array/src/main.ts",
+      "signature": "dbccbc643b9c68c19e469c53bf1556c026cf13bded2fd762176aab49579ab915",
+      "keys": {
+        "c": "27b626c0b9327c803efd0d6b4da9ddd9",
+        "jvm": "2b4b1d77a0e2b1ceadf45fb552abc743",
+        "llvm": "bdd5a8df5df1954f56ca83f379d3b4a6"
+      },
+      "cases_sha256": "b743595ad5393acf71cc03523d731dd2059a5451059a2e6450ff7fc843c557e2",
+      "driver_sha256": "cb246e8fc16b54db01b369a1677c3460ecc2adc1143a3503a2043beaeacdb4e4",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076601,
+        0.0757
+      ]
+    }
+  ]
+}

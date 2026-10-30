@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-name-that-starts-absent-and-evolves",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-name-that-starts-absent-and-evolves/src/main.ts",
+      "signature": "a23750236672d61bed6828ddcd06179b9a095bd91eb399fe30056d100e1c546d",
+      "keys": {
+        "c": "7cad4f18b8bb38ffc82579e53fa00e1b",
+        "jvm": "9b1f7af5fdf3552aba143c68b3f6ceab",
+        "llvm": "65825cef1b061e0abf31f857add52ffa"
+      },
+      "cases_sha256": "bfc909c7f9fc2788380a654e2702edd60d4b80745640d38bbaf7cb274c75fa8d",
+      "driver_sha256": "5350995da5b05697bd8737e3b1b2724745bbe83da90e99e7bfe417f419c88fe4",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.08021,
+        0.076401
+      ]
+    }
+  ]
+}

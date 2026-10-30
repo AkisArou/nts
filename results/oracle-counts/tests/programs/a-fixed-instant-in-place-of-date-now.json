@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-fixed-instant-in-place-of-date-now",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-fixed-instant-in-place-of-date-now/src/main.ts",
+      "signature": "f1926c27abd46e4a90c83c0ffc3389db6257b80dab2f0080b2207e52a4b10839",
+      "keys": {
+        "c": "359722b15312786130085f4446ee964c",
+        "jvm": "5aad00a724a571ef1cf5d6b9f6e8cf8f",
+        "llvm": "338aa4a10d894a4b0093a028731bda07"
+      },
+      "cases_sha256": "9d9ef69a69602e4629b5b1ede32b5bee015a0ce6752a2ce6257fdd090679ed8a",
+      "driver_sha256": "5bc4c72b564886e787acbc053132187df2cc2456d19469e0039dd6ba205c4600",
+      "populations": {
+        "rightNow": {
+          "count": 29,
+          "cases_sha256": "9d9ef69a69602e4629b5b1ede32b5bee015a0ce6752a2ce6257fdd090679ed8a"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

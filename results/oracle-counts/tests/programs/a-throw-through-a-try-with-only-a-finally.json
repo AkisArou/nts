@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throw-through-a-try-with-only-a-finally",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throw-through-a-try-with-only-a-finally/src/main.ts",
+      "signature": "ba25a57dd54afc0d1234dfd0ba3514fb66e3db032609363532840cc41368f097",
+      "keys": {
+        "c": "083e546aea642c2e52b5a2a07cba84fc",
+        "jvm": "68f62fdc2ebc2f87639681efdf1ef142",
+        "llvm": "c8b70ea2f1b76cfd2ac336288d0ec1dc"
+      },
+      "cases_sha256": "dcf8649f83753a64d23c350226112ed33dcc40b4b072de4d210af810c9838660",
+      "driver_sha256": "f7da358bd54a62653d3e8b5edf44dae8e3f79d57223e4d65426995c9ef611bdb",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076855,
+        0.07826
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-pinned-only-through-a-callback",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-pinned-only-through-a-callback/src/main.ts",
+      "signature": "f28dbdf16b738524bcda8c0323182ac14726a70b4c708b356431bf354ff1aa85",
+      "keys": {
+        "c": "67d27429c042425ea4aacd2aaef94499",
+        "jvm": "dfabc1c3714b438b6f83db9c33538c70",
+        "llvm": "51d98d1eebcfcdaa7d90fcaf53dffb75"
+      },
+      "cases_sha256": "932f1dbc5de1d9d9c42f16debf4f8d94989743bcba942daf78611ad4e914979e",
+      "driver_sha256": "2696da0772f38aabeddc4c4bb0ee141bda82b019e3c4ab7cf1ee756cdba6219b",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077062,
+        0.0758
+      ]
+    }
+  ]
+}

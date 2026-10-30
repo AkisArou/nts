@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-async-generator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-async-generator/src/main.ts",
+      "signature": "23ff9cc1a572e6b51f7533a28f630c30ab7b0a041418755128bac988aa543407",
+      "keys": {
+        "c": "4c4c0c0ff9adc0548a3e89d5b3e7a4c2",
+        "jvm": "9ffcde85b5ffd0bdc9693b21804e78ff",
+        "llvm": "0788fcdee8e9c76584a25edde88d6f57"
+      },
+      "cases_sha256": "63faaf4a3ea8f1ca31f0866f625c8a56074a6c1bb6d7d6cbadcfa3b83079e338",
+      "driver_sha256": "e53edb21a892304db7622133a6954b02c47dd25b1d1bc907b7dc1e49e4261c01",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.083379,
+        0.081916
+      ]
+    }
+  ]
+}

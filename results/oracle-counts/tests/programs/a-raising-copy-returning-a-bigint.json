@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-raising-copy-returning-a-bigint",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-raising-copy-returning-a-bigint/src/main.ts",
+      "signature": "c8aa67825761442aac63a0fcf523054e027861b57abe88b3f08026e458f6bca5",
+      "keys": {
+        "c": "8f6845dfb9ac11d8b78ea8a3baff1470",
+        "jvm": "0b35786c1e11bf62b2e528181155b821",
+        "llvm": "e9b6962df029f190199abfb0c18b3865"
+      },
+      "cases_sha256": "dad066b277fe96aa8c783c044064db31b19b3e5d6e7f8cb521c94ef7595419e4",
+      "driver_sha256": "0963f36a96fca375151e26e29bd2ca64c07f2f4313c4110a10d7e5f3b2f1ba21",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.073871,
+        0.07559
+      ]
+    }
+  ]
+}

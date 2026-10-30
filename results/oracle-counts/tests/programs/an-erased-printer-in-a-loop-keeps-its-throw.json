@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-erased-printer-in-a-loop-keeps-its-throw",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-erased-printer-in-a-loop-keeps-its-throw/src/main.ts",
+      "signature": "ea20be250fbb81f9bd8a1e341c09847e2fa331b8bf50dc4f5ae36c5146bd1f2d",
+      "keys": {
+        "c": "50719b9bac2af0d4d2b19cb840fd36de",
+        "jvm": "a36d6b4720e2dd853ba61dc2da1cfddf",
+        "llvm": "08305cdb7a022fff7b875fe37d3f67d3"
+      },
+      "cases_sha256": "82cecc5237206061d1d7a82608b9522661eda59e5285b9aa159025d53a130268",
+      "driver_sha256": "093a2d992725fb2b8624242f86e454717c52922beda931b2dcac78dde7aa9f9d",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.079653,
+        0.075061
+      ]
+    }
+  ]
+}

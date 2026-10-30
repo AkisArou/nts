@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-alias-read-after-an-interface-view",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-alias-read-after-an-interface-view/src/main.ts",
+      "signature": "4e3bb722a88a803def1fc395e25f5e631123f5405456eb53425e2d07648e275b",
+      "keys": {
+        "c": "acb91078ad358db92a4f67a121352b01",
+        "jvm": "f1499a063e8eaa6f31fcbc87f607f3f3",
+        "llvm": "0ad36b6ed8277c9bdda929ed3246cd41"
+      },
+      "cases_sha256": "afc639b02bc5062d92ccd026b6ac67217b1a79bf29637aa16ac2a873d7813063",
+      "driver_sha256": "d3216d88342c43b8552b0484073599b7f4efb441c5af1e9857de3ba45617838c",
+      "populations": {
+        "aliasRead": {
+          "count": 29,
+          "cases_sha256": "eaa75a848c1885d33ca2e2bb587f5939e551d459f37382eecabddaa2407bab05"
+        },
+        "viaQ": {
+          "count": 29,
+          "cases_sha256": "39aaf5266e2c198fc022f6ba5425a57aa971b6b3f840fc417b2bbc24d4043b5c"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

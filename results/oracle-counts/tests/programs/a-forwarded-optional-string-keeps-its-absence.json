@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-forwarded-optional-string-keeps-its-absence",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-forwarded-optional-string-keeps-its-absence/src/main.ts",
+      "signature": "032b2aeeb54c086bd04cc5f29e5674fbb98a3c2ffb5d64d7597b8170f3776869",
+      "keys": {
+        "c": "385b2a47f99cacc335045821fa8c8c8f",
+        "jvm": "d491ce7059c15759686dadf975d31b8a",
+        "llvm": "b278f9ad4b822f460cdf9568afae7aed"
+      },
+      "cases_sha256": "3612c10ab268b1239d9e2cba87cb48ae5bca6a05469bae0c276a985ed9b08112",
+      "driver_sha256": "c1c5b3130d034c00d509f1889227b292517c23cd6f5338a397f05f175fb7e17f",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.074464,
+        0.074748
+      ]
+    }
+  ]
+}

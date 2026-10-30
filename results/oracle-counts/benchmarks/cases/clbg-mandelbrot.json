@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/clbg-mandelbrot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/clbg-mandelbrot/case.ts",
+      "signature": "3560194b443593606c51bf3302c0af6cda5c1075d222d99c3b1d1297ac4fbb77",
+      "keys": {
+        "c": "e0ff5e13a57476664a9667c43d0986fd",
+        "jvm": "f7e8af507b23bb66b75a9631f935d13c",
+        "llvm": "916e3a8eda087ad938b5351db06ef1f0"
+      },
+      "cases_sha256": "b105dab253eb3abc71bc0751168923625a8803203597911c89791125c21450b3",
+      "driver_sha256": "6d949129c06cb2f4bcb08271f9938ff8db300bea1907cebbe1bbc64adc5d33e1",
+      "input_domain": {
+        "identity": "8583e23a5d8af78686cd6f897bcd6fb5",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "NoGc differential mode accumulates every allocation; larger widths exceed the 2 GiB child limit",
+                "max": 320,
+                "integer": false,
+                "allowNaN": true
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "NoGc differential mode accumulates every allocation; larger widths exceed the 2 GiB child limit",
+                "max": 320,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 22,
+          "cases_sha256": "10600a861228b87b0641b9fa0de466e512e6dfa000755776aa3a5e81aa7651a3"
+        },
+        "work": {
+          "count": 22,
+          "cases_sha256": "dfe32c4658ca9d062c6f977e60740516e3a646a21b8accb5e4a659f2a15d2040"
+        }
+      },
+      "complete": true,
+      "count": 44
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-save-through-an-interface-whose-implementer-maps-with-an-arrow",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-save-through-an-interface-whose-implementer-maps-with-an-arrow/src/main.ts",
+      "signature": "63ebdf63fb6359ada8dff0b4d722a2e0e9392344e9c897e46a562889e6758f7b",
+      "keys": {
+        "c": "2a56e7f48d040a6bdc469b637ad3993b",
+        "jvm": "fd4b48016ac10addba2979c21d34a318",
+        "llvm": "d9d85276323d7be31b81f9de591f35e7"
+      },
+      "cases_sha256": "2fd54acf1c46ff0e0fc2f5d7fd01beae37506edd6fd8d96e10e5edbc3934d390",
+      "driver_sha256": "f3ff09ba4459a99904bf8c373a0b1e3925b9f00d83cb01efe51f8a592e359876",
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-function-that-reads-its-own-this",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-function-that-reads-its-own-this/src/main.ts",
+      "signature": "5fc866c4713c718b0d5eb006d091987bb4100c237da34775abcf97de3cdce699",
+      "keys": {
+        "c": "f9ed69e1d765f40d624760d865b69e48",
+        "jvm": "56c2280083f87c708b45df31b5d26d5d",
+        "llvm": "c3311e7b76fde9d6fe3cf7b111f434d9"
+      },
+      "cases_sha256": "e2367220216cb2d5f447e8c23d6d437e15ed8a29b6d2a03e355600cc9af7928b",
+      "driver_sha256": "7127dee4eb4f31e0682e8993b90c9aa661910b7e30425a72a2bfff48dbdb2ad9",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.085647,
+        0.100484
+      ]
+    }
+  ]
+}

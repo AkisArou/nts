@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-number-keeps-samevalue-through-an-erased-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-number-keeps-samevalue-through-an-erased-slot/src/main.ts",
+      "signature": "9b44987b73f3e844bf0daf51689072e7bb6f86e3ff8e034206b74cb95bd3c8f2",
+      "keys": {
+        "c": "241003c46086a248b4d9d40cf22ea49a",
+        "jvm": "f117c43ae8ea4f0d590317deb03f415c",
+        "llvm": "c31078ec4256ed6b19013b3d38944521"
+      },
+      "cases_sha256": "c0633d97e1e414f5f0420e3787b72272a027713887e5555c546fb298e2c066bc",
+      "driver_sha256": "cdbc00e721e898202362920dc341a8cfbd5c8ca6cd41a10eb4d607be0aaecb5d",
+      "complete": true,
+      "count": 754,
+      "node_cpu_s": [
+        0.098895,
+        0.101121
+      ]
+    }
+  ]
+}

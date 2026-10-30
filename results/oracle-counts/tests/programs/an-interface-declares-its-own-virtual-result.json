@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-interface-declares-its-own-virtual-result",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-interface-declares-its-own-virtual-result/src/main.ts",
+      "signature": "396b71bb73b71f4e7b6092b770ea669c525abe16dde45fe10cb050735c790a9c",
+      "keys": {
+        "c": "9d6fa8a78bf331987711014536ad53ac",
+        "jvm": "cd7d6734ea345a8f6b3bfac6890b870f",
+        "llvm": "13163399ec01b4686b81474d5509bf73"
+      },
+      "cases_sha256": "b59c96e05ec9187db5800e74e8cbd41dc890e73f190850c0e0ad53ac65b5322a",
+      "driver_sha256": "5127ac2869b813c067dbbdc9c440c953ae2bce0ddc75b50f8c40840b000f3aba",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077153,
+        0.074988
+      ]
+    }
+  ]
+}

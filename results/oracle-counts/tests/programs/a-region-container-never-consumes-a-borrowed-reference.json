@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-region-container-never-consumes-a-borrowed-reference",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-region-container-never-consumes-a-borrowed-reference/src/main.ts",
+      "signature": "a00eff3588112e71f98cba17a3c01880a15948b614e30152824c4d479f790fcf",
+      "keys": {
+        "c": "c316c98faca315f6b009f5275e4cab7d",
+        "jvm": "7130339f6f3e9baa773148119f7f11c5",
+        "llvm": "6eb29871a44f698b3f09a19bca875b32"
+      },
+      "cases_sha256": "31789fda3afeebc08a7770a06f3a048c08e59ee12e6e7b9e07244dcf2d7ce756",
+      "driver_sha256": "df530a846837df1870a965a357bcb603bfc15ce4502d7300c395291c7c9ab56c",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074795,
+        0.078072
+      ]
+    }
+  ]
+}

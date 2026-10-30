@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-private-generator-method-handed-out-as-a-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-private-generator-method-handed-out-as-a-value/src/main.ts",
+      "signature": "16ff6a1229ccf542316489f5fb675f718f911b42210ec8293033a1b1d3c7f043",
+      "keys": {
+        "c": "f289b6858ced6ee7b7c82d5131891fa9",
+        "jvm": "1dde837629bf4c6b8be580281c152b9e",
+        "llvm": "e32bd31e4a7c6e58aa9185da235d468e"
+      },
+      "cases_sha256": "0ffd5160f438f7ba8cef27ded011c1adae7a8bae685adb9c9529d5c252fc9642",
+      "driver_sha256": "4936e05e87ac4981b2e1efb6ab5ade004b9907321b1cdf7671cf7e706c5d0ed7",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073187,
+        0.075012
+      ]
+    }
+  ]
+}

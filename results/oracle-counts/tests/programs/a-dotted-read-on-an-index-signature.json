@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-dotted-read-on-an-index-signature",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-dotted-read-on-an-index-signature/src/main.ts",
+      "signature": "44d1baafe29ba109fd80cac7b69e0d5d52b35e9dac5408be9e2d155a0f2dec12",
+      "keys": {
+        "c": "29607c5bc34fff6348d73aef733e1fc8",
+        "jvm": "45149cbb6d9fb55579cc242d1b5a2fd4",
+        "llvm": "6686a80038b088d8807244fa675226aa"
+      },
+      "cases_sha256": "30f3bfc26133491bdcf9bae4188df5de85ef6442172670f22732fd99716a5e89",
+      "driver_sha256": "ffddac76730de428e833335f1d7a3ddcbbbcb2c5ca8e2ca08211b9d1e47e5bb8",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079155,
+        0.076779
+      ]
+    }
+  ]
+}

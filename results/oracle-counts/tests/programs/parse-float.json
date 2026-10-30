@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/parse-float",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/parse-float/src/main.ts",
+      "signature": "b9f7c2ccbc9873e22dc7888df5911258166fa02633fd2e2bc333f92eaf51064e",
+      "keys": {
+        "c": "30e5967b1cb1c08ae6079838bb348d56",
+        "jvm": "fb28e16a45a1662064ca4f11b2ed9044",
+        "llvm": "3dcaeaec3d029a5a02b3ff3c3f0f35a4"
+      },
+      "cases_sha256": "5bc3dfce8d54d51f92dee6ef58c7677d323fc1f169e716f8b7dd1d28bac3bdff",
+      "driver_sha256": "c5441a85796b2b92542410322ca82d53f0bc2c3d6b694b251cd030f533d523d9",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076569,
+        0.075963
+      ]
+    }
+  ]
+}

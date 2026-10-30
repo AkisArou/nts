@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-promise-settler-in-a-closure",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-promise-settler-in-a-closure/src/main.ts",
+      "signature": "cbecd1e4eb7689d2a5e6e0d599dec421aa6bb01694e6e6a05ba2d9417c5488e0",
+      "keys": {
+        "c": "c2bb4fa119eb6d9246cc6f5943445916",
+        "jvm": "a3029946d7ac64eb437e9565797ed8a4",
+        "llvm": "45b205ef3f37ab97c9fd7b66dac7ae8b"
+      },
+      "cases_sha256": "5aec8d648539578f9530d7ba708196a41c696fe52b22bf291367b2e6b36779d6",
+      "driver_sha256": "ab1b9ef298c2d4ca91f970c56e2ff054eab1fd1c85b1348197f985cdfa3ad500",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076292,
+        0.079628
+      ]
+    }
+  ]
+}

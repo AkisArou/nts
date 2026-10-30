@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/map-and-set",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/map-and-set/src/main.ts",
+      "signature": "420b7ac69daa8f8b91d18771addcde0455fe7949a119859bc0e6fa10ff82144e",
+      "keys": {
+        "c": "dac56a0445135fcfe9b44a4e34a37f71",
+        "jvm": "56f71ca0707e4923c7ae84a74fc779ac",
+        "llvm": "21947419ab993367a7ae54be3a72630d"
+      },
+      "cases_sha256": "d9aa2d81282310326b54832df2cfcc371d56148f4c03e6ae3c828ba4cf1ac081",
+      "driver_sha256": "90887c974be06546eedc1b05ca9e47f56d0c84725894d001c05b0c5e3969f0bd",
+      "complete": true,
+      "count": 725,
+      "node_cpu_s": [
+        0.124496,
+        0.130129
+      ]
+    }
+  ]
+}

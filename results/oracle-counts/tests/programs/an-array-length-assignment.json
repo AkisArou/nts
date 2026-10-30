@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-length-assignment",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-length-assignment/src/main.ts",
+      "signature": "dbb3113b06e2821f6362cf2c2250509b974198d7d289fddcdb458597c7363dd7",
+      "keys": {
+        "c": "7ec7f1a2528ee9e605072c684cd613a1",
+        "jvm": "37323bad0b3edfa4248ba9ccab41f250",
+        "llvm": "7e659d4a89dada4ab26d85f81ba4a1c5"
+      },
+      "cases_sha256": "f589ab83877a75905abb56df7f3090efc8cd65a7a7d6ce905a7c06dfd2e638f1",
+      "driver_sha256": "411b085b9ce2f6a1ffee695521beaea46cb3b2de5365c466bcb543a208085303",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.074147,
+        0.074547
+      ]
+    }
+  ]
+}

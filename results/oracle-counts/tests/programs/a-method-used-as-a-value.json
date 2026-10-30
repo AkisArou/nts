@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-used-as-a-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-used-as-a-value/src/main.ts",
+      "signature": "8c04f1198661237ee8bf071c70a9392f6c7bf4362fe87ccb0485e01c08004022",
+      "keys": {
+        "c": "4858f60b48cf2e35e6261cfc656e8bd8",
+        "jvm": "97c6ed426288b94ca6ee2f44b9c3fa77",
+        "llvm": "8a2c886771c3a3f3680ed80f4942512f"
+      },
+      "cases_sha256": "44d8a666aa869f4eacd3d83ada853ec42c9ca55dee10f14da0d7e22afe32744c",
+      "driver_sha256": "1f092f603726911de8724d7d3b71b126648c7d11623471c6414018e851daa8cc",
+      "complete": true,
+      "count": 785,
+      "node_cpu_s": [
+        0.107383,
+        0.102215
+      ]
+    }
+  ]
+}

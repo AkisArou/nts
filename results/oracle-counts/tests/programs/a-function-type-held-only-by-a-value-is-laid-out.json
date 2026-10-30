@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-function-type-held-only-by-a-value-is-laid-out",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-function-type-held-only-by-a-value-is-laid-out/src/main.ts",
+      "signature": "b979f98cb7ca8b501761999e37625548b52381b18dee9a76469e235161e2b790",
+      "keys": {
+        "c": "8790f51781379096fe588e5c892db355",
+        "jvm": "42f502816045dbb8564147e61696b5a6",
+        "llvm": "5718dc9dca082359f9a9c6921acd249e"
+      },
+      "cases_sha256": "2d2bebde456fc4bb1033faa2f1b1fad2ef718cf00f252f5fcfa1ae0fc6298aae",
+      "driver_sha256": "ecfc857f972ea5b57315b30a2bd47efe2ae56e81b96e4e26ff1a11c5575d1855",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074695,
+        0.072311
+      ]
+    }
+  ]
+}

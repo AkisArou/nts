@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-override-declaring-fewer-parameters",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-override-declaring-fewer-parameters/src/main.ts",
+      "signature": "8e37a1eef6fe0117deacce50e5fc661efacbb2144904a9e580bb627e183065b5",
+      "keys": {
+        "c": "05da99eb1ca21b00b67f76338ef22edc",
+        "jvm": "676c54ccc0d53e2baeb05a13ecd8a919",
+        "llvm": "966f20342ec3bc3fad771787165af01d"
+      },
+      "cases_sha256": "be02267ab0d781359b87a03ae4fd8f96d1318d76803c3667b5d3b47ac6fb6fc4",
+      "driver_sha256": "f96b27337187758c2a964d5d80307366f122dac2c5707356eacb3b28df56c6c1",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074787,
+        0.073971
+      ]
+    }
+  ]
+}

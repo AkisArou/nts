@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-interface-literal-keeps-its-return-contract",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-interface-literal-keeps-its-return-contract/src/main.ts",
+      "signature": "9da6d94338f9e4f05f5d65d020a7f6ff9e245c38903bddb44a7f3a0c414b5132",
+      "keys": {
+        "c": "6bb54a9a4120d3a7727d742ccc499eaa",
+        "jvm": "36dfdb48b8019de4bbabde7762a66a1d",
+        "llvm": "1e8bb95226e4843dacd0cd8c528ec0b6"
+      },
+      "cases_sha256": "497c5fec7f961971cd6d82e57141c7d836bff67412935b94d1fd27b114795563",
+      "driver_sha256": "08124841db6c8ef442c6b82b44a91bdbbbe40053240b71c749bc7050b3d4673d",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076916,
+        0.077621
+      ]
+    }
+  ]
+}

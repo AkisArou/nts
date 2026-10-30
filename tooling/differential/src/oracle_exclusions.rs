@@ -138,8 +138,6 @@ mod tests {
 
     #[test]
     fn every_catalog_row_matches_a_generated_tuple() {
-        use nts_codegen_common::Backend;
-        use nts_core::hir;
         use nts_frontend_ts::Frontend;
         use std::collections::BTreeMap;
 
@@ -172,15 +170,7 @@ mod tests {
             .unwrap();
             let snapshot = source.snapshot(&config).unwrap();
             assert!(!snapshot.has_errors(), "{config}");
-            let provider = nts_codegen_common::provider::host_gc("jvm", false).unwrap();
-            let options = super::super::pool_options(Backend::Jvm, provider);
-            let raw = hir::RawProgram::lower(&snapshot, options.entry_files, options.foreign);
-            let prepared = raw
-                .into_prepared(&hir::PreparationOptions::from(&options))
-                .unwrap_or_else(|error| panic!("{}", error.render(&snapshot.sources)));
-            let cases = super::super::case_population(&snapshot, &prepared.program)
-                .unwrap()
-                .testable;
+            let cases = super::super::case_population(&snapshot).unwrap().testable;
             for rule in rules {
                 let matched = cases.iter().any(|case| {
                     case.name == rule.function

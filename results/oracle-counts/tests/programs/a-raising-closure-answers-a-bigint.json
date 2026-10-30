@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-raising-closure-answers-a-bigint",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-raising-closure-answers-a-bigint/src/main.ts",
+      "signature": "d198f119f4e70c5511c01b5fa2479b4c9c7ba9c9022279956552863bd168dd67",
+      "keys": {
+        "c": "1e9a17e4c81cab1f8a17ec3f28b94d1a",
+        "jvm": "7bc46079cf83b1b25bf6a0b16c907eef",
+        "llvm": "fc4b862f997e60eb325d4c6787ecf437"
+      },
+      "cases_sha256": "caf1ae0586c7bddfd1b508bfe39f1b6ca13a1b12e120a0077768fd9eaecfc085",
+      "driver_sha256": "a2327a98aa060f61d8cd6c332579c211a5f3c9d58c24e44c379c609ae0470c61",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074821,
+        0.074124
+      ]
+    }
+  ]
+}

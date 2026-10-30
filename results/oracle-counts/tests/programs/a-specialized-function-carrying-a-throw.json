@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-specialized-function-carrying-a-throw",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-specialized-function-carrying-a-throw/src/main.ts",
+      "signature": "98afaea0e53f13ff0ee99a0a66dbfbf3e7fbd560e0b554104fd3594bb6d14f01",
+      "keys": {
+        "c": "e301805e4c70aafa1efdf661e8d46e30",
+        "jvm": "23c8d8060bebddf065ca2e637c4c1885",
+        "llvm": "2914296a803646a76f12f18636b77c78"
+      },
+      "cases_sha256": "5015edc82414670b4481490039c472c6eacf964b9bb79bdda30c9bfaf6a6bd62",
+      "driver_sha256": "1733392b31ea9a3b0bae93f1d49d015857b71b208135e6c62d366d347e6a933c",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.079147,
+        0.078294
+      ]
+    }
+  ]
+}

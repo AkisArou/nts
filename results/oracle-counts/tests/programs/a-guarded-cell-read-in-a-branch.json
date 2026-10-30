@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-guarded-cell-read-in-a-branch",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-guarded-cell-read-in-a-branch/src/main.ts",
+      "signature": "8bb07a74feb664fdd01007fca95c6164e70fb0e79d41c2df863ee104c62a7d07",
+      "keys": {
+        "c": "bc3a8d59492309f59b1d48bdea0ab900",
+        "jvm": "67e87d598cbeccc622a95012478e5491",
+        "llvm": "baf515750e11fe82cb14994ed6e974e9"
+      },
+      "cases_sha256": "1de9d7186040f3e4226b4401397e5b15e57dfe80d5e1b44f4231981a1ffd6441",
+      "driver_sha256": "3b194ac042b18a9f80ac57cc34196d9e670ae51c10d05c9923e64e7402a9ca05",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.073868,
+        0.075691
+      ]
+    }
+  ]
+}

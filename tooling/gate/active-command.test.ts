@@ -45,6 +45,19 @@ test("structured stdout stays separate while command diagnostics are retained",a
   assert.equal(result.status,0);assert.deepEqual(JSON.parse(result.stdout),{value:7});assert.equal(result.stderr,"diagnostic\n");assert.ok(result.out.includes("diagnostic\n"));assert.ok(result.out.includes(result.stdout));
 });
 
+test("capture budgets hold and multibyte output remains exact across pipe chunks",async t=>{
+  const {root,env}=fixture(t);
+  const text="λ😃z".repeat(100_000);
+  const result=await activeCommand(process.execPath,["-e","process.stdout.write('λ😃z'.repeat(100000));process.stderr.write('終');"],{cwd:root,env,maxBuffer:1024*1024});
+  assert.equal(result.status,0);assert.equal(result.stdout,text);assert.equal(result.stderr,"終");
+  const separate=await activeCommand(process.execPath,["-e","process.stdout.write('x'.repeat(1000));process.stderr.write('y'.repeat(1000));"],{cwd:root,env,maxBuffer:1024});
+  assert.equal(separate.status,0);assert.equal(separate.stdout.length,1000);assert.equal(separate.stderr.length,1000);
+  await assert.rejects(activeCommand(process.execPath,["-e","process.stdout.write('x'.repeat(4096));"],{cwd:root,env,maxBuffer:1024}),/capture budget/);
+  await assert.rejects(activeCommand(process.execPath,["-e","process.stdout.write('{\"status\":\"agrees\"}');process.stderr.write('😃'.repeat(300));"],{cwd:root,env,maxBuffer:1024}),/stderr.*capture budget/);
+  const frame=readStepInstrument(env.NTS_GATE_STEP_RESULT,env.NTS_GATE_STEP,env.NTS_GATE_STEP_ATTEMPT);
+  assert.equal(frame?.kind,"tooling-setup");assert.equal(frame?.verdict,"INSTRUMENT");
+});
+
 test("CPU-busy work remains live without output beyond the idle guard",async t=>{
   const {root,env}=fixture(t),release=join(root,"release");
   const result=await activeCommand(process.execPath,["-e",`const fs=require('node:fs');while(!fs.existsSync(process.argv[1])){};process.stdout.write('complete\\n');`,release],{

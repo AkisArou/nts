@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-scope-control-flow",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-scope-control-flow/src/main.ts",
+      "signature": "860888c6d907ae286e3b268e6ddb8b242fd827fd57bad0c3ca9e4587d40dd9ef",
+      "keys": {
+        "c": "a6b554ae93fdd011f116d164e8a9904e",
+        "jvm": "a46add5f65c87f6f5dd2c005e4f7879d",
+        "llvm": "5373ac3cbc81dc6ab5692280a7a684a5"
+      },
+      "cases_sha256": "d75cf2eb6cc3ec0075ced957bdb0ee3cde3acc92be10585f3e42906bf9815f5d",
+      "driver_sha256": "017e2ed45721dd78c47e0ca0db28a823d5fdf1d96d1514ed456e38094628eb1b",
+      "complete": true,
+      "count": 9,
+      "node_cpu_s": [
+        0.079161,
+        0.076081
+      ]
+    }
+  ]
+}

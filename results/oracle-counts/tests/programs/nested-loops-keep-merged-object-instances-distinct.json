@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/nested-loops-keep-merged-object-instances-distinct",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/nested-loops-keep-merged-object-instances-distinct/src/main.ts",
+      "signature": "e5b77491c5574db167d962d7eb95a94c509ecd010a3bb019d15ff28c41ceafa0",
+      "keys": {
+        "c": "9acf5184731cc76b69fcf71697c019a2",
+        "jvm": "72fc14d577da3ec55dcb7c6933c76391",
+        "llvm": "e3d8616194a107c8d9a820023870a0ea"
+      },
+      "cases_sha256": "ae180b0e2b2497197782154852ccc88eaa7c29319bc4b9e7b707afdc23e04808",
+      "driver_sha256": "82274919118fce052c0bbad82b63cda178774da1200d5828a771c9f23c6b0f20",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075033,
+        0.075048
+      ]
+    }
+  ]
+}

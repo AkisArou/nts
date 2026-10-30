@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-numeric-computed-key",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-numeric-computed-key/src/main.ts",
+      "signature": "af4b0eeb4420fd1325125dc0b605b47eb99b4f9881ee4d8e5d49ca1e5d62d753",
+      "keys": {
+        "c": "99a7c9ffaea612dd75c02126dac59a92",
+        "jvm": "6c6bf009638c0f001aeb7378d92d37e1",
+        "llvm": "661826b7b1662145e0700f95ffe9eb33"
+      },
+      "cases_sha256": "1f1bca78abe57879c53d8546034a28f5ee8b94584adc8ed161182cc92693c2c1",
+      "driver_sha256": "1e873bf296f6eecd154032f6c8894403e982599e4d2c0a77e4a9ab7e43fb4fdf",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076102,
+        0.075924
+      ]
+    }
+  ]
+}

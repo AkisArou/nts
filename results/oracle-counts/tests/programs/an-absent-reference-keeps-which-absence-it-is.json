@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-absent-reference-keeps-which-absence-it-is",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-absent-reference-keeps-which-absence-it-is/src/main.ts",
+      "signature": "1b9241d0bd4597077a6d426dbbebd6b36c7afc267dcb7537446465cdda1d7c01",
+      "keys": {
+        "c": "a6b7dd6282b32c1eb185a9c00dfe7832",
+        "jvm": "0757343c7a7bf401719b5131a220b96e",
+        "llvm": "694dda8a92a08c9d324e19618d3d3f63"
+      },
+      "cases_sha256": "db81313e3ddb1561a3b3dc77c7737ee5fbaee6e5e00143098d6338cb287e9fbb",
+      "driver_sha256": "646f01111d9219e99718d2acbe5987056b4413baccccfc26b8afe6db878303a5",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.077254,
+        0.076258
+      ]
+    }
+  ]
+}

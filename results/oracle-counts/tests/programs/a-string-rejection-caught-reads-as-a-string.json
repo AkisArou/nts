@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-rejection-caught-reads-as-a-string",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-rejection-caught-reads-as-a-string/src/main.ts",
+      "signature": "ea47a3d1ba40b98660287c8cdde0d6307d0acc22a248e450cab16d3183254122",
+      "keys": {
+        "c": "4847f5769c866d14302ed5e03815b006",
+        "jvm": "b33af86c436d3b15aa22b5de8dc25191",
+        "llvm": "2aef544b417ec2a974f273da015aa2be"
+      },
+      "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47",
+      "driver_sha256": "9cc20e8fdd649340bd1b1cd0a769df8e279e469d28fbdb59d853a381acd891a6",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.076891,
+        0.075006
+      ]
+    }
+  ]
+}

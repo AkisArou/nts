@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/dynamic-element",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/dynamic-element/src/main.ts",
+      "signature": "f84d93dc1a23f2b33d78c9961704a3aeb21d09229178f599106a913c9837ba69",
+      "keys": {
+        "c": "4dfa21a0e4929d0eec61b2038f11c882",
+        "jvm": "43f69aff316d3c28f771b1674ac06d61",
+        "llvm": "debf09a7cc8226999d93b390b7ce9537"
+      },
+      "cases_sha256": "3a17b37b323f30df7a055ce75cf4685f2ece70b8db4849b974934e9e50eb056a",
+      "driver_sha256": "2a5357efde2b46472240d64bfa6289759b18b434c739d3299e1a3d606c9112a3",
+      "complete": true,
+      "count": 9,
+      "node_cpu_s": [
+        0.07635,
+        0.078156
+      ]
+    }
+  ]
+}

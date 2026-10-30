@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-call-to-an-overload-two-modules-share",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-call-to-an-overload-two-modules-share/src/main.ts",
+      "signature": "d3a8a1e10cc1bdf6e78360accf1301ef1db7135c38677033063aec7c50273749",
+      "keys": {
+        "c": "522820bf4205819ae66223cf4c12ca93",
+        "jvm": "9cc3b052b9086fa5b1533d7213d83517",
+        "llvm": "822b2ecda3c04c5ac0ab2239d5d09795"
+      },
+      "cases_sha256": "d5f2b892820e9b8d8a2f8df73cd301de541943c5d4c42ab9352851379898241a",
+      "driver_sha256": "9c7bce8f7c7bf0bf205d39188f909302b236e227efa53f318425cdf1944f8450",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.084734,
+        0.080778
+      ]
+    }
+  ]
+}

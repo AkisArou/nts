@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-slot-that-can-only-be-null",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-slot-that-can-only-be-null/src/main.ts",
+      "signature": "d853a9976b9ebcc5f10c4be968193071657d4f778544d5c2fc4b3b8686b7dd96",
+      "keys": {
+        "c": "3668715e9b9c4c128eaba6d6dbdb4b1e",
+        "jvm": "1daeece75785572c9d8a016113f158c4",
+        "llvm": "07a05d61b8d0875a0773b50e64c721b1"
+      },
+      "cases_sha256": "483a12dca12a49de14d7f389c41407640c80e7ff81727b69baa6b2cdf53d3448",
+      "driver_sha256": "22e7e0e54d27d2c36c9a742c2c47b2cf98814a90780d591bd7be0734b8eb697d",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.080482,
+        0.081842
+      ]
+    }
+  ]
+}

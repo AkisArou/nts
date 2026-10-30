@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-erased-array-read-keeps-missing-elements",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-erased-array-read-keeps-missing-elements/src/main.ts",
+      "signature": "ae9c2fd417225e315e729e523077254c88fd1d5e512a94039949b6e08fd5537a",
+      "keys": {
+        "c": "a3ad391323018b1bd4409ad6e788f5fa",
+        "jvm": "1145d3ce66659d98132d05ec795fdd85",
+        "llvm": "94c575f7ed1685a05175c65b255b5362"
+      },
+      "cases_sha256": "92b5eade644156f7ceb4187872a01cb9eca4fda9aa6b2d847ebde32e299e65f8",
+      "driver_sha256": "9c63d16335ccc1d99f282807a72866b8483ff866d48b1c95ae955ce0b220e2e8",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.086416,
+        0.093427
+      ]
+    }
+  ]
+}

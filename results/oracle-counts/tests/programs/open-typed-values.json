@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/open-typed-values",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/open-typed-values/src/main.ts",
+      "signature": "8afbc48893a8695b013d9757d5515e27f3aebbf05be137d5535ce011fde39f7b",
+      "keys": {
+        "c": "bb5e85651a894d2c3d280adb7769f012",
+        "jvm": "3b022cc699a5ba8f42bdab0966dd7e3e",
+        "llvm": "d260fe01eab30286829965ccdce4cf76"
+      },
+      "cases_sha256": "e5cd371850da4afffed3382be3cf55fc2cecdc6a36be35c66a8fc5a415809d1c",
+      "driver_sha256": "e959243586da5cb2bdd98d31cfd7a79c2cc4c9fdf2e8d8b7d11aecef7b41cd1a",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.084454,
+        0.084427
+      ]
+    }
+  ]
+}

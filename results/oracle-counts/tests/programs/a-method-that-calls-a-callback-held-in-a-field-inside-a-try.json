@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-method-that-calls-a-callback-held-in-a-field-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-method-that-calls-a-callback-held-in-a-field-inside-a-try/src/main.ts",
+      "signature": "ec7ea00cacdf45fdffb0f19da1a0de4e0b9e1ab065738930818fd7efa66ee9f5",
+      "keys": {
+        "c": "2e12697d88e25ad237036e23d329d4f9",
+        "jvm": "bf1cddedff4c422dbed0713173a51ed7",
+        "llvm": "ed25e0231670b0bd8bcf1b5adcf98e5d"
+      },
+      "cases_sha256": "23198ae485a03595d985cf92df8bf9a0c74f8c6db05357113bbb85e9ff503be6",
+      "driver_sha256": "a9ce4252b696e7e91111e8e99877f88951aa6cbfa44b6b4d4ce19d3d11621084",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076646,
+        0.078568
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-count-from-a-parameter-is-an-integer",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-count-from-a-parameter-is-an-integer/src/main.ts",
+      "signature": "f26e017671a054b01bb71b58a81859cf7e167c06007385b895a8001dd3cb6067",
+      "keys": {
+        "c": "b128746aefc20da7a36fe8bd6c8d263e",
+        "jvm": "ffbe6c7456a759177ef3d81d07b8ba29",
+        "llvm": "7c15e2ce73762324b42a6320a61705be"
+      },
+      "cases_sha256": "04dd33fe88c9d51dfaac5f87ce5266962f8f4ffdcfd40e6f95168857c20d6ef4",
+      "driver_sha256": "51de1da02ebb292eafbd7ff59f2f51859a2c2d6fc49f2c7271d5224c740a62c4",
+      "complete": true,
+      "count": 5,
+      "node_cpu_s": [
+        0.075091,
+        0.07654
+      ]
+    }
+  ]
+}

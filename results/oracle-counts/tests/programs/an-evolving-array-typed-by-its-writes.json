@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-evolving-array-typed-by-its-writes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-evolving-array-typed-by-its-writes/src/main.ts",
+      "signature": "f24bbb5cffae5c40173b11eb097bb07d25f2c351f24743a00113774056ba3cda",
+      "keys": {
+        "c": "3a9bc8ba80ece0ed1ba178ab8d0eb6e4",
+        "jvm": "fc7844c9e00072633ab41e0a5dc189e0",
+        "llvm": "6344b6fd02c501c5b4fec58c46a183f7"
+      },
+      "cases_sha256": "24bfb57b936e2897da0477d9f07679df3abb70c795f07cbbd209f4ea5914155a",
+      "driver_sha256": "c6eb42dbffc284a06c5afcebe4ae94cb357366934983bebdedefc75c139c6837",
+      "complete": true,
+      "count": 66,
+      "node_cpu_s": [
+        0.078279,
+        0.084345
+      ]
+    }
+  ]
+}

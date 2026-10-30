@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-parameter-property-read-by-name",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-parameter-property-read-by-name/src/main.ts",
+      "signature": "2c829f2ad45875d49ef9bc3da3c95de1c5cdcbc35dff216ffad763d082abd7b8",
+      "keys": {
+        "c": "a0c97e678dce2956317320c789227329",
+        "jvm": "2b5306930ffa705b398c873e58864329",
+        "llvm": "f4843b8b6c8afc4cae42122e9cd6384e"
+      },
+      "cases_sha256": "0efd3c4f2c41daebda97916369e0bb6c3b85e2217449f26d846d4f3848829407",
+      "driver_sha256": "fad3b3d352f2230c8a7649e7f4842a9c50f03b6049345cbf6cf93349a941dd05",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075262,
+        0.075398
+      ]
+    }
+  ]
+}

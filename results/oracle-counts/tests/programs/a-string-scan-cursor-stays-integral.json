@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-scan-cursor-stays-integral",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-scan-cursor-stays-integral/src/main.ts",
+      "signature": "f46bb802b2a141405a45872ed8c63cb252eac4bf4a405cdf3f6b43d7ea8274f1",
+      "keys": {
+        "c": "4caa8cafe387f3b41916f13483af5d69",
+        "jvm": "88a7f35ff27bf1b3a6bf58f30878ef81",
+        "llvm": "be7a6fc4a1487aa6b63da08d80f71f9d"
+      },
+      "cases_sha256": "f48422dd6cc40070d5d1c81a4484ecb8dac4082aea29dc324ba05d7c9775900a",
+      "driver_sha256": "450b13d96bf84d8cb373311bce5bc2fe82b9cf99cb33e9224fc5da04b92fb844",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.08059,
+        0.074482
+      ]
+    }
+  ]
+}

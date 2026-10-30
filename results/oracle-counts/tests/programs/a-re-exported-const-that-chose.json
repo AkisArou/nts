@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-re-exported-const-that-chose",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-re-exported-const-that-chose/src/main.ts",
+      "signature": "b217ce52e3bacfb6d89e99ed274924dda8f40e2f1a552d5c7b6324bf3c23e7c6",
+      "keys": {
+        "c": "28e93a81ea2c5e82c5fa47862657acb0",
+        "jvm": "f2e436d04465301520f92a55d33af485",
+        "llvm": "614b63402ebc6af29eda1fa5c1a97c9c"
+      },
+      "cases_sha256": "1eaf32a22b27d838829afdbf70bc56da5b7c2bed56d13e357bfe2a153fd36def",
+      "driver_sha256": "cce9a9a273b381cc92e25c89f9c964c17cb47ca0371b5bda804f3217d4e20c5e",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.078079,
+        0.076257
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-argument-past-the-last-parameter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-argument-past-the-last-parameter/src/main.ts",
+      "signature": "b18ecdd8ee04828738ede7a8797fea383a0be34437a73c1af8f4b2a97fe9d314",
+      "keys": {
+        "c": "17fc11b6fd2b3a601282d7a97922b0ca",
+        "jvm": "4a243a389690ef36cd9b5128484d7864",
+        "llvm": "967df3cd1fe8033dfd8c7292afc35c56"
+      },
+      "cases_sha256": "b3b8145b404d66ab3e3e526c42da2e90e82ce08ab2c80ca3d1d2f8a45997f3b5",
+      "driver_sha256": "55919946324476d4416d585657d18377a23f5f1c4e3c9dc3c3b352b7f6c61869",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.07458,
+        0.076332
+      ]
+    }
+  ]
+}

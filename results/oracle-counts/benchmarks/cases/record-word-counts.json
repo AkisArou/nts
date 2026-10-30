@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/record-word-counts",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/record-word-counts/case.ts",
+      "signature": "7271259e344340d5361e546b4cc6ef7937307ee7c7d94ca0a4b0407177c6ea61",
+      "keys": {
+        "c": "cc8111e23b831b1539825c8684f4343a",
+        "jvm": "8968ecaecf59f7cb5a15dfda0f180ce9",
+        "llvm": "ed365aea48216eb51cb522f87a96060d"
+      },
+      "cases_sha256": "59beb7ac6932896f76c936804f7327755b54d113292ee48da4494fa43203c1cc",
+      "driver_sha256": "ecef6ca348d1a49eab5398490fd56448e35b666168fef873720328632ebbcc04",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.077398,
+        0.075554
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-length-read-after-a-closure-pushed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-length-read-after-a-closure-pushed/src/main.ts",
+      "signature": "8bb5342cdad6b790702e62d86bc107549f4703d9ae5f0d9d09cdc8100a6c1298",
+      "keys": {
+        "c": "1aa016253baa22153b63f37162e7beb3",
+        "jvm": "6e0cb48f681431abce254d317de50291",
+        "llvm": "3093df32d6909d457440bb5961447747"
+      },
+      "cases_sha256": "04ae5851c285618f9b41ae73a473267d4b3e4f77640736ec14e0f41e852e9c10",
+      "driver_sha256": "392282da4f53b0abc1b440f814d15a5db4224c4ef3f675aae2182c9eaddff4b7",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075139,
+        0.072073
+      ]
+    }
+  ]
+}

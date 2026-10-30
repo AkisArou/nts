@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/closure-merge",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/closure-merge/src/main.ts",
+      "signature": "2dd446f7c54f28aff99f84d351461fb1721caef5d8e92de3f1fae3bfb19016a7",
+      "keys": {
+        "c": "7fe0f477ea8c3c29ceb490303fbfe3c3",
+        "jvm": "a7d187b68af4083825be7b9fadee8f92",
+        "llvm": "58e03f45d0ef770e03fa36fd81932a35"
+      },
+      "cases_sha256": "6462870d589c73c35ba3cbc7c336b923d369757bf0de270ed3c32e5ed67fd6ff",
+      "driver_sha256": "59793bf261cbb08e0f9b93625683b910e0eafbdaa003b01246a868dbb4a980d0",
+      "complete": true,
+      "count": 238,
+      "node_cpu_s": [
+        0.079304,
+        0.078969
+      ]
+    }
+  ]
+}

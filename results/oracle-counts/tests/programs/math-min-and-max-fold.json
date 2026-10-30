@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/math-min-and-max-fold",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/math-min-and-max-fold/src/main.ts",
+      "signature": "b3d5198626c451c33ef8f661e3298c2378e442a8a6d308806ccb417990e74d36",
+      "keys": {
+        "c": "5e40e8055d0e62a38b9665dc2cf7c626",
+        "jvm": "0db9175a4d1746bc5d968fcee6024678",
+        "llvm": "80097e72d5fd13a01fd91fc950e7677e"
+      },
+      "cases_sha256": "609a76ba661be461a6f37ad6a48ce976b0092b5036bac15465650f872e09fb2b",
+      "driver_sha256": "b5c41d9a5e88de028b088cdc16c181975b10b9eaedc3874841e4c05880220ce0",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.075784,
+        0.073093
+      ]
+    }
+  ]
+}

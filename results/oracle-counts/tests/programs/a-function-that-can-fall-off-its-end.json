@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-function-that-can-fall-off-its-end",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-function-that-can-fall-off-its-end/src/main.ts",
+      "signature": "d30a50d249725baefd88067fe2ae1bea6cc92e2e5af6b09593e4c8e9ae4c73c1",
+      "keys": {
+        "c": "5162bda445f946816fe4dd9c6c01def7",
+        "jvm": "679a1e9ae4da4f0740c5cc342d1563d3",
+        "llvm": "b9cdbf04ca2c46fdb6a1e8c24fa593bb"
+      },
+      "cases_sha256": "e2e98d6e4f54b1d779fd85c343bf662060f9bccfa91d0adf6cd7bf3a01b4fb7d",
+      "driver_sha256": "15cf8ea106bc68eb01285a39e9e10a17b92d68a571803b629524f71f615a6e5a",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075151,
+        0.074832
+      ]
+    }
+  ]
+}

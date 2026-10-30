@@ -1,5 +1,5 @@
+import { runCheck, Outcome } from "../differential/check-report.ts";
 import { test } from "node:test";
-import { spawnTest } from "./test-wait.ts";
 import { existsSync, mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
@@ -57,18 +57,12 @@ export function probe(seed: number): number {
   return dir;
 }
 
-function agrees(backend: string, dir = probeProject()): boolean {
+async function agrees(backend: string, dir = probeProject()): Promise<boolean> {
   try {
-    // spawnTest's hang guard throws on expiry: a killed or signalled run is
-    // "not measured" with that reason, never a disagreement.
-    const ran = spawnTest(bin, ["check", dir], {
-      encoding: "utf8",
+    const {record: observation} = await runCheck(bin, dir, {
       env: { ...process.env, NTS_BACKEND: backend, NTS_CHECKERS: "1" },
-    }, `nts check (${backend})`);
-    if (ran.error || ran.signal) {
-      throw new Error(`not measured: nts check (${backend}) ended by ${ran.signal ?? ran.error?.message}`);
-    }
-    return ran.status === 0 && `${ran.stdout}${ran.stderr}`.includes("agreed on every case");
+    });
+    return observation.outcome === Outcome.AGREES && observation.checked > 0;
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -83,26 +77,26 @@ test("the signatures cover the pinned node's Unicode version", () => {
   );
 });
 
-test("native case tables are at the pinned node's Unicode version", () => {
+test("native case tables are at the pinned node's Unicode version", async () => {
   assert.ok(existsSync(bin), `build nts or set NTS_BIN before running this test: ${bin}`);
-  assert.ok(agrees("c"), "native (C) case mappings lag node's Unicode version");
-  assert.ok(agrees("llvm"), "native (LLVM) case mappings lag node's Unicode version");
+  assert.ok(await agrees("c"), "native (C) case mappings lag node's Unicode version");
+  assert.ok(await agrees("llvm"), "native (LLVM) case mappings lag node's Unicode version");
 });
 
 test(
   "frontend identifier tables are at the pinned node's Unicode version",
   { todo: "the native checker knows identifiers by Unicode 15.1, so a name starting with a newer letter such as U+A7CB is TS1127 here where node accepts it (docs/foundations/unicode.md). The identifier tables are upstream's, so this is reported upstream, not edited here." },
-  () => {
+  async () => {
     assert.ok(existsSync(bin), `build nts or set NTS_BIN before running this test: ${bin}`);
-    assert.ok(agrees("c", identifierProbeProject()), "frontend identifier tables lag node's Unicode version");
+    assert.ok(await agrees("c", identifierProbeProject()), "frontend identifier tables lag node's Unicode version");
   },
 );
 
 test(
   "JVM case tables are at the pinned node's Unicode version",
   { todo: "JDK 21's tables are Unicode 15.0 and node's are 17.0; the JVM answers through the JDK until stage 1 generates its tables from compiler/unicode (docs/foundations/unicode.md). Signature letters reproduce in tests/outcomes/a-unicode-16-letter-lowercased-on-the-jvm and a-unicode-17-letter-lowercased-on-the-jvm." },
-  () => {
+  async () => {
     assert.ok(existsSync(bin), `build nts or set NTS_BIN before running this test: ${bin}`);
-    assert.ok(agrees("jvm"), "JVM case mappings lag node's Unicode version");
+    assert.ok(await agrees("jvm"), "JVM case mappings lag node's Unicode version");
   },
 );

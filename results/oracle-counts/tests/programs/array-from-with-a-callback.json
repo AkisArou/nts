@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-from-with-a-callback",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-from-with-a-callback/src/main.ts",
+      "signature": "f2360ebac032f2ffe1ed09b18d4ed284ed3f35b592d54cabacb7904661074534",
+      "keys": {
+        "c": "748689c48dac00a972188a761fde848b",
+        "jvm": "1216dae10d5dbf2a4fc27f0994863147",
+        "llvm": "30442941aab5e6a7f591d23a6ad8d0b1"
+      },
+      "cases_sha256": "81998b9665656073f5b77119e5e80625b8f2608fcda86fe3097cce904220b68d",
+      "driver_sha256": "d5b88d57dfc7be7ab97ddc6e4758f665e12934744d8f9c5f2d5def05419efcf5",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.078352,
+        0.078023
+      ]
+    }
+  ]
+}

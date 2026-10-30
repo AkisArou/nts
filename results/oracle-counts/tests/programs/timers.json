@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/timers",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/timers/src/main.ts",
+      "signature": "3861cc9c8b5e88d91cf8eb252d0fc46a40dc110fcb7d4e9d962f3b239523cfc3",
+      "keys": {
+        "c": "091e7f4dce75f7b784f9cad78d7f474b",
+        "jvm": "2c50a3c69e7ba60ce5e4aaaf9aa59071",
+        "llvm": "0e78e476fa39db59d7c19eb60a4a52e3"
+      },
+      "cases_sha256": "408a856c52ad3ac444684e8192ec926dcc4b795463f0e054ff8987487092821d",
+      "driver_sha256": "7a357559884fe07b8b47951e9e12b4c98c0e1b99880e8d14c026937e7feb299c",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.078548,
+        0.076599
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-initializer-that-constructs-an-instance",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-initializer-that-constructs-an-instance/src/main.ts",
+      "signature": "a9b097c847becb5edd72228adce04b221e540d3f64e9e616a13b83aa738a123b",
+      "keys": {
+        "c": "1a913abaf08f83fb050d9efd75477565",
+        "jvm": "a40410da33b45cc7737fb3849806c968",
+        "llvm": "2a72c0b460d8e411f4c843eb54393608"
+      },
+      "cases_sha256": "00528bab01b4fe490e69ba18ecba69643acad9ba3ac3e44574bc9408fbd9214d",
+      "driver_sha256": "6b2876ecb02a38f8a73e847c328ad4a98ce50782315878d40acb0dabb4bfa288",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.07791,
+        0.07622
+      ]
+    }
+  ]
+}

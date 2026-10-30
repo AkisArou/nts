@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-dispatched-call-that-keeps-its-argument",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-dispatched-call-that-keeps-its-argument/src/main.ts",
+      "signature": "e0a9a9bd835b64ab4d0dca1d128b71d8f5b5e47fa1765def6f8fe1a063b3d1a9",
+      "keys": {
+        "c": "53fc4000442f3d843fa8afb3913aed07",
+        "jvm": "f24d2c5c77ba3295ca44dc22d95efb52",
+        "llvm": "18f90b136543089b4e59d4a6f68696a0"
+      },
+      "cases_sha256": "ee8ce90d27ac3f624480e73f7f7015f3527a809f116930f6853d35662f1116d6",
+      "driver_sha256": "ddd89d0ed7d795883550dcd1c6db58150838e349c7c660e9de7c06a9e5772b55",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.076694,
+        0.07835
+      ]
+    }
+  ]
+}

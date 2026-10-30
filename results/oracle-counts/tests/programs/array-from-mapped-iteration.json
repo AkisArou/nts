@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-from-mapped-iteration",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-from-mapped-iteration/src/main.ts",
+      "signature": "9a21ed1349632be605f91c14d206c2fc811889514ed53326c8e9b2e4c446590f",
+      "keys": {
+        "c": "d6993e1e01bf65f702b6fcecd01a5932",
+        "jvm": "c5d973b16347f1cffcfd81153061704b",
+        "llvm": "d6683f6f4b3e4cb0d8d0b04d96e1872d"
+      },
+      "cases_sha256": "2d1f0fd029d54fab383d0724df3c5911f5afa03128ff60a88280594a017d243a",
+      "driver_sha256": "8aa517a1066efe3da55a19457fdef9d718b9c854a2ed8180f7db9fda5ee7a99a",
+      "complete": true,
+      "count": 696,
+      "node_cpu_s": [
+        0.122314,
+        0.131047
+      ]
+    }
+  ]
+}

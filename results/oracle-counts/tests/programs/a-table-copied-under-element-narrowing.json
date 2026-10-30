@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-table-copied-under-element-narrowing",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-table-copied-under-element-narrowing/src/main.ts",
+      "signature": "b5f2b86f11a67cceb2d7298e0e63f80cba50de0311ffd6abe92e189270b9ce7a",
+      "keys": {
+        "c": "6505ccac378df384be9eb013cda0b2eb",
+        "jvm": "2416bec76eecea8217d7723275dbbf99",
+        "llvm": "0e7e29d4623e7c291cdf55cc1bdedb48"
+      },
+      "cases_sha256": "33626183b0ed7fc347eaac5641f4b6f3af36bb95d3ed7489341275fb8969be58",
+      "driver_sha256": "e0486c61eeda2e36072a6bc4117a58a4eff8fb8632288580e330865b23de72b5",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.082292,
+        0.083179
+      ]
+    }
+  ]
+}

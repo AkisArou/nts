@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/absences",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/absences/case.ts",
+      "signature": "7068593b6b8d565e3bb6c04d38d490534ebb294105ba8d075397f39400f1c9f4",
+      "keys": {
+        "c": "91d4ea2210404f440b7c46a1bd13bb68",
+        "jvm": "af67bc3bc194df60faec0de9163616a0",
+        "llvm": "e88c8c060025e15264c1a242fe5ca6b5"
+      },
+      "cases_sha256": "92484cee9ab04ca9e59d19e7298a43fd24ea1143b99239005c0ccc1215e7d807",
+      "driver_sha256": "853aba1bddabc082cc1ee45ea53fca8f81917ec1876b2968260ff4b7882281fa",
+      "complete": true,
+      "count": 28,
+      "node_cpu_s": [
+        0.083543,
+        0.084381
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/declared-wider",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/declared-wider/src/main.ts",
+      "signature": "2f10c3d3d9063cb0b7aa5a71a4808919b8ae32718f6aab1dbeb69dce35d86021",
+      "keys": {
+        "c": "c16a6cae50413810c3ea095a45baa251",
+        "jvm": "7e2934d18df77b3c64cfce6d9e80506e",
+        "llvm": "8cf7243a9fe7f3020370ed94b80b7cb5"
+      },
+      "cases_sha256": "7baa1bdf5f210169ba393ac45ea81d312d4419ea429add3ae30bdeaebbedfbb8",
+      "driver_sha256": "223e98035d768fff6c58a6e33d71f6bd5001f73378bc2149c1e086400b68437d",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079806,
+        0.080378
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-unary-plus-is-a-conversion",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-unary-plus-is-a-conversion/src/main.ts",
+      "signature": "b7ca4c7c893745198bb986c10366901f605c6fc83260e8f67858bc5a51d89ef1",
+      "keys": {
+        "c": "a510eb8f1e4d5b9d5ab07abbf98425e8",
+        "jvm": "1bc059be08ff3a19eaa6d2cfc26bfd03",
+        "llvm": "f6da3f9292d20782938330f1defeb052"
+      },
+      "cases_sha256": "31537cbd4b96a330d15f76bf4fe4caf675ceaf7a467b34021a8a3943e40331d1",
+      "driver_sha256": "f0e7e5a4b4404cb9f385099d4333c0181d4f7e4344bb360a678f63289c32c0eb",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.075722,
+        0.075169
+      ]
+    }
+  ]
+}

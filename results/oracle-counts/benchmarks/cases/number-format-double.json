@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/number-format-double",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/number-format-double/case.ts",
+      "signature": "8cb8f470986c415a9fbf01748c69547d79e6e10096c0f20e9e7be609e6b2d369",
+      "keys": {
+        "c": "3318b7cf78278a8d2cc401c741a08e56",
+        "jvm": "2ca25f1601baabab8137537c80c055cb",
+        "llvm": "c48add54a4445b2f66a3ff6b1591a097"
+      },
+      "cases_sha256": "c7a7560edf57490fb9c3837d4c44ed1723dfaf5815519b9ef728f058fb53eefa",
+      "driver_sha256": "f7a34f1b5db08b4caa3fe13e8c1ad0e9ed216af36638a2c0502d76764822a296",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.075241,
+        0.078396
+      ]
+    }
+  ]
+}

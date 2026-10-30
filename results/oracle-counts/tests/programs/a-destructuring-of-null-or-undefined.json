@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-destructuring-of-null-or-undefined",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-destructuring-of-null-or-undefined/src/main.ts",
+      "signature": "e41a4d7716f06f896d9665e1e2bb55ac16d5f530e6d11ade109b0e1eb29035c5",
+      "keys": {
+        "c": "a9610b4c6293c0876df8c92e87d4cce5",
+        "jvm": "8c4297b4c9daabc9a05d9453d3318e09",
+        "llvm": "1be8bcbb1a7b802f1376cd48a297b3e4"
+      },
+      "cases_sha256": "58faba752b9a07d1f6b79edc3409e2ff66f1f4d1494d246bd1cf5c37c88541c6",
+      "driver_sha256": "46230e31fff6e581f0fd30205581c80d955b974ade0f36eae4451047e4903106",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.078977,
+        0.083282
+      ]
+    }
+  ]
+}

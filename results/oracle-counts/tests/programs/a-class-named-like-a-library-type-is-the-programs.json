@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-named-like-a-library-type-is-the-programs",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-named-like-a-library-type-is-the-programs/src/main.ts",
+      "signature": "fbb6de599de3f206e036283e91380c0304d060510e4f35b9145f34fc5212780c",
+      "keys": {
+        "c": "75e7b8b6efb5457dacc9712499f9176f",
+        "jvm": "594e54ad000db675d67edcb4eb6ee580",
+        "llvm": "e013253b1944ed5f5f675466eeaa12c0"
+      },
+      "cases_sha256": "573ae9b145b53ac05220ae135ba141dc22a6a32827137e816551c25fd8c5fb35",
+      "driver_sha256": "d3ea07e7bb7ecac1b0a614cddfd76c0049c4d76569ed76d3a8cee954a06165db",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.087325,
+        0.080579
+      ]
+    }
+  ]
+}

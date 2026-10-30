@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-weakmap-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-weakmap-control/src/main.ts",
+      "signature": "52f00fc877cb5a4b134f2b162492924dbc1e81b8d8070f559b6058dfb3c40012",
+      "keys": {
+        "c": "b5822ae4b3b9651535e0c9f36cc4e0d8",
+        "jvm": "082b51822dca7b3d47497c06a011cce2",
+        "llvm": "122c3d0c63de097b2ba9401b75bcb768"
+      },
+      "cases_sha256": "d062f8b5663a23a480b0a59d7aff2e03b0243e43a17279a0324f5344313c67c1",
+      "driver_sha256": "5d21b33e14d6a2e69ac5344062db13425416a16d5158fe2bc7ff116474bb6bf4",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

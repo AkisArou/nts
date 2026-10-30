@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-capability-settled-through-an-optional-link",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-capability-settled-through-an-optional-link/src/main.ts",
+      "signature": "08adabde5a489822969975e08b53cdbd061ebe556d4c57824da5e5eb091c27a1",
+      "keys": {
+        "c": "e547dbc86827010b6246535d0c8baa20",
+        "jvm": "16250703cd04bf4241fd4459cbb6c407",
+        "llvm": "17292db7927c66d6ac7893d3e273db32"
+      },
+      "cases_sha256": "c2f964dc061096e42ca0b64c6bd9697e9039c20bb871070647d4fe67dc1737a0",
+      "driver_sha256": "ecfff40453c01a7984bbfc4f5ac29035d21b407fb35c9fa7ad09822cdc0d6c8e",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.084958,
+        0.082224
+      ]
+    }
+  ]
+}

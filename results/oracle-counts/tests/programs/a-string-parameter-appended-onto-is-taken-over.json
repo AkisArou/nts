@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-parameter-appended-onto-is-taken-over",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-parameter-appended-onto-is-taken-over/src/main.ts",
+      "signature": "4cafdcd6799fcadf320963e607c59ff82a945f08d9b6502abd14c1cf0a26e668",
+      "keys": {
+        "c": "783adf53d349501e705698f28ab33086",
+        "jvm": "bfec5b1d762015414fd5ba62a74c054a",
+        "llvm": "1e099cf1904729df3c97636b1ee3f62a"
+      },
+      "cases_sha256": "6e807125e0c5e10d691de46889ff83e896aa2dee55cc6553d32596e41b68cb0b",
+      "driver_sha256": "47da17d3054fc4414069fcceeb21e4838e00a6ad7d0486a89feceb6848fb5722",
+      "complete": true,
+      "count": 126,
+      "node_cpu_s": [
+        0.089831,
+        0.087823
+      ]
+    }
+  ]
+}

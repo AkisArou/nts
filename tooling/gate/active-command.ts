@@ -1,6 +1,7 @@
 // A command's exit decides its result. Silence can only leave it unmeasured.
-import {execFileSync,spawn, type SpawnOptions} from "node:child_process";
+import {execFileSync,spawn} from "node:child_process";
 import {readFileSync,readdirSync} from "node:fs";
+import {StringDecoder} from "node:string_decoder";
 import {publishHung,publishRunaway,publishToolingFailure,ToolingInstrumentError} from "./step-result.ts";
 
 export const COMMAND_IDLE_GUARD_MS=5*60_000;
@@ -24,7 +25,7 @@ export function processActivity(text:string) {
 }
 function processAt(pid:number) {
   try{return processActivity(readFileSync(`/proc/${pid}/stat`,"utf8"));}
-  catch(error){if(error.code==="ENOENT"||error.code==="ESRCH")return;throw error;}
+  catch(error){if(error instanceof Error&&"code" in error&&(error.code==="ENOENT"||error.code==="ESRCH"))return;throw error;}
 }
 type ProcessActivity=ReturnType<typeof processActivity>;
 function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessActivity> {
@@ -84,7 +85,7 @@ export class CommandActivitySampler {
 const activitySampler=new CommandActivitySampler();
 
 export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;elapsedMs:number};
-type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;
+type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;maxBuffer?:number;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
 /** Own one process group while retaining the caller's cgroup and resource caps.
@@ -97,9 +98,10 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
     if(!Number.isFinite(idle)||idle<=0)throw new Error("command idle guard must be positive");
     const budget=options.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS;
     if(!Number.isFinite(budget)||budget<=0)throw new Error("command CPU budget must be positive");
+    if(options.maxBuffer!==undefined&&(!Number.isSafeInteger(options.maxBuffer)||options.maxBuffer<1))throw new Error("command capture budget must be a positive integer");
     let frequency;
     try{frequency=clockTicks();}catch(error){const failure=new ToolingInstrumentError("tooling-setup",`cannot observe command CPU time: ${String(error)}`);publishToolingFailure(failure,options.env);reject(failure);return;}
-    const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]} satisfies SpawnOptions);
+    const child=spawn(command,args,{cwd:options.cwd,env:options.env,detached:true,stdio:["ignore","pipe","pipe"]});
     let out="",stdout="",stderr="",last=began,cpu=0,started:number|undefined,error:Error|undefined,hung:string|undefined,runaway:string|undefined,instrument:ToolingInstrumentError|undefined;
     let cancelActivity=()=>{};
     const stop=()=>{
@@ -107,7 +109,7 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       // A re-used leader PID can never authorize signalling its new group.
       const leader=processAt(child.pid);
       if(started!==undefined&&leader&&(leader.started!==started||leader.group!==child.pid||leader.session!==child.pid))throw new Error("refusing to stop a changed command group");
-      try{process.kill(-child.pid,"SIGKILL");}catch(error){if(error.code!=="ESRCH")throw error;}
+      try{process.kill(-child.pid,"SIGKILL");}catch(error){if(!(error instanceof Error)||!("code" in error)||error.code!=="ESRCH")throw error;}
     };
     const broken=(cause:unknown)=>{
       if(instrument)return;
@@ -117,11 +119,25 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       try{stop();}catch(error){instrument=new ToolingInstrumentError("tooling-cleanup",`${instrument.message}; ${String(error)}`);publishToolingFailure(instrument,options.env);}
       child.stdout.destroy();child.stderr.destroy();
     };
-    child.stdout.on("data",part=>{stdout+=part;out+=part;last=performance.now();});
-    child.stderr.on("data",part=>{stderr+=part;out+=part;last=performance.now();});
+    let stdoutBytes=0,stderrBytes=0;
+    const stdoutDecoder=new StringDecoder("utf8"),stderrDecoder=new StringDecoder("utf8");
+    const output=(part:Buffer,standard:boolean)=>{
+      try{
+        last=performance.now();
+        const retained=standard?(stdoutBytes+=part.length):(stderrBytes+=part.length);
+        if(options.maxBuffer!==undefined&&retained>options.maxBuffer)throw new Error(`command ${standard?"stdout":"stderr"} exceeded its ${options.maxBuffer} byte capture budget`);
+        const text=(standard?stdoutDecoder:stderrDecoder).write(part);
+        if(standard)stdout+=text;else stderr+=text;
+        out+=text;
+      }catch(error){broken(error);}
+    };
+    child.stdout.on("data",part=>output(part,true));
+    child.stderr.on("data",part=>output(part,false));
     child.on("error",caught=>{error=caught;});
     child.on("close",(status,signal)=>{
       cancelActivity();
+      const stdoutTail=stdoutDecoder.end(),stderrTail=stderrDecoder.end();
+      stdout+=stdoutTail;stderr+=stderrTail;out+=stdoutTail+stderrTail;
       // A helper can detach its stdio and outlive the leader without delaying
       // close. The directly owned group must finish with its command.
       try{stop();}catch(cause){
@@ -155,4 +171,16 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       }});
     }catch(error){broken(error);}
   });
+}
+
+/** An incomplete command is never a compiler, oracle or runtime observation. */
+export class CommandNotMeasuredError extends Error {
+  readonly kind:"hung"|"runaway";
+  readonly result:ActiveResult;
+  constructor(result:ActiveResult){
+    const reason=result.runaway??result.hung;
+    if(!reason)throw new Error("command completed without a liveness failure");
+    super(reason);this.name="CommandNotMeasuredError";
+    this.kind=result.runaway?"runaway":"hung";this.result=result;
+  }
 }

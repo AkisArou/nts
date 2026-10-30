@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/async-catch",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/async-catch/src/main.ts",
+      "signature": "4f921f74039e4af6a2a6ea7b9567759f3b7d7dc2a8b1b844d874ae5dcd35100d",
+      "keys": {
+        "c": "2c01f1cb58785fb08421373b76294bac",
+        "jvm": "bef6eab8513a7aa80dd1b3068fc09699",
+        "llvm": "483949371d4660a7b6bf83c76bb9d802"
+      },
+      "cases_sha256": "982f2ebfc92f356289c019cfc8d407dade345e91fcc4b0840372dbca6699aa09",
+      "driver_sha256": "70c46cae1114876454988db7de7edeb750edcd6e573e801859b28e9e48f1ee79",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.077757,
+        0.078388
+      ]
+    }
+  ]
+}

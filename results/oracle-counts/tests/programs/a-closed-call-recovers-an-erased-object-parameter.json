@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closed-call-recovers-an-erased-object-parameter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closed-call-recovers-an-erased-object-parameter/src/main.ts",
+      "signature": "dce8a89b10f6b911568ec7e594fe476799f943419b9c0d17b0ab3a7321a255b8",
+      "keys": {
+        "c": "23a0ea415ff835866a9548611ff6cb44",
+        "jvm": "6a435e466ff9cd2108e8403604e93119",
+        "llvm": "fa25598bcf13965bf1e585acd3e47e9c"
+      },
+      "cases_sha256": "14cfb909bad47430aba8fb6a4eae6b18ae960bb775fc92c723ff4d479fe62564",
+      "driver_sha256": "3a3dfa903e54ac5c10ff35bd4a678518ff9e8ea5b7a91ab777955b613ae7565c",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.082106,
+        0.083025
+      ]
+    }
+  ]
+}

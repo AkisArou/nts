@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-callable-property-supplied-by-a-method",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-callable-property-supplied-by-a-method/src/main.ts",
+      "signature": "cbe97f0e1c80c8b30d39e396c1fe81ef16f9096d5872fc27a445f71fad0329cc",
+      "keys": {
+        "c": "780aaecd783fc7bb26309bc9550c199d",
+        "jvm": "d773297405229b4a2dc52153c963baeb",
+        "llvm": "bbfc19a694deb9586ec0e519d8f9c482"
+      },
+      "cases_sha256": "b16c49d5e67a79d7e440393e13c680e5580ffced948b09064619ea62ebed5aed",
+      "driver_sha256": "3e892fbde4555492f622f05e32e3481f8c801692b4377830d7022848b2c5d65d",
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

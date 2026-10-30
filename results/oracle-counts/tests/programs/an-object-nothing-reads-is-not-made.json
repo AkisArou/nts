@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-nothing-reads-is-not-made",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-nothing-reads-is-not-made/src/main.ts",
+      "signature": "b4ecbafc96cfde5f7fd56c9413e768dcd8f053b4b5007033060548543c2305b3",
+      "keys": {
+        "c": "3a4aed4eace577229a366d01e46b2e65",
+        "jvm": "c88fb7c7e4ba70446da19928f74e8c27",
+        "llvm": "2d64ecb34ab54a74213a348a10e80873"
+      },
+      "cases_sha256": "b38b529d8f32a632fd36867810b83706b9f6a397194130401ac971406df6c55b",
+      "driver_sha256": "ac2203aab0fc6e4a02983dfdb227816ec16d6c0b3b46181a8697970938ad1978",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.085845,
+        0.085813
+      ]
+    }
+  ]
+}

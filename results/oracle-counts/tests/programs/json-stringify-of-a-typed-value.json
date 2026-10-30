@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/json-stringify-of-a-typed-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/json-stringify-of-a-typed-value/src/main.ts",
+      "signature": "7a09a5a547c73ead7145d10c1c0ece8ddc12e2ce01674c32a754fa29690cf306",
+      "keys": {
+        "c": "e6cea43cfb82f9add08dfa274faa99a4",
+        "jvm": "da5cb1a525e27b5689954aa46ee4d366",
+        "llvm": "dd13040dcc68c353e5a72235ea2cfab8"
+      },
+      "cases_sha256": "4999fe7d443ac4135c96688d188d5bca250e76b5c7889cbe7c1f011ccfc61992",
+      "driver_sha256": "3e4ef7a9c3dc0d4d6b9eb94be82fdb42f986bc47144d532cf6be89f67f532f99",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.102572,
+        0.106596
+      ]
+    }
+  ]
+}

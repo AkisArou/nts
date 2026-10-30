@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-chain-without-a-non-null-assertion",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-chain-without-a-non-null-assertion/src/main.ts",
+      "signature": "6119ba0643cc125be200498a3cf2822bc054a1604671285467589731ffad2f44",
+      "keys": {
+        "c": "735984acc56a3f54e37f41cf697118af",
+        "jvm": "1391d93884cb60c0cfd5f3e97447a849",
+        "llvm": "7cc518f0e465a5c0fd207e679825939f"
+      },
+      "cases_sha256": "152e41bd65200bcd8f4328fd2e36d652d599bcd6746b05b792b510b3407cd4bb",
+      "driver_sha256": "a16ae1f80e589291359e182256290065e154dd090b010a9f7a9c4c02ee788b07",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.082382,
+        0.077412
+      ]
+    }
+  ]
+}

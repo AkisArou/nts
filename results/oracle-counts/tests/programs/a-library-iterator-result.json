@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-library-iterator-result",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-library-iterator-result/src/main.ts",
+      "signature": "6d34971c9e675548b501c0e6b1cd7cf1a9c511ad2bcedfb2a510705dd33ea193",
+      "keys": {
+        "c": "7c7fdf760e1f1b05914336ed4a5dc257",
+        "jvm": "4e62b1731d735318c26bb4938cff6c28",
+        "llvm": "3d0ca47b1e90b6b49955eab246b856fc"
+      },
+      "cases_sha256": "0a07802eee873a5c716b2ef23fe515f65cca4fe946f29ee8d40de20f7751b526",
+      "driver_sha256": "226d6d8461965a38ac3dddf4b75df913d806ee3d01519ec6c1005ac2c039c501",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.084226,
+        0.083508
+      ]
+    }
+  ]
+}

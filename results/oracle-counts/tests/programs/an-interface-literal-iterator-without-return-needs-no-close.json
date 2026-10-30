@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-interface-literal-iterator-without-return-needs-no-close",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-interface-literal-iterator-without-return-needs-no-close/src/main.ts",
+      "signature": "64f452f4d358ea19d40106524e1037d4ea8e451d81d8141e3cc02ce9ef77c342",
+      "keys": {
+        "c": "37c32796ad1298bc86f6035d046d6ce5",
+        "jvm": "7f0e93527dd780b8fc5294af1dbdf85d",
+        "llvm": "4ee5e10b51e3f9ad38d49e733a4a1ef5"
+      },
+      "cases_sha256": "7425570e6d900ce2e0ee04c7850d1ad253d3a43d4f5f367b5f6cb886293cb1a5",
+      "driver_sha256": "4825e3b44e308f6ddad2a3be4f68e81813b62eb96d5720f5429edaba5a602ae5",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.077402,
+        0.076487
+      ]
+    }
+  ]
+}

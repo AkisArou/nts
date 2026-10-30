@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-in-a-boolean-context",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-in-a-boolean-context/src/main.ts",
+      "signature": "fcd158b89ef2a20c07fd02503265a4196f831752802b379600bd644a4471c53f",
+      "keys": {
+        "c": "96d15fb8de10b82a4ef4287f7d79d3a9",
+        "jvm": "b9fc6517a22db8454e36d16dcf163566",
+        "llvm": "4122238246b932726538abbf866d529f"
+      },
+      "cases_sha256": "dc037cda1a503038c9b6f2d25a12ef0fa69d260540e48e6cd67ad531be6adc0c",
+      "driver_sha256": "357e3eac9eb15e773f5693357c214510ad02cd0e0dc0728be5d68e76b3c9314d",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.073759,
+        0.076019
+      ]
+    }
+  ]
+}

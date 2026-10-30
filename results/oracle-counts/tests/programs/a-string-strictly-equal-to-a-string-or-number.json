@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-strictly-equal-to-a-string-or-number",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-strictly-equal-to-a-string-or-number/src/main.ts",
+      "signature": "36f1b70a0aaf2e03426cadd133a027caf73fd2a7fc250c7dc2f58a7ccbd44166",
+      "keys": {
+        "c": "3c36be6e98856d3ab82ef3e561ef2edd",
+        "jvm": "249d6a585d8aa99b368d2e8f5cbb0d88",
+        "llvm": "a6bbc0f212188e5793ce979ae2b3d2ec"
+      },
+      "cases_sha256": "e6488b723fd1f2754d10a9976ad927746f51ea085ca9e771df820506036ee58d",
+      "driver_sha256": "29d0e02cdde9b9639e3ed44f2d6c32ff1ef2b387c19fcd1e2905b2089d5f6dce",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076844,
+        0.079846
+      ]
+    }
+  ]
+}

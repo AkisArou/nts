@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/map-and-set",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/map-and-set/case.ts",
+      "signature": "b429a241b6b61e6302b3b3fa02368c52412fcaf237d5ffa2bb32f0bdf5d9ad89",
+      "keys": {
+        "c": "e0058e773350f6f458d98e7a425f4460",
+        "jvm": "b1b6ba13897051cf8a1ea3b2acd8d68c",
+        "llvm": "03c2a4f9eec36862b51cedda34f0b0fd"
+      },
+      "cases_sha256": "223fd03f0caabf41e6c5003d99e135abf2b5e7b39f6134eb3457adb5d39628c2",
+      "driver_sha256": "4341b47eb113f039c7f9cc92f480865b829707342d48a33ef260bf51fd373e87",
+      "complete": true,
+      "count": 28,
+      "node_cpu_s": [
+        0.097552,
+        0.098231
+      ]
+    }
+  ]
+}

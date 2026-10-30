@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-whose-name-starts-with-two-underscores",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-whose-name-starts-with-two-underscores/src/main.ts",
+      "signature": "3972713b792a0bdaac79aabd0c034f8bef73a01497f8e1bcce07fea77ba47d35",
+      "keys": {
+        "c": "d82c296b212efb454804fab5fac24c99",
+        "jvm": "7ed19e1a2f04514ebbcde0ef56191f6c",
+        "llvm": "6fb07cfd37696871364ca2e2e861108b"
+      },
+      "cases_sha256": "2a52a520aa71fd50c1ff755986494b902459c70064018c21699374cd3b7e1427",
+      "driver_sha256": "cba13ec6cb14de5d041485a65e764ad1428a2210668541096dfe95b38d8e0ec8",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.07738,
+        0.078497
+      ]
+    }
+  ]
+}

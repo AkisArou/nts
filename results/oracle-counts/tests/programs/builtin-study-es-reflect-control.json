@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-reflect-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-reflect-control/src/main.ts",
+      "signature": "865997eb39bc780ecc0c8876050dce0e6bbb1c5d675169a08ee4e69462962cdd",
+      "keys": {
+        "c": "c94d128eb5dece22f4bcd04a27eb9765",
+        "jvm": "8845cbac6be6f7ae737213cc45a4577a",
+        "llvm": "ef38f797a433d6b33c513f67d55c4598"
+      },
+      "cases_sha256": "d265e93bcb11cb275e7bbb9cf4c8814e79cdeca01ae2840e6d7d8a51025d2675",
+      "driver_sha256": "851ccbabc37e7837fb77c04ef5b784fed61e34c5965e1bb68f25f72e77228d22",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

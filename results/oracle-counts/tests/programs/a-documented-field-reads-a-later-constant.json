@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-documented-field-reads-a-later-constant",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-documented-field-reads-a-later-constant/src/main.ts",
+      "signature": "edfe7f5e5424ff848acea17de7aa1d1f5d1b5e6e8db54485f5cf680ce7e687c3",
+      "keys": {
+        "c": "b867afc5bbf1d2a5c0b3e00297bc129e",
+        "jvm": "0278a20418d3ce87c900fae2c83c20fe",
+        "llvm": "bd6b400da956927ebbfff68445b731a8"
+      },
+      "cases_sha256": "2d7d4d9fa17fcac0194a79630c3a618f1df4278197525e8e959067bf89fbab59",
+      "driver_sha256": "0d225b7e5996cd49cb35037b42ef4960168d508837cf270ea5f02d001384d4c9",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077601,
+        0.080356
+      ]
+    }
+  ]
+}

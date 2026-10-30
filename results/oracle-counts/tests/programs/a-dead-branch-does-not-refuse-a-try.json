@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-dead-branch-does-not-refuse-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-dead-branch-does-not-refuse-a-try/src/main.ts",
+      "signature": "e5f67f6dd69f627dc957634f6e9ffe2ea4d604171bf553fbc6441034581b697b",
+      "keys": {
+        "c": "0a63668cab6a10337bc7cd5af6a6dd67",
+        "jvm": "d82c0318648e6513d3568d3d13d11ebf",
+        "llvm": "ce42a066064ff38849e3c170103b107f"
+      },
+      "cases_sha256": "01db0250bae583d6aa79339a336366788329551184004436b20c03339a8b0900",
+      "driver_sha256": "078f793344f6c0c2a14825bcc87cb8fcabd91c45b59cee636be12dd7250a78dd",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.0745,
+        0.075447
+      ]
+    }
+  ]
+}

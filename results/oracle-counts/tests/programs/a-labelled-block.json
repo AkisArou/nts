@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-labelled-block",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-labelled-block/src/main.ts",
+      "signature": "40e9f79933adc782af7135da9f3245bbaabe02cf731f87770a9fb80ba54c9131",
+      "keys": {
+        "c": "9546c51852a6570efe6aa83c2c4fa6ce",
+        "jvm": "20cb5f563f8c7e326ae18eb234f1f793",
+        "llvm": "7e010eb7eee0e4c018ca4b7cfae83492"
+      },
+      "cases_sha256": "c3602f8b1ff1ff2a3d7c7ac4883a1cb199462bfe170c1ca46725835d5ccd4f6b",
+      "driver_sha256": "38470a9f34759f3a0038f55d6ab018116c74985e34188c7334e79717b170dc58",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.074638,
+        0.079624
+      ]
+    }
+  ]
+}

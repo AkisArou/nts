@@ -35325,34 +35325,7 @@ impl<'a> FuncBuilder<'a> {
     /// the `...` of a rest, which is what makes reading the end precise rather
     /// than a guess at which child is which.
     fn default_of(&self, param: NodeId) -> Option<NodeId> {
-        let children = self.children(param);
-        let last = *children.last()?;
-        // **A parameter's name is not always an identifier.** A destructured
-        // one is a binding pattern, and looking only for an `IDENTIFIER` made
-        // this answer `None` for every `{ a = 1 }: Opts = {}` — the options-bag
-        // idiom — so the call filled nothing and passed no argument at all.
-        //
-        // That produced no diagnostic. The arity check is in `verify`, so
-        // `emit-c` reported `invalid HIR: CallArgumentCount { expected: 1,
-        // found: 0 }` and exited **0**, having emitted nothing: a whole program
-        // silently not built. `g({ a: 1 })` and `function g(a = 1)` both worked,
-        // which is why this survived — it needs the default *and* the pattern
-        // *and* a call that omits the argument, and each of the three alone is
-        // fine.
-        let name = *children.iter().find(|child| {
-            matches!(
-                self.kind_of(**child),
-                Some(
-                    syntax::IDENTIFIER
-                        | syntax::OBJECT_BINDING_PATTERN
-                        | syntax::ARRAY_BINDING_PATTERN
-                )
-            )
-        })?;
-        (last != name
-            && !syntax::is_type_node(self.kind_of(last).unwrap_or(0))
-            && self.kind_of(last) != Some(syntax::QUESTION_TOKEN))
-        .then_some(last)
+        super::written_scalar::default_of(self.snapshot, param)
     }
 
     /// Whether an expression reads one of the parameters `declaration` declares.
@@ -37494,9 +37467,7 @@ impl<'a> FuncBuilder<'a> {
     /// function -- has a type annotation: a type node among its own children,
     /// which for a function is its return type's.
     fn annotated(&self, declaration: NodeId) -> bool {
-        self.children(declaration)
-            .into_iter()
-            .any(|child| syntax::is_type_node(self.kind_of(child).unwrap_or(0)))
+        super::written_scalar::annotated(self.snapshot, declaration)
     }
 
     /// The scalar kind `name`'s declaration was **written** as
@@ -37508,12 +37479,8 @@ impl<'a> FuncBuilder<'a> {
     /// recognizer, [`super::native::scalar`].
     fn written_kind(&self, name: NodeId) -> Option<super::native::Scalar> {
         let declaration = self.syntactic_parent(name)?;
-        let contextual = self.kind_of(declaration) == Some(syntax::PARAMETER)
-            && self.default_of(declaration).is_none();
-        if !(contextual || self.annotated(declaration)) {
-            return None;
-        }
-        self.written_scalar(*self.snapshot.node_types.get(&name)?)
+        let resolved = *self.snapshot.node_types.get(&name)?;
+        super::written_scalar::parameter(self.snapshot, declaration, resolved)
     }
 
     /// The scalar kind `ty` is, an optional one's included: `T | undefined`
@@ -37674,19 +37641,8 @@ impl<'a> FuncBuilder<'a> {
     /// An `async` function's is its promise's payload (`Promise<c_long>`): the
     /// value each `return` settles it with, and an `await` of the call reads.
     fn written_return(&self, declaration: NodeId) -> Option<super::native::Scalar> {
-        if !self.annotated(declaration) {
-            return None;
-        }
         let returns = self.declared_result_type(declaration)?;
-        if self
-            .node(declaration)
-            .modifiers
-            .contains(nts_semantic_schema::DeclarationModifiers::ASYNC)
-        {
-            let payload = *self.snapshot.type_arguments.get(&returns)?.first()?;
-            return self.written_scalar(payload);
-        }
-        self.written_scalar(returns)
+        super::written_scalar::returned(self.snapshot, declaration, returns)
     }
 
     /// What a function's null result stands for, from its declared result

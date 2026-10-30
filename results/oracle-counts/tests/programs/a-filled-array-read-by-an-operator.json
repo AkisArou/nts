@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-filled-array-read-by-an-operator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-filled-array-read-by-an-operator/src/main.ts",
+      "signature": "49061fd80e62184b5e9c7d0f76fe7ba27005b46ebc29efbb130c16efb732e5fc",
+      "keys": {
+        "c": "49e386b6c51265d1d74d1a56a97c3065",
+        "jvm": "cb0dd02cfba7c396598fce6838e22b4f",
+        "llvm": "1bbd3a4944f907b3d0420c63ca984e39"
+      },
+      "cases_sha256": "3c4535ba4e02faef506652bbccdcb3a5a1c2ba1c790d1c1471beb284cdc48e23",
+      "driver_sha256": "e7d88f7f140f05c749e71865c6f09d0308083756a031ad6fdfcda3f86068cfdb",
+      "complete": true,
+      "count": 6,
+      "node_cpu_s": [
+        0.07281,
+        0.073669
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/field-widths",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/field-widths/src/main.ts",
+      "signature": "689161605cb40f8d3ea07900eb8e074558cb1777f96ba12e9bd5996915500703",
+      "keys": {
+        "c": "6abda710ee0a842ed05f0979d1f38c13",
+        "jvm": "6ef671bdc7bf0707ce8047a0d8423c83",
+        "llvm": "31a38dbaeaf41698ecdf914e62395e02"
+      },
+      "cases_sha256": "801f3541bbb8c02b505823d123c18a802422d79582dc7e16234364e35a8d01c0",
+      "driver_sha256": "416a415ffabc72e968af6390f6b5ded4f5a720f0b2fc807f5b34e5a07a57e158",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.085141,
+        0.078453
+      ]
+    }
+  ]
+}

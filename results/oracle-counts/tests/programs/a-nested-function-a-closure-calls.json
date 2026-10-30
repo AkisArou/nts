@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-nested-function-a-closure-calls",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-nested-function-a-closure-calls/src/main.ts",
+      "signature": "6763f674b5d0f9bc2ca70e69a10dedc7b60e2e636e42c56db2964c8aa0bfafc4",
+      "keys": {
+        "c": "9a7c081e73983362fc66d2eae2afdd1f",
+        "jvm": "cab35db25bd297639a531c636440b26d",
+        "llvm": "e5f248e8454ef283cfe19896c93fb75b"
+      },
+      "cases_sha256": "a5d198517ae1f2d0f8c39a59dc7290fd945011ae44d7e24043e0937f1f4b467a",
+      "driver_sha256": "c2bd94d6f7c11acf23502abd5c7c6ea2a913115dd5c30e38ccb736d48cca80f8",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.076709,
+        0.074847
+      ]
+    }
+  ]
+}

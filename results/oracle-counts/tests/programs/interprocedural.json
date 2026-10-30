@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/interprocedural",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/interprocedural/src/main.ts",
+      "signature": "45c73974921142d771db6575d8e2eb3e39a368f60a2af5fcc9f3f278c1e682fa",
+      "keys": {
+        "c": "fd4171b69e6031629d29fde4f26c3ffe",
+        "jvm": "4da821571d5c4cc19e7c3f4c47cfe6a3",
+        "llvm": "e62241ce38494ed87544d54db877f9e6"
+      },
+      "cases_sha256": "51d235f9016815707915e4da51e43d417f272e1e9218e704b7dffdb7ab118a60",
+      "driver_sha256": "d308b7fe6d071a3e5338dc448c3ff03a5fc8b68213cf32be4324315750eafb7b",
+      "populations": {
+        "exposed": {
+          "count": 29,
+          "cases_sha256": "61f547bf0ae6cbb7b0b2629cab49459de94ad56f02b6cb9b8b11305bf286db86"
+        },
+        "pipeline": {
+          "count": 30,
+          "cases_sha256": "46178e7704c860d3a4ee9c97faf6c8044badb3835d2ca313fbdbc77702549e4d"
+        }
+      },
+      "complete": true,
+      "count": 59
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-frame-object-in-an-array-retains-its-fields",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-frame-object-in-an-array-retains-its-fields/src/main.ts",
+      "signature": "8bc9ae44102350cb0b0723f3ede53dd2ce7da07f0da1be398a02c8e36da1901a",
+      "keys": {
+        "c": "22e8f431bf8ee0833615788c981acde7",
+        "jvm": "6a96d99e85cef96e0db5d20f74d3c64e",
+        "llvm": "5d6df18843e3d6a89aaa1b331ca31736"
+      },
+      "cases_sha256": "2308077ef2b3d4765a7e40831dca87bde5f5886dc14a4c533d6b3f2520564cc2",
+      "driver_sha256": "b1d998d5cb5d618b7f1c305b6a3336296ffd4b4c21296ca6045ed3ff3edd8dd6",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.077844,
+        0.076925
+      ]
+    }
+  ]
+}

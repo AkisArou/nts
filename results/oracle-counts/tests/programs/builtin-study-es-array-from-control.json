@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-array-from-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-array-from-control/src/main.ts",
+      "signature": "92e33d9232fedf962aff752980507baa9a259e5f64cb6e905df170ea70c80c3c",
+      "keys": {
+        "c": "b3b6baf04a7d146fad996239be233dd2",
+        "jvm": "478d9f6994e70b0c4b3b15a584919d9d",
+        "llvm": "18565d97eb5295d00b3198b75e6a5a6c"
+      },
+      "cases_sha256": "30ebacf9cf80d84ea1d37aa7f7e536ae8f9d09e7c7a7d24dba52e31a6ef6cb7f",
+      "driver_sha256": "157516ef6179ecb5e3ce0f0d4348468b6781b8f8f1ad59b14cff944d0ac43da4",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

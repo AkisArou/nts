@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/present-record-keys-asked-whether-present",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/present-record-keys-asked-whether-present/src/main.ts",
+      "signature": "06b179f4e6b551bb0d8db6e7929d4a8a90b9cabbc5b77759202336f6b0918e75",
+      "keys": {
+        "c": "81eb3338a8794c77679eeb6c7599d813",
+        "jvm": "b1f1950e710006a6d7fd81ddb4a206a1",
+        "llvm": "3092c90e85afa310cee7798af9b89757"
+      },
+      "cases_sha256": "e6386b2707fcb148dfeb4182b5cce43bb5b5f8b51a6efcabc3737db6c786b372",
+      "driver_sha256": "89c5559922156a0168cf7caba7ee097762d787f7d2aef4a330cc1522d561f7f7",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.075934,
+        0.081811
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-error-with-a-cause",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-error-with-a-cause/src/main.ts",
+      "signature": "8bb30718add348a8bd95627393b1554b7de6a324682bea0f6d766db773661e7e",
+      "keys": {
+        "c": "a67d0a54ca70d5e29146a50bfceb3d59",
+        "jvm": "d1942d6b587950e9def465cb1a2d7335",
+        "llvm": "f46aa3d193610ec16b7fda855bfafd70"
+      },
+      "cases_sha256": "77b5331f4a002991faf9c5f49200c00b21a21d5fc22ef1d9558afe347dd79c95",
+      "driver_sha256": "da7b8f7c7e9305b80c442a88883d6a9e1421ba9f7de4e36cf0517591a521357d",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.07999,
+        0.077061
+      ]
+    }
+  ]
+}

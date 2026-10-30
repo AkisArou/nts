@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-constant-read-through-calls",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-constant-read-through-calls/src/main.ts",
+      "signature": "338d7055294d27628ef2a3fa2ab1996d3dbfd3ebc4f88b95ce82291fb112f780",
+      "keys": {
+        "c": "9f48d10fa8c9847373e27cc2185d616d",
+        "jvm": "71e3f4159b80ef59a25e2b3c4af2fa26",
+        "llvm": "6a20775773f1584d63fdffa14ff67433"
+      },
+      "cases_sha256": "1e963b0b01bc665b0aec616c622bbba06c33678890342218402ee7b200e3cb7e",
+      "driver_sha256": "1b9f6151297913d41976e18cc2990fc1a21cdfd2704d4aff9767b4d27134d62b",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073884,
+        0.073061
+      ]
+    }
+  ]
+}

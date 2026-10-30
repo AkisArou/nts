@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-error-evaluates-its-options-before-converting-its-message",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-error-evaluates-its-options-before-converting-its-message/src/main.ts",
+      "signature": "78aa0b25b74b3b04c0d388ee2b8ea7061bd48942ef5084856c958af78ead94f7",
+      "keys": {
+        "c": "0297647837deef8ae56508893762dc83",
+        "jvm": "f733eba08266c05217d2b595fe8e4278",
+        "llvm": "74f2ba262c34179e8ef7dd24a1e8ce70"
+      },
+      "cases_sha256": "fc17d53e8edf916446d2506392578289f6f1c6e153dbc44ae8ecf2fc267b9443",
+      "driver_sha256": "5035f72055370f87a3f99389becba262a883e2af2fe6cee4cf0ba486ab06c709",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.085608,
+        0.087221
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/objects",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/objects/case.ts",
+      "signature": "4c2a6f626ed1b257b80d634ae27347359265806317d48ba63b135b2e31634605",
+      "keys": {
+        "c": "902226c071b25de66b860051e49dd7bb",
+        "jvm": "863d6615ddd9e4dd6f9ae37575d1a5a4",
+        "llvm": "cbf0f99dfa2c66f5ced774e86a52b721"
+      },
+      "cases_sha256": "53d0c78be68c8a76d8e6329feea99b9f1541658de45cf74ae1995e073f2bf3b8",
+      "driver_sha256": "b6960e3c56c45532fed197e5ce92024bb36ab8da90a606d0cdeabef945e1e58f",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.07838,
+        0.079876
+      ]
+    }
+  ]
+}

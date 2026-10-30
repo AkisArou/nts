@@ -4,7 +4,9 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import assert from "node:assert/strict";
-import { addRecord, canonicalDriver, completeRows, noOracleRecord, recordAll } from "../differential/record-oracles.ts";
+import { addRecord, canonicalDriver, completeRows, noOracleRecord, recordAll, validateSourcePlan } from "../differential/record-oracles.ts";
+import { readRecords } from "../differential/oracle-records.ts";
+import { fileURLToPath } from "node:url";
 const plan = { version: 1, backend: "c", source: "fixture.ts", entry: "/fixture.ts", source_digest: "source-digest", seed: null,
   generator_version: 1, generator_digest: "generator", case_key: "key", case_count: 2,
   cases: ["f 0 [0.0]", "f 1 [-0.0]"], signature: [], driver: "", resolver: "" };
@@ -30,18 +32,16 @@ test("recording merges backend signatures and refuses reduced coverage or inadeq
   assert.equal(addRecord(shared, { ...plan, signature: ["different"] }, [2, 2], 2).rows.length, 2);
 });
 
-test("checked-in promises use compact sorted rows with complete measured identities", () => {
-  const text = readFileSync(new URL("../../results/oracle-counts.json", import.meta.url), "utf8");
-  assert.ok(Buffer.byteLength(text) < 1_000_000);
-  const index = JSON.parse(text), lines = text.trimEnd().split("\n");
+test("checked-in fixture records promise complete measured identities", () => {
+  const index = readRecords(fileURLToPath(new URL("../..", import.meta.url)));
   const jsx = index.rows.find((row: { source: string }) => row.source === "tests/programs/jsx/src/main.tsx");
+  assert.ok(jsx);
   assert.equal(jsx.kind, "no-oracle");
   assert.equal(jsx.reason, "no generated cases; node cannot load .tsx directly");
   assert.equal(index.version, 1);
   assert.equal(index.generator_version, 1);
   assert.equal(index.seed, null);
-  assert.match(index.generator_digest, /^[0-9a-f]{32}$/);
-  assert.equal(lines.length, index.rows.length + 2);
+  assert.match(index.generator_digest ?? "", /^[0-9a-f]{32}$/);
   const seen = new Set();
   let previous = "";
   for (const row of index.rows) {
@@ -54,12 +54,12 @@ test("checked-in promises use compact sorted rows with complete measured identit
     if (row.kind === "no-oracle") {
       assert.equal("count" in row, false);
       assert.equal("complete" in row, false);
-      assert.match(row.source_digest, /^[0-9a-f]{32}$/);
+      assert.match(row.source_digest ?? "", /^[0-9a-f]{32}$/);
       assert.ok(typeof row.reason === "string" && row.reason.trim().length > 0);
       continue;
     }
     assert.equal(row.kind, "measured"); assert.equal(row.complete, true);
-    assert.ok(Number.isInteger(row.count) && row.count >= 0);
+    assert.ok(typeof row.count === "number" && Number.isInteger(row.count) && row.count >= 0);
     // Legacy measured CPU provenance remains readable. New records keep it in
     // evidence instead, so authors on different machines publish equal bytes.
     if (row.node_cpu_s) {
@@ -141,4 +141,20 @@ test("no-oracle records carry no numeric count and require an empty source ident
   assert.equal(row.source_digest, "source-digest");
   assert.equal("count" in row, false);
   assert.equal("node_cpu_s" in row, false);
+});
+
+test("a source plan cannot drop a refused export or record its empty population", () => {
+  const sourcePlan = { ...plan, version: 2, source_exports: ["f", "g"], cases: ["f 0 [0.0]", "g 0 [0.0]"] };
+  assert.equal(addRecord({ version: 1, rows: [] }, sourcePlan, [0.1, 0.2], 2).rows[0].count, 2);
+  const dropped = { ...sourcePlan, cases: ["f 0 [0.0]"], case_count: 1 };
+  assert.throws(() => addRecord({ version: 1, rows: [] }, dropped, [0.1, 0.2], 1), /lost or emptied source export g/);
+  const empty = { ...sourcePlan, cases: [], case_count: 0 };
+  assert.throws(() => addRecord({ version: 1, rows: [] }, empty, [0.1, 0.2], 0), /lost or emptied/);
+  assert.throws(() => noOracleRecord(empty, "compiled nothing"), /lost or emptied/);
+});
+
+test("source-plan inventories are mandatory, unique and closed over their cases", () => {
+  assert.throws(() => validateSourcePlan({ ...plan, version: 2 }), /source export inventory/);
+  assert.throws(() => validateSourcePlan({ ...plan, version: 2, source_exports: ["f", "f"] }), /source export inventory/);
+  assert.throws(() => validateSourcePlan({ ...plan, version: 2, source_exports: ["g"] }), /undeclared export f/);
 });

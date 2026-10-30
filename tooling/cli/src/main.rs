@@ -228,9 +228,15 @@ fn named_project(rest: &[String]) -> Result<Utf8PathBuf> {
 
 /// `nts check`: run a compiled program and node side by side.
 fn check(rest: &[String]) -> Result<()> {
-    let tsconfig = project(rest)?;
-    let mut source = frontend_for(&tsconfig)?;
-    let report = nts_differential::check(&tsconfig, &mut source)?;
+    let measured = (|| {
+        let tsconfig = project(rest)?;
+        let mut source = frontend_for(&tsconfig)?;
+        nts_differential::check(&tsconfig, &mut source)
+    })();
+    if rest.iter().any(|argument| argument == "--json") {
+        return print_check_json(measured);
+    }
+    let report = measured?;
     if report.functions == 0 {
         println!(
             "nothing to check: no exported function has scalar arguments \
@@ -238,13 +244,22 @@ fn check(rest: &[String]) -> Result<()> {
         );
         return Ok(());
     }
-    if report.refused > 0 {
+    if report.status() == nts_differential::check_report::Status::AllUnavailable {
         println!(
-            "{} case(s) the compiled program declined -- an index its `!` \
-             promised was in range and was not, most often; node answers \
-             `undefined` there and the two have nothing to compare",
-            report.refused
+            "{} of {} cases declined; no compiled cases compared",
+            report.unavailable, report.expected
         );
+        return Ok(());
+    }
+    if report.unavailable > 0 {
+        println!(
+            "{} case(s) have no available compiled binding",
+            report.unavailable
+        );
+    }
+    let runtime_declined = report.refused.saturating_sub(report.unavailable);
+    if runtime_declined > 0 {
+        println!("{runtime_declined} case(s) the compiled program declined at run time");
     }
     if report.timeouts > 0 {
         // Its own line, above the count, because for a long time it had no
@@ -252,16 +267,13 @@ fn check(rest: &[String]) -> Result<()> {
         // was reported as the program *declining* its input. See
         // `stopped_with` for the run that found it.
         println!(
-            "{} case(s) ran out of time and were not finished -- not a \
-             disagreement and not a refusal; a pool value in a loop bound asks \
-             for two billion iterations and the program does what it asks",
+            "TIMED OUT: {} case(s) did not finish; no comparison was made for them",
             report.timeouts
         );
     }
     if report.checked < report.expected {
         println!(
-            "checked {} of {} cases; the rest were not reached (a pool \
-             value in a loop bound will do that)",
+            "checked {} of {} cases; the rest were not compared",
             report.checked, report.expected
         );
     } else {
@@ -311,16 +323,34 @@ fn check(rest: &[String]) -> Result<()> {
     }
     if report.checked == 0 {
         bail!(
-            "no case was checked: all {} declined, so the two sides were \
-             never compared. A program that stops on every input looks \
-             exactly like this",
-            report.refused
+            "no compiled cases compared: {runtime_declined} runtime declines, {} \
+             unavailable bindings and {} timed out of {} generated cases",
+            report.unavailable,
+            report.timeouts,
+            report.expected
         )
     }
     bail!(
         "{} case(s) disagree between the compiled program and node",
         report.disagreements.len()
     )
+}
+
+fn print_check_json(measured: Result<nts_differential::Report>) -> Result<()> {
+    match measured {
+        Ok(report) => {
+            println!("{}", report.json());
+            if report.status().succeeds() {
+                Ok(())
+            } else {
+                bail!("check disposition: {:?}", report.status())
+            }
+        }
+        Err(error) => {
+            println!("{}", nts_differential::check_report::error_json(&error));
+            Err(error)
+        }
+    }
 }
 
 /// `nts bind-gir Gtk-4.0 --out types [--gir-dir <dir>]... [--header|--package|--define NS:value]...`
@@ -620,7 +650,7 @@ current directory.
 
 BUILDING
   build        build every product `nts.config.ts` declares, for every target
-  check        compile, run, and compare against node
+  check        compile, run, and compare against node (--json)
 
 EMITTING
   emit         emit --backends c,llvm,jvm into --out/<backend>, sharing raw lowering

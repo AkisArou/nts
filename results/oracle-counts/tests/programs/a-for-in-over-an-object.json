@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-for-in-over-an-object",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-for-in-over-an-object/src/main.ts",
+      "signature": "a43a393611c6d380c0adb7ad4e52b75daa68f0edae6f58d2478eb38e6683c4ef",
+      "keys": {
+        "c": "2a821e9f6688c3e9bb310ff00a3a78de",
+        "jvm": "304baf045db2b8f19d4c47c5dc196831",
+        "llvm": "9f9ccd41368c16edc2c3b37c0a68c01c"
+      },
+      "cases_sha256": "e3fd79b36edc583634dae7b326e3b9adb171b4b396f1b7c161e7bfba8c2aa396",
+      "driver_sha256": "05aca8346064a685c2b7bf10d09c200cd798790337df3b2cf54623a5ea9228aa",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.082878,
+        0.078616
+      ]
+    }
+  ]
+}

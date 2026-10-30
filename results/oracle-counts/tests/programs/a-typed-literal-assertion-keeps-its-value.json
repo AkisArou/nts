@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-typed-literal-assertion-keeps-its-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-typed-literal-assertion-keeps-its-value/src/main.ts",
+      "signature": "709ad7fbb1ba293ebf127011c2b8faeccbad0971e9b05008805b49749c8c4545",
+      "keys": {
+        "c": "1825bfdeec7fcc3102edcd03980be815",
+        "jvm": "4cac2dc53ff94670d0499bd69c802bf2",
+        "llvm": "f794e8890222f73bf31289ff9a06a3db"
+      },
+      "cases_sha256": "9077bafec5b342596d470a9e68e0cec68859a6f4cf0b5fb8ce245aa824bd7d5e",
+      "driver_sha256": "44c67df994b8ab72c1ce3efc96aebb19b62ec513fe91c57f141629ca4ed9a17a",
+      "populations": {
+        "enumClaim": {
+          "count": 29,
+          "cases_sha256": "822e618b310b1ade6647effcd4c095edc78cc029f9d0cd476f484d443892318e"
+        },
+        "fieldClaim": {
+          "count": 29,
+          "cases_sha256": "5a53537d220bf42bfbac5a0b877aa4f03144b5dde87f562a7919e0143066bf22"
+        },
+        "globalClaim": {
+          "count": 29,
+          "cases_sha256": "688cdf2ea1bfd8ff134f388971145b9b02d9e34a82422778800b3df868f4bad8"
+        },
+        "numberClaim": {
+          "count": 29,
+          "cases_sha256": "302660cc818b356a9423bc24bcab0e8c0361ef4649e328ebd9de26fd818998ff"
+        },
+        "stringClaim": {
+          "count": 5,
+          "cases_sha256": "0148ab413f1f1a31cca185acee29d2e4db7b0e5177cbb1cd0cbf6d2b631ae5c7"
+        },
+        "stringLengthClaim": {
+          "count": 5,
+          "cases_sha256": "f538af22ed011500f21aebd7ecd24b52e0e9575f7946252d3aa0adb0ae119600"
+        },
+        "unionClaim": {
+          "count": 29,
+          "cases_sha256": "e8f82efe4c9a354db3c7ef8f7392a2cd1abdf34ebe863e1c7c47bdec647bdeb9"
+        }
+      },
+      "complete": true,
+      "count": 155
+    }
+  ]
+}

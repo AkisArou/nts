@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-regexp-ctor-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-regexp-ctor-control/src/main.ts",
+      "signature": "548d477bf979963e7c4bbda3e95193530998ed82b46b6ec419ef8be8c813f89e",
+      "keys": {
+        "c": "d5f0db2d56007abcf2e5c60af6260882",
+        "jvm": "dd99f7b5a3c12b82173146afe3269ac0",
+        "llvm": "717f18085178e4658e816b6427901b04"
+      },
+      "cases_sha256": "3170ca1017b1a8a75043a48421ff0faf0f024c30b5632863c3bbc3beff4cfbd9",
+      "driver_sha256": "964ed5448b0d58706d93f4241b44aac74101560e1727acac08c39340423a218b",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

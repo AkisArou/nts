@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-function-value-keeps-implementation-parameters",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-function-value-keeps-implementation-parameters/src/main.ts",
+      "signature": "32460bfa3e12c651c6182f17ab5246762231ba82ced8cf9c0b3e48e09e5e733d",
+      "keys": {
+        "c": "8af91c2887a55d7f32ab1b9978abf1b0",
+        "jvm": "01f3ad06621d9430985b8a19dced7518",
+        "llvm": "875e5df6f60c9ad8fc2f6a2f8bbf337c"
+      },
+      "cases_sha256": "e0f0e4e8c8e208b43e4fe569c782869233e97cf7588bd06dc5d8c5e4450994c5",
+      "driver_sha256": "e33e3972359e1f43a0d8cb3881f82450340efca632281363dd0898717f374b89",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076213,
+        0.077541
+      ]
+    }
+  ]
+}

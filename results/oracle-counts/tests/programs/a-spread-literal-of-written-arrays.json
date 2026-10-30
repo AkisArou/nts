@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-spread-literal-of-written-arrays",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-spread-literal-of-written-arrays/src/main.ts",
+      "signature": "ab50c4153b9d86fe248d9263cb880b43c77bfd6cdde88f6c15467e782b778115",
+      "keys": {
+        "c": "b9788fd8f0e5f7e61b3dad712a94adf3",
+        "jvm": "28dbaf01cef75226c5bae374da6fd1df",
+        "llvm": "e2bf8f23cbde7a06f8384df13c804190"
+      },
+      "cases_sha256": "6ce6425fac8027ddad57a9dabc767ff5c3f0e61900d5a1b1a9c867ba66c812fe",
+      "driver_sha256": "adb242667d5b34a8dbaa3b5f2aaa4f0227d6b299a016173165d78439ec3a2992",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.073877,
+        0.075657
+      ]
+    }
+  ]
+}

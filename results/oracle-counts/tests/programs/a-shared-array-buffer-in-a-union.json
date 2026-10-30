@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-shared-array-buffer-in-a-union",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-shared-array-buffer-in-a-union/src/main.ts",
+      "signature": "6fdaa0aca9a4106422972a9d4086e44a6e4cd040df2d08bf17b8cc01d4a64448",
+      "keys": {
+        "c": "f6ed8c2c056cbe55d4908d422006de1a",
+        "jvm": "378cb0d0b38b54c1978057c501a5b391",
+        "llvm": "bea330685b304806664a0ec1a3ca29e2"
+      },
+      "cases_sha256": "1e604cf7d97fb8a05209a6cff8352b51d699b9a66280c4692e5d23abcac6dd79",
+      "driver_sha256": "cdd0c1ee94d35e5aa80731840b3ba19c53094f9cf8bad80865df204b254e00bb",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075875,
+        0.076335
+      ]
+    }
+  ]
+}

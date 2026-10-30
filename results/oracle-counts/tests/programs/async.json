@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/async",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/async/src/main.ts",
+      "signature": "7b5cfbef643e67f03beedcb56b2fcb2f8a7d22b69421567111f5bb9038302cca",
+      "keys": {
+        "c": "db5d21326408452f9b490a570a458bc3",
+        "jvm": "9de756c58af709ba051b2cc710d5850f",
+        "llvm": "935eb5d71227cae369031f6c982d0b49"
+      },
+      "cases_sha256": "979457615217d63b9e37df03703bc4ddc8918ca0057fd78e51c73bb52d680308",
+      "driver_sha256": "47633518c7285306ed23134ac40185bc37a526c698991ff49ac9a56c1b35bea0",
+      "populations": {
+        "allKeepsInputOrder": {
+          "count": 29,
+          "cases_sha256": "40ec49e9fa3439416372bdd9aecee37f15b6811b8a439b599b21f2f2ffed78f9"
+        },
+        "allOfNone": {
+          "count": 29,
+          "cases_sha256": "20d511fa2ef26def203efed956da566dc695b0ffd4bfe6af69d01d5c6324d5ba"
+        },
+        "allOfStrings": {
+          "count": 29,
+          "cases_sha256": "eb2fc59bb659c3a6e31ca280ef6c0012345a23545fb72da1ec486ed4dde82ca6"
+        },
+        "allOfTwo": {
+          "count": 29,
+          "cases_sha256": "454acf928368484084c249625722ddc596ca51337a74ad00877fbbd9c4733bab"
+        },
+        "allWithARejection": {
+          "count": 29,
+          "cases_sha256": "0fe2b2da4ec4a846f374b4a9e1ef871ceefda200d3859d02ec8b3dae94a00cfa"
+        },
+        "alreadySettled": {
+          "count": 29,
+          "cases_sha256": "58ebc9780c21d7293c5dc9f085e9a57e2c66e54d610c3d4f0701069640e0ed0d"
+        },
+        "awaitARejection": {
+          "count": 29,
+          "cases_sha256": "00ea1e7a2bcb8d657a36c7bf6e3e6142cf7daf79e54591f19e4c6eec1dd0bb4d"
+        },
+        "awaitedNothing": {
+          "count": 29,
+          "cases_sha256": "e3fe9ddada378a7758b8e3c3c01e6966b2316ac8136af95bcc98e9144e021487"
+        },
+        "carried": {
+          "count": 29,
+          "cases_sha256": "3d89e6015bf9a762a531383d7ee277f477cc583c70a606c2d9944b3c8c6daf32"
+        },
+        "carriedLoop": {
+          "count": 29,
+          "cases_sha256": "cfcabd6ef1a919476128885fa891aa08d54425c11384e63eeef9c10023968090"
+        },
+        "classify": {
+          "count": 29,
+          "cases_sha256": "1cb1ffd72150b28d05018b8eb3edc7558b89f5e55f741d1ea12fe535780e0bf2"
+        },
+        "describe": {
+          "count": 29,
+          "cases_sha256": "98833be9a77f94a6033ea5814e44d54d88e5e16448d6538f075d43a46a34415f"
+        },
+        "firstOver": {
+          "count": 29,
+          "cases_sha256": "b5d0dfbe003490f99b35bc40f49afeb4db052dfde57e876dfefe22dc8241b846"
+        },
+        "forwarded": {
+          "count": 29,
+          "cases_sha256": "765e25671a94c36cdec7d7bce13d693e2ae15f9bea504a8ceef60fed27a549d5"
+        },
+        "guardedAwait": {
+          "count": 29,
+          "cases_sha256": "139126e59232d76b73033dac31daae2b392551a02b35a68760ed6ad1df5f9d4e"
+        },
+        "immediate": {
+          "count": 29,
+          "cases_sha256": "379792838ce0df429c9bd9aa2645f20c5752f0c3fd28c1c6e41b75c6a9a2965f"
+        },
+        "looped": {
+          "count": 29,
+          "cases_sha256": "80e667ac90716f271688526af2d9b97d03ccdd0d4cf9647c5ce5fa73a7b17bf4"
+        },
+        "mixedPayloads": {
+          "count": 29,
+          "cases_sha256": "8a925b3e073c550b1c6d000cc63252aecb978d52a14297d7b1340ed7ba431f3f"
+        },
+        "named": {
+          "count": 29,
+          "cases_sha256": "31aac11acdbec785e6008de1fa4b5dece4f89cda374ccc2dc021f37e45040310"
+        },
+        "nestedAwaits": {
+          "count": 29,
+          "cases_sha256": "906c8858d0702cf5e0addda0b7b960af644da706015d05f415a6053b4309dc58"
+        },
+        "nothing": {
+          "count": 29,
+          "cases_sha256": "5615466f4e37c6135316084dfd3a3de17d0e1baf1a2b92f97abfdbddf58b323f"
+        },
+        "raceOfSettled": {
+          "count": 29,
+          "cases_sha256": "b30ec840cede6255094b505505557b4f94a545d4b6966901c056c3f697c90b34"
+        },
+        "raceTakesTheFirstToSettle": {
+          "count": 29,
+          "cases_sha256": "f4ee367e94714bbae26e309ac2b028de4c96cad7774ca52bcfe8b3afa61f023c"
+        },
+        "raceWithARejection": {
+          "count": 29,
+          "cases_sha256": "899f7c7b03b8b1b700aee5268ae2e9862005da080f883e19440d7fa9c65b0bc5"
+        },
+        "refused": {
+          "count": 29,
+          "cases_sha256": "96c4cdec5338736ee41cdb3f8b93a306a3dbf40abb32e42f9d8827efaac71908"
+        },
+        "rejectionAfterASuspension": {
+          "count": 29,
+          "cases_sha256": "bf5d25ef2f27edc164bbb7bd479f6f5cdfd9340c994f35564a81f3825c1d1621"
+        },
+        "scaled": {
+          "count": 29,
+          "cases_sha256": "a1161bff3fb6059d01f40ef68b6df4c9d77ba62e81dbf6ef8482dc8ab1d6fa80"
+        },
+        "summed": {
+          "count": 29,
+          "cases_sha256": "2a868838af809d4678214c70cc853ede1a06ca18c6c80524507a9f28ea8e4b25"
+        },
+        "threeNumbers": {
+          "count": 29,
+          "cases_sha256": "66b0e4a043b8c120fa1f8326c6f7f51b531b3c91f87335d61c604ff0b424946e"
+        },
+        "throughABox": {
+          "count": 29,
+          "cases_sha256": "6c993a304f1e6615a6268aedc392fae737b6dd52002e834377ecad03c9f41919"
+        },
+        "throughResolve": {
+          "count": 29,
+          "cases_sha256": "1aa8ee03f65085a5b427905f3609f8680be062fe105fe50d4abc7e850314cc9f"
+        },
+        "twice": {
+          "count": 29,
+          "cases_sha256": "7d31d4382e0f8749525702ed63b3fe33412ca2513ff2b2038910a5d4299558d5"
+        },
+        "twiceAwaited": {
+          "count": 29,
+          "cases_sha256": "5d1e25b90adf9122d9e7f3fb8653699172d5a91cdc293502bbf96cee3feb0d7d"
+        },
+        "twoSettled": {
+          "count": 29,
+          "cases_sha256": "eb5d91331439da07b4a2b120606ab762dcb6c392e0ba0026acba6de7e0e98783"
+        }
+      },
+      "complete": true,
+      "count": 986
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/tuples",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/tuples/src/main.ts",
+      "signature": "e7a85ccb9eb6aab71fbe9430ca4a66e2d1ac12d5da3aa29591146e9e1b6cb016",
+      "keys": {
+        "c": "7991178c4818fadd3232f066f53ec936",
+        "jvm": "86a92db4f383d7b753b8a890aa4c740a",
+        "llvm": "9c1153415971daa1ce2c10ab50768d89"
+      },
+      "cases_sha256": "2e1b7a6246fa182e2058e8d5d88edf0e8665df215c7696790c918303e0ec1ec5",
+      "driver_sha256": "92339e75939787332c68e5c7d0b01f9d7b895126e8e3a79823692bbe792ec32b",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.082218,
+        0.081256
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-scope-const-holding-a-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-scope-const-holding-a-function/src/main.ts",
+      "signature": "af0195f7a43bcfc1fbf2673e78584af59c6458df214eba1f42002d29de5b7556",
+      "keys": {
+        "c": "7fc1714cbaf36b2f0f72a5547e0bd0b2",
+        "jvm": "5ee2f925a70b72dfa7275586a74cef2b",
+        "llvm": "5e6903b5155fbf3c3fa726f10b29e747"
+      },
+      "cases_sha256": "5d80357f45553676ff5f6c7f27f19c838331d27f207bed83d10e05dada3d932f",
+      "driver_sha256": "b10b6d932b839dce390edb8e7d3ced143f2b3db0c2b92caa3e482a846628937c",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.07448,
+        0.072697
+      ]
+    }
+  ]
+}

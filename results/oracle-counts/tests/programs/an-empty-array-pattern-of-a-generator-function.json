@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-empty-array-pattern-of-a-generator-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-empty-array-pattern-of-a-generator-function/src/main.ts",
+      "signature": "784d2a1fe1a7e8464a8bc432015b0b7f56618a4e4c20c845d1fcc7d810a6a017",
+      "keys": {
+        "c": "9554d8297236f5978a34509590cc4591",
+        "jvm": "6757149f34e2398ae640a264f5d1acaf",
+        "llvm": "2f6aacfea88cd7c27d39795834c1170c"
+      },
+      "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47",
+      "driver_sha256": "d3a7d9941eb2b82c0df9d3d0589c2ca7b11b4a85a47f7d88a938f541d9f24a3d",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.067898,
+        0.066285
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-json-parse-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-json-parse-control/src/main.ts",
+      "signature": "6b3eac0a14469850290e2426b7ab6682c33a938ad41b0be17df6f4351e3d3303",
+      "keys": {
+        "c": "a7373a256da6e00aab41b6b5e4afab56",
+        "jvm": "e2a61568b41b712a484740e7c0345545",
+        "llvm": "d792a179bc6e1f2132fe7a5a1177b394"
+      },
+      "cases_sha256": "7c1fe2dfc61d464bdeb1c7b7982121149c7d09c55af5014e82676fad0eb6b582",
+      "driver_sha256": "78a4bf9b28bcb8fe73491268bedc0bb55a6469e1abcc3008a2bf95a00c718b0b",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

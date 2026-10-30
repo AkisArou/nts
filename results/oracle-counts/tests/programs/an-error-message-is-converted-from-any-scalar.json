@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-error-message-is-converted-from-any-scalar",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-error-message-is-converted-from-any-scalar/src/main.ts",
+      "signature": "56c5baefe1af15166726921c7d47f15ed1338ddadbbf4f72f8c2f21474d58090",
+      "keys": {
+        "c": "48c4f183a0a442c62f7148ad4b273b5a",
+        "jvm": "44877c75bec3d1bbb56fdc5b68512137",
+        "llvm": "6536778ad8bad59f384a52a06b02368b"
+      },
+      "cases_sha256": "203c0efe42977bca87b6637b9d5b44cf5cdbb79c3ff4054f6536696c4e1315a4",
+      "driver_sha256": "7820dec5894246dd65e637cfdc1e493a7c8a5c0de3ac04208df71517d5127b09",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.081409,
+        0.074629
+      ]
+    }
+  ]
+}

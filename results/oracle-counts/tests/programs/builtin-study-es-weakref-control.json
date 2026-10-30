@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-weakref-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-weakref-control/src/main.ts",
+      "signature": "d731c5d7f69682eb287bc7740e4a4cabde33ea320720ea316778b1215af5f460",
+      "keys": {
+        "c": "3d8797204eadf28dc714d4c4cb794afd",
+        "jvm": "f3d6ab44953646d1bad561491ef151db",
+        "llvm": "d09960bc76c294124afe993b13b92a68"
+      },
+      "cases_sha256": "a37d933ece5ea9b93340b070f1fb56fa653c0935f9e79caa04692f306a038e4f",
+      "driver_sha256": "a30490f82896bcc70c943510a8a792d48a1eaa863fc972b817f8572a28c412c4",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

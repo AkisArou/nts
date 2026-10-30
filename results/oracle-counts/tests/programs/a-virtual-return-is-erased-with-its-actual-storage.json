@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-virtual-return-is-erased-with-its-actual-storage",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-virtual-return-is-erased-with-its-actual-storage/src/main.ts",
+      "signature": "0500877f2c2783920e4baed7843275664dba300ecf9aa9a41f707cc4d1ec2708",
+      "keys": {
+        "c": "cc87a9ccaaf71ba0132bf6020ad8024c",
+        "jvm": "b51dfcb0f87e7372ffc0cac6fdab54fa",
+        "llvm": "951fbd39531d17dd2035b09f15b9bcde"
+      },
+      "cases_sha256": "97f403ddac8fefe876e54d5919f9e67d5023b41a781e10c9c51db3abcbab524d",
+      "driver_sha256": "d18e8439564a45495b151c8f088cfb4f0a28198c24bc8457439530b1736b0ecb",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.092129,
+        0.089433
+      ]
+    }
+  ]
+}

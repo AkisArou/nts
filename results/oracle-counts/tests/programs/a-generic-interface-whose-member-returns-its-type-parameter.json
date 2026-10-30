@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-interface-whose-member-returns-its-type-parameter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-interface-whose-member-returns-its-type-parameter/src/main.ts",
+      "signature": "4fc0ddc3d5effc25b3a37797fefbe2ee1fa2aa3e568b6b9a03cbb4e75499a4d3",
+      "keys": {
+        "c": "0e7e0de81756b9e6f340eb8acdb07e2e",
+        "jvm": "81370bed2bc3c981b3e32063426b73a4",
+        "llvm": "1fe9980dec87e8cbd1721fe05fab0b44"
+      },
+      "cases_sha256": "62373e909653c8214ed8865a735f4d58347e7a7f69420fca9844c0abaeeb3e41",
+      "driver_sha256": "45b13a59db81159f8148ae764b1ab499091b726e03ff64a1831529edcd430470",
+      "populations": {
+        "label": {
+          "count": 5,
+          "cases_sha256": "a8fcd76ecac3a829db13cdc2ec981aca9b78299abc23095f26cf2753ed5f411a"
+        },
+        "result": {
+          "count": 29,
+          "cases_sha256": "44e799eae4b6e2348e20fcfce2f9a8d88bd5884f14a1e61155e858cc6f792245"
+        },
+        "resultControl": {
+          "count": 29,
+          "cases_sha256": "79ceff6482c8aad0b1395dcd2203740180abfc5ea8e2f0580a6aef896f7aa970"
+        }
+      },
+      "complete": true,
+      "count": 63
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-builtin-number-argument-has-an-absence",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-builtin-number-argument-has-an-absence/src/main.js",
+      "signature": "f8fd8ff5a2443143b05a9d298eaa955d0f8b40e90567a4aa6d5b5ad0a7175016",
+      "keys": {
+        "c": "a8499f9723904c6c01afac3ae3269823",
+        "jvm": "e7cb76594a015d7b0914f556a0383ec3",
+        "llvm": "2cc9af431b57df7b3950c1325f2e0a5e"
+      },
+      "cases_sha256": "6b90a4dfebac63776d6e9c8bef0e81e941f1782c9b7c5647b72f8bcde592c791",
+      "driver_sha256": "e718fc9fa785486f0d1e1527a5faf4baa2d6b2588d52e93ed520f021cdae392e",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.016348,
+        0.015297
+      ]
+    }
+  ]
+}

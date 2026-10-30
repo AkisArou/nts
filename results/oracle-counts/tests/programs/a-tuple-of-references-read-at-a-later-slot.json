@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tuple-of-references-read-at-a-later-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tuple-of-references-read-at-a-later-slot/src/main.ts",
+      "signature": "16be52124a25f0f4381a7b3c6991cf3e4e8e10a92b0b600881cf768e3cf0f63e",
+      "keys": {
+        "c": "73f7a94e462695a74bd8aa886785cda6",
+        "jvm": "bfff57c7f8e1198a3cc8ceaf480d9206",
+        "llvm": "54623c17ea9e4399c0d6f0058835ee2f"
+      },
+      "cases_sha256": "02e092be5e46d2506a72300bff48ac3808fa18fd1fcb6c9573366faa7240493d",
+      "driver_sha256": "b836de7f329032f22ab8f89b8bfecb0101853f0eac7e6fd5af68f101a6af0442",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.081357,
+        0.078773
+      ]
+    }
+  ]
+}

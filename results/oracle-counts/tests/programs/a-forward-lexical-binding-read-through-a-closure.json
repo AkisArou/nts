@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-forward-lexical-binding-read-through-a-closure",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-forward-lexical-binding-read-through-a-closure/src/main.ts",
+      "signature": "b5e02e898c71023ddb68ed371a19204347e169f354c57d6f1f4008e84024e32e",
+      "keys": {
+        "c": "764d60f93f88fdae1853f4f430f0580b",
+        "jvm": "fb620ba7087ca8887b464957aaa8a810",
+        "llvm": "79f2c9c0c406ddbe62d74d2c0375cd9e"
+      },
+      "cases_sha256": "db969c76ff5065153be2853ed8dd3214eabd9f16ce18eefdf8ada3f9fb921d45",
+      "driver_sha256": "eccdefc775554004bd23a5a37f221aeefefc823a9d275e55114a021e7c4d63b7",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.078061,
+        0.076394
+      ]
+    }
+  ]
+}

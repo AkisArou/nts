@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-over-a-loop-variable",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-over-a-loop-variable/src/main.ts",
+      "signature": "c5df9997a92e55276a48793a934bc686bf801deb8057c11821ce9ecfd9faa3c1",
+      "keys": {
+        "c": "e67d70bc2bcf478be5cfc065b2a1502e",
+        "jvm": "dbe81f8a1d6ee91130233aec4e3d9856",
+        "llvm": "03385a04cbeff8675660cdca052f25f7"
+      },
+      "cases_sha256": "3719d9c36096ee558cc1e2b55c937ef5edc4a1c2f51be64f7fd227e8ec3c38b0",
+      "driver_sha256": "ecfa9eea2e5fd70d234d4c1ff7e8681f88e0c4957d0d076fb3b6a6f7722232cf",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.080364,
+        0.082189
+      ]
+    }
+  ]
+}

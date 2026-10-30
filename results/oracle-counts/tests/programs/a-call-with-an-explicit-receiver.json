@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-call-with-an-explicit-receiver",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-call-with-an-explicit-receiver/src/main.ts",
+      "signature": "8efb46647088d936ff61c07e4722272f7929c8013c2466896d80c9f251b8f015",
+      "keys": {
+        "c": "c027d60f18eb4f520e5ff89422f31c52",
+        "jvm": "ee3dad5c22cbe19cb6f96b02a70c47cc",
+        "llvm": "38c985fdffb7f162dbdfa6b03b10f09b"
+      },
+      "cases_sha256": "9bb7ae651ad42fd6e28238f449a92c811bf37ae5efb5904f87028f36af2a1136",
+      "driver_sha256": "6bd424c53c2d37dbb9ddbddb450c90b262933412f9a3f0384ec0b2253501ef1c",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.073519,
+        0.075336
+      ]
+    }
+  ]
+}

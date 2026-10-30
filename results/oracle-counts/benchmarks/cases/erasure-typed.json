@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/erasure-typed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/erasure-typed/case.ts",
+      "signature": "e32c8e25b4583d85496e3c37c6f4f5364b47038faae2de6f917428592c40ab97",
+      "keys": {
+        "c": "6aa27484b45ca25867a87e32a2a574b6",
+        "jvm": "15f24b733f60a90fa05fd65da04de33b",
+        "llvm": "104e194400b55b0d85a8b4ced342e217"
+      },
+      "cases_sha256": "e77d5936297e277a755bc541b178f3f0781e51e3bfed00ecfdf261c7ebd578e7",
+      "driver_sha256": "a9cf915eb4af1979265110677cd3b62857784be9e8d0b2372b73028dcd209427",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.083112,
+        0.081468
+      ]
+    }
+  ]
+}

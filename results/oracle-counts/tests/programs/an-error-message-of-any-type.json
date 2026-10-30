@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-error-message-of-any-type",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-error-message-of-any-type/src/main.ts",
+      "signature": "9c2d16f14023776a5332ae9f9c49169f7ef0385b28434b6f5c67af319048ab06",
+      "keys": {
+        "c": "c9300346b4724c20d3cfd68dafecc377",
+        "jvm": "22c3b9de2d0c8d5d6d68c8bc0cac0be5",
+        "llvm": "0684f206fd581b78abdbfa4ad70b40b4"
+      },
+      "cases_sha256": "4364e201301fc36567797752bc75cf91b55deb05fe7e550b73fbc317b548736c",
+      "driver_sha256": "ac33970ff86f82550a971e7a119fe869c00ccb688e5a0c1fb065ab4cd3b029d3",
+      "complete": true,
+      "count": 6,
+      "node_cpu_s": [
+        0.074447,
+        0.074845
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-grown-by-index",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-grown-by-index/src/main.ts",
+      "signature": "e725293533f3fa1f397d9334f42c0a65c05899136489317b010a0852ddb3f536",
+      "keys": {
+        "c": "e4fb3757eb199d5e1ffa11a683dab2b2",
+        "jvm": "e032d18489313f956f046d01267b6d71",
+        "llvm": "b048c2437d2c0b8262d07f3f60467c45"
+      },
+      "cases_sha256": "f884886d1f47c0c63a141d70385cf7c2edca56bffc0549a899d1fb50543c46aa",
+      "driver_sha256": "a19222798f9cb4101a47a2df13206c5a6d1348a9634d20b866f3874879f2d646",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079108,
+        0.077995
+      ]
+    }
+  ]
+}

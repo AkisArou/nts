@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-yield-star",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-yield-star/src/main.ts",
+      "signature": "3e468f55dbfdd7cca10522635c4ba3e612171b5c2ad42fa51ff52d30258aa4f5",
+      "keys": {
+        "c": "152b104b3dcb383fd51cc2c47c35a673",
+        "jvm": "0847ea87dc26cd5f6b5453d62d25f083",
+        "llvm": "ae2275a136db2957974d903594e6c33c"
+      },
+      "cases_sha256": "63b20613966b1d1017541d8bd0e9c965ba198df78dcd9088b3fb2800536fa46c",
+      "driver_sha256": "c6105c3c0aebdee31befedad49752bea48e748ede14cd2ed5a1e7ec7c3f8a3ea",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.086669,
+        0.080962
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-uniform-entry-keeps-bound-parameter-absence",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-uniform-entry-keeps-bound-parameter-absence/src/main.ts",
+      "signature": "834c188aec90b33737dbb7a54441f131f4935dbc9a942aecd9c3b0f5152a67fc",
+      "keys": {
+        "c": "cc0cd4a005f3e54b409f3164dabf5c68",
+        "jvm": "c53dd5f007f6a4260d96ce8a6525ae6e",
+        "llvm": "68d1c6ee14bfa361adb7dfea22584cb3"
+      },
+      "cases_sha256": "84407022b3d4f053b3dc5915f55318287bb8e85a15734b748765261af692e252",
+      "driver_sha256": "59ddb9dbd56b481c90cafcb94429ba63b5e25ed01ad0bb8c794e06676ce157d0",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.073399,
+        0.074157
+      ]
+    }
+  ]
+}

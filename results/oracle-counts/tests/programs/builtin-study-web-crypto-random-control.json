@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-crypto-random-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-crypto-random-control/src/main.ts",
+      "signature": "203ef71a2728f5b10f35bd3d049596877ff7f22272d683148702a6a91025e57b",
+      "keys": {
+        "c": "967e9498c7c8caedc5341574cf1eb646",
+        "jvm": "3f8502e1d7af76f5b32b35ca9b78fce6",
+        "llvm": "987b4391abd39af9bfac2f33cf19fd4f"
+      },
+      "cases_sha256": "bdef1f9165a09b44c4ed539cd0f8c87b7729d4609830f315aafa13fb57cd2389",
+      "driver_sha256": "c1860c5c4e6dd4f565ef616ff621b8670306282d733aff1e23791623a4391c58",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

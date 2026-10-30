@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generator-closure-filling-a-signature-with-other-generator-arguments",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generator-closure-filling-a-signature-with-other-generator-arguments/src/main.ts",
+      "signature": "0b47c02c2ca438e4cfef653f4f76d981337c057a16678c1b02c66eafac7d6d35",
+      "keys": {
+        "c": "25ccab4203dfc1a462556c3e10ed7d7e",
+        "jvm": "64ede50107d1ff2d5fad037b12094c32",
+        "llvm": "ba3a739b120cfcc2432caead2ec89947"
+      },
+      "cases_sha256": "bb49660ce97923928543115f28a351d812ad62f9fbba358e093d8c9f6e2f30a8",
+      "driver_sha256": "4e5b15bc4ac4c70073b16d22c12a8d9232f460c6c0a2e4d973f346a78aa10537",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.074393,
+        0.076374
+      ]
+    }
+  ]
+}

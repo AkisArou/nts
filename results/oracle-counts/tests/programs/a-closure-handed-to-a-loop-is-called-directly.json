@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-handed-to-a-loop-is-called-directly",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-handed-to-a-loop-is-called-directly/src/main.ts",
+      "signature": "8a5cc10e0aae6544557c736c8a739e33ba7a05a0b6cbd9e966b394b43bf14736",
+      "keys": {
+        "c": "990d8423a29c97f4cccb1be819ffd5fa",
+        "jvm": "48b2f2d734a7150b53f3879108eaf89c",
+        "llvm": "e05a7d4c52a399a600676cbd30afb58d"
+      },
+      "cases_sha256": "8e1f038b5e5d52922dc3552d3a9a42f8e41befb27ea23a36de0e32b06808fe33",
+      "driver_sha256": "ce7193336c6df580b14c91ca2ae57b52d07eef7774c0b73199aa42c0b6700e37",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.083062,
+        0.082039
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/repeated-unit-reads-of-one-index",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/repeated-unit-reads-of-one-index/src/main.ts",
+      "signature": "716b58c746ee1dda2a9f387d3530aea56e9b5b0598cd7975a630aa75f4290a54",
+      "keys": {
+        "c": "78a18a641b9179cd3347714491f31bba",
+        "jvm": "e7ba7fc4a89c1b31164e36b45d23809c",
+        "llvm": "6a589b796de494c22d3dc7de8ffd0fbe"
+      },
+      "cases_sha256": "aeddc54bf7a5cf9187c6efe8bf6b828b184a46f6bdcb7502f571b28a12898b61",
+      "driver_sha256": "9421c6e7a87f9e5de7df29299e4e0dabe3b9b8dcd4de1adb8a17caada4ac5f02",
+      "complete": true,
+      "count": 165,
+      "node_cpu_s": [
+        0.074455,
+        0.074662
+      ]
+    }
+  ]
+}

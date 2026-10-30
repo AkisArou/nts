@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-over-a-string-or-a-set",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-over-a-string-or-a-set/src/main.ts",
+      "signature": "2916b5a25cad62a49b680515918044dc169ebb3bf244ca1701c9bf36d272f4e7",
+      "keys": {
+        "c": "25ed43f2db3ea5134ebf826feb978bd7",
+        "jvm": "b2183885ccd12b77ecb42c74a827e804",
+        "llvm": "f4fa9c3ba740fd670b22a72dc6cc691e"
+      },
+      "cases_sha256": "e45902c6dfcf9ef7b940e66021f7adfdfd60db3204ece4c8a50b138ee0d4dde0",
+      "driver_sha256": "735ffaf547467ec2332eaab110e0b25f444091787a69b29a0a6c64cccbe477d0",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.07637,
+        0.075473
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-recursive-return-is-only-expanded-when-called",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-recursive-return-is-only-expanded-when-called/src/main.ts",
+      "signature": "445c504b9aa74657779d967db0faff144bde6f1d374377cbd253ceeaeaa2a61f",
+      "keys": {
+        "c": "088de2db352c478ea812e9a78dbde0b4",
+        "jvm": "b10681815fdd7a27e6c6db7f00d6079b",
+        "llvm": "7c16e03081f3d8579b846fac8f651da2"
+      },
+      "cases_sha256": "703c72f0f525ebc610fee6073c1455005e041f41d080164273ddca417140eae1",
+      "driver_sha256": "3fb07365e544b533f4ffbab6ad900dcf4492d8b2bb821a76c70820f6f31aba3d",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.073137,
+        0.072468
+      ]
+    }
+  ]
+}

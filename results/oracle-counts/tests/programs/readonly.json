@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/readonly",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/readonly/src/main.ts",
+      "signature": "5e1c81c3a3d5c1db39a80db5309613a360d1e61cb2048175cf9fb582f77210d8",
+      "keys": {
+        "c": "df1f9fcd6649f2f00bbce154e1127c0c",
+        "jvm": "dac6e25ced8dba54fa5754f4dc9f1f96",
+        "llvm": "15267c28c6313814971efc4b8dc4a87f"
+      },
+      "cases_sha256": "279edd2086078442a1f62e76885ffafde139738bb71ad45f7d06995ddcfdc313",
+      "driver_sha256": "b57ec36f9f966110229ad5122aacabcee725055877b3513c10529541f0a2d543",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.07401,
+        0.07516
+      ]
+    }
+  ]
+}

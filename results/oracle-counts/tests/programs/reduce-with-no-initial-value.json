@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/reduce-with-no-initial-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/reduce-with-no-initial-value/src/main.ts",
+      "signature": "0045a10639bb6b948ab594b338bd38413e1cdafbbfe8a916ee66b828bc85d925",
+      "keys": {
+        "c": "bbe660427ca8199a9ed836cf01ef5249",
+        "jvm": "bb067970e529720c5944188ef6d92c62",
+        "llvm": "f81b53ca373ddeb26762f764742e337f"
+      },
+      "cases_sha256": "2e4dedd570f57e3c0a19d6c3e6f70d1d500b7d8a30f1bc56113cbedaf551b677",
+      "driver_sha256": "e3955d14b4f4691b3f2df6011359d7b9a5c0ede5a6f58b16a3da464641aea58e",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.073644,
+        0.073698
+      ]
+    }
+  ]
+}

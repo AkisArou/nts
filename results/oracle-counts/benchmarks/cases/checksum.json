@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/checksum",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/checksum/case.ts",
+      "signature": "cf05764eba2d3382127e9df6aadfa0aa43e4698f47ecf5c4f997658f23623dc9",
+      "keys": {
+        "c": "0a00240eaea907a0f2150677c2f90bf6",
+        "jvm": "a73db419d3e5db70f2b37dbbdd74be48",
+        "llvm": "d71af5f7c94830aa127e61598fcf6a7c"
+      },
+      "cases_sha256": "917ec3f7d9fb95981dcf933dedddac7d253155024c98843b2712548bf6ad604e",
+      "driver_sha256": "d41af105968daab8e13fb9cb5cc30707054f97139930d738b2a50034d22aa533",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.080579,
+        0.076553
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-json-string-quoted-onto-a-string",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-json-string-quoted-onto-a-string/src/main.ts",
+      "signature": "da26de4c7bdb12067716da7c0b81bac35181fb98d1a08dc4441b4718bea20baf",
+      "keys": {
+        "c": "d32c23ce61cf887945357131da3e61c6",
+        "jvm": "ac1f78c1d8591d9b98c466c09cda639f",
+        "llvm": "37a805583eb99edfa670d968576db050"
+      },
+      "cases_sha256": "3714c4b80f782da8fdff81c14bbf0a1d661b4e7575a92fb0b7563def60de0d6a",
+      "driver_sha256": "f1b2d16efff7bfe9d7652a8fc5c772233f392f3e6ad698174e51562800263e13",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.091083,
+        0.084925
+      ]
+    }
+  ]
+}

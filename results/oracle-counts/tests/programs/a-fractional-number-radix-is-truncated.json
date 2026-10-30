@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-fractional-number-radix-is-truncated",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-fractional-number-radix-is-truncated/src/main.ts",
+      "signature": "a7c70966b5848e50a942ecba9f2ca6c2f7dce866f18aa02cac8fef382f2ff11b",
+      "keys": {
+        "c": "27723c8d2dc1f76aa41d8f6921bb38c9",
+        "jvm": "56ca81c61c6008428659a738ccd20893",
+        "llvm": "48afe2dec590002e95309477d6313ff2"
+      },
+      "cases_sha256": "ab6c34ce0ed7405dcaf1f9e4bb6a33b8a4a5dc1f849f19492399e5abfcbd78ce",
+      "driver_sha256": "86d1622285a73abb415dc4b5d2ebd6dce4a8129f9524d4b6365d2107430c474c",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.072743,
+        0.07473
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-over-a-module-scope-loop-head",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-over-a-module-scope-loop-head/src/main.ts",
+      "signature": "6ad93fc5f340379eca0262d038114fcf5a307716d40f6e38e86adfcee57fe9e8",
+      "keys": {
+        "c": "2a43f78a5250674f99f9d434d37fdfbe",
+        "jvm": "5642be3a7ce8875f9fd6b75669d4f257",
+        "llvm": "8fe482a4a33a5089d04675ef0101d36f"
+      },
+      "cases_sha256": "178b6f1fa5cfd309d9046b684ab6f53d18e98ffa978f3bc31cc94f4049c5070b",
+      "driver_sha256": "a62e648b1619d62245fe14021f09c436265f1c1bbb27c8c272105d2810d5b8da",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.083018,
+        0.082091
+      ]
+    }
+  ]
+}

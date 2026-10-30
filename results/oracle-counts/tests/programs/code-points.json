@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/code-points",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/code-points/src/main.ts",
+      "signature": "eb056afd0535eedb5801a5ae7c4d1ef607d6d9a0a97f7dd6905ac6c6d98e6e7a",
+      "keys": {
+        "c": "270590fc34b287d09631b17c47641038",
+        "jvm": "295f75e4ad9e66854e59a8b90cfe64ae",
+        "llvm": "9b5af0ab92a3df9620d210057427ea81"
+      },
+      "cases_sha256": "56e7a0c9d9a633d617c335ebcbfc57edf4fba5194f5d56afab9ff34f5ace81f2",
+      "driver_sha256": "1ac95170011385afb62d8a5a536925ec98c5df85a26638374c4e0ec29fa70195",
+      "complete": true,
+      "count": 205,
+      "node_cpu_s": [
+        0.083838,
+        0.082764
+      ]
+    }
+  ]
+}

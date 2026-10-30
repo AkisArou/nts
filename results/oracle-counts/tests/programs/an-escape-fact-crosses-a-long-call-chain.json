@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-escape-fact-crosses-a-long-call-chain",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-escape-fact-crosses-a-long-call-chain/src/main.ts",
+      "signature": "a17fc4979543e707cdf6f9d381202b46c781769dea22cde7d9c9d0687a566b7f",
+      "keys": {
+        "c": "2491aa166640c118658ed8c0bb24811c",
+        "jvm": "a3995b8dea7269508df96a6c29c4d17c",
+        "llvm": "a3ca750d352b72c0275a80f94d11132a"
+      },
+      "cases_sha256": "5c72abaa09e142769b31d5a8850ede851851dad4b8fcd9216cfec35c8ded01bc",
+      "driver_sha256": "7df6f52986f7941c4e48ba1e6871edd2e217cf8a3eae9a8d8461f602418f6620",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.083769,
+        0.084598
+      ]
+    }
+  ]
+}

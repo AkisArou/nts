@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-builtin-number-argument-is-converted",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-builtin-number-argument-is-converted/src/main.ts",
+      "signature": "46cdabd536bd21aa3f578822c77736b877e2e30a4bdd75787274e5db015d4dff",
+      "keys": {
+        "c": "4dc26f63dceddf09d56c1e3fa96c4692",
+        "jvm": "3ca33bb553d3b95cb1a215de800f533b",
+        "llvm": "a858a984a6ba3bc16b88b2a9d49ffe67"
+      },
+      "cases_sha256": "d510547527452d718ca710da7c820683f58ef22bd2c2579a6d73b5e2ec22c75f",
+      "driver_sha256": "b4c40e5a50f467db71ecbc941326ed6ba7dba2d03f3671815e317168e33b4dcf",
+      "complete": true,
+      "count": 1334,
+      "node_cpu_s": [
+        0.210287,
+        0.200737
+      ]
+    }
+  ]
+}

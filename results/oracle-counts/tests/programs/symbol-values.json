@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/symbol-values",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/symbol-values/src/main.ts",
+      "signature": "0b3cda4a15d4be49a262ee9c07dbd6768c015a956cdc611753562452736939da",
+      "keys": {
+        "c": "6400de4e20744f7c7090d93a026c8480",
+        "jvm": "bc33fe51abe7ed55bd028011156b352c",
+        "llvm": "31e0bd16fe98443ef2ef9c962faede7e"
+      },
+      "cases_sha256": "e15c50f0c575f7aa591748d2be9b99781c473b0428836952f9d6f4efdb7cab11",
+      "driver_sha256": "6f04f4dbf7c32a488ff7b9cfd23a25c807f790b36949312f9e5b9b417c9534b3",
+      "complete": true,
+      "count": 348,
+      "node_cpu_s": [
+        0.081537,
+        0.084853
+      ]
+    }
+  ]
+}

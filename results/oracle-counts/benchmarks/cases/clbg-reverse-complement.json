@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/clbg-reverse-complement",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/clbg-reverse-complement/case.ts",
+      "signature": "efa956f2a5ba5bce8b8a4ca3d1b426d215544683f4f689bf18612c521d19e995",
+      "keys": {
+        "c": "e574843719f4451f4d5a15431f9a6005",
+        "jvm": "771d41df0b9edd8f2dabd089e1cd650e",
+        "llvm": "9588b8ff1a94ce9483960b100973e364"
+      },
+      "cases_sha256": "b3339872e68527dc4f58e223548ed030a64318537a5864e276cbc24ca33d27e5",
+      "driver_sha256": "bb20490b5e0a698aad4e383f961b93db6a3110c1bba41e1683bcb616cef018b8",
+      "input_domain": {
+        "identity": "f0cc2d9eef8fc0eeb82604487afb5f6c",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "Larger generated FASTA inputs exhaust Node's heap under the oracle's 2 GiB address-space budget; retain the benchmark seed 1000, NaN, negatives and fractions.",
+                "max": 1024,
+                "integer": false,
+                "allowNaN": true
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "Larger generated FASTA inputs exhaust Node's heap under the oracle's 2 GiB address-space budget; retain the benchmark seed 1000, NaN, negatives and fractions.",
+                "max": 1024,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 23,
+          "cases_sha256": "edcb8db42a7dd06f7a28b5754397cc4cb478b9e636564b615023283863dda8fc"
+        },
+        "work": {
+          "count": 23,
+          "cases_sha256": "608e31901b3252bb53c7801f4b860e4783ac1d9b786a4e2db70999ff2b5b9e15"
+        }
+      },
+      "complete": true,
+      "count": 46
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-dynamic-import",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-dynamic-import/src/main.ts",
+      "signature": "ae34b5f01ad1a9e920ceca20912bde9f7e2f889ea04822887b25c22c1387bc0f",
+      "keys": {
+        "c": "c3fce1d74bc1b777a28f292a8da8c82d",
+        "jvm": "70e255567c5da70e57d5ffd282ef3151",
+        "llvm": "4ffe75eb843e9042f86eae6372eef95b"
+      },
+      "cases_sha256": "ffe4aa18b5a9cf96b1e818f9cfe71854ff6200540a2dd81060a1c1b06f089a62",
+      "driver_sha256": "e8e59a24d7491271359312dc5080820953d707f2683c3804e38e60ec8b611290",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.10948,
+        0.106639
+      ]
+    }
+  ]
+}

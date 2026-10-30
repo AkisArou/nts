@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-math-misc-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-math-misc-control/src/main.ts",
+      "signature": "be0d4dd3293044cbbc8f8a4af3669b9572b43e11a683d99bdebd31bdf59e9325",
+      "keys": {
+        "c": "57df2d6410baa2148548efee97e9196c",
+        "jvm": "cc8c352d7e75e0ec9eaf4bbc77e42185",
+        "llvm": "fcbeb268ea3170b2c26af6ec70d77ffe"
+      },
+      "cases_sha256": "93489a504318c252d4533d5493e2dd74f6636e8d4fc3eb22c8a9e3f1310f05c7",
+      "driver_sha256": "a5f54a8a910b4a6db676aa035dba11e5d854a377ed38f66d97e4081e942c4302",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

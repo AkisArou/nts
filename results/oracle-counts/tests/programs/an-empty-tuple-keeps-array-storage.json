@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-empty-tuple-keeps-array-storage",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-empty-tuple-keeps-array-storage/src/main.ts",
+      "signature": "6ebe4ee6c07c1c0caf7f69ef8cf0b9ecef42e816e78ad11b7ef041aa9853be24",
+      "keys": {
+        "c": "8895f2b3b9705a7b17de7e80948b0d6f",
+        "jvm": "0baf76b1f0f57f25656b9bdf6cd03517",
+        "llvm": "f9fc01fb528f2f94673cc28283b35561"
+      },
+      "cases_sha256": "a5cf3f78473b2257a75a67e62b9d02ed48603fd6bb0bbb4a4ee2d773f0c10fa7",
+      "driver_sha256": "9fae6133e1b87c9b2a7e43011767bb3c62196e23efd77774e02a53d5d27f1bd4",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074943,
+        0.074022
+      ]
+    }
+  ]
+}

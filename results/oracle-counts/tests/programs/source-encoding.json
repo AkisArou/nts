@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/source-encoding",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/source-encoding/src/main.ts",
+      "signature": "9fcb57ce3a6fe1cf0db2e59388212b8d69d9c321455ae7d893389ccc89703129",
+      "keys": {
+        "c": "ba2d79e1e947148d3cf07eadb053b18e",
+        "jvm": "65885dbb0c761708b794624fb81da983",
+        "llvm": "8c31ef7094f856cdc03c090503405fe4"
+      },
+      "cases_sha256": "f1fe2149b36b5deb8e340eb32817fbcf0a22711889e4cdb29bd7bb4920148ea4",
+      "driver_sha256": "3d6b68c80f1d2aa5e31a55a0a7290da86a7c66866c92cc381a231a301c8543db",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.078875,
+        0.076029
+      ]
+    }
+  ]
+}

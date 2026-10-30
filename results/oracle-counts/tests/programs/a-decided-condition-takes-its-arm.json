@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-decided-condition-takes-its-arm",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-decided-condition-takes-its-arm/src/main.ts",
+      "signature": "5a4fa00c1dfd72e0a01691d262c8d5e9aba084d27992cfc0f693384e08caa0c7",
+      "keys": {
+        "c": "d2de4b635701d66ef864ad1e93c7ade3",
+        "jvm": "b064f9834ed2f8fd9bdc367b7b864767",
+        "llvm": "696c405963b4906bbaa3b596f3275b02"
+      },
+      "cases_sha256": "68930a50eaad6ad24ef9850933983695ebf99b223849e9b203c09f2031cda4b3",
+      "driver_sha256": "7b967cef4967a8707c1345681d9f30d40827b52fba0951533316c87f50f41127",
+      "complete": true,
+      "count": 644,
+      "node_cpu_s": [
+        0.088722,
+        0.089631
+      ]
+    }
+  ]
+}

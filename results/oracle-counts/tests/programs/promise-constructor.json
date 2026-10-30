@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/promise-constructor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/promise-constructor/src/main.ts",
+      "signature": "cc195c4d5c8f8e7c3658973900e1088d20501764e97cf5ec1d2ff61a7bef67df",
+      "keys": {
+        "c": "109e03c58891a0a224d636ff5a278591",
+        "jvm": "eb1424eaf9bf939fd8ac61b87d5039f0",
+        "llvm": "d983f36f4304770e518b8dd6b326291a"
+      },
+      "cases_sha256": "0eb4a0b1d4d24368cd786ae5c968d8cd2c246a74543af4c5415b6b70d89fd119",
+      "driver_sha256": "7ba0867f06f8b55c572942048c8f23219a0334fb2f365db3a8d19618da65a5d3",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.075374,
+        0.075729
+      ]
+    }
+  ]
+}

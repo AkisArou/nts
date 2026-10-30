@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-wrapping-add-compared-with-its-operand",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-wrapping-add-compared-with-its-operand/src/main.ts",
+      "signature": "72fce8516268dbade18b5ae2a4d421c86f5de1812c885881539a4f0895525904",
+      "keys": {
+        "c": "563819b974b66f47c2255f5853c8c7a3",
+        "jvm": "d0c1d68b6e86587baadb8013f54fc078",
+        "llvm": "39c9a233f5824e653c711162819bac69"
+      },
+      "cases_sha256": "5d562fbba82903bb9e9ed63f94144d4fe2bbd137807b8d14fe9537596eb3d289",
+      "driver_sha256": "3aab2df34f0e0e8b3a5dc0f80f012566bd613814037829904d986c3e1c4e4c13",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075271,
+        0.076466
+      ]
+    }
+  ]
+}

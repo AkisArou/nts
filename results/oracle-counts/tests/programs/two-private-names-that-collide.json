@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-private-names-that-collide",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-private-names-that-collide/src/main.ts",
+      "signature": "4940e12c5e5f6f155ffccb0d8fd8a7421cfd9ab5ced65d7b8be3fd378a570020",
+      "keys": {
+        "c": "6c6fd01619b01939de7ccbee931fc399",
+        "jvm": "d63d20eae286b257c3d1ecff4c7e78a6",
+        "llvm": "ac3ad9803eea1c14bf5bcc546474ef44"
+      },
+      "cases_sha256": "b24f92e7f2981b768d67ed02051596a0daa0229be771c85abb93f418ae243b76",
+      "driver_sha256": "ce7e79f7008d8267b7647905edd26398154523c1fd78ebffcd7aee0b6b97f43b",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.079254,
+        0.079099
+      ]
+    }
+  ]
+}

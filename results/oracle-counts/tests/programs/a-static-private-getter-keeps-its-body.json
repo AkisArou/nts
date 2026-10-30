@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-static-private-getter-keeps-its-body",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-static-private-getter-keeps-its-body/src/main.js",
+      "signature": "fef7d72d997e3270f4a28030dc0ccd09fbc720b5c439669f117f43805adefb3b",
+      "keys": {
+        "c": "c6fa33c99a1a6c7ed2e6f4883c1dfbb8",
+        "jvm": "111e13d41af87075d68a5b4e00ad3b90",
+        "llvm": "93d86ab6184b8e797a367572c630f2c6"
+      },
+      "cases_sha256": "02395b3f927443a024ca450a24bc7b762d2ecc60b432092f7b91e63686eacc01",
+      "driver_sha256": "51faca4d30e45b36881d68469d359107d647c55c5e4f23fcf0eca03ea6db8149",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.014553,
+        0.014035
+      ]
+    }
+  ]
+}

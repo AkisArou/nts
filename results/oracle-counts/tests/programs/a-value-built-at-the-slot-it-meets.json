@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-value-built-at-the-slot-it-meets",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-value-built-at-the-slot-it-meets/src/main.ts",
+      "signature": "d1ed27dbc0d6295d3a8e5ec6ed2a10bc85deb9abfe7580c242ad7ae09f934fab",
+      "keys": {
+        "c": "a2637899d3c5edd4f4731613148f4d9a",
+        "jvm": "3fd67af42dd46bd016fba886b1e258c6",
+        "llvm": "8681b7f8ce4b9b6c2e88b1d345471370"
+      },
+      "cases_sha256": "19e9f5f5e4b6709c4716bd50b043a1164a619f5e4077461dd972e9f07468a03a",
+      "driver_sha256": "9c5f9caa00d4aa6beae908d7ef9116bc67f0f9c0fb1471935f5c24971961542c",
+      "complete": true,
+      "count": 522,
+      "node_cpu_s": [
+        0.100816,
+        0.101968
+      ]
+    }
+  ]
+}

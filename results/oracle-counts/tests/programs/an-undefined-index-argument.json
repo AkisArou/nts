@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-undefined-index-argument",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-undefined-index-argument/src/main.ts",
+      "signature": "5e32a9e20006ff6dae95bb9bbd31617c2cc634ca7ae461feafcc423e6abf3019",
+      "keys": {
+        "c": "2f2dc5fca5741544b655ec3b7d586215",
+        "jvm": "2863c1a7c147e2751f235f8cceec6af8",
+        "llvm": "5410629adc0b4579f360121893a09cd4"
+      },
+      "cases_sha256": "fda3e4a9c124f76b618a07b9d56d4237d127bf02e32519a18b6c3561bf9860f2",
+      "driver_sha256": "a735542b9a6c22936e63f6617dc296d179d13ff7c8474afade0793579f127bd0",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076052,
+        0.076366
+      ]
+    }
+  ]
+}

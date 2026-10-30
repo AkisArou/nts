@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-date-parts-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-date-parts-control/src/main.ts",
+      "signature": "88abb17ac431d3b563d6125a69146d196d4dee42dd1d9b1c6023f57c476e2531",
+      "keys": {
+        "c": "95860fdfc5e55b7432774e9f5f424d52",
+        "jvm": "c49c36ea4e13926321e4c5d00d3a52f3",
+        "llvm": "d93b6d2077f8eaf895d72f74546d19f4"
+      },
+      "cases_sha256": "a4855043c34be752075d08426a0b47fb09715b81680dc2d6ca2dfe38fa05051a",
+      "driver_sha256": "54291c871d1d371adecaf8f58ceea73ac264a4aec6eca408efd5c85f4944e57e",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-optional-chained-method-call",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-optional-chained-method-call/src/main.ts",
+      "signature": "ce622216e7cb9c27aec21ab8d0e21cf7ff57b4b75f6b93d79ca9d22464544437",
+      "keys": {
+        "c": "7df9d4d441c6a21e62c4a63be3886bfe",
+        "jvm": "7bfa0b92146ce09065b162a44747a134",
+        "llvm": "cc2b0c1ab91ebe9495e205cc3a7c54f0"
+      },
+      "cases_sha256": "c0f2ccc5140c93b47ee892c0c3ea68b99ac6e73353b86c24ca2c983913bffa45",
+      "driver_sha256": "a8eb9bd232847afc38b1a868cd5e5b3d8e933aba5e95912b71846549e46ba315",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077911,
+        0.077433
+      ]
+    }
+  ]
+}

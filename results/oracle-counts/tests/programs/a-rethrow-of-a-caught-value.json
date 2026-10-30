@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rethrow-of-a-caught-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rethrow-of-a-caught-value/src/main.ts",
+      "signature": "f228370bdf40b1f0a8608959a48d9e37ab333a0380b8c6fa63889ae634bd4962",
+      "keys": {
+        "c": "fec0a7d0ef07f1e53faecd2410880eb8",
+        "jvm": "e9edf6474c28fe3e2ce02d6c5cf66f42",
+        "llvm": "40f5e34c13abe6d34edbf3e2bfd6e006"
+      },
+      "cases_sha256": "9e413425c20ad900b1af25d2d12dbe8d6cb052afb5b108b5e4175472f438d766",
+      "driver_sha256": "16d57691049a2afc1bbf46ba74c60f646f4de9707ffe8621ee3f82dc4d7c8b7c",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074541,
+        0.074334
+      ]
+    }
+  ]
+}

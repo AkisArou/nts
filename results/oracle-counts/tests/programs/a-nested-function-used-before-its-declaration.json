@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-nested-function-used-before-its-declaration",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-nested-function-used-before-its-declaration/src/main.ts",
+      "signature": "24c1d7f01d2bfce0dbc3507708c05308a7d9290b9e74c31e0a5a1b09cadc94cc",
+      "keys": {
+        "c": "3b812f3fe462ef3121d86624584e73dd",
+        "jvm": "e3cff9d726c5173f9895cd8e203b371c",
+        "llvm": "a7e8f1f1f9a2e402dacefef8d0bf8f61"
+      },
+      "cases_sha256": "e3f0e68637edf5287fc5eb8da20b3038bb07a9b285c32429716318644cb7e553",
+      "driver_sha256": "fed0e6685b0038da7a55991aef49232d0f162d033117d6e2e9eb17659df80eb3",
+      "populations": {
+        "calledBeforeDeclared": {
+          "count": 29,
+          "cases_sha256": "ed7890eb2c9c9a2508145cfe6e02fe61a19a9b69691d244162285a584d573654"
+        },
+        "capturesFromInsideTheBlock": {
+          "count": 29,
+          "cases_sha256": "b97093a44ca33d19a8812b825a6f03165f36b542c0f754e884fad1ca27c0c530"
+        },
+        "declaredFirst": {
+          "count": 29,
+          "cases_sha256": "2a6e04e0d4235b8b7ef7e3fd3d7af6bedb7dbd709fa6b36eb2acfc01dcbe931a"
+        },
+        "usedBeforeDeclared": {
+          "count": 29,
+          "cases_sha256": "fb001bd256576c3ec785972bcef51560027c802dd8aea05cbfcc5f6ef03d37bf"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}

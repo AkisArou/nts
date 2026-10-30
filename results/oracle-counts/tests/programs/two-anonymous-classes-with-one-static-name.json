@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-anonymous-classes-with-one-static-name",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-anonymous-classes-with-one-static-name/src/main.ts",
+      "signature": "2f9d2a711a1c1d5ddd9a77407839d17998e5eda98d38f2dc0702747673379bbb",
+      "keys": {
+        "c": "1d4ef2042fff59cfab826d98a167acba",
+        "jvm": "6f026732caf0dd3a7ccf28f174cee1a9",
+        "llvm": "8e465b4a93fc5c0ad9e5ed7b3d31252e"
+      },
+      "cases_sha256": "3240747e8b02c035e7e60c6b15506c10b55ae168e6ad26485bf430efdf029554",
+      "driver_sha256": "344550bbb10f062f927ea61859df23d65aae9f07224521832c1feac8a0db430c",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.073402,
+        0.072443
+      ]
+    }
+  ]
+}

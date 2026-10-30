@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-parameter-whose-positions-disagree",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-parameter-whose-positions-disagree/src/main.ts",
+      "signature": "572b1326af131f504064fc751873a1b7c98988fe506e4e1fa7ed398d07311a5a",
+      "keys": {
+        "c": "f3283183f9163e431d9bd3f4482c503f",
+        "jvm": "aec377f0f7f592f2b5c10916780652a8",
+        "llvm": "f1fa85a453c65d4952cf942e6b68b3ec"
+      },
+      "cases_sha256": "ab931c57f78aa40f78b3c7e7b624ecc131ad00eadbabfe6c18bc7675a65445e9",
+      "driver_sha256": "b4ca39c66415524f176c69f719c206d1efab60d469b5dc5ed26dc5bd0425fc2a",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.077608,
+        0.080307
+      ]
+    }
+  ]
+}

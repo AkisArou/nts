@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-swap-of-two-arrays-in-a-loop",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-swap-of-two-arrays-in-a-loop/src/main.ts",
+      "signature": "1c2057468f710b4fe075419dcbcc3398a21ae0c5e2d8f7072d37076a592763d8",
+      "keys": {
+        "c": "2ff69116d0c8eff4dd7da45e0c07dbab",
+        "jvm": "603b784620cc1c9191ccec85f4c967d3",
+        "llvm": "1c1f8f52a2190432b4ec0798e6573159"
+      },
+      "cases_sha256": "05e870615a7fb9884f56a8fbb8c12c902a7edc6e870cf56cb976ded5392cf88a",
+      "driver_sha256": "4c47d051cd2331e4ab26011634185018631617be5ce396d1655db5a804b4bf08",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077436,
+        0.076136
+      ]
+    }
+  ]
+}

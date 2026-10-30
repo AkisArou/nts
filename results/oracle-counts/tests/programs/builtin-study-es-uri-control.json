@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-uri-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-uri-control/src/main.ts",
+      "signature": "76efbf655501aecb1a9f3a67b901e87ffb59f2b0ba79cc14fd23b29d0143b37e",
+      "keys": {
+        "c": "8d1e43d130ffbe0d7c27f82685655cd2",
+        "jvm": "f9d52133f98a647d3ce90dc405011165",
+        "llvm": "ef51324b481f0b2bee59418a04270976"
+      },
+      "cases_sha256": "df9775dc06b5cc9cd3cedcfc915ea1ab4d9cd5ac419aeed51adac75665e53eed",
+      "driver_sha256": "f21f895986172a03a608f25353100e197c08ae6fec425f23e8ab93296c5e2256",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-member-every-arm-puts-in-the-same-place",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-member-every-arm-puts-in-the-same-place/src/main.ts",
+      "signature": "c3fcd6647721be6a481d0fe023e31914f0f623316ed39d97e3ef5f6c2369b4cd",
+      "keys": {
+        "c": "42b0efcd00fcbabc2099de95a7a4523a",
+        "jvm": "ea523a77ebaf21265e55c82645d8b574",
+        "llvm": "c21b44db0d5e74036ca3a24cd26d4b50"
+      },
+      "cases_sha256": "cfe1b4aa585e85351b215968e4cf37de4d7d9bee1411c6cd4b7b6bcd9edefb65",
+      "driver_sha256": "5559fbeb8dc39b617f55b13cdb57c2088017e4464f408dc1096a9cdceacd925d",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.082993,
+        0.077915
+      ]
+    }
+  ]
+}

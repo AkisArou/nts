@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-literal-at-the-slots-element",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-literal-at-the-slots-element/src/main.ts",
+      "signature": "a9bf12caace9593c642a0092d264a5e3048f083a7b007b22810e58d47cb5ac36",
+      "keys": {
+        "c": "22a12f2dd5a954581e39fa2625819c56",
+        "jvm": "ae071445963c8ab893b991ad2bb4f278",
+        "llvm": "399ee0b62da06922db99c73530da86b3"
+      },
+      "cases_sha256": "2870836a1cffb974d0fc2ab5059e16684c1bb4f37ebd920d4237436feca52176",
+      "driver_sha256": "6eec243a98a357f2e15410e7a936876fa400ecac621476bda790331844c36a9b",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076897,
+        0.077721
+      ]
+    }
+  ]
+}

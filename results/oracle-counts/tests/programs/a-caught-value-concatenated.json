@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-caught-value-concatenated",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-caught-value-concatenated/src/main.ts",
+      "signature": "00162ddf57b92828e06b9f3e5f8de60cf64cbbb689cd75438838bf39019d572e",
+      "keys": {
+        "c": "34e033f771e097a12b491573045ac913",
+        "jvm": "f57ecfe32b6afc6114b2593b433a0245",
+        "llvm": "3f23bb9161b7e8ff549e6b41e1512969"
+      },
+      "cases_sha256": "409dee74faf62e5616aaa4504562dcdad587447da8b66f225417156793c96141",
+      "driver_sha256": "3909610d3dda4a91dba229290cada45e0bef8236f2658e9d9d43c67558cd55c4",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.073825,
+        0.073633
+      ]
+    }
+  ]
+}

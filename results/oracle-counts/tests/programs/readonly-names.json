@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/readonly-names",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/readonly-names/src/main.ts",
+      "signature": "3e1f8a58c47a35ba655beb5e4be5077fd53426651195f145f16b83f0aafb2adc",
+      "keys": {
+        "c": "f7d78b7958423695a64efcea10a19e91",
+        "jvm": "715ce34f09a0ee012453eebc5771c5e5",
+        "llvm": "cde080ddb132c9bcaa426d9bdf07aebc"
+      },
+      "cases_sha256": "62c6fd136530a0c06128a1447b136a5a765b322a908a18ca10f218fe9142c0ce",
+      "driver_sha256": "d711c20fde4e0997a83f327b9c8c475f36435c3a0af93b662dcdf4f125031be8",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.081236,
+        0.08049
+      ]
+    }
+  ]
+}

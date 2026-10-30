@@ -1,4 +1,4 @@
-import { spawnTest } from "./test-wait.ts";
+import { runCheck, Outcome } from "../differential/check-report.ts";
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +8,7 @@ import { test } from "node:test";
 
 const HERE = dirname(fileURLToPath(import.meta.url)), ROOT = resolve(HERE, "../..");
 
-test("benchmark shadows compare fresh JVM and imported-source oracle results without supplying verdicts", t => {
+test("benchmark shadows compare fresh JVM and imported-source oracle results without supplying verdicts", async t => {
   const root = mkdtempSync(join(tmpdir(), "nts-benchmark-shadow-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
@@ -19,14 +19,16 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
   writeFileSync(join(project, "main.ts"), 'import { offset } from "../helper.ts"; export function value(n: number): number { return n + offset; }\n');
   writeFileSync(helper, "export const offset = 2;\n");
   const cache = join(root, "cache");
-  const run = (name: string) => {
+  const run = async (name: string) => {
     const directory = join(root, name), costs = join(directory, "costs"); mkdirSync(costs, { recursive: true });
-    const result = spawnTest(bin, ["check", config], { cwd: ROOT, encoding: "utf8",
+    const {result, record: observation} = await runCheck(bin, config, { cwd: ROOT,
       env: { ...process.env, NTS_BACKEND: "jvm", NTS_CHECKERS: "1", NTS_GATE_STEP: "bench-agree",
         NTS_GATE_RUN_DIR: directory, NTS_GATE_CASE_COSTS_DIR: costs, NTS_GATE_SHADOW_DIR: cache,
         NTS_GATE_SHADOW_HELPER: join(HERE, "artifact-shadow.ts") } });
     assert.equal(result.status, 0, result.stdout + result.stderr);
-    assert.match(result.stdout, /agreed on every case/);
+    assert.equal(observation.outcome, Outcome.AGREES);
+    assert.ok(observation.checked > 0);
+    assert.equal(observation.checked, observation.expected);
     const rows = readdirSync(costs).filter(f => /^shadow-\d+-\d+\.jsonl$/.test(f)).flatMap(f => readFileSync(join(costs, f), "utf8").trim().split("\n").map(line => JSON.parse(line)));
     assert.equal(rows.length, 2, "each fresh check must observe both actual executions");
     assert.ok(rows.every(r => r.context === config), "shadow context must identify the captured project");
@@ -34,15 +36,15 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
     assert.deepEqual(rows.map(r => r.kind).sort(), ["bench-oracle-node", "bench-program-jvm"]);
     return rows;
   };
-  assert.ok(run("first").every(r => r.status === "miss"));
-  assert.ok(run("second").every(r => r.status === "hit-match"));
-  assert.ok(run("third").every(r => r.status === "hit-match"));
+  assert.ok((await run("first")).every(r => r.status === "miss"));
+  assert.ok((await run("second")).every(r => r.status === "hit-match"));
+  assert.ok((await run("third")).every(r => r.status === "hit-match"));
   writeFileSync(helper, "export const offset = 3;\n");
-  const changed = run("changed-helper");
+  const changed = await run("changed-helper");
   assert.ok(changed.every(r => r.status === "miss"), "an imported source changes both oracle and emitted-program keys");
   for (const row of changed) {
     const file = join(cache, row.kind, `${row.key}.json`), value = JSON.parse(readFileSync(file, "utf8"));
     value.result_sha256 = "0".repeat(64); writeFileSync(file, JSON.stringify(value));
   }
-  assert.ok(run("mismatching-baseline").every(r => r.status === "hit-mismatch"), "fresh agreement must survive a mismatching cache observation");
+  assert.ok((await run("mismatching-baseline")).every(r => r.status === "hit-mismatch"), "fresh agreement must survive a mismatching cache observation");
 });

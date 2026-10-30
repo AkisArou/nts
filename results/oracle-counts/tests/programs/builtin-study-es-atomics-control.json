@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-atomics-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-atomics-control/src/main.ts",
+      "signature": "a0003d55893661b20ccac3b80f9de14fdfe25581963904595da9f24abf0b7799",
+      "keys": {
+        "c": "e9abfa5eeca234979481856da949d4a6",
+        "jvm": "9e911ff082a1f9629b1489b650182ea6",
+        "llvm": "3172954bb57a8f405cbc5c65f092268d"
+      },
+      "cases_sha256": "302f8596fe3eaea22cf67e175e0a49b34430fd29cf4c43bd1aa851bd9496c1ac",
+      "driver_sha256": "879b82708a7a2f9d398f9bcf46269d17a7e2cee10ed00eafd984a52deb0aa0a9",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

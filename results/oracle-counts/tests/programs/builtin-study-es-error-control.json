@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-error-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-error-control/src/main.ts",
+      "signature": "a156f3a652c75ce99052d2b917e531be71b21c234036fc334882fb1f0ef50069",
+      "keys": {
+        "c": "d062569a903cd6329b8d0fb910c4b65d",
+        "jvm": "213054cf36cb48f25c28ea6172601a94",
+        "llvm": "958ca88c46859496eeb378491e657f58"
+      },
+      "cases_sha256": "0242b4321597d5691cf64dd5d24fe7d14f2c1732b059f9eb35469dba99a79480",
+      "driver_sha256": "ab0bf80c3b4a35cbe1780028f65cc8f36f5b4d1cda24459e859e76729a73823b",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-position-returned-inside-its-loop-is-bounded",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-position-returned-inside-its-loop-is-bounded/src/main.ts",
+      "signature": "0e15ae8f31f5b9ee3ab0807904d8196a3d480156497e3ba69871c66c2435053a",
+      "keys": {
+        "c": "2d397578f720367d667eff6f8049ddce",
+        "jvm": "e3121bbc28ea42a677551b7faa637e92",
+        "llvm": "fc759c743912a639e5e7ca7604a47732"
+      },
+      "cases_sha256": "49bc59f7283fa6ce0454686cb14d3a927155b8bc52071f5559a06ae5734b16cc",
+      "driver_sha256": "e9575ac9eea3e4a61cc512057e8726fe40dfed108014ae39388ffc5c0e93b934",
+      "complete": true,
+      "count": 5,
+      "node_cpu_s": [
+        0.07572,
+        0.077228
+      ]
+    }
+  ]
+}

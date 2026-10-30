@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/strict-equality-across-typeof-kinds",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/strict-equality-across-typeof-kinds/src/main.ts",
+      "signature": "8849cba741b2d0318ade5156fa1e591f0501dd0efbc89b3d46edf7c4463ee364",
+      "keys": {
+        "c": "64d5cd7aaac447c2c2c173acd54276aa",
+        "jvm": "08fb4f6663557bfbebc99b21ff19ecd4",
+        "llvm": "fb0c9012ac97d3a7d66602c2a3d862c1"
+      },
+      "cases_sha256": "8aa2bc66f4c888740420d4cbc318613e71538a55ca2a5496dba9b6d8fe570441",
+      "driver_sha256": "6a0a31f0cf0bb29fa7dd6ab57a0806d1a1c7e1124eedaa1b75775cdb252e77f2",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.064798,
+        0.065427
+      ]
+    }
+  ]
+}

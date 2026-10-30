@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/case-ascii-widths",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/case-ascii-widths/src/main.ts",
+      "signature": "de52ed5f8acae5abaabbf7a354d3db014646d31637749362b7182f76fe5d1187",
+      "keys": {
+        "c": "08fda5bedcfe618d5a408fecc48048a8",
+        "jvm": "9b04c3e20f200f8534c8434229effce9",
+        "llvm": "7df8ba7e4b45e937bb2c6f9cddc7fc44"
+      },
+      "cases_sha256": "aec1ae8e4294b5e2bfa4fa81c5e5f79b088dea915a838c06f85df972ddbc675c",
+      "driver_sha256": "c972c0adba863f4465c8e6934ee432757f64fce2a7f8cb9ef0334a55ad075ec1",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.087473,
+        0.089121
+      ]
+    }
+  ]
+}

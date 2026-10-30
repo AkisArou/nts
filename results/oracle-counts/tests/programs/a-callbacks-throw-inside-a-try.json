@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-callbacks-throw-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-callbacks-throw-inside-a-try/src/main.ts",
+      "signature": "8ca7389f7664235328b5c4f977cf59c08de17aa317409bba3f44ef063633054a",
+      "keys": {
+        "c": "17da552be6d1089d2d071f15d3d133cb",
+        "jvm": "91bf6dcd8931597f52ff37980ffd3bf6",
+        "llvm": "7eefaf26c2ae9cd66ac5cf63c479dc60"
+      },
+      "cases_sha256": "e8ffb8ec16f7fe226835fe79df25fee17427db2a8ca41e126ebacb34fc0a8866",
+      "driver_sha256": "eef23a690356f5c281936214c03592c4c797f4e6b03320277bdea04841b285a3",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.072748,
+        0.073865
+      ]
+    }
+  ]
+}

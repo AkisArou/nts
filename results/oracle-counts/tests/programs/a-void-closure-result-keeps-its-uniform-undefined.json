@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-void-closure-result-keeps-its-uniform-undefined",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-void-closure-result-keeps-its-uniform-undefined/src/main.ts",
+      "signature": "38fae279175b3392430c0401a6c6fa55fcd639f07465fbec2b2332462c8b466d",
+      "keys": {
+        "c": "9e1ebd84dcdc6bb1b942f22b2c38e3ed",
+        "jvm": "4af2088dea172c86429b0ca37fbe414a",
+        "llvm": "09a9ab8b338c2682b95ab8fe12411337"
+      },
+      "cases_sha256": "b833e469300c22c5794a71c0c14bc46825d08d0a1925131b492ac6137b8be0dd",
+      "driver_sha256": "0c3fb6cbe35697b4d51a86ebfed3ab9010a9efe9dbab4a015b92784c8f5d72c0",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074453,
+        0.075991
+      ]
+    }
+  ]
+}

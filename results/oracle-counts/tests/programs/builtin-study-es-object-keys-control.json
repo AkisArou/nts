@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-object-keys-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-object-keys-control/src/main.ts",
+      "signature": "5fd7007d085aad11c9ba7be4122aee3a9a3b59c10afbc6f2be081d956d48331e",
+      "keys": {
+        "c": "031fbf82c7b7046104cb20a65ccc6eb6",
+        "jvm": "850bf8a5eec0f5bc8e7b43fc164c08f6",
+        "llvm": "f0a498c5ff74b4052ad8bdfb1fbada8f"
+      },
+      "cases_sha256": "dbbf060062c249caba8125549fe3566bdda4a2a4112fc8f5e6633bc26869536b",
+      "driver_sha256": "7be432c73be25e9b51f6b4d371dac0043a2f39ecb2edbb7fe91b73a93077c9bf",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

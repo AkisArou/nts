@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throw-through-call-or-apply-inside-a-try",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throw-through-call-or-apply-inside-a-try/src/main.ts",
+      "signature": "50b460d74b6548801b6756b14535108eb15cc379a8440b1bc8e4491688724cb0",
+      "keys": {
+        "c": "179a1c6abfb6f5c28f8917614a6140e1",
+        "jvm": "44a66a3779f455045ab25ca861fa9f6c",
+        "llvm": "e31f830713fbedbc809ada0869e788cb"
+      },
+      "cases_sha256": "58765fbe7054790509d4f72eec51da40da3d4d771c71aa568b489e438dd753be",
+      "driver_sha256": "3c5537ac48ee92f8c7c77d954197c775c1dec750fa6e9260eac3760d9ff7b4fd",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.077869,
+        0.074601
+      ]
+    }
+  ]
+}

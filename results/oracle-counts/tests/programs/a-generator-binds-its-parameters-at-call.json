@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generator-binds-its-parameters-at-call",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generator-binds-its-parameters-at-call/src/main.ts",
+      "signature": "7ea8669fa44c2116aa7a92097731716197bc65d4963e3c2e3dfbd781eec741e3",
+      "keys": {
+        "c": "34eea4570a5539914a52b211702940ab",
+        "jvm": "6806cce1e2a8ece4603601bfe59b0033",
+        "llvm": "4a94143481a5631df0e7ee19134e00bf"
+      },
+      "cases_sha256": "1fba18ba020b407f18627ee07c71b183f635e1215792499b5ab813551ecd9e32",
+      "driver_sha256": "97af80bb97e936b85994d1fda7cab21facb8dea354c6e04667961f7dc93fc73e",
+      "complete": true,
+      "count": 725,
+      "node_cpu_s": [
+        0.125688,
+        0.132529
+      ]
+    }
+  ]
+}

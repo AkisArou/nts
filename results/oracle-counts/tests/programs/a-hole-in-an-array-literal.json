@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-hole-in-an-array-literal",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-hole-in-an-array-literal/src/main.ts",
+      "signature": "e515be41930fa463c4865372382abbd76684af9ec7c62156b4f9bff879d58689",
+      "keys": {
+        "c": "25daa86009fef1a63b8fb25f7e4f524a",
+        "jvm": "7a03ba1cffb7839d4f2b4b76188bfb02",
+        "llvm": "4d350ea6c7df60f3b81c05d094568c3d"
+      },
+      "cases_sha256": "06efe8f56cd5bc2e6db41336b4bd0cf52bef26e08504acec47d834a6f751c54a",
+      "driver_sha256": "a0be0df98f6b4004e4e68b6551c8b15313c61bf007cb39e229735a65d7840085",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.075703,
+        0.07704
+      ]
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-textencoder-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-textencoder-control/src/main.ts",
+      "signature": "cf0e80d7ae0b3dca3698b27e3173454c5f562ba0537933b6274f4612adc49c18",
+      "keys": {
+        "c": "d65aa1eab1814a7d1923172803bd858c",
+        "jvm": "ec5d78484f28ad90fe9453752ece7e54",
+        "llvm": "dbf1478141770e2d0e604e5d19037cde"
+      },
+      "cases_sha256": "73d22f63057d881dd1b82f9e09a9a953da06c0abf2f57ce11cecf433739de7b1",
+      "driver_sha256": "3d58ef5e1316ba00d360faeab071bca7085d4e6a18e9540bb4f811ef0713a37a",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

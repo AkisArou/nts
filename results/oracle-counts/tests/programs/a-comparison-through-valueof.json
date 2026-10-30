@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-comparison-through-valueof",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-comparison-through-valueof/src/main.ts",
+      "signature": "249cf437a94841131ab7cd5ed6e0d244c2ba691209bfeaff57d90f130e6684a1",
+      "keys": {
+        "c": "99f604eb1b3ff3945b62bf1c3ecbb6e4",
+        "jvm": "1dba21f30ef4255c64293f3309c855a1",
+        "llvm": "2d7d8ae55d7bbc3687d3cc28b85beeac"
+      },
+      "cases_sha256": "350875a385085239768a14c4919d6be169dcd6e42e9206e4c4d51938dc1a9583",
+      "driver_sha256": "e4111f0e3e62c00de3470f7fc3385904374fe04009bca596f4356fcaf56ada36",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.080355,
+        0.080193
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-number-of-an-object-held-as-any",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-number-of-an-object-held-as-any/src/main.ts",
+      "signature": "d3a3cf5a932819b7e1fca2acc96f229ecd2822e5264f99a249ac6aca9e2a0eaa",
+      "keys": {
+        "c": "2b7905f954211b50d9bfe22a47f69fbb",
+        "jvm": "9ab7d8b5c383ce5307358f8af2259294",
+        "llvm": "c512f518249cc63597e8bbc11f2efe72"
+      },
+      "cases_sha256": "ee885145c7942496a4a998f50f58c723434ddf219aeb0dd2ac7b908a2e6a9fd1",
+      "driver_sha256": "0b86789d1421414dfdc81410568325a6827653851f0ad38702b0d2c33258d7f5",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.080064,
+        0.079211
+      ]
+    }
+  ]
+}

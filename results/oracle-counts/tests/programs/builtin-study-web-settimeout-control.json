@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-web-settimeout-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-web-settimeout-control/src/main.ts",
+      "signature": "b5c3792e9eda096df2a6d0d02a0053c74ce5fffdaed66934b18de06367b57c2e",
+      "keys": {
+        "c": "9a386b06e86756b6a90a7d4db3b35bdb",
+        "jvm": "df7175fe18f3e6a52dc7c86e4a2aa40b",
+        "llvm": "9b5deb1c75d523e93b624c8cde7e24e7"
+      },
+      "cases_sha256": "2bbb2319effd2b1212156a2b0f67544a463ae99e62852e24b3f15f01c8f76cb2",
+      "driver_sha256": "05a8dd321bb8a26418206128595133b641b6884ecfedb535f81a45d12d3640c4",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

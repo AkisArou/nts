@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/object-entries-of-a-class-instance",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/object-entries-of-a-class-instance/src/main.ts",
+      "signature": "efa22b33e08e133b6ba65b9d4aa8dd8398a835e6ebfd527d1a7b93ff2b2c49c8",
+      "keys": {
+        "c": "43d8dec6693c46c8d9bce4201fc9ac12",
+        "jvm": "bf8e17f7d6b65e36126a707b269a780c",
+        "llvm": "ee130b94d8de75be668b3c8c70f9ef2f"
+      },
+      "cases_sha256": "3c9b11052db1f394883116420c3b1e833584de70624e3f2c67eec8232e032bb0",
+      "driver_sha256": "0ebd630e2fe09efadd81017ba6dcbc352ae06fa7eb77dba7f867b856f60b39e6",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076071,
+        0.075481
+      ]
+    }
+  ]
+}

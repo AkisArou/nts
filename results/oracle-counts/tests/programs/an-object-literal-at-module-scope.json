@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-object-literal-at-module-scope",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-object-literal-at-module-scope/src/main.ts",
+      "signature": "4a874868f9ccf6d43a4d8355bdf22d53a0e9359efd5103216dc3e9678bcad045",
+      "keys": {
+        "c": "14ddd166cbc34a9478f302cd06603879",
+        "jvm": "45d7862db27da99ab33b541505b04fee",
+        "llvm": "7a00a4bee500a16afc817eb5f1b4e4a6"
+      },
+      "cases_sha256": "67d2e110a86c790497ec681befe798c527c49a623429602afe29ab0464fca520",
+      "driver_sha256": "0b6a128b17ade1418a71f806f20c83b2edd39cf78b387d3292124f0caa12490a",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076081,
+        0.076098
+      ]
+    }
+  ]
+}

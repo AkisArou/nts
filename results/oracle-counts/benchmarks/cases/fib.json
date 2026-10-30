@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/fib",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/fib/case.ts",
+      "signature": "c2b329fbaedb8d0a5967552bf2a426ccd0f447c4688a5d07b931d4b9559b89ab",
+      "keys": {
+        "c": "78bdd4bf6a790fc61bfef72d513b1c63",
+        "jvm": "cc6ebfaf38c78b56369690fa26c6f701",
+        "llvm": "7d0b3d66fcb7fa9ed40fc675f0374a80"
+      },
+      "cases_sha256": "f408979ba3904193baed561669404d5387cf3736b5987277f39f0c4ee49b0b8b",
+      "driver_sha256": "45a0d54018fa6588fd9c7295873a11105f332fa90d2b91858e682751468787d8",
+      "complete": true,
+      "count": 24,
+      "node_cpu_s": [
+        0.079744,
+        0.078068
+      ]
+    }
+  ]
+}

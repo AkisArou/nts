@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/abstract-methods",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/abstract-methods/src/main.ts",
+      "signature": "a3b635f2a9a4ee569d75077ccefe60592dd2da27c60e01f11a014bd0bef0ae67",
+      "keys": {
+        "c": "26ca6ff7043e4ec29f7d3b947cf9bff8",
+        "jvm": "70add266624a197f3524ed743efe3a33",
+        "llvm": "cd3b218e0b24f09492c76b5a54843f07"
+      },
+      "cases_sha256": "b590b199398c2a78a654fc817e1e42211a90c61d7a805ee8e61a309426e6c141",
+      "driver_sha256": "620d5af5be4fb6035c66a2f873746f2d94a05c8b54033b3b8ac58f47ca76aca0",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.080661,
+        0.082983
+      ]
+    }
+  ]
+}

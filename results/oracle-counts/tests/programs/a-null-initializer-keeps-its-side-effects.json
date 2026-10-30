@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-null-initializer-keeps-its-side-effects",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-null-initializer-keeps-its-side-effects/src/main.ts",
+      "signature": "b5f402de13501cb5ab5d8b1102fcc4fef2a8d3271b3e2b4364d88bd40e5f33da",
+      "keys": {
+        "c": "a6cd39c10056675e74f96aaebaf74a5f",
+        "jvm": "82cec95c2fa737c1511fd08a50ce0480",
+        "llvm": "3b336c38f0e0a9a0cf0b879c99d7acbe"
+      },
+      "cases_sha256": "dbe61929e263a00c923285bff0c63549df81bbc4c0a4f4825f91a246f42f23e5",
+      "driver_sha256": "312f448f76eedd3fd8e479fa2f3baa2ede0bfc773ab1c21479face4776b42dd2",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.075315,
+        0.072527
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-async-arrow",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-async-arrow/src/main.ts",
+      "signature": "e43e1ae3657a855b0daacff28ee4cade5e74213925f9378302b0748f1da388b0",
+      "keys": {
+        "c": "796c89bc165ca09d126eaad578272574",
+        "jvm": "398e5bf082423ad6ea558a34efcd78bf",
+        "llvm": "a04e6c838bdbe57db835ba3f0faef76e"
+      },
+      "cases_sha256": "217ae18e57b4677effd00d35a0bfeae65389a94e29bc12f105e4dd64da18370f",
+      "driver_sha256": "a7ab8a41dc59a5a438849923883bc9523003b3b28c833357185adbddd7395e58",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.082058,
+        0.084822
+      ]
+    }
+  ]
+}

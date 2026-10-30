@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-absent-uniform-argument-keeps-its-tag",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-absent-uniform-argument-keeps-its-tag/src/main.ts",
+      "signature": "f2cce34460ea3466b3bcfc73534bcce87c7a17b73f38518fcddb37597695383b",
+      "keys": {
+        "c": "76350bc332f20ed57a08c8f672c52e55",
+        "jvm": "bb3f1f6836ed61fc1bc5d92c409e54ea",
+        "llvm": "88b5dc62c71c30a43da8f52a4a0eac4b"
+      },
+      "cases_sha256": "81468df187cbd99df74ad806e1161fbfbb3a5b81f332dc4d4b21b52f3e81baa7",
+      "driver_sha256": "b74c11cae7d6474cde0ead509c0122c5a78df298ff4c5d7f34d117f08e959ec6",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.073023,
+        0.073703
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/offset-counter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/offset-counter/src/main.ts",
+      "signature": "952fbee77e2525826caa68af430ea4f713b87d27c18185feac011d690959a385",
+      "keys": {
+        "c": "0a50eab2ae4469943af83119361df968",
+        "jvm": "6135c8110304bd91cc1dd3c92fd74238",
+        "llvm": "91916cf2ff92531a3823b05d42584b32"
+      },
+      "cases_sha256": "3135bc8ba87a983198f44a69f0533610cee471f05a64a0ef9a4eb4fb847503fa",
+      "driver_sha256": "6244b58946b8671bc64142664a1e2c5db4551f49eb7dffa9e9b04d1330b566f5",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.077375,
+        0.074843
+      ]
+    }
+  ]
+}

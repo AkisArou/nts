@@ -1,16 +1,7 @@
 import { execFileSync, spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
-import { join } from "node:path";
 import { isRecordedBinary, provenanceOf } from "../conformance/pin.ts";
 
-type OracleRow = { source: string; kind?: string; complete?: boolean; count?: number; keys?: Record<string,string> };
-function rows(text:string):OracleRow[] {
-  const table=JSON.parse(text);
-  if(table.version!==1 || !Array.isArray(table.rows) || table.rows.some((row:OracleRow)=>typeof row?.source!=="string")) {
-    throw new Error("cannot establish new projects from an invalid oracle table");
-  }
-  return table.rows;
-}
+import { readRecords, readRecordsAt } from "./oracle-records.ts";
 const projectOf=(source:string)=>/^tests\/programs\/([^/]+)\//.exec(source)?.[1];
 
 /** Only an explicit, verified clean before pin can establish candidate history. */
@@ -23,8 +14,8 @@ export function newlyRecordedProjects(root:string,before:string,base:string,back
   if(spawnSync("git",["merge-base","--is-ancestor",commit,"HEAD"],{cwd:root}).status!==0) {
     throw new Error("new-project comparison base is not an ancestor of the candidate");
   }
-  const old=rows(execFileSync("git",["show",`${commit}:results/oracle-counts.json`],{cwd:root,encoding:"utf8",maxBuffer:1<<26}));
-  const current=rows(readFileSync(join(root,"results/oracle-counts.json"),"utf8"));
+  const old=readRecordsAt(root,commit).rows;
+  const current=readRecords(root).rows;
   const prior=new Set(old.map(row=>projectOf(row.source)).filter(Boolean));
   const added=new Set<string>();
   for(const row of current) {

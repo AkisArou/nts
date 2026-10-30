@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/decided-statics",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/decided-statics/src/main.ts",
+      "signature": "30fdcb10fb7396b7a1ee234343325bba842d0615dd3bdbf501f69e527562757e",
+      "keys": {
+        "c": "85889e3014f915f150bf348dcffe5720",
+        "jvm": "372f5066e1f234fc960e789060daa716",
+        "llvm": "40070e63307c804dac1983cb54797326"
+      },
+      "cases_sha256": "19b0400934856bfed19b1b9affcecdda833c107a21779f5c62c280b3853c26f2",
+      "driver_sha256": "b6af71edef4ec8938af68f82029e69e35410c59876d2dcdabc8432732891ef57",
+      "complete": true,
+      "count": 435,
+      "node_cpu_s": [
+        0.100588,
+        0.089367
+      ]
+    }
+  ]
+}

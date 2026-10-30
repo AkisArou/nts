@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-table-holds-its-number-values-unboxed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-table-holds-its-number-values-unboxed/src/main.ts",
+      "signature": "96d5b5c6191996304be039beac4d17ea0ba2e89ebeceac8dbed844c66f2755bc",
+      "keys": {
+        "c": "d0d2c66aba11c86b8b1b45a2fc064551",
+        "jvm": "2764f48324271c33c21f178e683cb9e8",
+        "llvm": "5feeef7272945cb6b2b587e359242921"
+      },
+      "cases_sha256": "bcb3b4ede294ceecaf0fa50d3fb8ba50e156e48e35fceabe53ca037fd1793f18",
+      "driver_sha256": "d1b7fd52d80e0afe97e25e1049d795c7256dab1305153ca2e519763e8d70368b",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.09885,
+        0.093141
+      ]
+    }
+  ]
+}

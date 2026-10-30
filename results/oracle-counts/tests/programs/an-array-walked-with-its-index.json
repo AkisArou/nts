@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-walked-with-its-index",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-walked-with-its-index/src/main.ts",
+      "signature": "a5589ca5c5b7c4756cac9ffd0cf859c43e32981c7e1697f188774da199b26dc9",
+      "keys": {
+        "c": "dde8193882a7276ab7433b865d0dc9e6",
+        "jvm": "401e7093a6a9d6bbd02c53c37276c40d",
+        "llvm": "b7af1cf41f86800695c88a180f3fa17e"
+      },
+      "cases_sha256": "c9cc10de6d8d7c8ea540e690239506ca2de8712e33a1a5a8d6d6efb54b958e2f",
+      "driver_sha256": "1009c810a0af24b351fff71da185b43f2fa2ae56e5dd8be8d1429687a9c9ca6d",
+      "complete": true,
+      "count": 319,
+      "node_cpu_s": [
+        0.081334,
+        0.084535
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-cast-that-is-a-prefix",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-cast-that-is-a-prefix/src/main.ts",
+      "signature": "a8bec97541a587138357da14720042ba1507121b8549652e5570740f9ef0ffe2",
+      "keys": {
+        "c": "496a2b3634eabb563405d7ac2dd24601",
+        "jvm": "778eeb09fb391bc57781a2f6b041a2ce",
+        "llvm": "382f2bef5acce760b94d1f1589edf389"
+      },
+      "cases_sha256": "d35f2537cd4d42754c7fc82b1e74aaf46126a4d727b10276bd2cab1b48614f13",
+      "driver_sha256": "a5890ae2055c7d734cdb2ca9b8a50e12cfc61dd75526f552fb058007a3906d54",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.077991,
+        0.079338
+      ]
+    }
+  ]
+}

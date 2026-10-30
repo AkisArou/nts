@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-transferred-buffer-past-its-old-length",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-transferred-buffer-past-its-old-length/src/main.ts",
+      "signature": "fbf0e31ec7fa7f217a345ea8242f9141043c3af35ee971430a3874e0e1f121db",
+      "keys": {
+        "c": "b095f74182f06060619faaf112893606",
+        "jvm": "9c8c40774168a1907f021662650441ed",
+        "llvm": "f2cd30c1528c8372948c1bcb99265b1b"
+      },
+      "cases_sha256": "dbe5c3fa44833240d5e2e5f68b3df184b415ee7f9ec6aa73b0ce97ed9ffbb15d",
+      "driver_sha256": "6b005a9f9b4752dd576440eda781f30d90c62a18600ca4e60003758225673fec",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.076607,
+        0.076148
+      ]
+    }
+  ]
+}

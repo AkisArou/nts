@@ -584,6 +584,27 @@ export const RULES = [
     arms: [],
   },
   {
+    // Unlike display output, every oracle-store byte is checked authority.
+    // The inventory control catches unknown/missing/orphaned records too.
+    name: "the oracle record inventory",
+    when: p => p.startsWith("results/oracle-counts/"),
+    steps: ["tooling"],
+    arms: [],
+  },
+  {
+    name: "a program's recorded oracle population",
+    when: p => /^results\/oracle-counts\/tests\/programs\/[^/]+\.json$/.test(p) || p === "results/oracle-counts/_generator.json",
+    steps: ["examples", "llvm", "llvm-rc", "jvm", "rc"],
+    arms: [],
+  },
+  {
+    name: "a benchmark's recorded oracle population",
+    wide: true,
+    when: p => /^results\/oracle-counts\/benchmarks\/cases\/[^/]+\.json$/.test(p) || p === "results/oracle-counts/_generator.json",
+    steps: ["bench-agree"],
+    arms: [],
+  },
+  {
     // Tool-written measurements are outputs. Recorded conformance baselines
     // still owe their readers through the rules and derived maps below.
     name: "tool-written results",

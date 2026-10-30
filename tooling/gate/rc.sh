@@ -117,64 +117,6 @@ cd "$(cd "$(dirname "$0")/../.." && pwd)"
 # Empty since 2026-10-07: `this-in-a-field-initializer` passes once a kept
 # parameter is released where it dies (a2), and `promise-reactions` once a
 # collection runs to a fixpoint. The history above stays as the record.
-known_failing=""
-
-crowded=8
-cores=$( { command -v nproc >/dev/null && nproc; } || echo 4 )
-jobs=${NTS_GATE_JOBS:-$( [ "$cores" -lt "$crowded" ] && echo "$cores" || echo "$crowded" )}
-
-results=$(mktemp)
-trap 'rm -f "$results"' EXIT
-
-# Each worker holds one of the gate's tokens (token.sh; see "Tokens" in run.mjs).
-NTS_RC=1 ls tests/programs/*/tsconfig.json | NTS_RC=1 xargs -P "$jobs" -n 1 "$PWD/tooling/gate/token.sh" sh -c '
-  d=$1
-  n=$(basename "$(dirname "$d")")
-  case "$n" in
-    invalid|unsupported)
-      # Fixtures that must *refuse* something, asked exactly as `gate.sh` asks
-      # it. Listing them as "known failing under reference counting" said
-      # nothing about reference counting: one does not typecheck and the other
-      # is a refused construct, and neither would pass under any provider.
-      #
-      # Not "must fail to compile" -- see `gate.sh` for why that inversion was
-      # satisfied by the node parser rather than by the compiler. (No
-      # apostrophes in this block: it is the body of `sh -c` inside single
-      # quotes, and one closes the string. The comment fifteen lines up says so,
-      # and I wrote `node` with an apostrophe anyway.)
-      if NTS_RC=1 "${NTS_BIN:-./target/release/nts}" check "$d" 2>&1 | grep -q "refused:\|does not typecheck"
-        then echo "ok   $n (not an oracle case)"
-        else echo "DIS  $n (refused nothing)"
-      fi ;;
-    *)
-      # An example with nothing for the differential to drive exits 0 without
-      # comparing an answer, so counting it as a pass overstates this number
-      # exactly as it overstated the one in gate.sh.
-      #
-      # No apostrophes in here: this whole block is the body of `sh -c` inside
-      # single quotes, and one closes the string.
-      out=$(NTS_RC=1 "${NTS_BIN:-./target/release/nts}" check "$d" 2>&1)
-      if [ $? -ne 0 ]
-        then echo "DIS  $n"
-      elif [ "${out#*nothing to check}" != "$out" ]
-        then echo "bare $n"
-        else echo "ok   $n"
-      fi ;;
-  esac
-' _ > "$results"
-
-failing=$(grep '^DIS' "$results" | awk '{print $2}' | sort | tr '\n' ' ')
-# Guarded: `printf '%s\n'` with no arguments still prints a newline, so an
-# empty list would compare as " " against an empty result.
-expected=""
-[ -n "$known_failing" ] && expected=$(printf '%s\n' $known_failing | sort | tr '\n' ' ')
-bare=$(grep -c '^bare' "$results" || true)
-echo "$(grep -c '^ok' "$results" || true) of $(($(grep -c . "$results") - bare)) pass under reference counting"
-[ "$bare" -gt 0 ] && echo "  $bare compared nothing"
-if [ "$failing" != "$expected" ]; then
-  echo "  expected these to fail: $expected"
-  echo "  actually failing:       $failing"
-  exit 1
-fi
-[ -n "$expected" ] && echo "  known failing: $expected"
-exit 0
+set -eu
+root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
+exec node "$root/tooling/differential/check-consumers.ts" rc "$@"

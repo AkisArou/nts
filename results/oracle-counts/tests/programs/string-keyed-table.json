@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/string-keyed-table",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/string-keyed-table/src/main.ts",
+      "signature": "74a749eeb7ff6de2595799097ea12bd1ba79a3670e00285d65317ac0bac85b4d",
+      "keys": {
+        "c": "8f537ae413c9ae4a131fb7227945ebd7",
+        "jvm": "78a263e9c58abf9af4852184a53fd7e9",
+        "llvm": "00313a4bc0a675f0cdff70fa0467d980"
+      },
+      "cases_sha256": "b80cd4fd4ce3dfd88bc4c4a2194f9041bf9d1226e9ac8951137ffdbab697f786",
+      "driver_sha256": "a91df7956986a76070e5f73428c3e676432c8558c55a555b8dff2d3e8c798559",
+      "complete": true,
+      "count": 667,
+      "node_cpu_s": [
+        0.104543,
+        0.101739
+      ]
+    }
+  ]
+}

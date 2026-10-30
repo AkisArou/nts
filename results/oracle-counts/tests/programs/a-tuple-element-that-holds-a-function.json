@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tuple-element-that-holds-a-function",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tuple-element-that-holds-a-function/src/main.ts",
+      "signature": "6305de962bfa7c1e3d01d8a51e4c5837a3f6f64adfc7cceae8d31195fb7c3cf7",
+      "keys": {
+        "c": "422ce4b821fb9550d1f21b71eb8c72e6",
+        "jvm": "3c534ce1cd5799bc01abb29bd3e01b48",
+        "llvm": "ebc46f852ccdec3a95909b36220ea15a"
+      },
+      "cases_sha256": "5745c9800eb4a5b3cfbf6a55bb54e3a7c0824a9bca86380d8c77ba0f07c25d2b",
+      "driver_sha256": "1fde389fb31ae01419156c50ed8f802dd5ef4914de869ae01244572e1726a675",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.081608,
+        0.078969
+      ]
+    }
+  ]
+}

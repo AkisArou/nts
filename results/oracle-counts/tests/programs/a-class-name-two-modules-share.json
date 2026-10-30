@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-name-two-modules-share",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-name-two-modules-share/src/main.ts",
+      "signature": "e6fd2851264e8d8552f439b785b58c8855fde3f65877483b72e5bd64c277d549",
+      "keys": {
+        "c": "fa92f8e7fe570f5b8d1a33231543ad0a",
+        "jvm": "a82fe97c80246c24a8a6a3e4b9a06675",
+        "llvm": "8ceabaa1d0caef5de4c889ea332a9f64"
+      },
+      "cases_sha256": "e7e7e2f757513eae929f4c516765724ea063b2c349aa7f9ab63767df94b86bb4",
+      "driver_sha256": "8445d0cdbab6fc6bd84ae5c036ed99061283518119bbc169486065b9a37d9e26",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.082141,
+        0.081375
+      ]
+    }
+  ]
+}

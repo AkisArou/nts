@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-required-cast-member-may-be-absent",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-required-cast-member-may-be-absent/src/main.ts",
+      "signature": "2adb116d6289ded6d72658e6a0a724a33a3466ede958bdf6843ed1de3cd2be8e",
+      "keys": {
+        "c": "516aaf62b1744966fe3dceb47dc3fd14",
+        "jvm": "8dea2267466864886a8dab01d9233df4",
+        "llvm": "f60b0b12df0f66856207bc6f0cc9a56c"
+      },
+      "cases_sha256": "58131a4df0190215d0b3e2783033dac716b2de229f7771312f331a719e3c3185",
+      "driver_sha256": "cdc106877b1cd834805263e5b1197fa723db7c6657ba7150b5f582fa0b60dd29",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073902,
+        0.073864
+      ]
+    }
+  ]
+}

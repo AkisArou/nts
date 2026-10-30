@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/string-concat-at-any-arity",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/string-concat-at-any-arity/src/main.ts",
+      "signature": "4e96342e0f27ee4af8a73950e5c8e1be9a4b3f8e6aae0d7b172d198f45abf794",
+      "keys": {
+        "c": "d3ad75739ab3db5a4a422d05a5f1cbf5",
+        "jvm": "fb6f2ff3c07fff8eafedb2f23bb539ad",
+        "llvm": "bb26518c452609e48192a982fd4ca87f"
+      },
+      "cases_sha256": "75ac645d65a8c524fb376ece4f384db1a4dd474a89f624f7f0e6d8cad518c92f",
+      "driver_sha256": "f8fb2a85d09f162c311f8fd3cd182c8a2da1d8c5eff48129743d4b374712f186",
+      "complete": true,
+      "count": 40,
+      "node_cpu_s": [
+        0.073532,
+        0.072016
+      ]
+    }
+  ]
+}

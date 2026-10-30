@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-with-its-own-tostring",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-with-its-own-tostring/src/main.ts",
+      "signature": "019cf583ea3af7d4e512c8abd2623771d1134cbda4c6cb1d8f3a82d0fc43a31c",
+      "keys": {
+        "c": "f3cc23e022a2dae51230a7f40357d555",
+        "jvm": "22f019e30a356a43cec9baa3bfcdba1e",
+        "llvm": "c79ffe08b506b9b2e52d513657eba7cf"
+      },
+      "cases_sha256": "ba9486b88523cd5ce3206853d0c23083f6cb049dc18ac183b3ff717af05d0eb9",
+      "driver_sha256": "edfe617a5b76fdabfab9aed6ad714a80ee865eb5f24ce7b9c6d2c2a4dec3a5dc",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.07818,
+        0.07838
+      ]
+    }
+  ]
+}

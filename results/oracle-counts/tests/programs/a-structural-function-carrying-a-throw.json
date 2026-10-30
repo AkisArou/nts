@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-function-carrying-a-throw",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-function-carrying-a-throw/src/main.ts",
+      "signature": "21d62ab5c3d017443a706b1639555ae5ed2e19c671677faafea3f89111a68943",
+      "keys": {
+        "c": "1f280aa5c09f0741906bcc87897542be",
+        "jvm": "873611bb19c4f3c7de7355441a5e1a1d",
+        "llvm": "bf679f539bc932bc69efa15941b86dfb"
+      },
+      "cases_sha256": "a309d45206287da5166ea02cf83f4917b52c07598bed988d55edc5ce4d02056f",
+      "driver_sha256": "d2b1a24d56b3e64e97e4eb8ab263908a9048764ffd0991392014a95d9bab9abd",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.0782,
+        0.076708
+      ]
+    }
+  ]
+}

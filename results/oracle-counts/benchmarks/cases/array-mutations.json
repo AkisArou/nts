@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/array-mutations",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/array-mutations/case.ts",
+      "signature": "2b35ffae5e69a0b02159eb523ee3be83327033af20f710ecc8bb65c8e98bb93e",
+      "keys": {
+        "c": "2f51e1f230105ba40e329e1e3adbdf5d",
+        "jvm": "3ae8feebe47112e1df023a4e7d301cf1",
+        "llvm": "34817ecb52e94cfb2c5358f23e17cce3"
+      },
+      "cases_sha256": "cb16a03bc3271da10b6d0e49d6661d1f735939d0d81ec992f225beb6601f8214",
+      "driver_sha256": "21a0563e2b8142dcd2e295e0fc70f57115565426bb013cfd7d706e3d765679a5",
+      "complete": true,
+      "count": 28,
+      "node_cpu_s": [
+        0.087482,
+        0.087883
+      ]
+    }
+  ]
+}

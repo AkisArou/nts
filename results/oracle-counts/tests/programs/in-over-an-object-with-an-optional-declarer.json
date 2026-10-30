@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/in-over-an-object-with-an-optional-declarer",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/in-over-an-object-with-an-optional-declarer/src/main.ts",
+      "signature": "fd8082086327b8ddf0a37bf642bfc44ae185210c391a3653711821de741c623b",
+      "keys": {
+        "c": "65b9bc264cb9cf323eac390995917e2d",
+        "jvm": "fe0532087c12fdc8cbbaa8c36a74f531",
+        "llvm": "fb55c84b33a3faa80614435ba5b13c32"
+      },
+      "cases_sha256": "f423751360cb78bff56abe3457fab7a9148f9d6d80d708f26ea0950b0f51f568",
+      "driver_sha256": "1ee9a770f9f3419fbe91cb8608335e1f51b1ad42d6af4b6989eece048b7dabce",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.076104,
+        0.076174
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/erased-truthiness",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/erased-truthiness/src/main.ts",
+      "signature": "95ca3377f6bc01522e8bf69715582914ecb7ab5c13ec827b7ac04e0d85f4e54c",
+      "keys": {
+        "c": "78e14777991c811086e8888e060979d4",
+        "jvm": "53cb8919eee9435f68e9108e2de1c35c",
+        "llvm": "34b6c731c25f4b03c01575caa5d9f334"
+      },
+      "cases_sha256": "3a62e28ed0f7189083bae7e2a40b8bcb1b381c6aac69c8191698d7ae42081453",
+      "driver_sha256": "1633ffeca40d975d8bfb21f3a0cc51c82f158ed7e9317a6711ff8f828acdd3c1",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.078975,
+        0.074743
+      ]
+    }
+  ]
+}

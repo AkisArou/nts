@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-template-object-keeps-its-identity",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-template-object-keeps-its-identity/src/main.ts",
+      "signature": "3f4bc144edc6740c181fb6eaec233ac47b5407b20c81f82b2a5fe26af58ec698",
+      "keys": {
+        "c": "a367882e20b17277d7d536ed193b264c",
+        "jvm": "35cdcb01aaba473c72bee1b88f182b83",
+        "llvm": "07d13c2bca30d2eecd541b1b7bbafbc6"
+      },
+      "cases_sha256": "03f24530ab26baf5bd3895770c647ed76aa850c4193fe61c2392f396a7e44728",
+      "driver_sha256": "fb3fb63839217ef020f838a77ba809c31d76602ea335f8b025c573510351881a",
+      "complete": true,
+      "count": 667,
+      "node_cpu_s": [
+        0.097671,
+        0.102518
+      ]
+    }
+  ]
+}

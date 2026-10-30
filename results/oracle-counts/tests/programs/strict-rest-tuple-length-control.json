@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/strict-rest-tuple-length-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/strict-rest-tuple-length-control/src/main.ts",
+      "signature": "ea97f0ee646b1ca13a0b4a7ce1ba080148c50ff05c3cf3916305471e9fe5fa2b",
+      "keys": {
+        "c": "5f0e1ff699660e225019d409b919cec9",
+        "jvm": "9f182d78c038afaa681c0ff7683368a4",
+        "llvm": "fba7b591df9b29ee36910b31604084da"
+      },
+      "cases_sha256": "2cbf70765568f40e13d1490905565fc4fbcd6b9442960223f5176e11ebd28aea",
+      "driver_sha256": "a9323904d4f01ea1085c1339c9cdc34191cb561ecd6b0bb08243dbd40c06961c",
+      "populations": {
+        "argumentCount": {
+          "count": 29,
+          "cases_sha256": "2cbf70765568f40e13d1490905565fc4fbcd6b9442960223f5176e11ebd28aea"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

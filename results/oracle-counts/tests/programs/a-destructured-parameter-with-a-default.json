@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-destructured-parameter-with-a-default",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-destructured-parameter-with-a-default/src/main.ts",
+      "signature": "be2001ef7867fb9183adff4a07ab5087080d1bd918cfa9133ae0003a81de53cf",
+      "keys": {
+        "c": "b73f87b469e39e311f7205567cff4936",
+        "jvm": "2b8e0f63d0865fbfe9d3b8f0c323cbde",
+        "llvm": "8768c59ae1935b54f898a71cf6f114a8"
+      },
+      "cases_sha256": "059463733fdf344137251f1e43ffb397a5426f9ba21f3ef3c8e8f3018f303b4b",
+      "driver_sha256": "e81c7fd13ffa1269e2718cccebb0ddce18e60dbac8f9fbedea47b406767be12a",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.077534,
+        0.081784
+      ]
+    }
+  ]
+}

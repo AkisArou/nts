@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-throw-through-a-const-alias-is-caught",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-throw-through-a-const-alias-is-caught/src/main.ts",
+      "signature": "d7c03e051711e86ad133b206ce51543636e98a2783d5a10ac8f19c4b5d1e2173",
+      "keys": {
+        "c": "8cf51c70c44fa9f73b18e197d034105c",
+        "jvm": "73c5a0d55cb19ab0f8c9139eb523b824",
+        "llvm": "25f405718f801a1474e3137c23619c61"
+      },
+      "cases_sha256": "ede55dc11697800f42b82771e5e8db1a6900f02efcb4bbdc02088f2ea474fd61",
+      "driver_sha256": "1a27f49a8ba7bcc739d24b9a790e31e447a999a65ae39401e3b65bc5e6ab94b2",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077162,
+        0.076675
+      ]
+    }
+  ]
+}

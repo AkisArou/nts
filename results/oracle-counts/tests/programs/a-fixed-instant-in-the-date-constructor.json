@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-fixed-instant-in-the-date-constructor",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-fixed-instant-in-the-date-constructor/src/main.ts",
+      "signature": "bc159e39c2647f2ac4fd9e7650efb1a5b57724c1518dc8cc04aba64d130384c7",
+      "keys": {
+        "c": "a5910c02e16ea2aefdd8bff075f07ff3",
+        "jvm": "e668a1781a267ed14558f2bff47e0570",
+        "llvm": "e887645c42d0c4d87b2fbe58fc5204df"
+      },
+      "cases_sha256": "cc199eb129b27be061a7b050ff6a52c03da8ee6c4fee231547c820e6a6de2901",
+      "driver_sha256": "734fd4e55fd338aea91c2a97d798696d5ae2e0f7eb58d40fab8e11c7f604b6cd",
+      "populations": {
+        "theCurrentInstant": {
+          "count": 29,
+          "cases_sha256": "cc199eb129b27be061a7b050ff6a52c03da8ee6c4fee231547c820e6a6de2901"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

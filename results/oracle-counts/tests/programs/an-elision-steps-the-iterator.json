@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-elision-steps-the-iterator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-elision-steps-the-iterator/src/main.ts",
+      "signature": "95f1dc3f7ee94148d21c89b7498469a20d6ab879d84c79e4ad5c107fb0343b97",
+      "keys": {
+        "c": "9691f2cac830c0f9febdadcaad89046f",
+        "jvm": "23d3c23619914326a897bd1ce3b1129b",
+        "llvm": "af6951bced7b9a9f6f2ffb140271400d"
+      },
+      "cases_sha256": "afb44d58e2490dba1232e8d49ac501ba53c637291d926b2578f8f39b85b7bb83",
+      "driver_sha256": "520b18e534d242616dc87cc3b7f7d2acd7b23b64cb4d93315fe1b6a98ff79923",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.075419,
+        0.076166
+      ]
+    }
+  ]
+}

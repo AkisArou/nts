@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-binding-read-before-its-declaration",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-binding-read-before-its-declaration/src/main.ts",
+      "signature": "c7394a63914d160e09c60b95404b7ffce6606a059da55bc567358bf8b48c7231",
+      "keys": {
+        "c": "a91a5726f843a9e03cb990fdb3130220",
+        "jvm": "f69b9aec07e811c0e338ec27222cd4b3",
+        "llvm": "b5ba655cb404ad51d78739935e94a297"
+      },
+      "cases_sha256": "39a02a4d86647928c998618705ec62edee3c2d1bd431724b6502b54a4dca46bc",
+      "driver_sha256": "68b1cfc4070e6bbdaa06eb40c033d06950ca0fed728f2a757e5cbe4a2e01b424",
+      "complete": true,
+      "count": 667,
+      "node_cpu_s": [
+        0.111622,
+        0.111005
+      ]
+    }
+  ]
+}

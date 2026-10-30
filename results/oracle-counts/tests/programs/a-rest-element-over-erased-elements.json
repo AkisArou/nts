@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-element-over-erased-elements",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-element-over-erased-elements/src/main.ts",
+      "signature": "328e0ec5944148ce2bf59ab50e6c69635a8e769f4a84a3fd23f62970644a8267",
+      "keys": {
+        "c": "badd0ca6f75163f2b78f55886e794378",
+        "jvm": "115919b96c66a4f509bf4d31dbaa14e8",
+        "llvm": "8ef2ca678fa159dd961676abc016290a"
+      },
+      "cases_sha256": "fdd0738c07ada4353b65c773d3ba91f46fe02c789218eb12ab90032329671d67",
+      "driver_sha256": "05b6f5af916c53b5fc357ee85a6a330581c42f60bb4236fefb4b3a0f0f681e95",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.078807,
+        0.076103
+      ]
+    }
+  ]
+}

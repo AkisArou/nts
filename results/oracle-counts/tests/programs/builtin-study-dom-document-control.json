@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-dom-document-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-dom-document-control/src/main.ts",
+      "signature": "6d39ab94c8df8e65538f7e520e1dd71b2362ba7db9d83c8987b991c050796177",
+      "keys": {
+        "c": "f56fb9247c2c8d4b5bd48dd4061c2b9c",
+        "jvm": "418cc821a2abf515fffd8fb27201232e",
+        "llvm": "f69f624a44f645ad46df0b8a1f711981"
+      },
+      "cases_sha256": "ce1d3fa68c28143c65a11b6877e94ebddd92d60717813ae2f8e5dc55516c48b2",
+      "driver_sha256": "e668ac474394c79c01cf6645555368cd32058b7b4d211deba8afaadb4981e432",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

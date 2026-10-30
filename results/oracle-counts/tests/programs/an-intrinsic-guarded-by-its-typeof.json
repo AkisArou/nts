@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-intrinsic-guarded-by-its-typeof",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-intrinsic-guarded-by-its-typeof/src/main.ts",
+      "signature": "0648a5f1066660378c09d5ece9e0d7e723713b6caf251d1c941bd42942d7c93f",
+      "keys": {
+        "c": "617bc7636e21d3bddad6372fd262263a",
+        "jvm": "fc596450bdde2a0d3efb8e978790c13d",
+        "llvm": "6f32c319190ed1c59dbae0dc20c68bd8"
+      },
+      "cases_sha256": "45d7e2c20ad01800f1e1b0cc1494256c5724e2f190fb5bd457031665f3b4fe70",
+      "driver_sha256": "a27eea9fcdfb058c395ec926d9fe7bda5ea93be6ad94e688d2434bcb4dfec378",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.076091,
+        0.074046
+      ]
+    }
+  ]
+}

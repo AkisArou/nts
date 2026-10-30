@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-uniform-entry-forwards-its-checked-native-number",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-uniform-entry-forwards-its-checked-native-number/src/main.ts",
+      "signature": "539ba232c5e31195a3f484d630693e20b7ce34cb0d5c384d3c48fbca1d5abb74",
+      "keys": {
+        "c": "a0bfc8cf42d1bf8df5ec8ef96162caf5",
+        "jvm": "bb65b6f2be4ecb964fedfb7d74165d73",
+        "llvm": "9923c49f161c6b5a2c01b3ca7658f184"
+      },
+      "cases_sha256": "e234b19fcab270dac320721bd39af09c086cc5057b6eaa9a5288875459cdbe1d",
+      "driver_sha256": "b0a86bb72430b36061857b37975958a559b4f85c7a557f80e656252ddd0a0762",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.073848,
+        0.075536
+      ]
+    }
+  ]
+}

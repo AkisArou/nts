@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-type-argument-built-from-a-callers-type-parameter-as-a-union",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-type-argument-built-from-a-callers-type-parameter-as-a-union/src/main.ts",
+      "signature": "5811899743d91d1e9f49c2176ba95edf2869bee7968c7ca38416cb8dc46c0c83",
+      "keys": {
+        "c": "1f84f17ae3db45cda44b251b8941093d",
+        "jvm": "2c7001b0155878e93dedaef671690043",
+        "llvm": "d307bef30b4b327fdf8fb1664ab60273"
+      },
+      "cases_sha256": "955853e7ea06c1cbe2eb6fda8d04dc8f69b0bc30bbacb6f1292ed3077fc7b5e0",
+      "driver_sha256": "e6a646f380675720d81bbb01a58c334ae853be24797238f9ae04b877272e136a",
+      "complete": true,
+      "count": 254,
+      "node_cpu_s": [
+        0.080483,
+        0.07831
+      ]
+    }
+  ]
+}

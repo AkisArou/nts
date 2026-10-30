@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-from-unsupported",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-from-unsupported/src/main.ts",
+      "signature": "506db831214b936404211dca6cd5b494d93e6b37d2a002309cb4091c293cf34b",
+      "keys": {
+        "c": "08627a845fc1f019f5db5169e71fd145",
+        "jvm": "e5646c8c534da8ed0d37bf27ec44a663",
+        "llvm": "2ac7628d627222126bba3ffd9798c03e"
+      },
+      "cases_sha256": "b3c21c0d136d103eea3f33743f4536b1e9d50b5558397650e2b5d9f6b0285eb9",
+      "driver_sha256": "1a608e052dc6f2f48549293d073e3474ed8cb809e858a0f213481dc6d59533df",
+      "populations": {
+        "overAnArrayLike": {
+          "count": 29,
+          "cases_sha256": "b3c21c0d136d103eea3f33743f4536b1e9d50b5558397650e2b5d9f6b0285eb9"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

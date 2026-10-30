@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-numeric-array-write-at-the-next-slot",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-numeric-array-write-at-the-next-slot/src/main.ts",
+      "signature": "524590660eec5eba826b82635cb056620ed5358aee0811d846728a394af88fb7",
+      "keys": {
+        "c": "dd7fcaf5bc53946778e209da7d516dd6",
+        "jvm": "4905968dfcf516ae212a67333c86494f",
+        "llvm": "28bafcba46298c4056c62a701d675d2f"
+      },
+      "cases_sha256": "67c408d2284c2bb0667ebe1ee20671db8decae78e2f7dc0271630f90bdd73182",
+      "driver_sha256": "edf13af22c4390819fb906eb3d0ca4fbea1afcdf2f36481c3ae2bde5c1edbb1e",
+      "populations": {
+        "writeSlot": {
+          "count": 1,
+          "cases_sha256": "67c408d2284c2bb0667ebe1ee20671db8decae78e2f7dc0271630f90bdd73182"
+        }
+      },
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

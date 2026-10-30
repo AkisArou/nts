@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-narrowed-unit-read-beside-a-float",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-narrowed-unit-read-beside-a-float/src/main.ts",
+      "signature": "4347bc1ea871c885c287efcd79337be4148847bddc03ce40655773eede3a8c0d",
+      "keys": {
+        "c": "d3a24f1a50875cd098a578086d786473",
+        "jvm": "4550ca0469bc9523020e5bacfb5f02f8",
+        "llvm": "d499a5fb445a5ed940a885144056c45a"
+      },
+      "cases_sha256": "c0315deacec30f27438830d7b92aa1e548569523e54997f34ad1b5fe94827bd0",
+      "driver_sha256": "028f825e06c9c64c7bf515e751ce3599b1f1391ec8bdab1a1b68f4945710e395",
+      "complete": true,
+      "count": 2,
+      "node_cpu_s": [
+        0.070575,
+        0.073384
+      ]
+    }
+  ]
+}

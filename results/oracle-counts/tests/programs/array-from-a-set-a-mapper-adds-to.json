@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-from-a-set-a-mapper-adds-to",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-from-a-set-a-mapper-adds-to/src/main.ts",
+      "signature": "53178933793cf5d02efa905303db22ac65759fb92aee1bc0987a6bfa65c2e088",
+      "keys": {
+        "c": "2ca0b0f450cff9f4c767f9231f47b41b",
+        "jvm": "b3fc35a133fe6728462d2b3361a0cdc6",
+        "llvm": "8a7974e1803de135730d695a2f0c968a"
+      },
+      "cases_sha256": "b4ce96a8bd99bf31f35c573f41b0dcfd3c06fc57ccd9817a345565da920e1320",
+      "driver_sha256": "0282c9c586498ade5aca186720fa8201b640bc71eedf576060995796db78ba9a",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073712,
+        0.073823
+      ]
+    }
+  ]
+}

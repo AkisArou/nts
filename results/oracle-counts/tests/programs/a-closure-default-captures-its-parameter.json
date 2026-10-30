@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-closure-default-captures-its-parameter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-closure-default-captures-its-parameter/src/main.ts",
+      "signature": "b2f9ec4a3cac0165dadfa1adf6f5d9f35620da38b053ad8a148b218eef9e27df",
+      "keys": {
+        "c": "73879fa106413dc594d12cff10bf406d",
+        "jvm": "a9190f071a466be0488c61153eaa8f31",
+        "llvm": "0b34b661efdac22a84b0dcef79bf72d6"
+      },
+      "cases_sha256": "2b65d3b490480e1c112f72957dcb519103869e68ccb0bd4d84b7ea343c60c750",
+      "driver_sha256": "b59e7a280cfc4d636d763a34ca112722952fdbb72c9c8a3744ec5a5121f12b6a",
+      "complete": true,
+      "count": 1450,
+      "node_cpu_s": [
+        0.143471,
+        0.139957
+      ]
+    }
+  ]
+}

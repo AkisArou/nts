@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-record-key-is-a-property-key",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-record-key-is-a-property-key/src/main.ts",
+      "signature": "39c7425b8f10e65bc17a31a01286e6f66d446c195e5749f9840706e7b569394e",
+      "keys": {
+        "c": "0561ea203c86398614b4e28628f67b46",
+        "jvm": "f91fecc606f7d2436967cc699f2c885d",
+        "llvm": "b1b3569d31fe3fcc67809ae1f1c52843"
+      },
+      "cases_sha256": "567f85146a583ec2ae5c4024997ecf44b20fd9ec0d89d585c4dca39b9db7c825",
+      "driver_sha256": "e78498defdad0acca1e8f945bef5269066473ab57eb32111c7018d3ce20b5749",
+      "complete": true,
+      "count": 609,
+      "node_cpu_s": [
+        0.124786,
+        0.12147
+      ]
+    }
+  ]
+}

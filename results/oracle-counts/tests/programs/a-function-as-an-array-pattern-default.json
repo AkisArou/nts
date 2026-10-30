@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-function-as-an-array-pattern-default",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-function-as-an-array-pattern-default/src/main.ts",
+      "signature": "e0ec35290a3a2722f7fdfefc53b0e45e7c977323cbcd70ea6a4a3f6fe8840d45",
+      "keys": {
+        "c": "da141f117bc9f2fa734230995361d7bf",
+        "jvm": "9a063c1911da6dfdad902d60b1bcd8ef",
+        "llvm": "042b5050f5b3e3c52b76bbed23e79976"
+      },
+      "cases_sha256": "c4005381a0acf7a10367b8dfeb147e83e9e0586783f5e98d767b9829138f50a8",
+      "driver_sha256": "9c8b8235fb05a9be6e38ab87e0e50203dd3af200bd72d6cb1f5197f8d3d13795",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.074175,
+        0.073512
+      ]
+    }
+  ]
+}

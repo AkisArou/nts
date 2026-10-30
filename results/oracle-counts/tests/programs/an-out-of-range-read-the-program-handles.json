@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-out-of-range-read-the-program-handles",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-out-of-range-read-the-program-handles/src/main.ts",
+      "signature": "82af728ad9ab1cc4e1d3363c1c5dcbdad3677d98b2f45ef9d89ce1d328516019",
+      "keys": {
+        "c": "47ebfb18543c60eb0bb9144dc7bbc601",
+        "jvm": "fa3ae2cfb5cf958518d7cd048c5fecaf",
+        "llvm": "6c0ab154b43bbde3149189023b1cf8b8"
+      },
+      "cases_sha256": "6da852f8a7d748990d1f442599b24de0182fd89d78eb6a305ba001fb63d529b4",
+      "driver_sha256": "b876f96e21e714c42a92b92f440f678a49ff708dd5d1b3a7024fe9bfbd8ac835",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.07584,
+        0.074795
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/console-writes-of-erased-primitives-and-void",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/console-writes-of-erased-primitives-and-void/src/main.ts",
+      "signature": "35199bb9b1ed9f97541ddf2ac61355b60c86cef9a6c01e76e9097f93aa6026e1",
+      "keys": {
+        "c": "d1dc204a737761cc759bdfda7f04c551",
+        "jvm": "e847653a0894d4955e15edd9d12e6dde",
+        "llvm": "282e7592333c54069f148df0f804fc1b"
+      },
+      "cases_sha256": "5f6fe0ed9e4e10b8fd535f152d71225b3fb8ee01adc0c6ff21280d3a6d1773f9",
+      "driver_sha256": "a67d255130552372fe97164742a6d37555b9a6f33fc987f365e03713d0956c8f",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.08368,
+        0.082237
+      ]
+    }
+  ]
+}

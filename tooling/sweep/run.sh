@@ -13,4 +13,5 @@ mkdir -p "$work/src"
 # own depth, and this directory is not at it.
 [ -f "$work/tsconfig.json" ] || printf '{ "extends": "%s/tsconfig.fixtures.json", "include": ["src"] }\n' "$root" > "$work/tsconfig.json"
 node "$root/tooling/sweep/sweep.mjs" > "$work/src/main.ts"
-exec "${NTS_BIN:-$root/target/release/nts}" check "$work/tsconfig.json"
+exec node "$root/tooling/differential/check-report.ts" consume program \
+  "${NTS_BIN:-$root/target/release/nts}" "$work/tsconfig.json"

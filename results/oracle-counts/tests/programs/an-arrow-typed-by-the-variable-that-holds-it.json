@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-arrow-typed-by-the-variable-that-holds-it",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-arrow-typed-by-the-variable-that-holds-it/src/main.ts",
+      "signature": "4e53a90a8b8351ecb4d701472508c5f4d5190afaf06d770a9d0ce1afbed799a6",
+      "keys": {
+        "c": "9cd4adbb5bde9dd94b958b3989efcf3f",
+        "jvm": "0901ed521171986f3b1801909adf9d5f",
+        "llvm": "7b2e26099146c3b46e1d3140ca56e334"
+      },
+      "cases_sha256": "e27d2505276c5b8b3e38cd7a73e80b7df791e8c82ce0e6d16797da50d7e40973",
+      "driver_sha256": "2e35301d906f115b08a12684293bad03fd8a7b2266bdc8736f7e0bb2cc090aab",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.077995,
+        0.078902
+      ]
+    }
+  ]
+}

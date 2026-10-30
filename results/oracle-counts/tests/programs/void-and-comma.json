@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/void-and-comma",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/void-and-comma/src/main.ts",
+      "signature": "0bd8d396e2ae6894e12d81fd1e65689af5c28c075d55408a260a4a9ca825e27e",
+      "keys": {
+        "c": "49a70711132fd438b1d316254ba6be1a",
+        "jvm": "b4c42972c23bf62cef2fb695c29a7b93",
+        "llvm": "feb04f5f3592aae8cb7bd5f28dad4e09"
+      },
+      "cases_sha256": "2a633abbef82f261da518b43b3b42562ad0280f692639ece6f3676335fa5a168",
+      "driver_sha256": "6762bd78bc11c85398e4988ce353a191aafff3df493634225db3034a8418ebbf",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075285,
+        0.073261
+      ]
+    }
+  ]
+}

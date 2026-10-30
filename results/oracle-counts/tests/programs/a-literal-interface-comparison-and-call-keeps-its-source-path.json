@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-literal-interface-comparison-and-call-keeps-its-source-path/src/main.ts",
+      "signature": "533468d675c5da5bf1d1a4e3080a0c013f08a3aab88934e45838c634b43b2e93",
+      "keys": {
+        "c": "20f05c79f4d2730cfcedcef9f0d32cc3",
+        "jvm": "1ec2e060b60b4277049bb8cb99934ba9",
+        "llvm": "71c0d7d545a6ba6d20144bd26d12af3e"
+      },
+      "cases_sha256": "fa1ed19e26d50f849aced1ad4d5387cd0142b24009295372315652ccb0d46dfd",
+      "driver_sha256": "f3ca00edfa6af845275bed0fd24cea8cf5cae10239a1fcc775062cd30a2e0084",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.073747,
+        0.073427
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generator-function-expression-invoked-where-it-is-written",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generator-function-expression-invoked-where-it-is-written/src/main.ts",
+      "signature": "30fdc5a4b1e74522b5ee9ceba95908b75af5c2a71f49a75c346f9496307dd734",
+      "keys": {
+        "c": "141f69acffd8de83d6954a7ccaed03f3",
+        "jvm": "e2a7b1d893d205a69458bf09435c1e38",
+        "llvm": "d411057dc038848e3d8aa841eb356e1e"
+      },
+      "cases_sha256": "04af2c1201c6a07d63885edfb467747b6f55e2d90c853646e30b28b50e05a1fe",
+      "driver_sha256": "790a32d43f7e6eaad80b9119070f33e8582358afafd177943ce64152c6bba2bc",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.080598,
+        0.073689
+      ]
+    }
+  ]
+}

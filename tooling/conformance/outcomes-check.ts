@@ -127,8 +127,10 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
+import { runConsumer as supervisedCheck, finishCheckStep, checkOutcome, sameCheckOutcome, validateStoredCheckOutcome, reportCheckFailure } from "../differential/check-report.ts";
+
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
-import { compileSync, serialRun } from "../census/worker-memory.ts";
+import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
@@ -325,16 +327,8 @@ const backendIn = (text) => /^\/\/\s*backend:\s*(jvm|llvm)\s*$/m.exec(text)?.[1]
 /** The backend a `check` fixture names, from its `src/main.ts`. */
 const backendOf = (name) => backendIn(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"));
 
-/**
- * Whether `nts check` said a backend declined, in any backend's words: "the
- * backend declined", "the LLVM backend declined", "the Wasm backend declined
- * N shape(s)" -- `tooling/differential/agree.mjs` reads the same three. Only
- * the first was read, so an LLVM or Wasm decline was not a refusal here.
- */
-const backendDeclined = (said) => said.some((l) => /\bthe (?:LLVM |Wasm )?backend declined\b/.test(l));
-
 /** `nts check`: the lines that decide, verbatim, declined ones included. */
-function runCheck(dir, backend, options) {
+async function runCheck(dir, backend, options) {
   const { NTS_BACKEND: _ambient, NTS_RC: _rc, NTS_SANITIZE: _sanitize, ...rest } = env();
   if (options.rc) rest.NTS_RC = "1";
   // The check builds its program under AddressSanitizer and runs it without an
@@ -344,74 +338,11 @@ function runCheck(dir, backend, options) {
   // its sanitized executable.
   if (options.address) rest.NTS_SANITIZE = "address";
   const tools = options.address ? { ...TOOLS, memoryCapKb: 0 } : TOOLS;
-  const ran = compileSync(tools, NTS, ["check", dir], {
-    encoding: "utf8",
-    timeout: 300_000,
-    maxBuffer: 64 * 1024 * 1024,
-    env: backend === null ? rest : { ...rest, NTS_BACKEND: backend },
+  const {format, result} = await supervisedCheck(NTS, dir, "program", {
+    env: backend === null ? rest : {...rest, NTS_BACKEND: backend},
+    run: (command, args, activity) => compileActive(tools, command, args, activity),
   });
-  if (ran.memoryKilled) return { category: "not-measured", nts: "the resident memory cap" };
-  const said = `${ran.stdout ?? ""}${ran.stderr ?? ""}`.split("\n").map((l) => l.trim());
-  return decideCheck(said, ran.status);
-}
-
-/** What a finished `nts check` run decided, from its lines alone. */
-function decideCheck(said, status) {
-  // The CLI says a decline as "17 case(s) the compiled program declined -- …",
-  // count first: matched by its words, not by a line start, or it drops out
-  // of the record and the check reads "agreed on every case" over cases that
-  // never ran (CompilerHelper's BigInt(number) probe, 2026-10-14: 21 of 696).
-  const declined = /\bcase\(s\) the compiled program declined\b/;
-  // And invalid HIR by its words too: `nts check` says it as
-  // "Error: invalid HIR: …", which a line-start match dropped, so the JVM
-  // lane's `function ([]) {…}` over an array literal recorded as not measured
-  // (2026-10-15). The prefix goes, so the record reads as `emit-c`'s does.
-  const lines = said.filter(
-    (l) =>
-      /^(checked|agreed|disagree|declined|refused:|not emitted:|not rendered:|nothing to check|invalid HIR)/i.test(l) ||
-      /\bdisagree/i.test(l) ||
-      /\binvalid HIR\b/.test(l) ||
-      declined.test(l),
-  ).map((l) => stableCheckText(l.replace(/^Error: (?=invalid HIR)/, "")));
-  const text = lines.join(" | ");
-  if (/invalid HIR/.test(text)) return { category: "invalid-hir", nts: text };
-  // An internal emitter error decides the run on its own: nothing was emitted
-  // to compare, and the line matches no deciding prefix above (the Wasm
-  // emitter's "no callable fills uniform slot N" in CookieJar#evict@raises
-  // recorded as NOT MEASURED with a wall of unrelated refusals as its text,
-  // 2026-10-27). The slot number moves with the program, so it comes out.
-  const internal = said.find((l) => /^Error: internal \w+ emitter error\b/.test(l));
-  if (internal) return { category: "aborted", nts: internal.replace(/^Error: /, "").replace(/uniform slot \d+/, "uniform slot N") };
-  // **A backend's refusal by name is a refusal**, as a lowering's is: `nts
-  // check` lists each function it did not emit and checks nothing. Before the
-  // disagreement test, which a decline's own message can trip -- the JVM
-  // emitter's "the emitter and its own accounting disagree" was recorded as a
-  // wrong answer -- and which nothing compared can earn. LLVM lists each
-  // function as "not rendered:", the others as "not emitted:".
-  const notEmitted = lines.find((l) => /^not (?:emitted|rendered):/.test(l));
-  if (notEmitted && backendDeclined(said)) {
-    return { category: "refused", nts: notEmitted };
-  }
-  if (/disagree/i.test(text)) return { category: "wrong-answer", nts: text };
-  // A stop by name, as a `build` fixture's `aborted`: the first reason, without
-  // the counts, which move with the case pool. Below a disagreement, which is
-  // the worse answer when a program gives both.
-  const aborted = said.find((l) => l.startsWith("the compiled program aborted: "));
-  if (aborted) return { category: "aborted", nts: aborted.replace(/^the compiled program aborted: /, "") };
-  // **Declined is not agreed**: those cases stopped -- an uncaught throw, a
-  // refusal by name -- and were never compared. The first such line, without
-  // its explanation, which does not change; below a named abort, whose reason
-  // says more.
-  const decline = lines.find((l) => declined.test(l));
-  if (decline) return { category: "aborted", nts: decline.replace(/\s+--\s.*$/, "") };
-  if (/nothing to check/.test(text) && /refused:/.test(text)) {
-    const first = lines.find((l) => l.startsWith("refused:"));
-    // A location, if the line carries one, is where the fixture's text puts the
-    // refusal, not what was refused: moving a line must not change an outcome.
-    return { category: "refused", nts: first.replace(/^refused:\s*(?:\S+:\d+:\d+:\s+)?/, "") };
-  }
-  if (/agreed on every case/.test(text)) return { category: "agrees", nts: text };
-  return { category: "not-measured", nts: text || `nts check exited ${status} and said nothing that decides` };
+  return checkOutcome(format, result.status, result.stdout, result.stderr);
 }
 
 function memoryOptions(name) {
@@ -422,7 +353,7 @@ function memoryOptions(name) {
   };
 }
 
-function measure(name) {
+async function measure(name) {
   const mode = runMode(name);
   const options = memoryOptions(name);
   // A check reaches what build mode cannot -- a raising copy, which only a
@@ -430,7 +361,7 @@ function measure(name) {
   // too; on the C backend, where the check links a native program.
   if (mode === "check" && options.address && backendOf(name) !== null) return { run: mode, category: "not-measured", nts: "the address sanitizer checks the C backend only", node: null };
   const dir = materialise(name, join(FIXTURES, name, "src"), mode);
-  if (mode === "check") return { run: "check", ...runCheck(dir, backendOf(name), options), node: null };
+  if (mode === "check") return { run: "check", ...await runCheck(dir, backendOf(name), options), node: null };
   const nts = runBuild(dir, options);
   if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
   if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : runNode(dir) };
@@ -454,51 +385,6 @@ function selfCheck() {
     ["// run: check\n", null],
   ]) {
     if (backendIn(text) !== want) return `\`// backend:\` in ${JSON.stringify(text)} read as ${backendIn(text)}, not ${want}`;
-  }
-  for (const words of [
-    "Error: the backend declined 1 function(s), listed above; nothing can be checked",
-    "Error: the LLVM backend declined 1 function(s)",
-    "Error: the Wasm backend declined 1 shape(s), listed above; nothing can be checked",
-  ]) {
-    if (!backendDeclined([words])) return `a backend's decline not read as one: ${words}`;
-  }
-  if (backendDeclined(["agreed on every case"])) return "an agreement read as a backend's decline";
-  // An internal emitter error outranks any partial-agreement line before it,
-  // and its uniform-slot number is normalised out; an unrelated error stays
-  // not measured (the CookieJar#evict@raises line verbatim, 2026-10-27).
-  const emitter = decideCheck([
-    "checked 12 of 29 cases; the rest were not reached",
-    "agreed on every case",
-    "Error: internal wasm emitter error in `CookieJar#evict@raises`: no callable fills uniform slot 611",
-  ], 1);
-  if (emitter.category !== "aborted" || emitter.nts !== "internal wasm emitter error in `CookieJar#evict@raises`: no callable fills uniform slot N") {
-    return `an internal emitter error read as ${JSON.stringify(emitter)}`;
-  }
-  const unrelated = decideCheck(["Error: the input file could not be read"], 1);
-  if (unrelated.category !== "not-measured") return `an unrelated error read as ${unrelated.category}`;
-  const summary = (site, count = 27) => ({
-    run: "check", category: "wrong-answer", node: null,
-    nts: `checked 29 cases | refused: ${site} NTS1001 missing method | Error: ${count} case(s) disagree`,
-  });
-  const before = summary("/scratch/100/source.ts:7:52:");
-  if (!judge(before, summary("/scratch/200/source.ts:8:53:")).ok) {
-    return "check refusal locations changed an identical observation";
-  }
-  if (judge(before, summary("/scratch/200/source.ts:8:53:", 28)).ok
-      || judge(before, { ...before, nts: before.nts.replace("missing method", "wrong contract") }).ok) {
-    return "check location normalization hid a changed count or refusal";
-  }
-  // A backend's decline names the scratch path the same way.
-  const declined = (site, code) => ({
-    run: "check", category: "wrong-answer", node: null,
-    nts: `not emitted: ${site} ${code} emitting %3 moved the operand stack | Error: the backend declined 1 function(s)`,
-  });
-  const once = declined("/scratch/100/case.js:19:1:", "NTS4001");
-  if (!judge(once, declined("/scratch/200/case.js:19:1:", "NTS4001")).ok) {
-    return "check decline locations changed an identical observation";
-  }
-  if (judge(once, declined("/scratch/200/case.js:19:1:", "NTS4002")).ok) {
-    return "check decline normalization hid a changed decline";
   }
   const dir = join(SCRATCH, "self");
   const probe = (text, compilerOptions) => {
@@ -565,6 +451,18 @@ for (const name of chosen) {
   }
 }
 
+if (!recording) {
+  try {
+    for (const name of chosen) {
+      const record=JSON.parse(readFileSync(join(FIXTURES,name,"outcome.json"),"utf8"));
+      if(record.run==="check")validateStoredCheckOutcome(record);
+    }
+  } catch(error) {
+    console.error(`  NOT MEASURED: invalid stored check outcome: ${error instanceof Error?error.message:String(error)}`);
+    process.exit(reportCheckFailure(error));
+  }
+}
+
 console.log(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
 const broken = selfCheck();
 if (broken) {
@@ -579,7 +477,12 @@ let unexpected = 0;
 let loud = 0;
 const tally = new Map();
 for (const name of chosen) {
-  const now = measure(name);
+  let now;
+  try { now = await measure(name); }
+  catch (error) {
+    console.error(`  NOT MEASURED ${name}: ${error instanceof Error ? error.message : String(error)}`);
+    process.exit(finishCheckStep(unexpected));
+  }
   const recordFile = join(FIXTURES, name, "outcome.json");
   if (recording) {
     if (now.category === "not-measured") {
@@ -588,6 +491,7 @@ for (const name of chosen) {
       continue;
     }
     const record = {
+      ...(now.check ? { version: 1, check: now.check } : {}),
       run: now.run, category: now.category, nts: now.nts,
       ...(now.category === "refused" && now.run === "build" ? { ran: now.ran } : {}),
       node: now.node, measured_with: FINGERPRINT, source: "measured",
@@ -602,7 +506,12 @@ for (const name of chosen) {
     continue;
   }
   const was = JSON.parse(readFileSync(recordFile, "utf8"));
-  const verdict = judge(was, now);
+  let verdict;
+  try { verdict = judge(was, now); }
+  catch(error) {
+    console.error(`  NOT MEASURED ${name}: invalid stored check comparison: ${error instanceof Error?error.message:String(error)}`);
+    process.exit(reportCheckFailure(error,process.env,unexpected));
+  }
   tally.set(verdict.word, (tally.get(verdict.word) ?? 0) + 1);
   if (!verdict.ok) unexpected += 1;
   if (verdict.loud) loud += 1;
@@ -624,7 +533,8 @@ function judge(was, now) {
     const text = r.run === "check" ? stableCheckText(r.nts) : r.nts;
     return r.category === "invalid-hir" || r.category === "refused" ? normalizeGeneratedNumbers(text) : text;
   };
-  const same = was.category === now.category && textOf(was) === textOf(now) && ranTo(was) === ranTo(now);
+  const sameObservation = was.run === "check" ? sameCheckOutcome(was, now) : textOf(was) === textOf(now);
+  const same = was.category === now.category && sameObservation && ranTo(was) === ranTo(now);
   const transition = outcomeTransition(outcomeDisposition(was.category), outcomeDisposition(now.category), same);
   const past = ranTo(now) !== undefined && ranTo(now) !== now.node && /^exit /.test(ranTo(now))
     ? ` -- and the program still ran, answering ${ranTo(now)} where node answers ${now.node}`
@@ -640,7 +550,7 @@ function judge(was, now) {
       why: `was ${was.category}; hand it to tests/refusals/ with\n                // expect: ${now.nts}`,
     };
   }
-  if (was.category === now.category && textOf(was) === textOf(now)) {
+  if (was.category === now.category && sameObservation) {
     return { ...transition, why: `refused as before; its artefact ran to ${ranTo(was) ?? "(not recorded)"}, now ${ranTo(now)}` };
   }
   return { ...transition, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };

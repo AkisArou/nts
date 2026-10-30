@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bigint-string-comparison-is-exact",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bigint-string-comparison-is-exact/src/main.ts",
+      "signature": "f16851faeebc77cf6928eab66c03a89ee003dfa0e8e48f1860aaa23cc170bcc5",
+      "keys": {
+        "c": "d772ee0eada07fe8b1f65f7c97383c48",
+        "jvm": "f9ea3c09c13693f151ff1f69dd278aa5",
+        "llvm": "a43371e738e1fb179f88e195843df8bf"
+      },
+      "cases_sha256": "37de813199d3fbdf2d0b1ee4d23c6803a4d341cc444088da41051657f5891672",
+      "driver_sha256": "186f948d68e5fbd58fd0ef72c96cb02be0ac3fbb78d703933146c29e1a2e43d0",
+      "complete": true,
+      "count": 551,
+      "node_cpu_s": [
+        0.110206,
+        0.117506
+      ]
+    }
+  ]
+}

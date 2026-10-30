@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-function-value-uses-the-erased-root-after-eight-copies",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-function-value-uses-the-erased-root-after-eight-copies/src/main.ts",
+      "signature": "b6c378c6eed76ddd170c24e39ce6eb3d0553fa6e4e4599160a703297b79cae4a",
+      "keys": {
+        "c": "0c5710b912fd2dd68ef0e3f51dd7edc3",
+        "jvm": "6cc4af7b0e10841ccdae99f417b2e0d3",
+        "llvm": "7ff194397fd52fd5889c4ff41056ca7e"
+      },
+      "cases_sha256": "8996790a705a8ace8ee7d761159870d564bccf6a2e2496ece634d17cce56ecc2",
+      "driver_sha256": "b0dbcfc63e8566263f46311b9d1b14857dfdfa07ebff31d4883e40e6c68da89d",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.076316,
+        0.077646
+      ]
+    }
+  ]
+}

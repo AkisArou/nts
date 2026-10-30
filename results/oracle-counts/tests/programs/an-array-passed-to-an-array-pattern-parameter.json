@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-passed-to-an-array-pattern-parameter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-passed-to-an-array-pattern-parameter/src/main.js",
+      "signature": "0c4fb7f7e2c62d9db07c3b7eaa456f78df335f6c031d1c0da5e7071dc382f4e0",
+      "keys": {
+        "c": "c6434c00fe2fdeb550c332c7dc22f1c5",
+        "jvm": "4f2d3fde83241721696f8d5bf6e25150",
+        "llvm": "4206a82761ccf5a7fec15a2a09a1e93a"
+      },
+      "cases_sha256": "c8311331b55b5bf9bf3448238c85abfd3fa8b14a31a70cecfe48f40343c354fe",
+      "driver_sha256": "18f22a3470a4e0f72ea15c289a826b00fac616296775cd52a48b3ecea3294d8c",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.014891,
+        0.014459
+      ]
+    }
+  ]
+}

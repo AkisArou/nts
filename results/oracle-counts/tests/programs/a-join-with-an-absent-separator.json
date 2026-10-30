@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-join-with-an-absent-separator",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-join-with-an-absent-separator/src/main.ts",
+      "signature": "68a19f470e53527933dadb583785d27650368144c072718f961e26bb12a64fb0",
+      "keys": {
+        "c": "1ee2ae56f8222137e8037ee3128d4df3",
+        "jvm": "2619489bb77b7f574956009f340de19d",
+        "llvm": "616f44fbbf6eaf1a6256d692eb155e44"
+      },
+      "cases_sha256": "df59ca18a75dd5b9326ed60e28993370f7619682fec092a141ef84b6457ee635",
+      "driver_sha256": "221d21178cd202ab8491be1446b3fabeb81cd1f270ff6d4111b992fc83b9bb86",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.070285,
+        0.071451
+      ]
+    }
+  ]
+}

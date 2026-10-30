@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/promise-reactions",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/promise-reactions/src/main.ts",
+      "signature": "b9ba14abb5231c2676e355a7a922296fe6bea8c1a10cb9336054c1381ed45eba",
+      "keys": {
+        "c": "e93a56fc296d156921c051ac3d9a199b",
+        "jvm": "1212e5d78e1b68316819920331805c2a",
+        "llvm": "5dea1bb8079279639d6fee455ca0e061"
+      },
+      "cases_sha256": "ad157cbd2ca2d847eb994345892a88faca92779d63bc07cd8c3ca624364099d1",
+      "driver_sha256": "d3260dbed10e771d895a75d975ab007d5776e8236d9a737671aea05539a037b1",
+      "complete": true,
+      "count": 435,
+      "node_cpu_s": [
+        0.098742,
+        0.105769
+      ]
+    }
+  ]
+}

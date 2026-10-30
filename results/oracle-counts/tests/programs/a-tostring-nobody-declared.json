@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-tostring-nobody-declared",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-tostring-nobody-declared/src/main.ts",
+      "signature": "4980f45706241a8830565a6e7253d248d048e67aa34b3d629d1823a001037008",
+      "keys": {
+        "c": "3606a5cb3b22b97014dd6730f3a9dc47",
+        "jvm": "49dff6e32f4dbe78238b2c953b687c7c",
+        "llvm": "8f1547289885e5f3f6080992617e0c7b"
+      },
+      "cases_sha256": "98833be9a77f94a6033ea5814e44d54d88e5e16448d6538f075d43a46a34415f",
+      "driver_sha256": "f156c72aa9a2f898bf33c5a5a0c4c2a68fd119256bcf4b826eccd0b89d8bb675",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.077324,
+        0.073107
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-clamped-before-anything-can-see-it",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-clamped-before-anything-can-see-it/src/main.ts",
+      "signature": "fb2e2cb94135a194bf8cbe5da47c12f73de7c91691f9fa281e4d1b0d6d5f0728",
+      "keys": {
+        "c": "84d3b727c28193b787dcbfaba4038fc0",
+        "jvm": "72f53aba4494d84bc4852f6c6bd8ae78",
+        "llvm": "0d0a792533fd8f08b21664740f2d5f1d"
+      },
+      "cases_sha256": "04cf1d150be717ef387c0cbe356fbbcdd84369fa46a450fab281bd32b15a33cf",
+      "driver_sha256": "b0195bfe434beb4ec81f7753c6007ff1193240bdf48e82a51f1caaeb8ab2e22d",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075615,
+        0.077281
+      ]
+    }
+  ]
+}

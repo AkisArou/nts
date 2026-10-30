@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-constructor-extending-null",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-constructor-extending-null/src/main.ts",
+      "signature": "252a27c09db87f491a034ab8f0b3b58a0184233dadb2bbdc862bcc8208977a31",
+      "keys": {
+        "c": "da843cc165e18acd6e089151398ec4e9",
+        "jvm": "238b1a11599421075c50f17537389ad7",
+        "llvm": "3a36b7e3fe6e66b46f0f61ad50b46975"
+      },
+      "cases_sha256": "b8089145dd15a46b272bc479348f95197e1e10139881f770180ee2a07c066b15",
+      "driver_sha256": "bdfde77ca1a2d36f4ec981ea210ca16e9ea53e2fb9acf0b62ea856f64ebff744",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.079306,
+        0.078796
+      ]
+    }
+  ]
+}

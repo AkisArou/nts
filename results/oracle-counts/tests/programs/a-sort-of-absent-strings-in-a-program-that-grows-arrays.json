@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-sort-of-absent-strings-in-a-program-that-grows-arrays",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-sort-of-absent-strings-in-a-program-that-grows-arrays/src/main.ts",
+      "signature": "54872f2b3ba2f0dc6ff2c7ba89e36cb91cfab5584e1b54ad7ff4095253057edd",
+      "keys": {
+        "c": "7caf05e479ec679494729913c4898918",
+        "jvm": "50c5bb68bfa6cf692e2cbf0552d66de7",
+        "llvm": "57146f8c51eac6384b190851d64fdc45"
+      },
+      "cases_sha256": "a5e2939bcf61bfa31eb8f6643ba8d3e7d4b10f65cc80aaa764e623eb5d20290f",
+      "driver_sha256": "16c59297925911990f91b4003d16cb4db7fab4e4669a906740471249ce29d9ee",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.07457,
+        0.07291
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-cross-module-throw-a-nullable-parameter-hides",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-cross-module-throw-a-nullable-parameter-hides/src/main.ts",
+      "signature": "dc2954b3d84deb211ca790f44aa4bc15b78c50e8a66b49b127968cc47b80bd50",
+      "keys": {
+        "c": "6092322e3291e17cc71f985eadef7ccb",
+        "jvm": "b83657c126ca5d47af9d8db8d3ceac0c",
+        "llvm": "2ca9e3dc175e1a1dc16437fbc52c2a47"
+      },
+      "cases_sha256": "e46f0702c92290abf7d686ef2c1af0cb142ac05b8bf39efbbf96f083d00693d6",
+      "driver_sha256": "7fcf2f142f3d087934afc032287bd77f062c5b3185b3bf127f628d55020c9ee7",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.079509,
+        0.078318
+      ]
+    }
+  ]
+}

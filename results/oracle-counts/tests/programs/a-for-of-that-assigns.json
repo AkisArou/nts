@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-for-of-that-assigns",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-for-of-that-assigns/src/main.ts",
+      "signature": "13549347183e88c4369cc0af3254fc6a8859ab88b3bd556e080a9d1a323f4c3e",
+      "keys": {
+        "c": "b3a60e3ebe9d184d3f38a7d713200fe6",
+        "jvm": "ffbc6264868c1c7956cc22ee5e9a4785",
+        "llvm": "da20c3ab2a8188155d179c214a32e862"
+      },
+      "cases_sha256": "457a61aa231b944564bbc05c111b439bb6373b88f6b93fa01ff000317b509374",
+      "driver_sha256": "8b7c577555ad445f0c55bd3fe0dcc11bf503907b6282626ddd9c7b6db410d813",
+      "complete": true,
+      "count": 696,
+      "node_cpu_s": [
+        0.103838,
+        0.105037
+      ]
+    }
+  ]
+}

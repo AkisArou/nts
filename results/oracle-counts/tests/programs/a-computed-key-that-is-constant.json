@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-computed-key-that-is-constant",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-computed-key-that-is-constant/src/main.ts",
+      "signature": "03d2699e96d9df3ac71ed41f35d62133c35a7b2fb3c67528260cf8f8b26c78b0",
+      "keys": {
+        "c": "83f74a1857919218ee0f02aab09872e9",
+        "jvm": "ee16abfc4a6176d2b9cba53783c63be7",
+        "llvm": "eaa55c2afa9d3914ea70f0896473f102"
+      },
+      "cases_sha256": "94bd0dbd25a7060221b410fd8cc2dd02bdba253fe3f834a3f69677d177cc1cf9",
+      "driver_sha256": "5722d3224b724e815c452085321c82acf3b5d9907b2f91bd36033d28bb75c717",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.076684,
+        0.076659
+      ]
+    }
+  ]
+}

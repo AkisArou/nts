@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-structural-cast-keeps-its-erased-tag",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-structural-cast-keeps-its-erased-tag/src/main.ts",
+      "signature": "2f0e3dff99f76f498220544f8cbd18e2a5f810a43b7f84a8df14b3ef734343c0",
+      "keys": {
+        "c": "48893689c1c1bf6d74b65a7a4208ecaf",
+        "jvm": "df547969394291542913c67b1fe871bf",
+        "llvm": "b68d815e25cc0208b7a503ffea6b14f4"
+      },
+      "cases_sha256": "9b23d34a87de460c83ebab55785f1ab6770dd5ef91978d05889f0d44fe1576a0",
+      "driver_sha256": "949cbfa619d66f724ce3c8d9db26b5aa6c4c54d179cf9350a88dc65e4b37da46",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.081444,
+        0.080207
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-try-around-a-call-on-an-interface-typed-receiver",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-try-around-a-call-on-an-interface-typed-receiver/src/main.ts",
+      "signature": "62ee4664e422c90527e652d11b841fbf020c5b06fef8480d756db85641a724df",
+      "keys": {
+        "c": "7ef0808304cfc7647db2fa89b9198702",
+        "jvm": "78b8cfd5cb471b2201d3247e9c3db124",
+        "llvm": "980cdf82eb19ca81bad4e167deeb6a81"
+      },
+      "cases_sha256": "1a705e2292209b01c55cf51b656c3739e423aa60e1cc9000bb24d106601abf02",
+      "driver_sha256": "33c56f74dcb3642de16d9cdf465f257905ef25cd6ab5e0f408c1020e4b67ef42",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.076573,
+        0.074927
+      ]
+    }
+  ]
+}

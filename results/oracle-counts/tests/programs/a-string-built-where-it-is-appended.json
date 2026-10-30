@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-built-where-it-is-appended",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-built-where-it-is-appended/src/main.ts",
+      "signature": "9326a4164ec02ed46005fec1d46ac64ec20288b7e5f02d4e4022ee6714bcc14e",
+      "keys": {
+        "c": "8dc1128092e3bfbca1adc91ccd58f527",
+        "jvm": "c56317c554a095a21359a2813925b9dd",
+        "llvm": "689e18b7b4ad442ed1e41012044e92bb"
+      },
+      "cases_sha256": "05f5b5670d25691708f2b74fec38007bd6ae34d46b41b7c0f9a2e0b36576fe34",
+      "driver_sha256": "94000443e9152b76d43bf8eb5f044cab5a273ca2b7fd9deb414155bd5a3deb4c",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.076594,
+        0.076597
+      ]
+    }
+  ]
+}

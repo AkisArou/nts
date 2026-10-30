@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-async-throw-rejects-with-what-it-throws",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-async-throw-rejects-with-what-it-throws/src/main.ts",
+      "signature": "83c0727cf59748d05f8f6661f79fd9cc0f124141371648f284e85d2aa548a7f9",
+      "keys": {
+        "c": "55e89acf55913899da57cb4c6e67c690",
+        "jvm": "81e9005514d05623b3072353ea822ad1",
+        "llvm": "91cc6746d4ce39e82bd0df482662a45c"
+      },
+      "cases_sha256": "0bbf5247f4c094351c077db73ff7583d4c6583f6a3676041ecd0144922ff96c5",
+      "driver_sha256": "b64be63d21c132651fac329060ea922af83e4765547a54d073915bfa151e87de",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.074975,
+        0.074711
+      ]
+    }
+  ]
+}

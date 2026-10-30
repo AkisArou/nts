@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-capturing-literal-dispatched-through-another-interface",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-capturing-literal-dispatched-through-another-interface/src/main.ts",
+      "signature": "2ecc0ba8367a4b70b12ec80d56f836a936eca46379a7f4da79d990fc56a9732d",
+      "keys": {
+        "c": "b46ca0efd8d4479631ed4239a8111868",
+        "jvm": "799fa32f5104191df5cadfeb96816cef",
+        "llvm": "abd4fa05567f7ecca851c9180c244e7f"
+      },
+      "cases_sha256": "9e66fe499e69a583fb69a5e174cb820802a9ab81ea8e68379ccf782e73096835",
+      "driver_sha256": "a94d39c218e38d1062e06ec20bf28244348eb1280ab591bdbc3371df4c8cc40a",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.082239,
+        0.080704
+      ]
+    }
+  ]
+}

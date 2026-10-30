@@ -1,4 +1,6 @@
 // Typechecks, and every export here must be REFUSED. Two different reasons.
+// Clock reads live in the clock refusal fixtures: their wall-time results
+// cannot be compared across separate Node and compiled executions.
 
 // **The oracle.** `new Date(NaN).toISOString()` throws a RangeError in node, and
 // a runtime helper here has no way to throw. Answering with a string instead is
@@ -26,14 +28,3 @@ export function theOffset(ms: number): number {
   return new Date(ms).getTimezoneOffset();
 }
 
-// **A clock.** `Date.now()` and `new Date()` read wall time, which this runtime
-// has no capability for — and which no differential could check even if it did,
-// because node would answer with its instant and this with a later one. The
-// same reason `Math.random` is absent.
-export function rightNow(n: number): number {
-  return Date.now() + n;
-}
-
-export function theCurrentInstant(n: number): number {
-  return new Date().getTime() + n;
-}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/typed-array-aliasing",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/typed-array-aliasing/src/main.ts",
+      "signature": "d482aa1d7b86672abec10597324574391ceaf10602e3b7d71806629ec96ed6cd",
+      "keys": {
+        "c": "f0e52b8740b13179f209a2e212e8e8af",
+        "jvm": "cbbdb7901b0a16d3e6aab47a32a8740a",
+        "llvm": "8005732f190dde94f3c3e1cb9ac3930e"
+      },
+      "cases_sha256": "1cb298823410bdb50dd09b96ffa4d41551e01d60d36a92e3135c9e3ac5f30704",
+      "driver_sha256": "8a87fd55c1e44b9b94e35f08c51d6f3cd8bc079d2470e844d15a59b56c6f3e9d",
+      "complete": true,
+      "count": 643,
+      "node_cpu_s": [
+        0.148684,
+        0.149337
+      ]
+    }
+  ]
+}

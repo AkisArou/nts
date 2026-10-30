@@ -1,0 +1,58 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-enum-across-a-module",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-enum-across-a-module/src/main.ts",
+      "signature": "ee1bc8b5704b0f9ad2b7befa7025df9dcbe2aa7bba6ae1b5e79841f1cc08e2ed",
+      "keys": {
+        "c": "d7e95a49f27daabad0db5d1720caa9ce",
+        "jvm": "88dfbe398bd00550e0aa1a4378e41d40",
+        "llvm": "66e00915fe90eb3243ffb90d75978fd1"
+      },
+      "cases_sha256": "dbcb27d70947c32e3e4b226b42439185586a0afcd1b09a083e0a4206274d0732",
+      "driver_sha256": "8b94d8af5e4d2223825a1ca57daa9bc0876e69a740771a8f0bcaf108debb72a8",
+      "populations": {
+        "constEnumMember": {
+          "count": 1,
+          "cases_sha256": "74690e4fcd80b8b1266a8ac4cdef0eed598ee505f17e1e5a012eac6261a9a79d"
+        },
+        "forwardMember": {
+          "count": 1,
+          "cases_sha256": "5635bf0cfc7e3c96385679f5da803124a658bc7e0bd6686e57b7aa15e16d17a3"
+        },
+        "implicitZero": {
+          "count": 1,
+          "cases_sha256": "76ad40d6925a76fd6910ccb0cf51462e35c5e4108000e7d616fcbb906a6f5211"
+        },
+        "isCentered": {
+          "count": 29,
+          "cases_sha256": "0582f1d13f269c1c4cae537f62049021b5f1566ba554bbaf22cde21539430e38"
+        },
+        "reverseAtConstant": {
+          "count": 1,
+          "cases_sha256": "6f40b87341c580cf29c1c65df56de5cdb9aa76ec49a2df54095d443f4982c0d4"
+        },
+        "stringMember": {
+          "count": 1,
+          "cases_sha256": "7c2a6a72bee7e903f61a41533f127430fcf5b508d286ac5c767636fd1a48399a"
+        },
+        "throughTwoHops": {
+          "count": 1,
+          "cases_sha256": "5fa7f853af59eb52e117fefc3f050e6dfc86d7fb7dfc2b3c9e466a95a1a60eb2"
+        },
+        "widen": {
+          "count": 30,
+          "cases_sha256": "b9cab5d4858e1fc5fbbcdb5d175f1f3412555e37f097eb136392077830d37218"
+        },
+        "withAGap": {
+          "count": 1,
+          "cases_sha256": "8340851fa9a6f0746b91ff983af6d534cfd3240f8b0d168447151108c7b04fda"
+        }
+      },
+      "complete": true,
+      "count": 66
+    }
+  ]
+}

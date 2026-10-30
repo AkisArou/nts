@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-rest-tuple-of-mixed-widths-stored-and-spread",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-rest-tuple-of-mixed-widths-stored-and-spread/src/main.ts",
+      "signature": "6862433bf26ec5747927191e0f4d71a837f54eeec24eaf0dcb766588c8e5e0f2",
+      "keys": {
+        "c": "49cc54e9502dffc820bae13147977719",
+        "jvm": "9a4dcf7d8edbacd5b8483005341b340c",
+        "llvm": "3473afbe570ec680a9b953c687e0121f"
+      },
+      "cases_sha256": "010da57377c62d72ede644d8f132048e0260e1a24cf25d31b2e93d309b4eaca9",
+      "driver_sha256": "0dcda5827d8839649678459d7f37863249ecd68e761457b06de2f4d26d7526b3",
+      "complete": true,
+      "count": 174,
+      "node_cpu_s": [
+        0.080453,
+        0.081321
+      ]
+    }
+  ]
+}

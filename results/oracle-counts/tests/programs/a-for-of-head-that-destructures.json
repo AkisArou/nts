@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-for-of-head-that-destructures",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-for-of-head-that-destructures/src/main.ts",
+      "signature": "0b0704982c38363e1e6b33498f38b8211e0529c49cc2565c1706b937246eb3d7",
+      "keys": {
+        "c": "bd9e3dabe65efdc0cc72f8bd8f13562a",
+        "jvm": "e32eab96ded437556571209a597cc5f6",
+        "llvm": "4219f2737fa1c4fa2cb0a0107c014a28"
+      },
+      "cases_sha256": "4ed1e5d12896b106803831c58977d2f2cd2d23333ee350f8bb00e840a9e29c8d",
+      "driver_sha256": "f2a1cda981bce1a8e403bd8cc18e70ded3ebb84fcdcc9707003c29886ae907ee",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.083131,
+        0.083492
+      ]
+    }
+  ]
+}

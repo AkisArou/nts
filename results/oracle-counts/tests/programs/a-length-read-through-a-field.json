@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-length-read-through-a-field",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-length-read-through-a-field/src/main.ts",
+      "signature": "eb71b7af4a048a233a9d369d2cc9ecd4a54f247aa52d6802388ec5217b2973a2",
+      "keys": {
+        "c": "22f44e6a4e4b335abb7a3a50fc7e54c3",
+        "jvm": "bd2ecd971b30a55c0ab7a5b9af48e648",
+        "llvm": "40f7e55e3ed1d9a54a58d4d8d61fb5e6"
+      },
+      "cases_sha256": "7127b02c752c2bda1b41bd4ac58bc5e1e933296de6949445e4dbc3a60507bd29",
+      "driver_sha256": "760c3839bbe92c55de6ecf3915b61f0dc04af073673f9b3590efc4b99ab1a92d",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077126,
+        0.075521
+      ]
+    }
+  ]
+}

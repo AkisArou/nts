@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-class-stored-into-a-module-global",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-class-stored-into-a-module-global/src/main.ts",
+      "signature": "b497d19f1c033fbf114358fa2a5449ac3763f3c78a7cef8b69f0474278b5115f",
+      "keys": {
+        "c": "6c96b2f6dbd05d160fd375fa89bcfa63",
+        "jvm": "d41b1ebe432b3d525bd783618a1aaf95",
+        "llvm": "e6370d1e31486b82065ad1c60f4c7bc0"
+      },
+      "cases_sha256": "351eacf57d313421696f9ae7543ed878b960c6f4311c17cf5a7919a183bd2b47",
+      "driver_sha256": "d133563ded8054d2cdce1a83250e0927ef79edd67fd7743ff6b6101c91e7d92b",
+      "complete": true,
+      "count": 29,
+      "node_cpu_s": [
+        0.072793,
+        0.074599
+      ]
+    }
+  ]
+}

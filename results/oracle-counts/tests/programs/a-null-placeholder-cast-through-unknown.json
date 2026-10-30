@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-null-placeholder-cast-through-unknown",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-null-placeholder-cast-through-unknown/src/main.ts",
+      "signature": "42f193bee185440a6b403b91abbd14a62d12ca815af35ab0155afe03b8d4b571",
+      "keys": {
+        "c": "9085fc4d01fd12a3e0ea875a098841ac",
+        "jvm": "95a41f753b996a6c2983e0d79784945d",
+        "llvm": "e3d0e6ab56b19ff99894d553190a1448"
+      },
+      "cases_sha256": "49cb457cdf1e9e9b3ea8f6cde509c518c3d7bbd7368691780c3bcd7f8d597313",
+      "driver_sha256": "4498d2a5c927cbb1c662587d14e2397912eee1506531efdde3b44647d8209137",
+      "complete": true,
+      "count": 58,
+      "node_cpu_s": [
+        0.075389,
+        0.073561
+      ]
+    }
+  ]
+}

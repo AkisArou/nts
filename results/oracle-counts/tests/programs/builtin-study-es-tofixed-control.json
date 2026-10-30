@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/builtin-study-es-tofixed-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/builtin-study-es-tofixed-control/src/main.ts",
+      "signature": "255e42eb6f5d210ac30164362053038d8e3a748f884923fa04bccdf76484c8b2",
+      "keys": {
+        "c": "91c2553731a83e5d33c19c2bbf5faeca",
+        "jvm": "9d5d9ebe0418c556d91bf5b682c1f01f",
+        "llvm": "fdfb301ab2fa6a80a42200533555fcdc"
+      },
+      "cases_sha256": "833b2f413b0006235a78e943b752f197903994690f257a577ff1757d8a38e808",
+      "driver_sha256": "22525b0bdff01cb5573dd10cf687ae9313ca013b4d2b42c001231822dae0c6a7",
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

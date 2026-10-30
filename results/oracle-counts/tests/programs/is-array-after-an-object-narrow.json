@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/is-array-after-an-object-narrow",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/is-array-after-an-object-narrow/src/main.ts",
+      "signature": "952a1e3b2fe70ad0473e5be72cf549efd168fc49a858004d0a8862672c99ca75",
+      "keys": {
+        "c": "81f00677cb092eca76fe265eb9bfe02c",
+        "jvm": "cc3171e1728c19c0e6e236ba4f236e45",
+        "llvm": "0e8cb25ca4f30e6db56cb95a6417ad9a"
+      },
+      "cases_sha256": "96ad30b711dcd8660c2691f3841d60633b5235611e8827d36623f6e6544a169f",
+      "driver_sha256": "61058e3cbab841ef0f2a06f17ce56d55276a5ba7dc808579c73c146be1a03ce4",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.079637,
+        0.079214
+      ]
+    }
+  ]
+}

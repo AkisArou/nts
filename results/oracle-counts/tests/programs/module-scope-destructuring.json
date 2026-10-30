@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-scope-destructuring",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-scope-destructuring/src/main.ts",
+      "signature": "a9039aed501a9c4a98dbabd84772030d635995984ba04f8ea1a93008dfae9527",
+      "keys": {
+        "c": "d4652e5c50c2daeada292124db80031d",
+        "jvm": "3b818a246ba56ec971ea0790459f8ac0",
+        "llvm": "90c3decda5cd182fe8a37b72df129b8a"
+      },
+      "cases_sha256": "12105b89845b230dac56e8fdad19707ebd91ceaccff4f53355fce0a2c323c678",
+      "driver_sha256": "e9c0d3d3328bbb88ac337da6dbced8b5bf035ae569d3d4c04be024bdefb7976b",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.076292,
+        0.076766
+      ]
+    }
+  ]
+}

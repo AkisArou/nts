@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-of-written-kinds-read-back",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-of-written-kinds-read-back/src/main.ts",
+      "signature": "183eb75ecc0cfa820fd91249572de09ce75a2453c2e9b3818b55e8ad0bc35c27",
+      "keys": {
+        "c": "83629e29e503fbc89335affcfe1c4060",
+        "jvm": "6901dc3dc5058364b88aba8ac7bba6b1",
+        "llvm": "ab9e05a768e058239e3c869a824fdc69"
+      },
+      "cases_sha256": "34955d607c17a54fce88296c77cb421dbfb5d16a06e64ebab742159283701f5f",
+      "driver_sha256": "9ffa3e40e0f6e8ab4e84616ec744ba68c375a177a3e1ea7a2b21c7c7f0b20927",
+      "complete": true,
+      "count": 116,
+      "node_cpu_s": [
+        0.077029,
+        0.076084
+      ]
+    }
+  ]
+}

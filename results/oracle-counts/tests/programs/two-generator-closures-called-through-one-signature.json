@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-generator-closures-called-through-one-signature",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-generator-closures-called-through-one-signature/src/main.ts",
+      "signature": "21eea7b279df89c530d9cbdde68f0f5f1d5a1e49c00266426822793244da3f96",
+      "keys": {
+        "c": "548ced11e3d081b0f9b775e9e0c1d41a",
+        "jvm": "302ca7843f571e6f37b540b3f184dadf",
+        "llvm": "c3d9ba203ed748f0b46b3206f190154f"
+      },
+      "cases_sha256": "e24c3a6d458d7b73c29c7d43a5c8d0784a964f82b1f295e32f77a34f008d9818",
+      "driver_sha256": "a33fcbc868702b838b0dda0c9bf58d245604a6b76d558e0ae15dd57ce6ad58e7",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.075659,
+        0.074356
+      ]
+    }
+  ]
+}

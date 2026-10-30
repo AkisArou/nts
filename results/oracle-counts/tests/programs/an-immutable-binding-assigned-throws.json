@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-immutable-binding-assigned-throws",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-immutable-binding-assigned-throws/src/main.ts",
+      "signature": "2344c9de58265d2975c7d6c0c91762a62b0342dee165636e9aed10922fae864a",
+      "keys": {
+        "c": "6a34b1ae419f3591b7d3c909ff9fed1c",
+        "jvm": "913e2bb3af472c6ee93d11994e05c36d",
+        "llvm": "f600cf149f1badd5690f76b1a496f425"
+      },
+      "cases_sha256": "9f80b03b572fb5a0642cfe6fab0729d940bceb56691ca982f51a9f42fa2ef3e1",
+      "driver_sha256": "544d5bfd59066f83af23754768c3a4d12159368e8f0951a50564e67530c4feea",
+      "complete": true,
+      "count": 203,
+      "node_cpu_s": [
+        0.068072,
+        0.068318
+      ]
+    }
+  ]
+}

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-raising-gate-held-by-a-call-through-a-value",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-raising-gate-held-by-a-call-through-a-value/src/main.ts",
+      "signature": "4da36b266464016b851f3b8ff3200506e62cd974f29ee5788a4580cf230a2341",
+      "keys": {
+        "c": "c7638e51b04f5be8e241307fc4cdb389",
+        "jvm": "dc848c9a25035774e525419ebdb14ac5",
+        "llvm": "6ab3cef34bfd171f932547eac3f405f8"
+      },
+      "cases_sha256": "9db62a60f7f52290c010429ee0dbd44c6ef4884e7b6abed41687048cd588cee0",
+      "driver_sha256": "29419c38752188850e61a0de717f8736a6fd64f4a6b12155b3b3dd7bc6ea6c66",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.077775,
+        0.081272
+      ]
+    }
+  ]
+}

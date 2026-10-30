@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/parameter-shapes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/parameter-shapes/src/main.ts",
+      "signature": "0ccab76007732fb0b7738c972a6a2d6f1f09bb96ecc59b425f726046fbafa484",
+      "keys": {
+        "c": "368139047f35a82e2ddeb60e135c091f",
+        "jvm": "56f116c89c2badee1b5ecc07d4308f00",
+        "llvm": "bb383f834f26a2cede2872beb27a6200"
+      },
+      "cases_sha256": "055375b9a7e9219a32c04bd76caeef8497346788a04d3b89cc87feee8eb0c47e",
+      "driver_sha256": "1103ad7642486790f603144b420c37f3203bf6ad5ca34e05c7bdd37b55c83c3a",
+      "complete": true,
+      "count": 145,
+      "node_cpu_s": [
+        0.075102,
+        0.072704
+      ]
+    }
+  ]
+}

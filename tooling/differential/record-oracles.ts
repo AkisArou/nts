@@ -9,20 +9,14 @@ import { promisify } from "node:util";
 const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
 
-type NumericDomain = { min?: number; max?: number; integer?: boolean; allowNaN?: boolean; reason: string };
-type RecordedDomain = { identity: string; declaration: { version: number; functions: Record<string, Record<string, NumericDomain>> } };
-type Populations = Record<string, { count: number; cases_sha256: string }>;
+import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
+  type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
+  source_exports?: string[];
   input_domain?: RecordedDomain;
   repository_root?: string;
   generator_version: number; generator_digest: string; case_key: string; case_count: number;
   cases: string[]; signature: unknown[]; driver: string; resolver: string };
-type Row = { kind: "measured" | "no-oracle"; source: string; signature: string;
-  input_domain?: RecordedDomain;
-  populations?: Populations;
-  keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
-  count?: number; complete?: true; node_cpu_s?: number[]; source_digest?: string; reason?: string };
-type Table = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: Row[] };
 type Manifest = { version: number; plans: Plan[]; failures: { config: string; backend: string; error: string }[] };
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -81,7 +75,27 @@ export function completeRows(text: string, expected: number): string[] {
   }
   return lines;
 }
+export function validateSourcePlan(plan: Plan): void {
+  if (plan.version === 1) return;
+  if (plan.version !== 2 || !Array.isArray(plan.source_exports) ||
+      plan.source_exports.some(name => typeof name !== "string" || !name) ||
+      new Set(plan.source_exports).size !== plan.source_exports.length) {
+    throw new Error("invalid source export inventory in oracle plan");
+  }
+  const expected = new Set(plan.source_exports);
+  const reached = new Set<string>();
+  for (const row of plan.cases) {
+    const name = row.slice(0, row.indexOf(" "));
+    if (!expected.has(name)) throw new Error(`oracle plan has an undeclared export ${name}`);
+    reached.add(name);
+  }
+  for (const name of expected) {
+    if (!reached.has(name)) throw new Error(`oracle plan lost or emptied source export ${name}`);
+  }
+}
+
 export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: number): Table {
+  validateSourcePlan(plan);
   if (table.version !== 1 || plan.cases.length !== plan.case_count || plan.seed !== null || delivered !== plan.case_count) throw new Error("invalid recording schema");
   if (cpu.length !== 2 || cpu.some(n => !Number.isFinite(n) || n < 0 || n * 2 > 15)) throw new Error("CPU budget needs at least twice both measured runs");
   const previous = table.rows.filter(row => row.source === plan.source && row.keys[plan.backend]);
@@ -116,6 +130,7 @@ export function addRecord(table: Table, plan: Plan, cpu: number[], delivered: nu
   return { version: 1, generator_version: plan.generator_version, generator_digest: plan.generator_digest, seed: null, rows: [...table.rows.filter(old => !(old.source === row.source && old.signature === row.signature)), row] };
 }
 export function noOracleRecord(plan: Plan, reason: string): Row {
+  validateSourcePlan(plan);
   if (plan.case_count !== 0 || plan.cases.length !== 0 || !plan.source_digest || !reason) throw new Error("no-oracle requires an explicit empty source identity and reason");
   return { kind: "no-oracle", ...identity(plan), source_digest: plan.source_digest, reason,
     ...(plan.input_domain === undefined ? {} : { input_domain: plan.input_domain }) };
@@ -183,7 +198,8 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
         if (result.plan) {
           const plan = result.plan;
           plan.repository_root = root;
-          if (plan.version !== 1 || !plan.source || plan.cases.length !== plan.case_count) throw new Error(`invalid plan for ${config}`);
+          if (![1, 2].includes(plan.version) || !plan.source || plan.cases.length !== plan.case_count) throw new Error(`invalid plan for ${config}`);
+          validateSourcePlan(plan);
           if (named && !named.some(name => plan.source.startsWith(relative(root, resolve(root, name.replace(/\/tsconfig\.json$/, ""))).replaceAll("\\", "/") + "/"))) throw new Error(`planner returned an unrequested source: ${plan.source}`);
           manifest.plans.push(plan);
           console.log("plan", result.backend, plan.source, plan.case_count);
@@ -312,20 +328,33 @@ async function recordNamed(names: string[]) {
   }
   await planAll(resolve(binary), root, evidence, false, undefined, names);
   await planAll(resolve(binary), root, evidence, true, undefined, names);
-  const table = join(root, "results/oracle-counts.json");
-  const stage = join(evidence, "recorded-table.json");
-  const original = readFileSync(table);
-  writeFileSync(stage, original);
-  const script = fileURLToPath(import.meta.url);
-  const measure = spawnSync("sh", [join(root, "tooling/gate/with-lock.sh"), "--wait", process.execPath, script, "record", evidence, stage], { cwd: root, stdio: "inherit" });
-  if (measure.status !== 0) throw new Error(`recording refused; checked-in table unchanged; evidence: ${evidence}`);
   const plans = (json(join(evidence, "plans.json")) as Manifest).plans;
   const selected = new Set(plans.map(plan => plan.source));
+  const fixtures = new Set([...selected].map(fixtureOf));
+  const before = readRecords(root, fixtures);
+  const originalHeader = readFileSync(join(root, GENERATOR));
+  const original = new Map([...fixtures].map(fixture => {
+    const path = join(root, recordPath(fixture));
+    return [fixture, existsSync(path) ? readFileSync(path) : null] as const;
+  }));
+  // A flat file is a private interchange value in the evidence directory.
+  // Only the selected fixture records are published to the authority.
+  const stage = join(evidence, "recorded-table.json");
+  writeTable(stage, before);
+  const script = fileURLToPath(import.meta.url);
+  const measure = spawnSync("sh", [join(root, "tooling/gate/with-lock.sh"), "--wait", process.execPath, script, "record", evidence, stage], { cwd: root, stdio: "inherit" });
+  if (measure.status !== 0) throw new Error(`recording refused; checked-in records unchanged; evidence: ${evidence}`);
   const identities = new Set(plans.map(plan => `${plan.source}\0${identity(plan).signature}`));
-  if (!readFileSync(table).equals(original)) throw new Error(`count table changed during recording; nothing published; evidence: ${evidence}`);
-  const before = json(table) as Table, recorded = json(stage) as Table;
+  if (!readFileSync(join(root, GENERATOR)).equals(originalHeader)) throw new Error(`generator header changed during recording; nothing published; evidence: ${evidence}`);
+  for (const [fixture, bytes] of original) {
+    const path = join(root, recordPath(fixture));
+    if (bytes === null ? existsSync(path) : !existsSync(path) || !readFileSync(path).equals(bytes)) {
+      throw new Error(`fixture record changed during recording: ${fixture}; nothing published; evidence: ${evidence}`);
+    }
+  }
+  const recorded = parseLegacyTable(json(stage));
   const result = { ...recorded, rows: [...before.rows.filter(row => !selected.has(row.source)), ...recorded.rows.filter(row => identities.has(`${row.source}\0${row.signature}`))] };
-  writeTable(table, result);
+  writeRecords(root, result, fixtures);
   console.log(`recorded ${names.length} named fixture(s), ${selected.size} source(s); evidence: ${evidence}`);
 }
 async function main() {

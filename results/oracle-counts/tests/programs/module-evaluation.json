@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/module-evaluation",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/module-evaluation/src/main.ts",
+      "signature": "6010d510f32445a6487987c863ed9472922955893889beb5d8c451967091dec0",
+      "keys": {
+        "c": "eba56856aafc65ead60acf7df7738ee4",
+        "jvm": "485f4cb47919be7fd42390d7a6a2b57f",
+        "llvm": "45fbf958a0ca8404c49223185d123ece"
+      },
+      "cases_sha256": "5590418bbc15a021175c7b69bc65cedeabb0f2898ad45bf19ec64738023518b8",
+      "driver_sha256": "f020df11a1600749ecaa1fcd1ecc1136f9ad64fd25a1af807f1e1e7cb5e01fef",
+      "populations": {
+        "readCounted": {
+          "count": 1,
+          "cases_sha256": "bb13dd8ecb3ad9bf6d3a37a9a59649580c5b3d5169b0992183f39d37ebc333bd"
+        },
+        "readDoubled": {
+          "count": 1,
+          "cases_sha256": "a387369357a853803aaf790ad4e259d43f2accf3a363a192501ca755dd5a738b"
+        },
+        "readFromTable": {
+          "count": 29,
+          "cases_sha256": "838a6329afa43917e87d4b65481742895c69f3913a480b8cca7e96a72c9806b8"
+        },
+        "readLabel": {
+          "count": 1,
+          "cases_sha256": "7dbd835733a2fbd39d601c6b74e241f72ffdd937d5228eca923ae5fdcb67f25f"
+        },
+        "readPattern": {
+          "count": 1,
+          "cases_sha256": "26d580b0e657f06d45bff2ff64609e37b909981bae1b90daea539abe38e861b0"
+        },
+        "readsBoth": {
+          "count": 29,
+          "cases_sha256": "abc8cea046f06e92f416b4ef88a9a717cb123b87627035875c2bbb0aaca1cfb8"
+        },
+        "readScaled": {
+          "count": 29,
+          "cases_sha256": "47d30353b444fcc67057f3797fb3f8a28356b2b004cdc132676f631a76552b09"
+        },
+        "readTotal": {
+          "count": 1,
+          "cases_sha256": "5db22b0498ac053e51334a8936143584e5a3a3e05631327ce65e26bec713e577"
+        }
+      },
+      "complete": true,
+      "count": 92
+    }
+  ]
+}

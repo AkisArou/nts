@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/logical-assignment",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/logical-assignment/src/main.ts",
+      "signature": "23f4bcdbf94410a8e1bd3268b353a06fcaee37102aa0386ae259b4d06b1456d7",
+      "keys": {
+        "c": "fa3992e5685f6392ee96cf00881d4def",
+        "jvm": "5bb3768fd00bf1e3c4a1a2d249c78a38",
+        "llvm": "f5d1d8e5a52ee92d77ca3c5e379723d0"
+      },
+      "cases_sha256": "66267dcdb52d05c310f59f3987a6e9bb22d7cce213c99262c909c147fada919a",
+      "driver_sha256": "027406d8cd6bab321ffb93b708a46d802bfdc54021850d504e106ce21e02dc75",
+      "complete": true,
+      "count": 580,
+      "node_cpu_s": [
+        0.088058,
+        0.084226
+      ]
+    }
+  ]
+}

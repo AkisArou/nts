@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/optional-access",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/optional-access/src/main.ts",
+      "signature": "a4c31ab73166550a169ec3b1bc8fdd5bad7228876d9518a67ffdfd1637509f1b",
+      "keys": {
+        "c": "5650a14ea954d9cd7d9b76bbb1abdcdf",
+        "jvm": "f01e4274b59690fe31817e5c2ea9ec0f",
+        "llvm": "54167a196cfcf0f75fa1f654d9bd7a6d"
+      },
+      "cases_sha256": "774b3a528e9abee02d66b1834e6b27b0bf639efa3bb773286a6e75b0c9cbee91",
+      "driver_sha256": "be56dbcb76328b1ed3e521fb8072786a79730d5b38dd09d78897dd1de2940ae5",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.07657,
+        0.078937
+      ]
+    }
+  ]
+}

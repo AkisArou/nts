@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-evolving-type-at-module-scope",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-evolving-type-at-module-scope/src/main.ts",
+      "signature": "0f5b895b6c10da4b1feee4be0d003bd8396a08f22aeaa3e99a90d47e334ef0c7",
+      "keys": {
+        "c": "9fdc78704c90147b9a53ca8fcc30c24a",
+        "jvm": "2af32f6483b51cb79863f0ba725225e8",
+        "llvm": "9bdced564a24bab376479eda5db0ce4d"
+      },
+      "cases_sha256": "35b419c1207c2c0b75314349f41ad971709a8ee075e4014b88389fef037ae42e",
+      "driver_sha256": "583b42a9f190b5d9d09d3384522467e6f707e0cd9b2cbcf8aeec690116b460e7",
+      "complete": true,
+      "count": 91,
+      "node_cpu_s": [
+        0.079877,
+        0.079676
+      ]
+    }
+  ]
+}

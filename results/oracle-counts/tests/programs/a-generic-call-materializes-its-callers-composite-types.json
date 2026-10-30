@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-call-materializes-its-callers-composite-types",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-call-materializes-its-callers-composite-types/src/main.ts",
+      "signature": "a21ce6ef7f38ec7f557afed5a5cc4685e1354eff0ac0cccb0b83dd1ed26876e6",
+      "keys": {
+        "c": "399567a1da59b1425ff7a22cbfd83d5b",
+        "jvm": "3e619b177bad4f0ababd1be12afbd910",
+        "llvm": "c0d2332b08048a9e485f72e261cefc04"
+      },
+      "cases_sha256": "60b6b4af871ebac1b2ba5449e8aa165efab1890b330966b87283db1338aa2ebe",
+      "driver_sha256": "a4785aea798ab445302fe552ff004267495cbeec6f84c0daf172878c9015391e",
+      "complete": true,
+      "count": 261,
+      "node_cpu_s": [
+        0.073438,
+        0.072556
+      ]
+    }
+  ]
+}

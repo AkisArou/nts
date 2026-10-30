@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-uniform-call-binds-defaults-once",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-uniform-call-binds-defaults-once/src/main.ts",
+      "signature": "1597c0126fd7d92bbdec8923c6817e1cc1974680e2574f555daaa1e377f50b4b",
+      "keys": {
+        "c": "0d56e4f5efd5418fdf40ca973327c01f",
+        "jvm": "d7c60bc39e288fe1ef1090ebd9e27c71",
+        "llvm": "b686c40b00cf0a51f5fcb71349069663"
+      },
+      "cases_sha256": "f080a427e3f77bc685e3d9ad0e58a14ceec89293509a7e67a3f61177635f8a06",
+      "driver_sha256": "47c18b7214cbe6c9ed0f3d9816a081cee73b15ed975dbcee2de263099420f78c",
+      "complete": true,
+      "count": 232,
+      "node_cpu_s": [
+        0.080602,
+        0.076523
+      ]
+    }
+  ]
+}

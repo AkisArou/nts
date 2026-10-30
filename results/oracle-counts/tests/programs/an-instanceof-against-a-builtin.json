@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-instanceof-against-a-builtin",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-instanceof-against-a-builtin/src/main.ts",
+      "signature": "92bc771e7f0435457979b1553f99fccf402524685a1e04e7e754ef2507c8bd1f",
+      "keys": {
+        "c": "80f90e8a4de5d4b3da9f69891f31c03f",
+        "jvm": "229b244539d34bd72d6d30d09fc19b52",
+        "llvm": "6451275189058a76e09ee620e5d27cad"
+      },
+      "cases_sha256": "7e58af54f7ebfade3bf0ee622c759605298500695274eabe3d5581026d9529f1",
+      "driver_sha256": "c40aa0f611b5244e12b8a325ac72feefdcb17d6cba656e4fb375a771414752db",
+      "complete": true,
+      "count": 377,
+      "node_cpu_s": [
+        0.099758,
+        0.102198
+      ]
+    }
+  ]
+}

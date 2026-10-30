@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-module-const-that-asks-what-is-provided",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-module-const-that-asks-what-is-provided/src/main.ts",
+      "signature": "1745615f06c6f951c4622a44b80c377d7ac2aec03a0246afc75c8babf58c4480",
+      "keys": {
+        "c": "aef60249dbcfe79a9a41fa014a21e7e2",
+        "jvm": "a0753767797a42bc85e120b20b514c95",
+        "llvm": "53ed5c082b4095fffb2a0d171bdbc684"
+      },
+      "cases_sha256": "2c1701d9355d9b725139e5dc281daec19d7ee76028bca83d1e76317f1d389bae",
+      "driver_sha256": "63d186f6d20f1409c64632482e534feb7ef1d7f3c7558a937571a8b02d35498c",
+      "complete": true,
+      "count": 87,
+      "node_cpu_s": [
+        0.074174,
+        0.074259
+      ]
+    }
+  ]
+}
