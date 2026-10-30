@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-crypto-capability-side-table-is-strong",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-crypto-capability-side-table-is-strong/src/main.ts",
+      "signature": "585528c646923698bc5901a5775c75c3650c7266db08a803e2acd64b62d6e779",
+      "keys": {
+        "c": "b52e1dcf5c2e8dc27b185f1a048bcb70",
+        "jvm": "5ba5027e68c7b5fd119e408506893ab3",
+        "llvm": "c917baee8684088f251b1b91e05b5a18"
+      },
+      "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45",
+      "driver_sha256": "c194f59d625fe39ccc376da56f5c61d3c7e8509df84c301046153bb95a14f266",
+      "populations": {
+        "work": {
+          "count": 29,
+          "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

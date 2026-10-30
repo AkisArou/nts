@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/src/main.ts",
+      "signature": "a7546a0a240a78d2cf98af020c7a28f33f13010e8de2d62fddfb43216b8acaf7",
+      "keys": {
+        "c": "bdc81d454f8b76ff3bd6b14840378e9f",
+        "jvm": "5546ea7eb81e7dc37e36efc265944d39",
+        "llvm": "d75ca001942033ffa225764a1ae91e35"
+      },
+      "cases_sha256": "96c4cdec5338736ee41cdb3f8b93a306a3dbf40abb32e42f9d8827efaac71908",
+      "driver_sha256": "9af4ef6adcc01c3c376942ea8f441f4a12d3b64cef32debf00a2b5fff6707eb0",
+      "populations": {
+        "refused": {
+          "count": 29,
+          "cases_sha256": "96c4cdec5338736ee41cdb3f8b93a306a3dbf40abb32e42f9d8827efaac71908"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}
