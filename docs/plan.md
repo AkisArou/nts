@@ -279,9 +279,8 @@ The designs and their build orders are in [`foundations/`](foundations).
    the first bound this way. TypeScript's `using` and `DisposableStack`, which
    C handles can use, follow from the compiler lane after its soundness
    classes. `node:ffi` is kept in mind for later, not scheduled
-   ([calling C](targets/calling-c.md#later-nodeffi)). Separately, the node
-   reference moves to Node 26, the latest LTS line, as a landing of its own
-   that re-records what changes (owner: tsrs).
+   ([calling C](targets/calling-c.md#later-nodeffi)), and so is moving the
+   node reference to Node 26: it stays on Node 24 until then.
 
 ## Phase 3: conformance-driven development
 

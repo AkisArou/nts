@@ -99,8 +99,8 @@ contested: strings converted for the call, buffers borrowed for the call,
 their own thread, ownership left untracked, and `using` on the library
 handle. It has no structs, arrays, variadic calls or errno, so it is nts's
 bridge for compatibility and for comparing C interop with node, not its main
-surface. The user keeps it in mind for later rather than building it now;
-the node reference moves to Node 26 on its own.
+surface. The user keeps it in mind for later rather than building it now,
+and moving the node reference to Node 26 waits with it.
 
 ## What this changed
 

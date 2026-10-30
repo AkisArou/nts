@@ -471,8 +471,8 @@ output and the checking build.
   user on 10-30 ([log](../records/notebooks/decisions-log.md#calling-c-10-30);
   [record 0361](../records/0361-calling-c-from-a-header.md)).
 - `node:ffi` is kept in mind for later and not built now (the user, 10-30,
-  [log](../records/notebooks/decisions-log.md#calling-c-10-30)). The node
-  reference moves to Node 26 as an item of its own.
+  [log](../records/notebooks/decisions-log.md#calling-c-10-30)), and so is
+  moving the node reference to Node 26.
 - The audit of the accepted design (10-30,
   [record 0361](../records/0361-calling-c-from-a-header.md#the-audit)): a lent
   value lives to its block's end; a lent buffer cannot be detached; nested

@@ -1065,5 +1065,8 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
 - **`node:ffi` later.** The user, after the decision: "we will tackle node:ffi
   at some point later. no need to integrate it now. we just have to keep it in
   mind." It leaves the plan's stages, and the design keeps room for it
-  ([Calling C](../../targets/calling-c.md#later-nodeffi)). The node reference
-  still moves to Node 26, as an item of its own.
+  ([Calling C](../../targets/calling-c.md#later-nodeffi)).
+- **Node 26 later.** The user: "No need to interact with Node 26 yet though.
+  Why do it? node ffi later, update to node 26 later." The node reference
+  stays on Node 24; the move waits with `node:ffi`, and the work started for
+  it is kept, unlanded.
