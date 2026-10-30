@@ -396,7 +396,7 @@ export class SubtleCrypto {
       if (!supportsPublicKey(slots.algorithm.name)) throw new DOMException("The algorithm has no public key", "NotSupportedError");
       return cryptoTask(scheduler, () => derivePublicKey(provider, slots, usages));
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
