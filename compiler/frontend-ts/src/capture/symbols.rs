@@ -59,6 +59,8 @@ impl<'p> Capture<'p, '_> {
             declaration_sites,
             ty: None,
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library,
         });
         self.symbols.insert(symbol, id);
@@ -115,16 +117,32 @@ impl<'p> Capture<'p, '_> {
                 self.snapshot.modules[index].exports = exports;
             }
         }
-        // Insert before following aliases: even malformed cyclic data cannot
-        // make the builder recurse. All declarations were associated above.
-        let mut next = 0;
-        while let Some(&symbol) = self.symbol_work.get(next) {
+        self.resolve_symbol_edges()
+    }
+
+    /// The existing arena worklist also drains symbols discovered by type
+    /// capture. Each edge/owner relation is queried once, without rescanning
+    /// syntax or enumerating the checker's globals.
+    pub(super) fn resolve_symbol_edges(&mut self) -> Result<(), SnapshotError> {
+        while let Some(&symbol) = self.symbol_work.get(self.symbol_edges) {
             if let Some(target) = symbol.alias_target() {
                 let target = self.intern_symbol(target)?;
                 let id = self.symbols[&symbol];
                 self.snapshot.symbols[id.0 as usize].aliased = Some(target);
             }
-            next += 1;
+            if let Some(owner) = symbol.owner() {
+                let native_owner = owner;
+                let owner = self.intern_symbol(native_owner)?;
+                let id = self.symbols[&symbol];
+                self.snapshot.symbols[id.0 as usize].owner = Some(owner);
+                if self.constructor_owners.insert(native_owner)
+                    && let Some(value) = native_owner.constructor_value()
+                {
+                    let value = self.intern_symbol(value)?;
+                    self.snapshot.symbols[owner.0 as usize].constructor_value = Some(value);
+                }
+            }
+            self.symbol_edges += 1;
         }
         Ok(())
     }

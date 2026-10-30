@@ -25,10 +25,17 @@
 
 mod compiler;
 mod identity;
+mod reached;
 
 pub(super) use compiler::compiler_global;
 pub use compiler::{CompilerProvider, ProviderKind, Use, compiler_providers};
-pub use identity::{GlobalBinding, GlobalMeaning, global_binding};
+pub use identity::{
+    AttributionWork, FeatureBindings, GlobalBinding, GlobalMeaning, feature_binding, global_binding,
+};
+pub use reached::{
+    AvailabilityProbe, FeatureId, FeatureReachPlan, FeatureUse, FeatureWitness, ReachContext,
+    ReachWork, ReachedFeature, ReachedFeatures, reached_features,
+};
 
 use super::{OpKind, Program};
 

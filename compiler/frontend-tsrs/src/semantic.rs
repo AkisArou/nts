@@ -123,6 +123,31 @@ impl<'p> Node<'p> {
     pub fn symbol(self) -> Option<Symbol<'p>> {
         let file = self.source_file();
         let native = file.with_checker(|c| c.get_symbol_at_location_exported(self.native));
+        // A static `in` probe names a global property, although TypeScript's
+        // symbol-at-location does not attach that property to its string key.
+        // Authenticate the receiver through the same checked builtin identity
+        // as every other globalThis consumer; a local spelling is no proof.
+        let native = native.or_else(|| {
+            let tsrs_ast::NodeData::StringLiteral(key) = self.native.data() else {
+                return None;
+            };
+            let parent = self.parent()?;
+            let tsrs_ast::NodeData::BinaryExpression(binary) = parent.native.data() else {
+                return None;
+            };
+            if binary.left != self.native
+                || binary.operator_token.kind() != tsrs_ast::Kind::InKeyword
+            {
+                return None;
+            }
+            let receiver = Node::new(binary.right(), file).symbol()?;
+            if receiver.builtin_binding() != Some(BuiltinBinding::GlobalThis) {
+                return None;
+            }
+            file.with_checker(|c| {
+                c.get_global_symbol_exported(key.text(), SymbolFlags::Value, None)
+            })
+        });
         native.map(|native| Symbol::new(native, file))
     }
     #[must_use]
@@ -167,6 +192,39 @@ impl<'p> File<'p> {
 }
 
 impl<'p> Symbol<'p> {
+    /// The declaring owner's checked identity. Inherited accesses retain the
+    /// actual member's owner; source members with the same name stay distinct.
+    #[must_use]
+    pub fn owner(self) -> Option<Self> {
+        self.native
+            .parent()
+            .map(|native| Self::new(native, self.file))
+    }
+
+    /// Relate a constructor-interface owner to its actual global value. The
+    /// prototype supplies a candidate identity, then exact checked type
+    /// equality proves the relation. No naming convention is consulted.
+    #[must_use]
+    pub fn constructor_value(self) -> Option<Self> {
+        let meanings = self.global_bindings();
+        if !meanings.type_ || meanings.value {
+            return None;
+        }
+        let native = self.file.with_checker(|checker| {
+            let owner = checker.get_declared_type_of_symbol_exported(self.native);
+            let prototype = checker.get_property_of_type_exported(owner, "prototype")?;
+            let prototype_type = checker.get_type_of_symbol_exported(prototype);
+            let candidate = prototype_type.symbol()?;
+            let value =
+                checker.get_global_symbol_exported(candidate.name(), SymbolFlags::Value, None)?;
+            (checker.get_merged_symbol_exported(candidate)
+                == checker.get_merged_symbol_exported(value)
+                && checker.get_type_of_symbol_exported(value) == owner)
+                .then_some(value)
+        })?;
+        Some(Self::new(native, self.file))
+    }
+
     /// Exact membership in this checked program's global value/type tables.
     /// A local alias keeps its own scope; follow `alias_target` to ask about
     /// its actual supplier. These are binding facts, never builtin availability

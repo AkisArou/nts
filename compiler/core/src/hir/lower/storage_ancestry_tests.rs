@@ -32,6 +32,8 @@ fn graph(depth: u32, name: Option<&str>, kind: TypeKind) -> (SemanticSnapshot, T
         declaration_sites: Vec::new(),
         ty: None,
         aliased: None,
+        owner: None,
+        constructor_value: None,
         library: name.map(|_| Library::Es),
     });
     snapshot.types.push(TypeRecord {
@@ -49,6 +51,8 @@ fn graph(depth: u32, name: Option<&str>, kind: TypeKind) -> (SemanticSnapshot, T
             declaration_sites: Vec::new(),
             ty: None,
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library: None,
         });
         snapshot.types.push(TypeRecord {
@@ -180,6 +184,8 @@ fn provided_storage_preserves_the_existing_multiple_base_order() {
             declaration_sites: Vec::new(),
             ty: None,
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library: Some(Library::Es),
         });
         snapshot.types.push(TypeRecord {

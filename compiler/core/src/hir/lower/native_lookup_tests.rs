@@ -50,6 +50,8 @@ fn native_classes(depth: u32) -> (SemanticSnapshot, NodeId, NodeId, NodeId) {
             declaration_sites: Vec::new(),
             ty: None,
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library: None,
         });
         if at != 0 {

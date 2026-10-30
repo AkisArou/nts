@@ -87991,6 +87991,8 @@ mod tests {
             declaration_sites: Vec::new(),
             ty: None,
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library: None,
         });
         snapshot.types.push(TypeRecord {
@@ -88075,6 +88077,8 @@ mod tests {
                 declaration_sites: Vec::new(),
                 ty: None,
                 aliased: None,
+                owner: None,
+                constructor_value: None,
                 library: None,
             });
         }

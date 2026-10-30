@@ -32,13 +32,26 @@
 //! The two are complementary; this one does not replace it.
 
 use crate::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeId, syntax};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+/// Increasing checked demand for a declaration's effects. Escaping a value
+/// includes construction; constructing a class alone does not call its methods.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Demand {
+    #[default]
+    Definition,
+    Construct,
+    Value,
+}
 
 /// What a walk from a set of roots reached.
 #[derive(Debug, Clone, Default)]
 pub struct Reachability {
     /// Nodes reachable from the roots.
     pub nodes: FxHashSet<NodeId>,
+    /// Nodes reopened through executable/value demand rather than definition
+    /// containment. This is part of the same immutable reachability result.
+    pub node_demands: FxHashMap<NodeId, Demand>,
     /// Symbols named by a reachable node.
     pub symbols: FxHashSet<SymbolId>,
     /// Types of reachable nodes — the seed set for deep resolution.
@@ -232,22 +245,60 @@ pub fn from_roots(
     roots: impl IntoIterator<Item = SymbolId>,
     nodes: impl IntoIterator<Item = NodeId>,
 ) -> Reachability {
+    from_roots_with(snapshot, roots, nodes, |_, _, _| Some(Demand::Value))
+}
+
+/// An edge in the checked declaration graph. Policies can exclude syntax
+/// branches or erased/probe references without rebuilding a second graph walk.
+#[derive(Debug, Clone, Copy)]
+pub enum Edge {
+    Syntax(NodeId),
+    Declaration(SymbolId),
+    Heritage(NodeId),
+    Call(NodeId),
+}
+
+/// The same declaration walk with a pure edge policy. The policy is consulted
+/// before an edge marks its target visited. `Some(Demand)` selects the target's
+/// effects; `None` excludes
+/// it. A later demand reopens a definition without duplicating graph identity.
+/// The third policy argument says whether the source node is demanded.
+#[must_use]
+pub fn from_roots_with(
+    snapshot: &SemanticSnapshot,
+    roots: impl IntoIterator<Item = SymbolId>,
+    nodes: impl IntoIterator<Item = NodeId>,
+    mut follow: impl FnMut(NodeId, Edge, Demand) -> Option<Demand>,
+) -> Reachability {
     let mut result = Reachability::default();
-    let mut worklist: Vec<NodeId> = nodes.into_iter().collect();
+    let mut worklist: Vec<(NodeId, Demand)> = nodes
+        .into_iter()
+        .map(|node| (node, Demand::Definition))
+        .collect();
     let declaration_files = declaration_files(snapshot);
+    let mut followed_symbols = FxHashMap::default();
     // Classes and interfaces of declaration files walked whole: see below.
     let mut whole: FxHashSet<NodeId> = FxHashSet::default();
 
     for symbol in roots {
+        followed_symbols.insert(symbol, Demand::Value);
         if result.symbols.insert(symbol)
             && let Some(record) = snapshot.symbols.get(symbol.0 as usize)
         {
-            worklist.extend(record.declarations.iter().copied());
+            worklist.extend(
+                record
+                    .declarations
+                    .iter()
+                    .map(|node| (*node, Demand::Value)),
+            );
         }
     }
 
-    while let Some(node) = worklist.pop() {
-        if !result.nodes.insert(node) {
+    while let Some((node, demanded)) = worklist.pop() {
+        let previous = result.node_demands.entry(node).or_default();
+        let new_demand = demanded > *previous;
+        *previous = (*previous).max(demanded);
+        if !result.nodes.insert(node) && !new_demand {
             continue;
         }
         let Some(record) = snapshot.nodes.get(node.0 as usize) else {
@@ -278,7 +329,9 @@ pub fn from_roots(
         if !(declares_members && declaration_files.contains(&record.origin.location.file.0))
             || whole.contains(&node)
         {
-            worklist.extend(record.children.iter().copied());
+            worklist.extend(record.children.iter().filter_map(|child| {
+                follow(node, Edge::Syntax(*child), demanded).map(|demand| (*child, demand))
+            }));
         }
 
         // **Except a class or interface the program extends or implements.**
@@ -289,16 +342,23 @@ pub fn from_roots(
         // after.
         if matches!(record.kind, NodeKind::Syntax(syntax::HERITAGE_CLAUSE)) {
             for base in inherited(snapshot, &record.children) {
+                let Some(base_demand) = follow(node, Edge::Heritage(base), demanded) else {
+                    continue;
+                };
                 if whole.insert(base) && result.nodes.contains(&base) {
                     worklist.extend(
                         snapshot
                             .nodes
                             .get(base.0 as usize)
                             .into_iter()
-                            .flat_map(|base| base.children.iter().copied()),
+                            .flat_map(|base| base.children.iter().copied())
+                            .filter_map(|child| {
+                                follow(base, Edge::Syntax(child), base_demand)
+                                    .map(|demand| (child, demand))
+                            }),
                     );
                 } else {
-                    worklist.push(base);
+                    worklist.push((base, base_demand));
                 }
             }
         }
@@ -306,11 +366,23 @@ pub fn from_roots(
         // A reference names a symbol; following it to that symbol's declarations
         // is what makes this a graph walk rather than a subtree walk. Without this
         // edge, a function's body would be reached but nothing it calls would be.
+        if let Some(symbol) = record.symbol {
+            result.symbols.insert(symbol);
+        }
         if let Some(symbol) = record.symbol
-            && result.symbols.insert(symbol)
+            && let Some(symbol_demand) = follow(node, Edge::Declaration(symbol), demanded)
+            && followed_symbols
+                .get(&symbol)
+                .is_none_or(|previous| *previous < symbol_demand)
             && let Some(declared) = snapshot.symbols.get(symbol.0 as usize)
         {
-            worklist.extend(declared.declarations.iter().copied());
+            followed_symbols.insert(symbol, symbol_demand);
+            worklist.extend(
+                declared
+                    .declarations
+                    .iter()
+                    .map(|node| (*node, symbol_demand)),
+            );
         }
 
         // A resolved call reaches its callee even when nothing else does — the
@@ -320,29 +392,35 @@ pub fn from_roots(
             // generic callback parameters, fixed rest tuples and composite
             // return types. They are reachable facts of this call, through the
             // same seed policy as its expression's own type.
-            if let Some(signature) = snapshot.signatures.get(target.signature.0 as usize) {
-                result
-                    .types
-                    .extend(signature.parameters.iter().map(|parameter| parameter.ty));
-                result.types.insert(signature.return_type);
-                result
-                    .types
-                    .extend(signature.type_parameters.iter().copied());
-                result.types.extend(signature.this_type);
-                result.types.extend(
-                    signature
-                        .type_predicate
-                        .as_ref()
-                        .and_then(|predicate| predicate.narrowed_to),
-                );
-            }
-            if let Some(callee) = target.callee {
-                worklist.push(callee);
+            reach_signature(snapshot, target.signature, &mut result.types);
+            if let Some(callee) = target.callee
+                && let Some(callee_demand) = follow(node, Edge::Call(callee), demanded)
+            {
+                worklist.push((callee, callee_demand));
             }
         }
     }
 
     result
+}
+
+fn reach_signature(
+    snapshot: &SemanticSnapshot,
+    signature: crate::SignatureId,
+    types: &mut FxHashSet<TypeId>,
+) {
+    if let Some(signature) = snapshot.signatures.get(signature.0 as usize) {
+        types.extend(signature.parameters.iter().map(|parameter| parameter.ty));
+        types.insert(signature.return_type);
+        types.extend(signature.type_parameters.iter().copied());
+        types.extend(signature.this_type);
+        types.extend(
+            signature
+                .type_predicate
+                .as_ref()
+                .and_then(|predicate| predicate.narrowed_to),
+        );
+    }
 }
 
 #[cfg(test)]
@@ -384,6 +462,8 @@ mod tests {
             declaration_sites: Vec::new(),
             ty: None,
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library: None,
         }
     }

@@ -13,6 +13,8 @@ fn snapshot() -> SemanticSnapshot {
         declaration_sites: Vec::new(),
         ty: None,
         aliased: None,
+        owner: None,
+        constructor_value: None,
         library: Some(nts_semantic_schema::Library::Es),
     });
     snapshot.types = vec![

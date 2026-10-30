@@ -25,7 +25,7 @@ use nts_semantic_schema::{
     ModuleRecord, NodeId, SCHEMA_VERSION, SemanticSnapshot, SignatureId, SnapshotError, SymbolId,
     TypeId,
 };
-use rustc_hash::FxHashMap;
+use rustc_hash::{FxHashMap, FxHashSet};
 
 /// Native identities are lookup keys only. Arena and worklist insertion order
 /// comes from native source/visitor order, never a checker ID or hash iteration.
@@ -42,6 +42,8 @@ pub(crate) struct Capture<'p, 'r> {
     files: Vec<(File<'p>, NodeId)>,
     symbols: FxHashMap<Symbol<'p>, SymbolId>,
     symbol_work: Vec<Symbol<'p>>,
+    symbol_edges: usize,
+    constructor_owners: FxHashSet<Symbol<'p>>,
     types: FxHashMap<Type<'p>, TypeId>,
     type_work: Vec<Type<'p>>,
     signatures: FxHashMap<(Signature<'p>, bool), SignatureId>,
@@ -106,6 +108,8 @@ impl<'p, 'r> Capture<'p, 'r> {
             files: Vec::new(),
             symbols: FxHashMap::default(),
             symbol_work: Vec::new(),
+            symbol_edges: 0,
+            constructor_owners: FxHashSet::default(),
             types: FxHashMap::default(),
             type_work: Vec::new(),
             signatures: FxHashMap::default(),
@@ -174,6 +178,7 @@ impl<'p, 'r> Capture<'p, 'r> {
         self.capture_calls_and_constants()?;
         let seeds = nts_semantic_schema::reachability::for_frontend(&self.snapshot).seeds();
         self.expand_types(seeds)?;
+        self.resolve_symbol_edges()?;
         self.snapshot.bound_types = crate::bindings::bound_types(&self.snapshot);
         self.snapshot.validate()?;
         Ok(self.snapshot)

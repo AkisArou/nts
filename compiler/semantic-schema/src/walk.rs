@@ -18,7 +18,30 @@
 //! deliberately left alone — it is a different animal, and unifying it means
 //! moving lowering state, which is not what this buys.
 
-use crate::schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId};
+use crate::schema::{NodeData, NodeId, NodeKind, SemanticSnapshot, SymbolId};
+
+/// A named semantic child slot, using the schema's shared presence layout.
+#[must_use]
+pub fn child(snapshot: &SemanticSnapshot, id: NodeId, name: &str) -> Option<NodeId> {
+    let record = snapshot.nodes.get(id.0 as usize)?;
+    let NodeKind::Syntax(kind) = record.kind else {
+        return None;
+    };
+    let NodeData::Children { present, .. } = record.data else {
+        return None;
+    };
+    let slot = crate::children::properties(kind)
+        .iter()
+        .position(|slot| *slot == name)?;
+    let bit = 1_u8.checked_shl(u32::try_from(slot).ok()?)?;
+    if present & bit == 0 {
+        return None;
+    }
+    record
+        .children
+        .get((present & (bit - 1)).count_ones() as usize)
+        .copied()
+}
 
 /// A node's syntax kind, or `None` for a list node.
 #[must_use]

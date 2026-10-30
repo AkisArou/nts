@@ -333,6 +333,8 @@ fn query_symbol(
         declaration_sites: Vec::new(),
         ty: None,
         aliased: None,
+        owner: None,
+        constructor_value: None,
         library: None,
     });
     id

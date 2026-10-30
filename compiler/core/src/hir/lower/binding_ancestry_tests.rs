@@ -52,6 +52,8 @@ fn binding(depth: u32, owner: u16, kind: VariableKind) -> SemanticSnapshot {
         declaration_sites: Vec::new(),
         ty: None,
         aliased: None,
+        owner: None,
+        constructor_value: None,
         library: None,
     });
     snapshot

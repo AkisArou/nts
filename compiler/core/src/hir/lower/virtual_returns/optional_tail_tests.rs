@@ -668,6 +668,8 @@ fn overloaded_property() -> (Fixture, Func, NodeId) {
             declaration_sites: Vec::new(),
             ty: Some(TypeId(3)),
             aliased: None,
+            owner: None,
+            constructor_value: None,
             library: None,
         });
     let parameter = TypeId(u32::try_from(fixture.snapshot.types.len()).unwrap());

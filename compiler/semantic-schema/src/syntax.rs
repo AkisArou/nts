@@ -284,6 +284,10 @@ pub const ENUM_DECLARATION: u16 = 267;
 pub const MODULE_DECLARATION: u16 = 268;
 pub const EXPRESSION_WITH_TYPE_ARGUMENTS: u16 = 234;
 pub const TYPE_REFERENCE: u16 = 184;
+/// A name qualified in a type (`Namespace.Type`).
+pub const QUALIFIED_NAME: u16 = 167;
+/// `typeof value` in a type position, distinct from a runtime typeof probe.
+pub const TYPE_QUERY: u16 = 187;
 /// `T` in `class Box<T>`: the declaration of a type parameter, whose parent
 /// is the class, interface or function that owns it.
 pub const TYPE_PARAMETER: u16 = 169;

@@ -70,7 +70,7 @@ use crate::origin::Origin;
 /// and selected overloads, for inspection-to-final-capture rebinding.
 /// 52: checker-proved membership in the global value and type binding tables.
 /// 53: tuple element kinds, initial fixed prefix and readonly metadata.
-pub const SCHEMA_VERSION: u32 = 53;
+pub const SCHEMA_VERSION: u32 = 54;
 
 /// A TypeScript symbol, as the checker resolved it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize)]
@@ -507,6 +507,14 @@ pub struct SymbolRecord {
     /// Followed to the end of the chain, so a re-export costs a reader one hop
     /// rather than as many as the program happens to have.
     pub aliased: Option<SymbolId>,
+    /// The checker's declaring symbol, not a receiver's structural type or a
+    /// name-based guess. A library member can reach its canonical global owner
+    /// through this chain even when source names only a primitive instance.
+    pub owner: Option<SymbolId>,
+    /// A global constructor value whose checked type is this declared owner
+    /// type, authenticated through the owner's prototype's global identity.
+    /// This is not inferred by removing a suffix from an interface name.
+    pub constructor_value: Option<SymbolId>,
     /// The library that declares a symbol the program does not: its feature's
     /// family (`es:JSON`, `web:fetch`, `node:fs`), which is what a builtin's
     /// provider is chosen by. `None` where any declaration is in the decoded
@@ -1378,6 +1386,60 @@ impl SemanticSnapshot {
         self.symbols.get(symbol.0 as usize)?.name.public_name()
     }
 
+    fn validate_symbols(&self) -> Result<(), SnapshotError> {
+        for symbol in &self.symbols {
+            self.check_key(&symbol.name)?;
+            for related in [symbol.aliased, symbol.owner, symbol.constructor_value]
+                .into_iter()
+                .flatten()
+            {
+                check(related.0, "symbol", self.symbols.len())?;
+            }
+            if let Some(value) = symbol.constructor_value {
+                let value = &self.symbols[value.0 as usize];
+                if !symbol.flags.contains(SymbolFlags::GLOBAL_TYPE)
+                    || symbol.flags.contains(SymbolFlags::GLOBAL_VALUE)
+                    || !value.flags.contains(SymbolFlags::GLOBAL_VALUE)
+                    || value.library != symbol.library
+                {
+                    return Err(SnapshotError::Project(
+                        "invalid checked constructor-value identity".into(),
+                    ));
+                }
+            }
+            if let Some(TypeId(ty)) = symbol.ty {
+                check(ty, "type", self.types.len())?;
+            }
+        }
+
+        // A declaring owner is a forest, independently of alias/type edges.
+        // Validate once in linear time, including owners not reached by a root.
+        let mut owners = vec![0_u8; self.symbols.len()];
+        for start in 0..self.symbols.len() {
+            let mut path = Vec::new();
+            let mut at = Some(start);
+            while let Some(index) = at {
+                match owners[index] {
+                    2 => break,
+                    1 => {
+                        return Err(SnapshotError::Project(
+                            "cyclic symbol declaring owners".into(),
+                        ));
+                    }
+                    _ => {}
+                }
+                owners[index] = 1;
+                path.push(index);
+                at = self.symbols[index].owner.map(|owner| owner.0 as usize);
+            }
+            for index in path {
+                owners[index] = 2;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Reject a snapshot the rest of the compiler cannot safely trust.
     ///
     /// Called once at the frontend boundary. Everything downstream indexes these
@@ -1406,12 +1468,7 @@ impl SemanticSnapshot {
             }
         }
 
-        for symbol in &self.symbols {
-            self.check_key(&symbol.name)?;
-            if let Some(TypeId(ty)) = symbol.ty {
-                check(ty, "type", self.types.len())?;
-            }
-        }
+        self.validate_symbols()?;
 
         for (index, record) in self.types.iter().enumerate() {
             if let TypeKind::Object { properties } = &record.kind {
