@@ -191,11 +191,11 @@ first cases that use them.
 | `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 10 | 0 |
 | `ts-builtin-subclass` | a class extending a built-in (Array, Error, Map) | conformance/es6/classDeclaration; typed paths | 3 | 0 |
 | `ts-call-signatures` | a call signature in an interface or type literal: a callable object with properties | conformance/types/members; ts-eslint TSCallSignatureDeclaration | 2 | 0 |
-| `ts-class` | a class declaration or expression | conformance/classes | 273 | 29 |
+| `ts-class` | a class declaration or expression | conformance/classes | 277 | 29 |
 | `ts-class-expression` | a class expression, named or anonymous | conformance/classes/classExpressions; conformance/es6/classExpressions | 5 | 0 |
 | `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 79 | 4 |
 | `ts-class-static-block` | a `static { }` block | conformance/classes/classStaticBlock; ts-eslint StaticBlock | 2 | 0 |
-| `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 128 | 1 |
+| `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 129 | 1 |
 | `ts-commonjs` | a CommonJS-format TypeScript module | conformance/externalModules | 0 | 5 |
 | `ts-computed-keys` | a computed property key in a literal, a class or a type | conformance/es6/computedProperties | 5 | 0 |
 | `ts-conditional-types` | a conditional type (`T extends U ? X : Y`), distributive over unions | conformance/types/conditional; ts-eslint TSConditionalType | 4 | 0 |
@@ -221,8 +221,8 @@ first cases that use them.
 | `ts-export-equals` | `export =` | conformance/externalModules; ts-eslint TSExportAssignment | 0 | 4 |
 | `ts-exports` | export declarations, lists, renames and defaults, read back within the module | conformance/externalModules; conformance/es6/modules; ts-eslint ExportNamedDeclaration | 10 | 3 |
 | `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 32 | 0 |
-| `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 27 | 0 |
-| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 702 | 4 |
+| `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 28 | 0 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 707 | 4 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 17 | 0 |
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 15 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 9 | 0 |
@@ -234,13 +234,13 @@ first cases that use them.
 | `ts-index-signatures` | an index signature (`[key: string]: T`) on a type, interface or class | conformance/classes/indexMemberDeclarations; ts-eslint TSIndexSignature | 8 | 0 |
 | `ts-indexed-access` | an indexed access type (`T[K]`) | conformance/types/keyof; ts-eslint TSIndexedAccessType | 7 | 0 |
 | `ts-infer` | `infer` in a conditional type | conformance/types/conditional; ts-eslint TSInferType | 1 | 0 |
-| `ts-inheritance` | `extends` between classes: super calls, super property access, the prototype chain | conformance/classes/classDeclarations/classHeritageSpecification; conformance/expressions/superCalls | 78 | 3 |
+| `ts-inheritance` | `extends` between classes: super calls, super property access, the prototype chain | conformance/classes/classDeclarations/classHeritageSpecification; conformance/expressions/superCalls | 82 | 3 |
 | `ts-instanceof` | `instanceof`, and narrowing by it | conformance/expressions/typeGuards/typeGuardsWithInstanceOf | 3 | 0 |
 | `ts-instantiation-expression` | an instantiation expression (`f<number>`), erased | conformance/types/typeParameters/typeArgumentLists/instantiationExpressions; ts-eslint TSInstantiationExpression | 1 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 4 | 0 |
 | `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 65 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 2 | 0 |
-| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 616 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 621 | 0 |
 | `ts-jsx` | JSX in a `.tsx` file, compiled to factory calls | conformance/jsx; ts-eslint JSX nodes | 0 | 6 |
 | `ts-keyof` | `keyof T`, and values of that type | conformance/types/keyof; ts-eslint TSTypeOperator | 9 | 0 |
 | `ts-legacy-decorators` | `experimentalDecorators`: class, method, property, accessor and parameter decorators | conformance/decorators | 0 | 8 |
@@ -257,7 +257,7 @@ first cases that use them.
 | `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 89 | 0 |
 | `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 212 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 1 | 0 |
-| `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 224 | 0 |
+| `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 225 | 0 |
 | `ts-optional-chaining` | `?.` on properties, calls and elements, in typed code | conformance/expressions/optionalChaining | 8 | 0 |
 | `ts-optional-parameters` | a parameter marked `?` | conformance/functions; conformance/types/members | 7 | 0 |
 | `ts-optional-properties` | a property marked `?` in a type, a class or an interface | conformance/types/members; conformance/types/objectTypeLiteral | 8 | 0 |
@@ -267,7 +267,7 @@ first cases that use them.
 | `ts-private-fields` | ECMAScript `#private` fields, methods and accessors | conformance/classes/members/privateNames | 8 | 2 |
 | `ts-private-keyword` | the `private` modifier, a compile-time check over an ordinary property | conformance/classes/members/accessibility; ts-eslint TSPrivateKeyword | 7 | 0 |
 | `ts-proof-bounds` | an index proved in range before a route changes the index or the container | proof contracts: Objects, Arrays; Numbers, Integers proved from doubles | 83 | 0 |
-| `ts-proof-call-target` | a known receiver or closure target changes before a dispatch or specialized call | proof contracts: Objects, Calls and Functions as values; Language, Functions | 52 | 0 |
+| `ts-proof-call-target` | a known receiver or closure target changes before a dispatch or specialized call | proof contracts: Objects, Calls and Functions as values; Language, Functions | 57 | 0 |
 | `ts-proof-element-kind` | a non-integer store invalidates a whole-program integer element kind | proof contracts: Objects, Arrays; Numbers, Integers proved from doubles | 44 | 0 |
 | `ts-proof-length` | an allocation or guard proves a length before a route changes it | proof contracts: Objects, Arrays | 64 | 0 |
 | `ts-proof-negative-zero` | a zero sign becomes observable after a route invalidates its omission | proof contracts: Numbers, Integers proved from doubles; Language, Numbers | 45 | 0 |
@@ -277,25 +277,25 @@ first cases that use them.
 | `ts-record` | `Record<K, V>` | conformance/types/mapped; lib | 8 | 0 |
 | `ts-rest-parameters` | a rest parameter, typed as an array or a tuple | conformance/es6/restParameters | 3 | 0 |
 | `ts-route-accessor` | a getter or setter runs user code between proof and use | proof contracts: Objects, Calls; conformance/classes/accessors | 16 | 0 |
-| `ts-route-alias` | a second name, field or container entry writes the value a proof describes | proof contracts: Objects, Arrays and Functions as values | 33 | 0 |
-| `ts-route-call` | a direct, nested or recursive call changes the value between proof and use | proof contracts: Objects, Arrays and Calls | 62 | 0 |
+| `ts-route-alias` | a second name, field or container entry writes the value a proof describes | proof contracts: Objects, Arrays and Functions as values | 34 | 0 |
+| `ts-route-call` | a direct, nested or recursive call changes the value between proof and use | proof contracts: Objects, Arrays and Calls | 63 | 0 |
 | `ts-route-callback` | a callback passed to a builtin changes the value between proof and use | proof contracts: Objects, Arrays and Functions as values | 37 | 0 |
 | `ts-route-chain` | a change propagates through many assignments, fields or loop-carried dependencies | proof contracts: Numbers, Integers proved from doubles; Objects, Arrays | 26 | 0 |
 | `ts-route-conversion` | valueOf or toString runs user code during primitive conversion | proof contracts: Objects, Calls; conformance/expressions; ToPrimitive | 37 | 0 |
 | `ts-route-exception` | a thrown or unwinding edge preserves a partial update before use | proof contracts: Objects, Calls; conformance/statements/tryStatements | 12 | 0 |
-| `ts-route-loop` | a back edge, nested loop or loop exit carries a change to a later use | proof contracts: Numbers, Integers proved from doubles; conformance/statements | 56 | 0 |
-| `ts-route-merge` | paths with different facts join before the value is used | proof contracts: Numbers, Integers proved from doubles; conformance/controlFlow | 65 | 0 |
+| `ts-route-loop` | a back edge, nested loop or loop exit carries a change to a later use | proof contracts: Numbers, Integers proved from doubles; conformance/statements | 58 | 0 |
+| `ts-route-merge` | paths with different facts join before the value is used | proof contracts: Numbers, Integers proved from doubles; conformance/controlFlow | 66 | 0 |
 | `ts-route-suspension` | yield or await lets other code change a proved value before resumption | proof contracts: Objects, Functions as values; conformance/generators; conformance/async | 15 | 0 |
 | `ts-satisfies` | the `satisfies` operator, which leaves its value and the value's type alone | conformance/expressions/typeSatisfaction; ts-eslint TSSatisfiesExpression | 3 | 0 |
 | `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 46 | 1 |
-| `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 18 | 4 |
+| `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 22 | 4 |
 | `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 14 | 0 |
 | `ts-structural-typing` | a value accepted for its shape, not its declared name: literals and classes that never say `implements` | conformance/types/typeRelationships; typed paths | 29 | 0 |
 | `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 14 | 2 |
 | `ts-tagged-templates` | a tagged template with a typed tag function | conformance/es6/templates | 1 | 0 |
 | `ts-template-literal-types` | a template literal type, and the intrinsic string types (Uppercase, Capitalize, ...) | conformance/types/literal/templateLiteralTypes; ts-eslint TSTemplateLiteralType | 8 | 0 |
 | `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 65 | 0 |
-| `ts-this` | `this` in methods, arrow fields and detached calls | conformance/expressions/thisKeyword | 19 | 1 |
+| `ts-this` | `this` in methods, arrow fields and detached calls | conformance/expressions/thisKeyword | 23 | 1 |
 | `ts-this-parameter` | a `this` parameter, which is erased | conformance/types/thisType; conformance/functions | 5 | 0 |
 | `ts-this-type` | the polymorphic `this` type | conformance/types/thisType | 2 | 0 |
 | `ts-to-primitive` | an object converted to a primitive: `valueOf`, `toString`, `Symbol.toPrimitive` | typed paths | 48 | 0 |
