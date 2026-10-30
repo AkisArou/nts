@@ -74,7 +74,7 @@ fn reached(
 }
 fn runtime(result: &ReachedFeatures) -> Vec<&str> {
     result
-        .features
+        .features()
         .iter()
         .filter(|f| f.requires_provider())
         .map(|f| f.feature.name.as_str())
@@ -99,7 +99,7 @@ fn erased_annotations_and_type_queries_do_not_reach_a_helpers_body() {
     let only = reached(&snapshot, &["subject"], |_| None);
     assert!(runtime(&only).is_empty(), "{only:?}");
     let weakmap = only
-        .features
+        .features()
         .iter()
         .find(|f| f.feature.name == "WeakMap")
         .unwrap();
@@ -138,7 +138,7 @@ fn typeof_probes_prune_before_requirements_and_unknown_guards_keep_both_arms() {
     .capture();
     let probe = reached(&snapshot, &["probe"], |_| Some(false));
     assert_eq!(runtime(&probe), [] as [&str; 0]);
-    assert_eq!(probe.probes.len(), 1);
+    assert_eq!(probe.probes().len(), 1);
     for subject in ["parenthesized", "property"] {
         assert_eq!(
             runtime(&reached(&snapshot, &[subject], |_| Some(false))),
@@ -146,7 +146,7 @@ fn typeof_probes_prune_before_requirements_and_unknown_guards_keep_both_arms() {
             "{subject}"
         );
     }
-    assert_eq!(probe.features[0].witnesses[0].use_kind, FeatureUse::Probe);
+    assert_eq!(probe.features()[0].witnesses[0].use_kind, FeatureUse::Probe);
     assert_eq!(
         runtime(&reached(&snapshot, &["branches"], |_| Some(false))),
         ["Map"]
@@ -187,10 +187,10 @@ fn in_probes_authenticate_static_key_and_global_receiver() {
     .capture();
     let actual = reached(&snapshot, &["subject"], |_| Some(false));
     assert_eq!(runtime(&actual), ["Map"]);
-    assert_eq!(actual.probes.len(), 1);
-    assert_eq!(actual.probes[0].feature.as_ref().unwrap().name, "WeakMap");
+    assert_eq!(actual.probes().len(), 1);
+    assert_eq!(actual.probes()[0].feature.as_ref().unwrap().name, "WeakMap");
     assert_eq!(
-        actual.probes[0].feature.as_ref().unwrap().library,
+        actual.probes()[0].feature.as_ref().unwrap().library,
         Library::Es
     );
     for subject in ["shadow", "dynamic", "unresolved"] {
@@ -259,7 +259,7 @@ fn executable_heritage_and_type_arguments_have_distinct_meanings() {
     let actual = reached(&snapshot, &["Subject"], |_| None);
     assert_eq!(runtime(&actual), ["Map"]);
     let weakref = actual
-        .features
+        .features()
         .iter()
         .find(|f| f.feature.name == "WeakRef")
         .unwrap();
@@ -827,7 +827,7 @@ fn the_complete_51_probe_population_and_controls_use_the_same_checked_walk() {
                 "{} {name}: no profile guards in archived probes",
                 path.file_name().unwrap()
             );
-            for feature in &result.features {
+            for feature in result.features() {
                 assert_ne!(feature.witnesses, Vec::new());
                 for witness in &feature.witnesses {
                     assert!(snapshot.nodes[witness.node.0 as usize].symbol.is_some());

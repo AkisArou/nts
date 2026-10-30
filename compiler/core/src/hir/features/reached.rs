@@ -70,11 +70,28 @@ pub struct AvailabilityProbe {
     pub available: Option<bool>,
 }
 
+/// Requirements and the reach plan that produced them form one sealed result.
+/// Only the checked walk constructs it; callers can inspect, but cannot remove
+/// witnesses while retaining a plan that validates against the checked inputs.
+///
+/// ```compile_fail,E0616
+/// use nts_core::hir::features::ReachedFeatures;
+/// fn truncate(mut reached: ReachedFeatures) {
+///     reached.features.clear();
+/// }
+/// ```
+///
+/// ```compile_fail,E0616
+/// use nts_core::hir::features::ReachedFeatures;
+/// fn truncate(mut reached: ReachedFeatures) {
+///     reached.probes.clear();
+/// }
+/// ```
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ReachedFeatures {
     /// Canonically sorted, with each feature appearing once for the program.
-    pub features: Vec<ReachedFeature>,
-    pub probes: Vec<AvailabilityProbe>,
+    features: Vec<ReachedFeature>,
+    probes: Vec<AvailabilityProbe>,
     plan: FeatureReachPlan,
 }
 
@@ -113,6 +130,14 @@ pub struct ReachWork {
     pub alias_hops: usize,
 }
 impl ReachedFeatures {
+    #[must_use]
+    pub fn features(&self) -> &[ReachedFeature] {
+        &self.features
+    }
+    #[must_use]
+    pub fn probes(&self) -> &[AvailabilityProbe] {
+        &self.probes
+    }
     #[must_use]
     pub const fn plan(&self) -> &FeatureReachPlan {
         &self.plan
