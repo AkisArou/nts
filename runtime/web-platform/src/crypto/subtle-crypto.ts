@@ -409,7 +409,7 @@ export class SubtleCrypto {
         return { ciphertext: result.ciphertext.buffer as ArrayBuffer, sharedKey };
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -428,7 +428,7 @@ export class SubtleCrypto {
         return { ciphertext: result.ciphertext.buffer as ArrayBuffer, sharedKey: result.sharedKey.buffer as ArrayBuffer };
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -456,7 +456,7 @@ export class SubtleCrypto {
         return sharedKey;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
@@ -476,7 +476,7 @@ export class SubtleCrypto {
         return decapsulateMlKem(provider, normalized, slots, bytes).buffer as ArrayBuffer;
       });
     } catch (error) {
-      return rejectedPromise(error);
+      return Promise.reject(error);
     }
   }
 
