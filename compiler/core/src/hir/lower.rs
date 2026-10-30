@@ -42645,11 +42645,11 @@ impl<'a> FuncBuilder<'a> {
         else {
             return Ok(None);
         };
-        let mut found = Vec::new();
-        self.binding_thens(ty, 0, &mut found);
-        let signature = match found.as_slice() {
-            [] => return Ok(None),
-            [(signature, true)] => *signature,
+        let found = binding_thens::collect(self.snapshot, &self.thenables, ty)
+            .map_err(|reason| self.unsupported(id, reason))?;
+        let signature = match found {
+            binding_thens::Found::None => return Ok(None),
+            binding_thens::Found::One(signature, true) => signature,
             // A union that holds one: `IAsyncOperation<T> | null` is either
             // the operation or not, and which is a run-time question the
             // static choice cannot ask.
@@ -42670,46 +42670,6 @@ impl<'a> FuncBuilder<'a> {
                 Err(self.unsupported(id, &format!("resolving a promise with {reason}")))
             }
             None => Ok(None),
-        }
-    }
-
-    /// The binding `then`s a type holds, each with whether the type is
-    /// certainly one: an object type's own, and an intersection's members'.
-    /// A union's are recorded as uncertain.
-    fn binding_thens(&self, ty: TypeId, depth: u32, found: &mut Vec<(NodeId, bool)>) {
-        if depth > 16 {
-            return;
-        }
-        match self
-            .snapshot
-            .types
-            .get(ty.0 as usize)
-            .map(|record| &record.kind)
-        {
-            Some(TypeKind::Object { properties }) => {
-                let then = properties
-                    .iter()
-                    .find(|property| property.name.is_name("then"))
-                    .and_then(|property| property.declaration);
-                if let Some(signature) =
-                    then.filter(|signature| self.thenables.signatures.contains_key(signature))
-                {
-                    found.push((signature, true));
-                }
-            }
-            Some(TypeKind::Intersection(members)) => {
-                for member in members {
-                    self.binding_thens(*member, depth + 1, found);
-                }
-            }
-            Some(TypeKind::Union(members)) => {
-                let mut inner = Vec::new();
-                for member in members {
-                    self.binding_thens(*member, depth + 1, &mut inner);
-                }
-                found.extend(inner.into_iter().map(|(signature, _)| (signature, false)));
-            }
-            _ => {}
         }
     }
 
@@ -87978,6 +87938,7 @@ mod collection_tests;
 #[cfg(test)]
 mod carried_reference_tests;
 
+mod binding_thens;
 mod type_bases;
 
 #[cfg(test)]
