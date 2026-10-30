@@ -1,0 +1,1656 @@
+{
+  "schemaVersion": 1,
+  "typescriptSource": "82c90950e3f19b122e5e92bce63f5d837eff0fd7",
+  "registryCommit": "2fb64ee2c66cf0e115e0ae744db3094268b49d11",
+  "compilerSource": "091bda9e0740",
+  "compilerSha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0",
+  "families": [
+    {
+      "family": "sha3-cshake-kmac",
+      "source": "import { SubtleCrypto } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport type { CryptoKey } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/crypto-key.ts\";\nexport function supported(): number { return Number(SubtleCrypto.supports(\"digest\", \"SHA3-256\")) + Number(SubtleCrypto.supports(\"digest\", {name: \"cSHAKE128\", length: 128})) + Number(SubtleCrypto.supports(\"generateKey\", {name: \"KMAC128\", length: 128})); }\nexport function sha3(s: SubtleCrypto) { return s.digest(\"SHA3-256\", new Uint8Array(0)); }\nexport function cshake(s: SubtleCrypto) { return s.digest({name: \"cSHAKE128\", length: 128}, new Uint8Array(0)); }\nexport function kmac(s: SubtleCrypto) { return s.generateKey({name: \"KMAC128\", length: 128}, false, [\"sign\"]); }\nexport function existing(s: SubtleCrypto) { return s.digest(\"SHA-256\", new Uint8Array(0)); }\nexport function sha3_384(s: SubtleCrypto) { return s.digest(\"SHA3-384\", new Uint8Array(0)); }\nexport function sha3_512(s: SubtleCrypto) { return s.digest(\"SHA3-512\", new Uint8Array(0)); }\nexport function cshake256(s: SubtleCrypto) { return s.digest({name: \"cSHAKE256\", length: 128}, new Uint8Array(0)); }\nexport function kmac256(s: SubtleCrypto) { return s.generateKey({name: \"KMAC256\", length: 256}, false, [\"sign\"]); }\nexport function signKmac(s: SubtleCrypto, key: CryptoKey) { return s.sign({name: \"KMAC128\", length: 128}, key, new Uint8Array(0)); }\nexport function verifyKmac(s: SubtleCrypto, key: CryptoKey) { return s.verify({name: \"KMAC256\", length: 128}, key, new Uint8Array(16), new Uint8Array(0)); }\n",
+      "sourceSha256": "03c3faf60775ae7956402cf80a82b5ef1e6d9b46494b3185bf72f8b2dec44774",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 48,
+          "code": "NTS1003",
+          "function": "sha3",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 5,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "cshake",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 6,
+          "column": 48,
+          "code": "NTS1003",
+          "function": "kmac",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "c",
+          "line": 8,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "sha3_384",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 9,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "sha3_512",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 10,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "cshake256",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 11,
+          "column": 51,
+          "code": "NTS1003",
+          "function": "kmac256",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 12,
+          "column": 68,
+          "code": "NTS1003",
+          "function": "signKmac@main",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#sign`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 13,
+          "column": 70,
+          "code": "NTS1003",
+          "function": "verifyKmac@main",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#verify`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 48,
+          "code": "NTS1003",
+          "function": "sha3",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 5,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "cshake",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 6,
+          "column": 48,
+          "code": "NTS1003",
+          "function": "kmac",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "llvm",
+          "line": 8,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "sha3_384",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 9,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "sha3_512",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 10,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "cshake256",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 11,
+          "column": 51,
+          "code": "NTS1003",
+          "function": "kmac256",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 12,
+          "column": 68,
+          "code": "NTS1003",
+          "function": "signKmac@main",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#sign`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 13,
+          "column": 70,
+          "code": "NTS1003",
+          "function": "verifyKmac@main",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#verify`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 48,
+          "code": "NTS1003",
+          "function": "sha3",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 5,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "cshake",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 6,
+          "column": 48,
+          "code": "NTS1003",
+          "function": "kmac",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "jvm",
+          "line": 8,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "sha3_384",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 9,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "sha3_512",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 10,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "cshake256",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 11,
+          "column": 51,
+          "code": "NTS1003",
+          "function": "kmac256",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 12,
+          "column": 68,
+          "code": "NTS1003",
+          "function": "signKmac@main",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#sign`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 13,
+          "column": 70,
+          "code": "NTS1003",
+          "function": "verifyKmac@main",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#verify`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        }
+      ]
+    },
+    {
+      "family": "aead",
+      "source": "import { SubtleCrypto } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport type { CryptoKey } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/crypto-key.ts\";\nexport function supported(): number { return Number(SubtleCrypto.supports(\"generateKey\", {name: \"AES-OCB\", length: 128})) + Number(SubtleCrypto.supports(\"generateKey\", \"ChaCha20-Poly1305\")); }\nexport function aesOcb(s: SubtleCrypto) { return s.generateKey({name: \"AES-OCB\", length: 128}, false, [\"encrypt\"]); }\nexport function chacha(s: SubtleCrypto) { return s.generateKey(\"ChaCha20-Poly1305\", false, [\"encrypt\"]); }\nexport function encrypt(s: SubtleCrypto, key: CryptoKey) { return s.encrypt({name: \"AES-OCB\", iv: new Uint8Array(12)}, key, new Uint8Array(0)); }\nexport function existing(s: SubtleCrypto) { return s.generateKey({name: \"AES-GCM\", length: 128}, false, [\"encrypt\"]); }\nexport function decrypt(s: SubtleCrypto, key: CryptoKey) { return s.decrypt({name: \"ChaCha20-Poly1305\", iv: new Uint8Array(12)}, key, new Uint8Array(16)); }\n",
+      "sourceSha256": "b6195e4ac25993f33914105be6c01f3d3dc4edab628fee527dfca04b4173689b",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "aesOcb",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 5,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "chacha",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 6,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "encrypt",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encrypt`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "c",
+          "line": 8,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "decrypt",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decrypt`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "aesOcb",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 5,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "chacha",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 6,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "encrypt",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encrypt`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "llvm",
+          "line": 8,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "decrypt",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decrypt`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "aesOcb",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 5,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "chacha",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 6,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "encrypt",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encrypt`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "jvm",
+          "line": 8,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "decrypt",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decrypt`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        }
+      ]
+    },
+    {
+      "family": "argon2",
+      "source": "import { SubtleCrypto } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport type { CryptoKey } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/crypto-key.ts\";\nexport function supported(): number { return Number(SubtleCrypto.supports(\"deriveBits\", {name: \"Argon2id\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, 128)); }\nexport function derive(s: SubtleCrypto, key: CryptoKey) { return s.deriveBits({name: \"Argon2id\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, key, 128); }\nexport function importPassword(s: SubtleCrypto) { return s.importKey(\"raw-secret\", new Uint8Array([1]), \"Argon2id\", false, [\"deriveBits\"]); }\nexport function existing(s: SubtleCrypto) { return s.importKey(\"raw\", new Uint8Array([1]), \"PBKDF2\", false, [\"deriveBits\"]); }\nexport function argon2d(s: SubtleCrypto, key: CryptoKey) { return s.deriveBits({name: \"Argon2d\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, key, 128); }\nexport function argon2i(s: SubtleCrypto, key: CryptoKey) { return s.deriveBits({name: \"Argon2i\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, key, 128); }\n",
+      "sourceSha256": "0d93b1fa82f3a676b6638cbabd6c4c8712e62c978efdfd9b534c19742e0aa14f",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "derive",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 5,
+          "column": 58,
+          "code": "NTS1003",
+          "function": "importPassword",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 6,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "c",
+          "line": 7,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "argon2d",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 8,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "argon2i",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "derive",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 5,
+          "column": 58,
+          "code": "NTS1003",
+          "function": "importPassword",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 6,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "llvm",
+          "line": 7,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "argon2d",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 8,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "argon2i",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "derive",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 5,
+          "column": 58,
+          "code": "NTS1003",
+          "function": "importPassword",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 6,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "jvm",
+          "line": 7,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "argon2d",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 8,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "argon2i",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#deriveBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        }
+      ]
+    },
+    {
+      "family": "ml-dsa",
+      "source": "import { SubtleCrypto } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport type { CryptoKey } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/crypto-key.ts\";\nexport function supported(): number { return Number(SubtleCrypto.supports(\"generateKey\", \"ML-DSA-44\")) + Number(SubtleCrypto.supports(\"getPublicKey\", \"ML-DSA-44\")); }\nexport function generate(s: SubtleCrypto) { return s.generateKey(\"ML-DSA-44\", false, [\"sign\", \"verify\"]); }\nexport function publicKey(s: SubtleCrypto, key: CryptoKey) { return s.getPublicKey(key, [\"verify\"]); }\nexport function sign(s: SubtleCrypto, key: CryptoKey) { return s.sign(\"ML-DSA-44\", key, new Uint8Array(0)); }\nexport function existing(s: SubtleCrypto) { return s.generateKey(\"Ed25519\", false, [\"sign\", \"verify\"]); }\nexport function dsa65(s: SubtleCrypto) { return s.generateKey(\"ML-DSA-65\", false, [\"sign\", \"verify\"]); }\nexport function dsa87(s: SubtleCrypto) { return s.generateKey(\"ML-DSA-87\", false, [\"sign\", \"verify\"]); }\nexport function verify(s: SubtleCrypto, key: CryptoKey) { return s.verify(\"ML-DSA-44\", key, new Uint8Array(2420), new Uint8Array(0)); }\n",
+      "sourceSha256": "f3f0dcc3750896c6d9ef5dcb475fdb9e9f54f0d6cdaa4fe78f59a9097afa695c",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "generate",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 5,
+          "column": 69,
+          "code": "NTS1003",
+          "function": "publicKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#getPublicKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 6,
+          "column": 64,
+          "code": "NTS1003",
+          "function": "sign",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#sign`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "c",
+          "line": 8,
+          "column": 49,
+          "code": "NTS1003",
+          "function": "dsa65",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 9,
+          "column": 49,
+          "code": "NTS1003",
+          "function": "dsa87",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 10,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "verify",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#verify`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "generate",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 5,
+          "column": 69,
+          "code": "NTS1003",
+          "function": "publicKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#getPublicKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 6,
+          "column": 64,
+          "code": "NTS1003",
+          "function": "sign",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#sign`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "llvm",
+          "line": 8,
+          "column": 49,
+          "code": "NTS1003",
+          "function": "dsa65",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 9,
+          "column": 49,
+          "code": "NTS1003",
+          "function": "dsa87",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 10,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "verify",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#verify`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "generate",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 5,
+          "column": 69,
+          "code": "NTS1003",
+          "function": "publicKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#getPublicKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 6,
+          "column": 64,
+          "code": "NTS1003",
+          "function": "sign",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#sign`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 7,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "jvm",
+          "line": 8,
+          "column": 49,
+          "code": "NTS1003",
+          "function": "dsa65",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 9,
+          "column": 49,
+          "code": "NTS1003",
+          "function": "dsa87",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 10,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "verify",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#verify`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        }
+      ]
+    },
+    {
+      "family": "ml-kem",
+      "source": "import { SubtleCrypto } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport type { CryptoKey } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/crypto-key.ts\";\nexport function supported(): number { return Number(SubtleCrypto.supports(\"generateKey\", \"ML-KEM-512\")) + Number(SubtleCrypto.supports(\"encapsulateBits\", \"ML-KEM-512\")); }\nexport function generate(s: SubtleCrypto) { return s.generateKey(\"ML-KEM-512\", false, [\"encapsulateBits\", \"decapsulateBits\"]); }\nexport function encBits(s: SubtleCrypto, key: CryptoKey) { return s.encapsulateBits(\"ML-KEM-512\", key); }\nexport function encKey(s: SubtleCrypto, key: CryptoKey) { return s.encapsulateKey(\"ML-KEM-512\", key, {name: \"AES-GCM\", length: 128}, false, [\"encrypt\"]); }\nexport function decBits(s: SubtleCrypto, key: CryptoKey) { return s.decapsulateBits(\"ML-KEM-512\", key, new Uint8Array(768)); }\nexport function decKey(s: SubtleCrypto, key: CryptoKey) { return s.decapsulateKey(\"ML-KEM-512\", key, new Uint8Array(768), {name: \"AES-GCM\", length: 128}, false, [\"encrypt\"]); }\nexport function existing(s: SubtleCrypto) { return s.generateKey(\"X25519\", false, [\"deriveBits\"]); }\nexport function kem768(s: SubtleCrypto) { return s.generateKey(\"ML-KEM-768\", false, [\"encapsulateBits\", \"decapsulateBits\"]); }\nexport function kem1024(s: SubtleCrypto) { return s.generateKey(\"ML-KEM-1024\", false, [\"encapsulateBits\", \"decapsulateBits\"]); }\n",
+      "sourceSha256": "c085528717b466422064f0ce585b2d34d0444a223da281c3903ffac2fd7d6919",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "generate",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 5,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "encBits",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encapsulateBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 6,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "encKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encapsulateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 7,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "decBits",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decapsulateBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 8,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "decKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decapsulateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 9,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "c",
+          "line": 10,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "kem768",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 11,
+          "column": 51,
+          "code": "NTS1003",
+          "function": "kem1024",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "generate",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 5,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "encBits",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encapsulateBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 6,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "encKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encapsulateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 7,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "decBits",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decapsulateBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 8,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "decKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decapsulateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 9,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "llvm",
+          "line": 10,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "kem768",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 11,
+          "column": 51,
+          "code": "NTS1003",
+          "function": "kem1024",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "generate",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 5,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "encBits",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encapsulateBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 6,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "encKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#encapsulateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 7,
+          "column": 67,
+          "code": "NTS1003",
+          "function": "decBits",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decapsulateBits`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 8,
+          "column": 66,
+          "code": "NTS1003",
+          "function": "decKey",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#decapsulateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 9,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "jvm",
+          "line": 10,
+          "column": 50,
+          "code": "NTS1003",
+          "function": "kem768",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 11,
+          "column": 51,
+          "code": "NTS1003",
+          "function": "kem1024",
+          "control": false,
+          "cause": "indirect throw (L15)",
+          "reason": "it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        }
+      ]
+    },
+    {
+      "family": "supports",
+      "source": "import { SubtleCrypto } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport type { CryptoKey } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/crypto-key.ts\";\nexport function supported(): number { return Number(SubtleCrypto.supports(\"digest\", \"SHA3-256\")) + Number(SubtleCrypto.supports(\"generateKey\", \"ML-DSA-44\")) + Number(SubtleCrypto.supports(\"generateKey\", \"ML-KEM-512\")); }\nexport function existing(): number { return Number(SubtleCrypto.supports(\"digest\", \"SHA-256\")); }\nexport function allNew(): number {\n let count=0;\n for (const name of [\"SHA3-256\", \"SHA3-384\", \"SHA3-512\"]) count += Number(SubtleCrypto.supports(\"digest\", name));\n for (const name of [\"cSHAKE128\", \"cSHAKE256\"]) count += Number(SubtleCrypto.supports(\"digest\", {name, length: 128}));\n for (const name of [\"KMAC128\", \"KMAC256\"]) count += Number(SubtleCrypto.supports(\"generateKey\", {name, length: 128}));\n count += Number(SubtleCrypto.supports(\"generateKey\", {name: \"AES-OCB\", length: 128}));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ChaCha20-Poly1305\"));\n for (const name of [\"Argon2d\", \"Argon2i\", \"Argon2id\"]) count += Number(SubtleCrypto.supports(\"deriveBits\", {name, nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, 128));\n for (const name of [\"ML-DSA-44\", \"ML-DSA-65\", \"ML-DSA-87\", \"ML-KEM-512\", \"ML-KEM-768\", \"ML-KEM-1024\"]) count += Number(SubtleCrypto.supports(\"generateKey\", name));\n return count;\n}\n",
+      "sourceSha256": "65cc5cd34387b4209238c3dd16cf915651d9dafb322920e2d74425cc52aca973",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "old algorithm on new supports API"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "old algorithm on new supports API"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 53,
+          "code": "NTS1003",
+          "function": "supported",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 52,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "arguments (#55)",
+          "reason": "it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "old algorithm on new supports API"
+        },
+        {
+          "backend": "c",
+          "line": 8,
+          "column": 98,
+          "code": "NTS1001",
+          "function": "allNew",
+          "control": false,
+          "cause": "other: shadowed-binding shorthand in aggregate probe",
+          "reason": "a shorthand naming a shadowed binding is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 8,
+          "column": 98,
+          "code": "NTS1001",
+          "function": "allNew",
+          "control": false,
+          "cause": "other: shadowed-binding shorthand in aggregate probe",
+          "reason": "a shorthand naming a shadowed binding is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 8,
+          "column": 98,
+          "code": "NTS1001",
+          "function": "allNew",
+          "control": false,
+          "cause": "other: shadowed-binding shorthand in aggregate probe",
+          "reason": "a shorthand naming a shadowed binding is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        }
+      ]
+    },
+    {
+      "family": "brotli",
+      "source": "import { CompressionStream, DecompressionStream } from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/compression/compression-stream.ts\";\nexport function compressor() { return new CompressionStream(\"brotli\"); }\nexport function decompressor() { return new DecompressionStream(\"brotli\"); }\nexport function existing() { return new CompressionStream(\"gzip\"); }\n",
+      "sourceSha256": "605d895bcc1d367f98d850a3130b196990f23b35ee9c683b9dee9b280e904e9a",
+      "observations": [
+        {
+          "backend": "c",
+          "line": 2,
+          "column": 39,
+          "code": "NTS1003",
+          "function": "compressor",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 3,
+          "column": 41,
+          "code": "NTS1003",
+          "function": "decompressor",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `DecompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "c",
+          "line": 4,
+          "column": 37,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "arguments (#55)",
+          "reason": "it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "llvm",
+          "line": 2,
+          "column": 39,
+          "code": "NTS1003",
+          "function": "compressor",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 3,
+          "column": 41,
+          "code": "NTS1003",
+          "function": "decompressor",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `DecompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "llvm",
+          "line": 4,
+          "column": 37,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "arguments (#55)",
+          "reason": "it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        },
+        {
+          "backend": "jvm",
+          "line": 2,
+          "column": 39,
+          "code": "NTS1003",
+          "function": "compressor",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 3,
+          "column": 41,
+          "code": "NTS1003",
+          "function": "decompressor",
+          "control": false,
+          "cause": "arguments (#55)",
+          "reason": "it calls `DecompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "new algorithm/query probe"
+        },
+        {
+          "backend": "jvm",
+          "line": 4,
+          "column": 37,
+          "code": "NTS1003",
+          "function": "existing",
+          "control": true,
+          "cause": "arguments (#55)",
+          "reason": "it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+          "controlKind": "pre-existing public operation"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "c": {
+      "total": 46,
+      "new": 39,
+      "newByCause": {
+        "arguments (#55)": 8,
+        "indirect throw (L15)": 30,
+        "other: shadowed-binding shorthand in aggregate probe": 1
+      }
+    },
+    "llvm": {
+      "total": 46,
+      "new": 39,
+      "newByCause": {
+        "arguments (#55)": 8,
+        "indirect throw (L15)": 30,
+        "other: shadowed-binding shorthand in aggregate probe": 1
+      }
+    },
+    "jvm": {
+      "total": 46,
+      "new": 39,
+      "newByCause": {
+        "arguments (#55)": 8,
+        "indirect throw (L15)": 30,
+        "other: shadowed-binding shorthand in aggregate probe": 1
+      }
+    }
+  },
+  "nativeStatus": "Not reached by the refused public entries. No unsupported-runtime, link-success or native-operation claim.",
+  "controls": [
+    {
+      "name": "baseline-existing",
+      "source": "import {SubtleCrypto} from \"/home/akisarou/Projects/nts-lanes/helper2-webcrypto-native/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nimport {CompressionStream} from \"/home/akisarou/Projects/nts-lanes/helper2-webcrypto-native/runtime/web-platform/src/compression/compression-stream.ts\";\nexport function sha256(s: SubtleCrypto) { return s.digest(\"SHA-256\", new Uint8Array(0)); }\nexport function aesGcm(s: SubtleCrypto) { return s.generateKey({name: \"AES-GCM\", length: 128}, false, [\"encrypt\"]); }\nexport function pbkdf2(s: SubtleCrypto) { return s.importKey(\"raw\", new Uint8Array([1]), \"PBKDF2\", false, [\"deriveBits\"]); }\nexport function ed25519(s: SubtleCrypto) { return s.generateKey(\"Ed25519\", false, [\"sign\", \"verify\"]); }\nexport function x25519(s: SubtleCrypto) { return s.generateKey(\"X25519\", false, [\"deriveBits\"]); }\nexport function gzip() { return new CompressionStream(\"gzip\"); }\n",
+      "sourceSha256": "e4aa1db8830d93cab35f5bc56ff3baf35885d419e0ed02edb345069d9bee60d7",
+      "diagnostics": [
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:3:50: NTS1003 `sha256` cannot be compiled because it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:4:50: NTS1003 `aesGcm` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:5:50: NTS1003 `pbkdf2` cannot be compiled because it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:6:51: NTS1003 `ed25519` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:7:50: NTS1003 `x25519` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:8:33: NTS1003 `gzip` cannot be compiled because it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:3:50: NTS1003 `sha256` cannot be compiled because it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:4:50: NTS1003 `aesGcm` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:5:50: NTS1003 `pbkdf2` cannot be compiled because it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:6:51: NTS1003 `ed25519` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:7:50: NTS1003 `x25519` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:8:33: NTS1003 `gzip` cannot be compiled because it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:3:50: NTS1003 `sha256` cannot be compiled because it calls `SubtleCrypto#digest`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `operation`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:4:50: NTS1003 `aesGcm` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:5:50: NTS1003 `pbkdf2` cannot be compiled because it calls `SubtleCrypto#importKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:6:51: NTS1003 `ed25519` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:7:50: NTS1003 `x25519` cannot be compiled because it calls `SubtleCrypto#generateKey`, and a call inside a `try` whose `throw` would not reach this handler: a function that itself calls something whose `throw` cannot be carried: `convert`, through a function value, which has no raising copy to call is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/main.ts:8:33: NTS1003 `gzip` cannot be compiled because it calls `CompressionStream#constructor`, and the `arguments` object is not supported by this lowering yet"
+      ],
+      "runtimeStatus": "not run because entries are refused"
+    },
+    {
+      "name": "supports-direct",
+      "source": "import {SubtleCrypto} from \"/home/akisarou/Projects/nts-lanes/helper2-crypto-modern/runtime/web-platform/src/crypto/subtle-crypto.ts\";\nexport function allNew(): number {\n let count=0;\n count += Number(SubtleCrypto.supports(\"digest\", \"SHA3-256\"));\n count += Number(SubtleCrypto.supports(\"digest\", \"SHA3-384\"));\n count += Number(SubtleCrypto.supports(\"digest\", \"SHA3-512\"));\n count += Number(SubtleCrypto.supports(\"digest\", {name: \"cSHAKE128\", length: 128}));\n count += Number(SubtleCrypto.supports(\"digest\", {name: \"cSHAKE256\", length: 128}));\n count += Number(SubtleCrypto.supports(\"generateKey\", {name: \"KMAC128\", length: 128}));\n count += Number(SubtleCrypto.supports(\"generateKey\", {name: \"KMAC256\", length: 128}));\n count += Number(SubtleCrypto.supports(\"generateKey\", {name: \"AES-OCB\", length: 128}));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ChaCha20-Poly1305\"));\n count += Number(SubtleCrypto.supports(\"deriveBits\", {name: \"Argon2d\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, 128));\n count += Number(SubtleCrypto.supports(\"deriveBits\", {name: \"Argon2i\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, 128));\n count += Number(SubtleCrypto.supports(\"deriveBits\", {name: \"Argon2id\", nonce: new Uint8Array(8), memory: 8, parallelism: 1, passes: 1}, 128));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ML-DSA-44\"));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ML-DSA-65\"));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ML-DSA-87\"));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ML-KEM-512\"));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ML-KEM-768\"));\n count += Number(SubtleCrypto.supports(\"generateKey\", \"ML-KEM-1024\"));\n return count;\n}\n",
+      "sourceSha256": "9f0eaa98df8c990dd6e1f9ea01596997d8929a173bc8d71f3081a2e903e0c28d",
+      "diagnostics": [
+        "[c] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/main.ts:4:18: NTS1003 `allNew` cannot be compiled because it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+        "[llvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/main.ts:4:18: NTS1003 `allNew` cannot be compiled because it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet",
+        "[jvm] /home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/main.ts:4:18: NTS1003 `allNew` cannot be compiled because it calls `SubtleCrypto.supports`, and the `arguments` object is not supported by this lowering yet"
+      ],
+      "runtimeStatus": "not run because entries are refused"
+    }
+  ],
+  "hostSupportsControl": {
+    "command": [
+      "node",
+      "--experimental-transform-types",
+      "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/runner.ts"
+    ],
+    "status": 0,
+    "stdout": "0",
+    "meaning": "All 18 explicit support queries return false on Node with no installed crypto capability; this is host evidence, not a compiled result."
+  },
+  "interpretation": "Compilation exits 0 while refusing the named entries; emission is not a runtime NotSupportedError observation. The six original operation controls refuse on actual baseline091bda as well. No source workaround for arguments, indirect throws or probe-level shadowing is applied."
+}

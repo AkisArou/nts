@@ -1,0 +1,2637 @@
+{
+  "schemaVersion": 1,
+  "coversPRs": [
+    111,
+    112,
+    113,
+    114,
+    115,
+    116,
+    117
+  ],
+  "authorStackSource": "82c90950e3f19b122e5e92bce63f5d837eff0fd7",
+  "maintainerRegistryCommit": "2fb64ee2c66cf0e115e0ae744db3094268b49d11",
+  "rangeDiff": {
+    "compared": "f36889098..e2ea7502be27 versus091bda9e0740..82c90950e3f1",
+    "equalPatches": 26,
+    "authorCommits": 24,
+    "separatePromiseRejectMaintainerCommits": 2
+  },
+  "compiler": {
+    "source": "82c90950e3f19b122e5e92bce63f5d837eff0fd7",
+    "compilerSource": "091bda9e0740",
+    "compiler": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+    "compilerSha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0",
+    "probes": [
+      {
+        "family": "sha3-cshake-kmac",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/main.ts",
+        "sha256": "59d1289c8de260cb8cc050cbc1ff42cc68691812f3eff5f2a31827afa80e03fd",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/tsconfig.json"
+      },
+      {
+        "family": "aead",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/main.ts",
+        "sha256": "1794420326a8e0f02845cad9e7d64a76ed5e764b7741c98ea91ca1fe46db4bee",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/tsconfig.json"
+      },
+      {
+        "family": "argon2",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/main.ts",
+        "sha256": "cbdeb1bf48e10a01fd45677cf5971d62b9f24b17b94434b4f3a17789b319d356",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/tsconfig.json"
+      },
+      {
+        "family": "ml-dsa",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/main.ts",
+        "sha256": "42a012834b8106bf2cee533ac2121c420ed437df0b477fbf587ee2d178b44239",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/tsconfig.json"
+      },
+      {
+        "family": "ml-kem",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/main.ts",
+        "sha256": "6aa427b2aaf8aeb779d3bb89f5fe6a35ea25f11fc2ba89ade263a2c7249f8c6b",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/tsconfig.json"
+      },
+      {
+        "family": "supports",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/main.ts",
+        "sha256": "eb3ff40205fa633d4502cc2cfa125abe5815e567a344eb2bd8a278f068883a26",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/tsconfig.json"
+      },
+      {
+        "family": "brotli",
+        "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/main.ts",
+        "sha256": "605d895bcc1d367f98d850a3130b196990f23b35ee9c683b9dee9b280e904e9a",
+        "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/tsconfig.json"
+      }
+    ]
+  },
+  "observations": {
+    "representative": {
+      "inventory": {
+        "source": "82c90950e3f19b122e5e92bce63f5d837eff0fd7",
+        "compilerSource": "091bda9e0740",
+        "compiler": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+        "compilerSha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0",
+        "probes": [
+          {
+            "family": "sha3-cshake-kmac",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/main.ts",
+            "sha256": "59d1289c8de260cb8cc050cbc1ff42cc68691812f3eff5f2a31827afa80e03fd",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/tsconfig.json"
+          },
+          {
+            "family": "aead",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/main.ts",
+            "sha256": "1794420326a8e0f02845cad9e7d64a76ed5e764b7741c98ea91ca1fe46db4bee",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/tsconfig.json"
+          },
+          {
+            "family": "argon2",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/main.ts",
+            "sha256": "cbdeb1bf48e10a01fd45677cf5971d62b9f24b17b94434b4f3a17789b319d356",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/tsconfig.json"
+          },
+          {
+            "family": "ml-dsa",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/main.ts",
+            "sha256": "42a012834b8106bf2cee533ac2121c420ed437df0b477fbf587ee2d178b44239",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/tsconfig.json"
+          },
+          {
+            "family": "ml-kem",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/main.ts",
+            "sha256": "6aa427b2aaf8aeb779d3bb89f5fe6a35ea25f11fc2ba89ade263a2c7249f8c6b",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/tsconfig.json"
+          },
+          {
+            "family": "supports",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/main.ts",
+            "sha256": "eb3ff40205fa633d4502cc2cfa125abe5815e567a344eb2bd8a278f068883a26",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/tsconfig.json"
+          },
+          {
+            "family": "brotli",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/main.ts",
+            "sha256": "605d895bcc1d367f98d850a3130b196990f23b35ee9c683b9dee9b280e904e9a",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/tsconfig.json"
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "sha3-cshake-kmac",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/sha3-cshake-kmac"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 33128.303194,
+          "stderrSha256": "b39830cc37dbafa94162a560ef5dd6ec3daa63bdbf8c3797db73e8c928e18188"
+        },
+        {
+          "name": "aead",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/aead"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 33310.145906,
+          "stderrSha256": "920ed020fe217ac76d90a91fcac9d55bbce5608c9f190e59c594424425010b3f"
+        },
+        {
+          "name": "argon2",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/argon2"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 33219.87599599999,
+          "stderrSha256": "56aa44e73c508544e2a6a1239898d9e1bd8635bb927bf987893735464a952318"
+        },
+        {
+          "name": "ml-dsa",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/ml-dsa"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 33375.534451,
+          "stderrSha256": "02ba470e2124b2d688782341c437dc02ae11d7158882907fe6069ea5b793d4fc"
+        },
+        {
+          "name": "ml-kem",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/ml-kem"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 34075.413406999985,
+          "stderrSha256": "1ce7262a0984b6c3355ff682956f4fa5a268d11d3d9a447aa3b1f504b59ced38"
+        },
+        {
+          "name": "supports",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/supports"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 33322.14007299999,
+          "stderrSha256": "e2adcad66bf9d220bd74753449813c623479be621d70ae8c4c8b5a3e86f373e7"
+        },
+        {
+          "name": "brotli",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted/brotli"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 34991.347355000005,
+          "stderrSha256": "57123a9092ce006560aae4f09e039f33ff188b09fcb6646e6f1d3b95e154374a"
+        },
+        {
+          "name": "integrity-runtime",
+          "cmd": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "integrity-runtime"
+          ],
+          "status": 1,
+          "signal": null,
+          "elapsedMs": 612111.391725,
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      ]
+    },
+    "expandedAndPackage": {
+      "inventory": {
+        "source": "82c90950e3f19b122e5e92bce63f5d837eff0fd7",
+        "compilerSource": "091bda9e0740",
+        "compiler": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+        "compilerSha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0",
+        "probes": [
+          {
+            "family": "sha3-cshake-kmac",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/sha3-cshake-kmac/main.ts",
+            "sha256": "03c3faf60775ae7956402cf80a82b5ef1e6d9b46494b3185bf72f8b2dec44774",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/sha3-cshake-kmac/tsconfig.json"
+          },
+          {
+            "family": "aead",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/aead/main.ts",
+            "sha256": "b6195e4ac25993f33914105be6c01f3d3dc4edab628fee527dfca04b4173689b",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/aead/tsconfig.json"
+          },
+          {
+            "family": "argon2",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/argon2/main.ts",
+            "sha256": "0d93b1fa82f3a676b6638cbabd6c4c8712e62c978efdfd9b534c19742e0aa14f",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/argon2/tsconfig.json"
+          },
+          {
+            "family": "ml-dsa",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/ml-dsa/main.ts",
+            "sha256": "f3f0dcc3750896c6d9ef5dcb475fdb9e9f54f0d6cdaa4fe78f59a9097afa695c",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/ml-dsa/tsconfig.json"
+          },
+          {
+            "family": "ml-kem",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/ml-kem/main.ts",
+            "sha256": "c085528717b466422064f0ce585b2d34d0444a223da281c3903ffac2fd7d6919",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/ml-kem/tsconfig.json"
+          },
+          {
+            "family": "supports",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/supports/main.ts",
+            "sha256": "65cc5cd34387b4209238c3dd16cf915651d9dafb322920e2d74425cc52aca973",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/supports/tsconfig.json"
+          },
+          {
+            "family": "brotli",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/brotli/main.ts",
+            "sha256": "605d895bcc1d367f98d850a3130b196990f23b35ee9c683b9dee9b280e904e9a",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/brotli/tsconfig.json"
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "sha3-cshake-kmac",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/sha3-cshake-kmac/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/sha3-cshake-kmac"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 55001.931853,
+          "stderrSha256": "ee816388f77bfe0c2b9805f141710e5c6a6dc1b8d637b105e3c2df56cd09b724"
+        },
+        {
+          "name": "aead",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/aead/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/aead"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 56134.559721000005,
+          "stderrSha256": "48c114192193a4474f864be30da23cc6f1bfa2225e98a1d484daf46f6106cf8b"
+        },
+        {
+          "name": "argon2",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/argon2/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/argon2"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 54140.549404000005,
+          "stderrSha256": "30bea89281fb0088cf221364065505ea63311c31c82718e776540c9a86c21b4e"
+        },
+        {
+          "name": "ml-dsa",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/ml-dsa/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/ml-dsa"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 54201.677828000014,
+          "stderrSha256": "1c5f7d50e37e70c9836098a3982c058331711b736ce9837563938fcd49b1c55e"
+        },
+        {
+          "name": "ml-kem",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/ml-kem/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/ml-kem"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 54298.05515399997,
+          "stderrSha256": "281a24df7957ff4558293a71540d3d8fe6b84ad2eb19d93ad04f70690289809b"
+        },
+        {
+          "name": "supports",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/supports/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/supports"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 53991.98961400002,
+          "stderrSha256": "6275a78415cc6e9833d77e3ab0c4e3177163792773e0835c7cd98b1142822d76"
+        },
+        {
+          "name": "brotli",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes-v2/brotli/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/emitted-v2/brotli"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 55733.04152500001,
+          "stderrSha256": "ec4b01c96eb378664cc2796e89b847b4f969c2daef0739292910e8bdb08e0417"
+        },
+        {
+          "name": "process-registration",
+          "cmd": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+          "args": [
+            "tooling/conformance/integrity.ts",
+            "runtime/node/process"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 102767.313754,
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "name": "before-inputs",
+          "cmd": "sh",
+          "args": [
+            "tooling/lanes/inputs.sh",
+            "lane",
+            "/home/akisarou/Projects/nts",
+            "/home/akisarou/Projects/nts-lanes/helper2-webcrypto-native"
+          ],
+          "root": "/home/akisarou/Projects/nts-lanes/helper2-webcrypto-native",
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 2188.61301999999,
+          "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "name": "before-package",
+          "cmd": "sh",
+          "args": [
+            "tooling/conformance/web-platform/check.sh"
+          ],
+          "root": "/home/akisarou/Projects/nts-lanes/helper2-webcrypto-native",
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 125508.062829,
+          "stderrSha256": "d929442ec67490b45aa8aebec2787d71002bb2b15f71d96bf7c9f3629d533136"
+        },
+        {
+          "name": "after-package",
+          "cmd": "sh",
+          "args": [
+            "tooling/conformance/web-platform/check.sh"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 125518.65203499992,
+          "stderrSha256": "582efbf367919e71f7c431474068ba06fff5f4ea08a4a9386b1296fe5c58127f"
+        }
+      ]
+    },
+    "baselineAndDirectControls": {
+      "inventory": {
+        "source": "82c90950e3f19b122e5e92bce63f5d837eff0fd7",
+        "compilerSource": "091bda9e0740",
+        "compiler": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+        "compilerSha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0",
+        "probes": [
+          {
+            "family": "sha3-cshake-kmac",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/main.ts",
+            "sha256": "59d1289c8de260cb8cc050cbc1ff42cc68691812f3eff5f2a31827afa80e03fd",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/sha3-cshake-kmac/tsconfig.json"
+          },
+          {
+            "family": "aead",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/main.ts",
+            "sha256": "1794420326a8e0f02845cad9e7d64a76ed5e764b7741c98ea91ca1fe46db4bee",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/aead/tsconfig.json"
+          },
+          {
+            "family": "argon2",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/main.ts",
+            "sha256": "cbdeb1bf48e10a01fd45677cf5971d62b9f24b17b94434b4f3a17789b319d356",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/argon2/tsconfig.json"
+          },
+          {
+            "family": "ml-dsa",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/main.ts",
+            "sha256": "42a012834b8106bf2cee533ac2121c420ed437df0b477fbf587ee2d178b44239",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-dsa/tsconfig.json"
+          },
+          {
+            "family": "ml-kem",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/main.ts",
+            "sha256": "6aa427b2aaf8aeb779d3bb89f5fe6a35ea25f11fc2ba89ade263a2c7249f8c6b",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/ml-kem/tsconfig.json"
+          },
+          {
+            "family": "supports",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/main.ts",
+            "sha256": "eb3ff40205fa633d4502cc2cfa125abe5815e567a344eb2bd8a278f068883a26",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/supports/tsconfig.json"
+          },
+          {
+            "family": "brotli",
+            "source": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/main.ts",
+            "sha256": "605d895bcc1d367f98d850a3130b196990f23b35ee9c683b9dee9b280e904e9a",
+            "tsconfig": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/probes/brotli/tsconfig.json"
+          }
+        ]
+      },
+      "rows": [
+        {
+          "name": "baseline-existing",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing/emitted"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 37883.162137,
+          "stderrSha256": "080e01867d98f40cac07aa2ffb46979ab80576b3d9924c7368af2dd6b9408c1c"
+        },
+        {
+          "name": "supports-direct",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+          "args": [
+            "emit",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/tsconfig.json",
+            "--backends",
+            "c,llvm,jvm",
+            "--out",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/emitted"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 38670.78926499999,
+          "stderrSha256": "54aa46f513288e44a9d5d72cc71e7eb5fe17d82adb4767087707eea9de336e88"
+        },
+        {
+          "name": "supports-node",
+          "cmd": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+          "args": [
+            "--experimental-transform-types",
+            "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct/runner.ts"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 107.90804100000241,
+          "stderrSha256": "54232f20f094e1de7809c2711546c00f46bbf091e09fa92e01615b155a4c1629"
+        }
+      ]
+    }
+  },
+  "hostCounts": {
+    "before-package": {
+      "webcrypto": {
+        "files": 122,
+        "pass": 30991,
+        "fail": 0,
+        "blocked": 5339,
+        "perFile": [
+          [
+            "WebCryptoAPI/algorithm-discards-context.https.window.js",
+            0,
+            0,
+            13
+          ],
+          [
+            "WebCryptoAPI/crypto_key_cached_slots.https.any.js",
+            2,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
+            0,
+            0,
+            1
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
+            19,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js",
+            18,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js",
+            17,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js",
+            16,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js",
+            29,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+            38,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js",
+            31,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js",
+            3661,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js",
+            8632,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/digest/cshake.tentative.https.any.js",
+            0,
+            0,
+            88
+          ],
+          [
+            "WebCryptoAPI/digest/digest.https.any.js",
+            116,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js",
+            0,
+            0,
+            148
+          ],
+          [
+            "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+            0,
+            0,
+            48
+          ],
+          [
+            "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
+            0,
+            0,
+            135
+          ],
+          [
+            "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+            0,
+            0,
+            9
+          ],
+          [
+            "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+            0,
+            0,
+            120
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+            55,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js",
+            46,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js",
+            493,
+            0,
+            84
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js",
+            493,
+            0,
+            84
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+            1,
+            0,
+            276
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+            0,
+            0,
+            28
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
+            157,
+            0,
+            24
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js",
+            516,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+            360,
+            0,
+            414
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
+            476,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js",
+            454,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js",
+            412,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js",
+            412,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_HMAC.https.any.js",
+            616,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js",
+            360,
+            0,
+            156
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+            360,
+            0,
+            684
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
+            532,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js",
+            428,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js",
+            428,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_X25519.https.any.js",
+            424,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js",
+            424,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+            360,
+            0,
+            140
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
+            360,
+            0,
+            192
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+            0,
+            0,
+            288
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js",
+            54,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_HMAC.https.any.js",
+            192,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js",
+            0,
+            0,
+            108
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+            0,
+            0,
+            468
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
+            156,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_X25519.https.any.js",
+            32,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js",
+            32,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+            0,
+            0,
+            192
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
+            0,
+            0,
+            144
+          ],
+          [
+            "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+            0,
+            0,
+            37
+          ],
+          [
+            "WebCryptoAPI/getRandomValues.any.js",
+            39,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/historical.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+            0,
+            0,
+            72
+          ],
+          [
+            "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
+            0,
+            0,
+            45
+          ],
+          [
+            "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+            0,
+            0,
+            24
+          ],
+          [
+            "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
+            0,
+            0,
+            144
+          ],
+          [
+            "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
+            0,
+            0,
+            180
+          ],
+          [
+            "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+            0,
+            0,
+            324
+          ],
+          [
+            "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",
+            1,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+            180,
+            0,
+            84
+          ],
+          [
+            "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js",
+            620,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js",
+            620,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js",
+            54,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js",
+            54,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js",
+            530,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js",
+            530,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js",
+            454,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js",
+            454,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
+            0,
+            0,
+            20
+          ],
+          [
+            "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
+            1056,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/symmetric_importKey.https.any.js",
+            606,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/normalize-algorithm-name.https.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/randomUUID.https.any.js",
+            3,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+            1,
+            0,
+            1
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-cbc.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-ctr.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-gcm.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-kw.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/ecdh.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/ecdsa.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/ed25519.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/ed448.tentative.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/hmac.https.any.js",
+            0,
+            0,
+            8
+          ],
+          [
+            "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+            0,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/serialization/mldsa.tentative.https.any.js",
+            0,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+            0,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/serialization/rsa-oaep.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/rsa-pss.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/x25519.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/sign_verify/ecdsa.https.any.js",
+            301,
+            0,
+            24
+          ],
+          [
+            "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js",
+            17,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+            17,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js",
+            14,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/sign_verify/hmac.https.any.js",
+            57,
+            0,
+            8
+          ],
+          [
+            "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
+            1,
+            0,
+            102
+          ],
+          [
+            "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
+            1,
+            0,
+            57
+          ],
+          [
+            "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js",
+            61,
+            0,
+            8
+          ],
+          [
+            "WebCryptoAPI/sign_verify/rsa_pss.https.any.js",
+            129,
+            0,
+            16
+          ],
+          [
+            "WebCryptoAPI/supports-modern.tentative.https.any.js",
+            0,
+            0,
+            94
+          ],
+          [
+            "WebCryptoAPI/supports.tentative.https.any.js",
+            0,
+            0,
+            171
+          ],
+          [
+            "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+            357,
+            0,
+            0
+          ]
+        ]
+      },
+      "compression": {
+        "files": 18,
+        "pass": 243,
+        "fail": 0,
+        "blocked": 75,
+        "perFile": [
+          [
+            "compression/compression-bad-chunks.any.js",
+            21,
+            0,
+            7
+          ],
+          [
+            "compression/compression-constructor-error.any.js",
+            3,
+            0,
+            0
+          ],
+          [
+            "compression/compression-including-empty-chunk.any.js",
+            9,
+            0,
+            3
+          ],
+          [
+            "compression/compression-large-flush-output.any.js",
+            3,
+            0,
+            1
+          ],
+          [
+            "compression/compression-multiple-chunks.any.js",
+            45,
+            0,
+            15
+          ],
+          [
+            "compression/compression-output-length.any.js",
+            3,
+            0,
+            1
+          ],
+          [
+            "compression/compression-stream.any.js",
+            10,
+            0,
+            3
+          ],
+          [
+            "compression/compression-with-detach.window.js",
+            0,
+            0,
+            1
+          ],
+          [
+            "compression/decompression-bad-chunks.any.js",
+            27,
+            0,
+            9
+          ],
+          [
+            "compression/decompression-buffersource.any.js",
+            36,
+            0,
+            12
+          ],
+          [
+            "compression/decompression-constructor-error.any.js",
+            3,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-correct-input.any.js",
+            3,
+            0,
+            1
+          ],
+          [
+            "compression/decompression-corrupt-input.any.js",
+            26,
+            0,
+            3
+          ],
+          [
+            "compression/decompression-empty-input.any.js",
+            3,
+            0,
+            1
+          ],
+          [
+            "compression/decompression-extra-input.any.js",
+            3,
+            0,
+            1
+          ],
+          [
+            "compression/decompression-split-chunk.any.js",
+            45,
+            0,
+            15
+          ],
+          [
+            "compression/decompression-uint8array-output.any.js",
+            3,
+            0,
+            1
+          ],
+          [
+            "compression/decompression-with-detach.window.js",
+            0,
+            0,
+            1
+          ]
+        ]
+      },
+      "package": {
+        "tests": 49078,
+        "pass": 42990,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 6088,
+        "todo": 0
+      }
+    },
+    "after-package": {
+      "webcrypto": {
+        "files": 122,
+        "pass": 35656,
+        "fail": 0,
+        "blocked": 792,
+        "perFile": [
+          [
+            "WebCryptoAPI/algorithm-discards-context.https.window.js",
+            0,
+            0,
+            13
+          ],
+          [
+            "WebCryptoAPI/crypto_key_cached_slots.https.any.js",
+            2,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve25519.https.any.js",
+            19,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_bits_curve448.tentative.https.any.js",
+            18,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve25519.https.any.js",
+            17,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/cfrg_curves_keys_curve448.tentative.https.any.js",
+            16,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/derived_bits_length.https.any.js",
+            29,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/ecdh_bits.https.any.js",
+            38,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/ecdh_keys.https.any.js",
+            31,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/hkdf.https.any.js",
+            3661,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/derive_bits_keys/pbkdf2.https.any.js",
+            8632,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/digest/cshake.tentative.https.any.js",
+            72,
+            0,
+            16
+          ],
+          [
+            "WebCryptoAPI/digest/digest.https.any.js",
+            116,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/digest/kangarootwelve.tentative.https.any.js",
+            0,
+            0,
+            148
+          ],
+          [
+            "WebCryptoAPI/digest/sha3.tentative.https.any.js",
+            39,
+            0,
+            9
+          ],
+          [
+            "WebCryptoAPI/digest/turboshake.tentative.https.any.js",
+            0,
+            0,
+            135
+          ],
+          [
+            "WebCryptoAPI/encap_decap/encap_decap_bits.tentative.https.any.js",
+            9,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/encap_decap/encap_decap_keys.tentative.https.any.js",
+            120,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_cbc.https.any.js",
+            55,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_ctr.https.any.js",
+            46,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_gcm.https.any.js",
+            493,
+            0,
+            84
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_gcm_256_iv.https.any.js",
+            493,
+            0,
+            84
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/aes_ocb.tentative.https.any.js",
+            241,
+            0,
+            36
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/chacha20_poly1305.tentative.https.any.js",
+            28,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/encrypt_decrypt/rsa_oaep.https.any.js",
+            157,
+            0,
+            24
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-CBC.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-CTR.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-GCM.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-KW.https.any.js",
+            516,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_AES-OCB.tentative.https.any.js",
+            774,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ECDH.https.any.js",
+            476,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ECDSA.https.any.js",
+            454,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_Ed25519.https.any.js",
+            412,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_Ed448.tentative.https.any.js",
+            412,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_HMAC.https.any.js",
+            616,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ML-DSA.tentative.https.any.js",
+            516,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_ML-KEM.tentative.https.any.js",
+            1044,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_RSA-OAEP.https.any.js",
+            532,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_RSA-PSS.https.any.js",
+            428,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_RSASSA-PKCS1-v1_5.https.any.js",
+            428,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_X25519.https.any.js",
+            424,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_X448.tentative.https.any.js",
+            424,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_chacha20_poly1305.tentative.https.any.js",
+            500,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/failures_kmac.tentative.https.any.js",
+            552,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-CBC.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-CTR.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-GCM.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-KW.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_AES-OCB.tentative.https.any.js",
+            288,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ECDH.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ECDSA.https.any.js",
+            54,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_Ed25519.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_Ed448.tentative.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_HMAC.https.any.js",
+            192,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ML-DSA.tentative.https.any.js",
+            108,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_ML-KEM.tentative.https.any.js",
+            468,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_RSA-OAEP.https.any.js",
+            156,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_RSA-PSS.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_RSASSA-PKCS1-v1_5.https.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_X25519.https.any.js",
+            32,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_X448.tentative.https.any.js",
+            32,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_chacha20_poly1305.tentative.https.any.js",
+            192,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/generateKey/successes_kmac.tentative.https.any.js",
+            144,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/getPublicKey.tentative.https.any.js",
+            37,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/getRandomValues.any.js",
+            39,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/historical.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/import_export/AES-OCB_importKey.tentative.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/Argon2_importKey.tentative.https.any.js",
+            45,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ChaCha20-Poly1305_importKey.tentative.https.any.js",
+            24,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/KMAC_importKey.tentative.https.any.js",
+            144,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ML-DSA_importKey.tentative.https.any.js",
+            180,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ML-KEM_importKey.tentative.https.any.js",
+            324,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/crashtests/importKey-unsettled-promise.https.any.js",
+            1,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ec_importKey.https.any.js",
+            180,
+            0,
+            84
+          ],
+          [
+            "WebCryptoAPI/import_export/ec_importKey_failures_ECDH.https.any.js",
+            620,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/ec_importKey_failures_ECDSA.https.any.js",
+            620,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_Ed25519.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_Ed448.tentative.https.any.js",
+            72,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_X25519.https.any.js",
+            54,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_X448.tentative.https.any.js",
+            54,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_Ed25519.https.any.js",
+            530,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_Ed448.tentative.https.any.js",
+            530,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_X25519.https.any.js",
+            454,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/okp_importKey_failures_X448.tentative.https.any.js",
+            454,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/raw_format_aliases.tentative.https.any.js",
+            20,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/rsa_importKey.https.any.js",
+            1056,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/import_export/symmetric_importKey.https.any.js",
+            606,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/normalize-algorithm-name.https.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/randomUUID.https.any.js",
+            3,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/secure_context/crypto-subtle-secure-context-available.https.sub.html",
+            1,
+            0,
+            1
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-cbc.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-ctr.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-gcm.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-kw.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/aes-ocb.tentative.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/chacha20-poly1305.tentative.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/ecdh.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/ecdsa.https.any.js",
+            0,
+            0,
+            3
+          ],
+          [
+            "WebCryptoAPI/serialization/ed25519.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/ed448.tentative.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/hmac.https.any.js",
+            0,
+            0,
+            8
+          ],
+          [
+            "WebCryptoAPI/serialization/kmac.tentative.https.any.js",
+            0,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/serialization/mldsa.tentative.https.any.js",
+            0,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/serialization/mlkem.tentative.https.any.js",
+            0,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/serialization/rsa-oaep.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/rsa-pss.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/rsassa-pkcs1-v1_5.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/x25519.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/serialization/x448.tentative.https.any.js",
+            0,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/sign_verify/ecdsa.https.any.js",
+            301,
+            0,
+            24
+          ],
+          [
+            "WebCryptoAPI/sign_verify/eddsa_curve25519.https.any.js",
+            17,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/sign_verify/eddsa_curve448.tentative.https.any.js",
+            17,
+            0,
+            2
+          ],
+          [
+            "WebCryptoAPI/sign_verify/eddsa_small_order_points.https.any.js",
+            14,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/sign_verify/hmac.https.any.js",
+            57,
+            0,
+            8
+          ],
+          [
+            "WebCryptoAPI/sign_verify/kmac.tentative.https.any.js",
+            91,
+            0,
+            12
+          ],
+          [
+            "WebCryptoAPI/sign_verify/mldsa.tentative.https.any.js",
+            52,
+            0,
+            6
+          ],
+          [
+            "WebCryptoAPI/sign_verify/rsa_pkcs.https.any.js",
+            61,
+            0,
+            8
+          ],
+          [
+            "WebCryptoAPI/sign_verify/rsa_pss.https.any.js",
+            129,
+            0,
+            16
+          ],
+          [
+            "WebCryptoAPI/supports-modern.tentative.https.any.js",
+            94,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/supports.tentative.https.any.js",
+            171,
+            0,
+            0
+          ],
+          [
+            "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js",
+            472,
+            0,
+            0
+          ]
+        ]
+      },
+      "compression": {
+        "files": 18,
+        "pass": 316,
+        "fail": 0,
+        "blocked": 2,
+        "perFile": [
+          [
+            "compression/compression-bad-chunks.any.js",
+            28,
+            0,
+            0
+          ],
+          [
+            "compression/compression-constructor-error.any.js",
+            3,
+            0,
+            0
+          ],
+          [
+            "compression/compression-including-empty-chunk.any.js",
+            12,
+            0,
+            0
+          ],
+          [
+            "compression/compression-large-flush-output.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "compression/compression-multiple-chunks.any.js",
+            60,
+            0,
+            0
+          ],
+          [
+            "compression/compression-output-length.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "compression/compression-stream.any.js",
+            13,
+            0,
+            0
+          ],
+          [
+            "compression/compression-with-detach.window.js",
+            0,
+            0,
+            1
+          ],
+          [
+            "compression/decompression-bad-chunks.any.js",
+            36,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-buffersource.any.js",
+            48,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-constructor-error.any.js",
+            3,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-correct-input.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-corrupt-input.any.js",
+            29,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-empty-input.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-extra-input.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-split-chunk.any.js",
+            60,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-uint8array-output.any.js",
+            4,
+            0,
+            0
+          ],
+          [
+            "compression/decompression-with-detach.window.js",
+            0,
+            0,
+            1
+          ]
+        ]
+      },
+      "package": {
+        "tests": 49419,
+        "pass": 47951,
+        "fail": 0,
+        "cancelled": 0,
+        "skipped": 1468,
+        "todo": 0
+      }
+    }
+  },
+  "countExplanation": {
+    "packagePassGain": 4961,
+    "packageTestGain": 341,
+    "webcryptoPassGain": 4665,
+    "compressionPassGain": 73,
+    "existingUpstreamRegistrationExpansion": {
+      "WebCryptoAPI/derive_bits_keys/argon2.tentative.https.any.js": 3,
+      "WebCryptoAPI/wrapKey_unwrapKey/wrapKey_unwrapKey.https.any.js": 115
+    },
+    "note": "The upstream files remain unedited. Argon2 and wrap/unwrap register 118 additional cases once their new capabilities exist."
+  },
+  "integrity": {
+    "completeRuntimeScan": {
+      "status": 1,
+      "projectsMeasured": 29,
+      "projectsPlanned": 29,
+      "functions": 65686,
+      "elapsedSeconds": 612.111,
+      "fresh": 2,
+      "expired": 2,
+      "finding": "Only process428 to process429 subject-number churn on the same process initializer/read cuts."
+    },
+    "selectiveRegistration": {
+      "path": "tooling/conformance/integrity.known",
+      "beforeSha256": "869ae5ec5ca1638315b83821b00952b542c7a0d07d28481d292e65468a659036",
+      "afterSha256": "8dd80924710f1911e66e687bf9f32f889637cd5b96391a10c37133eef3f59382",
+      "subjects": [
+        "a statement reading process428 -> a statement reading process429",
+        "the initializer of process428 -> the initializer of process429"
+      ],
+      "fixtureBackedReasonsUnchanged": true,
+      "processSourceDiffEmpty": true,
+      "functionalCutsAdded": 0,
+      "coveringItem": "#70: diagnostic subject should use source binding plus file"
+    },
+    "actualFocusedReplay": {
+      "status": 0,
+      "project": "runtime/node/process",
+      "knownViolations": 93,
+      "fresh": 0,
+      "expired": 0,
+      "receipt": "process-registration-v2.stdout"
+    },
+    "fullRuntimeReevaluation": "On the unchanged measured source, replacing precisely the two fresh keys and removing precisely the two expired keys leaves no unmatched observation. The real focused process recheck passes; final landing gate will rerun the full step."
+  },
+  "rawReceipts": [
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/brotli-v2.stderr",
+      "sha256": "ec4b01c96eb378664cc2796e89b847b4f969c2daef0739292910e8bdb08e0417",
+      "bytes": 1978167
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/argon2.stdout",
+      "sha256": "703878c443202f5fdb1accef6fabc999d768f962d3e0b29103115df267e252b1",
+      "bytes": 515
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-node.stderr",
+      "sha256": "54232f20f094e1de7809c2711546c00f46bbf091e09fa92e01615b155a4c1629",
+      "bytes": 180
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/refusal-inventory.json",
+      "sha256": "a32e1ee2e3157428a22ec9908e1ffd5ae1a3ae1adc1de20f3ca81cc86e5e53bc",
+      "bytes": 65488
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct.stdout",
+      "sha256": "cf33c38cfe0b5eb69b6b632d189abfdb074e97a96ecf20a10ab288cd1df32acb",
+      "bytes": 542
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/run.mts",
+      "sha256": "f5c033841de65779522bb43e59a4c78aae0170e4927dd8a92f91595870586de4",
+      "bytes": 1910
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/aead-v2.stderr",
+      "sha256": "48c114192193a4474f864be30da23cc6f1bfa2225e98a1d484daf46f6106cf8b",
+      "bytes": 1949304
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/sha3-cshake-kmac-v2.stderr",
+      "sha256": "ee816388f77bfe0c2b9805f141710e5c6a6dc1b8d637b105e3c2df56cd09b724",
+      "bytes": 1956265
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-kem.stderr",
+      "sha256": "1ce7262a0984b6c3355ff682956f4fa5a268d11d3d9a447aa3b1f504b59ced38",
+      "bytes": 1950656
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/argon2.stderr",
+      "sha256": "56aa44e73c508544e2a6a1239898d9e1bd8635bb927bf987893735464a952318",
+      "bytes": 1946711
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing.stdout",
+      "sha256": "5d0704365367eb581b8c11cec378788fbaf2746c9f14f3d1c83c85bedd1b3a6f",
+      "bytes": 548
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/aead.stderr",
+      "sha256": "920ed020fe217ac76d90a91fcac9d55bbce5608c9f190e59c594424425010b3f",
+      "bytes": 1947961
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/baseline-existing.stderr",
+      "sha256": "080e01867d98f40cac07aa2ffb46979ab80576b3d9924c7368af2dd6b9408c1c",
+      "bytes": 1941598
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/sha3-cshake-kmac.stdout",
+      "sha256": "506f9a2e7463c3fffc1ca239fbed048445c6a3a98fd0302e58809ac79d60990e",
+      "bytes": 545
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/host-counts.json",
+      "sha256": "549edcb2d86564ebf8063b6164bddcfd1a4b6fbbec47cf5a8faa7c3d40d1db6f",
+      "bytes": 37193
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports.stdout",
+      "sha256": "4967d61787bb6f6cef424c304b1d0bdb090c9997d5a9f1b3825e684c9d7e6c37",
+      "bytes": 521
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/sha3-cshake-kmac-v2.stdout",
+      "sha256": "52a6a7c6111b04e57f31855b530f7185759ee394580d2b55c883df4b7b89c518",
+      "bytes": 554
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-dsa-v2.stdout",
+      "sha256": "f9ad4c39a4c90f59d2510400c8920fd88e0b740f5f1161687609714e5cd5e136",
+      "bytes": 524
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/brotli-v2.stdout",
+      "sha256": "efdb5414c5f2d1ec0d9b798edc2ff05aa87079fd0eacddacd1d1b1cce863a47b",
+      "bytes": 524
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-v2.stdout",
+      "sha256": "c6cd347c631cef786a0f9676431aa5c5b783b1eacbb5339106c9c2a45ca770fe",
+      "bytes": 530
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-dsa-v2.stderr",
+      "sha256": "1c5f7d50e37e70c9836098a3982c058331711b736ce9837563938fcd49b1c55e",
+      "bytes": 1951945
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/brotli.stderr",
+      "sha256": "57123a9092ce006560aae4f09e039f33ff188b09fcb6646e6f1d3b95e154374a",
+      "bytes": 1978140
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/process-registration-v2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/before-package-v2.stdout",
+      "sha256": "7cfa6e9105d8f269b865b2be2227de367b00c85bcc38c67d1a169fbd0e0887bb",
+      "bytes": 7099156
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports.stderr",
+      "sha256": "e2adcad66bf9d220bd74753449813c623479be621d70ae8c4c8b5a3e86f373e7",
+      "bytes": 1943545
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/aead-v2.stdout",
+      "sha256": "1460754212eac4ba50a3642a716090b4925e5895a48d8ddbba8a272a0833e843",
+      "bytes": 518
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/after-package-v2.stderr",
+      "sha256": "582efbf367919e71f7c431474068ba06fff5f4ea08a4a9386b1296fe5c58127f",
+      "bytes": 1934
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/process-registration-v2.stdout",
+      "sha256": "a58bd07daeae9bf35457d43cdf3008c7989048072a03874d828a784b52e270f0",
+      "bytes": 48021
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/inventory-v2.json",
+      "sha256": "6416c27b1be0ea0a5c2cd4a4fbb61a0cccaafd44c0855e01e214d909e0dfada9",
+      "bytes": 2816
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-kem.stdout",
+      "sha256": "e5408b541b708f59614de8ff78cea6045cae2cf2be0d000c130b47651fb91243",
+      "bytes": 515
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/integrity-runtime.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/argon2-v2.stderr",
+      "sha256": "30bea89281fb0088cf221364065505ea63311c31c82718e776540c9a86c21b4e",
+      "bytes": 1949373
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-kem-v2.stdout",
+      "sha256": "365af6b4978d487d043cab82bca9d84cfa81979862c32290b3759d086fc62347",
+      "bytes": 524
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/before-package-v2.stderr",
+      "sha256": "d929442ec67490b45aa8aebec2787d71002bb2b15f71d96bf7c9f3629d533136",
+      "bytes": 1934
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/final-controls.json",
+      "sha256": "3c518f4bd99f8e712e1cda05b420b5109bcc8ee4552fe4ddf76d400c9e75c0fc",
+      "bytes": 4651
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/argon2-v2.stdout",
+      "sha256": "96a4d90e440126a39d775ae2bae49da9dd655f966aeb61e3f7b3a5211cd34571",
+      "bytes": 524
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/brotli.stdout",
+      "sha256": "72778906605d57fb77aa705c3549a30885449295bc8a3c32c60231f831ae491f",
+      "bytes": 515
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/refusal-inventory-v2.json",
+      "sha256": "1e89279b4e4e4f209f8278b6de0b6eb05ad2dc7d720c8c8e87038c4d5fc56ae5",
+      "bytes": 79163
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/final-controls.mts",
+      "sha256": "10df6a0ec99435cc8a558c8753ca84a9ffc8d6f31f77ef80c00900ef8ebc1d8e",
+      "bytes": 2119
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-dsa.stderr",
+      "sha256": "02ba470e2124b2d688782341c437dc02ae11d7158882907fe6069ea5b793d4fc",
+      "bytes": 1947991
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/inventory.json",
+      "sha256": "66c614006b27da462a690029a0a1036e49db7c7eba7d3050e568165a74e6718c",
+      "bytes": 2774
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/before-inputs-v2.stderr",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/result.json",
+      "sha256": "a420f979d75d035d4f46e26383e26e6874aa19d4bab0de114b046e90f2689a2e",
+      "bytes": 7632
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-v2.stderr",
+      "sha256": "6275a78415cc6e9833d77e3ab0c4e3177163792773e0835c7cd98b1142822d76",
+      "bytes": 1944132
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/after-package-v2.stdout",
+      "sha256": "340e41e7070afa41517a158439f848ecc2dc648184987117f5dee39c71b56a1d",
+      "bytes": 6359091
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/result-v2.json",
+      "sha256": "03b292f0ff8634c8f1d61f1921184c03b83dffb1ac751e2c8605d2ff2d8a511b",
+      "bytes": 8959
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-dsa.stdout",
+      "sha256": "93dde2165cccd639ba020d81464b2b279c2c44a9e59b339091e705e87b6eb2c8",
+      "bytes": 515
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/integrity-runtime.stdout",
+      "sha256": "8f6d3122dbc61dfcfb5076068f76bdc65875ea573c47d7dcd60d2ac8bcd965e1",
+      "bytes": 3613
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/run-v2.mts",
+      "sha256": "b7173c9d843645f95a68d6fdeb5ec44850427ed9dde0111d101794388f76f263",
+      "bytes": 2457
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/sha3-cshake-kmac.stderr",
+      "sha256": "b39830cc37dbafa94162a560ef5dd6ec3daa63bdbf8c3797db73e8c928e18188",
+      "bytes": 1948105
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/ml-kem-v2.stderr",
+      "sha256": "281a24df7957ff4558293a71540d3d8fe6b84ad2eb19d93ad04f70690289809b",
+      "bytes": 1953342
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/before-inputs-v2.stdout",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "bytes": 0
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-node.stdout",
+      "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "bytes": 2
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/supports-direct.stderr",
+      "sha256": "54aa46f513288e44a9d5d72cc71e7eb5fe17d82adb4767087707eea9de336e88",
+      "bytes": 1942658
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-compiled-availability/aead.stdout",
+      "sha256": "36a7f3843ee06e3b921f139576cbf3417fa7bf9aee73cbfc82e6ff6895aedf94",
+      "bytes": 509
+    }
+  ],
+  "conditions": {
+    "unitSequence": [
+      "nts-helper2-crypto-compiled-availability-r1-20261030",
+      "nts-helper2-crypto-qualification-r2-20261030",
+      "nts-helper2-crypto-final-controls-20261030"
+    ],
+    "oneHeavyPhaseAtATime": true,
+    "nice": 19,
+    "excludedCPUs": [
+      4,
+      5
+    ],
+    "memoryMaxGiB": 11,
+    "coreDumps": false
+  },
+  "remainingNativeWork": "Native base operations and modern algorithms remain separate landings after runtime stage1. The carrier ABI architecture is cleared, but no native provider implementation or native operation coverage is claimed."
+}
