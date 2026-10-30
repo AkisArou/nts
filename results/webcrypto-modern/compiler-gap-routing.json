@@ -1,0 +1,2206 @@
+{
+  "schemaVersion": 1,
+  "purpose": "Route the compiled Web Crypto gaps with a one-difference steady-state registry control; no runtime or refusal-policy change.",
+  "fixtureCommit": "2c311a1eb30fd87294687a2753de4d83740196e2",
+  "landedCrypto": "e42ad1b0f561adf1323bac64f50a7ee866726f80",
+  "originalFourPairsCommit": "4ab1769d5341c18cf580d151327232b678baa439",
+  "routing": [
+    {
+      "family": "WeakMap capability get/set",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/capability.ts",
+          "line": 10,
+          "column": 3,
+          "cause": "a module-scope variable of unrepresentable type (...)",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  cryptoCapabilities.set(crypto, provider);",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/capability.ts",
+          "line": 15,
+          "column": 10,
+          "cause": "a module-scope variable of unrepresentable type (...)",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  return cryptoCapabilities.get(crypto);",
+          "landedMatches": 16
+        }
+      ],
+      "refusal": "a-crypto-capability-side-table-is-weak",
+      "control": "a-crypto-capability-side-table-is-strong",
+      "state": "Fixed-key WeakMap subject and one-token Map control, replacing the provider under both permanently live module keys on every call.",
+      "difference": "Only WeakMap changes to Map; both programs use identical fixed module keys and replacement logic. No forced collection or weak-lifetime claim is measured.",
+      "uniqueSiteCausePairs": 2
+    },
+    {
+      "family": "asserted-index byte mask",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/kmac.ts",
+          "line": 65,
+          "column": 25,
+          "cause": "assignment to a computed target",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  if (length % 8 !== 0) bytes[bytes.length - 1]! &= (1 << (length % 8)) - 1;",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/kmac.ts",
+          "line": 99,
+          "column": 7,
+          "cause": "assignment to a computed target",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      bytes[bytes.length - 1]! &= (1 << (length % 8)) - 1;",
+          "landedMatches": 16
+        }
+      ],
+      "refusal": "a-byte-mask-through-an-asserted-index",
+      "control": "a-byte-mask-through-an-explicit-index-write",
+      "expect": "NTS1001 assignment to a computed target is not supported by this lowering yet",
+      "difference": "Only the compound write through a non-null asserted target changes to an explicit indexed write.",
+      "state": "already landed at 4ab1769d5341c18cf580d151327232b678baa439",
+      "uniqueSiteCausePairs": 2
+    },
+    {
+      "family": "in on a native-or-failure result",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/aead.ts",
+          "line": 51,
+          "column": 20,
+          "cause": "an `X` on something that is not an object, which JavaScript throws for",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  if (\"failure\" in result) throw operationError();",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/kmac.ts",
+          "line": 110,
+          "column": 20,
+          "cause": "an `X` on something that is not an object, which JavaScript throws for",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  if (\"failure\" in bytes) throw new DOMException(\"The KMAC key cannot be exported\", \"OperationError\");",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/ml-kem.ts",
+          "line": 43,
+          "column": 20,
+          "cause": "an `X` on something that is not an object, which JavaScript throws for",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  if (\"failure\" in result || result.byteLength !== getMlKemSharedKeyLength() / 8) {",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/ml-key.ts",
+          "line": 152,
+          "column": 20,
+          "cause": "an `X` on something that is not an object, which JavaScript throws for",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  if (\"failure\" in result) throw new DOMException(\"The key cannot be exported\", \"OperationError\");",
+          "landedMatches": 16
+        }
+      ],
+      "refusal": "an-in-test-on-a-native-or-failure-result",
+      "control": "an-in-test-on-an-object-or-failure-result",
+      "expect": "NTS1001 an `in` on something that is not an object, which JavaScript throws for is not supported by this lowering yet",
+      "difference": "Only the successful result changes from Uint8Array to an ordinary object; both sides of the union are objects.",
+      "state": "already landed at 4ab1769d5341c18cf580d151327232b678baa439",
+      "uniqueSiteCausePairs": 4
+    },
+    {
+      "family": "structural field read through an erased cast",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/algorithms.ts",
+          "line": 640,
+          "column": 50,
+          "cause": "an unlicensed field `X` read through a structural cast of an erased value as `X` at nts-workspace:///../../web-platform/src/crypto/algorithms.ts:635:30",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  const iv = toCryptoBufferSource(requiredMember(input.iv, name + \".iv\"));",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/algorithms.ts",
+          "line": 668,
+          "column": 65,
+          "cause": "an unlicensed field `X` read through a structural cast of an erased value as `X` at nts-workspace:///../../web-platform/src/crypto/algorithms.ts:663:32",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "    const outputLength = toCryptoUnsignedInteger(requiredMember(input.outputLength, \"cSHAKE.outputLength\"), 32);",
+          "landedMatches": 16
+        }
+      ],
+      "refusal": "a-field-read-through-an-erased-cast-with-a-method-supplier",
+      "control": "a-field-read-through-a-concrete-class-with-a-method-supplier",
+      "state": "existing refusal unchanged; its concrete control is now separately executable",
+      "difference": "Only the structural assertion is removed from the refused function. The source is otherwise the same class/method supplier.",
+      "scope": "This pins the unlicensed erased structural field-read cause; ordinary numeric and managed-buffer field reads emitted cleanly in the retained reductions and are not claimed unsupported.",
+      "uniqueSiteCausePairs": 2
+    },
+    {
+      "family": "null-only result",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/supports.ts",
+          "line": 234,
+          "column": 119,
+          "cause": "a call result of unrepresentable type (...)",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "  if (name === \"HKDF\" || name === \"PBKDF2\" || name === \"Argon2d\" || name === \"Argon2i\" || name === \"Argon2id\") return getKdfKeyLength();",
+          "landedMatches": 16
+        }
+      ],
+      "refusal": "a-null-only-function-result-is-observed",
+      "control": "a-null-result-has-a-number-representation",
+      "expect": "NTS1001 a call result of unrepresentable type (null) is not supported by this lowering yet",
+      "difference": "Only the helper return annotation changes from null to number | null; both helpers actually return null.",
+      "state": "already landed at 4ab1769d5341c18cf580d151327232b678baa439",
+      "uniqueSiteCausePairs": 1
+    },
+    {
+      "family": "disjunctive class-guard length",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/supports.ts",
+          "line": 251,
+          "column": 12,
+          "cause": "`X` of something without one",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "    return algorithm.length === undefined || (algorithm.length <= length && algorithm.length > length - 8);",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/supports.ts",
+          "line": 72,
+          "column": 22,
+          "cause": "`X` of something without one",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      if (!aesLength(algorithm.length)) return undefined;",
+          "landedMatches": 16
+        }
+      ],
+      "refusal": "a-length-field-in-a-disjunctive-class-guard",
+      "control": "an-extent-field-in-a-disjunctive-class-guard",
+      "expect": "NTS1001 `length` of something without one is not supported by this lowering yet",
+      "difference": "Only the property name changes from length to extent; the class layouts, values and disjunctive guard remain the same.",
+      "state": "already landed at 4ab1769d5341c18cf580d151327232b678baa439",
+      "uniqueSiteCausePairs": 2
+    },
+    {
+      "family": "arguments",
+      "queue": "#55",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+          "line": 197,
+          "column": 22,
+          "cause": "the `X` object",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "    requireArguments(arguments, 2, \"SubtleCrypto.supports\");",
+          "landedMatches": 16
+        }
+      ],
+      "handling": "counts only; no duplicate fixture",
+      "uniqueSiteCausePairs": 1
+    },
+    {
+      "family": "indirect throw",
+      "queue": "L15",
+      "sites": [
+        {
+          "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+          "line": 422,
+          "column": 22,
+          "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      const usages = toKeyUsages(keyUsages);",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+          "line": 446,
+          "column": 14,
+          "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      return cryptoTask(scheduler, () => {",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+          "line": 468,
+          "column": 22,
+          "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      const usages = toKeyUsages(keyUsages);",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+          "line": 495,
+          "column": 14,
+          "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      return cryptoTask(scheduler, () => {",
+          "landedMatches": 16
+        },
+        {
+          "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+          "line": 511,
+          "column": 22,
+          "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+          "modules": [
+            "assert",
+            "child_process",
+            "cluster",
+            "console",
+            "crypto",
+            "dgram",
+            "events",
+            "fs",
+            "http",
+            "net",
+            "perf_hooks",
+            "process",
+            "readline",
+            "stream",
+            "util",
+            "zlib"
+          ],
+          "source": "      const usages = toKeyUsages(keyUsages);",
+          "landedMatches": 16
+        }
+      ],
+      "handling": "counts only; no duplicate fixture",
+      "uniqueSiteCausePairs": 5
+    }
+  ],
+  "counts": {
+    "uniqueRoutedSiteCausePairs": 19,
+    "newFamilyPairs": 13,
+    "existingArgumentsPairs": 1,
+    "existingIndirectThrowPairs": 5,
+    "importingModulesPerPair": 16,
+    "moduleSiteMemberships": 304,
+    "interpretation": "The 304 module memberships are not 304 globally distinct sites. All 19 previously attributed pairs are retained in the landed emission."
+  },
+  "landedCensus": {
+    "source": "e42ad1b0f561adf1323bac64f50a7ee866726f80",
+    "compilerSha256": "77d2b3b4d94f5fa43d636bd0f9aab25eb0e501dfee37988a5bec0a4e2eb6b43a",
+    "run": "e42ad1b0f561-1793365052027",
+    "modules": [
+      "assert",
+      "async_hooks",
+      "buffer",
+      "child_process",
+      "cluster",
+      "console",
+      "crypto",
+      "dgram",
+      "diagnostics_channel",
+      "dns",
+      "events",
+      "fs",
+      "http",
+      "net",
+      "os",
+      "path",
+      "perf_hooks",
+      "process",
+      "punycode",
+      "querystring",
+      "readline",
+      "stream",
+      "string_decoder",
+      "timers",
+      "tty",
+      "url",
+      "util",
+      "zlib"
+    ],
+    "totalOccurrences": 18428,
+    "totalSites": 1458,
+    "distinctSites": 1410,
+    "definitions": 57619,
+    "ceiling": 1499,
+    "scope": "The canonical census generalized causes and positions are read from sealed gate output, not inferred from source. The global pair count moved from 1459 to 1458 elsewhere; no routed pair was lost.",
+    "sealedInputs": {
+      "compiler": "77d2b3b4d94f5fa43d636bd0f9aab25eb0e501dfee37988a5bec0a4e2eb6b43a",
+      "run": "e42ad1b0f561-1793365052027",
+      "files": [
+        {
+          "path": "stream.sites",
+          "sha256": "2254bc977253b24edaf9509a11bad89f6a366a73323dbaf8ea781ffffdf3e811",
+          "bytes": 317693
+        },
+        {
+          "path": "fs.refusals",
+          "sha256": "55bd6d0199032872a8005f3e1bb32becff446810bd667e9bae394cd6c3eee316",
+          "bytes": 5
+        },
+        {
+          "path": "async_hooks.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "http.refusals",
+          "sha256": "b79ba45cc3397d11b0995cb8ec0be2c8a58a22185b33d0bce897aa7fc59c18a0",
+          "bytes": 5
+        },
+        {
+          "path": "url.defined",
+          "sha256": "7a3cc8ae6abd272d2adbb617cae2fab8f6f35ee6bff7f565291a49fcb1dc54b9",
+          "bytes": 4
+        },
+        {
+          "path": "cluster.sites",
+          "sha256": "362ed7e1cfc835d47b35b25de3c2695c6b1e2f0b6710840ed19e1b93db187a13",
+          "bytes": 322198
+        },
+        {
+          "path": "cluster.defined",
+          "sha256": "2f24b6c2993ee78cde9a77bdeb47f1e94e741737ee5f0864423890f5897d8751",
+          "bytes": 5
+        },
+        {
+          "path": "os.defined",
+          "sha256": "b5feddddcf05a36102a60e41d70ce3a88939e8283ec42fbfc32b95c90c3e4af6",
+          "bytes": 4
+        },
+        {
+          "path": "dns.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "util.defined",
+          "sha256": "00e31ff6f6cd83f90e02cc2c8b7648a50ad278211913ce174e6eb320270576f2",
+          "bytes": 5
+        },
+        {
+          "path": "util.sites",
+          "sha256": "888b31e07b53910feaee47c54863966706179e8ba92d20f68e5c1b609f9f3fa3",
+          "bytes": 263013
+        },
+        {
+          "path": "assert.sites",
+          "sha256": "6d58743e7163f975cb720063fb467c9f1765405369a8a700b9e4197a1a2ed13d",
+          "bytes": 265045
+        },
+        {
+          "path": "zlib.defined",
+          "sha256": "34d49dd93b1ed153ef6d5d3db84a82bd02f5d6624014f3832c57e7bdae210417",
+          "bytes": 5
+        },
+        {
+          "path": "cluster.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "crypto.refusals",
+          "sha256": "114d5a907f518135f77fddecfb27e8a878a2bfd6ba6a159f7e85b9c8be76378e",
+          "bytes": 5
+        },
+        {
+          "path": "process.defined",
+          "sha256": "0cc28df50d2f7f3d6c79a774d2a86d9ae7d7aac52edfce9aaf44d500568cf5c7",
+          "bytes": 5
+        },
+        {
+          "path": "path.defined",
+          "sha256": "84b983f776fa270eac724d630c27d687dc01bde11f0677e7180eff0ce2797883",
+          "bytes": 4
+        },
+        {
+          "path": "fs.sites",
+          "sha256": "3b852018bc0085bef18f799ced24b79af532e6cf3690ac88d930b74df82817d5",
+          "bytes": 384901
+        },
+        {
+          "path": "querystring.sites",
+          "sha256": "98ba4e4850ca23ed9852f60d28b0895dc986b2047663ea57fabac84440718ea6",
+          "bytes": 6139
+        },
+        {
+          "path": "perf_hooks.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "process.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "querystring.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "buffer.refusals",
+          "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302",
+          "bytes": 3
+        },
+        {
+          "path": "url.refusals",
+          "sha256": "6442bc26a7c562f5afe6467dab36365c709909f6a81afcecfc0c25cff0f1bab0",
+          "bytes": 3
+        },
+        {
+          "path": "dns.defined",
+          "sha256": "04d980dc3dd2b13d317fa60de5014bc7fa1e9da002152be45d1cbd0c4550133e",
+          "bytes": 4
+        },
+        {
+          "path": "process.sites",
+          "sha256": "19b9cd787ab7ebba92b9dd24af5477a062f7cdb7e1d663803c85349f0f9f1539",
+          "bytes": 359894
+        },
+        {
+          "path": "punycode.refusals",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "child_process.sites",
+          "sha256": "afcf9918d3ab8569bd7e7562771cf63d2bffda858005ec68f5dff03fadd373f2",
+          "bytes": 307149
+        },
+        {
+          "path": "url.sites",
+          "sha256": "46447c0b24f379bb7a81242c75048bc98887a1e0ad78e6543edcd561135b06b0",
+          "bytes": 15674
+        },
+        {
+          "path": "fs.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "util.refusals",
+          "sha256": "22131641e6e7d747f16c6ecab05c1f8c35bd630afa8a1adacea5dc98c4f29f07",
+          "bytes": 4
+        },
+        {
+          "path": "async_hooks.defined",
+          "sha256": "81549590044d2f7b62378afe7234c54599e8cb643c760be28492c36d1aa5d90f",
+          "bytes": 4
+        },
+        {
+          "path": "punycode.defined",
+          "sha256": "3840bc236ee03aacbb1ef7d5108ddfa347c59f10b68d4174affbb53140f31273",
+          "bytes": 3
+        },
+        {
+          "path": "events.refusals",
+          "sha256": "2159c00db79e11023298b62db4a2952eb8c85c276a9a120ab351e411d1665a35",
+          "bytes": 4
+        },
+        {
+          "path": "assert.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "buffer.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "crypto.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "diagnostics_channel.defined",
+          "sha256": "b0ef7769d270570fe1ab58808890bb70761b8686576d021da265acbb9ffd5a5a",
+          "bytes": 4
+        },
+        {
+          "path": "perf_hooks.refusals",
+          "sha256": "5bf713239d6d72b6022a74451cfee41230bb9a90fda2d4ded87aa1cb319eea06",
+          "bytes": 4
+        },
+        {
+          "path": "net.sites",
+          "sha256": "9dc1af1947ffec06335cab1e86862d3899367e9ced02c9ce6fb2ed5cbf72879d",
+          "bytes": 309944
+        },
+        {
+          "path": "dgram.refusals",
+          "sha256": "2b7f13306363b97bc2969af0a03418f887e2cd93d84d8f3ecbf02d2207997e12",
+          "bytes": 5
+        },
+        {
+          "path": "crypto.sites",
+          "sha256": "c36232161d0f0826c41a4028987f4699b1d2f4c0a0c1939861ea8964d124b0e9",
+          "bytes": 347542
+        },
+        {
+          "path": "buffer.sites",
+          "sha256": "98ba4e4850ca23ed9852f60d28b0895dc986b2047663ea57fabac84440718ea6",
+          "bytes": 6139
+        },
+        {
+          "path": "timers.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "path.sites",
+          "sha256": "e50df257ce9b94450db24b312a1455c5ad7fcfcf2e05f9b1c504cc3d599c6ffa",
+          "bytes": 2971
+        },
+        {
+          "path": "string_decoder.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "path.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "string_decoder.defined",
+          "sha256": "af5a86efbcdf0dc2cdba643a99528c6ab92cfc7ead17d655b3f63b841d74efb7",
+          "bytes": 4
+        },
+        {
+          "path": "stream.defined",
+          "sha256": "d88c58d9a0a9130be903167d37d64eb61d1a23e4f2ad602aa10c568e6fff4e0c",
+          "bytes": 5
+        },
+        {
+          "path": "timers.refusals",
+          "sha256": "b1ce0aa6fdf3cf349d773243dab9fbbe09d30619f38b0c1e8977e28c4f0bc495",
+          "bytes": 3
+        },
+        {
+          "path": "diagnostics_channel.sites",
+          "sha256": "1617ddd46d7cfa581b75e124b102790c32152c96d809bff3eedf5d334055b857",
+          "bytes": 7728
+        },
+        {
+          "path": "perf_hooks.defined",
+          "sha256": "286827657421da074b43e2849953cf20c5e5efa8f71b351bef36edfe2b63d06b",
+          "bytes": 5
+        },
+        {
+          "path": "http.defined",
+          "sha256": "5ceb3b14465b48159413741176851efa2f0683d2018a798f6fa24320d7860c00",
+          "bytes": 5
+        },
+        {
+          "path": "querystring.defined",
+          "sha256": "1d42234635e87f07d19c2a5b7e2f316dd40389c46abd2223052146caa5e3483e",
+          "bytes": 4
+        },
+        {
+          "path": "child_process.defined",
+          "sha256": "5eecdbd3cb88bb41e274858ad00e2088f43ca6350d70d5102e26c8bab2c87053",
+          "bytes": 5
+        },
+        {
+          "path": "net.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "fs.defined",
+          "sha256": "461495a28c7dbafd68a5d572935def4abaac4ec16813c779c14881f8bb357f0e",
+          "bytes": 5
+        },
+        {
+          "path": "punycode.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "dns.sites",
+          "sha256": "cfe61a385dc95791cca10a4248998d704ed6db060375cbec753dcd01539b31a9",
+          "bytes": 24658
+        },
+        {
+          "path": "console.refusals",
+          "sha256": "2d438acf433ce2f294d3689f2f5df1d1e31f514039f29c4b8dacd5ab87e7f9b6",
+          "bytes": 4
+        },
+        {
+          "path": "timers.sites",
+          "sha256": "85903a690b226280167789ce0d1d757375043992b32f121f9158a5ca7670d536",
+          "bytes": 12080
+        },
+        {
+          "path": "buffer.defined",
+          "sha256": "207db6cbeab7cf4aa8ddfbcec34f4df58186e3354cbe7822756864df81e7dc6f",
+          "bytes": 4
+        },
+        {
+          "path": "querystring.refusals",
+          "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302",
+          "bytes": 3
+        },
+        {
+          "path": ".emitted-by",
+          "sha256": "8394ee1c397c3d8a62516023ff00590b19e19466502f32ec60772dddf505991f",
+          "bytes": 65
+        },
+        {
+          "path": "async_hooks.refusals",
+          "sha256": "90d7ec0f0acef104d8b6252794295f661a0149634868d02a1ae0c358099638f5",
+          "bytes": 3
+        },
+        {
+          "path": "crypto.defined",
+          "sha256": "c7f1c1fbd0bbc22454cfde423fcf59660032bcf9ea7dcb9887f6242754feac7b",
+          "bytes": 5
+        },
+        {
+          "path": "string_decoder.refusals",
+          "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302",
+          "bytes": 3
+        },
+        {
+          "path": "dgram.defined",
+          "sha256": "ac0d23ac16820d4595754ce4ed87041d88b77f39c22119b4f1a35d7052aea284",
+          "bytes": 5
+        },
+        {
+          "path": "process.refusals",
+          "sha256": "268450b9a66c06c9d9c17524b4f5c6d9d299382426155a974202e2d047bb2c39",
+          "bytes": 5
+        },
+        {
+          "path": "readline.defined",
+          "sha256": "15a47fcd2c3b5d1faf1e53f72336c2a2eb7d55eb2be36a1822543d16ff286511",
+          "bytes": 5
+        },
+        {
+          "path": "child_process.refusals",
+          "sha256": "1bdce42a88b06a2ffad1ce3046cfb8f1eb155a0f15412bce938cabe8e8e1bc23",
+          "bytes": 5
+        },
+        {
+          "path": "cluster.refusals",
+          "sha256": "e529ccd564c84815b8b9eda022305e587d774ad63fd9e7c14c4607b38a16c8dc",
+          "bytes": 5
+        },
+        {
+          "path": "assert.refusals",
+          "sha256": "b5ed52891081bb7000bc44c6d92b3de673d90172d129ef972367cb16f00f3565",
+          "bytes": 4
+        },
+        {
+          "path": "http.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "events.defined",
+          "sha256": "df8664cf309701b7ec84fca8bb2005824526efd94110b48eba2a9bf02a92d5ef",
+          "bytes": 5
+        },
+        {
+          "path": "stream.refusals",
+          "sha256": "33bd680a6a30c445be74a8a6316e7b770b3fb100002e45da74acc10af5616bee",
+          "bytes": 5
+        },
+        {
+          "path": "tty.refusals",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "os.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "net.defined",
+          "sha256": "ca250cc18b4b2115f2b2fcd0242b2a45eeb4d22e29545b82a04f528056b199a3",
+          "bytes": 5
+        },
+        {
+          "path": "events.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "tty.defined",
+          "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3",
+          "bytes": 2
+        },
+        {
+          "path": "dgram.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "diagnostics_channel.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "console.sites",
+          "sha256": "0255378136aee73fbddf429dcfa6eed568a52780f528a49ae9b384669c99ea0c",
+          "bytes": 270255
+        },
+        {
+          "path": "diagnostics_channel.refusals",
+          "sha256": "32c2643e0dc65524c9f1f6f9f00937322fd68d59986bc381d9ff2285d23e353d",
+          "bytes": 3
+        },
+        {
+          "path": "punycode.sites",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "dgram.sites",
+          "sha256": "deea853294ef1fd31a857580ac5b6eab086d8d74208b999ae47bff1da8ee2e80",
+          "bytes": 312107
+        },
+        {
+          "path": "assert.defined",
+          "sha256": "f17914754dc70b8a803b9a119640786cea91ca0480d628555ad8ac723cccefc9",
+          "bytes": 5
+        },
+        {
+          "path": "zlib.sites",
+          "sha256": "210a4dac7cf6a61f251168bfd33ab9e23ebc86103939b7b748c7a3853289b893",
+          "bytes": 325704
+        },
+        {
+          "path": "path.refusals",
+          "sha256": "1a252402972f6057fa53cc172b52b9ffca698e18311facd0f3b06ecaaef79e17",
+          "bytes": 3
+        },
+        {
+          "path": "console.defined",
+          "sha256": "1211bddb3152b61f7e4ce90786afbd717f96e9222bf76fcaa1be5360da56eb57",
+          "bytes": 5
+        },
+        {
+          "path": "zlib.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "http.sites",
+          "sha256": "63096cb0cab5ac31285b1218bc07ac20993638a92e2ecc6362917712a682e7e9",
+          "bytes": 357905
+        },
+        {
+          "path": "events.sites",
+          "sha256": "2098ecdbda63e769f79025217ba67caf9790f1acad934e03d96103232024c883",
+          "bytes": 246394
+        },
+        {
+          "path": "readline.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "timers.defined",
+          "sha256": "fbbbdc7231dc30612154b1808efeaf4b6f7e8756db6c205e6ff94579e0ba8aa0",
+          "bytes": 4
+        },
+        {
+          "path": "dns.refusals",
+          "sha256": "2fcae9c346ff9530cd3b7303a6456e3a296ff1876b18b50c324343638ec2bdf3",
+          "bytes": 4
+        },
+        {
+          "path": "os.refusals",
+          "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302",
+          "bytes": 3
+        },
+        {
+          "path": "readline.refusals",
+          "sha256": "856254a0c26cb47c1120a29309de1798efffd28379a1dbe5f74bd6013c0b374b",
+          "bytes": 5
+        },
+        {
+          "path": "net.refusals",
+          "sha256": "07ad018d85136358c8255c7aa7ae663538f69433ca7f3f0ab28d402a4accffa4",
+          "bytes": 5
+        },
+        {
+          "path": "async_hooks.sites",
+          "sha256": "1ef8bac4e1731c7cb2439435623be81926bf7e2b18de7aac1268241402976360",
+          "bytes": 8804
+        },
+        {
+          "path": "url.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "console.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "util.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "stream.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "os.sites",
+          "sha256": "22b4a4b64f0fddde857f7dc6607acf07d434bba077fbe89de30db966b9cb6de9",
+          "bytes": 6139
+        },
+        {
+          "path": "zlib.refusals",
+          "sha256": "72a5a31e4922bae6e6d5107afff80b76e59f77c39a2b866fb4a202aabad572ba",
+          "bytes": 5
+        },
+        {
+          "path": "tty.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "tty.sites",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "bytes": 0
+        },
+        {
+          "path": "string_decoder.sites",
+          "sha256": "98ba4e4850ca23ed9852f60d28b0895dc986b2047663ea57fabac84440718ea6",
+          "bytes": 6139
+        },
+        {
+          "path": "perf_hooks.sites",
+          "sha256": "8d2799dd27a148b53e0f904d1f524b363b48fb1bf065fec2d8c9a5160f73b60b",
+          "bytes": 249114
+        },
+        {
+          "path": "child_process.status",
+          "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+          "bytes": 2
+        },
+        {
+          "path": "readline.sites",
+          "sha256": "d0496ae3a08efcf7108407c15f039a322d0f0cf75bfcf910eb48ea6819247bd8",
+          "bytes": 277361
+        }
+      ]
+    }
+  },
+  "historicalAttributionScope": "The census and four already-landed pairs describe the exact e42ad1b0f561 pin and sealed outputs. They are historical routing evidence, not a new census of the current compiler.",
+  "newQualification": {
+    "sourceCommit": "2c311a1eb30fd87294687a2753de4d83740196e2",
+    "pins": {
+      "current": {
+        "path": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "source": "3934c13a8312",
+        "sha256": "39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06"
+      },
+      "previous": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "source": "cad7d13dfbe64a89b7ee1befa8a71e82b7a21076",
+        "sha256": "d163f37081853538b90d020b5affd6231c7fa7579aa53a0f33faca5bb2e2d5e9"
+      }
+    },
+    "commands": [
+      {
+        "name": "current-weak",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "emit",
+          "tests/refusals/a-crypto-capability-side-table-is-weak/tsconfig.json",
+          "--backends",
+          "c,llvm,jvm",
+          "--out",
+          "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-qualification-r2/emitted/current"
+        ],
+        "env": {},
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null
+      },
+      {
+        "name": "current-a-crypto-capability-side-table-is-strong-c",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "c"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "current-a-crypto-capability-side-table-is-strong-llvm",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "current-a-crypto-capability-side-table-is-strong-jvm",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "jvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "current-a-field-read-through-a-concrete-class-with-a-method-supplier-c",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "c"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "current-a-field-read-through-a-concrete-class-with-a-method-supplier-llvm",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "current-a-field-read-through-a-concrete-class-with-a-method-supplier-jvm",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "jvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "previous-weak",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "emit",
+          "tests/refusals/a-crypto-capability-side-table-is-weak/tsconfig.json",
+          "--backends",
+          "c,llvm,jvm",
+          "--out",
+          "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-qualification-r2/emitted/previous"
+        ],
+        "env": {},
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null
+      },
+      {
+        "name": "previous-a-crypto-capability-side-table-is-strong-c",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "c"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "previous-a-crypto-capability-side-table-is-strong-llvm",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "previous-a-crypto-capability-side-table-is-strong-jvm",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "jvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "previous-a-field-read-through-a-concrete-class-with-a-method-supplier-c",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "c"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "previous-a-field-read-through-a-concrete-class-with-a-method-supplier-llvm",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "previous-a-field-read-through-a-concrete-class-with-a-method-supplier-jvm",
+        "command": "/home/akisarou/.cache/nts-pins/helper2-full-bench-cad7d13df/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "jvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "gate-rc-a-crypto-capability-side-table-is-strong-c",
+        "command": "sh",
+        "args": [
+          "tooling/gate/rc.sh",
+          "a-crypto-capability-side-table-is-strong"
+        ],
+        "env": {
+          "NTS_BIN": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+          "NTS_BACKEND": "c"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "verified": true
+      },
+      {
+        "name": "counted-a-crypto-capability-side-table-is-strong-c",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "c",
+          "NTS_RC": "1"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "gate-rc-a-crypto-capability-side-table-is-strong-llvm",
+        "command": "sh",
+        "args": [
+          "tooling/gate/rc.sh",
+          "a-crypto-capability-side-table-is-strong"
+        ],
+        "env": {
+          "NTS_BIN": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+          "NTS_BACKEND": "llvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "verified": true
+      },
+      {
+        "name": "counted-a-crypto-capability-side-table-is-strong-llvm",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm",
+          "NTS_RC": "1"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "gate-rc-a-field-read-through-a-concrete-class-with-a-method-supplier-c",
+        "command": "sh",
+        "args": [
+          "tooling/gate/rc.sh",
+          "a-field-read-through-a-concrete-class-with-a-method-supplier"
+        ],
+        "env": {
+          "NTS_BIN": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+          "NTS_BACKEND": "c"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "verified": true
+      },
+      {
+        "name": "counted-a-field-read-through-a-concrete-class-with-a-method-supplier-c",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "c",
+          "NTS_RC": "1"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      },
+      {
+        "name": "gate-rc-a-field-read-through-a-concrete-class-with-a-method-supplier-llvm",
+        "command": "sh",
+        "args": [
+          "tooling/gate/rc.sh",
+          "a-field-read-through-a-concrete-class-with-a-method-supplier"
+        ],
+        "env": {
+          "NTS_BIN": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+          "NTS_BACKEND": "llvm"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "verified": true
+      },
+      {
+        "name": "counted-a-field-read-through-a-concrete-class-with-a-method-supplier-llvm",
+        "command": "/home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts",
+        "args": [
+          "check",
+          "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+          "--json"
+        ],
+        "env": {
+          "NTS_BACKEND": "llvm",
+          "NTS_RC": "1"
+        },
+        "status": 0,
+        "signal": null,
+        "error": null,
+        "hung": null,
+        "runaway": null,
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        }
+      }
+    ],
+    "terminal": "GREEN",
+    "rawEvidence": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-qualification-r2",
+    "scope": "Both controls compare all29 cases on C/LLVM/JVM with current and previous pins; four canonical C/LLVM RC owner controls and four raw counted reports pass; WeakMap subject retains its named refusal on all six arms."
+  },
+  "sourceFiles": [
+    {
+      "path": "results/oracle-counts/tests/programs/a-crypto-capability-side-table-is-strong.json",
+      "sha256": "8bf9d18c169e3c499b51bcb7ead28eeda0d6b9b8db9679ffa860d0511296d950"
+    },
+    {
+      "path": "results/oracle-counts/tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier.json",
+      "sha256": "75964a54d1ee28b8c4d969295e184c081b656ad1ae597c036cb1380f27f348d2"
+    },
+    {
+      "path": "tests/programs/a-crypto-capability-side-table-is-strong/src/main.ts",
+      "sha256": "cd4a8b6c61347818704c72ef303dfa575a2f0c2f55bac4d87b33fe36d5b4374b"
+    },
+    {
+      "path": "tests/programs/a-crypto-capability-side-table-is-strong/tsconfig.json",
+      "sha256": "4a788233e4372d6da704f5302f8da552f6229080cfad2429a281cae4cda4ccde"
+    },
+    {
+      "path": "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/src/main.ts",
+      "sha256": "cfee8ba89886a8199b4673ae92df315cea26120dc1d9bbb0c395a5293540da49"
+    },
+    {
+      "path": "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/tsconfig.json",
+      "sha256": "4a788233e4372d6da704f5302f8da552f6229080cfad2429a281cae4cda4ccde"
+    },
+    {
+      "path": "tests/refusals/a-crypto-capability-side-table-is-weak/src/main.ts",
+      "sha256": "11eede2d15a63fac5254828d4443317ade481d5f3e375fc6e3b8c1cc6241ff84"
+    },
+    {
+      "path": "tests/refusals/a-crypto-capability-side-table-is-weak/tsconfig.json",
+      "sha256": "4a788233e4372d6da704f5302f8da552f6229080cfad2429a281cae4cda4ccde"
+    }
+  ],
+  "existingFourPairQualification": {
+    "record": "results/webcrypto-modern/profile-findings-qualification.json",
+    "sha256": "41f2cdfbad543c0f4971b5e613fea2be5d52a5138e237df734e260917bc9eba0",
+    "pins": {
+      "main": {
+        "source": "634f0b85bbc00d00547d1977db2095928677cee4",
+        "sha256": "c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87"
+      },
+      "previous": {
+        "source": "091bda9e0740",
+        "sha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0"
+      }
+    },
+    "summary": "Four controls, each 29/29 on C, LLVM and JVM against both recorded pins; unchanged populations subsequently passed the landed full gate."
+  },
+  "oracleRecording": {
+    "strongControl": {
+      "command": [
+        "node",
+        "tooling/differential/record-oracles.ts",
+        "tests/programs/a-crypto-capability-side-table-is-strong"
+      ],
+      "evidence": "/home/akisarou/.cache/nts-oracle-record/run-FkfUmk",
+      "plans": 5,
+      "expected": 29,
+      "completedUniqueDrivers": 1,
+      "nodeCpuSeconds": [
+        0.075846,
+        0.075595
+      ],
+      "unchangedShardExplanation": "Official re-record completed all29 cases twice. The generated population and case key remain unchanged, so the authoritative shard stays byte-identical.",
+      "planner": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90/oracle-plan",
+        "source": "56847951d06d03d69e7a78391241ce0b881e3d20",
+        "sha256": "4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90",
+        "role": "Node population planning only; current and previous compiler populations independently qualified above"
+      }
+    },
+    "concreteControl": {
+      "evidence": "/home/akisarou/.cache/nts-oracle-record/run-mdu3an",
+      "expected": 29,
+      "scope": "The unchanged control body and its original measured population; all29 cases independently compare in the final matrix."
+    },
+    "records": [
+      {
+        "path": "results/oracle-counts/tests/programs/a-crypto-capability-side-table-is-strong.json",
+        "sha256": "8bf9d18c169e3c499b51bcb7ead28eeda0d6b9b8db9679ffa860d0511296d950",
+        "record": {
+          "version": 1,
+          "fixture": "tests/programs/a-crypto-capability-side-table-is-strong",
+          "rows": [
+            {
+              "kind": "measured",
+              "source": "tests/programs/a-crypto-capability-side-table-is-strong/src/main.ts",
+              "signature": "585528c646923698bc5901a5775c75c3650c7266db08a803e2acd64b62d6e779",
+              "keys": {
+                "c": "b52e1dcf5c2e8dc27b185f1a048bcb70",
+                "jvm": "5ba5027e68c7b5fd119e408506893ab3",
+                "llvm": "c917baee8684088f251b1b91e05b5a18"
+              },
+              "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45",
+              "driver_sha256": "c194f59d625fe39ccc376da56f5c61d3c7e8509df84c301046153bb95a14f266",
+              "populations": {
+                "work": {
+                  "count": 29,
+                  "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+                }
+              },
+              "complete": true,
+              "count": 29
+            }
+          ]
+        }
+      },
+      {
+        "path": "results/oracle-counts/tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier.json",
+        "sha256": "75964a54d1ee28b8c4d969295e184c081b656ad1ae597c036cb1380f27f348d2",
+        "record": {
+          "version": 1,
+          "fixture": "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier",
+          "rows": [
+            {
+              "kind": "measured",
+              "source": "tests/programs/a-field-read-through-a-concrete-class-with-a-method-supplier/src/main.ts",
+              "signature": "a7546a0a240a78d2cf98af020c7a28f33f13010e8de2d62fddfb43216b8acaf7",
+              "keys": {
+                "c": "bdc81d454f8b76ff3bd6b14840378e9f",
+                "jvm": "5546ea7eb81e7dc37e36efc265944d39",
+                "llvm": "d75ca001942033ffa225764a1ae91e35"
+              },
+              "cases_sha256": "96c4cdec5338736ee41cdb3f8b93a306a3dbf40abb32e42f9d8827efaac71908",
+              "driver_sha256": "9af4ef6adcc01c3c376942ea8f441f4a12d3b64cef32debf00a2b5fff6707eb0",
+              "populations": {
+                "refused": {
+                  "count": 29,
+                  "cases_sha256": "96c4cdec5338736ee41cdb3f8b93a306a3dbf40abb32e42f9d8827efaac71908"
+                }
+              },
+              "complete": true,
+              "count": 29
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "steadyStateCorrection": {
+    "withdrawnCommit": "ed7f54816ab69d7f4b04a01639badeee17449317",
+    "withdrawnIsAncestor": false,
+    "oldFailureRun": "/home/akisarou/.cache/nts-land/runs/5669369c7bb0-1793370304047",
+    "oldFailure": "The module Map retained fresh Token/Provider pairs:4 objects after the first case,60 after29,56 retained. This was program growth, not a compiler leak.",
+    "correction": "Two fixed module keys are registered with the same fresh provider on every call before lookup. Overwriting both entries releases the previous provider; the registry reaches a steady state after the first call.",
+    "oneDifference": "WeakMap versus Map is the only code-token difference in the subject/control bodies.",
+    "finalReferenceCounting": "All four canonical rc.sh controls pass against the current main compiler; no program growth remains."
+  },
+  "integrity": {
+    "projects": 3,
+    "functions": 9,
+    "violations": 0,
+    "knownRegistrationChanged": false,
+    "stdout": "  compiler /home/akisarou/.cache/nts-gate/bin/39bd915fcb606af91f77bdba65ab1b994dc653ac19ca81a8b220515b69c1da06/nts\n  3 of 3 project(s) measured, 9 function(s), in 0 s\n  whole: no violation beyond the 0 known\n"
+  },
+  "retainedEvidence": {
+    "originalFixedKeyQualification": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-qualification/results.json",
+    "finalMissingNodeSetup": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-qualification/results.json",
+    "setupCorrection": "The first final unit had manager PATH=/usr/local/bin:/usr/bin with no system Node; its oracle exit127 was retained as setup. The corrected final unit uses systemdEnvironment and completes every check.",
+    "officialOracleLog": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-record.log"
+  },
+  "evidenceFiles": [
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/qualify-steady-final-r2.mts",
+      "sha256": "7154505afbe3ef843ff6ab59b70274ad7db29aae3b96361484981c05ca131757"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-qualification-r2/results.json",
+      "sha256": "62dd391e315ce09ab4ed9cbee62d001818d77e97bd775e0baa0f03650d7157a2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-qualification-r2/terminal.status",
+      "sha256": "80aa948acc9fd0861bcfc68ba212b27a4df5fab2e7e046427e9f78a465a68242"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-final-integrity.log",
+      "sha256": "f74670f8ccba14c52f09955a6772b32805177bae278d22e72b9c0e8030ee90f6"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/steady-record.log",
+      "sha256": "5b73f40dcc05ef8bf9e26da158acbaf8450acf549ff4c4448da8493632cd41d9"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-oracle-record/run-FkfUmk/plans.json",
+      "sha256": "c98697558a05150b7e9c043b91eaa823095258f9e3fd8aca0a4d262c3456cbb2"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/landed-route-site-check.json",
+      "sha256": "2ccd5c8328fd6c41426a784f7fdf3704953b4918bfed77baf52b72082f5dc154"
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-routing-20261030/sealed-profile-inputs.json",
+      "sha256": "e40faa6c5dac4fc41792b9582742a87e3ba2de9d1bed82ced7c05d4d95fe2368"
+    }
+  ]
+}
