@@ -1,10 +1,12 @@
 // run: check
 // The sole subject/control difference swaps the equivalent if arms.
-// A scalar observation isolates the merge from the separate undefined-element boundary.
+// A code-unit read makes the stale range observable as a lost NaN.
+// The XOR permutation keeps the complete 0..7 range while the unrefined
+// control-flow arm can reach past the four-unit string.
 // The arm that tests `j` is lowered first, so its edge reaches the merge
 // first; the other arm has its own branch, so its edge arrives later.
 export function subject(c: boolean, d: boolean, i: number): number {
-  const j = i | 0;
+  const j = ((i | 0) ^ 4) & 7;
   let noise = 0;
   if (c) {
     if (j > 3) {
@@ -18,13 +20,13 @@ export function subject(c: boolean, d: boolean, i: number): number {
       noise = 1;
     }
   }
-  return (j <= 3 ? 1000 : 2000) + noise;
+  return "abcd".charCodeAt(j) + noise;
 }
 
 // Control: the same program with the arms swapped, so the arm that never
 // tests `j` reaches the merge first.
 export function control(c: boolean, d: boolean, i: number): number {
-  const j = i | 0;
+  const j = ((i | 0) ^ 4) & 7;
   let noise = 0;
   if (!c) {
     if (d) {
@@ -38,5 +40,5 @@ export function control(c: boolean, d: boolean, i: number): number {
       return -200;
     }
   }
-  return (j <= 3 ? 1000 : 2000) + noise;
+  return "abcd".charCodeAt(j) + noise;
 }

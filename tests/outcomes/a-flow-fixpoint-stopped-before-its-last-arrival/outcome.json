@@ -1,8 +1,38 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 2,
+      "expected": 4,
+      "compared": 4,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 1,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 4,
+      "received": 4,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "subject 1 4031000000000000",
+        "node": "subject 1 4032000000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
   "category": "wrong-answer",
-  "nts": "checked 4 cases across 2 function(s) | Error: 1 case(s) disagree between the compiled program and node",
+  "nts": "disagrees: 4 compared, 4 expected, 1 disagreements",
   "node": null,
-  "measured_with": "8314b779e391f84f",
+  "measured_with": "6d9a82e23aa5420b",
   "source": "measured"
 }

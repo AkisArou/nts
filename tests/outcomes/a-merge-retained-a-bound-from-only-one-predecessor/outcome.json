@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 2,
+      "expected": 66,
+      "compared": 66,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 1,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 66,
+      "received": 66,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "subject 0 3ff0000000000000",
+        "node": "subject 0 nan"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 66 compared, 66 expected, 1 disagreements",
+  "node": null,
+  "measured_with": "6d9a82e23aa5420b",
+  "source": "measured"
+}
