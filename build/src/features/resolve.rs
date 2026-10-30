@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::{Deserialize, Serialize};
@@ -63,7 +64,7 @@ pub struct PackageInstance {
     pub manifest: Digest,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct CurrentInputs {
     pub provider: ProviderKey,
     /// Full proof identity whose recorded observation closure was revalidated.
@@ -176,7 +177,8 @@ type Choices<'a> = BTreeMap<FeatureId, Choice<'a>>;
 
 struct Search<'a, 'r> {
     request: &'r Request<'a>,
-    candidates: Vec<&'a Candidate>,
+    index: &'r ResolutionIndex,
+    allowed: Option<&'r BTreeSet<Digest>>,
     best: Vec<Choices<'a>>,
     unavailable: BTreeMap<FeatureId, Unavailable>,
     cycles: Vec<Vec<FeatureId>>,
@@ -285,16 +287,20 @@ fn dominates(left: &Choices<'_>, right: &Choices<'_>, roots: &Requirements) -> b
 
 impl<'a> Search<'a, '_> {
     fn denied(&self, feature: &FeatureId) -> Option<(String, String)> {
-        self.request
-            .profile
-            .denied
-            .iter()
-            .find(|(pattern, _)| {
-                pattern.strip_suffix('*').map_or_else(
-                    || pattern.as_str() == feature.as_str(),
-                    |prefix| feature.as_str().starts_with(prefix),
-                )
-            })
+        let policy = &self.request.profile.denied;
+        let wildcard = feature
+            .as_str()
+            .split_once(':')
+            .map(|(family, _)| format!("{family}:*"));
+        policy
+            .get_key_value(feature.as_str())
+            .into_iter()
+            .chain(
+                wildcard
+                    .as_ref()
+                    .and_then(|pattern| policy.get_key_value(pattern)),
+            )
+            .min_by(|left, right| left.0.cmp(right.0))
             .map(|(pattern, reason)| (pattern.clone(), reason.clone()))
     }
 
@@ -350,29 +356,15 @@ impl<'a> Search<'a, '_> {
             return vec![];
         }
         let mut choices = vec![];
-        for candidate in self
+        for candidate_id in self
+            .index
             .candidates
-            .clone()
-            .into_iter()
-            .filter(|candidate| &candidate.key.feature == feature)
+            .get(feature)
+            .cloned()
+            .unwrap_or_default()
         {
-            if !admitted(
-                candidate.claim.backends.as_ref(),
-                &self.request.target.backend,
-            ) || !admitted(candidate.claim.hosts.as_ref(), &self.request.target.host)
-                || candidate.claim.targets.as_ref().is_some_and(|targets| {
-                    !targets.iter().any(|claim| {
-                        crate::config::claim_covers(
-                            claim,
-                            &self.request.target.id,
-                            self.request.target.minimum_version.as_deref(),
-                        )
-                    })
-                })
-            {
-                self.reject(feature, &candidate.key, RejectionReason::Target);
-                continue;
-            }
+            self.index.count(|work| work.candidate_visits += 1);
+            let candidate = &self.request.candidates[candidate_id];
             let selectors: Vec<_> = self
                 .selectors(feature)
                 .into_iter()
@@ -380,16 +372,21 @@ impl<'a> Search<'a, '_> {
                 .collect();
             if selectors.is_empty() {
                 self.reject(feature, &candidate.key, RejectionReason::NotPreferred);
+                continue;
+            }
+            if !self.target_admitted(candidate) {
+                self.reject(feature, &candidate.key, RejectionReason::Target);
+                continue;
             }
             for (selector, reason, rank) in selectors {
-                let mut records: Vec<_> = candidate.records.iter().collect();
-                records.sort_by(|left, right| left.origin.cmp(&right.origin));
+                let mut records: Vec<_> = candidate.records.iter().enumerate().collect();
+                records.sort_by(|left, right| left.1.origin.cmp(&right.1.origin));
                 if records.is_empty() {
                     self.reject(feature, &candidate.key, RejectionReason::MissingRecord);
                 }
                 let mut fresh = vec![];
-                for evidence in records {
-                    match self.verified(candidate, evidence, selector, &reason, rank) {
+                for (evidence_id, _) in records {
+                    match self.verified(candidate_id, evidence_id, selector, &reason, rank) {
                         Ok(choice) => fresh.push(choice),
                         Err(reason) => self.reject(feature, &candidate.key, reason),
                     }
@@ -408,6 +405,22 @@ impl<'a> Search<'a, '_> {
                         self.reject(feature, &candidate.key, RejectionReason::ConflictingRecords);
                         continue;
                     }
+                    // Contradictions above are established over every freshly
+                    // validated proof, before a guard mask can hide evidence.
+                    // Current-input contradictions likewise always use all
+                    // indexed rows. Adding an allowed proof cannot invalidate
+                    // a formerly admitted choice through either negative check.
+                    if self
+                        .allowed
+                        .is_some_and(|allowed| !allowed.contains(&choice.identity))
+                    {
+                        self.reject(
+                            feature,
+                            &candidate.key,
+                            RejectionReason::MissingCurrentInputs,
+                        );
+                        continue;
+                    }
                     match self.admissible(choice, demand) {
                         Ok(()) => choices.push(choice.clone()),
                         Err(reason) => self.reject(feature, &candidate.key, reason),
@@ -424,25 +437,45 @@ impl<'a> Search<'a, '_> {
         unique_choices(choices)
     }
 
+    fn target_admitted(&self, candidate: &Candidate) -> bool {
+        !(!admitted(
+            candidate.claim.backends.as_ref(),
+            &self.request.target.backend,
+        ) || !admitted(candidate.claim.hosts.as_ref(), &self.request.target.host)
+            || candidate.claim.targets.as_ref().is_some_and(|targets| {
+                !targets.iter().any(|claim| {
+                    crate::config::claim_covers(
+                        claim,
+                        &self.request.target.id,
+                        self.request.target.minimum_version.as_deref(),
+                    )
+                })
+            }))
+    }
+
     fn verified(
         &self,
-        candidate: &'a Candidate,
-        evidence: &'a Evidence,
+        candidate_id: usize,
+        evidence_id: usize,
         selector: &'a Selector,
         reason: &ChoiceReason,
         rank: usize,
     ) -> Result<Choice<'a>, RejectionReason> {
-        let identity = evidence
-            .record
-            .identity()
-            .map_err(|detail| RejectionReason::Record {
-                reason: RecordRejection::MalformedInputs { detail },
-            })?;
+        let candidate = &self.request.candidates[candidate_id];
+        let evidence = &candidate.records[evidence_id];
+        let identity = self.index.records[&(candidate_id, evidence_id)]
+            .clone()
+            .map_err(|reason| RejectionReason::Record { reason })?;
         let mut matching = self
-            .request
+            .index
             .current
-            .iter()
-            .filter(|current| current.provider == candidate.key && current.record == identity);
+            .get(&(candidate.key.clone(), identity.clone()))
+            .into_iter()
+            .flatten()
+            .map(|index| {
+                self.index.count(|work| work.current_visits += 1);
+                &self.request.current[*index]
+            });
         let current = matching
             .next()
             .ok_or(RejectionReason::MissingCurrentInputs)?;
@@ -450,7 +483,9 @@ impl<'a> Search<'a, '_> {
             return Err(RejectionReason::ConflictingCurrentInputs);
         }
         if &current.inputs.target != self.request.target {
-            return Err(RejectionReason::Target);
+            return Err(RejectionReason::Record {
+                reason: RecordRejection::DifferentTarget,
+            });
         }
         if current.inputs.profile != self.request.profile.id {
             return Err(RejectionReason::Record {
@@ -462,6 +497,7 @@ impl<'a> Search<'a, '_> {
                 reason: RecordRejection::DifferentOptions,
             });
         }
+        self.index.count(|work| work.record_validations += 1);
         evidence
             .record
             .validate(&candidate.key, &current.inputs)
@@ -713,59 +749,136 @@ fn cycle(chosen: &Choices<'_>) -> Option<Vec<FeatureId>> {
     None
 }
 
+/// Work at the shared catalog index and query boundaries (not wall time).
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct ResolutionWork {
+    pub manifests: usize,
+    pub current_indexed: usize,
+    pub queries: usize,
+    pub candidate_visits: usize,
+    pub current_visits: usize,
+    pub record_validations: usize,
+}
+
+/// Validated once for an immutable catalog; all later searches use these
+/// indices rather than reparsing manifests or scanning unrelated current rows.
+#[derive(Debug)]
+pub(super) struct ResolutionIndex {
+    candidates: BTreeMap<FeatureId, Vec<usize>>,
+    current: BTreeMap<(ProviderKey, Digest), Vec<usize>>,
+    pub(super) records: BTreeMap<(usize, usize), Result<Digest, RecordRejection>>,
+    work: Cell<ResolutionWork>,
+}
+impl ResolutionIndex {
+    fn count(&self, update: impl FnOnce(&mut ResolutionWork)) {
+        let mut work = self.work.get();
+        update(&mut work);
+        self.work.set(work);
+    }
+    pub(super) fn work(&self) -> ResolutionWork {
+        self.work.get()
+    }
+    pub(super) fn new(request: &Request<'_>) -> Result<Self, ResolutionError> {
+        let invalid = |detail: &str| ResolutionError::InvalidInput {
+            detail: detail.into(),
+        };
+        if request.profile.id.is_empty() {
+            return Err(invalid("a profile must have an identity"));
+        }
+        if request.profile.denied.keys().any(|pattern| {
+            pattern.is_empty()
+                || pattern.contains('*')
+                    && (!pattern.ends_with(":*") || pattern[..pattern.len() - 1].contains('*'))
+        }) {
+            return Err(invalid(
+                "a denial is an exact feature or a family:* pattern",
+            ));
+        }
+        if !admitted(request.profile.backends.as_ref(), &request.target.backend)
+            || !admitted(request.profile.hosts.as_ref(), &request.target.host)
+        {
+            return Err(ResolutionError::UnsupportedTarget {
+                profile: request.profile.id.clone(),
+                backend: request.target.backend.clone(),
+                host: request.target.host.clone(),
+            });
+        }
+        let mut candidates: Vec<_> = request.candidates.iter().collect();
+        candidates.sort_by(|left, right| left.key.cmp(&right.key));
+        if candidates.windows(2).any(|pair| pair[0].key == pair[1].key) {
+            return Err(invalid("duplicate provider identity"));
+        }
+        for candidate in &candidates {
+            // Public typed inputs may also be constructed in process. Use the one
+            // manifest reader for ownership and shape checks on that boundary too.
+            let manifest = serde_json::json!({ "nts": { "provides": {
+            candidate.key.feature.as_str(): &candidate.claim
+        } } });
+            super::parse_manifest(&candidate.key.package, &manifest.to_string())
+                .map_err(|detail| ResolutionError::InvalidInput { detail })?;
+        }
+        if candidates
+            .iter()
+            .any(|candidate| !request.packages.contains(&package(&candidate.key)))
+        {
+            return Err(invalid(
+                "provider package instance is not in the resolved package graph",
+            ));
+        }
+
+        let mut index = Self {
+            candidates: BTreeMap::new(),
+            current: BTreeMap::new(),
+            records: BTreeMap::new(),
+            work: Cell::new(ResolutionWork::default()),
+        };
+        for (position, candidate) in request.candidates.iter().enumerate() {
+            index.count(|work| work.manifests += 1);
+            index
+                .candidates
+                .entry(candidate.key.feature.clone())
+                .or_default()
+                .push(position);
+            for (evidence, record) in candidate.records.iter().enumerate() {
+                index.records.insert(
+                    (position, evidence),
+                    record
+                        .record
+                        .identity()
+                        .map_err(|detail| RecordRejection::MalformedInputs { detail }),
+                );
+            }
+        }
+        for (position, current) in request.current.iter().enumerate() {
+            index.count(|work| work.current_indexed += 1);
+            index
+                .current
+                .entry((current.provider.clone(), current.record.clone()))
+                .or_default()
+                .push(position);
+        }
+        Ok(index)
+    }
+}
+
 /// Solve the complete reached-member constraints, including recorded closures.
 /// Incomparable feasible preferences require an explicit choice; source order
 /// must never decide which public implementation wins.
 pub fn resolve(request: &Request<'_>) -> Result<Plan, ResolutionError> {
-    let invalid = |detail: &str| ResolutionError::InvalidInput {
-        detail: detail.into(),
-    };
-    if request.profile.id.is_empty() {
-        return Err(invalid("a profile must have an identity"));
-    }
-    if request.profile.denied.keys().any(|pattern| {
-        pattern.is_empty()
-            || pattern.contains('*')
-                && (!pattern.ends_with(":*") || pattern[..pattern.len() - 1].contains('*'))
-    }) {
-        return Err(invalid(
-            "a denial is an exact feature or a family:* pattern",
-        ));
-    }
-    if !admitted(request.profile.backends.as_ref(), &request.target.backend)
-        || !admitted(request.profile.hosts.as_ref(), &request.target.host)
-    {
-        return Err(ResolutionError::UnsupportedTarget {
-            profile: request.profile.id.clone(),
-            backend: request.target.backend.clone(),
-            host: request.target.host.clone(),
-        });
-    }
-    let mut candidates: Vec<_> = request.candidates.iter().collect();
-    candidates.sort_by(|left, right| left.key.cmp(&right.key));
-    if candidates.windows(2).any(|pair| pair[0].key == pair[1].key) {
-        return Err(invalid("duplicate provider identity"));
-    }
-    for candidate in &candidates {
-        // Public typed inputs may also be constructed in process. Use the one
-        // manifest reader for ownership and shape checks on that boundary too.
-        let manifest = serde_json::json!({ "nts": { "provides": {
-            candidate.key.feature.as_str(): &candidate.claim
-        } } });
-        super::parse_manifest(&candidate.key.package, &manifest.to_string())
-            .map_err(|detail| ResolutionError::InvalidInput { detail })?;
-    }
-    if candidates
-        .iter()
-        .any(|candidate| !request.packages.contains(&package(&candidate.key)))
-    {
-        return Err(invalid(
-            "provider package instance is not in the resolved package graph",
-        ));
-    }
+    let index = ResolutionIndex::new(request)?;
+    resolve_indexed(request, &index, None)
+}
+
+pub(super) fn resolve_indexed(
+    request: &Request<'_>,
+    index: &ResolutionIndex,
+    allowed: Option<&BTreeSet<Digest>>,
+) -> Result<Plan, ResolutionError> {
+    index.count(|work| work.queries += 1);
     let mut search = Search {
         request,
-        candidates,
+        index,
+        allowed,
         best: vec![],
         unavailable: BTreeMap::new(),
         cycles: vec![],

@@ -582,9 +582,11 @@ fn pruning_preserves_the_exhaustive_answer_without_enumerating_dominated_plans()
     let current = f.current_inputs();
     let request = f.request(&current);
     let run = |skip_pruning| {
+        let index = ResolutionIndex::new(&request).unwrap();
         let mut search = Search {
             request: &request,
-            candidates: f.candidates.iter().collect(),
+            index: &index,
+            allowed: None,
             best: vec![],
             unavailable: BTreeMap::new(),
             cycles: vec![],
@@ -704,4 +706,422 @@ fn another_proofs_freshness_cannot_admit_a_missing_record_scope() {
         f.rejected("web:A")
             .contains(&RejectionReason::MissingCurrentInputs)
     );
+}
+
+fn catalog_inputs(f: &Fixture) -> crate::features::CatalogInputs {
+    crate::features::CatalogInputs {
+        target: f.target.clone(),
+        profile: f.profile.clone(),
+        overrides: f.overrides.clone(),
+        profile_options: BTreeMap::new(),
+        candidates: f.candidates.clone(),
+        current: f.current_inputs(),
+        packages: f.packages.clone(),
+    }
+}
+fn catalog(f: &Fixture) -> crate::features::EligibilityCatalog {
+    crate::features::EligibilityCatalog::new(catalog_inputs(f)).unwrap()
+}
+fn observe(f: &mut Fixture, index: usize, observation: DecisionObservation) {
+    f.record(index).inputs.decisions.push(observation.clone());
+    f.current[index].inputs.decisions.push(observation);
+}
+
+#[test]
+fn catalog_has_one_resolver_for_presence_and_the_final_member_union() {
+    let mut f = Fixture::new();
+    f.add("web:A", "@nts/compiler", &["alpha"]);
+    f.add("web:A", "@nts/source", &["alpha", "beta"]);
+    f.uses.insert(feature("web:A"), demand(&["alpha", "beta"]));
+    let catalog = catalog(&f);
+    assert_eq!(catalog.available(&feature("web:A")), Some(true));
+    assert_eq!(catalog.resolve(&f.uses).unwrap(), f.resolve().unwrap());
+    assert_eq!(
+        catalog.resolve(&f.uses).unwrap().selected[&feature("web:A")]
+            .provider
+            .package,
+        "@nts/source"
+    );
+}
+
+#[test]
+fn catalog_identity_binds_all_effective_inputs_and_not_discovery_order() {
+    let mut f = Fixture::new();
+    f.add("web:A", "@nts/compiler", &[]);
+    f.add("web:B", "@nts/source", &[]);
+    let inputs = catalog_inputs(&f);
+    let first = crate::features::EligibilityCatalog::new(inputs.clone()).unwrap();
+    let mut permuted = inputs.clone();
+    permuted.candidates.reverse();
+    permuted.current.reverse();
+    let same = crate::features::EligibilityCatalog::new(permuted).unwrap();
+    assert_eq!(first.identity(), same.identity());
+    assert_eq!(first.reach_identity(), same.reach_identity());
+    for change in 0..9 {
+        let mut changed = inputs.clone();
+        match change {
+            0 => changed.target.arch = "aarch64".into(),
+            1 => changed.profile.preferences.reverse(),
+            2 => {
+                changed
+                    .profile_options
+                    .insert("mode".into(), serde_json::json!(1));
+            }
+            3 => {
+                changed
+                    .overrides
+                    .insert(feature("web:A"), selector("@nts/source"));
+            }
+            4 => changed.current[0].inputs.compiler_inputs = digest('e'),
+            5 => {
+                changed.current[0].inputs.observations =
+                    ObservedInputs::new(vec![HostObservation::File {
+                        path: InputPath {
+                            root: "package".into(),
+                            path: "missing.ts".into(),
+                        },
+                        content: None,
+                    }])
+                    .unwrap();
+            }
+            6 => changed.candidates[0].claim.limits = "a changed manifest contract".into(),
+            7 => {
+                changed.packages.insert(PackageInstance {
+                    name: "extra".into(),
+                    instance: digest('e'),
+                    manifest: digest('f'),
+                });
+            }
+            8 => changed.current[0].inputs.suite = digest('f'),
+            _ => unreachable!(),
+        }
+        let changed = crate::features::EligibilityCatalog::new(changed).unwrap();
+        assert_ne!(first.identity(), changed.identity(), "input {change}");
+        assert_ne!(
+            first.reach_identity(),
+            changed.reach_identity(),
+            "input {change}"
+        );
+    }
+}
+
+#[test]
+fn catalog_does_not_convert_stale_ambiguous_or_unproved_inventory_into_false() {
+    let mut f = Fixture::new();
+    let a = f.add("web:A", "@nts/compiler", &[]);
+    assert_eq!(catalog(&f).available(&feature("web:Absent")), None);
+    f.current[a].inputs.compiler_inputs = digest('e');
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    f.current[a].inputs = f.record(a).inputs.clone();
+    f.current[a].inputs.target.arch = "aarch64".into();
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    f.current[a].inputs = f.record(a).inputs.clone();
+    f.candidates[a].records.clear();
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    // Two equally preferred, freshly proved installed instances are ambiguous.
+    f.add("web:A", "@nts/compiler", &[]);
+    let other = f.add("web:A", "@nts/compiler", &[]);
+    let old = f.candidates[other].key.clone();
+    f.candidates[other].key.instance = digest('e');
+    f.record(other).provider.instance = digest('e');
+    f.current[other].provider.instance = digest('e');
+    f.packages.insert(PackageInstance {
+        name: old.package,
+        instance: digest('e'),
+        manifest: old.manifest,
+    });
+    // Remove the earlier record-less duplicate identity, retaining both proofs.
+    f.candidates.remove(a);
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+}
+
+#[test]
+fn catalog_false_requires_explicit_policy_or_exhaustive_target_rejection() {
+    let mut f = Fixture::new();
+    let a = f.add("web:A", "@nts/compiler", &[]);
+    f.candidates[a].claim.backends = Some(BTreeSet::from(["jvm".into()]));
+    assert_eq!(catalog(&f).available(&feature("web:A")), Some(false));
+    f.candidates[a].claim.backends = None;
+    f.overrides
+        .insert(feature("web:A"), selector("@nts/uninstalled"));
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    f.overrides.clear();
+    f.profile
+        .pins
+        .insert(feature("web:A"), selector("@nts/uninstalled"));
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    f.profile
+        .denied
+        .insert("web:*".into(), "not on this host".into());
+    assert_eq!(catalog(&f).available(&feature("web:A")), Some(false));
+}
+
+#[test]
+fn catalog_revalidates_recorded_guard_decisions_after_a_policy_change() {
+    let mut f = Fixture::new();
+    let a = f.add("web:A", "@nts/compiler", &[]);
+    f.add("web:B", "@nts/compiler", &[]);
+    f.uses.insert(feature("web:A"), Demand::default());
+    observe(
+        &mut f,
+        a,
+        DecisionObservation::Availability {
+            feature: feature("web:B"),
+            available: true,
+        },
+    );
+    assert_eq!(catalog(&f).available(&feature("web:A")), Some(true));
+    f.profile
+        .denied
+        .insert("web:B".into(), "not on this target".into());
+    let changed = catalog(&f);
+    assert_eq!(changed.available(&feature("web:B")), Some(false));
+    assert_eq!(changed.available(&feature("web:A")), None);
+    assert!(changed.resolve(&f.uses).is_err());
+    // Raw recorded/current booleans still agree. Comparing those alone would
+    // accept the old proof, which is exactly the unsafe bootstrap being tested.
+    assert!(f.resolve().is_ok());
+}
+
+#[test]
+fn catalog_cannot_bootstrap_self_or_mutual_availability_cycles() {
+    for mutual in [false, true] {
+        let mut f = Fixture::new();
+        let a = f.add("web:A", "@nts/compiler", &[]);
+        let b = if mutual {
+            f.add("web:B", "@nts/compiler", &[])
+        } else {
+            a
+        };
+        observe(
+            &mut f,
+            a,
+            DecisionObservation::Availability {
+                feature: feature(if mutual { "web:B" } else { "web:A" }),
+                available: true,
+            },
+        );
+        if mutual {
+            observe(
+                &mut f,
+                b,
+                DecisionObservation::Availability {
+                    feature: feature("web:A"),
+                    available: true,
+                },
+            );
+        }
+        f.uses.insert(feature("web:A"), Demand::default());
+        let catalog = catalog(&f);
+        assert_eq!(catalog.available(&feature("web:A")), None);
+        assert!(catalog.resolve(&f.uses).is_err());
+    }
+}
+
+#[test]
+fn catalog_checks_profile_option_observations_against_effective_options() {
+    let mut f = Fixture::new();
+    let a = f.add("web:A", "@nts/compiler", &[]);
+    observe(
+        &mut f,
+        a,
+        DecisionObservation::ProfileOption {
+            name: "clock".into(),
+            value: serde_json::json!("virtual"),
+        },
+    );
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    let mut inputs = catalog_inputs(&f);
+    inputs
+        .profile_options
+        .insert("clock".into(), serde_json::json!("virtual"));
+    assert_eq!(
+        crate::features::EligibilityCatalog::new(inputs)
+            .unwrap()
+            .available(&feature("web:A")),
+        Some(true)
+    );
+}
+
+#[test]
+fn catalog_cycles_in_alternative_proofs_do_not_poison_an_independent_supplier() {
+    for mutual in [false, true] {
+        let mut f = Fixture::new();
+        f.add("web:A", "@nts/compiler", &[]);
+        let alternative = f.add("web:A", "@nts/source", &[]);
+        observe(
+            &mut f,
+            alternative,
+            DecisionObservation::Availability {
+                feature: feature(if mutual { "web:B" } else { "web:A" }),
+                available: true,
+            },
+        );
+        if mutual {
+            let b = f.add("web:B", "@nts/source", &[]);
+            observe(
+                &mut f,
+                b,
+                DecisionObservation::Availability {
+                    feature: feature("web:A"),
+                    available: true,
+                },
+            );
+        }
+        let catalog = catalog(&f);
+        assert_eq!(catalog.available(&feature("web:A")), Some(true));
+        if mutual {
+            assert_eq!(catalog.available(&feature("web:B")), Some(true));
+        }
+        let plan = catalog
+            .resolve(&BTreeMap::from([(feature("web:A"), Demand::default())]))
+            .unwrap();
+        assert_eq!(
+            plan.selected[&feature("web:A")].provider.package,
+            "@nts/compiler"
+        );
+    }
+}
+
+#[test]
+fn catalog_unresolved_better_evidence_keeps_the_guard_unknown() {
+    let mut f = Fixture::new();
+    let preferred = f.add("web:A", "@nts/compiler", &[]);
+    f.add("web:A", "@nts/source", &[]);
+    observe(
+        &mut f,
+        preferred,
+        DecisionObservation::Availability {
+            feature: feature("web:Unknown"),
+            available: true,
+        },
+    );
+    let catalog = catalog(&f);
+    assert_eq!(catalog.available(&feature("web:A")), None);
+    // Ordinary final resolution still requires a completely grounded proof.
+    assert_eq!(
+        catalog
+            .resolve(&BTreeMap::from([(feature("web:A"), Demand::default())]))
+            .unwrap()
+            .selected[&feature("web:A")]
+            .provider
+            .package,
+        "@nts/source"
+    );
+}
+
+#[test]
+fn catalog_wildcard_policy_and_invalid_override_are_distinct_from_absent_inventory() {
+    let mut f = Fixture::new();
+    f.profile.denied.insert("es:*".into(), "denied".into());
+    assert_eq!(catalog(&f).available(&feature("es:Missing")), Some(false));
+    assert_eq!(catalog(&f).available(&feature("web:Missing")), None);
+    let a = f.add("web:A", "@nts/compiler", &[]);
+    f.candidates[a].claim.backends = Some(BTreeSet::from(["jvm".into()]));
+    f.overrides
+        .insert(feature("web:A"), selector("@nts/absent"));
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+    f.overrides.clear();
+    f.profile
+        .pins
+        .insert(feature("web:A"), selector("@nts/absent"));
+    assert_eq!(catalog(&f).available(&feature("web:A")), None);
+}
+
+#[test]
+fn catalog_conflict_checks_cannot_be_hidden_by_intermediate_guard_masks() {
+    let mut f = Fixture::new();
+    let a = f.add("web:A", "@nts/compiler", &["first"]);
+    f.add("web:A", "@nts/source", &[]);
+    observe(
+        &mut f,
+        a,
+        DecisionObservation::Availability {
+            feature: feature("web:Unknown"),
+            available: true,
+        },
+    );
+    let mut conflicting = f.candidates[a].records[0].clone();
+    conflicting
+        .record
+        .coverage
+        .members
+        .insert("different".into());
+    let first_id = f.record(a).identity().unwrap();
+    f.candidates[a].records.push(conflicting);
+    let current = f.current_inputs();
+    let uses = BTreeMap::from([(feature("web:A"), Demand::default())]);
+    let mut request = f.request(&current);
+    request.uses = &uses;
+    let index = ResolutionIndex::new(&request).unwrap();
+    let fallback_id = f.candidates[1].records[0].record.identity().unwrap();
+    for mask in [
+        BTreeSet::from([fallback_id.clone()]),
+        BTreeSet::from([fallback_id, first_id]),
+    ] {
+        let plan = resolve_indexed(&request, &index, Some(&mask)).unwrap();
+        assert_eq!(
+            plan.selected[&feature("web:A")].provider.package,
+            "@nts/source"
+        );
+    }
+    // Both conflict observations remain visible in the same immutable index;
+    // a possibly admitted proof cannot temporarily resurrect the compiler.
+    assert_eq!(catalog(&f).available(&feature("web:A")), Some(true));
+}
+
+#[test]
+fn catalog_independent_features_do_linear_index_and_query_work() {
+    for count in [4, 16, 64] {
+        let mut f = Fixture::new();
+        for n in 0..count {
+            f.add(&format!("web:F{n}"), "@nts/compiler", &[]);
+        }
+        let catalog = catalog(&f);
+        let work = catalog.work();
+        assert_eq!(work.resolver.manifests, count);
+        assert_eq!(work.resolver.current_indexed, count);
+        assert_eq!(work.proof_visits, count);
+        assert_eq!(work.decision_visits, 0);
+        assert_eq!(work.resolver.queries, count);
+        assert!(work.resolver.candidate_visits <= count * 3, "{work:?}");
+        assert!(work.resolver.current_visits <= count * 3, "{work:?}");
+        for n in 0..count {
+            assert_eq!(
+                catalog.available(&feature(&format!("web:F{n}"))),
+                Some(true)
+            );
+        }
+        assert_eq!(catalog.work(), work);
+        println!("catalog independent={count} actual={work:?}");
+    }
+}
+
+#[test]
+fn catalog_one_wide_guard_proof_processes_each_observation_edge_once() {
+    for count in [4, 16, 64] {
+        let mut f = Fixture::new();
+        let a = f.add("web:A", "@nts/compiler", &[]);
+        for n in 0..count {
+            let name = format!("web:Guard{n}");
+            f.add(&name, "@nts/compiler", &[]);
+            observe(
+                &mut f,
+                a,
+                DecisionObservation::Availability {
+                    feature: feature(&name),
+                    available: true,
+                },
+            );
+        }
+        let catalog = catalog(&f);
+        let work = catalog.work();
+        assert_eq!(catalog.available(&feature("web:A")), Some(true));
+        assert_eq!(work.proof_visits, count + 2);
+        assert_eq!(work.decision_visits, count * 2);
+        assert_eq!(work.wake_visits, 1);
+        assert!(work.resolver.queries <= count * 2 + 3, "{work:?}");
+        assert!(work.resolver.candidate_visits <= count * 4 + 6, "{work:?}");
+        println!("catalog wide guards={count} actual={work:?}");
+    }
 }

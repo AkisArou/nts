@@ -6,11 +6,13 @@
 //! union, including aliases and escapes.
 
 mod builtins;
+mod catalog;
 mod manifest;
 mod model;
 mod resolve;
 
 pub use builtins::{LoopAdapter, LoopOptions, builtin_profiles, runtime_manifest};
+pub use catalog::{CatalogInputs, CatalogWork, EligibilityCatalog};
 pub use manifest::{Claim, FeatureId, Manifest, ProviderKind, Use, parse_manifest};
 pub use model::{
     Coverage, DecisionObservation, Demand, Digest, Disposition, EntryKind, HostObservation,
@@ -19,5 +21,6 @@ pub use model::{
 };
 pub use resolve::{
     AmbientTypes, Candidate, ChoiceReason, CurrentInputs, Evidence, PackageInstance, Plan, Profile,
-    Rejection, RejectionReason, Request, ResolutionError, Selected, Unavailable, resolve,
+    Rejection, RejectionReason, Request, ResolutionError, ResolutionWork, Selected, Unavailable,
+    resolve,
 };
