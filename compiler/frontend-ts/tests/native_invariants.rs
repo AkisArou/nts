@@ -2,6 +2,7 @@
 #![allow(clippy::expect_used, clippy::unwrap_used)]
 
 use std::collections::BTreeSet;
+use std::fmt::Write as _;
 
 use camino::Utf8Path;
 use nts_frontend_ts::Frontend;
@@ -314,6 +315,63 @@ fn capture(name: &str) -> SemanticSnapshot {
 }
 
 #[test]
+fn deep_builtin_bases_keep_reached_calls_and_source_owned_callbacks() {
+    let deep = capture("a-deep-base-keeps-its-physical-storage");
+    assert!(
+        unrequested(&deep).is_empty(),
+        "deep storage fixture retains unrequested types"
+    );
+    assert!(!deep.diagnostics.iter().any(|d| d.code == "NTS0003"));
+
+    let directory =
+        std::env::temp_dir().join(format!("nts-deep-native-members-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut text = String::from(
+        "class Bytes0 extends Uint8Array { applyToFirst(callback: (value: number) => number): number { return callback(this[0]); } }\n",
+    );
+    for index in 1..=80 {
+        writeln!(text, "class Bytes{index} extends Bytes{} {{}}", index - 1).unwrap();
+    }
+    text.push_str("export function inspect() { const bytes = new Bytes80([1, 2]); const mapped = bytes.map(value => value + 1); return bytes.applyToFirst(value => value + mapped[0]); }\n");
+    std::fs::write(directory.join("main.ts"), text).unwrap();
+    std::fs::write(directory.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","types":[]},"files":["main.ts"]}"#).unwrap();
+    let config = camino::Utf8PathBuf::from_path_buf(directory.join("tsconfig.json")).unwrap();
+    let snapshot = Frontend::new(config.parent().unwrap())
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
+    assert!(!snapshot.has_errors(), "{:?}", snapshot.diagnostics);
+    assert!(!snapshot.diagnostics.iter().any(|d| d.code == "NTS0003"));
+    assert!(
+        unrequested(&snapshot).is_empty(),
+        "reached inherited API leaves no placeholder"
+    );
+    for parameter in ["callbackfn", "callback"] {
+        let contract = snapshot
+            .call_targets
+            .values()
+            .find_map(|target| {
+                let signature = &snapshot.signatures[target.signature.0 as usize];
+                signature.parameters.first().filter(|p| p.name == parameter)
+            })
+            .unwrap_or_else(|| panic!("no reached {parameter} contract"));
+        let TypeKind::Function(id) = snapshot.types[contract.ty.0 as usize].kind else {
+            panic!("{parameter} must retain its concrete callable contract");
+        };
+        let signature = &snapshot.signatures[id.0 as usize];
+        assert_eq!(
+            snapshot.types[signature.parameters[0].ty.0 as usize].kind,
+            TypeKind::Number
+        );
+        assert_eq!(
+            snapshot.types[signature.return_type.0 as usize].kind,
+            TypeKind::Number
+        );
+    }
+}
+
+#[test]
 fn instantiated_callbacks_rest_and_composites_have_complete_reachable_contracts() {
     for name in [
         "a-closure-default-captures-its-parameter",
@@ -331,6 +389,243 @@ fn instantiated_callbacks_rest_and_composites_have_complete_reachable_contracts(
             unrequested(&snapshot)
         );
     }
+}
+
+fn protocol_snapshot(name: &str, text: &str) -> SemanticSnapshot {
+    let directory =
+        std::env::temp_dir().join(format!("nts-protocol-{name}-{}", std::process::id()));
+    std::fs::create_dir_all(&directory).unwrap();
+    std::fs::write(directory.join("main.ts"), text).unwrap();
+    std::fs::write(directory.join("tsconfig.json"), r#"{"compilerOptions":{"strict":true,"target":"es2022","module":"esnext","types":[]},"files":["main.ts"]}"#).unwrap();
+    let config = camino::Utf8PathBuf::from_path_buf(directory.join("tsconfig.json")).unwrap();
+    let snapshot = Frontend::new(config.parent().unwrap())
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
+    std::fs::remove_dir_all(directory).unwrap();
+    assert!(!snapshot.has_errors(), "{name}: {:?}", snapshot.diagnostics);
+    assert!(
+        !snapshot.diagnostics.iter().any(|d| d.code == "NTS0003"),
+        "{name}: budget"
+    );
+    assert!(unrequested(&snapshot).is_empty(), "{name}: unrequested");
+    snapshot
+}
+
+fn contract(snapshot: &SemanticSnapshot, ty: TypeId) -> SignatureId {
+    match &snapshot.types[ty.0 as usize].kind {
+        TypeKind::Function(id) => *id,
+        TypeKind::Union(parts) => parts
+            .iter()
+            .find_map(|ty| match snapshot.types[ty.0 as usize].kind {
+                TypeKind::Function(id) => Some(id),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("no callable in {ty:?}")),
+        kind => panic!("no callable contract for {ty:?}: {kind:?}"),
+    }
+}
+
+#[test]
+fn implicit_protocols_request_inherited_builtin_members() {
+    use nts_semantic_schema::WellKnownSymbol;
+    for (name, body) in [
+        (
+            "for-of",
+            "export function inspect(input: Values) { let sum = 0; for (const value of input) sum += value; return sum; }",
+        ),
+        (
+            "spread",
+            "export function inspect(input: Values) { return [...input]; }",
+        ),
+        (
+            "destructure",
+            "export function inspect(input: Values) { const [first, ...rest] = input; return first! + rest.length; }",
+        ),
+        (
+            "delegate",
+            "export function* inspect(input: Values) { yield* input; }",
+        ),
+        (
+            "array-from",
+            "export function inspect(input: Values) { return Array.from(input); }",
+        ),
+        (
+            "constraint",
+            "export function inspect<T extends Values>(input: T) { let sum = 0; for (const value of input) sum += value; return sum; }",
+        ),
+        (
+            "union",
+            "export function inspect(input: Values | number[]) { let sum = 0; for (const value of input) sum += value; return sum; }",
+        ),
+    ] {
+        let snapshot = protocol_snapshot(
+            name,
+            &format!("class Values extends Set<number> {{}}\n{body}"),
+        );
+        let properties = snapshot
+            .types
+            .iter()
+            .find_map(|ty| {
+                (ty.symbol
+                    .is_some_and(|id| snapshot.symbols[id.0 as usize].name.is_name("Values")))
+                .then_some(&ty.kind)
+                .and_then(|kind| match kind {
+                    TypeKind::Object { properties } => Some(properties),
+                    _ => None,
+                })
+            })
+            .unwrap();
+        let method = properties
+            .iter()
+            .find(|p| snapshot.key_is_well_known(&p.name, WellKnownSymbol::Iterator))
+            .unwrap();
+        assert!(!method.own, "{name}: must use inherited iterator");
+        let signature = contract(&snapshot, method.ty);
+        let returned = snapshot.signatures[signature.0 as usize].return_type;
+        // The factory contract is demanded, while its builtin return keeps
+        // the representation boundary and element arguments it had before.
+        assert_eq!(
+            snapshot.types[returned.0 as usize].kind,
+            TypeKind::Structured
+        );
+        assert!(
+            snapshot.types[returned.0 as usize]
+                .symbol
+                .is_some_and(|id| snapshot.symbols[id.0 as usize].name.is_name("SetIterator")),
+            "{name}: opaque iterator identity"
+        );
+        assert!(
+            snapshot.type_arguments[&returned]
+                .iter()
+                .any(|id| snapshot.types[id.0 as usize].kind == TypeKind::Number),
+            "{name}: iterator element"
+        );
+    }
+    // The earlier boundary lost carried owners' inherited next/return even
+    // where source methods themselves were all complete.
+    let snapshot = capture("an-implicit-iterator-call-preserves-its-throw");
+    for ty in &snapshot.types {
+        if ty.symbol.is_some_and(|id| {
+            snapshot.symbols[id.0 as usize]
+                .name
+                .is_name("IterableIterator")
+        }) && let TypeKind::Object { properties } = &ty.kind
+        {
+            for member in ["next", "return"] {
+                let property = properties.iter().find(|p| p.name.is_name(member)).unwrap();
+                contract(&snapshot, property.ty);
+            }
+        }
+    }
+}
+
+#[test]
+fn implicit_coercion_requests_inherited_builtin_members() {
+    for (name, body) in [
+        ("template", "return `${input}`;"),
+        ("plus", "return '' + input;"),
+    ] {
+        let snapshot = protocol_snapshot(
+            name,
+            &format!(
+                "class Value extends Number {{}}\nexport function inspect(input: Value): string {{ {body} }}"
+            ),
+        );
+        let properties = snapshot
+            .types
+            .iter()
+            .find_map(|ty| {
+                (ty.symbol
+                    .is_some_and(|id| snapshot.symbols[id.0 as usize].name.is_name("Value")))
+                .then_some(&ty.kind)
+                .and_then(|kind| match kind {
+                    TypeKind::Object { properties } => Some(properties),
+                    _ => None,
+                })
+            })
+            .unwrap();
+        for member in ["toString", "valueOf"] {
+            let property = properties.iter().find(|p| p.name.is_name(member)).unwrap();
+            assert!(!property.own, "{name}: must use inherited {member}");
+            contract(&snapshot, property.ty);
+        }
+    }
+}
+
+#[test]
+fn carried_owners_keep_inherited_contracts_without_a_protocol_use() {
+    let snapshot = protocol_snapshot(
+        "carried",
+        "export function retain<T>(input: IterableIterator<T>): IterableIterator<T> { return input; }",
+    );
+    let mut owners = 0;
+    for ty in &snapshot.types {
+        if ty.symbol.is_some_and(|id| {
+            snapshot.symbols[id.0 as usize]
+                .name
+                .is_name("IterableIterator")
+        }) {
+            let TypeKind::Object { properties } = &ty.kind else {
+                panic!("carried owner must be expanded");
+            };
+            owners += 1;
+            for member in ["next", "return"] {
+                let property = properties.iter().find(|p| p.name.is_name(member)).unwrap();
+                assert!(!property.own, "carried {member} must be inherited");
+                contract(&snapshot, property.ty);
+            }
+        }
+    }
+    assert!(owners > 0);
+}
+
+#[test]
+fn coercion_demands_preserve_primitive_types() {
+    let snapshot = protocol_snapshot(
+        "primitive",
+        "export function inspect(value: number, text: string): string { return text + (value + 1); }",
+    );
+    for (name, expected) in [("value", TypeKind::Number), ("text", TypeKind::String)] {
+        let ty = snapshot
+            .nodes
+            .iter()
+            .enumerate()
+            .find_map(|(index, node)| {
+                (node.text.as_ref().and_then(|text| text.as_utf8()) == Some(name))
+                    .then(|| {
+                        snapshot
+                            .node_types
+                            .get(&nts_semantic_schema::NodeId(u32::try_from(index).unwrap()))
+                    })
+                    .flatten()
+            })
+            .unwrap();
+        assert_eq!(snapshot.types[ty.0 as usize].kind, expected);
+    }
+}
+
+#[test]
+fn protocol_demands_preserve_direct_builtin_storage() {
+    let snapshot = protocol_snapshot(
+        "typed-storage",
+        "export function inspect(n: number) { const bytes = new Uint8Array(2); bytes[0] = n; return Array.from(bytes); }",
+    );
+    let mut found = false;
+    for ty in &snapshot.types {
+        if ty
+            .symbol
+            .is_some_and(|id| snapshot.symbols[id.0 as usize].name.is_name("Uint8Array"))
+        {
+            // A compiler-provided builtin is opaque even when source iterates
+            // it. Opening it as an Object would replace typed-array storage.
+            if matches!(ty.kind, TypeKind::Structured) {
+                found = true;
+            }
+            assert!(!matches!(ty.kind, TypeKind::Object { .. }));
+        }
+    }
+    assert!(found);
 }
 
 #[test]

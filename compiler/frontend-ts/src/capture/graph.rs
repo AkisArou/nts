@@ -2,12 +2,12 @@
 
 use nts_frontend_tsrs::{self as native, Type};
 use nts_semantic_schema::{
-    Accessor, IndexSignature, MemberKind, NodeKind, PropertyRecord, SignatureId, SnapshotError,
-    SymbolFlags, TupleElementKind, TupleType, TypeId, TypeKind, syntax,
+    Accessor, IndexSignature, Library, MemberKind, NodeKind, PropertyRecord, SignatureId,
+    SnapshotError, SymbolFlags, TupleElementKind, TupleType, TypeId, TypeKind, syntax,
 };
 use rustc_hash::{FxHashMap, FxHashSet};
 
-use super::{Capture, arena_index, symbols::required_text};
+use super::{Capture, arena_index, member_demands::MemberDemands, symbols::required_text};
 
 #[cfg(test)]
 #[path = "graph_test.rs"]
@@ -30,6 +30,7 @@ impl<'p> Capture<'p, '_> {
         // charged expansion queue as every other type dependency.
         let native_parameters = native_parameter_demands(&self.snapshot)?;
         let mut work = seeds;
+        let mut members = self.member_demands(&mut work);
         let mut expanded = FxHashSet::default();
         let mut next = 0;
         let mut decomposed = 0;
@@ -59,6 +60,10 @@ impl<'p> Capture<'p, '_> {
                 next += 1;
             }
             let ty = self.type_work[id.0 as usize];
+            // Protocol requirements can reach an already expanded owner via
+            // a union, constraint or iterator factory's return. Reopen that
+            // same slot, under the same service budget, only for new demand.
+            let new_members = members.take_pending(id, ty.kind());
             if storage_id.is_some()
                 && (expanded.contains(&id)
                     || !matches!(
@@ -71,19 +76,22 @@ impl<'p> Capture<'p, '_> {
             // A generic signature's shallow return can be requested later by
             // a real call contract, syntax fact or member. It remains eligible
             // until an actual expansion enters `expanded` below.
-            if !matches!(
-                self.snapshot.types[id.0 as usize].kind,
-                TypeKind::Unsupported { .. } | TypeKind::Structured
-            ) || matches!(
-                ty.kind(),
-                native::TypeKind::Other | native::TypeKind::Literal
-            ) {
+            if (!new_members
+                && !matches!(
+                    self.snapshot.types[id.0 as usize].kind,
+                    TypeKind::Unsupported { .. } | TypeKind::Structured
+                ))
+                || matches!(
+                    ty.kind(),
+                    native::TypeKind::Other | native::TypeKind::Literal
+                )
+            {
                 continue;
             }
             // A deferred form can occur again in the concrete queue. That is
             // not an expansion: marking it done there would suppress its later
             // form pass, depending on how many paths reached the same type.
-            if !expanded.insert(id) {
+            if !expanded.insert(id) && !new_members {
                 continue;
             }
             if decomposed >= allowance {
@@ -106,6 +114,7 @@ impl<'p> Capture<'p, '_> {
                 .symbol
                 .is_some_and(|symbol| carries_members(&self.snapshot.symbols[symbol.0 as usize]));
             if !carried
+                && !members.contains(id)
                 && generic_form(ty)
                 && (!active_forms.contains(&id) || !self.declares_form(id, ty))
             {
@@ -123,7 +132,9 @@ impl<'p> Capture<'p, '_> {
                 continue;
             }
             let mut discoveries = Vec::new();
-            self.snapshot.types[id.0 as usize].kind = self.expand_type(id, ty, &mut discoveries)?;
+            let kind = self.expand_type(id, ty, &mut discoveries, &mut members)?;
+            members.follow(id, &kind, &self.snapshot, &mut discoveries);
+            self.snapshot.types[id.0 as usize].kind = kind;
             if matches!(
                 self.snapshot.types[id.0 as usize].kind,
                 TypeKind::Function(_)
@@ -238,6 +249,7 @@ impl<'p> Capture<'p, '_> {
         id: TypeId,
         ty: Type<'p>,
         work: &mut Vec<TypeId>,
+        members: &mut MemberDemands,
     ) -> Result<TypeKind, SnapshotError> {
         use native::TypeKind as N;
 
@@ -296,7 +308,7 @@ impl<'p> Capture<'p, '_> {
                 },
                 None => unsupported(),
             },
-            N::Object | N::Reference | N::Tuple => self.expand_object(id, ty, work)?,
+            N::Object | N::Reference | N::Tuple => self.expand_object(id, ty, work, members)?,
             _ => unsupported(),
         })
     }
@@ -306,6 +318,7 @@ impl<'p> Capture<'p, '_> {
         id: TypeId,
         ty: Type<'p>,
         work: &mut Vec<TypeId>,
+        members: &mut MemberDemands,
     ) -> Result<TypeKind, SnapshotError> {
         if let Some(tuple) = ty.tuple() {
             return Ok(TypeKind::Tuple(TupleType {
@@ -358,13 +371,31 @@ impl<'p> Capture<'p, '_> {
         if !indexes.is_empty() {
             self.snapshot.index_signatures.insert(id, indexes);
         }
+        Ok(TypeKind::Object {
+            properties: self.object_properties(id, ty, boundary, work, members)?,
+        })
+    }
+
+    fn object_properties(
+        &mut self,
+        id: TypeId,
+        ty: Type<'p>,
+        boundary: MemberBoundary,
+        work: &mut Vec<TypeId>,
+        members: &mut MemberDemands,
+    ) -> Result<Vec<PropertyRecord>, SnapshotError> {
         let own: Vec<_> = ty
             .symbol()
             .into_iter()
             .flat_map(nts_frontend_tsrs::Symbol::declarations)
             .collect();
         let mut properties = Vec::new();
+        let carried = self.snapshot.types[id.0 as usize]
+            .symbol
+            .is_some_and(|symbol| carries_members(&self.snapshot.symbols[symbol.0 as usize]));
         for property in ty.properties() {
+            let name = self.property_key(property.name)?;
+            let demanded = members.demands(id, &name, &self.snapshot);
             let declaration = property
                 .declarations
                 .iter()
@@ -379,13 +410,26 @@ impl<'p> Capture<'p, '_> {
                 }
                 false
             });
-            let member_type = if boundary == MemberBoundary::ForeignMembers {
+            // A source subclass owns its storage and declarations, not every
+            // inherited ES API. Reopening all those generic method contracts
+            // at each subclass also opens their fresh receiver instantiations.
+            // Actual syntax/call demands still reach the same shallow slot.
+            let inherited_es = !carried
+                && !demanded
+                && !own
+                && declaration.is_none()
+                && !property.declarations.is_empty()
+                && property.declarations.iter().all(|node| {
+                    Library::of_path(node.source_file().path().as_str()) == Some(Library::Es)
+                });
+            let member_type = if boundary == MemberBoundary::ForeignMembers || inherited_es {
                 self.shallow_type(property.ty)?
             } else {
                 self.reached_type(property.ty, work)?
             };
+            members.follow_member(id, &name, member_type, &self.snapshot, work);
             properties.push(PropertyRecord {
-                name: self.property_key(property.name)?,
+                name,
                 ty: member_type,
                 readonly: property.readonly,
                 optional: property.optional,
@@ -400,7 +444,7 @@ impl<'p> Capture<'p, '_> {
                 own,
             });
         }
-        Ok(TypeKind::Object { properties })
+        Ok(properties)
     }
 
     fn callable(

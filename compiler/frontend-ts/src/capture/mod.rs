@@ -7,6 +7,7 @@
 mod declarations;
 mod diagnostics;
 mod graph;
+mod member_demands;
 mod queries;
 mod signatures;
 mod symbols;

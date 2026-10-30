@@ -16,6 +16,12 @@ import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStr
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
+
+test("every new or changed program fixture owes the complete native capture invariant",()=>{
+  for(const added of [false,true]) for(const path of ['tests/programs/a-deep-base-keeps-its-physical-storage/src/main.ts','tests/programs/another/tsconfig.json']) {
+    assert.ok(changeOwes([{path,added}]).includes('frontend-tsrs'),path);
+  }
+});
 /** What a landing runs when it owes the full gate: every step but the wide ones. */
 const landing = () => allSteps().filter((s) => !WIDE.has(s));
 /**
@@ -200,7 +206,7 @@ test("native dependency and toolchain inputs select native validation", () => {
 });
 
 test("unrelated source changes do not select native frontend integrity", () => {
-  for (const path of ["tests/programs/hello/src/main.ts", "docs/architecture.md", "compiler/core/src/lower.rs"]) {
+  for (const path of ["docs/architecture.md", "compiler/core/src/lower.rs"]) {
     assert.ok(!stepsFor(path).includes("frontend-tsrs"), path);
   }
 });

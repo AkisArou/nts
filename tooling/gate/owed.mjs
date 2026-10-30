@@ -292,7 +292,9 @@ export const RULES = [
   },
   {
     name: "the native TypeScript frontend",
-    when: (p) => /^(third_party\/tsrs|compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema)\//.test(p),
+    // The corpus invariant snapshots every program, including a new fixture
+    // whose source exposes capture demand not reached by previous programs.
+    when: (p) => /^(third_party\/tsrs|compiler\/frontend-ts(?:rs)?|compiler\/semantic-schema|tests\/programs)\//.test(p),
     steps: ["frontend-tsrs"],
     arms: [],
   },
