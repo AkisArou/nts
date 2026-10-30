@@ -166,6 +166,7 @@ impl Worker {
                     notes: Vec::new(),
                     uncompilable: false,
                     unverifiable: false,
+                    incomplete: Vec::new(),
                 }
             }
         }
@@ -189,6 +190,7 @@ fn failed(message: String) -> Examined {
         notes: Vec::new(),
         uncompilable: false,
         unverifiable: false,
+        incomplete: Vec::new(),
     }
 }
 

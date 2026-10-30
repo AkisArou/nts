@@ -74,6 +74,7 @@ struct Totals {
     failed: usize,
     invalid: usize,
     crashed: usize,
+    incomplete: Vec<nts_differential::check_report::Incomplete>,
     /// Programs whose generated C does not compile.
     ///
     /// A second thing that must stay at zero, and a different failure from
@@ -202,6 +203,12 @@ fn main() -> Result<()> {
         run(&root, &files, limit)?
     };
     report(&totals);
+    if !totals.incomplete.is_empty() {
+        bail!(
+            "{} corpus verification commands were not measured",
+            totals.incomplete.len()
+        );
+    }
     let written = write_corpus_result(&root, &totals)?;
     println!("\nwrote {written}");
     if totals.crashed != 0 {
@@ -353,6 +360,8 @@ struct Examined {
     notes: Vec<String>,
     uncompilable: bool,
     unverifiable: bool,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    incomplete: Vec<nts_differential::check_report::Incomplete>,
 }
 
 /// Whether a JDK is here to answer with.
@@ -394,12 +403,14 @@ fn examine(file: &Utf8Path, workspace: &Workspace) -> Examined {
             notes: Vec::new(),
             uncompilable: false,
             unverifiable: false,
+            incomplete: Vec::new(),
         };
     }
 
     let mut notes = Vec::new();
     let mut uncompilable = false;
     let mut unverifiable = false;
+    let mut incomplete = Vec::new();
 
     // A fresh frontend per file. Sharing one would be faster and would also
     // share whatever state a pathological input leaves behind, and the point of
@@ -440,6 +451,7 @@ fn examine(file: &Utf8Path, workspace: &Workspace) -> Examined {
                     Err(nts_differential::NotC::Refused(what)) => {
                         notes.push(format!("BACKEND REFUSED: {file}: {what}"));
                     }
+                    Err(nts_differential::NotC::Incomplete(stopped)) => incomplete.push(stopped),
                     Err(nts_differential::NotC::Rejected(error)) => {
                         uncompilable = true;
                         notes.push(format!("UNCOMPILABLE C: {file}: {error}"));
@@ -452,6 +464,9 @@ fn examine(file: &Utf8Path, workspace: &Workspace) -> Examined {
                 if has_a_jdk() {
                     match nts_differential::verifies(&prepared.program, &workspace.built) {
                         Ok(()) | Err(nts_differential::NotC::Refused(_)) => {}
+                        Err(nts_differential::NotC::Incomplete(stopped)) => {
+                            incomplete.push(stopped);
+                        }
                         Err(nts_differential::NotC::Rejected(error)) => {
                             unverifiable = true;
                             notes.push(format!("UNVERIFIABLE CLASS: {file}: {error}"));
@@ -489,6 +504,7 @@ fn examine(file: &Utf8Path, workspace: &Workspace) -> Examined {
         notes,
         uncompilable,
         unverifiable,
+        incomplete,
     }
 }
 
@@ -602,6 +618,7 @@ fn fold_results(
         failed: 0,
         invalid: 0,
         crashed: 0,
+        incomplete: Vec::new(),
         uncompilable: 0,
         unverifiable: 0,
         reasons: FxHashMap::default(),
@@ -615,6 +632,7 @@ fn fold_results(
             continue;
         };
         rows.record(files[at], &examined)?;
+        totals.incomplete.extend(examined.incomplete);
         for note in examined.notes {
             println!("{note}");
         }

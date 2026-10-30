@@ -24,7 +24,7 @@ test("one activity snapshot serves concurrent groups without sharing their progr
   let scans=0;
   const records=new Map([
     [41,{group:41,session:41,cpu:10,started:100}],
-    [42,{group:41,session:41,cpu:7,started:101}],
+    [42,{group:42,session:41,cpu:7,started:101}],
     [51,{group:51,session:51,cpu:0,started:200}],
   ]);
   const sampler=new CommandActivitySampler(owned=>{scans++;assert.deepEqual([...owned],[41,51]);return records;});
@@ -43,6 +43,14 @@ test("structured stdout stays separate while command diagnostics are retained",a
   const {root,env}=fixture(t);
   const result=await activeCommand(process.execPath,["-e","process.stderr.write('diagnostic\\n');process.stdout.write(JSON.stringify({value:7}));"],{cwd:root,env});
   assert.equal(result.status,0);assert.deepEqual(JSON.parse(result.stdout),{value:7});assert.equal(result.stderr,"diagnostic\n");assert.ok(result.out.includes("diagnostic\n"));assert.ok(result.out.includes(result.stdout));
+});
+
+test("CPU in a nested owned group keeps its waiting parent active",async t=>{
+  const {root,env}=fixture(t);
+  const body="import time\nstart=time.process_time()\nwhile time.process_time()-start<2.1: pass";
+  const parent=`import subprocess\np=subprocess.Popen(['python3','-c',${JSON.stringify(body)}],process_group=0)\np.wait()\nraise SystemExit(p.returncode)`;
+  const result=await activeCommand('python3',['-c',parent],{cwd:root,env,idleMs:1000,pollMs:100});
+  assert.equal(result.status,0,result.out);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
 });
 
 test("capture budgets hold and multibyte output remains exact across pipe chunks",async t=>{

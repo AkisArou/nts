@@ -69,11 +69,24 @@ export function checkArguments(format: CheckFormat, project: string): string[] {
   return ['check', project, ...(format === 'json-v1' ? ['--json'] : [])];
 }
 
+/** Liveness observations shared by check reports and corpus verification rows. */
+export function parseCheckStops(value: unknown) {
+  return array(value, 'invalid supervisor observations').map(raw => {
+    const event = object(raw, 'invalid supervisor observation');
+    exactKeys(event, ['kind', 'reason', 'case_index'], 'supervisor observation fields');
+    const reason = text(event.reason, 'invalid supervisor reason'); assert.ok(reason.length > 0, 'empty supervisor reason');
+    return {kind: member(event.kind, ['hung', 'runaway', 'tooling-setup'] as const, 'unknown supervisor stop'), reason,
+      case_index: event.case_index === null ? null : integer(event.case_index, 'invalid supervisor case index')};
+  });
+}
+
 /** Validate the full versioned shape and the independently derivable disposition. */
 export function parseJsonReport(input: string, exitStatus: number | null): CheckReport {
   const value = object(JSON.parse(input), 'check JSON must be an object');
-  exactKeys(value, ['version', 'status', 'counts', 'oracle', 'refusals', 'disagreements', 'aborts', 'error'], 'check report fields');
-  assert.equal(value.version, 1, 'unsupported check report version');
+  assert.ok(value.version === 1 || value.version === 2, 'unsupported check report version');
+  const version = value.version;
+  exactKeys(value, ['version', 'status', 'counts', 'oracle', 'refusals', 'disagreements', 'aborts', 'error', ...(version === 2 ? ['incomplete'] : [])], 'check report fields');
+  const incomplete = version === 2 ? parseCheckStops(value.incomplete) : [];
   const status = member(value.status, CHECK_STATUSES, 'unknown check status');
   const refusals = array(value.refusals, 'check refusals must be an array').map(raw => {
     const refusal = object(raw, 'invalid check refusal');
@@ -94,9 +107,10 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     assert.equal(value.oracle, null, 'failed check cannot claim oracle completion');
     assert.equal(disagreements.length, 0, 'a stage error cannot carry comparison findings');
     assert.equal(aborts.length, 0, 'a stage error cannot carry runtime findings');
+    assert.equal(incomplete.length, 0, 'a stage error cannot carry measured liveness findings');
     const error = object(value.error, 'missing structured check error');
     exactKeys(error, ['kind', 'source', 'message'], 'check error fields');
-    return { version: 1, status, counts: null, oracle: null, refusals, disagreements, aborts, error: {
+    return { version, ...(version === 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: {
       kind: member(error.kind, FAILURE_KINDS, 'unknown check failure kind'),
       source: error.source === null ? null : text(error.source, 'invalid check source identity'),
       message: text(error.message, 'missing check error message'),
@@ -132,14 +146,14 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     : !complete ? 'not_measured'
     : counts.disagreements > 0 ? 'disagrees'
     : counts.aborts > 0 ? 'aborted'
-    : counts.timeouts > 0 || counts.compared + counts.unavailable + counts.runtime_declined !== counts.expected ? 'not_measured'
+    : incomplete.length > 0 || counts.timeouts > 0 || counts.compared + counts.unavailable + counts.runtime_declined !== counts.expected ? 'not_measured'
     : counts.unavailable === counts.expected && counts.expected > 0 ? 'all_unavailable'
     : counts.compared === 0 ? (counts.runtime_declined === counts.expected && counts.expected > 0 ? 'all_declined' : 'not_measured')
     : counts.compared === counts.expected ? 'agrees' : 'partial';
   if (counts.functions === 0) assert.equal(counts.expected, 0, 'an empty export inventory has cases');
   if (counts.functions > 0) assert.ok(counts.expected > 0, 'a declared export has an empty population');
   assert.equal(status, derived, 'check disposition contradicts its structured fields');
-  return { version: 1, status, counts, oracle: { expected, received, complete }, refusals, disagreements, aborts, error: null };
+  return { version, ...(version === 2 ? {incomplete} : {}), status, counts, oracle: { expected, received, complete }, refusals, disagreements, aborts, error: null };
 }
 
 /** A common record for agreement, gate and outcome consumers. */
@@ -223,9 +237,11 @@ export function checkOutcome(format: CheckFormat, status: number | null, stdout:
   }
   assert.ok(counts && check.oracle);
   let category: CheckObservation["category"];
-  if (!check.oracle.complete || counts.timeouts > 0) category = 'not-measured';
+  if (!check.oracle.complete) category = 'not-measured';
   else if (counts.disagreements > 0) category = 'wrong-answer';
-  else if (counts.aborts > 0 || counts.runtime_declined > 0) category = 'aborted';
+  else if (counts.aborts > 0) category = 'aborted';
+  else if (counts.timeouts > 0 || check.incomplete?.length) category = 'not-measured';
+  else if (counts.runtime_declined > 0) category = 'aborted';
   else if (counts.unavailable > 0 || (check.status === 'nothing' && check.refusals.length > 0)) category = 'refused';
   else if (check.status === 'agrees') category = 'agrees';
   else category = 'not-measured';
@@ -239,8 +255,12 @@ export function checkOutcome(format: CheckFormat, status: number | null, stdout:
 
 function stableReport(report: CheckReport): CheckReport {
   const stable = (text: string) => stableCheckText(text).replace(/uniform slot \d+/g, 'uniform slot N');
+  // V2 adds liveness observations. A completed observation still has exactly
+  // the V1 record identity; changing transport alone never rewrites evidence.
+  const {incomplete, ...v1} = report;
+  const compatible = incomplete?.length ? report : {...v1, version: 1 as const};
   return {
-    ...report,
+    ...compatible,
     refusals: report.refusals.map(one => ({...one, message: normalizeGeneratedNumbers(stable(one.message))})),
     aborts: report.aborts.map(stableRuntimeAbortOutput),
     error: report.error === null ? null : {...report.error, message:
@@ -338,6 +358,18 @@ export async function runCheck(binary: string, project: string, options: CheckRu
   const result = await checkedCommand(binary, checkArguments(format, project), {...options, maxBuffer: 64 * 1024 * 1024});
   try {
     const record = decodeCheck(format, result.status, result.stdout, result.stderr);
+    const stops = record.report?.incomplete ?? [];
+    if (stops.length) {
+      const failures = ['disagrees', 'aborted'].includes(record.report!.status) ? record.report!.disagreements.length + record.report!.aborts.length : 0;
+      const chosen = stops.find(stop => stop.kind === 'tooling-setup') ?? stops.find(stop => stop.kind === 'runaway') ?? stops[0]!;
+      const policy = instrumentPolicy(chosen.kind, failures);
+      assert.ok(policy, 'invalid completed check failures');
+      record.first += `; ${stops.map(stop => `${stop.kind}: ${stop.reason}`).join('; ')}`;
+      // A completed wrong answer remains an ordinary red result with its
+      // structured liveness detail. Only a pure liveness observation holds.
+      if (policy.disposition === 'verdict') return {record, result, format, incomplete: undefined};
+      return {record, result, format, incomplete: chosen.kind === 'tooling-setup' ? new ToolingInstrumentError('tooling-setup', chosen.reason) : new CommandNotMeasuredError({...result, [chosen.kind]: chosen.reason})};
+    }
     const incomplete = record.outcome !== Outcome.NOT_MEASURED ? undefined
       : record.timeouts > 0 ? new CommandNotMeasuredError({...result, hung: `check NOT RUN (hung): ${project}; ${record.timeouts} calls did not complete`})
       : new ToolingInstrumentError('tooling-setup', `check not measured: ${project}: ${record.first}`);

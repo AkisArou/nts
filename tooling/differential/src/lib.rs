@@ -43,6 +43,7 @@ use nts_core::hir::{self, HirType};
 use nts_frontend_ts::Frontend;
 
 mod artifact_shadow;
+mod call_activity;
 mod case_costs;
 pub mod check_report;
 mod domains;
@@ -99,8 +100,28 @@ const POOL: &[f64] = &[
 /// is most often a loop bound and this is the value least likely to hang.
 const QUIET: f64 = 3.0;
 
-/// How long either side may take before its remaining cases are abandoned.
-const TIMEOUT: &str = "20";
+/// Reviewed per-arm CPU calibration, regenerated from complete verified calls.
+const CALL_BUDGETS: &str =
+    include_str!("../../../results/differential-call-costs/calibration.json");
+
+fn call_limits(backend: Backend) -> Result<call_activity::Limits> {
+    let profile: serde_json::Value = serde_json::from_str(CALL_BUDGETS)?;
+    let arm = if backend != Backend::Jvm && address_sanitized() {
+        "sanitized"
+    } else {
+        backend.name()
+    };
+    let cpu_seconds = profile["arms"][arm]["allowance_seconds"]
+        .as_f64()
+        .context("missing calibrated compiled-call CPU allowance")?;
+    let idle = profile["idle_seconds"]
+        .as_u64()
+        .context("missing compiled-call inactivity allowance")?;
+    Ok(call_activity::Limits {
+        cpu_seconds,
+        idle: std::time::Duration::from_secs(idle),
+    })
+}
 
 /// How much address space either side may claim, in bytes.
 ///
@@ -150,8 +171,6 @@ fn bounded(program: &str) -> std::process::Command {
     command
         .arg(format!("--as={}", MEMORY_MB << 20))
         .arg("--core=0")
-        .arg("timeout")
-        .arg(TIMEOUT)
         .arg(program);
     command
 }
@@ -199,19 +218,14 @@ fn bounded_native(program: &str) -> std::process::Command {
     // alone let an untouched `calloc(2 ** 31 - 1)` succeed here, which `--as`
     // refuses unsanitized and node refuses beside it: `trackingFollowsAResize`
     // answered 302 where node threw (CompilerHelper, 2026-10-22).
-    command
-        .arg("--core=0")
-        .arg("timeout")
-        .arg(TIMEOUT)
-        .arg(program)
-        .env(
-            "ASAN_OPTIONS",
-            format!(
-                "detect_leaks=0:allocator_may_return_null=1:hard_rss_limit_mb={MEMORY_MB}:\
+    command.arg("--core=0").arg(program).env(
+        "ASAN_OPTIONS",
+        format!(
+            "detect_leaks=0:allocator_may_return_null=1:hard_rss_limit_mb={MEMORY_MB}:\
                  max_allocation_size_mb={}",
-                MEMORY_MB - PROGRAM_MAPS_MB
-            ),
-        );
+            MEMORY_MB - PROGRAM_MAPS_MB
+        ),
+    );
     command
 }
 
@@ -527,6 +541,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
             results: Vec::new(),
             output: Vec::new(),
             thrown: Vec::new(),
+            incomplete: Vec::new(),
         }
     } else {
         let execution = match backend {
@@ -571,13 +586,14 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         &testable,
         &refused,
         &approximate,
-        !compiled.is_empty(),
+        !compiled.is_empty() && native.incomplete.is_empty(),
     );
     report.unavailable = unavailable;
     report.node_received = engine.results.len();
     report.refusals = prepared.diagnostics.iter().map(Into::into).collect();
     report.aborts = aborts;
     report.timeouts = timeouts;
+    report.incomplete.clone_from(&native.incomplete);
     // A timed-out case still has to leave a gap on this side so the node side
     // trims to match by index -- so it goes into `refused` for *alignment* and
     // comes back out of the count, which is a different question. Reporting it
@@ -1385,6 +1401,7 @@ const HARNESS_PRELUDE: &str =
 
 fn native_harness(testable: &[Testable], initializes: bool) -> String {
     let mut main = String::from(HARNESS_PRELUDE);
+    main.push_str(call_activity::NATIVE);
     for one in testable {
         let params: Vec<String> = one
             .params
@@ -1425,6 +1442,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
          \x20   if (nts_check_out == NULL) { fprintf(stderr, \"nts-check: cannot open %s\\n\", nts_check_path); return 2; }\n\
          \x20   /* Deterministic: virtual time, one thread, no I/O. Ordering is\n\
          \x20    * reproducible here in a way it is not against a real loop. */\n\
+         \x20   if (!nts_check_activity_mark(\"ready\", from)) return 2;\n\
          \x20   nts_test_host_install();\n",
     );
     if initializes {
@@ -1481,7 +1499,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             };
             let _ = writeln!(
                 main,
-                "    if (++at_case >= from) {{ {built}{show}{given_back} }}"
+                "    if (++at_case >= from) {{ if (!nts_check_activity_mark(\"begin\", at_case)) return 2; {built}{show}{given_back} if (!nts_check_activity_mark(\"end\", at_case)) return 2; }}"
             );
             // The baseline, taken after the first case rather than before it:
             // whatever a module sets up on the way to answering once is state
@@ -1518,7 +1536,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     // as much as its arms). An asynchronous case already drives the loop, and
     // runs what was queued before it, as node's `await` does.
     main.push_str(
-        "    nts_checkpoint();\n#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   return 0;\n}\n",
+        "    nts_checkpoint();\n#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   if (!nts_check_activity_mark(\"done\", at_case + 1)) return 2;\n         \x20   return 0;\n}\n",
     );
     main
 }
@@ -1558,12 +1576,15 @@ const TEST_HOST_SOURCE: &str = include_str!("../../../runtime/c/nts_test_host.c"
 pub enum NotC {
     Refused(String),
     Rejected(String),
+    /// The verifier did not finish; no generated-class verdict was observed.
+    Incomplete(check_report::Incomplete),
 }
 
 impl std::fmt::Display for NotC {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Refused(what) | Self::Rejected(what) => f.write_str(what),
+            Self::Incomplete(stopped) => f.write_str(&stopped.reason),
         }
     }
 }
@@ -1650,39 +1671,92 @@ pub fn verifies(program: &hir::Program, dir: &Utf8Path) -> Result<(), NotC> {
     for class in &emitted.classes {
         let path = dir.join(class.path());
         if let Some(parent) = path.parent() {
-            std::fs::create_dir_all(parent).map_err(|e| NotC::Rejected(e.to_string()))?;
+            std::fs::create_dir_all(parent).map_err(|e| verification_instrument(e.to_string()))?;
         }
-        std::fs::write(&path, &class.bytes).map_err(|e| NotC::Rejected(e.to_string()))?;
+        std::fs::write(&path, &class.bytes).map_err(|e| verification_instrument(e.to_string()))?;
         names.push(class.binary_name.replace('/', "."));
     }
     let jar = dir.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref())
-        .map_err(|e| NotC::Rejected(e.to_string()))?;
+        .map_err(|e| verification_instrument(e.to_string()))?;
 
     let java = std::env::var("JAVA_HOME")
         .map_or_else(|_| "java".to_owned(), |home| format!("{home}/bin/java"));
-    let loaded = std::process::Command::new("timeout")
-        .arg(TIMEOUT)
-        .arg(java)
+    let mut command = nts_codegen_jvm::toolchain::command(java);
+    command
         .arg("-Xmx256m")
-        .args(nts_codegen_jvm::toolchain::vm_flags())
         .arg("-cp")
         .arg(format!("{dir}:{jar}"))
         .arg("nts.rt.Verify")
-        .args(&names)
-        .output()
-        .map_err(|error| NotC::Rejected(error.to_string()))?;
-    if loaded.status.success() {
-        return Ok(());
-    }
-    Err(NotC::Rejected(
-        String::from_utf8_lossy(&loaded.stdout)
-            .lines()
-            .find(|line| line.starts_with("UNVERIFIABLE"))
-            .unwrap_or("the JVM refused a generated class")
-            .trim()
-            .to_owned(),
+        .args(&names);
+    verifier_completion(call_activity::command(
+        command,
+        call_limits(Backend::Jvm).map_err(|error| verification_instrument(error.to_string()))?,
     ))
+}
+
+fn verification_instrument(reason: String) -> NotC {
+    NotC::Incomplete(check_report::Incomplete {
+        kind: check_report::IncompleteKind::ToolingSetup,
+        reason,
+        case_index: None,
+    })
+}
+
+fn verifier_completion(finished: Result<call_activity::Finished>) -> Result<(), NotC> {
+    let finished = finished.map_err(|error| verification_instrument(error.to_string()))?;
+    if let Some(stopped) = finished.incomplete {
+        return Err(NotC::Incomplete(stopped));
+    }
+    let output = finished.output;
+    let text = String::from_utf8_lossy(&output.stdout);
+    let rejected = text.lines().find(|line| line.starts_with("UNVERIFIABLE"));
+    match (output.status.success(), rejected) {
+        (true, None) => Ok(()),
+        (false, Some(reason)) => Err(NotC::Rejected(reason.trim().to_owned())),
+        _ => Err(verification_instrument(format!(
+            "JVM verifier did not produce a consistent disposition: {}; {} {}",
+            output.status,
+            text,
+            String::from_utf8_lossy(&output.stderr)
+        ))),
+    }
+}
+
+#[cfg(test)]
+mod verifier_observations {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn an_incomplete_verifier_never_reports_a_generated_class_rejection() {
+        let mut child = std::process::Command::new("node");
+        child.args([
+            "-e",
+            "console.log('UNVERIFIABLE partial prefix');setInterval(()=>{},1000)",
+        ]);
+        let observed = call_activity::command(
+            child,
+            call_activity::Limits {
+                cpu_seconds: 5.0,
+                idle: std::time::Duration::from_millis(200),
+            },
+        );
+        assert!(matches!(
+            verifier_completion(observed),
+            Err(NotC::Incomplete(check_report::Incomplete {
+                kind: check_report::IncompleteKind::Hung,
+                ..
+            }))
+        ));
+        assert!(matches!(
+            verifier_completion(Err(anyhow::anyhow!("broken observer"))),
+            Err(NotC::Incomplete(check_report::Incomplete {
+                kind: check_report::IncompleteKind::ToolingSetup,
+                ..
+            }))
+        ));
+    }
 }
 
 /// How the runtime says "the program correctly declined", as opposed to
@@ -1723,7 +1797,7 @@ const UNCAUGHT: &str = "nts: uncaught ";
 /// Neither a defect nor a refusal. The pool asks for a loop bound of
 /// 9,007,199,254,740,991 and a program that allocates once per iteration does
 /// exactly what that asks; the answer is that the case cannot be run, not that
-/// the compiler is wrong. It is [`TIMEOUT`]'s hazard through a different door
+/// the compiler is wrong. It is the hostile input pool's hazard through a different door
 /// and is counted the same way -- the case is not reached, the run continues,
 /// and the total says how many were.
 const EXHAUSTED: &str = "nts: out of memory";
@@ -1736,10 +1810,7 @@ const EXHAUSTED: &str = "nts: out of memory";
 #[derive(Debug, PartialEq, Eq)]
 enum Stopped {
     Declined,
-    /// The program did not finish inside the harness's time. Neither a verdict
-    /// nor a defect -- and, before this existed, indistinguishable from a
-    /// decline, which is the one thing the standing rule forbids.
-    TimedOut,
+    /// A completed runtime diagnostic or unexpected process signal.
     Defect(String),
 }
 
@@ -1758,32 +1829,12 @@ fn signal_of(status: std::process::ExitStatus) -> Option<i32> {
 /// blind spot sat behind it. In both, stdout was buffered and lost with the
 /// crash, so there was nothing to compare and nothing to complain about.
 ///
-/// A timeout is not a signal here -- `timeout` exits 124 of its own accord --
 /// so a case that takes too long stays what it was: not reached, and not a
 /// verdict. An `abort()` *after* a refusal keeps its refusal line and stays a
 /// decline, which is what every bounds check does.
-/// `timeout`'s own exit status when it kills the child. Not a signal on this
-/// side -- the shell tool exits with it -- so nothing in `stopped` saw it.
-const TIMED_OUT: i32 = 124;
-
-/// As [`stopped`], plus the exit code, which is the only place a timeout shows.
-///
-/// `benchmarks/cases/absences` found the gap. Fixing an unsigned remainder made
-/// the case correct and slow -- 14.74 s for its 2.1 billion iterations -- and
-/// the harness reported **"1 case(s) the compiled program declined"**, which is
-/// the sentence it uses for a program keeping the promise its `!` made. Before
-/// the fix the case was fast and wrong; after it, slow and filed as a decline.
-/// The second state is better and is still not honest.
-///
-/// A timeout is genuinely not a verdict, and the fix is not to make it one: it
-/// is to stop it wearing another verdict's name.
-fn stopped_with(code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stopped {
-    // Before anything else, because a timed-out program usually printed
-    // nothing -- and an empty complaint is exactly what a clean decline looks
-    // like once its line has been consumed.
-    if code == Some(TIMED_OUT) {
-        return Stopped::TimedOut;
-    }
+/// Classify a stopped program's diagnostic and signal. Its numeric exit code
+/// carries no supervision meaning; only the owner can report a guard stop.
+fn stopped_with(_code: Option<i32>, signal: Option<i32>, complaint: &str) -> Stopped {
     // A sanitizer's report, which is never the program declining its input:
     // the memory it names was used wrongly, whatever the program printed or
     // was about to. Named by kind (`heap-use-after-free`), as a build-mode
@@ -2148,22 +2199,16 @@ fn run_native(
     // input, so the two had nothing to compare there anyway; what matters is
     // that the *rest* of the program still gets checked.
     let _execution = case_costs::span("program.total");
-    collect_restarting(
-        dir,
-        &results(testable),
-        refused,
-        aborts,
-        timeouts,
-        |from, path| {
-            case_costs::child("program.attempt", || {
-                bounded_native(binary.as_str())
-                    .env("NTS_DIFF_RESULTS", path.as_str())
-                    .arg(from.to_string())
-                    .output()
-                    .context("running the compiled program")
-            })
-        },
-    )
+    let cases = results(testable);
+    collect_restarting(dir, &cases, refused, aborts, timeouts, |from, path| {
+        case_costs::measure("program.attempt", || {
+            let mut command = bounded_native(binary.as_str());
+            command
+                .env("NTS_DIFF_RESULTS", path.as_str())
+                .arg(from.to_string());
+            call_activity::run(command, path, from, cases.len(), call_limits(backend)?)
+        })
+    })
 }
 
 /// The `n` of a results file's `done <n>` line, if it has one.
@@ -2190,6 +2235,7 @@ struct Run {
     /// refusal is two languages answering differently, but a throw where node
     /// answered is one answer, and the compiled program got it wrong.
     thrown: Vec<(usize, String)>,
+    incomplete: Vec<check_report::Incomplete>,
 }
 
 /// Run a case set, restarting past whatever ends it.
@@ -2204,18 +2250,19 @@ struct Run {
 /// different artifacts and start them differently, but "what does a run that
 /// stopped early mean" is one question, and two answers to it would be two
 /// different accountings of the same refusal.
-fn collect_restarting(
+fn collect_restarting<T: Into<call_activity::Finished>>(
     dir: &Utf8Path,
     results: &[String],
     refused: &mut Vec<usize>,
     aborts: &mut Vec<String>,
     timeouts: &mut usize,
-    run_from: impl Fn(usize, &Utf8Path) -> Result<std::process::Output>,
+    run_from: impl Fn(usize, &Utf8Path) -> Result<T>,
 ) -> Result<Run> {
     let total = results.len();
     let mut collected: Vec<String> = Vec::new();
     let mut output: Vec<String> = Vec::new();
     let mut thrown: Vec<(usize, String)> = Vec::new();
+    let mut incomplete = Vec::new();
     let mut from = 0;
     let mut restarts = 0;
     // Every restart advances `from` by at least one. The finite case list
@@ -2228,7 +2275,11 @@ fn collect_restarting(
         // program starts, where the run boundary is known.
         let path = dir.join(format!("results-{restarts}.txt"));
         let _ = std::fs::remove_file(&path);
-        let run = run_from(from, &path)?;
+        let finished: call_activity::Finished = run_from(from, &path)?.into();
+        let supervised = finished.incomplete.is_some();
+        incomplete.extend(finished.incomplete);
+        let run = finished.output;
+        case_costs::child_result("program.attempt", &run);
         let mut produced = std::fs::read(&path)
             .map(|bytes| lines(&bytes))
             .unwrap_or_default();
@@ -2289,8 +2340,17 @@ fn collect_restarting(
                 total - from
             ));
         }
+        if supervised && let Stopped::Defect(what) = stopped_with(None, None, &complaint) {
+            aborts.push(what);
+        }
         if reached == total - from {
-            if !finished {
+            if !run.status.success() && !supervised {
+                aborts.push(format!(
+                    "the program exited {} after answering every case: {complaint}",
+                    run.status
+                ));
+            }
+            if !finished && !supervised {
                 aborts.push(format!(
                     "answered every case and ended without its `done` line: {}",
                     String::from_utf8_lossy(&run.stderr)
@@ -2301,14 +2361,17 @@ fn collect_restarting(
             }
             break;
         }
-        match stopped_with(run.status.code(), signal_of(run.status), &complaint) {
-            Stopped::Declined => {
-                if let Some(line) = complaint.lines().find(|line| line.starts_with(UNCAUGHT)) {
-                    thrown.push((from + reached, line.to_owned()));
+        if supervised {
+            *timeouts += 1;
+        } else {
+            match stopped_with(run.status.code(), signal_of(run.status), &complaint) {
+                Stopped::Declined => {
+                    if let Some(line) = complaint.lines().find(|line| line.starts_with(UNCAUGHT)) {
+                        thrown.push((from + reached, line.to_owned()));
+                    }
                 }
+                Stopped::Defect(what) => aborts.push(what),
             }
-            Stopped::TimedOut => *timeouts += 1,
-            Stopped::Defect(what) => aborts.push(what),
         }
         // The case after the last one that printed. A refusal leaves a gap on
         // this side, and the node side is trimmed to match by index below.
@@ -2320,6 +2383,7 @@ fn collect_restarting(
         results: collected,
         output,
         thrown,
+        incomplete,
     })
 }
 
@@ -2446,23 +2510,25 @@ fn run_jvm(
     let classpath = format!("{dir}:{jar}");
     let shadow = artifact_shadow::jvm(dir, &emitted, &jar, &cases_path);
     let execution = case_costs::span("program.total");
+    let expected = results(testable);
+    let total = expected.len();
     let run = collect_restarting(
         dir,
-        &results(testable),
+        &expected,
         refused,
         aborts,
         timeouts,
         move |from, path| {
-            case_costs::child("program.attempt", || {
-                bounded_jvm()
+            case_costs::measure("program.attempt", || {
+                let mut command = bounded_jvm();
+                command
                     .env("NTS_DIFF_RESULTS", path.as_str())
                     .arg("-cp")
                     .arg(&classpath)
                     .arg("nts.rt.Check")
                     .arg(cases_path.as_str())
-                    .arg(from.to_string())
-                    .output()
-                    .context("running the compiled classes")
+                    .arg(from.to_string());
+                call_activity::run(command, path, from, total, call_limits(Backend::Jvm)?)
             })
         },
     );
@@ -2537,10 +2603,8 @@ fn representable(value: f64, descriptor: u8) -> Result<()> {
 fn bounded_jvm() -> std::process::Command {
     let java = std::env::var("JAVA_HOME")
         .map_or_else(|_| "java".to_owned(), |home| format!("{home}/bin/java"));
-    let mut command = std::process::Command::new("timeout");
+    let mut command = std::process::Command::new(java);
     command
-        .arg(TIMEOUT)
-        .arg(java)
         .arg("-Xmx512m")
         .arg("-XX:MaxMetaspaceSize=128m")
         .arg("-XX:TieredStopAtLevel=1")
@@ -2795,7 +2859,7 @@ fn run_node(
     let result = case_costs::child("oracle.execute", || {
         let finished = oracle_run::run(
             without_colour(command),
-            std::time::Duration::from_millis(oracle_coverage::WALL_MILLIS),
+            std::time::Duration::from_millis(oracle_coverage::IDLE_MILLIS),
         )?;
         status = finished.status;
         Ok::<_, anyhow::Error>(finished.output)
@@ -2825,6 +2889,7 @@ fn run_node(
             results: measured?,
             output: lines(&output.stdout),
             thrown: Vec::new(),
+            incomplete: Vec::new(),
         })
     });
     artifact_shadow::finish_oracle(shadow, &result, &status, &completion);
@@ -2921,6 +2986,8 @@ pub struct Report {
     /// "declined", which is what a program keeping the promise its `!` made
     /// does. A refused construct and an unmeasurable one must not look alike.
     pub timeouts: usize,
+    /// The supervisor's liveness observations, retained even after every answer.
+    pub incomplete: Vec<check_report::Incomplete>,
 }
 
 impl Report {
@@ -2940,7 +3007,10 @@ impl Report {
     /// *all* of them.
     #[must_use]
     pub fn agreed(&self) -> bool {
-        self.checked > 0 && self.disagreements.is_empty() && self.aborts.is_empty()
+        self.checked > 0
+            && self.disagreements.is_empty()
+            && self.aborts.is_empty()
+            && self.incomplete.is_empty()
     }
 }
 
@@ -3056,6 +3126,7 @@ fn report(
         disagreements,
         aborts: Vec::new(),
         timeouts: 0,
+        incomplete: Vec::new(),
     }
 }
 
@@ -3335,7 +3406,6 @@ mod tests {
         // These two lines are the whole bug: a run that said nothing because it
         // refused and a run that said nothing because it was killed were one
         // verdict, and the second is not a verdict at all.
-        assert_eq!(stopped_with(Some(124), None, ""), Stopped::TimedOut);
         // A segfault that printed nothing. This is the case that was missing.
         assert!(matches!(
             stopped_with(None, Some(11), ""),
@@ -3529,6 +3599,44 @@ mod result_channel {
         RESULTS.iter().map(|r| (*r).to_owned()).collect()
     }
 
+    #[test]
+    fn answering_every_case_does_not_hide_a_cleanup_hold_or_program_exit() {
+        for supervised in [true, false] {
+            let dir = scratch(if supervised {
+                "cleanup-hold"
+            } else {
+                "own-124"
+            });
+            let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+            let run = collect_restarting(
+                &dir,
+                &expected(),
+                &mut refused,
+                &mut aborts,
+                &mut timeouts,
+                |_, path| {
+                    std::fs::write(path, "f 0 7\nf 1 8\ndone 2\n").expect("complete answers");
+                    let mut output = exited("");
+                    output.status =
+                        std::process::ExitStatus::from_raw(if supervised { 9 } else { 124 << 8 });
+                    Ok(super::call_activity::Finished {
+                        output,
+                        incomplete: supervised.then(|| super::check_report::Incomplete {
+                            kind: super::check_report::IncompleteKind::Hung,
+                            reason: "cleanup made no progress".into(),
+                            case_index: None,
+                        }),
+                    })
+                },
+            )
+            .expect("collect completed evidence");
+            assert_eq!(run.results.len(), 2);
+            assert_eq!(run.incomplete.len(), usize::from(supervised));
+            assert_eq!(aborts.is_empty(), supervised);
+            assert_eq!(timeouts, 0);
+        }
+    }
+
     /// A run that answered every case and wrote no `done` line is reported --
     /// the shape of a program that died after its last case, which without a
     /// terminal marker reads exactly like a clean run.
@@ -3687,6 +3795,7 @@ mod pairing {
                 .iter()
                 .map(|(at, line)| (*at, (*line).to_owned()))
                 .collect(),
+            incomplete: Vec::new(),
         }
     }
 

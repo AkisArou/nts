@@ -65,7 +65,7 @@ export function lingering() { setTimeout(() => { throw new Error("outside protoc
         ],
     );
     assert!(finished.output.status.success(), "{:?}", finished.output);
-    assert_eq!(finished.status["wall_guard_fired"], false);
+    assert!(finished.status["stop"].is_null());
     let rows = std::fs::read_to_string(dir.join("results.txt")).unwrap();
     assert!(rows.contains("micro 0 401c000000000000"));
     assert!(rows.contains("immediate 0 4022000000000000"));
@@ -107,7 +107,7 @@ export function pending() { queueMicrotask(() => console.log("scheduled")); retu
         &[case("ready", true), case("pending", true)],
     );
     assert!(!finished.output.status.success());
-    assert_eq!(finished.status["wall_guard_fired"], false);
+    assert!(finished.status["stop"].is_null());
     assert_eq!(finished.output.stdout, b"scheduled\n");
     let rows = std::fs::read_to_string(dir.join("results.txt")).unwrap();
     assert_eq!(rows, "ready 0 401c000000000000\n");

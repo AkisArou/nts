@@ -91,6 +91,7 @@ mod tests {
                     notes: vec!["C syntax error".to_owned()],
                     uncompilable: true,
                     unverifiable: false,
+                    incomplete: Vec::new(),
                 },
             )
             .expect("record");

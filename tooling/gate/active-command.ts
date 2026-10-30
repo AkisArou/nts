@@ -37,7 +37,11 @@ function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessA
     // observer. An unreadable directly owned leader is an instrument failure.
     const pid=Number(name);
     try{record=processAt(pid);}catch(error){if(owned.has(pid))throw error;continue;}
-    if(record&&owned.has(record.group))records.set(pid,record);
+    // Rust's owned child groups remain in this directly spawned session.
+    // Counting the session forwards nested CPU without trusting a heartbeat
+    // or treating a waiting compiler as idle. Signals still use only spawn's
+    // directly owned group; the nested supervisor owns its children's groups.
+    if(record&&owned.has(record.session))records.set(pid,record);
   }
   return records;
 }
@@ -70,7 +74,7 @@ export class CommandActivitySampler {
     catch(error){for(const watch of watches)watch.broken(error);return;}
     const totals=new Map<number,number>();
     for(const record of records.values()){
-      if(record.group===record.session)totals.set(record.group,(totals.get(record.group)??0)+record.cpu);
+      totals.set(record.session,(totals.get(record.session)??0)+record.cpu);
     }
     for(const watch of watches){
       if(!this.watches.has(watch))continue;

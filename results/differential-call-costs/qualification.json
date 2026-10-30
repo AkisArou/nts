@@ -1,0 +1,1045 @@
+{
+  "version": 1,
+  "cost_before_after_before": {
+    "started": "2026-10-30T10:11:30.952Z",
+    "before": {
+      "commit": "3dd649e707b3d4db42ba974c6bbf2397c3872bc8",
+      "sha": "35d4b3d2b7c87a43fe0a6913dae618a3c8769579729f55a29ff87d16b91f4a22",
+      "path": "$EVIDENCE/bin/35d4b3d2b7c87a43fe0a6913dae618a3c8769579729f55a29ff87d16b91f4a22/nts"
+    },
+    "after": {
+      "path": "$EVIDENCE/bin/aeecac8fd663e13d03eeabc6797f4d5b7374af0d4d3987a5f99f9641ace2c2cf/nts",
+      "sha": "aeecac8fd663e13d03eeabc6797f4d5b7374af0d4d3987a5f99f9641ace2c2cf",
+      "commit": "f5dac6d0259d835d8863fa0fd8467bc2ca0a993a"
+    },
+    "nice": 19,
+    "affinity": "4",
+    "load": "2.37 2.81 8.75 2/2014 1371353",
+    "sample": [
+      "hello",
+      "arrays",
+      "classes",
+      "fluent-this"
+    ],
+    "runs": [
+      {
+        "backend": "c",
+        "round": "before-a",
+        "fixture": "hello",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.44,
+          "user_s": 0.14,
+          "sys_s": 0.04,
+          "maxrss_kb": 103892,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-a",
+        "fixture": "arrays",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "partial",
+          "counts": {
+            "functions": 12,
+            "expected": 265,
+            "compared": 226,
+            "unavailable": 0,
+            "runtime_declined": 39,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 265,
+            "received": 265,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 3.39,
+          "user_s": 0.29,
+          "sys_s": 0.28,
+          "maxrss_kb": 110960,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-a",
+        "fixture": "classes",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "nothing",
+          "counts": {
+            "functions": 0,
+            "expected": 0,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 0,
+            "received": 0,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.01,
+          "user_s": 0,
+          "sys_s": 0,
+          "maxrss_kb": 29316,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-a",
+        "fixture": "fluent-this",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 6,
+            "expected": 174,
+            "compared": 174,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 174,
+            "received": 174,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.99,
+          "user_s": 0.17,
+          "sys_s": 0.07,
+          "maxrss_kb": 107752,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "after",
+        "fixture": "hello",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.18,
+          "user_s": 0.12,
+          "sys_s": 0.05,
+          "maxrss_kb": 103852,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "after",
+        "fixture": "arrays",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "partial",
+          "counts": {
+            "functions": 12,
+            "expected": 265,
+            "compared": 226,
+            "unavailable": 0,
+            "runtime_declined": 39,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 265,
+            "received": 265,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 2.25,
+          "user_s": 0.3,
+          "sys_s": 0.23,
+          "maxrss_kb": 110920,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "after",
+        "fixture": "classes",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "nothing",
+          "counts": {
+            "functions": 0,
+            "expected": 0,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 0,
+            "received": 0,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.01,
+          "user_s": 0.01,
+          "sys_s": 0,
+          "maxrss_kb": 31340,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "after",
+        "fixture": "fluent-this",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 6,
+            "expected": 174,
+            "compared": 174,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 174,
+            "received": 174,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.22,
+          "user_s": 0.17,
+          "sys_s": 0.04,
+          "maxrss_kb": 107720,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-b",
+        "fixture": "hello",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.43,
+          "user_s": 0.13,
+          "sys_s": 0.05,
+          "maxrss_kb": 103948,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-b",
+        "fixture": "arrays",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "partial",
+          "counts": {
+            "functions": 12,
+            "expected": 265,
+            "compared": 226,
+            "unavailable": 0,
+            "runtime_declined": 39,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 265,
+            "received": 265,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 3.39,
+          "user_s": 0.31,
+          "sys_s": 0.27,
+          "maxrss_kb": 110876,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-b",
+        "fixture": "classes",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "nothing",
+          "counts": {
+            "functions": 0,
+            "expected": 0,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 0,
+            "received": 0,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.01,
+          "user_s": 0.01,
+          "sys_s": 0,
+          "maxrss_kb": 29216,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "c",
+        "round": "before-b",
+        "fixture": "fluent-this",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 6,
+            "expected": 174,
+            "compared": 174,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 174,
+            "received": 174,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 1,
+          "user_s": 0.18,
+          "sys_s": 0.07,
+          "maxrss_kb": 107572,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-a",
+        "fixture": "hello",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.38,
+          "user_s": 0.09,
+          "sys_s": 0.04,
+          "maxrss_kb": 72516,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-a",
+        "fixture": "arrays",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "partial",
+          "counts": {
+            "functions": 12,
+            "expected": 265,
+            "compared": 226,
+            "unavailable": 0,
+            "runtime_declined": 39,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 265,
+            "received": 265,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 2.78,
+          "user_s": 1.36,
+          "sys_s": 0.56,
+          "maxrss_kb": 90216,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-a",
+        "fixture": "classes",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "nothing",
+          "counts": {
+            "functions": 0,
+            "expected": 0,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 0,
+            "received": 0,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.01,
+          "user_s": 0.01,
+          "sys_s": 0,
+          "maxrss_kb": 29132,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-a",
+        "fixture": "fluent-this",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 6,
+            "expected": 174,
+            "compared": 174,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 174,
+            "received": 174,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.91,
+          "user_s": 0.13,
+          "sys_s": 0.05,
+          "maxrss_kb": 77352,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "after",
+        "fixture": "hello",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.13,
+          "user_s": 0.09,
+          "sys_s": 0.03,
+          "maxrss_kb": 72664,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "after",
+        "fixture": "arrays",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "partial",
+          "counts": {
+            "functions": 12,
+            "expected": 265,
+            "compared": 226,
+            "unavailable": 0,
+            "runtime_declined": 39,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 265,
+            "received": 265,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 1.88,
+          "user_s": 1.29,
+          "sys_s": 0.57,
+          "maxrss_kb": 90092,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "after",
+        "fixture": "classes",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "nothing",
+          "counts": {
+            "functions": 0,
+            "expected": 0,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 0,
+            "received": 0,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.01,
+          "user_s": 0.01,
+          "sys_s": 0,
+          "maxrss_kb": 31508,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "after",
+        "fixture": "fluent-this",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 6,
+            "expected": 174,
+            "compared": 174,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 174,
+            "received": 174,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.15,
+          "user_s": 0.11,
+          "sys_s": 0.03,
+          "maxrss_kb": 80400,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-b",
+        "fixture": "hello",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.39,
+          "user_s": 0.11,
+          "sys_s": 0.03,
+          "maxrss_kb": 72404,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-b",
+        "fixture": "arrays",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "partial",
+          "counts": {
+            "functions": 12,
+            "expected": 265,
+            "compared": 226,
+            "unavailable": 0,
+            "runtime_declined": 39,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 265,
+            "received": 265,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 2.76,
+          "user_s": 1.35,
+          "sys_s": 0.54,
+          "maxrss_kb": 90084,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-b",
+        "fixture": "classes",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "nothing",
+          "counts": {
+            "functions": 0,
+            "expected": 0,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 0,
+            "received": 0,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.01,
+          "user_s": 0.01,
+          "sys_s": 0,
+          "maxrss_kb": 29220,
+          "exit": 0
+        }
+      },
+      {
+        "backend": "jvm",
+        "round": "before-b",
+        "fixture": "fluent-this",
+        "report": {
+          "version": 2,
+          "incomplete": [],
+          "status": "agrees",
+          "counts": {
+            "functions": 6,
+            "expected": 174,
+            "compared": 174,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 174,
+            "received": 174,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "timing": {
+          "wall_s": 0.9,
+          "user_s": 0.13,
+          "sys_s": 0.05,
+          "maxrss_kb": 80460,
+          "exit": 0
+        }
+      }
+    ],
+    "unset": [
+      {
+        "round": "before-a",
+        "cases": 50000,
+        "jar_sha256": "e910121f5b398127c1a85ff36b2e6438dd9341009837d990946d3368cf2d5cd3",
+        "results_sha256": "50b06d27290bb577121f43dd19cd59d5d95987248fe50c3c056bb9dbfe918d33",
+        "timing": {
+          "wall_s": 0.12,
+          "user_s": 0.1,
+          "sys_s": 0.02,
+          "maxrss_kb": 91692,
+          "exit": 0
+        }
+      },
+      {
+        "round": "after",
+        "cases": 50000,
+        "jar_sha256": "549400a09d9d4e86908da8d8f15e9970c4befef06ec6c59bce74f4a8455e16fa",
+        "results_sha256": "50b06d27290bb577121f43dd19cd59d5d95987248fe50c3c056bb9dbfe918d33",
+        "timing": {
+          "wall_s": 0.11,
+          "user_s": 0.09,
+          "sys_s": 0.01,
+          "maxrss_kb": 85408,
+          "exit": 0
+        }
+      },
+      {
+        "round": "before-b",
+        "cases": 50000,
+        "jar_sha256": "e910121f5b398127c1a85ff36b2e6438dd9341009837d990946d3368cf2d5cd3",
+        "results_sha256": "50b06d27290bb577121f43dd19cd59d5d95987248fe50c3c056bb9dbfe918d33",
+        "timing": {
+          "wall_s": 0.12,
+          "user_s": 0.1,
+          "sys_s": 0.02,
+          "maxrss_kb": 91692,
+          "exit": 0
+        }
+      }
+    ],
+    "finished": "2026-10-30T10:11:54.552Z"
+  },
+  "summary": {
+    "c": {
+      "before-a": {
+        "cpu_s": 0.99,
+        "wall_s": 4.83
+      },
+      "after": {
+        "cpu_s": 0.92,
+        "wall_s": 2.66
+      },
+      "before-b": {
+        "cpu_s": 1.02,
+        "wall_s": 4.83
+      }
+    },
+    "jvm": {
+      "before-a": {
+        "cpu_s": 2.24,
+        "wall_s": 4.08
+      },
+      "after": {
+        "cpu_s": 2.13,
+        "wall_s": 2.17
+      },
+      "before-b": {
+        "cpu_s": 2.22,
+        "wall_s": 4.06
+      }
+    }
+  },
+  "prior_regression": {
+    "source": {
+      "path": "$EVIDENCE/bin/b8b52353e3030c23fcc90ad16a8247e6d64f600c272b6b65564381ee35830c3a/nts",
+      "sha": "b8b52353e3030c23fcc90ad16a8247e6d64f600c272b6b65564381ee35830c3a",
+      "commit": "701a292c270e461b4e005cb172213b4c48131fbc"
+    },
+    "summary": {
+      "c": {
+        "before-a": {
+          "cpu_s": 1.59,
+          "wall_s": 5.96
+        },
+        "after": {
+          "cpu_s": 1.65,
+          "wall_s": 14.44
+        },
+        "before-b": {
+          "cpu_s": 1.55,
+          "wall_s": 5.69
+        }
+      },
+      "jvm": {
+        "before-a": {
+          "cpu_s": 3.57,
+          "wall_s": 5.33
+        },
+        "after": {
+          "cpu_s": 3.57,
+          "wall_s": 14.65
+        },
+        "before-b": {
+          "cpu_s": 3.87,
+          "wall_s": 5.61
+        }
+      }
+    },
+    "receipt_sha256": "7552405543fd274075739f88453aed924d030c29ebda04ea3bd5901b556d901f"
+  },
+  "source_java_sha256": "0ab3ff1c246c2f35b7fe3e77c777b20a040a04e59aca4d7bc04aed8c45109e11",
+  "runtime_jar_sha256": "549400a09d9d4e86908da8d8f15e9970c4befef06ec6c59bce74f4a8455e16fa",
+  "collector_sha256": "113ed0e5a5afa59eb77df9412cc4abdd17dd30bc888967f62e9d80ab5289b81c",
+  "exception_control": "call_activity::tests::the_jvm_keeps_an_unwrapped_exception_with_events_enabled_or_unset",
+  "jvm_owner": {
+    "source": "c96684a8a",
+    "parent_comparison": "nts-runtime3/jvm-guard-unset/result.json",
+    "cpu_before_s": [
+      0.12,
+      0.12,
+      0.11,
+      0.12
+    ],
+    "cpu_after_s": [
+      0.12,
+      0.12,
+      0.11
+    ],
+    "identical_results": 7
+  }
+}

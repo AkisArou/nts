@@ -11,7 +11,7 @@ use nts_codegen_common::Backend;
 use serde_json::Value;
 
 pub(super) const CPU_SECONDS: u64 = 15;
-pub(super) const WALL_MILLIS: u64 = 120_000;
+pub(super) const IDLE_MILLIS: u64 = 300_000;
 
 pub(super) struct Coverage {
     pub(super) count: usize,
@@ -129,18 +129,23 @@ pub(super) fn measured_rows(
 ) -> Result<Vec<String>> {
     let exit = status["exit_code"].as_i64();
     let signal = &status["signal"];
-    let wall = status["wall_guard_fired"]
-        .as_bool()
+    let stop = status
+        .get("stop")
         .context("oracle not measured: missing supervisor disposition")?;
+    let stopped = !stop.is_null();
+    if stopped {
+        serde_json::from_value::<super::check_report::Incomplete>(stop.clone())
+            .context("oracle not measured: invalid supervisor disposition")?;
+    }
     ensure!(
-        status["version"] == 1
+        status["version"] == 2
             && status["error"].is_null()
             && (exit.is_some() || !signal.is_null()),
         "oracle not measured: supervisor did not complete: {status}"
     );
-    if wall || !signal.is_null() || done != Some(rows.len()) || rows.len() < coverage.count {
+    if stopped || !signal.is_null() || done != Some(rows.len()) || rows.len() < coverage.count {
         bail!(
-            "oracle not measured: delivered {} of {} promised rows; done={done:?}, exit={exit:?}, signal={signal:?}, wall_guard={wall}",
+            "oracle not measured: delivered {} of {} promised rows; done={done:?}, exit={exit:?}, signal={signal:?}, supervisor_stop={stopped}",
             rows.len(),
             coverage.count
         );
@@ -191,10 +196,10 @@ mod tests {
             count: 2,
             key: "key".into(),
         };
-        let status = json!({"version":1,"exit_code":0,"signal":null,"wall_guard_fired":false});
+        let status = json!({"version":2,"exit_code":0,"signal":null,"stop":null});
         assert!(measured_rows(vec!["one".into()], None, &status, &coverage).is_err());
         let killed =
-            json!({"version":1,"exit_code":null,"signal":"SIGKILL","wall_guard_fired":true});
+            json!({"version":2,"exit_code":null,"signal":"SIGKILL","stop":{"kind":"hung"}});
         assert!(
             measured_rows(
                 vec!["one".into(), "two".into()],
@@ -204,7 +209,7 @@ mod tests {
             )
             .is_err()
         );
-        let own124 = json!({"version":1,"exit_code":124,"signal":null,"wall_guard_fired":false});
+        let own124 = json!({"version":2,"exit_code":124,"signal":null,"stop":null});
         assert_eq!(
             measured_rows(
                 vec!["one".into(), "two".into(), "surplus".into()],

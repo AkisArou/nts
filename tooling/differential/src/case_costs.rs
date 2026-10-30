@@ -159,18 +159,22 @@ pub(crate) fn child<E>(
     let _span = span(name);
     let result = work();
     if let Ok(output) = &result {
-        #[cfg(unix)]
-        let signal = {
-            use std::os::unix::process::ExitStatusExt as _;
-            output.status.signal()
-        };
-        #[cfg(not(unix))]
-        let signal: Option<i32> = None;
-        event(serde_json::json!({"event":"child.result", "phase":name,
-            "exit":output.status.code(), "signal":signal,
-            "stdout_bytes":output.stdout.len(), "stderr_bytes":output.stderr.len()}));
+        child_result(name, output);
     }
     result
+}
+
+pub(crate) fn child_result(name: &'static str, output: &std::process::Output) {
+    #[cfg(unix)]
+    let signal = {
+        use std::os::unix::process::ExitStatusExt as _;
+        output.status.signal()
+    };
+    #[cfg(not(unix))]
+    let signal: Option<i32> = None;
+    event(serde_json::json!({"event":"child.result", "phase":name,
+            "exit":output.status.code(), "signal":signal,
+            "stdout_bytes":output.stdout.len(), "stderr_bytes":output.stderr.len()}));
 }
 
 #[derive(Debug)]

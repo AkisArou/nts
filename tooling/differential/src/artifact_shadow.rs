@@ -81,8 +81,8 @@ pub(crate) fn jvm(
         "bench-program-jvm",
         files,
         Vec::new(),
-        vec![java, "timeout".into()],
-        json!({"timeout":super::TIMEOUT,"flags":(["-Xmx512m","-XX:MaxMetaspaceSize=128m","-XX:TieredStopAtLevel=1"].into_iter().chain(nts_codegen_jvm::toolchain::vm_flags()).collect::<Vec<_>>())}),
+        vec![java],
+        json!({"call_cpu_profile":super::CALL_BUDGETS,"supervisor":include_str!("call_activity.rs"),"flags":(["-Xmx512m","-XX:MaxMetaspaceSize=128m","-XX:TieredStopAtLevel=1"].into_iter().chain(nts_codegen_jvm::toolchain::vm_flags()).collect::<Vec<_>>())}),
     )
 }
 
@@ -129,8 +129,8 @@ pub(crate) fn oracle(dir: &Utf8Path, sources: &[nts_diagnostics::SourceFile]) ->
         "bench-oracle-node",
         files,
         absent,
-        vec!["node".into(), "timeout".into(), "prlimit".into()],
-        json!({"cpu_limit_s":super::oracle_coverage::CPU_SECONDS,"wall_limit_ms":super::oracle_coverage::WALL_MILLIS,"memory_mb":super::MEMORY_MB,"flags":["--experimental-transform-types","--import"],"supervisor":include_str!("oracle_run.rs")}),
+        vec!["node".into(), "prlimit".into()],
+        json!({"cpu_limit_s":super::oracle_coverage::CPU_SECONDS,"idle_limit_ms":super::oracle_coverage::IDLE_MILLIS,"memory_mb":super::MEMORY_MB,"flags":["--experimental-transform-types","--import"],"supervisor":include_str!("oracle_run.rs")}),
     )
 }
 

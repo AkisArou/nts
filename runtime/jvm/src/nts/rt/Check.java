@@ -36,6 +36,28 @@ public final class Check {
     private static PrintStream results;
     /** Cases answered in this run, for the {@code done} line. */
     private static long answered;
+    private static final String ACTIVITY_EVENTS = System.getenv("NTS_DIFF_CALL_EVENTS");
+    private static final String ACTIVITY_ACK = System.getenv("NTS_DIFF_CALL_ACK");
+    private static PrintStream activity;
+    private static java.io.InputStream activityAck;
+    private static long activityPid;
+    private static void activity(String event, long index) throws java.io.IOException {
+        if (ACTIVITY_EVENTS == null) return;
+        if (activity == null) {
+            // The embedded runtime targets Java 8, before ProcessHandle.
+            String identity = Files.readAllLines(Paths.get("/proc/self/stat"), StandardCharsets.UTF_8).get(0);
+            activityPid = Long.parseLong(identity.substring(0, identity.indexOf(' ')));
+            activity = new PrintStream(new FileOutputStream(ACTIVITY_EVENTS, true), true, "UTF-8");
+        }
+        activity.println("v1 " + event + " " + index + " " + activityPid);
+        if (activity.checkError()) throw new java.io.IOException("cannot publish check call activity");
+        if (activityAck == null) {
+            String ack = ACTIVITY_ACK;
+            if (ack == null) throw new java.io.IOException("missing check call acknowledgement channel");
+            activityAck = new java.io.FileInputStream(ack);
+        }
+        if (activityAck.read() != '1') throw new java.io.IOException("check call acknowledgement ended");
+    }
     private static final class Plan {
         final Method method;
         final String[] parameters;
@@ -66,7 +88,7 @@ public final class Check {
                 System.exit(2);
             }
         }
-        try { run(argv[0], from); }
+        try { activity("ready", from); run(argv[0], from); activity("done", from + answered); }
         catch (Throwable failure) {
             System.out.flush();
             Throwable cause = unwrap(failure);
@@ -105,7 +127,11 @@ public final class Check {
             long index = 0;
             for (String line = reader.readLine(); line != null; line = reader.readLine()) {
                 if (line.isEmpty()) { continue; }
-                if (index++ >= from) { one(program, plans, line); ++answered; }
+                if (index++ >= from) {
+                    activity("begin", index - 1);
+                    one(program, plans, line); ++answered;
+                    activity("end", index - 1);
+                }
             }
         }
         // **The marker, and it is what makes truncation visible.** A run that

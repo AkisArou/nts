@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawnTest } from "./test-wait.ts";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -58,6 +58,15 @@ if (name === 'invalid') {
   report.status='nothing'; Object.assign(report.counts,{functions:0,expected:0,compared:0});
   report.oracle={expected:0,received:0,complete:true};
   report.refusals=[{stage:'lowering',code:'NTS1001',message:'unsupported input'}];
+} else if (process.env.CHECK_MUTATION?.startsWith('supervisor-')) {
+  const mode=process.env.CHECK_MUTATION;
+  report.version=2;report.status='not_measured';status=1;
+  report.incomplete=[{kind:mode==='supervisor-runaway'?'runaway':'hung',reason:'owned compiled child stopped',case_index:mode==='supervisor-cleanup'?null:1}];
+  if(mode!=='supervisor-cleanup') {report.counts.compared=1;report.counts.timeouts=1;}
+  if(mode==='supervisor-wrong-hung') {
+    report.status='disagrees';report.counts.disagreements=1;
+    report.disagreements=[{compiled:'f 0 1',node:'f 0 2'}];
+  }
 } else if (process.env.CHECK_MUTATION === 'unavailable') {
   report.status='all_unavailable'; report.counts.compared=0; report.counts.unavailable=2;
 } else if (process.env.CHECK_MUTATION === 'contradiction') {
@@ -211,6 +220,22 @@ test("the real gate owner holds a hung check and retains a completed failure bef
   assert.equal(frame.kind, "hung"); assert.equal(frame.verdict, "FAIL"); assert.equal(frame.completedFailures, 1);
   const malformed = run("legacy-text"); assert.equal(malformed.status, 124, malformed.stdout + malformed.stderr);
   frame = JSON.parse(readFileSync(resultPath, "utf8")); assert.equal(frame.kind, "tooling-setup"); assert.equal(frame.verdict, "INSTRUMENT");
+});
+
+test("the actual gate owns typed per-call stops including cleanup after all answers",t=>{
+  const {root,compiler}=sandbox(t),resultPath=join(root,'instrument.json');
+  const run=(mutation:string)=>{
+    rmSync(resultPath,{force:true});
+    return spawnTest('sh',[join(root,'tooling/gate/gate.sh'),'control'],{cwd:root,encoding:'utf8',
+      env:{...process.env,NTS_BIN:compiler,CHECK_MUTATION:mutation,NTS_GATE_STEP:'examples',NTS_GATE_STEP_ATTEMPT:'call-owner',NTS_GATE_STEP_RESULT:resultPath}});
+  };
+  for(const mutation of ['supervisor-hung','supervisor-runaway','supervisor-cleanup']) {
+    const result=run(mutation);assert.equal(result.status,124,result.stdout+result.stderr);
+    const frame=JSON.parse(readFileSync(resultPath,'utf8'));
+    assert.equal(frame.kind,mutation==='supervisor-runaway'?'runaway':'hung');assert.equal(frame.verdict,'NOT RUN');
+  }
+  const red=run('supervisor-wrong-hung');assert.equal(red.status,1,red.stdout+red.stderr);
+  assert.match(red.stdout,/owned compiled child stopped/);assert.equal(existsSync(resultPath),false);
 });
 
 test("the real batch owner publishes typed setup and cleanup failures", t => {

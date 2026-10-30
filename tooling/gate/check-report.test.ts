@@ -53,7 +53,7 @@ test("a missing population, malformed schema or incomplete oracle fails closed",
   const value = report();
   const { oracle: _oracle, ...missingOracle } = value;
   assert.throws(() => parseJsonReport(JSON.stringify(missingOracle), 0), /fields/);
-  const version = { ...report(), version: 2 };
+  const version = { ...report(), version: 3 };
   assert.throws(() => parseJsonReport(JSON.stringify(version), 0), /version/);
   const incomplete = report();
   incomplete.oracle.received = 1;
@@ -61,6 +61,28 @@ test("a missing population, malformed schema or incomplete oracle fails closed",
   const empty = report("not_measured", { expected: 0, compared: 0 });
   empty.oracle = { expected: 0, received: 0, complete: true };
   assert.throws(() => parseJsonReport(JSON.stringify(empty), 1), /empty population/);
+});
+
+test("version two liveness is explicit and complete results retain their record identity", async () => {
+  const {runCheck, runConsumer, checkOutcome} = await import('../differential/check-report.ts');
+  const complete = report();
+  assert.deepEqual(checkOutcome('json-v1', 0, JSON.stringify({...complete,version:2,incomplete:[]})),
+    checkOutcome('json-v1', 0, JSON.stringify(complete)));
+  for (const kind of ['hung','runaway'] as const) {
+    const value = {...report('not_measured',{compared:1,timeouts:1}),version:2,
+      incomplete:[{kind,reason:'owned child stopped',case_index:1}]};
+    const run = async (_binary: string,args: readonly string[]) => ({status:args[0]==='--help'?0:1,signal:null,
+      out:'',stdout:args[0]==='--help'?'  check        compile, run, and compare against node (--json)\n':JSON.stringify(value),stderr:'',elapsedMs:0});
+    const held = await runCheck('v2-fixture','project',{run,env:{}});
+    assert.equal(held.incomplete?.kind,kind);
+    const bad = {...value,incomplete:[{...value.incomplete[0],kind:'unknown'}]};
+    assert.throws(()=>parseJsonReport(JSON.stringify(bad),1),/unknown supervisor/);
+    value.status='disagrees';value.counts.disagreements=1;
+    value.disagreements=[{compiled:'f 0 1',node:'f 0 2'}];
+    const red = await runConsumer('v2-fixture','project','program',{run,env:{}});
+    assert.equal(red.exitCode,1);assert.equal(red.incomplete,undefined);assert.equal(red.record.report?.incomplete?.[0]?.kind,kind);
+    assert.match(red.record.first,/owned child stopped/);
+  }
 });
 
 test("timeouts and unaccounted calls never become partial agreement", () => {

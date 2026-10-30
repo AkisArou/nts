@@ -12,13 +12,14 @@ export type CheckCounts = Record<typeof COUNT_NAMES[number], number>;
 export interface CheckRefusal { stage: "lowering" | "backend" | "typecheck"; code: string; message: string; }
 export interface CheckFailure { kind: FailureKind; source: string | null; message: string; }
 export interface CheckReport {
-  version: 1;
+  version: 1 | 2;
   status: CheckStatus;
   counts: CheckCounts | null;
   oracle: { expected: number; received: number; complete: boolean } | null;
   refusals: CheckRefusal[];
   disagreements: { compiled: string; node: string }[];
   aborts: string[];
+  incomplete?: {kind: "hung" | "runaway" | "tooling-setup"; reason: string; case_index: number | null}[];
   error: CheckFailure | null;
 }
 export type CheckFormat = "json-v1" | "legacy";

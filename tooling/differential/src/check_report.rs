@@ -1,8 +1,32 @@
 //! Versioned machine results for `nts check`; prose never decides a verdict.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 use crate::Report;
+
+/// Work the owned supervisor stopped, independently of the program's exit.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Incomplete {
+    /// The supervisor's observed stop cause.
+    pub kind: IncompleteKind,
+    /// Human-readable detail, including the measured CPU or inactivity budget.
+    pub reason: String,
+    /// Index in this compiled driver's case list, or cleanup after the list.
+    pub case_index: Option<usize>,
+}
+
+/// A supervisor observation, independent of any completed program verdict.
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum IncompleteKind {
+    /// Neither output, CPU nor completed work advanced.
+    Hung,
+    /// CPU consumed the reviewed allowance.
+    Runaway,
+    /// The verifier could not be started or its result could not be observed.
+    #[serde(rename = "tooling-setup")]
+    ToolingSetup,
+}
 
 /// A lowering or emission refusal, independent of its rendered source location.
 #[derive(Debug, Clone, Serialize)]
@@ -163,7 +187,7 @@ impl std::fmt::Display for Failure {
 }
 
 /// Serialized report schema. A new incompatible shape increments this version.
-pub const VERSION: u32 = 1;
+pub const VERSION: u32 = 2;
 
 impl Report {
     /// The disposition of this measured source population.
@@ -177,7 +201,9 @@ impl Report {
             Status::Disagrees
         } else if !self.aborts.is_empty() {
             Status::Aborted
-        } else if self.timeouts > 0 || self.checked.checked_add(self.refused) != Some(self.expected)
+        } else if !self.incomplete.is_empty()
+            || self.timeouts > 0
+            || self.checked.checked_add(self.refused) != Some(self.expected)
         {
             Status::NotMeasured
         } else if self.unavailable == self.expected && self.expected > 0 {
@@ -222,6 +248,7 @@ impl Report {
                 serde_json::json!({ "compiled": compiled, "node": node })
             }).collect::<Vec<_>>(),
             "aborts": self.aborts,
+            "incomplete": self.incomplete,
             "error": null,
         })
     }
@@ -239,6 +266,7 @@ pub fn error_json(error: &anyhow::Error) -> serde_json::Value {
         "refusals": failure.map_or_else(Vec::new, |failure| failure.refusals.clone()),
         "disagreements": [],
         "aborts": [],
+        "incomplete": [],
         "error": {
             "kind": failure.map_or(FailureKind::Internal, |failure| failure.kind),
             "source": failure.and_then(|failure| failure.source.as_deref()),
