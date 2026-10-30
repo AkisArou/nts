@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-loop-inlined-at-its-call-keeps-its-jvm-stackmap",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-loop-inlined-at-its-call-keeps-its-jvm-stackmap/src/main.ts",
+      "signature": "ccefb3dbdb2508046bff9546e1ac1d54c1288b146e4dbd6feaaf17378a2a26c4",
+      "keys": {
+        "c": "99fb9affa639910216849561ded95798",
+        "jvm": "604c495445ebf3abc6f3a0650539ff35",
+        "llvm": "f4fb3ecc3d815924d460c5873c1ff6c9"
+      },
+      "cases_sha256": "359ae1af2fa2c54b47100e95737325335ac58db393f1de795f2477c15b88fc79",
+      "driver_sha256": "7d39486197becce85630534c474dc8bba37d0cf65a535c91c0719e979bc4011f",
+      "populations": {
+        "work": {
+          "count": 5,
+          "cases_sha256": "359ae1af2fa2c54b47100e95737325335ac58db393f1de795f2477c15b88fc79"
+        }
+      },
+      "complete": true,
+      "count": 5
+    }
+  ]
+}

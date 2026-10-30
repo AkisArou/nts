@@ -22,6 +22,7 @@
 # and a MISSING is not something a pin can hold.
 # (I): a closure call's arguments were loaded unchecked; they are now checked as a direct call's,
 # so http's Socket-for-HTTPDuplex is a named decline rather than a VerifyError in Program.
+# (J): a branch to bytecode offset 0 with no explicit frame.
 # (C) and most of the closure-slot declines: one abstract root every callable class extends
 # (`types::callable_class`) -- 81 closure-store declines -> 32, and readline verifies whole.
 # Then the heterogeneous tuple (602f496c8, lowering): dns, dgram, net, http and process verify whole, and
@@ -34,3 +35,4 @@
 runtime/node/child_process	(E) ChildWritable, referenced and never written -- lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), and Program references a ClosureN beside it; the first failure since (F) cleared (jvm lane, 2026-09-29)
 runtime/node/cluster	(E) ChildWritable, as child_process's: lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), so the class is never written. The tuple that stood in front of it cleared in 602f496c8 (jvm lane, 2026-09-30)
 runtime/node/perf_hooks	(E) PerformanceNodeTiming and PerformanceResourceTiming, declined under NTS4009 and never written: their `toJSON` returns a JSON record that repeats PerformanceEntryJSON's fields with no `extends`, so the covariant return has no class relation to bridge. The agreed fix is an inferred parent (override-keyed, assignability-only, its own field), after the tuple; the tuple that stood in front of it cleared in 602f496c8 (jvm lane, 2026-09-30)
+tests/outcomes/a-method-loop-at-entry-misses-its-jvm-stackmap	(J) AWFY Json: the entry loop in Parser#skipWhiteSpace branches to bytecode offset 0 without its stackmap frame; the one-call-site inline-loop control verifies.	pin: invalid=Program.Parser$skipWhiteSpace

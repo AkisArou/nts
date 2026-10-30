@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "aborted",
+    "counts": {
+      "functions": 1,
+      "expected": 5,
+      "compared": 0,
+      "unavailable": 0,
+      "runtime_declined": 5,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 5
+    },
+    "oracle": {
+      "expected": 5,
+      "received": 5,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [
+      "java.lang.VerifyError: Expecting a stackmap frame at branch target 0",
+      "java.lang.VerifyError: Expecting a stackmap frame at branch target 0",
+      "java.lang.VerifyError: Expecting a stackmap frame at branch target 0",
+      "java.lang.VerifyError: Expecting a stackmap frame at branch target 0",
+      "java.lang.VerifyError: Expecting a stackmap frame at branch target 0"
+    ],
+    "error": null
+  },
+  "run": "check",
+  "category": "aborted",
+  "nts": "java.lang.VerifyError: Expecting a stackmap frame at branch target 0",
+  "node": null,
+  "measured_with": "8cd7672f642c5e62",
+  "source": "measured"
+}
