@@ -73,7 +73,7 @@ test("integrity holds a spawn error before decoding tempting complete output",()
 for(const order of ["mixed-hang-first","mixed-setup-first"]){
   for(const failed of [false,true])test(`integrity retains setup beside hung listings (${order}, completed failure=${failed})`,()=>{
     const result=probe(order,failed);assert.equal(result.status,124,result.stdout+result.stderr);
-    assert.equal(result.frame.kind,"tooling-setup");assert.equal(result.frame.verdict,"NOT RUN");
+    assert.equal(result.frame.kind,"tooling-setup");assert.equal(result.frame.verdict,"INSTRUMENT");
     assert.match(result.stdout,/SIGTERM/);assert.match(result.stdout,/NOT RUN \(hung\)/);
     if(failed)assert.match(result.stdout,/call-resolves/);
   });

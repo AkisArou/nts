@@ -158,7 +158,7 @@ if [ "$2" = --prepared ] && [ "$NTS_COUNTER_TEST_ENDING" = signal ]; then kill -
       assert.equal(result.status, 124, result.stdout + result.stderr);
       const observation=JSON.parse(readFileSync(frame,"utf8"));
       assert.equal(observation.kind,"tooling-setup");
-      assert.equal(observation.verdict,"NOT RUN");
+      assert.equal(observation.verdict,"INSTRUMENT");
       assert.match(observation.reason,/counter run (?:ended by|exited)/);
       assert.match(result.stdout, /NOT MEASURED/);
       assert.ok(row.counter_error);
