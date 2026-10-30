@@ -221,13 +221,14 @@ TypeScript's checker cannot see C writing to it.
 - **A pointer the program stores into a struct object, a `CArray` or a `Ref`
   holds its target.** After `iov.iov_base = bytes`, `iov`'s object keeps
   `bytes` alive until another value or `null` is stored there, or the object
-  dies; C overwriting the field releases nothing. The field reads back as a
-  `Ptr` (C may have moved it), and a string stored into a `const char *` field
-  holds its converted copy. The object holds the target, not C's copies of the
-  struct: `uv_write` copies its `uv_buf_t` array, so the program keeps the
-  `CArray` until the write completes. Memory C owns cannot hold an nts value,
-  so such a store through a `Ptr<T>` is refused; `cstring` or `malloc` make C
-  memory for it.
+  dies. nts never inspects what C writes to the field: a C write releases
+  nothing and holds nothing, since C may keep its own copy of the old pointer.
+  The field reads back as a `Ptr` (C may have moved it), and a string stored
+  into a `const char *` field holds its converted copy. The object holds the
+  target, not C's copies of the struct: `uv_write` copies its `uv_buf_t`
+  array, so the program keeps the `CArray` until the write completes. Memory C
+  owns cannot hold an nts value, so such a store through a `Ptr<T>` is
+  refused; `cstring` or `malloc` make C memory for it.
 
 ## Strings
 
