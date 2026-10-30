@@ -45,8 +45,10 @@ public final class nts.gen.Program {
   public static nts.rt.NtsSet<java.lang.String> labels();
   public static void eachUpTo(double, nts.gen.erased.Callable);
   public static double triangle(double);
-  public static int answer();
-  public static double echoed(int);
+  public static int answer$nts$uint32();
+  public static long answer();
+  public static double echoed$nts$uint32(int);
+  public static double echoed(long);
   public static int below();
   public static int negated(int);
   public static nts.rt.NtsValue Closure0$erased_call(nts.gen.Closure0, nts.rt.NtsValue, nts.rt.NtsValue);
