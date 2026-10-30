@@ -1,3 +1,25 @@
+// This code is derived from the SOM benchmarks, see AUTHORS.md file.
+//
+// Copyright (c) 2015-2016 Stefan Marr <git@stefan-marr.de>
+//
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the 'Software'), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+//
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+//
+// THE SOFTWARE IS PROVIDED 'AS IS', WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
 // The collections of `som.js` the macro benchmarks use: `deltablue`, `havlak`,
 // `cd` and `json`.
 //
@@ -23,9 +45,9 @@ const INITIAL_CAPACITY = 16;
 export type Comparator<E> = (a: E, b: E) => boolean;
 
 export class Vector<E> {
-  storage: E[] | null;
-  firstIdx: number;
-  lastIdx: number;
+  declare storage: E[] | null;
+  declare firstIdx: number;
+  declare lastIdx: number;
 
   constructor(size?: number) {
     this.storage = size === undefined || size === 0 ? null : new Array(size);
@@ -235,7 +257,7 @@ export class Vector<E> {
 }
 
 export class Set<E> {
-  items: Vector<E>;
+  declare items: Vector<E>;
 
   constructor(size?: number) {
     this.items = new Vector<E>(size === undefined ? INITIAL_SIZE : size);
@@ -295,10 +317,10 @@ export interface CustomHash {
 }
 
 export class DictEntry<K, V> {
-  hash: number;
-  key: K;
-  value: V;
-  next: DictEntry<K, V> | null;
+  declare hash: number;
+  declare key: K;
+  declare value: V;
+  declare next: DictEntry<K, V> | null;
 
   constructor(hash: number, key: K, value: V, next: DictEntry<K, V> | null) {
     this.hash = hash;
@@ -321,8 +343,8 @@ function hashFn(key: CustomHash): number {
 }
 
 export class Dictionary<K extends CustomHash, V> {
-  buckets: (DictEntry<K, V> | null | undefined)[];
-  size_: number;
+  declare buckets: (DictEntry<K, V> | null | undefined)[];
+  declare size_: number;
 
   constructor(size?: number) {
     this.buckets = new Array(size === undefined ? INITIAL_CAPACITY : size);
