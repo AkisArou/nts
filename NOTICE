@@ -10,3 +10,16 @@ notice texts and generated inventories are in licenses/ (README.md, packages.jso
 vendor-projects.json, vendored-data.json, components.json and texts/); include that directory with compiler binary
 distributions. The nts runtime needs no notice in compiled programs.
 Third-party components linked into a program retain their own notice requirements.
+
+The TypeScript library declaration files embedded in the nts compiler contain
+MDN Web Docs documentation by Mozilla Contributors, licensed under Creative
+Commons Attribution-ShareAlike 2.5 (CC BY-SA 2.5), or any later version:
+https://creativecommons.org/licenses/by-sa/2.5/
+https://developer.mozilla.org/en-US/docs/MDN/Writing_guidelines/Attrib_copyright_license
+The documentation is incorporated as declaration comments; their MDN Reference
+links identify the original pages.
+
+Full third-party notices for the embedded TypeScript libraries, including W3C,
+WHATWG, Web Background Synchronization and Khronos, are shipped through the
+third_party/tsrs NOTICE entry in licenses/README.md. The TypeScript declaration
+files are compiler inputs and are not embedded in programs produced by nts.
