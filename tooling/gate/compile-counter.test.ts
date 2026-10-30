@@ -1,6 +1,6 @@
 import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -144,16 +144,22 @@ if [ "$2" = --prepared ] && [ "$NTS_COUNTER_TEST_ENDING" = signal ]; then kill -
   chmodSync(nts, 0o755);
   for (const ending of ["ok", "signal"]) {
     const kept = join(dir, ending);
+    const frame = join(dir, `${ending}-instrument.json`);
     const result = spawnTest(process.execPath, [fileURLToPath(new URL("../conformance/integrity.ts", import.meta.url)), "runtime/node/counter-test"], {
       encoding: "utf8", env: { ...process.env, NTS_BIN: nts, NTS_INTEGRITY_KEEP: kept, NTS_COUNTER_TEST_ENDING: ending,
-        NTS_GATE_COSTS_DIR: join(dir, "costs"), NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_CASE_COSTS_DIR: "", NTS_GATE_RUN_DIR: dir },
+        NTS_GATE_COSTS_DIR: join(dir, "costs"), NTS_GATE_TOKENS: "", NTS_GATE_TOKEN_HELD: "1", NTS_GATE_CASE_COSTS_DIR: "", NTS_GATE_RUN_DIR: dir, NTS_GATE_STEP: "integrity", NTS_GATE_STEP_ATTEMPT: "counter-control", NTS_GATE_STEP_RESULT: frame },
     });
     const row = JSON.parse(readFileSync(join(kept, "runtime_node_counter-test.json"), "utf8"));
     if (ending === "ok") {
       assert.equal(result.status, 0, result.stdout + result.stderr);
       assert.equal(row.counter_error, null);
+      assert.equal(existsSync(frame), false, "successful integrity must leave no instrument frame");
     } else {
-      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.equal(result.status, 124, result.stdout + result.stderr);
+      const observation=JSON.parse(readFileSync(frame,"utf8"));
+      assert.equal(observation.kind,"tooling-setup");
+      assert.equal(observation.verdict,"NOT RUN");
+      assert.match(observation.reason,/counter run (?:ended by|exited)/);
       assert.match(result.stdout, /NOT MEASURED/);
       assert.ok(row.counter_error);
     }

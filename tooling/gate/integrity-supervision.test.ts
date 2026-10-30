@@ -19,8 +19,12 @@ function probe(behavior:string,failed=false,entry=INTEGRITY){
 const args=process.argv.slice(2),project=args.at(-1);
 const body=process.env.CONTROL_FAILED==="1"&&project.endsWith("a-completed")?"  %0 = call absent()\\n":"";
 if(args[0]==="hir")process.stdout.write("func control() -> void {\\n"+body+"}\\n\\n1 function(s), nothing refused\\n");
+if(project.endsWith("b-pending")&&args[0]==="hir"&&process.env.CONTROL_BEHAVIOR.startsWith("mixed-")){
+  if((args[1]==="--prepared")===(process.env.CONTROL_BEHAVIOR==="mixed-hang-first"))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
+  else process.kill(process.pid,"SIGTERM");
+}
 if(project.endsWith("b-pending")&&args[0]==="hir"&&args[1]!=="--prepared"){
-  if(process.env.CONTROL_BEHAVIOR==="busy"){
+  if(["busy","runaway"].includes(process.env.CONTROL_BEHAVIOR)){
     const start=process.cpuUsage();while(process.cpuUsage(start).user+process.cpuUsage(start).system<600000){}
   }else if(process.env.CONTROL_BEHAVIOR==="signal")process.kill(process.pid,"SIGTERM");
   else Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);
@@ -30,7 +34,7 @@ if(project.endsWith("b-pending")&&args[0]==="hir"&&args[1]!=="--prepared"){
 const actual=await import(${JSON.stringify(ACTIVE)});
 mock.module(${JSON.stringify(ACTIVE)},{namedExports:{...actual,activeCommand:(command,args,options)=>
   process.env.CONTROL_BEHAVIOR==="spawn-error"?Promise.resolve({status:0,signal:null,stdout:"func control() -> void {\\n}\\n1 function(s), nothing refused\\n",stderr:"",out:"",elapsedMs:0,error:new Error("spawn failed after a tempting listing")}):
-  actual.activeCommand(command,args,{...options,idleMs:300,pollMs:10,cpuBudgetSeconds:5})}});
+  actual.activeCommand(command,args,{...options,idleMs:300,pollMs:10,cpuBudgetSeconds:process.env.CONTROL_BEHAVIOR==="runaway"&&args[0]==="hir"&&args[1]!=="--prepared"&&args.at(-1).endsWith("b-pending")?0.1:5})}});
 process.argv=[process.execPath,${JSON.stringify(entry)},"runtime/node/a-completed","runtime/node/b-pending"];
 await import(${JSON.stringify(entry)});
 `;
@@ -64,4 +68,18 @@ test("integrity holds a signalled listing instead of parsing its valid prefix",(
 test("integrity holds a spawn error before decoding tempting complete output",()=>{
   const result=probe("spawn-error");assert.equal(result.status,124,result.stdout+result.stderr);
   assert.equal(result.frame.kind,"tooling-setup");assert.match(result.stdout,/spawn failed after a tempting listing/);
+});
+
+for(const order of ["mixed-hang-first","mixed-setup-first"]){
+  for(const failed of [false,true])test(`integrity retains setup beside hung listings (${order}, completed failure=${failed})`,()=>{
+    const result=probe(order,failed);assert.equal(result.status,124,result.stdout+result.stderr);
+    assert.equal(result.frame.kind,"tooling-setup");assert.equal(result.frame.verdict,"NOT RUN");
+    assert.match(result.stdout,/SIGTERM/);assert.match(result.stdout,/NOT RUN \(hung\)/);
+    if(failed)assert.match(result.stdout,/call-resolves/);
+  });
+}
+for(const failed of [false,true])test(`integrity publishes CPU-budget evidence after draining completed failures (${failed})`,()=>{
+  const result=probe("runaway",failed);assert.equal(result.status,failed?1:124,result.stdout+result.stderr);
+  assert.equal(result.frame.kind,"runaway");assert.equal(result.frame.verdict,failed?"FAIL":"NOT RUN");
+  assert.equal((result.frame.completedFailures??0)>0,failed);
 });

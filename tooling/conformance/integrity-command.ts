@@ -41,6 +41,7 @@ export function integrityListingFailure(result:ListingResult,label:string,expect
 /** A valid completed violation outranks liveness, using the shared authority. */
 export function finishIntegrity(incomplete:readonly unknown[],completedFailures:number,env=process.env):number{
   if(!incomplete.length)return completedFailures?1:0;
-  const chosen=incomplete.find(error=>checkFailurePolicy(error,completedFailures).disposition!=="verdict")??incomplete[0];
+  const chosen=incomplete.find(error=>!(error instanceof CommandNotMeasuredError)&&checkFailurePolicy(error,completedFailures).disposition==="operator-hold")
+    ??incomplete.find(error=>checkFailurePolicy(error,completedFailures).disposition!=="verdict")??incomplete[0];
   return reportCheckFailure(chosen,env,completedFailures);
 }

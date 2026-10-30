@@ -1348,7 +1348,8 @@ async function scan(project) {
   const results = await Promise.all(commands.map(([, args]) => run(args).catch(error=>({error,stdout:"",stderr:""}))));
   cost[project] = (Date.now() - began) / 1000;
   keep(project, results[0]);
-  for (const [i, [key, args]] of commands.entries()) {
+  let projectIncomplete=false;
+  for (const [i, [, args]] of commands.entries()) {
     const done = results[i];
     // The wrapper expresses command signals as nonzero statuses. Counter
     // failure must remain a not-measured listing, even if output was complete.
@@ -1356,8 +1357,12 @@ async function scan(project) {
     if (failure) {
       incomplete.push(failure);
       unmeasured.push(`${project}: nts ${args[0]} ${failure instanceof Error?failure.message:String(failure)}`);
-      return;
+      projectIncomplete=true;
     }
+  }
+  if(projectIncomplete)return;
+  for(const [i,[key]] of commands.entries()){
+    const done=results[i];
     // Diagnostics (the cascades) arrive on stderr beside the listing.
     listings[key] = key === "refusals" ? done.stdout : `${done.stdout}${done.stderr}`;
   }
