@@ -1,6 +1,6 @@
 # Builtins
 
-**Status:** approved by the user; stages 1 and 2 are partly built.
+**Status:** approved by the user; stages 1 and 2 are built.
 It carries out the eleven decisions listed at the end. The study it comes from,
 with its 51 probes, is [in the records](../records/notebooks/studies/builtins.md),
 with [its prior art](../records/notebooks/studies/builtins-prior-art.md).
@@ -15,9 +15,9 @@ implementation of each builtin.
 
 | | today |
 |---|---|
-| **What exists** | One name list in the compiler decides which globals exist, for every target at once: `PROVIDED_GLOBALS` in `compiler/core/src/hir/builtin.rs`, plus the lowering it names. |
+| **What exists** | One table in the compiler decides which globals and members exist, for every target at once: `ROOTS` in `compiler/core/src/hir/features/compiler.rs`, with the error and typed-array rows taken from `ERRORS` and `TYPED_ARRAYS` in `hir/builtin.rs`. It is published as the compiler's manifest, `compiler/core/providers/manifest.json`, which a test regenerates and compares byte for byte. No manifest or profile chooses between providers yet. |
 | **A missing builtin** | NTS1100 names it and its feature: `` `Date.now` (es:Date) is not provided by this compiler ``. It stops `nts build` before anything is written. NTS1101 is a builtin no target will provide (`eval`). The inspection commands still compile what they can. |
-| **Feature identity** | Each symbol a library declares records its library (`SymbolRecord::library`: `es`, `dom`, `node`, or a package's name). One classifier decides it: `Library::of_path`. |
+| **Feature identity** | Each symbol a library declares records its library (`SymbolRecord::library`: `es`, `dom`, `node`, or a package's name). One classifier decides it: `Library::of_path`. A symbol in the checker's global scope is also marked as the global value or global type it is (`GLOBAL_VALUE`, `GLOBAL_TYPE`); a local name or import alias that shares a global's name gets no mark. |
 | **Per-backend helpers** | A source can test `typeof nts_helper === "function"` on an `@ntsAbi intrinsic` declaration. Each backend's preparation answers it from that backend's own helper table (`hir/features.rs`). So one TypeScript source calls a native helper where it exists and runs its own body elsewhere. |
 | **Chromium** | 374 `@ntsBoundBy` tags bind lib.dom's declarations to Blink through `nts:dom`. Whether a tag or the compiler's own intrinsic wins depends on whether the overlay file is in the program, and on code order in lowering. |
 | **The event loop** | The only per-target provider choice that is built (`LoopHost`). It is guessed from the link flags (`loop_host()` in `tooling/cli/src/main.rs`). |
@@ -234,10 +234,13 @@ its result are [in the records](../records/notebooks/studies/v8-math-random.md).
 ## Where each piece lives
 
 - **The resolver:** `build/src/features/`.
+- **The compiler's provider table:** `compiler/core/src/hir/features/compiler.rs`.
+  `cargo run -p nts-differential --bin compiler-providers -- --write` publishes
+  it as `compiler/core/providers/manifest.json`.
 - **The binding table:** `compiler/core/src/hir/features.rs`, grown from
   today's helper slice. It replaces the name lists spread through lowering
-  (`PROVIDED_GLOBALS`, `primitive_builtin`, `intrinsic_of`, `console_method`,
-  `math_member` and the rest).
+  (`primitive_builtin`, `intrinsic_of`, `console_method`, `math_member` and the
+  rest).
 - **Profiles:** `tooling/config/src/profiles.ts`.
 - **Records:** `tests/providers/`.
 
@@ -255,8 +258,8 @@ its result are [in the records](../records/notebooks/studies/v8-math-random.md).
 
 | # | stage | state |
 |---|---|---|
-| 1 | One diagnostic: NTS1100, fatal on every backend. The study's 51 probes become refusal fixtures, each with a control. `hir::Provider` is renamed `hir::Memory`. | NTS1100 and NTS1101 built, and fatal for `nts build`; the rename built; the probe fixtures open |
-| 2 | Feature identity, and the compiler's table | `SymbolRecord::library` and the helper slice of `features.rs` built; the compiler's provider table, with members, open |
+| 1 | One diagnostic: NTS1100, fatal on every backend. The study's 51 probes become refusal fixtures, each with a control. `hir::Provider` is renamed `hir::Memory`. | built: NTS1100 and NTS1101, fatal for `nts build`; the rename; all 51 probes under `tests/refusals/builtin-study-*`, each with a control program. A probe whose builtin also meets a lowering gap refuses with the gap's diagnostic until stage 3's classifier tells a missing provider from a lowering gap; a probe the compiler now lowers stays as a guard |
+| 2 | Feature identity, and the compiler's table | built: `SymbolRecord::library` and the global identity marks; the helper slice of `features.rs`; the compiler's provider table, with its members and limits |
 | 3 | Manifests, profiles and the resolver, encoding exactly what exists today. `host:loop` replaces `loop_host()`. `nts providers` and a census step. | open |
 | 4 | One binding table in lowering. `nts:dom` binds by name, and the overlay goes. | open |
 | 5 | The first providers: `AbortController` and the event classes as source; `TextEncoder`, `TextDecoder`, `atob` and `btoa` over `runtime/c`'s SIMD conversions (`host:utf8`, `host:base64`); `JSON.stringify`, which the compiler already generates per type, through the provider table | open |
