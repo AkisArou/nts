@@ -58,10 +58,14 @@ test("a private view preserves working inputs and is deleted after comparison", 
   const f = fixture(t);
   f.put(f.source, "export function work(n: number): number { return 2; }\n");
   f.put("tests/programs/example/src/new-input.ts", "export const current = 3;\n");
+  const registry=f.git("worktree","list","--porcelain");
   const snapshot = comparisonOracleRoot(f.root, [f.old, f.current], f.cache);
   const view = join(snapshot.root, "results/oracle-counts.json");
   try {
     assert.equal(snapshot.legacy, true); assert.notEqual(snapshot.root, f.root);
+    const viewCommon=execFileSync("git",["rev-parse","--path-format=absolute","--git-common-dir"],{cwd:snapshot.root,encoding:"utf8"}).trim();
+    assert.notEqual(viewCommon,f.git("rev-parse","--path-format=absolute","--git-common-dir"),"the view must own Git metadata");
+    assert.equal(f.git("worktree","list","--porcelain"),registry,"the source registry must stay unchanged");
     assert.deepEqual(JSON.parse(readFileSync(view, "utf8")), f.table);
     for (const path of [f.source, "tests/programs/example/src/new-input.ts"]) assert.deepEqual(readFileSync(join(snapshot.root, path)), readFileSync(join(f.root, path)));
     assert.equal(existsSync(join(f.root, "results/oracle-counts.json")), false);
@@ -127,15 +131,31 @@ test("an old unrecorded fixture is never admitted as a newly measured directory"
   } finally { snapshot.dispose(); }
 });
 
-test("concurrent comparison roots have distinct Git registry basenames", t => {
+test("concurrent comparison clones own their metadata and never change the source registry", t => {
   const f = fixture(t), worker = join(dirname(f.root), "bridge-worker.mjs");
   const module = new URL("../differential/legacy-oracle-root.ts", import.meta.url).href;
-  writeFileSync(worker, `import {parentPort,workerData} from 'node:worker_threads';import {comparisonOracleRoot} from ${JSON.stringify(module)};const view=comparisonOracleRoot(workerData.root,[workerData.binary],workerData.cache);parentPort.on('message',()=>{view.dispose();parentPort.close();});parentPort.postMessage(view.root);`);
-  const code = `import assert from 'node:assert/strict';import {Worker} from 'node:worker_threads';import {basename} from 'node:path';
+  const registry = f.git("worktree", "list", "--porcelain"), head = f.git("rev-parse", "HEAD");
+  const common = f.git("rev-parse", "--path-format=absolute", "--git-common-dir");
+  writeFileSync(worker, `import {parentPort,workerData} from 'node:worker_threads';import {execFileSync} from 'node:child_process';import {comparisonOracleRoot} from ${JSON.stringify(module)};
+const view=comparisonOracleRoot(workerData.root,[workerData.binary],workerData.cache);
+const git=(...args)=>execFileSync('git',args,{cwd:view.root,encoding:'utf8'}).trim();
+parentPort.on('message',()=>{view.dispose();parentPort.close();});
+parentPort.postMessage({root:view.root,common:git('rev-parse','--path-format=absolute','--git-common-dir'),head:git('rev-parse','HEAD')});`);
+  const code = `import assert from 'node:assert/strict';import {Worker} from 'node:worker_threads';import {join} from 'node:path';import {execFileSync} from 'node:child_process';import {existsSync,readFileSync} from 'node:fs';
 const workers=Array.from({length:2},()=>new Worker(${JSON.stringify(worker)},{execArgv:[],workerData:${JSON.stringify({root:f.root,binary:f.old,cache:f.cache})}}));
-try{const roots=await Promise.all(workers.map(worker=>new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject);})));assert.equal(new Set(roots.map(path=>basename(path))).size,2);const exits=workers.map(worker=>new Promise((resolve,reject)=>{worker.once('exit',status=>status===0?resolve():reject(new Error('worker exit '+status)));worker.once('error',reject);}));workers.forEach(worker=>worker.postMessage('dispose'));await Promise.all(exits);console.log('distinct concurrent registry identities');}finally{await Promise.all(workers.map(worker=>worker.terminate()));}`;
+const registry=()=>execFileSync('git',['worktree','list','--porcelain'],{cwd:${JSON.stringify(f.root)},encoding:'utf8'}).trim();
+try{
+ const views=await Promise.all(workers.map(worker=>new Promise((resolve,reject)=>{worker.once('message',resolve);worker.once('error',reject);}))); 
+ assert.equal(new Set(views.map(view=>view.common)).size,2);
+ assert.equal(registry(),${JSON.stringify(registry)});
+ for(const view of views){assert.equal(view.common,join(view.root,'.git'));assert.notEqual(view.common,${JSON.stringify(common)});assert.equal(view.head,${JSON.stringify(head)});assert.equal(readFileSync(join(view.common,'objects/info/alternates'),'utf8').trim(),join(${JSON.stringify(common)},'objects'));}
+ const exits=workers.map(worker=>new Promise((resolve,reject)=>{worker.once('exit',status=>status===0?resolve():reject(new Error('worker exit '+status)));worker.once('error',reject);}));
+ workers[0].postMessage('dispose');await exits[0];assert.equal(existsSync(views[0].root),false);assert.equal(existsSync(views[1].common),true);assert.equal(registry(),${JSON.stringify(registry)});
+ workers[1].postMessage('dispose');await exits[1];assert.equal(existsSync(views[1].root),false);assert.equal(registry(),${JSON.stringify(registry)});
+ console.log('independent concurrent metadata and owned cleanup');
+}finally{await Promise.all(workers.map(worker=>worker.terminate()));}`;
   const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], {encoding: "utf8"});
   assert.equal(result.status, 0, result.stdout + result.stderr);
-  assert.match(result.stdout, /distinct concurrent registry identities/);
+  assert.match(result.stdout, /independent concurrent metadata and owned cleanup/);
   assert.deepEqual(readdirSync(f.cache), []);
 });

@@ -41,26 +41,29 @@ export function comparisonOracleRoot(root: string, binaries: string[], cache: st
   let disposed = false;
   function dispose(): void {
     if (disposed) return;
-    disposed = true;
-    // Always remove the derived view before the checkout, including failures.
-    for (const snapshot of snapshots) {
-      rmSync(join(snapshot, "results/oracle-counts.json"), { force: true });
-      git(root, ["worktree", "remove", "--force", snapshot]);
-    }
+    // These clones are temporary comparison views, never retained compiler pins.
+    // Their alternates require the frozen source and its object store to remain
+    // present and not be garbage-collected until the owning comparison disposes.
+    // Setup failures and normal/exceptional exits remove all clone-owned metadata.
     rmSync(directory, { recursive: true, force: true });
+    disposed = true;
   }
   try {
     const current = readRecords(root);
+    const head = git(root, ["rev-parse", "--verify", "HEAD^{commit}"]).trim();
     for (const binary of legacy) {
       const commit = provenanceOf(binary)!.sha;
       const existing = byCommit.get(commit);
       if (existing) { byBinary.set(resolve(root, binary), existing); continue; }
       const snapshot = join(directory, `${basename(directory)}-${snapshots.length}`);
-      git(root, ["worktree", "add", "--quiet", "--detach", snapshot, "HEAD"]);
+      // Independent metadata avoids Git observing another view's half-created
+      // worktree registry entry. Only immutable objects are shared via alternates.
+      git(root, ["clone", "--shared", "--no-checkout", "--quiet", "--", root, snapshot]);
       snapshots.push(snapshot);
+      git(snapshot, ["checkout", "--quiet", "--detach", head]);
       // Both compilers get precisely the candidate's current fixture bytes,
       // including a contributor's uncommitted tracked and untracked sources.
-      const diff = execFileSync("git", ["diff", "--binary", "HEAD", "--"], { cwd: root, maxBuffer: 256 * 1024 * 1024 });
+      const diff = execFileSync("git", ["diff", "--binary", head, "--"], { cwd: root, maxBuffer: 256 * 1024 * 1024 });
       if (diff.length) git(snapshot, ["apply", "--binary", "-"], diff);
       const untracked = git(root, ["ls-files", "--others", "--exclude-standard", "-z"]).split("\0").filter(Boolean);
       for (const path of untracked) {
