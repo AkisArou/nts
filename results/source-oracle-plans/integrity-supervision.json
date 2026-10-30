@@ -1,0 +1,221 @@
+{
+  "version": 1,
+  "source": "3c6903be828b",
+  "base": "c5549ea5ac3d",
+  "supervisor": "shared activeCommand CPU/activity and owner-completed-failure policy; no wall-clock verdict",
+  "source_files": [
+    {
+      "path": "tooling/conformance/integrity.ts",
+      "sha256": "fbe214a8a7d90daf7ac70b3742531383fb6b73391d6504803c4f3d5e654c269e"
+    },
+    {
+      "path": "tooling/conformance/integrity-command.ts",
+      "sha256": "c505f4c2dd90f988a905c5d0600a67a4337dbd2af1fa065747e27e71fee7617d"
+    },
+    {
+      "path": "tooling/gate/integrity-supervision.test.ts",
+      "sha256": "86e13499ca5830242dddf86ba77f330948ebb3b5119c86f1931a0bad410c1a0e"
+    },
+    {
+      "path": "tooling/gate/compile-counter.test.ts",
+      "sha256": "675dd153d05746230966e821359acb62953bca2db23ac066ef164d29736097b8"
+    },
+    {
+      "path": "tooling/gate/test-timing-reviewed.ts",
+      "sha256": "0a2025770db830bfe3418b18bff7d3bc983c3206849c586c80f3fa41ad69c902"
+    }
+  ],
+  "prior_train": {
+    "commit": "893ab09c40fc",
+    "run": "/home/akisarou/.cache/nts-land/runs/893ab09c40fc-1793320356406",
+    "compiler": {
+      "path": "/home/akisarou/.cache/nts-parallel-20261004/mainctl/gate-target/release/nts",
+      "sha256": "71d588db456371b0fb3b54c4e5513d15cf8113eb84973ed7c4e05b73592b94f9",
+      "pinned": "/home/akisarou/.cache/nts-gate/bin/71d588db456371b0fb3b54c4e5513d15cf8113eb84973ed7c4e05b73592b94f9/nts"
+    },
+    "passed_steps": 49,
+    "nonpass": [
+      {
+        "name": "integrity",
+        "verdict": "FAIL",
+        "reason": "exit 1",
+        "exit": 1,
+        "instrument": null
+      },
+      {
+        "name": "on-device",
+        "verdict": "SKIPPED",
+        "reason": "SKIP: no device",
+        "exit": 77,
+        "instrument": null
+      },
+      {
+        "name": "bench-agree",
+        "verdict": "NOT RUN",
+        "reason": "check NOT RUN (hung): /home/akisarou/.cache/nts-check-consumers/run-AO8oDR/awfy-permute.tsconfig.json; 1 calls did not complete",
+        "exit": 124,
+        "instrument": {
+          "version": 1,
+          "verdict": "NOT RUN",
+          "kind": "hung",
+          "step": "bench-agree",
+          "attempt": "/home/akisarou/.cache/nts-land/runs/893ab09c40fc-1793320356406",
+          "reason": "check NOT RUN (hung): /home/akisarou/.cache/nts-check-consumers/run-AO8oDR/awfy-permute.tsconfig.json; 1 calls did not complete"
+        }
+      }
+    ],
+    "disposition": "held, never attributed or halved",
+    "withdrawal": {
+      "state": "withdrawn",
+      "run": "/home/akisarou/.cache/nts-land/runs/893ab09c40fc-1793320356406",
+      "message": "93c3a0de7534 withdrawn while held; bench-agree: check NOT RUN (hung): /home/akisarou/.cache/nts-check-consumers/run-AO8oDR/awfy-permute.tsconfig.json; 1 calls did not complete"
+    }
+  },
+  "compiler_production": "git diff 893ab09c40fc..3c6903be8 is empty over compiler/core/src, compiler/codegen, tooling/cli/src and tooling/differential/src",
+  "real_recursion_probe": {
+    "stage": {
+      "name": "actual-recursion",
+      "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+      "args": [
+        "tooling/conformance/integrity.ts",
+        "tests/refusals/polymorphic-recursion-exhausts-the-decomposer"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 647105
+    },
+    "projects": 1,
+    "functions": 0,
+    "violations": 0,
+    "all_four_listings_completed": true,
+    "evidence": "/home/akisarou/.cache/nts-tmp/helper2-integrity-supervision/actual-recursion.log",
+    "carry": "Command runner is unchanged on the no-failure path; later correction retains additional failed siblings before decode. Counted-profile rebasing is irrelevant to this uncounted refusal project."
+  },
+  "final_qualification": {
+    "source": "3c6903be8",
+    "stages": [
+      {
+        "name": "strict",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "node_modules/typescript/bin/tsc",
+          "--ignoreConfig",
+          "--noEmit",
+          "--strict",
+          "--skipLibCheck",
+          "--allowJs",
+          "--target",
+          "esnext",
+          "--module",
+          "nodenext",
+          "--moduleResolution",
+          "nodenext",
+          "--allowImportingTsExtensions",
+          "--types",
+          "node",
+          "tooling/conformance/integrity-command.ts",
+          "tooling/gate/integrity-supervision.test.ts"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 74
+      },
+      {
+        "name": "focused",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "--test",
+          "tooling/gate/integrity.test.mjs",
+          "tooling/gate/integrity-supervision.test.ts",
+          "tooling/gate/compile-counter.test.ts",
+          "tooling/gate/test-timing.test.ts"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 4998
+      },
+      {
+        "name": "bench-agree",
+        "command": "sh",
+        "args": [
+          "tooling/gate/all.sh",
+          "--call",
+          "bench-agree"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 29729
+      },
+      {
+        "name": "tooling",
+        "command": "sh",
+        "args": [
+          "tooling/gate/all.sh",
+          "--call",
+          "tooling"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 198814
+      },
+      {
+        "name": "dry-run",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "tooling/lanes/land.ts",
+          "3c6903be8",
+          "--dry-run"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 12475
+      }
+    ],
+    "terminal": "PASS"
+  },
+  "focused": {
+    "pass": 26,
+    "fail": 0
+  },
+  "tooling": {
+    "total": 711,
+    "pass": 709,
+    "todo": 2,
+    "fail": 0
+  },
+  "quiet_bench_agree": {
+    "compared": 101,
+    "agreed": 101,
+    "bare": 1,
+    "all_unavailable": 2
+  },
+  "dry_run": {
+    "tree_checks": 9,
+    "passed": 9,
+    "owed": "full gate (52 steps)"
+  },
+  "owner_mutant": {
+    "source": "3c6903be8",
+    "mutation": "projectIncomplete=true; -> projectIncomplete=true; return;",
+    "stages": [
+      {
+        "status": 1,
+        "signal": null
+      }
+    ],
+    "diffSha256": "84cc53f30685bb2bdf6173430546f3558e4fd579969c8053577277704da5cf90",
+    "before": "failed on the exact owner disposition assertion",
+    "after": "matched control passed in focused-r3.log (26/26)",
+    "terminal": "PASS",
+    "cleanup": true
+  },
+  "counter_authority": "Existing counted KEEP/prepared launch, whole-process counter scope, fixed work profile/environment, per-row and meta work_settings and retained raw counter file are preserved and exercised.",
+  "range_diff": "1:  d6a73c496 = 1:  415047f47 differential: own the source population and decode supervised check reports\n2:  5341d4546 = 2:  5615f0ed0 results: pin complete source-owned outcome populations\n3:  93c3a0de7 = 3:  d155b18ad results: recover historical outcomes from the explicit pre-record commit\n4:  a94ba685a ! 4:  b395c2e42 integrity: supervise listings and publish incomplete work after definite failures\n    @@ tooling/conformance/integrity.ts: import { OUTCOMES, materialise, outcomeFixture\n      import { withToken } from \"../gate/tokens.mjs\";\n     -import { COUNTER_SCOPE, spawnCounted } from \"../gate/cputime.mjs\";\n     +import { COUNTER_SCOPE } from \"../gate/cputime.mjs\";\n    - import { COMPILE_WORK_PROFILE, compileCommand } from \"../gate/compile-counter.ts\";\n    + import { COMPILE_WORK_PROFILE, compileWorkSettings, compileCommand } from \"../gate/compile-counter.ts\";\n    + import { measuredCompileEnvironment } from \"../gate/canonical-environment.ts\";\n     +import {ToolingInstrumentError} from \"../gate/step-result.ts\";\n     +import {runIntegrityListing,integrityListingFailure,finishIntegrity} from \"./integrity-command.ts\";\n      \n    @@ tooling/conformance/integrity.ts: if (disorder) {\n          // The native producer captures anew; there is no producer-cache mode.\n          // Only a kept prepared listing supplies the compile-time step's counters.\n          const timedRun = KEEP && ADDON.test(args.at(-1)) && args[0] === \"hir\" && args[1] === \"--prepared\";\n    --    const counted = timedRun ? spawnCounted(NTS, compileCommand(\"nogc\", args.at(-1)), { cwd: ROOT, env,\n    +     const measuredEnvironment=timedRun?measuredCompileEnvironment(env):env;\n    +     const work_settings=timedRun?compileWorkSettings(measuredEnvironment):undefined;\n    +-    const counted = timedRun ? spawnCounted(NTS, compileCommand(\"nogc\", args.at(-1)), { cwd: ROOT, env:measuredEnvironment,\n     -      counterFile: join(KEEP, `${args.at(-1).replaceAll(\"/\", \"_\")}.perf`) }) : null;\n     -    const child = counted?.child ?? spawn(NTS, args, { cwd: ROOT, env });\n     -    // Only the prepared listing supplies compile-time's launch-time counters.\n    @@ tooling/conformance/integrity.ts: if (disorder) {\n     -    child.on(\"error\", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });\n     -    child.on(\"close\", (status, signal) => {\n     -      clearTimeout(timer);\n    --      cpu.then((counters) => resolve({ ...counters, work_profile: timedRun ? COMPILE_WORK_PROFILE : undefined, status, signal, stdout, stderr }));\n    +-      cpu.then((counters) => resolve({ ...counters, work_profile: timedRun ? COMPILE_WORK_PROFILE : undefined, work_settings, status, signal, stdout, stderr }));\n     -    });\n     -  })));\n    -+    return runIntegrityListing(NTS,timedRun?compileCommand(\"nogc\",args.at(-1)):args,{cwd:ROOT,env,\n    -+      ...(timedRun?{counterFile:join(KEEP,`${args.at(-1).replaceAll(\"/\", \"_\")}.perf`)}:{})});\n    ++    return runIntegrityListing(NTS,timedRun?compileCommand(\"nogc\",args.at(-1)):args,{cwd:ROOT,env:measuredEnvironment,\n    ++      ...(timedRun?{counterFile:join(KEEP,`${args.at(-1).replaceAll(\"/\", \"_\")}.perf`)}:{})})\n    ++      .then(result=>timedRun?{...result,work_settings}:result);\n     +  }));\n      \n      const found = [];\n",
+  "retained_failed_receipts": [
+    "/home/akisarou/.cache/nts-tmp/helper2-integrity-supervision/result.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-integrity-supervision/tooling.log",
+    "/home/akisarou/.cache/nts-tmp/helper2-integrity-supervision/r2-result.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-integrity-supervision/focused-r2.log"
+  ],
+  "scope": "No fixture sources, oracle records, compiler semantics or C binding surface changed by this supervision correction."
+}
