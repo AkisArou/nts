@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-generic-free-factory-with-a-nullable-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-generic-free-factory-with-a-nullable-array/src/main.ts",
+      "signature": "ac416ae8813307565546c6ce24368ae6bb0d5a6c51c160e393315c59fe1fb1fe",
+      "keys": {
+        "c": "9f94e9b65fb4cc2a136f3c4d7a10fab4",
+        "jvm": "877230d7c7344e1178fbdcbe8a9f5c3c",
+        "llvm": "9f039b55b414c20b49ebfa08474cc0f3"
+      },
+      "cases_sha256": "0ed74734482a4a57745296f110d22ff5464cd040d7c14050b1f4d868e4ee32f5",
+      "driver_sha256": "e5338963989e45d175fda2d323815e829999602048fe332cc8b423c33f122002",
+      "populations": {
+        "directControl": {
+          "count": 29,
+          "cases_sha256": "89131df6107f227b450754632dd857a51140071a8434523bbb831a6ad1041f18"
+        },
+        "freeFunctionControl": {
+          "count": 29,
+          "cases_sha256": "311483dfd14bd3fa186a93722c6efedf3640606d4bea82c4a46765b5dab5659b"
+        },
+        "throughStatic": {
+          "count": 29,
+          "cases_sha256": "48330e268138de0cadc9cbb79ad3849c86d5a778540083698b118f9d194d0fcc"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}
