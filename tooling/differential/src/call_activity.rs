@@ -116,30 +116,47 @@ struct Process {
     cpu: u64,
 }
 
-fn process(text: &str) -> Result<Process> {
+fn process(text: &str) -> Result<Option<Process>> {
     let end = text.rfind(')').context("invalid process name")?;
     let fields: Vec<_> = text[end + 1..].split_whitespace().collect();
+    let field =
+        |at: usize| -> Result<&str> { fields.get(at).copied().context("missing process field") };
     let number = |at: usize| -> Result<u64> {
-        fields
-            .get(at)
-            .context("missing process field")?
+        field(at)?
             .parse()
-            .context("invalid process field")
+            .with_context(|| format!("invalid unsigned process field {}", at + 3))
     };
-    Ok(Process {
-        group: u32::try_from(number(2)?)?,
-        session: u32::try_from(number(3)?)?,
+    // proc_pid_stat(5): pgrp/session are signed ints, and waited-child
+    // CPU times are signed longs. A task losing its signal state during
+    // exit is printed with pgrp/session -1 by fs/proc/array.c.
+    let group: i32 = field(2)?.parse().context("invalid process group")?;
+    let session: i32 = field(3)?.parse().context("invalid process session")?;
+    if group < 0 || session < 0 || matches!(field(0)?, "X" | "x") {
+        return Ok(None);
+    }
+    let mut cpu = number(11)?
+        .checked_add(number(12)?)
+        .context("process CPU overflow")?;
+    for at in [13, 14] {
+        let children: i64 = field(at)?
+            .parse()
+            .with_context(|| format!("invalid signed process field {}", at + 3))?;
+        cpu = cpu
+            .checked_add(u64::try_from(children).context("negative waited-child CPU")?)
+            .context("process CPU overflow")?;
+    }
+    Ok(Some(Process {
+        group: u32::try_from(group)?,
+        session: u32::try_from(session)?,
         running: !matches!(fields[0], "Z" | "X"),
         started: number(19)?,
-        cpu: [11, 12, 13, 14].into_iter().try_fold(0_u64, |sum, at| {
-            sum.checked_add(number(at)?).context("process CPU overflow")
-        })?,
-    })
+        cpu,
+    }))
 }
 
 fn process_at(pid: u32) -> Result<Option<Process>> {
     match std::fs::read_to_string(format!("/proc/{pid}/stat")) {
-        Ok(text) => Ok(Some(process(&text)?)),
+        Ok(text) => process(&text),
         Err(error)
             if error.kind() == std::io::ErrorKind::NotFound || error.raw_os_error() == Some(3) =>
         {
@@ -976,12 +993,23 @@ else:
         fields[13] = "17";
         fields[14] = "19";
         fields[19] = "23";
-        let record = process(&format!("321 (name with ) spaces) {}", fields.join(" "))).unwrap();
+        let record = process(&format!("321 (name with ) spaces) {}", fields.join(" ")))
+            .unwrap()
+            .unwrap();
         assert_eq!(
             (record.group, record.session, record.started, record.cpu),
             (321, 100, 23, 60)
         );
         assert!(process("invalid").is_err());
+    }
+
+    #[test]
+    fn a_captured_exiting_process_has_no_remaining_identity() {
+        // Verbatim /proc/1840560/stat captured while an owned child exited
+        // and was reaped, on Linux 7.2.11-arch1-1. The old unsigned parser
+        // failed on field 5 (-1), holding an unrelated outcomes command.
+        let raw = "1840560 (capture) X 0 -1 -1 0 -1 4227148 27 0 0 0 0 0 0 0 39 19 0 0 21665492 0 0 0 0 0 0 0 0 0 0 0 0 1 0 0 17 9 0 0 0 0 0 0 0 0 0 0 0 0 0 0\n";
+        assert!(process(raw).unwrap().is_none());
     }
 
     #[test]
