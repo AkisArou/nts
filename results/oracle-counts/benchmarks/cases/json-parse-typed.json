@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/json-parse-typed",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/json-parse-typed/case.ts",
+      "signature": "20ccd73c9c02804135ac939d0cec6aa7d1ae1d32bcdd293a269b58abddd289a0",
+      "keys": {
+        "c": "b817f51bdb88866add9e6374eda98cce",
+        "jvm": "59b7b839e1928769c1b97b193a960ec3",
+        "llvm": "66d410f18bf6250fabaf564d452691a1"
+      },
+      "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f",
+      "driver_sha256": "661d7472e8eccc2b17572ce4eabda959d2b54c3d2f9fb7d03262c25ca84687ab",
+      "input_domain": {
+        "identity": "324ab0d39a5d2757ba2be8d69a276405",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "offset": {
+                "reason": "Each call parses all 8 prebuilt 2,000-row documents. Offsets zero, one and two exercise rotated order; no document is omitted.",
+                "min": 0,
+                "max": 2,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 4,
+          "cases_sha256": "b6833dabb1d2bf24d64cfd79dc8862da83aeb243f6c8f29e4140d5ac80f7a13f"
+        }
+      },
+      "complete": true,
+      "count": 4
+    }
+  ]
+}
