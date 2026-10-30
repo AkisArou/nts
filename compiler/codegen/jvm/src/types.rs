@@ -24,6 +24,16 @@ use nts_codegen_common::symbols::jvm_class_name;
 use nts_core::hir::{HirType, Layout, ManagedType};
 use nts_jvm_emitter::{Kind, VType};
 
+/// A Java entry carrier covers the complete proved numeric value domain.
+#[must_use]
+pub fn entry_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
+    if crate::entry::unsigned32(ty) {
+        Some("J".to_owned())
+    } else {
+        descriptor(shape, ty)
+    }
+}
+
 /// The two properties the tag *numbering* exists to make true.
 ///
 /// Asserted at compile time rather than in a test, because they are facts about

@@ -39,6 +39,7 @@
 pub mod body;
 mod builder;
 pub mod closures;
+mod entry;
 mod face;
 mod fuse;
 mod guarded_members;
@@ -364,7 +365,7 @@ fn emit_program(
                     } else {
                         access::PUBLIC | access::STATIC | synthetic
                     };
-                publish(
+                if let Err(diagnostic) = publish(
                     package,
                     &mut builder,
                     program,
@@ -373,7 +374,13 @@ fn emit_program(
                     &name,
                     &signature,
                     rendered,
-                );
+                    &mut pool,
+                ) {
+                    // The implementation was published; only its Java entry
+                    // failed. Its internal callers and closure dependencies
+                    // remain live.
+                    diagnostics.push(diagnostic);
+                }
             }
             Err(refused) => {
                 if refused.too_long {
@@ -908,7 +915,7 @@ fn declined_stub(
         }
         rest = &rest[at + end + 1..];
     }
-    let name = body::method_name(&func.name);
+    let name = entry::implementation_name(program, func);
     if builder
         .methods
         .iter()
@@ -944,16 +951,21 @@ fn declined_stub(
     code.const_null(&origin);
     code.athrow(&origin);
     if let Ok(stub) = code.finish(pool) {
-        builder.method(
+        let _ = publish(
+            package,
+            builder,
+            program,
+            func,
             (if program.strings.parameter(func).is_some() {
                 access::PRIVATE
             } else {
                 access::PUBLIC
             }) | access::STATIC
                 | access::SYNTHETIC,
-            name,
-            signature,
-            Some(stub),
+            &body::method_name(&func.name),
+            &signature,
+            stub,
+            pool,
         );
     }
 }
@@ -1793,7 +1805,7 @@ fn print_body(
     };
     match (printed, by) {
         (Some(Printed::By(_)), Some((func, signature))) => {
-            call_on_this(&mut code, pool, package, func, &signature, origin);
+            call_on_this(&mut code, pool, package, program, func, &signature, origin);
         }
         (Some(Printed::Object), _) => code.const_string(origin, pool, "[object Object]"),
         // Its name in a built-in's text, or the refusal `runtime/c` makes for
@@ -2006,6 +2018,7 @@ fn call_on_this(
     code: &mut Code,
     pool: &mut Pool,
     package: &str,
+    program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
     signature: &str,
     origin: &nts_semantic_schema::Origin,
@@ -2015,7 +2028,7 @@ fn call_on_this(
         origin,
         pool,
         &body::program_class(package),
-        &body::method_name(&func.name),
+        entry::implementation_name(program, func),
         signature,
     );
 }
@@ -2202,7 +2215,7 @@ fn bridge_body(
         origin,
         pool,
         &body::program_class(package),
-        &body::method_name(&ours.name),
+        entry::implementation_name(program, ours),
         full,
     );
     // The interface's return, from ours. `Z` against `Z` needs nothing;
@@ -2289,7 +2302,7 @@ pub(crate) fn carries_env(
 /// takes and calls it -- the same two steps the foreign bridge takes, from a
 /// different starting descriptor.
 fn delivered_body(
-    package: &str,
+    (package, program): (&str, &JvmProgram<'_>),
     layout: &nts_core::hir::Layout,
     ours: &nts_core::hir::Func,
     delivery: &types::Deliverable,
@@ -2342,7 +2355,7 @@ fn delivered_body(
         origin,
         pool,
         &body::program_class(package),
-        &body::method_name(&ours.name),
+        entry::implementation_name(program, ours),
         full,
     );
     code.ret(origin, None);
@@ -2504,7 +2517,15 @@ fn deliverable_bridges(
             let Some(full) = body::signature(package, program, ours) else {
                 continue;
             };
-            let body = delivered_body(package, layout, ours, &delivery, &full, pool, origin)?;
+            let body = delivered_body(
+                (package, program),
+                layout,
+                ours,
+                &delivery,
+                &full,
+                pool,
+                origin,
+            )?;
             builder.method(
                 access::PUBLIC,
                 "call".to_owned(),
@@ -2560,7 +2581,7 @@ fn lambda_overloads(
             adapters.insert(base.clone(), (interface, call.clone()));
         }
         match lambda_forward(
-            package,
+            (package, program),
             func,
             &descriptor,
             &parameters,
@@ -2568,12 +2589,21 @@ fn lambda_overloads(
             pool,
             origin,
         ) {
-            Ok((want, body)) => builder.method(
-                access::PUBLIC | access::STATIC,
-                body::method_name(&func.name),
-                want,
-                Some(body),
-            ),
+            Ok((want, body)) => {
+                if let Err(diagnostic) = publish(
+                    package,
+                    builder,
+                    program,
+                    func,
+                    access::PUBLIC | access::STATIC,
+                    &body::method_name(&func.name),
+                    &want,
+                    body,
+                    pool,
+                ) {
+                    diagnostics.push(diagnostic);
+                }
+            }
             Err(diagnostic) => diagnostics.push(diagnostic),
         }
     }
@@ -2594,7 +2624,7 @@ fn lambda_overloads(
 /// ends and the single function begins, and it is also where the line count
 /// stopped being about one thing.
 fn lambda_forward(
-    package: &str,
+    (package, program): (&str, &JvmProgram<'_>),
     func: &nts_core::hir::Func,
     descriptor: &str,
     parameters: &[&str],
@@ -2660,7 +2690,7 @@ fn lambda_forward(
         origin,
         pool,
         &body::program_class(package),
-        &body::method_name(&func.name),
+        entry::implementation_name(program, func),
         descriptor,
     );
     code.ret(
@@ -2858,13 +2888,38 @@ fn publish(
     name: &str,
     descriptor: &str,
     body: nts_jvm_emitter::Body,
-) {
-    match generic_signature(package, program, func, descriptor) {
+    pool: &mut Pool,
+) -> Result<(), Diagnostic> {
+    let implementation = entry::implementation_name(program, func);
+    let bridge = entry::bridge(package, program, func, descriptor, implementation, pool);
+    let internal_access = if entry::needs_bridge(func) {
+        access | nts_jvm_emitter::class::access::SYNTHETIC
+    } else {
+        access
+    };
+    match generic_signature(package, program, func, descriptor, false) {
         Some(generic) => {
-            builder.method_generic(access, name, descriptor, generic, Some(body));
+            builder.method_generic(
+                internal_access,
+                implementation,
+                descriptor,
+                generic,
+                Some(body),
+            );
         }
-        None => builder.method(access, name, descriptor, Some(body)),
+        None => builder.method(internal_access, implementation, descriptor, Some(body)),
     }
+    // A Java entry can exceed the parameter-slot limit even when the internal
+    // descriptor fits. Publish the implementation (including refusal stubs)
+    // independently, so kept compiled callers always have a target.
+    if let Some((descriptor, body)) = bridge? {
+        let access = access & !nts_jvm_emitter::class::access::SYNTHETIC;
+        match generic_signature(package, program, func, &descriptor, true) {
+            Some(generic) => builder.method_generic(access, name, descriptor, generic, Some(body)),
+            None => builder.method(access, name, descriptor, Some(body)),
+        }
+    }
+    Ok(())
 }
 
 /// A method's generic signature, or `None` when the descriptor already says
@@ -2881,12 +2936,17 @@ fn generic_signature(
     program: &JvmProgram<'_>,
     func: &nts_core::hir::Func,
     descriptor: &str,
+    entry: bool,
 ) -> Option<String> {
     let shape = types::Shape::packaged(program, package);
     let mut rendered = String::from("(");
     let mut interesting = false;
     for param in &func.params {
-        let plain = types::descriptor(shape, &param.ty)?;
+        let plain = if entry {
+            types::entry_descriptor(shape, &param.ty)?
+        } else {
+            types::descriptor(shape, &param.ty)?
+        };
         match types::parameterised(shape, &param.ty) {
             Some(generic) => {
                 interesting = true;
@@ -2902,9 +2962,13 @@ fn generic_signature(
             rendered.push_str(&generic);
         }
         None => rendered.push_str(
-            types::return_descriptor(shape, &func.return_type)
-                .as_deref()
-                .unwrap_or("V"),
+            (if entry && crate::entry::unsigned32(&func.return_type) {
+                types::entry_descriptor(shape, &func.return_type)
+            } else {
+                types::return_descriptor(shape, &func.return_type)
+            })
+            .as_deref()
+            .unwrap_or("V"),
         ),
     }
     // The erasure has to be the descriptor. If it is not, this lane has built a
@@ -3449,7 +3513,7 @@ fn dispatch_forwarders(
                 &origin,
                 pool,
                 &body::program_class(package),
-                &body::method_name(func_name),
+                entry::implementation_name(program, target),
                 &full,
             );
         }
@@ -3642,7 +3706,7 @@ fn member_forwarders(
             &origin,
             pool,
             &body::program_class(package),
-            &body::method_name(&func.name),
+            entry::implementation_name(program, func),
             &signature,
         );
         code.ret(&origin, types::kind(&func.return_type));

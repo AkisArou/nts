@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-c-fixed-numeric-aliases",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-c-fixed-numeric-aliases/src/main.ts",
+      "signature": "9df916808384c38ffe8d006ec232c7d33e7429e2940ef20eb99af2ffdc5ef1cc",
+      "keys": {
+        "c": "d3372ef00ed467e6da8fe692a0b08e4f",
+        "jvm": "450724a0643929f8c34da735c659edf3",
+        "llvm": "dd46b9855da7667f024ab5a65ec75660"
+      },
+      "cases_sha256": "57c4d0de7c97f5675480133f562dd6d2b267010c3553be9e8ea6e52c62075be5",
+      "driver_sha256": "54e9b78627597f541ec3984ba2076deaad69bca59ad18996e2a28d1abb952cd6",
+      "populations": {
+        "signed": {
+          "count": 16,
+          "cases_sha256": "c2b45fc609ae548b14d25b73e9a755f2acc2064b038f0ecb1afdfa30ab6da6ce"
+        },
+        "unsigned": {
+          "count": 16,
+          "cases_sha256": "aa519838e87dc88fa2896f36a9062768fda069523686cbf64eb66cb3463e9c1a"
+        },
+        "unsignedAlias": {
+          "count": 1,
+          "cases_sha256": "fd8a399b845ef9666aa868f8e4a7630b522929f833ef01a807eeb7733a8d47b6"
+        }
+      },
+      "complete": true,
+      "count": 33
+    }
+  ]
+}

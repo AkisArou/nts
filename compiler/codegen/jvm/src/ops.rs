@@ -7960,12 +7960,12 @@ impl Emitter<'_> {
                 self.unerase_layoutless(code, pool, arg, want, origin);
             }
         }
-        let method = crate::body::method_name(name);
+        let method = crate::entry::implementation_name(self.program, target);
         code.invoke_static(
             origin,
             pool,
             &crate::body::program_class(self.shape.package),
-            &method,
+            method,
             &signature,
         );
         if let Some(placed) = self.string_result(code, target, value)? {

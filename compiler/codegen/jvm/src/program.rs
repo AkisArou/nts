@@ -43,6 +43,8 @@ pub struct JvmProgram<'a> {
     /// Each module global's static field, by global index; see
     /// [`Self::global_field`].
     global_fields: Vec<String>,
+    /// One method namespace for public names and allocated internal bodies.
+    implementation_names: FxHashMap<&'a str, String>,
     /// Per layout, its proved declared interface parents and whether its
     /// whole declared chain is proved; see [`Self::declared_parents`].
     declared: DeclaredAncestry,
@@ -245,6 +247,7 @@ impl<'a> JvmProgram<'a> {
             live,
             positional: FxHashSet::default(),
             global_fields: global_fields(program),
+            implementation_names: crate::entry::implementation_names(program),
             declared: DeclaredAncestry::default(),
         };
         facts.positional = facts.positional_accesses();
@@ -252,6 +255,11 @@ impl<'a> JvmProgram<'a> {
         facts.settle_faces();
         facts.guarded_members = crate::guarded_members::plan(&facts);
         facts
+    }
+
+    /// `func` belongs to this program; every body and overload shares this plan.
+    pub(crate) fn implementation_name(&self, func: &nts_core::hir::Func) -> &str {
+        &self.implementation_names[func.name.as_str()]
     }
 
     /// An additional internal selector, never the public ordinary spelling.

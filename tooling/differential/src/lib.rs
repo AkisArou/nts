@@ -2430,7 +2430,7 @@ fn run_jvm(
     // The backend's own facts, once: a split face is spelled as its interface.
     let facts = nts_codegen_jvm::JvmProgram::new(program);
     for (one, at, tuple) in interleaved(testable) {
-        let Some(returns) = nts_codegen_jvm::types::descriptor(
+        let Some(returns) = nts_codegen_jvm::types::entry_descriptor(
             nts_codegen_jvm::types::Shape::of(&facts),
             &one.returns,
         ) else {
@@ -2441,9 +2441,10 @@ fn run_jvm(
         };
         let mut parameters = Vec::with_capacity(one.params.len());
         for (ty, _) in &one.params {
-            let Some(descriptor) =
-                nts_codegen_jvm::types::descriptor(nts_codegen_jvm::types::Shape::of(&facts), ty)
-            else {
+            let Some(descriptor) = nts_codegen_jvm::types::entry_descriptor(
+                nts_codegen_jvm::types::Shape::of(&facts),
+                ty,
+            ) else {
                 bail!(
                     "`{}` takes a type the JVM backend rendered but this harness cannot",
                     one.name

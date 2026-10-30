@@ -239,11 +239,11 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
     }
     let jar = out.join(nts_codegen_jvm::RUNTIME_JAR_NAME);
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).unwrap();
-    // 3000000000 as a raw `int`, and 2^63 and 2^64 - 1 as raw `long`s.
+    // Uint32 Java entries take unsigned long values; U64 retains raw long bits.
     std::fs::write(
         out.join("Drive.java"),
         r#"public class Drive { public static void main(String[] a) {
-  int big = (int) 3000000000L;
+  long big = 3000000000L;
   long top = Long.MIN_VALUE;
   long max = -1L;
   System.out.println(nts.gen.Program.gt32(big, 1) + " " + nts.gen.Program.le32(big, 1) + " " + nts.gen.Program.eq32(big, big));
@@ -251,11 +251,11 @@ fn an_unsigned_integer_compares_and_converts_as_one() {
   System.out.println(nts.gen.Program.above32(big, 1) + " " + nts.gen.Program.above64(top, 1L));
   System.out.println(nts.gen.Program.double64(max) + " " + nts.gen.Program.float64(max) + " " + nts.gen.Program.double32(big));
   System.out.println(nts.gen.Program.erased32(big));
-  int[] ints = {0, 1, Integer.MAX_VALUE, Integer.MIN_VALUE, big, -1};
+  long[] ints = {0L, 1L, 0x7fffffffL, 0x80000000L, big, 0xffffffffL};
   long[] longs = {0L, 1L, Long.MAX_VALUE, top, max};
-  for (int x : ints) for (int y : ints) {
-    int lo = Integer.compareUnsigned(x, y) <= 0 ? x : y;
-    int hi = Integer.compareUnsigned(x, y) >= 0 ? x : y;
+  for (long x : ints) for (long y : ints) {
+    long lo = Math.min(x, y);
+    long hi = Math.max(x, y);
     if (nts.gen.Program.min32(x, y) != lo || nts.gen.Program.max32(x, y) != hi)
       throw new AssertionError("uint32 extrema");
   }

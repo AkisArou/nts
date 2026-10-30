@@ -397,7 +397,7 @@ impl Emitter<'_> {
             o,
             pool,
             &crate::body::program_class(self.shape.package),
-            &crate::body::method_name(&target.name),
+            crate::entry::implementation_name(self.program, target),
             &descriptor,
         );
         if let Some(placed) = self.string_result(code, target, id)? {

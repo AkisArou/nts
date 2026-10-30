@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-c-fixed-numeric-aliases-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-c-fixed-numeric-aliases-control/src/main.ts",
+      "signature": "3276d5e58caddaf24ffa12299fc26e21bb446310ca65c047e0b940b754bce23e",
+      "keys": {
+        "c": "17ebf2a91f71664f7876f2e1c2eca8fd",
+        "jvm": "acc11643056c74a6d67f39c12ac476fb",
+        "llvm": "30c40e6c795ddceac427f315eb9f9116"
+      },
+      "cases_sha256": "7d3395e0051bf9f83ef4d32860e599d9d6509e6749b63d42c1250279f41cada5",
+      "driver_sha256": "262cb572e3eaee4f7b8dd9ff8a96c49494e12542e93fa49709e38c960a708c98",
+      "populations": {
+        "signed": {
+          "count": 16,
+          "cases_sha256": "c2b45fc609ae548b14d25b73e9a755f2acc2064b038f0ecb1afdfa30ab6da6ce"
+        },
+        "unsigned": {
+          "count": 16,
+          "cases_sha256": "3e34b3ea54ba2406cf0c694d64f9258b374f8c2d650cbe285a26e4ca6daa56e8"
+        },
+        "unsignedAlias": {
+          "count": 1,
+          "cases_sha256": "fd8a399b845ef9666aa868f8e4a7630b522929f833ef01a807eeb7733a8d47b6"
+        }
+      },
+      "complete": true,
+      "count": 33
+    }
+  ]
+}

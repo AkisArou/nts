@@ -680,7 +680,7 @@ fn slot_body(
         origin,
         pool,
         &body::program_class(package),
-        &body::method_name(&default.name),
+        crate::entry::implementation_name(program, default),
         &full,
     );
     code.ret(origin, returned(descriptor));

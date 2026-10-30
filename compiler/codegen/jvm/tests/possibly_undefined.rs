@@ -176,24 +176,31 @@ public class OptionalDriver {
     else payload=(int)(word& (bits==32?0xffffffffL:(1L<<bits)-1));
     return new Object[]{payload,((word>>>bits)&1)!=0};
   }
+  static long unsigned32(Object value) {
+    return value instanceof Integer?Integer.toUnsignedLong((Integer)value):((Number)value).longValue();
+  }
   static void same(String name,Object a,Object b) {
     boolean ok;
     if(name.equals("F64"))ok=Double.doubleToRawLongBits((Double)a)==Double.doubleToRawLongBits((Double)b);
     else if(name.equals("F32"))ok=Float.floatToRawIntBits((Float)a)==Float.floatToRawIntBits((Float)b);
+    else if(name.equals("U32"))ok=unsigned32(a)==unsigned32(b);
     else if(name.equals("BigInt")){NtsBigInt x=(NtsBigInt)a,y=(NtsBigInt)b;ok=x.hi==y.hi&&x.lo==y.lo;}
     else ok=a==null?b==null:a.equals(b);
     if(!ok)throw new AssertionError(name+" payload: "+a+" / "+b);
   }
   static void check(String name,Class<?> type,Object x,Object fallback) throws Exception {
+    // Optional payload lanes retain their raw int ABI; direct Uint32 Java
+    // parameters and results expose the unsigned value as long.
+    Class<?> entryType=name.equals("U32")?long.class:type;
     boolean ref=name.equals("Reference")||name.equals("BigInt");
     boolean full=name.equals("F64")||name.equals("I64")||name.equals("U64");
     for(boolean d:new boolean[]{false,true}) {
       Object scratch=name.equals("F64")?new double[]{-333.25}:new long[]{0x123456789abcdefL};
-      Object packed=full?call("make"+name,new Class<?>[]{boolean.class,type,scratch.getClass()},d,x,scratch):call("make"+name,new Class<?>[]{boolean.class,type},d,x);
+      Object packed=full?call("make"+name,new Class<?>[]{boolean.class,entryType,scratch.getClass()},d,x,scratch):call("make"+name,new Class<?>[]{boolean.class,entryType},d,x);
       Object[] pair=unpack(name,packed,scratch);
       if((Boolean)pair[1]!=d)throw new AssertionError(name+" make defined");
       if(d)same(name,pair[0],x);
-      Object other=full?call("make"+name,new Class<?>[]{boolean.class,type,scratch.getClass()},!d,fallback,scratch):call("make"+name,new Class<?>[]{boolean.class,type},!d,fallback);
+      Object other=full?call("make"+name,new Class<?>[]{boolean.class,entryType,scratch.getClass()},!d,fallback,scratch):call("make"+name,new Class<?>[]{boolean.class,entryType},!d,fallback);
       Object[] opposite=unpack(name,other,scratch);
       for(boolean exchange:new boolean[]{false,true}) {
         Object changed=ref?call("swap"+name,new Class<?>[]{boolean.class,Object.class,Object.class},exchange,pair[0],opposite[0]):full?call("swap"+name,new Class<?>[]{boolean.class,type,boolean.class,type,boolean.class,scratch.getClass()},exchange,pair[0],pair[1],opposite[0],opposite[1],scratch):call("swap"+name,new Class<?>[]{boolean.class,type,boolean.class,type,boolean.class},exchange,pair[0],pair[1],opposite[0],opposite[1]);
@@ -205,18 +212,19 @@ public class OptionalDriver {
       pair=unpack(name,packed,scratch);
       boolean defined=(Boolean)(ref?call("defined"+name,new Class<?>[]{Object.class},pair[0]):call("defined"+name,new Class<?>[]{type,boolean.class},pair[0],pair[1]));
       if(defined!=d)throw new AssertionError(name+" identity defined");
-      Object read=ref?call("read"+name,new Class<?>[]{Object.class,type},pair[0],fallback):call("read"+name,new Class<?>[]{type,boolean.class,type},pair[0],pair[1],fallback);
+      Object read=ref?call("read"+name,new Class<?>[]{Object.class,type},pair[0],fallback):call("read"+name,new Class<?>[]{type,boolean.class,entryType},pair[0],pair[1],fallback);
       same(name,read,d?x:fallback);
-      same(name,call("roundtrip"+name,new Class<?>[]{boolean.class,type,type},d,x,fallback),d?x:fallback);
+      same(name,call("roundtrip"+name,new Class<?>[]{boolean.class,entryType,entryType},d,x,fallback),d?x:fallback);
     }
   }
   public static void main(String[] args) throws Exception {
     check("Bool",boolean.class,true,false);
-    for(String name:new String[]{"I8","U8","I16","U16","I32","U32"}) {
+    for(String name:new String[]{"I8","U8","I16","U16","I32"}) {
       int min=name.equals("I8")?-128:name.equals("U8")?0:name.equals("I16")?-32768:name.equals("U16")?0:Integer.MIN_VALUE;
       int max=name.equals("I8")?127:name.equals("U8")?255:name.equals("I16")?32767:name.equals("U16")?65535:Integer.MAX_VALUE;
       check(name,int.class,min,max);check(name,int.class,max,min);
     }
+    for(long x:new long[]{0L,0x7fffffffL,0x80000000L,0xffffffffL})check("U32",int.class,x,0xffffffffL-x);
     for(String name:new String[]{"I64","U64"}){check(name,long.class,Long.MIN_VALUE,Long.MAX_VALUE);check(name,long.class,Long.MAX_VALUE,Long.MIN_VALUE);}
     for(int bits:new int[]{0,0x80000000,0x7f800000,0xff800000,0x7fc00001,0x7fffffff,0xffc12345,1,0x3f800000})check("F32",float.class,Float.intBitsToFloat(bits),-99.0f);
     for(long bits:new long[]{0,0x8000000000000000L,0x7ff0000000000000L,0xfff0000000000000L,0x7ff8000000000001L,0x7fffffffffffffffL,0xfff8123456789abcL,1,0x3ff0000000000000L})check("F64",double.class,Double.longBitsToDouble(bits),-99.0);
