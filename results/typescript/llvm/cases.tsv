@@ -369,21 +369,89 @@ tests/typescript/objects/shorthand-properties.ts	{"kind":"pass"}
 tests/typescript/objects/spread-copies-own-enumerable.ts	{"kind":"pass"}
 tests/typescript/objects/spread-order.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/objects/super-in-literal-method.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/proofs-controls/bounds-accessor-setter-string-index-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/bounds-conversion-string-template-index-change-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/bounds-conversion-to-string-shift-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/bounds-loop-fixed-view-resize-back-edge-control.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-accessor-getter-fixed-view-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-getter-index-change.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-getter-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-setter-dataview-transfer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-setter-shrink-before-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-setter-string-index.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-alias-closure-capture-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-alias-field-shift.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-alias-map-value-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-alias-nested-array-pop-then-append.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-alias-parameter-alias-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-alias-typed-array-buffer-transfer.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-alias-typed-array-resize-write.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-variable-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-call-closure-length-zero.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-call-dataview-resize-range-error.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-direct-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-fixed-view-resize-regrow.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-interface-method-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-call-method-shift-then-append.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-nested-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-call-recursive-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-call-returned-closure-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-call-string-index-writer.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-call-typed-array-transfer-write.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-callback-array-from-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-callback-filter-shift.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-callback-find-length-zero.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-callback-for-each-pop.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-callback-map-for-each-pop.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-callback-map-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-callback-reduce-splice-then-append.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-callback-sort-comparator-pops.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-callback-string-index-map.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-callback-typed-array-for-each-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-chain-assignments-24-array-before-write.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-chain-assignments-24-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-chain-field-links-16-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-chain-loop-carried-24-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-chain-string-loop-carried-24-index.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-chain-typed-array-loop-carried-24-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-conversion-number-fallback-to-string-splice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-number-resizes-buffer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-string-template-index-change.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-conversion-to-string-shift.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-conversion-value-of-pop-before-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-exception-callee-throws-after-transfer.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-exception-finally-after-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-exception-getter-throws-after-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-exception-throw-after-index-change.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-exception-throw-after-pop-before-write.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-loop-back-edge-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-loop-continue-shifts.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-loop-do-while-shrink-before-write.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-loop-fixed-view-resize-back-edge.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-loop-labelled-break-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-loop-nested-inner-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-loop-string-char-at-continue.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-loop-string-char-code-back-edge.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-loop-typed-array-detach-do-while.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-loop-zero-trip-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-merge-array-index-write.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-merge-conditional-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-merge-early-return-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-merge-finally-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-merge-if-else-index.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-merge-logical-and-pop-before-write.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-merge-logical-or-shift.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-merge-nullish-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-merge-switch-fallthrough-index.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-merge-try-catch-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-merge-typed-array-detach-switch.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-merge-typed-array-resize-branch.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-suspension-await-buffer-transfer.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-suspension-await-microtask-index.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-suspension-await-microtask-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-suspension-yield-caller-pop-before-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/proofs/bounds-suspension-yield-caller-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/proofs/bounds-suspension-yield-star-caller-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/length-alias-field-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: growing an array by its length would leave holes, which have no representation here (4 to 7)"}}
 tests/typescript/proofs/length-alias-nested-array-splice.ts	{"kind":"pass"}
 tests/typescript/proofs/length-alias-variable-push.ts	{"kind":"pass"}
