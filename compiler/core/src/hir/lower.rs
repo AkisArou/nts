@@ -28034,7 +28034,28 @@ impl<'a> FuncBuilder<'a> {
         if *have == want || !Self::tagged_collection_view(have, &want) {
             return None;
         }
-        Some(self.push(OpKind::Convert(value), want, self.origin(id)))
+        Some(self.collection_view(id, value, want))
+    }
+
+    /// Same-family `Convert` views carry no check, layout change or effect.
+    /// They all name the carrier directly, keeping identity, escape and
+    /// callback queries independent of the number of preceding views.
+    /// Projections such as `Unerase` and control-flow joins remain real links.
+    fn collection_view(&mut self, id: NodeId, value: ValueId, want: HirType) -> ValueId {
+        // Both view producers use this constructor, so a view's source is
+        // already canonical. Keep the new source view and its own origin.
+        let carrier = match self.values[value.0 as usize].kind {
+            OpKind::Convert(source)
+                if Self::tagged_collection_view(
+                    &self.values[source.0 as usize].ty,
+                    &self.values[value.0 as usize].ty,
+                ) =>
+            {
+                source
+            }
+            _ => value,
+        };
+        self.push(OpKind::Convert(carrier), want, self.origin(id))
     }
 
     /// Map and Set arguments describe a source view of tagged entries. They
@@ -29667,7 +29688,7 @@ impl<'a> FuncBuilder<'a> {
             }
             self.record_arrival(&have, want, id);
             if Self::tagged_collection_view(&have, want) {
-                return Ok(self.push(OpKind::Convert(value), want.clone(), self.origin(id)));
+                return Ok(self.collection_view(id, value, want.clone()));
             }
             return Ok(view.map_or(value, |kind| self.push(kind, want.clone(), self.origin(id))));
         }
@@ -88008,6 +88029,9 @@ mod binding_ancestry_tests;
 
 #[cfg(test)]
 mod native_lookup_tests;
+
+#[cfg(test)]
+mod collection_view_tests;
 
 #[cfg(test)]
 mod tests {
