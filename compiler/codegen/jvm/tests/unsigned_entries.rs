@@ -123,6 +123,17 @@ public class Drive {
   }
 }
 "#.replace("AUTHORED", authored));
+        java_source(
+            &emitted,
+            &r"
+import nts.gen.Program;
+public class Drive {
+  public static void main(String[] args) { Program.INTERNAL(0); }
+}
+"
+            .replace("INTERNAL", implementation),
+            false,
+        );
     }
 }
 
@@ -240,7 +251,65 @@ public class Drive {{
     );
 }
 
+#[test]
+fn a_private_implementation_stays_linked_but_java_source_cannot_call_it() {
+    for publication in ["internal", "exported", "alias", "namespace"] {
+        let mut helper = function("erased$helper", true, false);
+        helper.exported = publication == "exported";
+        let mut caller = function("publicCaller", true, true);
+        let OpKind::Call { callee, .. } = &mut caller.values[1].kind else {
+            unreachable!();
+        };
+        *callee = hir::Callee::Direct(helper.name.clone());
+        let mut program = hir::Program {
+            funcs: vec![caller, helper],
+            ..hir::Program::default()
+        };
+        match publication {
+            "alias" => program
+                .public_api
+                .push(("erased$helper".into(), "alias".into())),
+            "namespace" => program.public_namespaces.push((
+                "api".into(),
+                vec![("member".into(), "erased$helper".into())],
+            )),
+            _ => {}
+        }
+        hir::verify::verify(&program).unwrap();
+        let emitted = nts_codegen_jvm::emit(&program);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        run_java(
+            &emitted,
+            r#"
+import nts.gen.Program;
+public class Drive {
+  public static void main(String[] args) {
+    if (Program.publicCaller(-17) != -17) throw new AssertionError("internal linkage");
+  }
+}
+"#,
+        );
+        // Only publication metadata differs between these programs.
+        java_source(
+            &emitted,
+            r#"
+import nts.gen.Program;
+public class Drive {
+  public static void main(String[] args) {
+    if (Program.erased$helper(-17) != -17) throw new AssertionError("public source entry");
+  }
+}
+"#,
+            publication != "internal",
+        );
+    }
+}
+
 fn run_java(emitted: &nts_codegen_jvm::Emitted, source: &str) {
+    java_source(emitted, source, true);
+}
+
+fn java_source(emitted: &nts_codegen_jvm::Emitted, source: &str, accepted: bool) {
     let root =
         Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../target/jvm-unsigned-entry-tests");
     let dir = scratch::ScratchDir::new(&root, "unsigned-entries");
@@ -259,6 +328,15 @@ fn run_java(emitted: &nts_codegen_jvm::Emitted, source: &str) {
         .arg(dir.join("Drive.java"))
         .output()
         .unwrap();
+    if !accepted {
+        let diagnostic = String::from_utf8_lossy(&compiled.stderr);
+        assert!(
+            !compiled.status.success(),
+            "javac accepted an internal implementation entry"
+        );
+        assert!(diagnostic.contains("cannot find symbol"), "{diagnostic}");
+        return;
+    }
     assert!(
         compiled.status.success(),
         "{}",

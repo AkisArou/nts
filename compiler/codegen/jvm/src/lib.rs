@@ -322,6 +322,19 @@ fn emit_program(
     let templates = nts_core::hir::templates::present(program);
     let plan = widen::plan(package, program);
     let mut declined: Vec<(&nts_core::hir::Func, Diagnostic)> = Vec::new();
+    // An alias or namespace can publish a function whose own declaration has
+    // no export modifier. Preserve those entries using the recorded surface.
+    let published: rustc_hash::FxHashSet<&str> = program
+        .public_api
+        .iter()
+        .map(|(emitted, _)| emitted.as_str())
+        .chain(
+            program
+                .public_namespaces
+                .iter()
+                .flat_map(|(_, members)| members.iter().map(|(_, emitted)| emitted.as_str())),
+        )
+        .collect();
 
     for func in &program.funcs {
         // An abstract declaration is carried in `program.funcs` so that a call
@@ -341,20 +354,12 @@ fn emit_program(
         }
         match render(package, program, func, &plan, &mut pool, templates) {
             Ok((name, signature, rendered)) => {
-                // **Synthetic exactly when an instance method replaces it.**
-                //
-                // `Session$bump` is not something a caller should type: `$` is
-                // the JVM's own mark for a generated name, and `ACC_SYNTHETIC`
-                // is what tells a debugger or decompiler to hide one --
-                // `class.rs` carries it with that comment.
-                //
-                // Measured before relying on it, and the measurement set the
-                // order: `javac` does not merely *hide* a synthetic member, it
-                // **refuses to reference** one. So this is safe only because
-                // `member_forwarders` gives Java `s.bump()` instead. A free
-                // function like `greet` has no forwarder and stays plain
-                // public, because `Program.greet(...)` IS its API.
-                let synthetic = if method_of(program, func).is_some() {
+                // javac cannot reference synthetic methods, while generated
+                // bytecode can. Public free functions keep their source entry;
+                // member_forwarders publishes instance methods on their class.
+                let synthetic = if (!func.exported && !published.contains(func.name.as_str()))
+                    || method_of(program, func).is_some()
+                {
                     access::SYNTHETIC
                 } else {
                     0

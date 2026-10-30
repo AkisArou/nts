@@ -70,3 +70,31 @@ fi
 javac $nts_jdk_flags --release 8 -Xlint:all,-options -cp "$classes:$classes/nts-runtime.jar" \
   -d "$here/target/java" "$here"/java/Main.java
 java $nts_jvm_flags -Xverify:all -cp "$here/target/java:$classes:$classes/nts-runtime.jar" Main
+
+# Public source entries remain usable above. Internal generated methods must
+# also be hidden from javac even when class-file inspection lists them.
+for member in 'answer$nts$uint32' 'echoed$nts$uint32' 'Closure0$erased_call'; do
+  case "$member" in
+    'answer$nts$uint32') expression="nts.gen.Program.$member()" ;;
+    'echoed$nts$uint32') expression="nts.gen.Program.$member(0)" ;;
+    'Closure0$erased_call') expression="nts.gen.Program.$member(null, null, null)" ;;
+  esac
+  cat > "$here/target/Forbidden.java" <<EOF
+public final class Forbidden {
+  public static void call() { $expression; }
+}
+EOF
+  if javac $nts_jdk_flags --release 8 -Xlint:all,-options \
+    -cp "$classes:$classes/nts-runtime.jar" -d "$here/target/java" \
+    "$here/target/Forbidden.java" > "$here/target/forbidden.log" 2>&1; then
+    echo "ts-from-java: javac accepted internal method $member"
+    exit 1
+  fi
+  if ! grep -F 'cannot find symbol' "$here/target/forbidden.log" > /dev/null \
+    || ! grep -F "$member" "$here/target/forbidden.log" > /dev/null; then
+    cat "$here/target/forbidden.log"
+    echo "ts-from-java: internal-method control did not produce the expected javac refusal"
+    exit 1
+  fi
+  echo "ts-from-java: javac refused internal method $member"
+done
