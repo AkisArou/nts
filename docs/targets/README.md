@@ -115,6 +115,8 @@ Windows UI, which share one C runtime; *JVM* covers desktop and Android.
 
 - [Native](native.md): command-line programs and libraries on Linux, macOS and
   Windows; calling C, and C calling TypeScript.
+- [Calling C](calling-c.md): how a program calls a C library, the types at the
+  boundary and the contract each call keeps; `node:ffi`.
 - [C headers](c-headers.md): binding a C library from its headers, and how C's
   number types become TypeScript types.
 - [GTK](gtk.md), [Apple](apple.md), [Windows](windows.md): each platform's SDK

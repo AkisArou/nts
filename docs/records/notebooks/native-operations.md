@@ -1,5 +1,11 @@
 # Native operations: example-led semantics
 
+> **Superseded in part.** `local<T>()` and the escape claims below give way to
+> struct objects, `Ref<T>` and `CArray<T>` in
+> [Calling C](../../targets/calling-c.md), decided on 2026-10-30
+> ([record 0361](../0361-calling-c-from-a-header.md)). This notebook is the
+> history of the vocabulary as it was built.
+
 Dated measurements, commands and tsgo API references below describe the pre-switch
 frontend. The current frontend runs in process; those historical inputs and
 results are kept at their original revisions.

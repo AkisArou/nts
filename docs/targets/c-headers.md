@@ -1,11 +1,11 @@
 # C headers
 
-How nts turns a C library's headers into a typed binding: what `nts bind-c`
-does today, how C's number types become TypeScript types, and the design for
-binding whole libraries. For anyone binding a C library, and for the work on
-the binder. What a binding is, the binding vocabulary, strings, callbacks and
-the witness are on the [native](native.md#calling-c) page; this page does not
-repeat them.
+How nts turns a C library's headers into a binding: what `nts bind-c` reads,
+how C's number types become TypeScript types, and how whole headers are bound.
+For anyone binding a C library, and for the work on the binder. How a program
+calls the binding, and the contract each call keeps, is
+[Calling C](calling-c.md); the witness and the native targets are
+[native](native.md).
 
 ## Status
 
@@ -13,9 +13,11 @@ repeat them.
 |---|---|
 | Binding named items from headers (`nts bind-c`) | built |
 | A name for every C number type, interchangeable with the fixed widths | decided; the first to build |
-| Binding whole headers, with an overrides file | decided, after ResourceFlow |
-| Ownership checked across the boundary (ResourceFlow) | decided, not built |
-| Function-like macros and `static inline` functions | open |
+| Binding whole headers directly, with no file of facts beside them | decided, not built |
+| A binding per target, from that target's headers | decided, not built |
+| Nullability, enum openness and `format` read from the header | decided, not built |
+| C shims for function-like macros and `static inline` functions | decided, not built |
+| A `node:ffi` implementation of each binding, for the node reference | decided, not built |
 
 ## Binding named items: `nts bind-c`
 
@@ -32,15 +34,17 @@ generator for a `c:` module that `nts.config.ts` declares with a `header`
 - **What C it can spell:** the C number types (below), pointers and `const`,
   `void *`, inline arrays, bit-fields, flexible array members, structs and
   unions (anonymous ones included), function pointers, and enumerators and
-  macros read out as constants. Anything else is refused by name, never
-  approximated: a binding that describes the wrong type is worse than none.
-- **What it cannot know:** a header does not say what a callee keeps, who
-  frees a returned pointer, what may be null, which pointer goes with which
-  length, which arguments are outputs, or how errors are reported. The author
-  states what a callee keeps (`--no-escape`) and types a variadic tail; the
-  rest is written by hand on top of the binding.
+  macros read out as constants. Enum-typed parameters, fields and results are
+  refused today. Anything else is refused by name, never approximated: a
+  binding that describes the wrong type is worse than none.
+- **What a header cannot say,** and the binding therefore does not state: what
+  a callee keeps, who frees a returned pointer, which pointer goes with which
+  length, which return value means failure. The program keeps those
+  obligations as a C program would ([Calling C](calling-c.md#two-layers)).
+  Today's `--no-escape` flag, which writes `@ntsNoEscape`, is for bindings
+  written by hand; a generated binding carries no such facts.
 - **What checks it:** the witness compiles every binding against the real
-  headers when the program is built ([native](native.md#the-witness)).
+  headers when the program is built ([native](native.md#calling-c)).
 
 ## C's number types
 
@@ -92,46 +96,53 @@ A C number type becomes a kind from `@nts/scalars`
   single representation and is refused.
 
 Today's binder writes `signed char`, `short`, `long long`, `float` and
-`double` as `Int8`, `Int16`, `BigInt64`, `Float32` and `Float64`; `int` and
-`unsigned int` are kinds of their own; `ssize_t` is written as `c_ptrdiff_t`;
-and `c_schar`, `c_uchar`, `c_short`, `c_ushort`, `c_longlong`,
+`double` as `Int8`, `Int16`, `BigInt64`, `Float32` and `Float64`, so a
+`long long` is spelled `int64_t`, which is a different C type on Linux. `int`
+and `unsigned int` are kinds of their own; `ssize_t` is written as
+`c_ptrdiff_t`; and `c_schar`, `c_uchar`, `c_short`, `c_ushort`, `c_longlong`,
 `c_ulonglong`, `c_float`, `c_double`, `c_ssize_t`, `c_intptr_t` and `c_wchar`
 do not exist.
 
-## Whole libraries
+## Whole headers
 
-After ResourceFlow, `bind-c` binds whole headers, with an overrides file
-([decisions](#decisions)):
+`bind-c` binds a library's whole headers directly, with no file of facts
+beside them:
 
 - **Everything the library's own headers declare,** not the system headers
-  they include. Each item is bound or refused by name with its reason, in a
-  report beside the binding.
-- **An overrides file per library** states what the headers cannot: who frees
-  a returned pointer and with which function, what a callee keeps, what may be
-  null, a pointer and its length (`Counted`), outputs and the error convention
-  (`@ntsThrows`), and the TypeScript names. An ownership fact is enforced by
-  ResourceFlow, never trusted as an unchecked annotation.
-- **Clang's own annotations are read** where a header has them (`_Nullable`,
-  `_Nonnull`, `counted_by`, `malloc` and the ownership attributes), so a
-  well-annotated header needs fewer overrides.
+  they include: functions, records, enums, constants, function-like macros and
+  `static inline` functions. Each item is bound or refused by name with its
+  reason, in a report beside the binding.
+- **Per target.** A binding is generated from each target's headers, with
+  that target's layouts and number widths, and the witness checks each.
+- **What it reads beyond the types:** nullability (`_Nullable`, `_Nonnull`,
+  `nonnull`, `returns_nonnull`), an enum's openness (`enum_extensibility`) and
+  flags (`flag_enum`), and `format` for printf-style functions. Upstream clang
+  cannot put a count on a function parameter, and glibc writes its buffer and
+  deallocator attributes only for GCC; this design needs neither.
+- **Function-like macros and `static inline` functions** become C functions
+  that nts generates from the header, compiles into the program and checks
+  with the witness, so every target calls them through a real symbol.
+- **A `node:ffi` implementation** of each binding is generated beside it, so a
+  program that calls C runs under node as the reference
+  ([Calling C](calling-c.md#nodeffi)).
 
 ## Open questions
 
-- **Macros and `static inline` functions** have no symbol to call. Proposed:
-  the binder emits a small C shim for each one a program uses, compiled into
-  the program and checked by the witness like any other binding.
-- **The overrides file's form.** Proposed: TypeScript, typed by a declaration
-  module, so the editor and the checker read it as they read the binding.
-- **Variadic functions** beyond the rest parameter a binding types for each
-  shape today, such as `printf`'s family.
-- **The libraries that drive it first.** Proposed: the ones `runtime/node`
-  already bundles (zlib, llhttp, libuv), then SQLite as an outside test.
+- **Explicit alignment** (`_Alignas`, `__attribute__((aligned))`,
+  `#pragma pack(n)` with `n` above 1) has no vocabulary, so such records are
+  refused by the layout check.
+- **Bit-fields on Windows** need Microsoft's placement, not built, so such
+  records are refused.
+- **Records by value** still refused on some ABIs: System V unions, AAPCS64
+  floating-point aggregates and arguments over 16 bytes, and arm64 Windows.
 
 ## Decisions
 
-- ResourceFlow comes with its enforcement, and after it `bind-c` binds whole
-  headers, with an overrides file (I-5, B-1,
-  [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- Bind whole headers directly, per target, with no file of facts: a binding is
+  the C API as the header declares it, and refined APIs are written over it
+  ([Calling C](calling-c.md#decisions)). This replaces the overrides file
+  decided on 10-28 (B-1); decided by the user on 10-30
+  ([log](../records/notebooks/decisions-log.md#calling-c-10-30)).
 - C's number types, decided by the user on 10-29 and built first. A C type that
   is the same on every target is an alias of the fixed-width kind. One that
   depends on the target is a kind of its own. Each fixed width keeps a label

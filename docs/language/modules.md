@@ -130,7 +130,7 @@ files: `c:` for C libraries (`runtime/native/libc.d.ts` by hand, or generated
 from a header by `nts bind-c`), `gi:` for GObject introspection, `objc:` for
 Apple's frameworks and `winrt:` for the Windows Runtime, the last three
 generated from the platform's own metadata, once per SDK. Each target's page
-says how: [native](../targets/native.md), [GTK](../targets/gtk.md),
+says how: [Calling C](../targets/calling-c.md), [GTK](../targets/gtk.md),
 [Apple](../targets/apple.md), [Windows](../targets/windows.md).
 
 A `declare` written in the program's own source is bound as a C function

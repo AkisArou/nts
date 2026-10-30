@@ -985,3 +985,59 @@ From the open-questions audit; each is the register's recommendation.
   on main by its trap, where ASan read allocator padding without complaint.
   Its corpus cost is not yet known; it decides the mode's place in the
   nightly run ([plan](../../plan.md#from-the-bun-and-scriptc-studies)).
+
+## Calling C (10-30)
+
+The user, the coordinator, four research reports and the measurements in
+[record 0361](../0361-calling-c-from-a-header.md) settled how TypeScript
+calls C. The specification is [Calling C](../../targets/calling-c.md).
+
+- **No generated layer that needs metadata.** A first proposal generated a
+  "plain layer" from a per-library file of facts. The user: "I think I do not
+  like the plain layer. It needs extra metadata." Refined APIs come instead
+  from TypeScript packages written over a binding, and from Node-API addons
+  once nts loads them (I-10).
+- **The binding is the C API as the header declares it,** written with
+  TypeScript's values: "when binding a C library from a header, the
+  developer would expect the same API like it is in C, but write it with
+  JS/TS semantics." `bind-c` binds whole headers per target, with no file of
+  facts. This replaces the overrides file of B-1.
+- **The rules,** accepted by the user ("I accept your recommendations"):
+  - struct classes over C memory at a fixed address, `new T({...})`
+    zero-filling, read-only nested fields, copies by `Object.assign` and
+    copy constructors; `local<T>()` removed;
+  - `Ref<T>` for out-parameters, since TypeScript's checker cannot see C
+    write to a variable (measured with TypeScript 7.0.2);
+  - `addrOf` on fields and elements, only as a direct argument;
+  - typed arrays and `CArray<T>` as C memory, plain arrays only where C just
+    reads, and pointer fields that keep their targets alive;
+  - a `string` for `const char *` for the call, an interior zero as a
+    `TypeError`, results as pointers read with `stringFrom`, and `cstring`
+    for strings C keeps;
+  - handles opaque and nullable, released by the program;
+  - return codes as values, `errno()` saved as each call returns, and C
+    adapters for `longjmp` libraries;
+  - callbacks as functions that capture nothing, data through the context
+    pointer or a `Handle`, and an escaping throw as the program's uncaught
+    error;
+  - every pointer and handle nullable unless the header says non-null, and a
+    NULL non-null result as a `TypeError`;
+  - enums open unless declared closed, C shims for function-like macros and
+    `static inline` functions, and variadic calls typed per call with
+    `format` checked;
+  - a checking build that runs tests under AddressSanitizer and poisons what
+    each call was lent.
+- **ResourceFlow (I-5) and the fact tags.** ResourceFlow keeps checking the
+  ownership facts a platform's metadata states (GObject, Objective-C, COM,
+  Windows). For plain C, a header states no ownership, so its work is the
+  checks above. The fact tags (`@ntsNoEscape`, `@ntsFree`, the closure kinds,
+  `Counted` and the rest) stay only where metadata generates them.
+- **`node:ffi`.** The user: "we should also support it at some point, because
+  we are gonna update our nodejs version." nts implements `node:ffi`,
+  compiling literal definitions to direct C calls, and generates a
+  `node:ffi` implementation of each binding so that C-interop programs are
+  compared with node. The node reference moves from Node 24 to Node 26, the
+  latest LTS line.
+- **The plan.** The user: "I think it should placed directly into our plan
+  and be built in parallel." It is phase 2, item 9 of
+  [the plan](../../plan.md), with owners for each stage.

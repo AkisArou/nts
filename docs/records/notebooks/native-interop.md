@@ -1,5 +1,11 @@
 # TypeScript and C, in both directions
 
+> **Superseded as a design.** How a program calls C is now
+> [Calling C](../../targets/calling-c.md), decided on 2026-10-30
+> ([record 0361](../0361-calling-c-from-a-header.md)). `CFn`, `Ref` (as a
+> handle) and `CStr` below never existed in code, and the open questions
+> below were since settled. This notebook is history.
+
 > **Scalars have moved on.** This doc spells `c_int` as a branded `number` in a
 > `"c:stdint"` module. Today `c_int` and the other C scalars come from
 > `@nts/scalars` (see `runtime/native/libc.d.ts`), as `docs/scalar-numbers.md`

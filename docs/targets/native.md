@@ -105,150 +105,13 @@ Every field is in the [`nts.config.ts` reference](../reference/nts-config.md).
 
 ## Calling C
 
-### Declaring a C library
-
-A C library is an ambient module named `c:<name>`. Its members enter scope
-only through imports, and each declaration is the authored ABI: the compiler
-derives the C prototype from it and never from a call site.
-
-```ts
-// types/counter.d.ts
-/** @ntsHeader "counter.h" */
-declare module "c:counter" {
-  import type { Opaque } from "c:types";
-  import type { c_int } from "@nts/scalars";
-
-  export type Counter = Opaque<"Counter">;           // struct Counter *
-  export function counter_new(initial: c_int): Counter | null;
-  export function counter_bump(counter: Counter, by: c_int): c_int;
-  export function counter_destroy(counter: Counter): void;
-}
-```
-
-```ts
-import { counter_new, counter_bump, counter_destroy } from "c:counter";
-
-const counter = counter_new(1);
-if (counter !== null) {
-  counter_bump(counter, 2);
-  counter_destroy(counter);
-}
-```
-
-JSDoc tags on a module or a declaration say what its types cannot:
-
-| tag | says |
-|---|---|
-| `@ntsHeader h` | the header that declares the module's members: included by the program, checked by the witness |
-| `@ntsLibrary name` | the library a function needs (`-l`): a program links what it calls and nothing more |
-| `@ntsPackage pkg` | the pkg-config packages a module's headers and symbols come from |
-| `@ntsNoEscape p` | the callee keeps nothing of `p` past the call |
-| `@ntsDefault p=v` | what the compiler passes for an optional parameter the caller leaves out |
-| `@ntsThrows p converter` | a failure reported through an out parameter is thrown as an `Error` when the caller leaves the slot out |
-| `@ntsConstant v` | an exported `const` is a constant, folded where it is read; nothing is linked |
-| `@ntsAbi managed` | an nts host bridge, with the managed convention, not a C ABI |
-
-`runtime/native/libc.d.ts` ships with the compiler: hand-written declarations
-of a libc subset (`c:stdlib`, `c:math`, `c:stdint`, `c:stddef`, `c:stdbool`)
-and the binding vocabulary (`c:types`, `c:memory`, `c:pending`). A project adds
-it to its tsconfig's `include`; it is not loaded automatically. Third-party
-libraries are not shipped: a project binds them, by hand or with `nts bind-c`.
-
-### Numbers
-
-The numbers in a declaration are kinds from `@nts/scalars`
-(`runtime/native/scalars.d.ts`): `Int8` to `Uint32`, `BigInt64`, `BigUint64`,
-`Float32` and `Float64`, and C's own `c_char`, `c_int`, `c_uint`, `c_long`,
-`c_size_t`, `c_ptrdiff_t` and `c_uintptr_t`, as wide as the target makes them.
-A kind is a `number` (a `bigint` where every bit of 64 is wanted) with an
-optional label, so a plain number is written where one is wanted, with no cast,
-and a result needs none.
-
-- A value stored into a kind (an argument to C, a field, a local, a return)
-  must be proven one of the kind's values, or the build stops (NTS5001).
-  `n | 0` is proven an `int`; an `as` is accepted only where nts proves it.
-- `AsNumber<c_size_t>` hands a 64-bit integer over as a number, exactly: a
-  value past 2^53 is a `RangeError`, never rounded.
-- `c_long` is 64 bits on Linux and macOS and 32 on Windows. A build for several
-  targets takes a value only where it fits on every one.
-
-### The binding vocabulary
-
-`c:types` describes what a C prototype means, so the call can be lowered
-exactly. Where a module names its header, the witness checks every
-declaration written with these types against it.
-
-| family | types | C |
-|---|---|---|
-| handles | `Opaque<Tag>`, `Class<Tag, Parent>`, `Const<H>`, `Erased<H>`, `Declared<T, D>`, `Typedef<T>` | a pointer to a struct the program cannot see into; a single-inheritance chain (`GtkButton` is a `GtkWidget`); `const`; `void *`; a factory declared as an ancestor; a typedef with no tag |
-| records | `Struct<Fields, Tag>`, `Union`, `Packed<T>`, `CArray<T, N>`, `Bits<T, N>`, `Flexible<T>`, `Given<T>` | a struct or union laid out as C lays it out, inline arrays, bit-fields, a flexible array member, a WebIDL-style "given or not" member |
-| pointers | `Ptr<T>`, `ConstPtr<T>`, `ByValue<T>`, `Fields<T>` | `T *`, `const T *`; a record passed by value, from storage or written as an object literal |
-| callbacks | a function type; `Closure<F>`, `ScopedClosure<F>`, `OnceClosure<F>`, `ErasedClosure<F, N>` | a function pointer; a callback with a context that C keeps, uses during the call, or calls once; GLib's `GCallback` |
-| text and arrays | `string`, `Utf16String`, `StringView`, `CStrings`, `CBytes`, `CElements`, `CHandles`, `Counted<A, L>` | `const char *` (UTF-8), `const uint16_t *`, a lent view of the string's own units, `char **`, a typed array's bytes or elements, an array of handles, an array with its length in a parameter of its own |
-| values | `CEnum<E, B>`, `CBool<B>` | an enum or a boolean C holds in an integer |
-| counted families | `GObjectClass`, `HostClass`, `Owned<T>`, `Consumed<T>`, `Boxed` | objects a host counts, and transfers of their references ([GTK](gtk.md), [Chromium](chromium.md)) |
-
-`c:memory` holds the storage operations, which the compiler lowers itself:
-`local<T>(count)` (zero-initialized storage in the frame), `sizeof<T>()`,
-`addrOf(place)` (C's `&p->field`), `copy(destination, source)`,
-`stringFrom(p)` and `bytesFrom(p, length)` (copy C's memory into a `string` or
-a `Uint8Array`), `pointerBits(p)` and `unsafeDowncast`. `c:stdlib`'s
-`malloc<T>(bytes)` and `free` are typed and manual.
-
-```ts
-import type { c_int } from "@nts/scalars";
-import { poll, type PollFd } from "c:poll";
-import { local } from "c:memory";
-
-export function waitReadable(fd: c_int, timeoutMs: c_int): number {
-  const request = local<PollFd>();     // struct pollfd, in this frame
-  request.fd = fd;
-  request.events = 1;                  // POLLIN
-  return poll(request, 1n, timeoutMs); // poll's binding says @ntsNoEscape
-}
-```
-
-- `p[i]` indexes elements, `p.field` reads and writes a member at its C width,
-  and a member that is a record or an inline array reads as a pointer to it.
-- Reads and writes through a raw pointer are the caller's obligation: nothing
-  checks bounds, alignment or lifetime there.
-- A variadic function's tail is a rest parameter whose type the binding
-  states: `open(path: string, flags: c_int, ...rest: Uint32[])`. A binding
-  that needs two shapes declares two names.
-
-### Strings at the boundary
-
-- A `string` parameter is `const char *`: NUL-terminated UTF-8, lent for the
-  call and given back after. An all-ASCII one-byte string is lent in place;
-  any other is converted. A lone surrogate becomes U+FFFD, and a U+0000 inside
-  the string ends the process, naming the boundary.
-- A `string` result is copied into a string the program owns. The C pointer is
-  neither kept nor freed.
-- `Utf16String` lends UTF-16, in place when the string is already two bytes a
-  unit, and passes a lone surrogate unchanged. `StringView` lends the string's
-  own units with their width and length, so text crosses exactly, U+0000
-  included.
-
-### Callbacks
-
-- A function passed where a declaration writes a function type is a C function
-  pointer: the compiler emits a bridge with the foreign signature that calls
-  the compiled function. It must not capture, since a bare code pointer has no
-  room for an environment.
-- A capturing callback is a `Closure<F>` (C keeps it and releases it through
-  the destroy function it is given), a `ScopedClosure<F>` (used only during the
-  call, released after it) or a `OnceClosure<F>` (called exactly once, then
-  released). The context and destroy parameters are in the C prototype, and
-  neither the binding nor the caller writes them.
-- A parameter without `@ntsNoEscape` may be kept by the callee, so frame
-  storage cannot be passed there: `native local address escapes`.
-- A throw inside a callback never unwinds through the C frames. The program
-  stops with status 1, naming the boundary
-  ([errors](../language/errors.md#callbacks-a-host-invokes)).
-- Compiled code runs on its owner thread. A completion from another thread
-  reaches the heap only through the host (`post_from_any_thread`), and a
-  binding whose promise waits on one brackets it with `nts_pending_begin` and
-  `nts_pending_end` (`c:pending`), so the program keeps running meanwhile.
+A C library is a `c:<name>` module whose declarations are the library's ABI:
+generated from its headers by `nts bind-c` ([C headers](c-headers.md)), or
+from a platform's metadata for GObject, Objective-C and Windows
+([GTK](gtk.md), [Apple](apple.md), [Windows](windows.md)). The C API is
+written with TypeScript's values: struct objects, `Ref`, typed arrays,
+strings and functions. How a program calls a binding, and the contract each
+call keeps, is [Calling C](calling-c.md).
 
 ### The witness
 
@@ -257,31 +120,8 @@ linking. It includes the headers the bindings name and asserts each bound
 function's type (`__builtin_types_compatible_p`) and each record's size and
 member offsets. A binding that disagrees with the real header fails the build
 instead of miscompiling, and a header named by a module must declare every
-symbol bound to it.
-
-### Generating a binding: `nts bind-c`
-
-```sh
-nts bind-c --module c:epoll --header sys/epoll.h \
-  --record epoll_event --record epoll_data \
-  --fn epoll_create1 --fn epoll_ctl --fn epoll_wait \
-  --no-escape epoll_ctl:event --alias epoll_event=EpollEvent \
-  --out types/epoll.d.ts
-```
-
-- It runs clang as a subprocess (`-ast-dump=json` for the declarations,
-  `-fdump-record-layouts` for the layouts), recomputes each layout by the
-  compiler's own rules, and refuses with both numbers where they differ.
-- A header does not say what a callee keeps, so `--no-escape` states it;
-  `--alias` names a tag. Constants named with `--const` go to a `.ts` of their
-  own (`--constants-out`). A variadic tail is written as `...rest: unknown[]`,
-  which does not compile until the binding types it.
-- It binds the items it is named, and generates signatures only, never
-  ownership. Binding whole headers, with an overrides file, is decided for
-  after ResourceFlow ([Decisions](#decisions)).
-  The flags are in the [CLI reference](../reference/cli.md#nts-bind-c), and
-  the binder's design, C's number types included, is
-  [C headers](c-headers.md).
+symbol bound to it. Every binding names its header, so the witness always
+has one to compare against.
 
 ## C calling TypeScript
 
@@ -331,22 +171,20 @@ int main(void) {
 
 ## Ownership of C pointers
 
-- **A plain C pointer is a word nts never counts.** An `Opaque` handle or a
-  `Ptr` has no header, no retain, no release and no tracing. It is destroyed by
-  the library's own call or by `free`, and whoever captures one must keep it
-  alive for every use.
-- **What the compiler checks:** storage from `local` never escapes its frame,
-  into a callee that may keep it, a closure, a suspended `await` or a return;
-  `@ntsNoEscape` is the contract that check relies on.
+- **A plain C pointer is a word nts never counts.** An opaque handle or a
+  `Ptr` has no header, no retain, no release and no tracing. The program
+  releases it with the library's own call or with `free`, as C does
+  ([Calling C](calling-c.md#handles)).
+- **What the compiler checks** is in
+  [Calling C](calling-c.md#what-nts-checks): an address passed only as a
+  direct argument, pointer fields keeping their targets alive, a lent buffer
+  held for the call, and every pointer tested for `null` before use.
 - **Counted families are the exception.** GObject, Objective-C, COM and Blink
-  objects are counted by the compiler with their family's own pair, and their
-  pages say how.
-- **ResourceFlow: designed, not built.** Checked ownership, borrowing, escape
-  and cleanup over native operations, so that an obligation such as "destroy
-  what `counter_new` returned" or "unsubscribe before freeing the context" is
-  discharged at compile time. The ownership vocabulary arrives together with
-  its enforcement, never as an unchecked annotation; ResourceFlow is decided
-  to be built that way ([Decisions](#decisions)).
+  objects are counted by the compiler with their family's own pair, from
+  their metadata, and their pages say how.
+- **ResourceFlow** checks the ownership facts a platform's metadata states,
+  and for plain C it is the checks above. A plain header states no ownership,
+  so nothing about a plain C handle is enforced beyond what C itself enforces.
 
 ## Open questions
 
@@ -395,10 +233,13 @@ From the open-questions audit (10-28):
   built now, not later (X-7,
   [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
   Not built yet.
-- **ResourceFlow comes with its enforcement,** and after it `bind-c` binds
-  whole headers, with an overrides file (I-5, B-1,
+- **ResourceFlow comes with its enforcement** where a platform's metadata
+  states ownership (I-5,
   [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
-  Not built.
+  For plain C its work is the checks of
+  [Calling C](calling-c.md#what-nts-checks), and `bind-c` binds whole headers
+  directly, with no overrides file (B-1, reworded by the user on 10-30,
+  [log](../records/notebooks/decisions-log.md#calling-c-10-30)). Not built.
 - **Objects cross the C ABI as opaque handles;** generated Swift, Kotlin and
   Java wrappers come later (S-2,
   [log](../records/notebooks/decisions-log.md#products-toolchains-and-dependencies-10-28)).
@@ -419,3 +260,11 @@ A new decision of 10-28:
   [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
   Not built; what is still to design is register
   [I-10](../open-questions.md#5-interop-and-hosts).
+
+From 10-30:
+
+- **Calling C** is the C API as the header declares it, written with
+  TypeScript's values; refined APIs are TypeScript packages over a binding, or
+  Node-API addons; nts implements `node:ffi`, and the node reference moves to
+  Node 26 ([Calling C](calling-c.md#decisions),
+  [log](../records/notebooks/decisions-log.md#calling-c-10-30)). Not built.

@@ -37,7 +37,8 @@ one page that changes as work goes; the designs it builds are in
     benchmark ports ([cloud-agents](contributing/cloud-agents.md)).
 
   The JVM is maintained while its new work waits for phase 4; the Wasm backend
-  is being rebuilt on Binaryen IR.
+  is being rebuilt on Binaryen IR. Calling C is built in parallel with phase
+  2's other work, by runtime, runtime2, tsrs and helper2 (phase 2, item 9).
 - **The machine:** one shared 32 GB box. At most two heavy jobs run at once,
   CPUs 4–5 are kept for measurement, and every build checks the disk floor
   first ([`../AGENTS.md`](../AGENTS.md)).
@@ -239,6 +240,40 @@ The designs and their build orders are in [`foundations/`](foundations).
    integral regions). Each step is measured per row by instruction counts and
    by the checks left in the hot loops' machine code on each backend
    ([evidence](records/notebooks/bounds-check-placement.md)).
+9. **Calling C** (decided, [calling C](targets/calling-c.md)), built in
+   parallel with the rest of this phase: the C API as each header declares it,
+   written with TypeScript's values and checked against the header at every
+   build. In this order:
+   1. **The vocabulary:** struct classes over C memory (`new T`, read-only
+      nested fields, `Object.assign` and copy constructors), `Ref<T>`,
+      `CArray<T>`, `addrOf` as a direct argument, pointer fields that keep
+      their targets alive, nullable pointers and handles, `errno()`,
+      `cstring` and `Handle`, with the checks that hold everywhere: an
+      interior zero and a NULL non-null result as `TypeError`s, and the
+      owner-thread check with or without a host (C-3, I-3). `local<T>()` goes.
+      Owner: runtime, with the compiler lane reviewing every core change.
+   2. **The binder:** C's number types first, then whole headers per target,
+      nullability and enum openness read from the header, C shims for
+      function-like macros and `static inline` functions, variadic calls
+      typed per call with `format` checked, and a `node:ffi` implementation
+      generated beside each binding. Owner: runtime2.
+   3. **The existing bindings** move to the new forms (`tests/interop`,
+      `runtime/native/libc.d.ts` and its README), and the fact tags stay only
+      where metadata generates them. Owner: helper2, with the lanes whose
+      bindings move.
+   4. **Node 26 and `node:ffi`:** the node reference moves to Node 26, the
+      latest LTS line, re-recording what changes. C-interop programs then join
+      the node-compared corpus through the generated `node:ffi`
+      implementations (owner: tsrs), and `node:ffi` itself compiles ahead of
+      time, with libffi bundled from source for definitions built at run time
+      (owner: runtime).
+   5. **Rows:** the cost of a C call against `node:ffi`, a struct-heavy
+      binding and a callback-heavy one (owner: helper2).
+
+   `runtime/node`'s libraries (libuv, llhttp, zlib, the crypto library) are
+   the first bound this way. TypeScript's `using` and `DisposableStack`, which
+   `node:ffi`'s handles also use, follow from the compiler lane after its
+   soundness classes.
 
 ## Phase 3: conformance-driven development
 
@@ -489,15 +524,12 @@ Noted, not scheduled:
 - line tables and `#line` in every build, frame pointers if cheap, an
   unoptimized debug profile, and `Error.stack` with node's uncaught-error
   report (X-1, X-2);
-- the runtime's check on every entry from a thread it does not own, on every
-  host (C-3, I-3; record 0018);
 - promises across boundaries: a deferred plus a threadsafe function for
   N-API, and `nts_checkpoint` documented for C embedders (I-4);
 - one nts instance per process, a second refused clearly (I-7);
-- ResourceFlow with its enforcement, then `bind-c` over whole headers (I-5,
-  B-1);
-- host errors as catchable `Error`s carrying the host value, after research
-  on unwinding through C frames (I-2);
+- host errors as catchable `Error`s carrying the host value, as GError,
+  HRESULT and `NSError` already are, with nothing unwinding through C frames
+  (I-2, [calling C](targets/calling-c.md#callbacks));
 - the per-target intersection type check (B-2), and publishing the
   permissively licensed surfaces (B-3);
 - objects across the C ABI as opaque handles, then Swift, Kotlin and Java

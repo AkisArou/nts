@@ -250,6 +250,12 @@ It runs clang as a subprocess (`NTS_BIND_CC`, else `CC`, else `clang`), reads
 the author's claim (`--no-escape`). A build compiles the binding's witness
 against the real headers.
 
+Decided, not built: `bind-c` binds a library's whole headers per target, with
+C shims for function-like macros and `static inline` functions and a
+`node:ffi` implementation beside each binding, and generated bindings carry no
+facts, so `--no-escape` stays for bindings written by hand
+([C headers](../targets/c-headers.md#whole-headers)).
+
 ### `nts bind-objc`
 
 Generates an `objc:` declaration module from macOS framework headers.

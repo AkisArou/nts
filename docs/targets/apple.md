@@ -103,7 +103,7 @@ in Swift.
   sends ([CLI](../reference/cli.md#nts-bind-objc)).
 
 **Swift.** `@objc` Swift is reached through the Objective-C binder, and
-`@_cdecl` Swift through [`bind-c`](native.md#generating-a-binding-nts-bind-c).
+`@_cdecl` Swift through [`bind-c`](c-headers.md#binding-named-items-nts-bind-c).
 Pure Swift (generic structs, SwiftUI, Swift's own `async`) needs a shim the
 programmer writes. C reaches compiled TypeScript through
 [`program.h`](native.md#c-calling-typescript); Swift calling TypeScript

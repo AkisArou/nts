@@ -1,0 +1,92 @@
+function	parameter_index	kept	direction
+adler32_z	1	not kept	read only
+adler32	1	not kept	read only
+compress2_z	0	may be kept	unknown
+compress2_z	1	not kept	unknown
+compress2_z	2	may be kept	unknown
+compress2	0	may be kept	unknown
+compress2	1	not kept	unknown
+compress2	2	may be kept	unknown
+compress_z	0	may be kept	unknown
+compress_z	1	not kept	unknown
+compress_z	2	may be kept	unknown
+compress	0	may be kept	unknown
+compress	1	not kept	unknown
+compress	2	may be kept	unknown
+crc32_z	1	may be kept	unknown
+crc32	1	may be kept	read only
+deflateInit_	0	may be kept	unknown
+deflateInit_	2	not kept	read only
+deflateInit2_	0	may be kept	unknown
+deflateInit2_	6	not kept	read only
+deflateEnd	0	not kept	unknown
+deflateReset	0	not kept	unknown
+deflateResetKeep	0	not kept	unknown
+deflateSetDictionary	0	not kept	unknown
+deflateSetDictionary	1	may be kept	unknown
+deflateGetDictionary	0	not kept	read only
+deflateGetDictionary	1	not kept	write only
+deflateGetDictionary	2	not kept	write only
+deflateSetHeader	0	not kept	read only
+deflateSetHeader	1	may be kept	unknown
+deflatePending	0	not kept	read only
+deflatePending	1	not kept	write only
+deflatePending	2	not kept	write only
+deflateUsed	0	not kept	read only
+deflateUsed	1	not kept	write only
+deflatePrime	0	not kept	read only
+deflateParams	0	may be kept	unknown
+deflate	0	may be kept	unknown
+deflateTune	0	not kept	read only
+deflateBound_z	0	not kept	read only
+deflateBound	0	not kept	read only
+deflateCopy	0	may be kept	unknown
+deflateCopy	1	not kept	read only
+inflateBackInit_	0	not kept	unknown
+inflateBackInit_	2	may be kept	unknown
+inflateBackInit_	3	not kept	read only
+inflateBack	0	not kept	unknown
+inflateBack	1	not kept	read only
+inflateBack	2	may be kept	unknown
+inflateBack	3	not kept	read only
+inflateBack	4	may be kept	unknown
+inflateBackEnd	0	not kept	unknown
+inflateResetKeep	0	not kept	unknown
+inflateReset	0	not kept	unknown
+inflateReset2	0	not kept	unknown
+inflateInit2_	0	may be kept	unknown
+inflateInit2_	2	not kept	read only
+inflateInit_	0	may be kept	unknown
+inflateInit_	1	not kept	read only
+inflatePrime	0	not kept	read only
+inflate	0	not kept	unknown
+inflateEnd	0	not kept	unknown
+inflateGetDictionary	0	not kept	read only
+inflateGetDictionary	1	not kept	write only
+inflateGetDictionary	2	not kept	write only
+inflateSetDictionary	0	not kept	read only
+inflateSetDictionary	1	not kept	read only
+inflateGetHeader	0	not kept	read only
+inflateGetHeader	1	may be kept	unknown
+inflateSync	0	not kept	unknown
+inflateSyncPoint	0	not kept	read only
+inflateCopy	0	may be kept	unknown
+inflateCopy	1	not kept	read only
+inflateUndermine	0	not kept	read only
+inflateValidate	0	not kept	read only
+inflateMark	0	not kept	read only
+inflateCodesUsed	0	not kept	read only
+uncompress2_z	0	may be kept	unknown
+uncompress2_z	1	not kept	unknown
+uncompress2_z	2	may be kept	unknown
+uncompress2_z	3	not kept	unknown
+uncompress2	0	may be kept	unknown
+uncompress2	1	not kept	unknown
+uncompress2	2	may be kept	unknown
+uncompress2	3	not kept	unknown
+uncompress_z	0	may be kept	unknown
+uncompress_z	1	not kept	unknown
+uncompress_z	2	may be kept	unknown
+uncompress	0	may be kept	unknown
+uncompress	1	not kept	unknown
+uncompress	2	may be kept	unknown

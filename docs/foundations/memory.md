@@ -483,10 +483,11 @@ From the open-questions audit (10-28,
   from the memory census's numbers (M-1).
 - **Where the cycle collector's candidate index goes in the 16-byte header**
   is decided in stage 6, by measurement (M-2).
-- **M5 covers the language, not binding declarations:** the ownership
-  vocabulary ResourceFlow checks in a C binding
-  ([native](../targets/native.md#ownership-of-c-pointers)) is not a memory
-  annotation in the language (I-5).
+- **M5 covers the language, not binding declarations:** what a binding
+  generated from a platform's metadata states about ownership, which
+  ResourceFlow checks, is not a memory annotation in the language (I-5). A
+  binding from a plain C header states no ownership at all
+  ([Calling C](../targets/calling-c.md#handles)).
 - **Startup time, executable size and peak RSS are rows,** against node and
   Bun, built as stage 0 instruments (P-2,
   [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
