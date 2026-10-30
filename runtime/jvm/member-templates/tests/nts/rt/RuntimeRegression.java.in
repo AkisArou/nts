@@ -1473,6 +1473,7 @@ public final class RuntimeRegression {
         testFractionalWrapperReads(); System.out.println("wrapper reads at a double index passed");
         testProvedViewAccess(); System.out.println("proven view accesses passed");
         testUntransferableBacking(); System.out.println("untransferable backing identities passed");
+        testFixedViewResize(); System.out.println("fixed view resize accesses passed");
         testStringKeyDoors(); System.out.println("unboxed string keys passed");
         testTableFills(); System.out.println("table fills passed");
         testNumberColumns(); System.out.println("number columns passed");
@@ -1863,6 +1864,49 @@ public final class RuntimeRegression {
         NtsMap.setString(mixed, "1", NtsValue.ofNumber(40));
         number(NtsTable.get(mixed, NtsValue.ofNumber(1)).num, 10, "the string \"1\" leaves the number 1");
         number(NtsTable.getString(mixed, "1").num, 40, "and is a key of its own");
+    }
+
+    private static void viewBoundsRefusal(Runnable access, String message) {
+        boolean stopped = false;
+        try { access.run(); }
+        catch (NtsRefusal refusal) {
+            stopped = true;
+            equal(refusal.getMessage(), "nts: refused: index 0 is outside [0, 0)", message);
+        }
+        check(stopped, message + " must stop before touching stale bytes");
+    }
+
+    /** The bounds-loop-fixed-view-resize-back-edge proof and its no-shrink control. */
+    private static void testFixedViewResize() {
+        for (boolean shrink : new boolean[] {false, true}) {
+            NtsBuffer buffer = NtsBuffer.allocateResizable(8, 8);
+            NtsViewI32 fixed = NtsViewI32.part(buffer, 0, 2);
+            NtsViewI32 offset = NtsViewI32.part(buffer, 4, 1);
+            NtsViewI32 tracking = NtsViewI32.over(buffer, 0);
+            NtsViewI32.setInt(fixed, 0, 17);
+            NtsBuffer.resize(buffer, shrink ? 4 : 8);
+            number(NtsView.length(fixed), shrink ? 0 : 2, "whole fixed view length after resize");
+            number(NtsView.byteLength(fixed), shrink ? 0 : 8, "whole fixed view byteLength after resize");
+            number(NtsView.length(offset), shrink ? 0 : 1, "fixed view with an offset after resize");
+            number(NtsView.length(tracking), shrink ? 1 : 2, "tracking view retains complete elements");
+            if (shrink) {
+                // These scalar accessors retain the named L4 refusal until
+                // source typed-array indexing can carry an absent result.
+                viewBoundsRefusal(() -> NtsViewI32.get(fixed, 0.0), "double-index read");
+                viewBoundsRefusal(() -> NtsViewI32.getInt(fixed, 0), "int-index read");
+                viewBoundsRefusal(() -> NtsViewI32.set(fixed, 0.0, 99), "double-index store");
+                viewBoundsRefusal(() -> NtsViewI32.setInt(fixed, 0, 99), "int-index store");
+                viewBoundsRefusal(() -> NtsViewI32.getInt(offset, 0), "offset read");
+            } else {
+                number(NtsViewI32.get(fixed, 0.0), 17, "no-shrink double read control");
+                number(NtsViewI32.getInt(fixed, 0), 17, "no-shrink int read control");
+            }
+            number(NtsViewI32.getInt(tracking, 0), 17, "refused fixed-view stores preserve live bytes");
+            NtsBuffer.resize(buffer, 8);
+            number(NtsView.length(fixed), 2, "fixed view revives after regrowth");
+            number(NtsViewI32.getInt(fixed, 0), 17, "regrowth retains the live prefix");
+            number(NtsViewI32.getInt(offset, 0), 0, "regrowth zeroes the discarded suffix");
+        }
     }
 
     /**

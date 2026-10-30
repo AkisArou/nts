@@ -14,9 +14,11 @@ package nts.rt;
  *
  * <h2>Length, and the two kinds of view</h2>
  *
- * A view built with an explicit length has it for life. A view built without
- * one **tracks** the buffer: shrink the buffer and the view is shorter, grow it
- * and the view is longer. That is not a convenience, it is the specification,
+ * A view built with an explicit length keeps its declared extent. Its length
+ * becomes zero while that whole extent is outside the buffer, and recovers if
+ * the buffer grows back. A view built without a length **tracks** the buffer:
+ * shrink the buffer and the view is shorter, grow it and the view is longer.
+ * That is not a convenience, it is the specification,
  * and it is why {@link #length} is computed rather than stored -- a stored
  * length would be right until the first `resize` and wrong afterwards, which is
  * the shape of bug a test corpus without resizable buffers never sees.
@@ -304,14 +306,7 @@ public abstract class NtsView extends NtsAnyView {
         if (view.buffer.bytes == null) {
             throw new NtsRefusal("a TypeError: the ArrayBuffer is detached");
         }
-        // Inlined rather than calling `count`, so the fast path is one branch
-        // on `declared` and not a second read of the buffer's null-ness. The
-        // shift is the whole of the arithmetic.
-        int n = view.declared;
-        if (n < 0) {
-            int rest = view.buffer.length - view.offset;
-            n = rest <= 0 ? 0 : rest >> view.shift;
-        }
+        int n = count(view);
         int i = (int) index;
         if (i != index || i < 0 || i >= n) {
             return outside(index, n);
@@ -333,11 +328,7 @@ public abstract class NtsView extends NtsAnyView {
         if (view.buffer.bytes == null) {
             throw new NtsRefusal("a TypeError: the ArrayBuffer is detached");
         }
-        int n = view.declared;
-        if (n < 0) {
-            int rest = view.buffer.length - view.offset;
-            n = rest <= 0 ? 0 : rest >> view.shift;
-        }
+        int n = count(view);
         if (i < 0 || i >= n) {
             return outside(i, n);
         }
