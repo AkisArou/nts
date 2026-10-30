@@ -30,7 +30,7 @@ fn check_every_case(fixture: &str, cases: usize, functions: usize) {
     assert!(output.status.success(), "{stdout}\n{stderr}");
     let report: serde_json::Value =
         serde_json::from_slice(&output.stdout).expect("versioned check report");
-    assert_eq!(report["version"], 1);
+    assert_eq!(report["version"], 2);
     assert_eq!(report["status"], "agrees", "{stdout}\n{stderr}");
     assert_eq!(report["counts"]["compared"], serde_json::json!(cases));
     assert_eq!(report["counts"]["expected"], serde_json::json!(cases));

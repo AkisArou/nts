@@ -67,7 +67,7 @@ const CONTROL: &str = "export function control(n: number): number { return n + 1
 fn all_unavailable_has_a_complete_nonempty_node_population() {
     let (success, report) = Project::new(REFUSED).check();
     assert!(success, "{report}");
-    assert_eq!(report["version"], 1);
+    assert_eq!(report["version"], 2);
     assert_eq!(report["status"], "all_unavailable");
     assert_eq!(report["counts"]["functions"], 1);
     assert_eq!(report["counts"]["expected"], 29);
