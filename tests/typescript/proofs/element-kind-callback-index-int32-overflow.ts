@@ -1,0 +1,18 @@
+/*---
+description: A reducer writes an element beyond int32 before a separate reader runs.
+features: [ts-proof-element-kind, ts-route-callback, ts-functions, ts-iteration, ts-arrays, ts-numbers, ts-closures, ts-arrow-functions]
+---*/
+// Fact: integer-only number[] is narrowable (docs/foundations/objects.md, Arrays).
+// Route: a reduce callback writes 2147483648; the separate reader keeps it.
+function readFirst(xs: number[]): number { return xs[0]; }
+function observe(n: number): number {
+  const xs = [1, 2];
+  [0, 1].reduce((sum, step) => {
+    if (step === 0 && n > 0) xs[0] = 2147483648;
+    return sum + step;
+  }, 0);
+  return readFirst(xs);
+}
+for (const n of [0, 1, 3, 4, 7]) {
+  assert.sameValue(observe(n), n > 0 ? 2147483648 : 1);
+}
