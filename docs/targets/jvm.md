@@ -136,6 +136,10 @@ java.util.Map<String, String> tags = nts.gen.Program.tags();
   `java.util.Map` (the runtime's table implements it), keeps insertion order,
   and carries its generic types through the `Signature` attribute; a write from
   Java is a write to the program's own table.
+- A `Uint32` parameter or result is a Java `long` holding the value, 0 to
+  2^32 − 1. Inside the program it stays 32 bits in an `int`, and the entries
+  compiled code calls with those bits are synthetic, like every other entry nts
+  generates for its own calls: `javac` refuses a Java call to one.
 
 ## Android
 
