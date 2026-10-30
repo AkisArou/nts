@@ -1,8 +1,44 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "partial",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 29,
+      "unavailable": 29,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+      }
+    ],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
-  "category": "agrees",
-  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet | refused: NTS1003 `throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet",
+  "category": "refused",
+  "nts": "NTS1001 `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet | NTS1003 `throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet",
   "node": null,
-  "measured_with": "757d1e813a36f5e5",
+  "measured_with": "36a04d8fc582b92d",
   "source": "measured"
 }

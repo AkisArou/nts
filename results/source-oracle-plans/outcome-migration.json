@@ -1,0 +1,4605 @@
+{
+  "version": 1,
+  "source": "fd2d94397",
+  "compilerBase": "7d3c7a054cf74decf885041df60a79d0e25daf5f",
+  "binaries": {
+    "main": {
+      "path": "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+      "sha256": "292e0e7f372ff559a904bfbfc3e957933de0363677df8faa3313a6ebee3c6361"
+    },
+    "prefix": {
+      "path": "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+      "sha256": "715cdf96dd5a3b6843b1510bc9fc80cc7b4d1aea4c28f71dbdbf3039d6d4ae0f"
+    },
+    "complete": {
+      "path": "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+      "sha256": "36a04d8fc582b92dbbe0927f32bd310f776e92fd8921569a9985712a05a78589"
+    }
+  },
+  "rows": [
+    {
+      "name": "a-checked-byte-read-multiplied-by-zero",
+      "reason": "restart-decline-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-checked-byte-read-multiplied-by-zero/src/main.ts",
+          "sha256": "ebcd32024d117dd9a3766fbea525b0b53a939ba29d68bb4f46290909f99ecc10"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "23 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1501.238206,
+        "stdoutSha256": "fead532720bb045ddb213a5c739817ebe1198cc7c9fd9149f57edd156a71b370",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 24,
+            "disagreements": 0,
+            "expected": 58,
+            "functions": 2,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 58,
+            "received": 58
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-checked-byte-read-multiplied-by-zero",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 1774.525882,
+        "stdoutSha256": "02a5eb5e0f36d62ac29073605f68bdc7f2432dfa7119a4e73f188acfc413e171",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 35,
+          "expected": 58,
+          "unavailable": 0,
+          "declined": 23,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 35,
+              "unavailable": 0,
+              "runtime_declined": 23,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-checked-byte-read-multiplied-by-zero",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "23 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    },
+    {
+      "name": "a-checked-byte-read-reduced-modulo-one",
+      "reason": "restart-decline-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-checked-byte-read-reduced-modulo-one/src/main.ts",
+          "sha256": "8f2b2588f84c0778d73c6df8a7a52a15f6da9a0d80817a6cc2a689c1138e60d1"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "23 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1126.5070670000005,
+        "stdoutSha256": "fead532720bb045ddb213a5c739817ebe1198cc7c9fd9149f57edd156a71b370",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 24,
+            "disagreements": 0,
+            "expected": 58,
+            "functions": 2,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 58,
+            "received": 58
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-checked-byte-read-reduced-modulo-one",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 1368.487075,
+        "stdoutSha256": "02a5eb5e0f36d62ac29073605f68bdc7f2432dfa7119a4e73f188acfc413e171",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 35,
+          "expected": 58,
+          "unavailable": 0,
+          "declined": 23,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 35,
+              "unavailable": 0,
+              "runtime_declined": 23,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-checked-byte-read-reduced-modulo-one",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "23 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    },
+    {
+      "name": "a-checked-byte-read-truncated-then-multiplied-by-zero",
+      "reason": "restart-decline-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-checked-byte-read-truncated-then-multiplied-by-zero/src/main.ts",
+          "sha256": "bacf7c3c9577b7d9645d72fbf2cb4729e02264e2d6dd2aa40b3aaedcfef028fe"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "23 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1044.503157,
+        "stdoutSha256": "fead532720bb045ddb213a5c739817ebe1198cc7c9fd9149f57edd156a71b370",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 24,
+            "disagreements": 0,
+            "expected": 58,
+            "functions": 2,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 58,
+            "received": 58
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-checked-byte-read-truncated-then-multiplied-by-zero",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 1351.6197579999998,
+        "stdoutSha256": "02a5eb5e0f36d62ac29073605f68bdc7f2432dfa7119a4e73f188acfc413e171",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 35,
+          "expected": 58,
+          "unavailable": 0,
+          "declined": 23,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 35,
+              "unavailable": 0,
+              "runtime_declined": 23,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-checked-byte-read-truncated-then-multiplied-by-zero",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 35,
+            "unavailable": 0,
+            "runtime_declined": 23,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "23 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    },
+    {
+      "name": "a-computed-field-key-is-never-evaluated",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-computed-field-key-is-never-evaluated/src/case.js",
+          "sha256": "a47a73b186cf798635c9d28302a031f45585a541dd019b70e10815ae8ce39f7c"
+        },
+        {
+          "path": "tests/outcomes/a-computed-field-key-is-never-evaluated/src/main.ts",
+          "sha256": "2c88a439721cb6b6af6c9f6f498cc42f4eb660b94b63a56da74e467a3e465d66"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 29,
+            "unavailable": 58,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 160.31270500000028,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "d830a02256ac776052c6ce936c3cf50c839c38ca0dac4c69d7a8ec10ce98ad88",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-computed-field-key-is-never-evaluated"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 170.47520900000018,
+        "stdoutSha256": "44d4539950874a2d46db026afea9c3c59abc5182988a4401c4c56507a952ed06",
+        "stderrSha256": "d830a02256ac776052c6ce936c3cf50c839c38ca0dac4c69d7a8ec10ce98ad88",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 87,
+          "unavailable": 58,
+          "declined": 58,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 3,
+              "expected": 87,
+              "compared": 29,
+              "unavailable": 58,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 87,
+              "received": 87,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a member whose name the program computes is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a member whose name the program computes is not supported by this lowering yet"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 29,
+            "unavailable": 58,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-computed-field-key-is-never-evaluated",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 29,
+            "unavailable": 58,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "a-computed-method-key-refuses-only-its-method",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-computed-method-key-refuses-only-its-method/src/case.js",
+          "sha256": "899fb6dc3934f9d7ef4b9a871700061b9d4cbe3ac80a49def921fa3216af6d08"
+        },
+        {
+          "path": "tests/outcomes/a-computed-method-key-refuses-only-its-method/src/main.ts",
+          "sha256": "6d0bffd6a24cd4e5db81b169c7d02232961fbb1d5fbc7c038927cc9dacad4b0d"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 29,
+            "unavailable": 58,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 175.29493300000104,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "09ab5c261d66aedd74b312502ff3652e1a246861d42d5db624d57d8cd574a76c",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 4,
+          "refusedRoots": 4,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-computed-method-key-refuses-only-its-method"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 171.3378070000017,
+        "stdoutSha256": "19f89033a97f611cde3516f744fa4f5b92e6b43479eff4d9a96f25d1de80eb01",
+        "stderrSha256": "09ab5c261d66aedd74b312502ff3652e1a246861d42d5db624d57d8cd574a76c",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 87,
+          "unavailable": 58,
+          "declined": 58,
+          "timeouts": 0,
+          "refused": 4,
+          "refusedRoots": 4,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 3,
+              "expected": 87,
+              "compared": 29,
+              "unavailable": 58,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 87,
+              "received": 87,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a member whose name the program computes is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a member whose name the program computes is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a member whose name the program computes is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a member whose name the program computes is not supported by this lowering yet"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 29,
+            "unavailable": 58,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-computed-method-key-refuses-only-its-method",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 29,
+            "unavailable": 58,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a member whose name the program computes is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "a-hole-in-an-array-of-a-nullable-element",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-hole-in-an-array-of-a-nullable-element/src/main.ts",
+          "sha256": "74adb6ff41935a7c192f4877d36b02e346a0cc3fa284c33fffbc1342fe793a87"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 5,
+            "expected": 145,
+            "compared": 29,
+            "unavailable": 116,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 145,
+            "received": 145,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1001 a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1003 `returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 197.46239700000115,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "defcc407640c30f5362f9df46985574225cb4893b9a1f1823025487c47764579",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 5,
+          "refusedRoots": 4,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-hole-in-an-array-of-a-nullable-element"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 192.50277900000037,
+        "stdoutSha256": "15f54f3ced7e8206fe02e573582a1c3d00b2b6c0049c316cc061df3456fec44f",
+        "stderrSha256": "defcc407640c30f5362f9df46985574225cb4893b9a1f1823025487c47764579",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 145,
+          "unavailable": 116,
+          "declined": 116,
+          "timeouts": 0,
+          "refused": 5,
+          "refusedRoots": 4,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 5,
+              "expected": 145,
+              "compared": 29,
+              "unavailable": 116,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 145,
+              "received": 145,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1003",
+                "message": "`returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 5,
+            "expected": 145,
+            "compared": 29,
+            "unavailable": 116,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 145,
+            "received": 145,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-hole-in-an-array-of-a-nullable-element",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 5,
+            "expected": 145,
+            "compared": 29,
+            "unavailable": 116,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 145,
+            "received": 145,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1001 a length written to an array of `T | null`, which may leave holes that read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1001 a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet | NTS1003 `returned` cannot be compiled because it calls `make`, and a `new Array(n)` of `T | null` that is not filled at once, whose holes read as `undefined` where a null slot of it reads as `null` is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "a-literal-union-index-is-not-a-bounds-proof",
+      "reason": "restart-decline-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-literal-union-index-is-not-a-bounds-proof/src/main.ts",
+          "sha256": "a6cd2566fe9fd8c9751950aefd9220a321e5749616276c232e58421f30ca02cb"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 5,
+            "unavailable": 0,
+            "runtime_declined": 24,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "24 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1053.304392,
+        "stdoutSha256": "d6737052c0b2e734002de35076ca5f6733a23ed2d51480f375a181b95d81e48c",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 5,
+            "disagreements": 0,
+            "expected": 29,
+            "functions": 1,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 29,
+            "received": 29
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-literal-union-index-is-not-a-bounds-proof",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 1400.1128360000002,
+        "stdoutSha256": "0ce9694312839270f18e7da17173667d061dd6f812afe8a8929be5b1626d57e7",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 5,
+          "expected": 29,
+          "unavailable": 0,
+          "declined": 24,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 1,
+              "expected": 29,
+              "compared": 5,
+              "unavailable": 0,
+              "runtime_declined": 24,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 29,
+              "received": 29,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 5,
+            "unavailable": 0,
+            "runtime_declined": 24,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-literal-union-index-is-not-a-bounds-proof",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 5,
+            "unavailable": 0,
+            "runtime_declined": 24,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "24 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    },
+    {
+      "name": "a-local-array-index-trusted-from-a-literal-union",
+      "reason": "restart-decline-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-local-array-index-trusted-from-a-literal-union/src/main.ts",
+          "sha256": "ff791f8827be936d3d0ad03f786753b1ffd6d67a9a57e3b8f8afd126f0e59f4d"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 5,
+            "unavailable": 0,
+            "runtime_declined": 24,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "24 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1118.2782549999993,
+        "stdoutSha256": "d6737052c0b2e734002de35076ca5f6733a23ed2d51480f375a181b95d81e48c",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 5,
+            "disagreements": 0,
+            "expected": 29,
+            "functions": 1,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 29,
+            "received": 29
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-local-array-index-trusted-from-a-literal-union",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 1493.8978150000003,
+        "stdoutSha256": "0ce9694312839270f18e7da17173667d061dd6f812afe8a8929be5b1626d57e7",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 5,
+          "expected": 29,
+          "unavailable": 0,
+          "declined": 24,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 1,
+              "expected": 29,
+              "compared": 5,
+              "unavailable": 0,
+              "runtime_declined": 24,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 29,
+              "received": 29,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 5,
+            "unavailable": 0,
+            "runtime_declined": 24,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-local-array-index-trusted-from-a-literal-union",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 5,
+            "unavailable": 0,
+            "runtime_declined": 24,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "24 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": "address"
+      }
+    },
+    {
+      "name": "a-method-called-through-a-same-shape-unrelated-class",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-method-called-through-a-same-shape-unrelated-class/src/main.ts",
+          "sha256": "71be0c65ecdf41b26eafdcb652088b04d95a68d927a339388d4c489a35b44739"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet | NTS1003 `throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 198.5083279999999,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "f184846bc8129eb9bb6dc1b9bd7f81b3ea89127e525b38d15debfa15eb5cb7b9",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 1,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-method-called-through-a-same-shape-unrelated-class"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 192.38228399999934,
+        "stdoutSha256": "c32e968bf2a60790421a5b0240e2f0c0cf48b30bd4b7a722c56a86e0f5ee79b5",
+        "stderrSha256": "f184846bc8129eb9bb6dc1b9bd7f81b3ea89127e525b38d15debfa15eb5cb7b9",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 58,
+          "unavailable": 29,
+          "declined": 29,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 1,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 29,
+              "unavailable": 29,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1003",
+                "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-method-called-through-a-same-shape-unrelated-class",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet | NTS1003 `throughTheOtherClass` cannot be compiled because it calls `as2`, and `S1` where the unrelated class `S2` is wanted -- a call through `S2` names its methods, and this object's are its own class's is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "a-module-reading-an-interface-field-whose-getter-was-refused",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-module-reading-an-interface-field-whose-getter-was-refused/src/main.ts",
+          "sha256": "b3376f755a0a7260e3df4bb9ca1cc422d5b94afce9f36321aee49bcea53d77b1"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | NTS1003 the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs | NTS1003 the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs | NTS1003 `f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 178.70329500000116,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "a7e03e82a780c6d3b485caec65602f18014e500a884de5cf0510b2bcb1deb31f",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 5,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-module-reading-an-interface-field-whose-getter-was-refused"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 179.0260300000009,
+        "stdoutSha256": "eb8ee47ac2c29bba3ec47362c8d0585fb106f6996bbbf51cca1561721639f170",
+        "stderrSha256": "a7e03e82a780c6d3b485caec65602f18014e500a884de5cf0510b2bcb1deb31f",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 58,
+          "unavailable": 29,
+          "declined": 29,
+          "timeouts": 0,
+          "refused": 5,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 29,
+              "unavailable": 29,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1003",
+                "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1003",
+                "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1003",
+                "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-module-reading-an-interface-field-whose-getter-was-refused",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1003",
+              "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | NTS1003 the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs | NTS1003 the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs | NTS1003 `f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "a-pushed-string-array-read-at-a-fractional-index-on-the-jvm",
+      "reason": "restart-decline-tail",
+      "backend": "jvm",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-pushed-string-array-read-at-a-fractional-index-on-the-jvm/src/main.ts",
+          "sha256": "d316068974399e2d5f71d616b8ea276bc568791615b39f8e22793df8db1ff4a6"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "all_declined",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 29,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "29 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 635.0520310000011,
+        "stdoutSha256": "4d0fcb754491358a277e24c7a12fcbeba574a7a735748f83556cfdaea066c73c",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 0,
+            "disagreements": 0,
+            "expected": 29,
+            "functions": 1,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 29,
+            "received": 29
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-pushed-string-array-read-at-a-fractional-index-on-the-jvm",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1001.0803979999982,
+        "stdoutSha256": "8a1d98d9f9244e2656057878fd6a39c972b754116dd0b66a0422676df8c1ca4f",
+        "stderrSha256": "c977b0cf77bf9b7e93d820661095322f94a3ee6b6c84e3d197dfa995ba74639d",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "declined every case",
+          "status": 1,
+          "checked": 0,
+          "expected": 29,
+          "unavailable": 0,
+          "declined": 29,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "declined every case",
+          "report": {
+            "version": 1,
+            "status": "all_declined",
+            "counts": {
+              "functions": 1,
+              "expected": 29,
+              "compared": 0,
+              "unavailable": 0,
+              "runtime_declined": 29,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 29,
+              "received": 29,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "all_declined",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 29,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-pushed-string-array-read-at-a-fractional-index-on-the-jvm",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "all_declined",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 0,
+            "unavailable": 0,
+            "runtime_declined": 29,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "29 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "jvm",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    },
+    {
+      "name": "a-stored-null-read-through-an-unchecked-index",
+      "reason": "restart-decline-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-stored-null-read-through-an-unchecked-index/src/main.ts",
+          "sha256": "f0c34db0d31e477350a180787aca3f7ab890670b64c0d0cd2bb54a4f46a171be"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 61,
+            "unavailable": 0,
+            "runtime_declined": 26,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "26 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 1031.6947989999971,
+        "stdoutSha256": "09de37ee7137a3098dca6fb7e54c1703f43a2e3146c8c031a74d16d8b385dc4a",
+        "stderrSha256": "cac5754a2abfd560a4bd7edb649e397f0206a78d7a1ad4dd4f7cdaf75fa9cd33",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 43,
+            "disagreements": 0,
+            "expected": 87,
+            "functions": 3,
+            "runtime_declined": 17,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 87,
+            "received": 87
+          },
+          "refusals": [],
+          "status": "not_measured",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-stored-null-read-through-an-unchecked-index",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 1500.6892179999995,
+        "stdoutSha256": "65e54cd0f250e7dea34037d2c94d65bf027b77c6e77d81a49011830fae03797f",
+        "stderrSha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 61,
+          "expected": 87,
+          "unavailable": 0,
+          "declined": 26,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 3,
+              "expected": 87,
+              "compared": 61,
+              "unavailable": 0,
+              "runtime_declined": 26,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 87,
+              "received": 87,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 61,
+            "unavailable": 0,
+            "runtime_declined": 26,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-stored-null-read-through-an-unchecked-index",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 0,
+      "additionalWrongAnswers": 0,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 3,
+            "expected": 87,
+            "compared": 61,
+            "unavailable": 0,
+            "runtime_declined": 26,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 87,
+            "received": 87,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "aborted",
+        "nts": "26 runtime declines",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "aborted",
+      "afterCategory": "aborted",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    },
+    {
+      "name": "a-var-redeclared-at-another-function-type",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-var-redeclared-at-another-function-type/src/case.js",
+          "sha256": "73d54efb927d9714a12224ec0b553d348f9a94fb4dce562ed56e470d2412cbc4"
+        },
+        {
+          "path": "tests/outcomes/a-var-redeclared-at-another-function-type/src/main.ts",
+          "sha256": "73b0fdb9f3f0b891f9fe5fce3aadf55a261a32a080096a7c7f5166698dd60e8e"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet | NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 170.93992100000105,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "0a2080d6755b84078aeaba8b2243412bb8ba572cb3a01d41d39e8db7cd6d35f5",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-var-redeclared-at-another-function-type"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 178.6832119999999,
+        "stdoutSha256": "06f13bd99f4e6ae7bf11468bb306e69b783834f341525e021a213be1fccdd6c3",
+        "stderrSha256": "0a2080d6755b84078aeaba8b2243412bb8ba572cb3a01d41d39e8db7cd6d35f5",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 58,
+          "unavailable": 29,
+          "declined": 29,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 29,
+              "unavailable": 29,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-var-redeclared-at-another-function-type",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a function answering a string where a function answering a number is wanted -- a call through the slot would read its answer as a number is not supported by this lowering yet | NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "a-var-redeclared-returning-another-object-layout",
+      "reason": "source-unavailable-population",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/a-var-redeclared-returning-another-object-layout/src/case.js",
+          "sha256": "96d733f75d5754a31668835f0dd9bc1aad9c2fef73f33b6f58f07d30d8fd6162"
+        },
+        {
+          "path": "tests/outcomes/a-var-redeclared-returning-another-object-layout/src/main.ts",
+          "sha256": "b1cf62f7ad51d90f83ea63ccdcb05d91201bb23617e4cea5f0b7b3a6c6bce760"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet | NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "main": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 187.63164800000231,
+        "stdoutSha256": "4c2c40d07d41c7ac174df8ef9cdc69033aecccf9279a1781bf7e5c87385792d8",
+        "stderrSha256": "488a02157d94ca6057e2e2929244dc7434152d1163e3e56aebeadebf3959e32d",
+        "decoded": {
+          "outcome": "agrees",
+          "status": 0,
+          "missingPopulation": null,
+          "checked": 29,
+          "expected": 29,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "first": "checked 29 cases across 1 function(s)",
+          "format": "legacy"
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-main-7d3c7a054cf7/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-var-redeclared-returning-another-object-layout"
+        ]
+      },
+      "complete": {
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 177.50185899999997,
+        "stdoutSha256": "cfe0350747bcbcc267ffd46237403f60daf7f4179ddcec173b5625a6bb9d0493",
+        "stderrSha256": "488a02157d94ca6057e2e2929244dc7434152d1163e3e56aebeadebf3959e32d",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "agrees on what it compared",
+          "status": 0,
+          "checked": 29,
+          "expected": 58,
+          "unavailable": 29,
+          "declined": 29,
+          "timeouts": 0,
+          "refused": 2,
+          "refusedRoots": 2,
+          "answers": [],
+          "compiledAnswers": [],
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "agrees on what it compared",
+          "report": {
+            "version": 1,
+            "status": "partial",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 29,
+              "unavailable": 29,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 0,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+              },
+              {
+                "stage": "lowering",
+                "code": "NTS1001",
+                "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+              }
+            ],
+            "disagreements": [],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/a-var-redeclared-returning-another-object-layout",
+          "--json"
+        ]
+      },
+      "preservedComparisons": 29,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "partial",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 29,
+            "unavailable": 29,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+            },
+            {
+              "stage": "lowering",
+              "code": "NTS1001",
+              "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+            }
+          ],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "refused",
+        "nts": "NTS1001 a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet | NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "refused",
+      "afterCategory": "refused",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      },
+      "preservedRefusals": "byte-identical complete compiler stderr on identical source, old main and candidate"
+    },
+    {
+      "name": "an-async-functions-throwing-default-escapes-its-promise",
+      "reason": "restart-wrong-answer-tail",
+      "backend": "c",
+      "sourceFiles": [
+        {
+          "path": "tests/outcomes/an-async-functions-throwing-default-escapes-its-promise/src/case.js",
+          "sha256": "036ca1df197215860a4947ff467bee8fe90df4de54091de52ec91a6e9d808cd2"
+        },
+        {
+          "path": "tests/outcomes/an-async-functions-throwing-default-escapes-its-promise/src/main.ts",
+          "sha256": "234b3cad94875c50fb6c0002bace6f955649e6b7ecd8e02faec95d1f2a741537"
+        }
+      ],
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "disagrees",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 29,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [
+            {
+              "compiled": "throwing 0 nts: uncaught RangeError: default",
+              "node": "throwing 0 4008000000000000"
+            },
+            {
+              "compiled": "throwing 1 nts: uncaught RangeError: default",
+              "node": "throwing 1 4008000000000000"
+            },
+            {
+              "compiled": "throwing 2 nts: uncaught RangeError: default",
+              "node": "throwing 2 4008000000000000"
+            },
+            {
+              "compiled": "throwing 3 nts: uncaught RangeError: default",
+              "node": "throwing 3 4008000000000000"
+            },
+            {
+              "compiled": "throwing 4 nts: uncaught RangeError: default",
+              "node": "throwing 4 4008000000000000"
+            },
+            {
+              "compiled": "throwing 5 nts: uncaught RangeError: default",
+              "node": "throwing 5 4008000000000000"
+            },
+            {
+              "compiled": "throwing 6 nts: uncaught RangeError: default",
+              "node": "throwing 6 4008000000000000"
+            },
+            {
+              "compiled": "throwing 7 nts: uncaught RangeError: default",
+              "node": "throwing 7 4008000000000000"
+            },
+            {
+              "compiled": "throwing 8 nts: uncaught RangeError: default",
+              "node": "throwing 8 4008000000000000"
+            },
+            {
+              "compiled": "throwing 9 nts: uncaught RangeError: default",
+              "node": "throwing 9 4008000000000000"
+            },
+            {
+              "compiled": "throwing 10 nts: uncaught RangeError: default",
+              "node": "throwing 10 4008000000000000"
+            },
+            {
+              "compiled": "throwing 11 nts: uncaught RangeError: default",
+              "node": "throwing 11 4008000000000000"
+            },
+            {
+              "compiled": "throwing 12 nts: uncaught RangeError: default",
+              "node": "throwing 12 4008000000000000"
+            },
+            {
+              "compiled": "throwing 13 nts: uncaught RangeError: default",
+              "node": "throwing 13 4008000000000000"
+            },
+            {
+              "compiled": "throwing 14 nts: uncaught RangeError: default",
+              "node": "throwing 14 4008000000000000"
+            },
+            {
+              "compiled": "throwing 15 nts: uncaught RangeError: default",
+              "node": "throwing 15 4008000000000000"
+            },
+            {
+              "compiled": "throwing 16 nts: uncaught RangeError: default",
+              "node": "throwing 16 4008000000000000"
+            },
+            {
+              "compiled": "throwing 17 nts: uncaught RangeError: default",
+              "node": "throwing 17 4008000000000000"
+            },
+            {
+              "compiled": "throwing 18 nts: uncaught RangeError: default",
+              "node": "throwing 18 4008000000000000"
+            },
+            {
+              "compiled": "throwing 19 nts: uncaught RangeError: default",
+              "node": "throwing 19 4008000000000000"
+            },
+            {
+              "compiled": "throwing 20 nts: uncaught RangeError: default",
+              "node": "throwing 20 4008000000000000"
+            },
+            {
+              "compiled": "throwing 21 nts: uncaught RangeError: default",
+              "node": "throwing 21 4008000000000000"
+            },
+            {
+              "compiled": "throwing 22 nts: uncaught RangeError: default",
+              "node": "throwing 22 4008000000000000"
+            },
+            {
+              "compiled": "throwing 23 nts: uncaught RangeError: default",
+              "node": "throwing 23 4008000000000000"
+            },
+            {
+              "compiled": "throwing 24 nts: uncaught RangeError: default",
+              "node": "throwing 24 4008000000000000"
+            },
+            {
+              "compiled": "throwing 25 nts: uncaught RangeError: default",
+              "node": "throwing 25 4008000000000000"
+            },
+            {
+              "compiled": "throwing 26 nts: uncaught RangeError: default",
+              "node": "throwing 26 4008000000000000"
+            },
+            {
+              "compiled": "throwing 27 nts: uncaught RangeError: default",
+              "node": "throwing 27 4008000000000000"
+            },
+            {
+              "compiled": "throwing 28 nts: uncaught RangeError: default",
+              "node": "throwing 28 4008000000000000"
+            }
+          ],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "disagrees: 58 compared, 58 expected, 29 disagreements",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "prefix": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 220.08771600000182,
+        "stdoutSha256": "0ccc1b08414f5d732f89907e287caa752b4c5117523e57c9ef4c9060d6b90554",
+        "stderrSha256": "cc755ae042dd5c41bb2cf341ec61aa9d14eb493d4c6449b1d261a74a23092f0e",
+        "report": {
+          "aborts": [],
+          "counts": {
+            "aborts": 0,
+            "approximated": 0,
+            "compared": 33,
+            "disagreements": 17,
+            "expected": 58,
+            "functions": 2,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "unavailable": 0
+          },
+          "disagreements": [
+            {
+              "compiled": "throwing 0 nts: uncaught RangeError: default",
+              "node": "throwing 0 4008000000000000"
+            },
+            {
+              "compiled": "throwing 1 nts: uncaught RangeError: default",
+              "node": "throwing 1 4008000000000000"
+            },
+            {
+              "compiled": "throwing 2 nts: uncaught RangeError: default",
+              "node": "throwing 2 4008000000000000"
+            },
+            {
+              "compiled": "throwing 3 nts: uncaught RangeError: default",
+              "node": "throwing 3 4008000000000000"
+            },
+            {
+              "compiled": "throwing 4 nts: uncaught RangeError: default",
+              "node": "throwing 4 4008000000000000"
+            },
+            {
+              "compiled": "throwing 5 nts: uncaught RangeError: default",
+              "node": "throwing 5 4008000000000000"
+            },
+            {
+              "compiled": "throwing 6 nts: uncaught RangeError: default",
+              "node": "throwing 6 4008000000000000"
+            },
+            {
+              "compiled": "throwing 7 nts: uncaught RangeError: default",
+              "node": "throwing 7 4008000000000000"
+            },
+            {
+              "compiled": "throwing 8 nts: uncaught RangeError: default",
+              "node": "throwing 8 4008000000000000"
+            },
+            {
+              "compiled": "throwing 9 nts: uncaught RangeError: default",
+              "node": "throwing 9 4008000000000000"
+            },
+            {
+              "compiled": "throwing 10 nts: uncaught RangeError: default",
+              "node": "throwing 10 4008000000000000"
+            },
+            {
+              "compiled": "throwing 11 nts: uncaught RangeError: default",
+              "node": "throwing 11 4008000000000000"
+            },
+            {
+              "compiled": "throwing 12 nts: uncaught RangeError: default",
+              "node": "throwing 12 4008000000000000"
+            },
+            {
+              "compiled": "throwing 13 nts: uncaught RangeError: default",
+              "node": "throwing 13 4008000000000000"
+            },
+            {
+              "compiled": "throwing 14 nts: uncaught RangeError: default",
+              "node": "throwing 14 4008000000000000"
+            },
+            {
+              "compiled": "throwing 15 nts: uncaught RangeError: default",
+              "node": "throwing 15 4008000000000000"
+            },
+            {
+              "compiled": "throwing 16 nts: uncaught RangeError: default",
+              "node": "throwing 16 4008000000000000"
+            }
+          ],
+          "error": null,
+          "oracle": {
+            "complete": true,
+            "expected": 58,
+            "received": 58
+          },
+          "refusals": [],
+          "status": "disagrees",
+          "version": 1
+        },
+        "measurement": "historical execution prefix; not admitted as a completed comparison",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/an-async-functions-throwing-default-escapes-its-promise",
+          "--json"
+        ]
+      },
+      "complete": {
+        "status": 1,
+        "signal": null,
+        "elapsedMs": 233.02330500000244,
+        "stdoutSha256": "837db922fc8efd97018a183048d9812f813782796fffaec2b9f3819d6d489320",
+        "stderrSha256": "cc755ae042dd5c41bb2cf341ec61aa9d14eb493d4c6449b1d261a74a23092f0e",
+        "decoded": {
+          "format": "json-v1",
+          "outcome": "disagrees",
+          "status": 1,
+          "checked": 58,
+          "expected": 58,
+          "unavailable": 0,
+          "declined": 0,
+          "timeouts": 0,
+          "refused": 0,
+          "refusedRoots": 0,
+          "answers": [
+            "  nts  throwing 0 nts: uncaught RangeError: default",
+            "  node throwing 0 4008000000000000",
+            "  nts  throwing 1 nts: uncaught RangeError: default",
+            "  node throwing 1 4008000000000000",
+            "  nts  throwing 2 nts: uncaught RangeError: default",
+            "  node throwing 2 4008000000000000",
+            "  nts  throwing 3 nts: uncaught RangeError: default",
+            "  node throwing 3 4008000000000000",
+            "  nts  throwing 4 nts: uncaught RangeError: default",
+            "  node throwing 4 4008000000000000",
+            "  nts  throwing 5 nts: uncaught RangeError: default",
+            "  node throwing 5 4008000000000000",
+            "  nts  throwing 6 nts: uncaught RangeError: default",
+            "  node throwing 6 4008000000000000",
+            "  nts  throwing 7 nts: uncaught RangeError: default",
+            "  node throwing 7 4008000000000000",
+            "  nts  throwing 8 nts: uncaught RangeError: default",
+            "  node throwing 8 4008000000000000",
+            "  nts  throwing 9 nts: uncaught RangeError: default",
+            "  node throwing 9 4008000000000000",
+            "  nts  throwing 10 nts: uncaught RangeError: default",
+            "  node throwing 10 4008000000000000",
+            "  nts  throwing 11 nts: uncaught RangeError: default",
+            "  node throwing 11 4008000000000000",
+            "  nts  throwing 12 nts: uncaught RangeError: default",
+            "  node throwing 12 4008000000000000",
+            "  nts  throwing 13 nts: uncaught RangeError: default",
+            "  node throwing 13 4008000000000000",
+            "  nts  throwing 14 nts: uncaught RangeError: default",
+            "  node throwing 14 4008000000000000",
+            "  nts  throwing 15 nts: uncaught RangeError: default",
+            "  node throwing 15 4008000000000000",
+            "  nts  throwing 16 nts: uncaught RangeError: default",
+            "  node throwing 16 4008000000000000",
+            "  nts  throwing 17 nts: uncaught RangeError: default",
+            "  node throwing 17 4008000000000000",
+            "  nts  throwing 18 nts: uncaught RangeError: default",
+            "  node throwing 18 4008000000000000",
+            "  nts  throwing 19 nts: uncaught RangeError: default",
+            "  node throwing 19 4008000000000000",
+            "  nts  throwing 20 nts: uncaught RangeError: default",
+            "  node throwing 20 4008000000000000",
+            "  nts  throwing 21 nts: uncaught RangeError: default",
+            "  node throwing 21 4008000000000000",
+            "  nts  throwing 22 nts: uncaught RangeError: default",
+            "  node throwing 22 4008000000000000",
+            "  nts  throwing 23 nts: uncaught RangeError: default",
+            "  node throwing 23 4008000000000000",
+            "  nts  throwing 24 nts: uncaught RangeError: default",
+            "  node throwing 24 4008000000000000",
+            "  nts  throwing 25 nts: uncaught RangeError: default",
+            "  node throwing 25 4008000000000000",
+            "  nts  throwing 26 nts: uncaught RangeError: default",
+            "  node throwing 26 4008000000000000",
+            "  nts  throwing 27 nts: uncaught RangeError: default",
+            "  node throwing 27 4008000000000000",
+            "  nts  throwing 28 nts: uncaught RangeError: default",
+            "  node throwing 28 4008000000000000"
+          ],
+          "compiledAnswers": [
+            "throwing 0 nts: uncaught RangeError: default",
+            "throwing 1 nts: uncaught RangeError: default",
+            "throwing 2 nts: uncaught RangeError: default",
+            "throwing 3 nts: uncaught RangeError: default",
+            "throwing 4 nts: uncaught RangeError: default",
+            "throwing 5 nts: uncaught RangeError: default",
+            "throwing 6 nts: uncaught RangeError: default",
+            "throwing 7 nts: uncaught RangeError: default",
+            "throwing 8 nts: uncaught RangeError: default",
+            "throwing 9 nts: uncaught RangeError: default",
+            "throwing 10 nts: uncaught RangeError: default",
+            "throwing 11 nts: uncaught RangeError: default",
+            "throwing 12 nts: uncaught RangeError: default",
+            "throwing 13 nts: uncaught RangeError: default",
+            "throwing 14 nts: uncaught RangeError: default",
+            "throwing 15 nts: uncaught RangeError: default",
+            "throwing 16 nts: uncaught RangeError: default",
+            "throwing 17 nts: uncaught RangeError: default",
+            "throwing 18 nts: uncaught RangeError: default",
+            "throwing 19 nts: uncaught RangeError: default",
+            "throwing 20 nts: uncaught RangeError: default",
+            "throwing 21 nts: uncaught RangeError: default",
+            "throwing 22 nts: uncaught RangeError: default",
+            "throwing 23 nts: uncaught RangeError: default",
+            "throwing 24 nts: uncaught RangeError: default",
+            "throwing 25 nts: uncaught RangeError: default",
+            "throwing 26 nts: uncaught RangeError: default",
+            "throwing 27 nts: uncaught RangeError: default",
+            "throwing 28 nts: uncaught RangeError: default"
+          ],
+          "refusals": [],
+          "oracleStopped": 0,
+          "missingPopulation": null,
+          "first": "disagrees",
+          "report": {
+            "version": 1,
+            "status": "disagrees",
+            "counts": {
+              "functions": 2,
+              "expected": 58,
+              "compared": 58,
+              "unavailable": 0,
+              "runtime_declined": 0,
+              "timeouts": 0,
+              "approximated": 0,
+              "disagreements": 29,
+              "aborts": 0
+            },
+            "oracle": {
+              "expected": 58,
+              "received": 58,
+              "complete": true
+            },
+            "refusals": [],
+            "disagreements": [
+              {
+                "compiled": "throwing 0 nts: uncaught RangeError: default",
+                "node": "throwing 0 4008000000000000"
+              },
+              {
+                "compiled": "throwing 1 nts: uncaught RangeError: default",
+                "node": "throwing 1 4008000000000000"
+              },
+              {
+                "compiled": "throwing 2 nts: uncaught RangeError: default",
+                "node": "throwing 2 4008000000000000"
+              },
+              {
+                "compiled": "throwing 3 nts: uncaught RangeError: default",
+                "node": "throwing 3 4008000000000000"
+              },
+              {
+                "compiled": "throwing 4 nts: uncaught RangeError: default",
+                "node": "throwing 4 4008000000000000"
+              },
+              {
+                "compiled": "throwing 5 nts: uncaught RangeError: default",
+                "node": "throwing 5 4008000000000000"
+              },
+              {
+                "compiled": "throwing 6 nts: uncaught RangeError: default",
+                "node": "throwing 6 4008000000000000"
+              },
+              {
+                "compiled": "throwing 7 nts: uncaught RangeError: default",
+                "node": "throwing 7 4008000000000000"
+              },
+              {
+                "compiled": "throwing 8 nts: uncaught RangeError: default",
+                "node": "throwing 8 4008000000000000"
+              },
+              {
+                "compiled": "throwing 9 nts: uncaught RangeError: default",
+                "node": "throwing 9 4008000000000000"
+              },
+              {
+                "compiled": "throwing 10 nts: uncaught RangeError: default",
+                "node": "throwing 10 4008000000000000"
+              },
+              {
+                "compiled": "throwing 11 nts: uncaught RangeError: default",
+                "node": "throwing 11 4008000000000000"
+              },
+              {
+                "compiled": "throwing 12 nts: uncaught RangeError: default",
+                "node": "throwing 12 4008000000000000"
+              },
+              {
+                "compiled": "throwing 13 nts: uncaught RangeError: default",
+                "node": "throwing 13 4008000000000000"
+              },
+              {
+                "compiled": "throwing 14 nts: uncaught RangeError: default",
+                "node": "throwing 14 4008000000000000"
+              },
+              {
+                "compiled": "throwing 15 nts: uncaught RangeError: default",
+                "node": "throwing 15 4008000000000000"
+              },
+              {
+                "compiled": "throwing 16 nts: uncaught RangeError: default",
+                "node": "throwing 16 4008000000000000"
+              },
+              {
+                "compiled": "throwing 17 nts: uncaught RangeError: default",
+                "node": "throwing 17 4008000000000000"
+              },
+              {
+                "compiled": "throwing 18 nts: uncaught RangeError: default",
+                "node": "throwing 18 4008000000000000"
+              },
+              {
+                "compiled": "throwing 19 nts: uncaught RangeError: default",
+                "node": "throwing 19 4008000000000000"
+              },
+              {
+                "compiled": "throwing 20 nts: uncaught RangeError: default",
+                "node": "throwing 20 4008000000000000"
+              },
+              {
+                "compiled": "throwing 21 nts: uncaught RangeError: default",
+                "node": "throwing 21 4008000000000000"
+              },
+              {
+                "compiled": "throwing 22 nts: uncaught RangeError: default",
+                "node": "throwing 22 4008000000000000"
+              },
+              {
+                "compiled": "throwing 23 nts: uncaught RangeError: default",
+                "node": "throwing 23 4008000000000000"
+              },
+              {
+                "compiled": "throwing 24 nts: uncaught RangeError: default",
+                "node": "throwing 24 4008000000000000"
+              },
+              {
+                "compiled": "throwing 25 nts: uncaught RangeError: default",
+                "node": "throwing 25 4008000000000000"
+              },
+              {
+                "compiled": "throwing 26 nts: uncaught RangeError: default",
+                "node": "throwing 26 4008000000000000"
+              },
+              {
+                "compiled": "throwing 27 nts: uncaught RangeError: default",
+                "node": "throwing 27 4008000000000000"
+              },
+              {
+                "compiled": "throwing 28 nts: uncaught RangeError: default",
+                "node": "throwing 28 4008000000000000"
+              }
+            ],
+            "aborts": [],
+            "error": null
+          }
+        },
+        "report": {
+          "version": 1,
+          "status": "disagrees",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 29,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [
+            {
+              "compiled": "throwing 0 nts: uncaught RangeError: default",
+              "node": "throwing 0 4008000000000000"
+            },
+            {
+              "compiled": "throwing 1 nts: uncaught RangeError: default",
+              "node": "throwing 1 4008000000000000"
+            },
+            {
+              "compiled": "throwing 2 nts: uncaught RangeError: default",
+              "node": "throwing 2 4008000000000000"
+            },
+            {
+              "compiled": "throwing 3 nts: uncaught RangeError: default",
+              "node": "throwing 3 4008000000000000"
+            },
+            {
+              "compiled": "throwing 4 nts: uncaught RangeError: default",
+              "node": "throwing 4 4008000000000000"
+            },
+            {
+              "compiled": "throwing 5 nts: uncaught RangeError: default",
+              "node": "throwing 5 4008000000000000"
+            },
+            {
+              "compiled": "throwing 6 nts: uncaught RangeError: default",
+              "node": "throwing 6 4008000000000000"
+            },
+            {
+              "compiled": "throwing 7 nts: uncaught RangeError: default",
+              "node": "throwing 7 4008000000000000"
+            },
+            {
+              "compiled": "throwing 8 nts: uncaught RangeError: default",
+              "node": "throwing 8 4008000000000000"
+            },
+            {
+              "compiled": "throwing 9 nts: uncaught RangeError: default",
+              "node": "throwing 9 4008000000000000"
+            },
+            {
+              "compiled": "throwing 10 nts: uncaught RangeError: default",
+              "node": "throwing 10 4008000000000000"
+            },
+            {
+              "compiled": "throwing 11 nts: uncaught RangeError: default",
+              "node": "throwing 11 4008000000000000"
+            },
+            {
+              "compiled": "throwing 12 nts: uncaught RangeError: default",
+              "node": "throwing 12 4008000000000000"
+            },
+            {
+              "compiled": "throwing 13 nts: uncaught RangeError: default",
+              "node": "throwing 13 4008000000000000"
+            },
+            {
+              "compiled": "throwing 14 nts: uncaught RangeError: default",
+              "node": "throwing 14 4008000000000000"
+            },
+            {
+              "compiled": "throwing 15 nts: uncaught RangeError: default",
+              "node": "throwing 15 4008000000000000"
+            },
+            {
+              "compiled": "throwing 16 nts: uncaught RangeError: default",
+              "node": "throwing 16 4008000000000000"
+            },
+            {
+              "compiled": "throwing 17 nts: uncaught RangeError: default",
+              "node": "throwing 17 4008000000000000"
+            },
+            {
+              "compiled": "throwing 18 nts: uncaught RangeError: default",
+              "node": "throwing 18 4008000000000000"
+            },
+            {
+              "compiled": "throwing 19 nts: uncaught RangeError: default",
+              "node": "throwing 19 4008000000000000"
+            },
+            {
+              "compiled": "throwing 20 nts: uncaught RangeError: default",
+              "node": "throwing 20 4008000000000000"
+            },
+            {
+              "compiled": "throwing 21 nts: uncaught RangeError: default",
+              "node": "throwing 21 4008000000000000"
+            },
+            {
+              "compiled": "throwing 22 nts: uncaught RangeError: default",
+              "node": "throwing 22 4008000000000000"
+            },
+            {
+              "compiled": "throwing 23 nts: uncaught RangeError: default",
+              "node": "throwing 23 4008000000000000"
+            },
+            {
+              "compiled": "throwing 24 nts: uncaught RangeError: default",
+              "node": "throwing 24 4008000000000000"
+            },
+            {
+              "compiled": "throwing 25 nts: uncaught RangeError: default",
+              "node": "throwing 25 4008000000000000"
+            },
+            {
+              "compiled": "throwing 26 nts: uncaught RangeError: default",
+              "node": "throwing 26 4008000000000000"
+            },
+            {
+              "compiled": "throwing 27 nts: uncaught RangeError: default",
+              "node": "throwing 27 4008000000000000"
+            },
+            {
+              "compiled": "throwing 28 nts: uncaught RangeError: default",
+              "node": "throwing 28 4008000000000000"
+            }
+          ],
+          "aborts": [],
+          "error": null
+        },
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+          "check",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/an-async-functions-throwing-default-escapes-its-promise",
+          "--json"
+        ]
+      },
+      "preservedWrongAnswers": 17,
+      "additionalWrongAnswers": 12,
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "disagrees",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 29,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [
+            {
+              "compiled": "throwing 0 nts: uncaught RangeError: default",
+              "node": "throwing 0 4008000000000000"
+            },
+            {
+              "compiled": "throwing 1 nts: uncaught RangeError: default",
+              "node": "throwing 1 4008000000000000"
+            },
+            {
+              "compiled": "throwing 2 nts: uncaught RangeError: default",
+              "node": "throwing 2 4008000000000000"
+            },
+            {
+              "compiled": "throwing 3 nts: uncaught RangeError: default",
+              "node": "throwing 3 4008000000000000"
+            },
+            {
+              "compiled": "throwing 4 nts: uncaught RangeError: default",
+              "node": "throwing 4 4008000000000000"
+            },
+            {
+              "compiled": "throwing 5 nts: uncaught RangeError: default",
+              "node": "throwing 5 4008000000000000"
+            },
+            {
+              "compiled": "throwing 6 nts: uncaught RangeError: default",
+              "node": "throwing 6 4008000000000000"
+            },
+            {
+              "compiled": "throwing 7 nts: uncaught RangeError: default",
+              "node": "throwing 7 4008000000000000"
+            },
+            {
+              "compiled": "throwing 8 nts: uncaught RangeError: default",
+              "node": "throwing 8 4008000000000000"
+            },
+            {
+              "compiled": "throwing 9 nts: uncaught RangeError: default",
+              "node": "throwing 9 4008000000000000"
+            },
+            {
+              "compiled": "throwing 10 nts: uncaught RangeError: default",
+              "node": "throwing 10 4008000000000000"
+            },
+            {
+              "compiled": "throwing 11 nts: uncaught RangeError: default",
+              "node": "throwing 11 4008000000000000"
+            },
+            {
+              "compiled": "throwing 12 nts: uncaught RangeError: default",
+              "node": "throwing 12 4008000000000000"
+            },
+            {
+              "compiled": "throwing 13 nts: uncaught RangeError: default",
+              "node": "throwing 13 4008000000000000"
+            },
+            {
+              "compiled": "throwing 14 nts: uncaught RangeError: default",
+              "node": "throwing 14 4008000000000000"
+            },
+            {
+              "compiled": "throwing 15 nts: uncaught RangeError: default",
+              "node": "throwing 15 4008000000000000"
+            },
+            {
+              "compiled": "throwing 16 nts: uncaught RangeError: default",
+              "node": "throwing 16 4008000000000000"
+            },
+            {
+              "compiled": "throwing 17 nts: uncaught RangeError: default",
+              "node": "throwing 17 4008000000000000"
+            },
+            {
+              "compiled": "throwing 18 nts: uncaught RangeError: default",
+              "node": "throwing 18 4008000000000000"
+            },
+            {
+              "compiled": "throwing 19 nts: uncaught RangeError: default",
+              "node": "throwing 19 4008000000000000"
+            },
+            {
+              "compiled": "throwing 20 nts: uncaught RangeError: default",
+              "node": "throwing 20 4008000000000000"
+            },
+            {
+              "compiled": "throwing 21 nts: uncaught RangeError: default",
+              "node": "throwing 21 4008000000000000"
+            },
+            {
+              "compiled": "throwing 22 nts: uncaught RangeError: default",
+              "node": "throwing 22 4008000000000000"
+            },
+            {
+              "compiled": "throwing 23 nts: uncaught RangeError: default",
+              "node": "throwing 23 4008000000000000"
+            },
+            {
+              "compiled": "throwing 24 nts: uncaught RangeError: default",
+              "node": "throwing 24 4008000000000000"
+            },
+            {
+              "compiled": "throwing 25 nts: uncaught RangeError: default",
+              "node": "throwing 25 4008000000000000"
+            },
+            {
+              "compiled": "throwing 26 nts: uncaught RangeError: default",
+              "node": "throwing 26 4008000000000000"
+            },
+            {
+              "compiled": "throwing 27 nts: uncaught RangeError: default",
+              "node": "throwing 27 4008000000000000"
+            },
+            {
+              "compiled": "throwing 28 nts: uncaught RangeError: default",
+              "node": "throwing 28 4008000000000000"
+            }
+          ],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "disagrees: 58 compared, 58 expected, 29 disagreements",
+        "node": null,
+        "measured_with": "36a04d8fc582b92d",
+        "source": "measured"
+      },
+      "beforeCategory": "wrong-answer",
+      "afterCategory": "wrong-answer",
+      "environment": {
+        "NTS_CHECKERS": "1",
+        "backend": "c",
+        "provider": "NoGc",
+        "sanitizer": null
+      }
+    }
+  ],
+  "terminal": "PASS",
+  "asyncArgumentPopulation": {
+    "identical": true,
+    "caseCount": 58,
+    "caseKey": "f95dc8dcb29aadd8c2f51af9287af56e",
+    "plans": [
+      {
+        "binary": "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/oracle-plan",
+        "sha256": "b183d72794f1d85a3b7a48c4243a42e8343e34ca3f4b597f2ee7394864f23bc1",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-a22daf751b06/oracle-plan",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/an-async-functions-throwing-default-escapes-its-promise/tsconfig.json"
+        ],
+        "cases": [
+          "throwing 0 [0.0]",
+          "effectFree 0 [0.0]",
+          "throwing 1 [-0.0]",
+          "effectFree 1 [-0.0]",
+          "throwing 2 [1.0]",
+          "effectFree 2 [1.0]",
+          "throwing 3 [-1.0]",
+          "effectFree 3 [-1.0]",
+          "throwing 4 [2.0]",
+          "effectFree 4 [2.0]",
+          "throwing 5 [3.0]",
+          "effectFree 5 [3.0]",
+          "throwing 6 [0.5]",
+          "effectFree 6 [0.5]",
+          "throwing 7 [-0.5]",
+          "effectFree 7 [-0.5]",
+          "throwing 8 [1.5]",
+          "effectFree 8 [1.5]",
+          "throwing 9 [-1.5]",
+          "effectFree 9 [-1.5]",
+          "throwing 10 [3.7]",
+          "effectFree 10 [3.7]",
+          "throwing 11 [-3.7]",
+          "effectFree 11 [-3.7]",
+          "throwing 12 [7.0]",
+          "effectFree 12 [7.0]",
+          "throwing 13 [27.0]",
+          "effectFree 13 [27.0]",
+          "throwing 14 [100.0]",
+          "effectFree 14 [100.0]",
+          "throwing 15 [255.0]",
+          "effectFree 15 [255.0]",
+          "throwing 16 [256.0]",
+          "effectFree 16 [256.0]",
+          "throwing 17 [1000.0]",
+          "effectFree 17 [1000.0]",
+          "throwing 18 [4096.0]",
+          "effectFree 18 [4096.0]",
+          "throwing 19 [65535.0]",
+          "effectFree 19 [65535.0]",
+          "throwing 20 [2147483647.0]",
+          "effectFree 20 [2147483647.0]",
+          "throwing 21 [-2147483648.0]",
+          "effectFree 21 [-2147483648.0]",
+          "throwing 22 [2147483648.0]",
+          "effectFree 22 [2147483648.0]",
+          "throwing 23 [4294967295.0]",
+          "effectFree 23 [4294967295.0]",
+          "throwing 24 [9007199254740991.0]",
+          "effectFree 24 [9007199254740991.0]",
+          "throwing 25 [-9007199254740991.0]",
+          "effectFree 25 [-9007199254740991.0]",
+          "throwing 26 [1e-8]",
+          "effectFree 26 [1e-8]",
+          "throwing 27 [12345.0]",
+          "effectFree 27 [12345.0]",
+          "throwing 28 [NaN]",
+          "effectFree 28 [NaN]"
+        ],
+        "signature": [
+          {
+            "absent": "Impossible",
+            "name": "throwing",
+            "params": [
+              "Float { bits: 64 }"
+            ],
+            "returns": "Float { bits: 64 }"
+          },
+          {
+            "absent": "Impossible",
+            "name": "effectFree",
+            "params": [
+              "Float { bits: 64 }"
+            ],
+            "returns": "Float { bits: 64 }"
+          }
+        ]
+      },
+      {
+        "binary": "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/oracle-plan",
+        "sha256": "cab0558a6504ad59910823562f3bdd727096446b647b0634818013d24c465ff1",
+        "command": [
+          "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/oracle-plan",
+          "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/projects/an-async-functions-throwing-default-escapes-its-promise/tsconfig.json"
+        ],
+        "cases": [
+          "throwing 0 [0.0]",
+          "effectFree 0 [0.0]",
+          "throwing 1 [-0.0]",
+          "effectFree 1 [-0.0]",
+          "throwing 2 [1.0]",
+          "effectFree 2 [1.0]",
+          "throwing 3 [-1.0]",
+          "effectFree 3 [-1.0]",
+          "throwing 4 [2.0]",
+          "effectFree 4 [2.0]",
+          "throwing 5 [3.0]",
+          "effectFree 5 [3.0]",
+          "throwing 6 [0.5]",
+          "effectFree 6 [0.5]",
+          "throwing 7 [-0.5]",
+          "effectFree 7 [-0.5]",
+          "throwing 8 [1.5]",
+          "effectFree 8 [1.5]",
+          "throwing 9 [-1.5]",
+          "effectFree 9 [-1.5]",
+          "throwing 10 [3.7]",
+          "effectFree 10 [3.7]",
+          "throwing 11 [-3.7]",
+          "effectFree 11 [-3.7]",
+          "throwing 12 [7.0]",
+          "effectFree 12 [7.0]",
+          "throwing 13 [27.0]",
+          "effectFree 13 [27.0]",
+          "throwing 14 [100.0]",
+          "effectFree 14 [100.0]",
+          "throwing 15 [255.0]",
+          "effectFree 15 [255.0]",
+          "throwing 16 [256.0]",
+          "effectFree 16 [256.0]",
+          "throwing 17 [1000.0]",
+          "effectFree 17 [1000.0]",
+          "throwing 18 [4096.0]",
+          "effectFree 18 [4096.0]",
+          "throwing 19 [65535.0]",
+          "effectFree 19 [65535.0]",
+          "throwing 20 [2147483647.0]",
+          "effectFree 20 [2147483647.0]",
+          "throwing 21 [-2147483648.0]",
+          "effectFree 21 [-2147483648.0]",
+          "throwing 22 [2147483648.0]",
+          "effectFree 22 [2147483648.0]",
+          "throwing 23 [4294967295.0]",
+          "effectFree 23 [4294967295.0]",
+          "throwing 24 [9007199254740991.0]",
+          "effectFree 24 [9007199254740991.0]",
+          "throwing 25 [-9007199254740991.0]",
+          "effectFree 25 [-9007199254740991.0]",
+          "throwing 26 [1e-8]",
+          "effectFree 26 [1e-8]",
+          "throwing 27 [12345.0]",
+          "effectFree 27 [12345.0]",
+          "throwing 28 [NaN]",
+          "effectFree 28 [NaN]"
+        ],
+        "signature": [
+          {
+            "absent": "Impossible",
+            "name": "throwing",
+            "params": [
+              "Float { bits: 64 }"
+            ],
+            "returns": "Float { bits: 64 }"
+          },
+          {
+            "absent": "Impossible",
+            "name": "effectFree",
+            "params": [
+              "Float { bits: 64 }"
+            ],
+            "returns": "Float { bits: 64 }"
+          }
+        ]
+      }
+    ]
+  },
+  "recording": {
+    "version": 1,
+    "source": "fd2d94397",
+    "compiler": {
+      "path": "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+      "sha256": "36a04d8fc582b92dbbe0927f32bd310f776e92fd8921569a9985712a05a78589"
+    },
+    "stages": [
+      {
+        "name": "canonical-selective-record",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "tooling/conformance/outcomes-check.ts",
+          "--record",
+          "a-checked-byte-read-multiplied-by-zero",
+          "a-checked-byte-read-reduced-modulo-one",
+          "a-checked-byte-read-truncated-then-multiplied-by-zero",
+          "a-computed-field-key-is-never-evaluated",
+          "a-computed-method-key-refuses-only-its-method",
+          "a-hole-in-an-array-of-a-nullable-element",
+          "a-literal-union-index-is-not-a-bounds-proof",
+          "a-local-array-index-trusted-from-a-literal-union",
+          "a-method-called-through-a-same-shape-unrelated-class",
+          "a-module-reading-an-interface-field-whose-getter-was-refused",
+          "a-pushed-string-array-read-at-a-fractional-index-on-the-jvm",
+          "a-stored-null-read-through-an-unchecked-index",
+          "a-var-redeclared-at-another-function-type",
+          "a-var-redeclared-returning-another-object-layout",
+          "an-async-functions-throwing-default-escapes-its-promise"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 13390
+      },
+      {
+        "name": "canonical-outcomes",
+        "command": "sh",
+        "args": [
+          "tooling/gate/all.sh",
+          "--call",
+          "outcomes"
+        ],
+        "status": 0,
+        "signal": null,
+        "elapsedMs": 126685
+      }
+    ],
+    "terminal": "PASS",
+    "integrity": "PASS over exactly the 15 recorded fixtures"
+  },
+  "migrationPolicy": "Explicit correction of observation scope: preserve all prior compiled comparisons/refusals and wrong-value pairs; add source-unavailable and completed restart-tail observations. No outcome transition policy change.",
+  "untouchedFixed": [
+    "a-comparison-of-lone-surrogates",
+    "a-zero-sign-proof-stopped-before-its-last-use",
+    "an-unchecked-numeric-literal-parameter",
+    "code-point-at-a-lone-leading-surrogate",
+    "for-of-over-a-lone-surrogate",
+    "lone-surrogates-compare-as-one-character"
+  ]
+}

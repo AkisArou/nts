@@ -1,8 +1,44 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "partial",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 29,
+      "unavailable": 29,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "a module-scope variable whose initializer was refused above is not supported by this lowering yet"
+      }
+    ],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
-  "category": "agrees",
-  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet | refused: NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
+  "category": "refused",
+  "nts": "NTS1001 a function's answer: the anonymous `{ b }` where the anonymous `{ a, b }` is wanted -- the anonymous `{ a, b }` declares 2 fields and the anonymous `{ b }` holds 1, so `b` has no storage at any offset and a pointer cast cannot widen a struct is not supported by this lowering yet | NTS1001 a module-scope variable whose initializer was refused above is not supported by this lowering yet",
   "node": null,
-  "measured_with": "1188b294664fb5c1",
+  "measured_with": "36a04d8fc582b92d",
   "source": "measured"
 }

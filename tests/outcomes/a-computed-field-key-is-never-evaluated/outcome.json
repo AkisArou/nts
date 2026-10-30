@@ -1,8 +1,44 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "partial",
+    "counts": {
+      "functions": 3,
+      "expected": 87,
+      "compared": 29,
+      "unavailable": 58,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 87,
+      "received": 87,
+      "complete": true
+    },
+    "refusals": [
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "a member whose name the program computes is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "a member whose name the program computes is not supported by this lowering yet"
+      }
+    ],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
-  "category": "agrees",
-  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 a member whose name the program computes is not supported by this lowering yet | refused: NTS1001 a member whose name the program computes is not supported by this lowering yet",
+  "category": "refused",
+  "nts": "NTS1001 a member whose name the program computes is not supported by this lowering yet | NTS1001 a member whose name the program computes is not supported by this lowering yet",
   "node": null,
-  "measured_with": "d99595a777b6baac",
+  "measured_with": "36a04d8fc582b92d",
   "source": "measured"
 }

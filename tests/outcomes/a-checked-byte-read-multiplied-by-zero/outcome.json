@@ -1,8 +1,33 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "partial",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 35,
+      "unavailable": 0,
+      "runtime_declined": 23,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
   "category": "aborted",
-  "nts": "17 case(s) the compiled program declined",
+  "nts": "23 runtime declines",
   "node": null,
-  "measured_with": "9b047bf8c1dc52a4",
+  "measured_with": "36a04d8fc582b92d",
   "source": "measured"
 }

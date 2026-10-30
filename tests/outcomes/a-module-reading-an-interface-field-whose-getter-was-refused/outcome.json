@@ -1,8 +1,59 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "partial",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 29,
+      "unavailable": 29,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "`Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "`f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned"
+      }
+    ],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
-  "category": "agrees",
-  "nts": "checked 29 cases across 1 function(s) | agreed on every case | refused: NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | refused: NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | refused: NTS1003 the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs | refused: NTS1003 the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs | refused: NTS1003 `f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned",
+  "category": "refused",
+  "nts": "NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | NTS1001 `Object.setPrototypeOf`, which is prototype and descriptor reflection: a value's shape is fixed when it is laid out, so there is no prototype object to hold a property, no descriptor to redefine one with, and nothing that can be given a different shape at run time is not supported by this lowering yet | NTS1003 the initializer of `z` was not compiled because it calls `bad`, which was refused above; the rest of the module's evaluation still runs | NTS1003 the initializer of `first` was not compiled because it calls `F#get v@interface1@4`, which was refused above; the rest of the module's evaluation still runs | NTS1003 `f` cannot be compiled because it reads `first`, which a module statement evaluation skips would have assigned",
   "node": null,
-  "measured_with": "38c0aec9d9d11354",
+  "measured_with": "36a04d8fc582b92d",
   "source": "measured"
 }

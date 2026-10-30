@@ -1,0 +1,1362 @@
+{
+  "version": 1,
+  "source": "fd2d94397",
+  "engineSource": "e5ac183a1",
+  "inventory": [
+    {
+      "name": "array-from-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "calls",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "dates-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 4
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 116,
+        "compared": 0,
+        "unavailable": 116,
+        "runtimeDeclined": 0,
+        "refused": 4
+      }
+    },
+    {
+      "name": "enum-reverse-map-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 58,
+        "compared": 0,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "generator-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 6
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 87,
+        "compared": 0,
+        "unavailable": 87,
+        "runtimeDeclined": 0,
+        "refused": 6
+      }
+    },
+    {
+      "name": "generic-classes-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "mathops-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 4
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 116,
+        "compared": 0,
+        "unavailable": 116,
+        "runtimeDeclined": 0,
+        "refused": 4
+      }
+    },
+    {
+      "name": "using-unsupported",
+      "backend": "c",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 58,
+        "compared": 0,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "a-generic-interface-whose-member-returns-its-type-parameter",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 58,
+        "compared": 58,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 63,
+        "compared": 58,
+        "unavailable": 5,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "a-local-const-in-every-kind-of-function",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 116,
+        "compared": 116,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 174,
+        "compared": 116,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "a-member-read-through-a-bracket",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 232,
+        "compared": 232,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 261,
+        "compared": 232,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-module-read-of-a-cut-binding",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 6
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 87,
+        "compared": 29,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 6
+      }
+    },
+    {
+      "name": "a-narrowed-value-assigned-to-a-const",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 203,
+        "compared": 203,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 232,
+        "compared": 203,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-nested-function-used-before-its-declaration",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 87,
+        "compared": 87,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 116,
+        "compared": 87,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-structural-alias-read-after-an-interface-view",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 58,
+        "compared": 29,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "an-await-of-a-thenable",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 348,
+        "compared": 348,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 406,
+        "compared": 348,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "an-enum-member-read-by-its-name",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 203,
+        "compared": 203,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 232,
+        "compared": 203,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "an-inferred-array-literal-at-its-binding",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 116,
+        "compared": 116,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 145,
+        "compared": 116,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "async-unsupported",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 87,
+        "compared": 29,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "module-evaluation",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 91,
+        "compared": 91,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 92,
+        "compared": 91,
+        "unavailable": 1,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "module-functions",
+      "backend": "c",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 406,
+        "compared": 406,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 435,
+        "compared": 406,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "array-from-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "calls",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "dates-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 4
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 116,
+        "compared": 0,
+        "unavailable": 116,
+        "runtimeDeclined": 0,
+        "refused": 4
+      }
+    },
+    {
+      "name": "enum-reverse-map-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 58,
+        "compared": 0,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "generator-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 6
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 87,
+        "compared": 0,
+        "unavailable": 87,
+        "runtimeDeclined": 0,
+        "refused": 6
+      }
+    },
+    {
+      "name": "generic-classes-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "mathops-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 4
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 116,
+        "compared": 0,
+        "unavailable": 116,
+        "runtimeDeclined": 0,
+        "refused": 4
+      }
+    },
+    {
+      "name": "using-unsupported",
+      "backend": "llvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 58,
+        "compared": 0,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "a-generic-interface-whose-member-returns-its-type-parameter",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 58,
+        "compared": 58,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 63,
+        "compared": 58,
+        "unavailable": 5,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "a-local-const-in-every-kind-of-function",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 116,
+        "compared": 116,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 174,
+        "compared": 116,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "a-member-read-through-a-bracket",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 232,
+        "compared": 232,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 261,
+        "compared": 232,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-module-read-of-a-cut-binding",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 6
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 87,
+        "compared": 29,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 6
+      }
+    },
+    {
+      "name": "a-narrowed-value-assigned-to-a-const",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 203,
+        "compared": 203,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 232,
+        "compared": 203,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-nested-function-used-before-its-declaration",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 87,
+        "compared": 87,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 116,
+        "compared": 87,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-structural-alias-read-after-an-interface-view",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 58,
+        "compared": 29,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "an-await-of-a-thenable",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 348,
+        "compared": 348,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 406,
+        "compared": 348,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "an-enum-member-read-by-its-name",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 203,
+        "compared": 203,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 232,
+        "compared": 203,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "an-inferred-array-literal-at-its-binding",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 116,
+        "compared": 116,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 145,
+        "compared": 116,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "async-unsupported",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 87,
+        "compared": 29,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "module-evaluation",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 91,
+        "compared": 91,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 92,
+        "compared": 91,
+        "unavailable": 1,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "module-functions",
+      "backend": "llvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 406,
+        "compared": 406,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 435,
+        "compared": 406,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "array-from-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "calls",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "dates-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 4
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 116,
+        "compared": 0,
+        "unavailable": 116,
+        "runtimeDeclined": 0,
+        "refused": 4
+      }
+    },
+    {
+      "name": "enum-reverse-map-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 58,
+        "compared": 0,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "generator-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 6
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 87,
+        "compared": 0,
+        "unavailable": 87,
+        "runtimeDeclined": 0,
+        "refused": 6
+      }
+    },
+    {
+      "name": "generic-classes-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 29,
+        "compared": 0,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "mathops-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 4
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 116,
+        "compared": 0,
+        "unavailable": 116,
+        "runtimeDeclined": 0,
+        "refused": 4
+      }
+    },
+    {
+      "name": "using-unsupported",
+      "backend": "jvm",
+      "kind": "all-unavailable",
+      "before": {
+        "outcome": "nothing to check",
+        "expected": 0,
+        "compared": 0,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "compiled bindings unavailable",
+        "expected": 58,
+        "compared": 0,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "a-generic-interface-whose-member-returns-its-type-parameter",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 58,
+        "compared": 58,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 63,
+        "compared": 58,
+        "unavailable": 5,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "a-local-const-in-every-kind-of-function",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 116,
+        "compared": 116,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 174,
+        "compared": 116,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    },
+    {
+      "name": "a-member-read-through-a-bracket",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 232,
+        "compared": 232,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 261,
+        "compared": 232,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-module-read-of-a-cut-binding",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 6
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 87,
+        "compared": 29,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 6
+      }
+    },
+    {
+      "name": "a-narrowed-value-assigned-to-a-const",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 203,
+        "compared": 203,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 232,
+        "compared": 203,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-nested-function-used-before-its-declaration",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 87,
+        "compared": 87,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 116,
+        "compared": 87,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "a-structural-alias-read-after-an-interface-view",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 58,
+        "compared": 29,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "an-await-of-a-thenable",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 348,
+        "compared": 348,
+        "runtimeDeclined": 0,
+        "refused": 2
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 406,
+        "compared": 348,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 2
+      }
+    },
+    {
+      "name": "an-enum-member-read-by-its-name",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 203,
+        "compared": 203,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 232,
+        "compared": 203,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "an-inferred-array-literal-at-its-binding",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 116,
+        "compared": 116,
+        "runtimeDeclined": 0,
+        "refused": 1
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 145,
+        "compared": 116,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 1
+      }
+    },
+    {
+      "name": "async-unsupported",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 29,
+        "compared": 29,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 87,
+        "compared": 29,
+        "unavailable": 58,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "module-evaluation",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 91,
+        "compared": 91,
+        "runtimeDeclined": 0,
+        "refused": 3
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 92,
+        "compared": 91,
+        "unavailable": 1,
+        "runtimeDeclined": 0,
+        "refused": 3
+      }
+    },
+    {
+      "name": "module-functions",
+      "backend": "jvm",
+      "kind": "new-partial",
+      "before": {
+        "outcome": "agrees",
+        "expected": 406,
+        "compared": 406,
+        "runtimeDeclined": 0,
+        "refused": 0
+      },
+      "after": {
+        "outcome": "agrees on what it compared",
+        "expected": 435,
+        "compared": 406,
+        "unavailable": 29,
+        "runtimeDeclined": 0,
+        "refused": 0
+      }
+    }
+  ],
+  "summary": {
+    "c": {
+      "subjects": 21,
+      "allUnavailable": [
+        "array-from-unsupported",
+        "calls",
+        "dates-unsupported",
+        "enum-reverse-map-unsupported",
+        "generator-unsupported",
+        "generic-classes-unsupported",
+        "mathops-unsupported",
+        "using-unsupported"
+      ],
+      "newPartial": [
+        "a-generic-interface-whose-member-returns-its-type-parameter",
+        "a-local-const-in-every-kind-of-function",
+        "a-member-read-through-a-bracket",
+        "a-module-read-of-a-cut-binding",
+        "a-narrowed-value-assigned-to-a-const",
+        "a-nested-function-used-before-its-declaration",
+        "a-structural-alias-read-after-an-interface-view",
+        "an-await-of-a-thenable",
+        "an-enum-member-read-by-its-name",
+        "an-inferred-array-literal-at-its-binding",
+        "async-unsupported",
+        "module-evaluation",
+        "module-functions"
+      ],
+      "beforeCompared": 1947,
+      "afterCompared": 1947,
+      "lostComparedSubjects": []
+    },
+    "llvm": {
+      "subjects": 21,
+      "allUnavailable": [
+        "array-from-unsupported",
+        "calls",
+        "dates-unsupported",
+        "enum-reverse-map-unsupported",
+        "generator-unsupported",
+        "generic-classes-unsupported",
+        "mathops-unsupported",
+        "using-unsupported"
+      ],
+      "newPartial": [
+        "a-generic-interface-whose-member-returns-its-type-parameter",
+        "a-local-const-in-every-kind-of-function",
+        "a-member-read-through-a-bracket",
+        "a-module-read-of-a-cut-binding",
+        "a-narrowed-value-assigned-to-a-const",
+        "a-nested-function-used-before-its-declaration",
+        "a-structural-alias-read-after-an-interface-view",
+        "an-await-of-a-thenable",
+        "an-enum-member-read-by-its-name",
+        "an-inferred-array-literal-at-its-binding",
+        "async-unsupported",
+        "module-evaluation",
+        "module-functions"
+      ],
+      "beforeCompared": 1947,
+      "afterCompared": 1947,
+      "lostComparedSubjects": []
+    },
+    "jvm": {
+      "subjects": 21,
+      "allUnavailable": [
+        "array-from-unsupported",
+        "calls",
+        "dates-unsupported",
+        "enum-reverse-map-unsupported",
+        "generator-unsupported",
+        "generic-classes-unsupported",
+        "mathops-unsupported",
+        "using-unsupported"
+      ],
+      "newPartial": [
+        "a-generic-interface-whose-member-returns-its-type-parameter",
+        "a-local-const-in-every-kind-of-function",
+        "a-member-read-through-a-bracket",
+        "a-module-read-of-a-cut-binding",
+        "a-narrowed-value-assigned-to-a-const",
+        "a-nested-function-used-before-its-declaration",
+        "a-structural-alias-read-after-an-interface-view",
+        "an-await-of-a-thenable",
+        "an-enum-member-read-by-its-name",
+        "an-inferred-array-literal-at-its-binding",
+        "async-unsupported",
+        "module-evaluation",
+        "module-functions"
+      ],
+      "beforeCompared": 1947,
+      "afterCompared": 1947,
+      "lostComparedSubjects": []
+    }
+  }
+}

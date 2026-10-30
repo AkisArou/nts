@@ -1,8 +1,150 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 58,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 29,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "throwing 0 nts: uncaught RangeError: default",
+        "node": "throwing 0 4008000000000000"
+      },
+      {
+        "compiled": "throwing 1 nts: uncaught RangeError: default",
+        "node": "throwing 1 4008000000000000"
+      },
+      {
+        "compiled": "throwing 2 nts: uncaught RangeError: default",
+        "node": "throwing 2 4008000000000000"
+      },
+      {
+        "compiled": "throwing 3 nts: uncaught RangeError: default",
+        "node": "throwing 3 4008000000000000"
+      },
+      {
+        "compiled": "throwing 4 nts: uncaught RangeError: default",
+        "node": "throwing 4 4008000000000000"
+      },
+      {
+        "compiled": "throwing 5 nts: uncaught RangeError: default",
+        "node": "throwing 5 4008000000000000"
+      },
+      {
+        "compiled": "throwing 6 nts: uncaught RangeError: default",
+        "node": "throwing 6 4008000000000000"
+      },
+      {
+        "compiled": "throwing 7 nts: uncaught RangeError: default",
+        "node": "throwing 7 4008000000000000"
+      },
+      {
+        "compiled": "throwing 8 nts: uncaught RangeError: default",
+        "node": "throwing 8 4008000000000000"
+      },
+      {
+        "compiled": "throwing 9 nts: uncaught RangeError: default",
+        "node": "throwing 9 4008000000000000"
+      },
+      {
+        "compiled": "throwing 10 nts: uncaught RangeError: default",
+        "node": "throwing 10 4008000000000000"
+      },
+      {
+        "compiled": "throwing 11 nts: uncaught RangeError: default",
+        "node": "throwing 11 4008000000000000"
+      },
+      {
+        "compiled": "throwing 12 nts: uncaught RangeError: default",
+        "node": "throwing 12 4008000000000000"
+      },
+      {
+        "compiled": "throwing 13 nts: uncaught RangeError: default",
+        "node": "throwing 13 4008000000000000"
+      },
+      {
+        "compiled": "throwing 14 nts: uncaught RangeError: default",
+        "node": "throwing 14 4008000000000000"
+      },
+      {
+        "compiled": "throwing 15 nts: uncaught RangeError: default",
+        "node": "throwing 15 4008000000000000"
+      },
+      {
+        "compiled": "throwing 16 nts: uncaught RangeError: default",
+        "node": "throwing 16 4008000000000000"
+      },
+      {
+        "compiled": "throwing 17 nts: uncaught RangeError: default",
+        "node": "throwing 17 4008000000000000"
+      },
+      {
+        "compiled": "throwing 18 nts: uncaught RangeError: default",
+        "node": "throwing 18 4008000000000000"
+      },
+      {
+        "compiled": "throwing 19 nts: uncaught RangeError: default",
+        "node": "throwing 19 4008000000000000"
+      },
+      {
+        "compiled": "throwing 20 nts: uncaught RangeError: default",
+        "node": "throwing 20 4008000000000000"
+      },
+      {
+        "compiled": "throwing 21 nts: uncaught RangeError: default",
+        "node": "throwing 21 4008000000000000"
+      },
+      {
+        "compiled": "throwing 22 nts: uncaught RangeError: default",
+        "node": "throwing 22 4008000000000000"
+      },
+      {
+        "compiled": "throwing 23 nts: uncaught RangeError: default",
+        "node": "throwing 23 4008000000000000"
+      },
+      {
+        "compiled": "throwing 24 nts: uncaught RangeError: default",
+        "node": "throwing 24 4008000000000000"
+      },
+      {
+        "compiled": "throwing 25 nts: uncaught RangeError: default",
+        "node": "throwing 25 4008000000000000"
+      },
+      {
+        "compiled": "throwing 26 nts: uncaught RangeError: default",
+        "node": "throwing 26 4008000000000000"
+      },
+      {
+        "compiled": "throwing 27 nts: uncaught RangeError: default",
+        "node": "throwing 27 4008000000000000"
+      },
+      {
+        "compiled": "throwing 28 nts: uncaught RangeError: default",
+        "node": "throwing 28 4008000000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
   "category": "wrong-answer",
-  "nts": "checked 33 of 58 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 17 case(s) disagree between the compiled program and node",
+  "nts": "disagrees: 58 compared, 58 expected, 29 disagreements",
   "node": null,
-  "measured_with": "3f5dcbe646425043",
+  "measured_with": "36a04d8fc582b92d",
   "source": "measured"
 }

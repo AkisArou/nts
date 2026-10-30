@@ -1,0 +1,541 @@
+{
+  "version": 1,
+  "compiler_base": "7d3c7a054cf74decf885041df60a79d0e25daf5f",
+  "engine_source": "e5ac183a1",
+  "artifacts": {
+    "nts": {
+      "path": "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+      "sha256": "36a04d8fc582b92dbbe0927f32bd310f776e92fd8921569a9985712a05a78589"
+    },
+    "oracle-plan": {
+      "path": "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/oracle-plan",
+      "sha256": "cab0558a6504ad59910823562f3bdd727096446b647b0634818013d24c465ff1"
+    }
+  },
+  "compiler_change": {
+    "files": 3,
+    "insertions": 105,
+    "deletions": 49,
+    "kind": "pure extraction; existing written scalar/default/annotation policy is unchanged",
+    "written_scalar_sha256": "1cc99418ff90f6f3803fd8a0f8bbd1eba75381001d15262d196559a757aa8428",
+    "reviewed_by": "compiler lane"
+  },
+  "rust": {
+    "original": {
+      "source": "a22daf751b0611fea9fcd1b7c1ef93520fc00981",
+      "passed": 2222,
+      "failed": 1,
+      "ignored": 4,
+      "groups": 297,
+      "stages": [
+        {
+          "name": "fmt",
+          "command": "cargo",
+          "args": [
+            "fmt",
+            "--check"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "clippy",
+          "command": "cargo",
+          "args": [
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "build-cli-planner",
+          "command": "cargo",
+          "args": [
+            "build",
+            "--profile",
+            "nts-dev",
+            "-p",
+            "nts-cli",
+            "-p",
+            "nts-differential",
+            "--bins"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "rust-tests",
+          "command": "cargo",
+          "args": [
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-core",
+            "-p",
+            "nts-differential",
+            "-p",
+            "nts-cli",
+            "-p",
+            "nts-codegen-common",
+            "-p",
+            "nts-codegen-c",
+            "-p",
+            "nts-codegen-llvm",
+            "-p",
+            "nts-codegen-jvm",
+            "-p",
+            "nts-frontend-ts",
+            "-p",
+            "nts-frontend-tsrs"
+          ],
+          "status": 101,
+          "signal": null
+        }
+      ],
+      "evidence": "/home/akisarou/.cache/nts-tmp/helper2-source-plan-combined-a22daf751b06/rust-tests.log"
+    },
+    "date_test_followup": {
+      "source": "223dd94c2",
+      "passed": 3,
+      "failed": 0,
+      "stages": [
+        {
+          "name": "fmt",
+          "command": "cargo",
+          "args": [
+            "fmt",
+            "--check"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "clippy",
+          "command": "cargo",
+          "args": [
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "build-cli-planner",
+          "command": "cargo",
+          "args": [
+            "build",
+            "--profile",
+            "nts-dev",
+            "-p",
+            "nts-cli",
+            "-p",
+            "nts-differential",
+            "--bins"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "dates-tests",
+          "command": "cargo",
+          "args": [
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-core",
+            "--test",
+            "dates"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "post-checks",
+          "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+          "args": [
+            "/home/akisarou/.cache/nts-tmp/helper2-source-plan-post-a22/run.mjs"
+          ],
+          "status": 0,
+          "signal": null
+        }
+      ]
+    },
+    "composite_after_test_only_correction": {
+      "passed": 2223,
+      "failed": 0,
+      "ignored": 4,
+      "basis": "all 297 original groups retained; the one stale Date test corrected without weakening six diagnostic assertions, then its 3-test binary re-run"
+    },
+    "final_differential": {
+      "passed": 78,
+      "failed": 0,
+      "stages": [
+        {
+          "name": "fmt",
+          "command": "cargo",
+          "args": [
+            "fmt",
+            "--check"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "clippy",
+          "command": "cargo",
+          "args": [
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "build-cli-planner",
+          "command": "cargo",
+          "args": [
+            "build",
+            "--profile",
+            "nts-dev",
+            "-p",
+            "nts-cli",
+            "-p",
+            "nts-differential",
+            "--bins"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "differential-tests",
+          "command": "cargo",
+          "args": [
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-differential"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "ts-controls",
+          "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+          "args": [
+            "--experimental-test-module-mocks",
+            "--test",
+            "tooling/gate/check-supervision.test.ts",
+            "tooling/gate/check-report-outcomes.test.ts",
+            "tooling/gate/check-report-consumers.test.ts"
+          ],
+          "status": 0,
+          "signal": null
+        },
+        {
+          "name": "release-cli",
+          "command": "cargo",
+          "args": [
+            "build",
+            "--release",
+            "-p",
+            "nts-cli",
+            "-p",
+            "nts-differential",
+            "--bins"
+          ],
+          "status": 0,
+          "signal": null
+        }
+      ],
+      "carry": "Later changes affect TS decoder/tests, shell accounting and measured JSON records only; compiler/backend production bytes unchanged."
+    }
+  },
+  "typescript": {
+    "tooling": {
+      "source": "fd2d94397",
+      "passed": 696,
+      "todo": 2,
+      "failed": 0,
+      "log": "/home/akisarou/.cache/nts-tmp/helper2-source-plan-final-fd2/tooling-tests.raw.log"
+    },
+    "strict_authorities": "PASS",
+    "legacy_pin_strict_baseline": {
+      "unchanged": true,
+      "count": 49
+    },
+    "strict_stages": [
+      {
+        "name": "strict-new",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "node_modules/typescript/bin/tsc",
+          "--ignoreConfig",
+          "--noEmit",
+          "--strict",
+          "--skipLibCheck",
+          "--allowJs",
+          "--target",
+          "esnext",
+          "--module",
+          "nodenext",
+          "--moduleResolution",
+          "nodenext",
+          "--allowImportingTsExtensions",
+          "--types",
+          "node",
+          "tooling/differential/check-report.ts",
+          "tooling/differential/check-consumers.ts",
+          "tooling/gate/check-report-consumers.test.ts"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "strict-bridge",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "node_modules/typescript/bin/tsc",
+          "--ignoreConfig",
+          "--noEmit",
+          "--strict",
+          "--skipLibCheck",
+          "--allowJs",
+          "--target",
+          "esnext",
+          "--module",
+          "nodenext",
+          "--moduleResolution",
+          "nodenext",
+          "--allowImportingTsExtensions",
+          "--types",
+          "node",
+          "tooling/differential/legacy-oracle-root.ts",
+          "tooling/gate/legacy-oracle-root.test.ts"
+        ],
+        "status": 1,
+        "signal": null
+      },
+      {
+        "name": "strict-pin-baseline",
+        "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "args": [
+          "node_modules/typescript/bin/tsc",
+          "--ignoreConfig",
+          "--noEmit",
+          "--strict",
+          "--skipLibCheck",
+          "--allowJs",
+          "--target",
+          "esnext",
+          "--module",
+          "nodenext",
+          "--moduleResolution",
+          "nodenext",
+          "--allowImportingTsExtensions",
+          "--types",
+          "node",
+          "tooling/conformance/pin.ts"
+        ],
+        "status": 1,
+        "signal": null
+      }
+    ]
+  },
+  "canonical_C_records": {
+    "language": 6974,
+    "builtins": 828,
+    "annexB": 9,
+    "staging": 53,
+    "harness": 17,
+    "regressed": 0,
+    "changed": 0,
+    "new": 0,
+    "missing": 0,
+    "stages": [
+      {
+        "name": "test262-cases",
+        "command": "sh",
+        "args": [
+          "tooling/gate/all.sh",
+          "--call",
+          "test262-cases"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "test262-builtins-cases",
+        "command": "sh",
+        "args": [
+          "tooling/gate/all.sh",
+          "--call",
+          "test262-builtins-cases"
+        ],
+        "status": 0,
+        "signal": null
+      },
+      {
+        "name": "test262-rest-cases",
+        "command": "sh",
+        "args": [
+          "tooling/gate/all.sh",
+          "--call",
+          "test262-rest-cases"
+        ],
+        "status": 0,
+        "signal": null
+      }
+    ],
+    "carry": "Final compiler/lowering production bytes are unchanged; the later differential execution restart fix is outside the emit path used here."
+  },
+  "canonical_consumers": {
+    "C": {
+      "status": 0,
+      "compared_projects": 850,
+      "bare": 4,
+      "unavailable": 8
+    },
+    "RC": {
+      "status": 0,
+      "compared_projects": 850,
+      "bare": 4,
+      "unavailable": 8
+    },
+    "LLVM": {
+      "status": 0
+    },
+    "JVM": {
+      "status": 0
+    },
+    "LLVM_RC": {
+      "status": 0
+    },
+    "benchmarks_JVM": {
+      "status": 0,
+      "compared_projects": 101,
+      "bare": 1,
+      "unavailable": 2
+    },
+    "example_refusals": {
+      "status": 0,
+      "projects": 26
+    },
+    "availability_inventory": "availability-audit.json",
+    "source_plan_audit": "population-audit.json",
+    "records": {
+      "before": 964,
+      "after": 966,
+      "unchanged": 938,
+      "changed_existing": 26,
+      "new_controls": 2,
+      "node_runs_per_driver": 2,
+      "node_record_evidence": "/home/akisarou/.cache/nts-oracle-record/run-gfxEVk"
+    }
+  },
+  "outcome_record_migration": "outcome-migration.json",
+  "limitations": [
+    {
+      "check": "optional full blockers precheck",
+      "status": "NOT RUN; deliberately stopped at the unchanged 4096-concrete-type expansion fixture",
+      "matched_comparison": "Both actual main release and the earlier candidate reached the explicit 120-second CPU investigation guard. This proves no verdict or regression; previous main completed gate logs and the new full train remain the verdict evidence.",
+      "evidence": "/home/akisarou/.cache/nts-tmp/helper2-polymorphic-budget-control"
+    },
+    {
+      "check": "bridge imports legacy pin.ts strict typing",
+      "status": "49 pre-existing errors, each matching the direct unchanged pin.ts control; new bridge/report authorities are strict-clean"
+    }
+  ],
+  "preserved_failed_receipts": [
+    "/home/akisarou/.cache/nts-tmp/helper2-source-plan-combined-a22daf751b06/result.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-source-plan-final-96ab/result.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-source-plan-release-f499/result.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-source-plan-final-fd2/result.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/audit-r1-partial.json",
+    "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/record-result.json"
+  ],
+  "other_failed_receipts": [
+    "/home/akisarou/.cache/nts-oracle-record/run-PACzk8",
+    "/home/akisarou/.cache/nts-tmp/helper2-clock-main-controls-r1"
+  ],
+  "host_tool_recheck": "Initial outcome repeat selected system JDK through its reduced unit PATH and showed two additional Unicode FIXED observations. Audit and official selective/full check repeated with the established Corretto 21 host tool; neither version rewrote those unrelated records.",
+  "outcomes": {
+    "status": 0,
+    "fixtures": 312,
+    "holds": 151,
+    "reproduces": 155,
+    "fixed": 6,
+    "changed": 0,
+    "regressed": 0,
+    "recorded_fixtures": 15,
+    "canonical_recording": {
+      "version": 1,
+      "source": "fd2d94397",
+      "compiler": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-source-plan-e5ac183a1/nts",
+        "sha256": "36a04d8fc582b92dbbe0927f32bd310f776e92fd8921569a9985712a05a78589"
+      },
+      "stages": [
+        {
+          "name": "canonical-selective-record",
+          "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+          "args": [
+            "tooling/conformance/outcomes-check.ts",
+            "--record",
+            "a-checked-byte-read-multiplied-by-zero",
+            "a-checked-byte-read-reduced-modulo-one",
+            "a-checked-byte-read-truncated-then-multiplied-by-zero",
+            "a-computed-field-key-is-never-evaluated",
+            "a-computed-method-key-refuses-only-its-method",
+            "a-hole-in-an-array-of-a-nullable-element",
+            "a-literal-union-index-is-not-a-bounds-proof",
+            "a-local-array-index-trusted-from-a-literal-union",
+            "a-method-called-through-a-same-shape-unrelated-class",
+            "a-module-reading-an-interface-field-whose-getter-was-refused",
+            "a-pushed-string-array-read-at-a-fractional-index-on-the-jvm",
+            "a-stored-null-read-through-an-unchecked-index",
+            "a-var-redeclared-at-another-function-type",
+            "a-var-redeclared-returning-another-object-layout",
+            "an-async-functions-throwing-default-escapes-its-promise"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 13390
+        },
+        {
+          "name": "canonical-outcomes",
+          "command": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "outcomes"
+          ],
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 126685
+        }
+      ],
+      "terminal": "PASS"
+    },
+    "java_home": "/home/akisarou/.asdf/installs/java/corretto-21.0.5.11.1",
+    "log": "/home/akisarou/.cache/nts-tmp/helper2-outcome-population-migration/canonical-outcomes.log"
+  }
+}
