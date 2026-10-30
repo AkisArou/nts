@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-deep-base-keeps-its-physical-storage",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-deep-base-keeps-its-physical-storage/src/main.ts",
+      "signature": "8c50416060f32ee260fbab774dae44097a78e870f9091c193e513700721baf6b",
+      "keys": {
+        "c": "c9fbeaffef125cdbcabecb8d42ac256c",
+        "jvm": "b1eca515857b71980c3adc7fc65d859e",
+        "llvm": "026c7a6dadc79bcf8410836c7f0ceb6f"
+      },
+      "cases_sha256": "d890396aae17bbfb2f139a234dfe77d2b4a72a92bcafcdb747ce6022ea4e59df",
+      "driver_sha256": "28574d1cd71e54ccbf788e3aed57726f415e7b451321e95c33bad47ee40fdc56",
+      "populations": {
+        "byteControl": {
+          "count": 29,
+          "cases_sha256": "6600bdee00cdacb40fbfcd5350415f61cd5c7809cbb035d98423087507636490"
+        },
+        "deepBytes": {
+          "count": 29,
+          "cases_sha256": "2947d2b4b34950411f81eb920a229784bcc346662fd8b182a0c2423afda3fe97"
+        },
+        "deepError": {
+          "count": 29,
+          "cases_sha256": "0731d6e7d0831f3baa2b2fcb649e51da60e43050d1c0006e25ae81855a4f24f8"
+        },
+        "errorControl": {
+          "count": 29,
+          "cases_sha256": "bac6ecf5f8c58311d77ab9391c29a92acd985d5d79fa2da68b29ea1134903934"
+        }
+      },
+      "complete": true,
+      "count": 116
+    }
+  ]
+}
