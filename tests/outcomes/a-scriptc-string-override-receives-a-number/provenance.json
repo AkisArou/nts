@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "kind": "adapted-upstream-test",
+  "upstream": "https://github.com/vercel-labs/scriptc/blob/8971d694b18a81a9a52b8f8208be22b182cb092b/tests/corpus/6401-override-param-variance.ts",
+  "source_sha256": "dac1438f66997e54b74c62941ba3b151f1f6d12b54aaf03357e39c966182f887",
+  "retained_original": "upstream.ts.txt",
+  "adaptation": "Expose work(n), normalize console output through String, and use a common nonthrowing type guard in the ABI pair. It preserves this entry's output strings; the original throwing guard is separately recorded in a-bivariant-override-throw-is-not-caught. The ABI control changes only the override parameter annotation from string to unknown."
+}

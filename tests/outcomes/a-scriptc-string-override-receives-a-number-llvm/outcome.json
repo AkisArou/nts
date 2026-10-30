@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "error",
+    "counts": null,
+    "oracle": null,
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [],
+    "error": {
+      "kind": "preparation",
+      "source": null,
+      "message": "invalid HIR: CallArgumentType { func: \"call@0obj7@raises\", callee: \"TypedHandler#handle\", at: 1, expected: Managed(String), found: Erased }"
+    }
+  },
+  "run": "check",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: CallArgumentType { func: \"call@0obj7@raises\", callee: \"TypedHandler#handle\", at: 1, expected: Managed(String), found: Erased }",
+  "node": null,
+  "measured_with": "71d588db456371b0",
+  "source": "measured"
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-direct-override-throw-is-caught",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-direct-override-throw-is-caught/src/main.ts",
+      "signature": "383d2623145328e61b2de1404c8215c306f12e4e9acd8dcae4ec7aebeb89a534",
+      "keys": {
+        "c": "b1d3bdd14ebf5bc2aee499e0c4251ce6",
+        "jvm": "9872689cca3a16ffae84f3d4534a1ca9",
+        "llvm": "cdc847550dca44f5fa106d191d8bce1b"
+      },
+      "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45",
+      "driver_sha256": "e4d307266bac52ee9f6bc954645e4854ebc03113eb57a6e76a057cd07033713d",
+      "populations": {
+        "work": {
+          "count": 29,
+          "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

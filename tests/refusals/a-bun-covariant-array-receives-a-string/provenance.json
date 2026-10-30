@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "kind": "adapted-upstream-test",
+  "upstream": "https://github.com/oven-sh/bun/blob/3a9ea00437f8065cd5a4604d7423299a769e2d9e/test/aot/parallel/mistyped-values/covariant-array.ts",
+  "source_sha256": "d345f9675b34982a510d62ab104222d0059070d06bf5d5cd448a76b36e1e9f6e",
+  "retained_original": "upstream.ts.txt",
+  "adaptation": "Replace test-runner calls and console output with exported work(n); keep the adversarial value route. The adjacent named control differs in one expression."
+}
