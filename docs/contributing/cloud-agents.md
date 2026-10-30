@@ -23,11 +23,21 @@ Plain TypeScript, and the tests that hold it to its specification:
   replaced with original code written without reference to it. Data under
   CC-BY-4.0 that a contribution adds may be a benchmark's input only:
   attributed in the case's provenance, kept under `benchmarks/`, and never
-  linked into nts or into a program nts builds. (A vendored upstream
-  component keeps its own notices: the vendored checker's DOM library
-  carries WHATWG text under CC-BY-4.0, attributed in its `NOTICE`.)
+  linked into nts or into a program nts builds. Text of a WHATWG standard
+  that is incorporated into source code is under BSD-3-Clause, by WHATWG's
+  own licence. MDN's documentation prose is CC-BY-SA, which is not
+  permitted, as code or as input. (A vendored upstream component keeps its
+  own notices: the vendored checker's DOM library carries WHATWG text under
+  CC-BY-4.0, attributed in its `NOTICE`.)
 - in `tests/typescript/`, a family of self-checking cases that node judges
   (with its row and tags in `FEATURES.md`), where a handoff assigns one.
+  A case is written the way a program naturally would be, including code
+  nts cannot compile yet. A case nts refuses today is recorded, and flips
+  when the compiler gains the feature. Only what nts never supports is left
+  out: `eval` and `new Function` given run-time source text, `with`, and
+  sloppy mode.
+- anywhere else a handoff assigns. The paths a handoff names are its task's
+  exception to the out-of-scope list below.
 
 Never the work the compiler or native code does: whatever depends on the
 layout of the values it is given (`structuredClone`, string conversions) and
@@ -149,6 +159,17 @@ a cloud environment.
 A local agent fetches the branch, compiles the package with nts, runs the
 gate's steps that the change owes, and lands it on `main` through
 [`land`](workflow.md). The landed commits keep the pull request's authorship;
-the pull request is then closed with the landed commit's id. A change that
-nts refuses comes back on the pull request with the refusal, so the code can
-be rewritten within the rules above.
+the pull request is then closed with the landed commit's id. A runtime
+library change that nts refuses comes back on the pull request with the
+refusal, so the code can be rewritten within the rules above. A test case or
+benchmark port that nts refuses lands as it is, with the refusal recorded as
+the finding.
+
+## Decisions
+
+- A handoff may assign a cloud agent any path. The paths it names are that
+  task's exception to the out-of-scope list (user, 10-30,
+  [log](../records/notebooks/decisions-log.md#contributors-and-language-10-30)).
+- Tests are written the way a program naturally would be, never around a
+  compiler gap. Only what nts never supports is left out (user, 10-30,
+  [log](../records/notebooks/decisions-log.md#contributors-and-language-10-30)).

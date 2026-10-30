@@ -1070,3 +1070,42 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   Why do it? node ffi later, update to node 26 later." The node reference
   stays on Node 24; the move waits with `node:ffi`, and the work started for
   it is kept, unlanded.
+
+## Contributors and language (10-30)
+
+- **A handoff may assign a cloud agent any path.** The user: "yes chatgpt
+  agents can work to whatever we need to". The paths a handoff names are that
+  task's exception to the default out-of-scope list. The first such task is
+  the program generator, in `tooling/census/generate/`
+  ([cloud-agents](../../contributing/cloud-agents.md#decisions)).
+- **Tests are written naturally, never around a compiler gap.** The user:
+  "we should avoid adding eval and new Function etc... but normal typescript
+  that we are supposed to eventually support, should be written as it should
+  be, with no hacks or compromises because we have a compiler gap. the
+  compiler gap should be noted, and when it is the right time, we support
+  it".
+  - The coordinator had asked the proofs suite's author to steer around
+    three shapes nts refuses today: a `const` reading a module-scope loop's
+    variable, some `bind` and `apply` forms, and a per-iteration `let` that
+    closures capture. All three requests were withdrawn.
+  - The module-scope loop gap went to the compiler's queue, with the
+    suite's refused cases as its guards.
+- **Reflection may yet be supported.** The user: "Reflection MIGHT eventually
+  be supported though. We will do an investigation when we have our compiler
+  bulletproof." The investigation covers what the boundaries page refuses
+  today, the prototype chain's reflection and the redirect hooks, beside the
+  set already in scope for later. `eval`, and `Function` given run-time
+  source text, stay a permanent boundary
+  ([boundaries](../../language/boundaries.md#decisions)).
+- **WHATWG text in source code is BSD-3-Clause; MDN's prose is CC-BY-SA.**
+  - WHATWG's standards state: "To the extent portions of it are incorporated
+    into source code, such portions in the source code are licensed under the
+    BSD 3-Clause License instead."
+  - MDN's documentation is CC-BY-SA 2.5 or later, which the permitted list
+    leaves out.
+  - So the JetStream TypeScript-library port (#118) stays blocked, since it
+    embeds TypeScript's DOM library, MDN-derived comments included, in its
+    program's source.
+  - nts's own binary embeds the same library files through the vendored
+    checker, so their MDN attribution is owed in the top-level `NOTICE`
+    before nts is distributed.

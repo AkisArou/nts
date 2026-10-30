@@ -551,6 +551,10 @@ Noted, not scheduled:
   Mac mini bought when that work begins (A-1);
 - analysis budgets scaled by program size, each exhaustion reported by name
   (P-7);
+- an investigation of reflection, once the compiler is bulletproof: the
+  prototype chain's reflection, the redirect hooks, `Proxy`, `Reflect`,
+  object integrity and the descriptors
+  ([boundaries](language/boundaries.md#decisions));
 - node's own tests in the gate once the node lane resumes (Q-5).
 
 ## Decisions

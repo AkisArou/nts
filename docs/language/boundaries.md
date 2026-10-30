@@ -191,6 +191,11 @@ a boundary:
   decision above takes `globalThis`, `Proxy`, `Reflect`, object integrity and
   the descriptors they are defined by out of that set
   ([log](../records/notebooks/decisions-log.md#test262-09-29-10-02)).
+- Reflection may yet be supported as a whole. That covers the prototype
+  chain's reflection and the redirect hooks above, which are refused today,
+  as well as the later set. An investigation decides once the compiler is
+  bulletproof. Until then, each stays as this page describes it (user, 10-30,
+  [log](../records/notebooks/decisions-log.md#contributors-and-language-10-30)).
 - Intl is in scope, with locale subsets
   ([log](../records/notebooks/decisions-log.md#builtins-and-runtimes-10-22)).
 - `eval`, and `Function` or `new Function` given source text known only at run
