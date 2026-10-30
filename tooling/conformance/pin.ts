@@ -52,7 +52,7 @@ const TREE = join(PINS, "tree");
 const TARGET = join(PINS, "target");
 const LOCK = join(PINS, "build.lock");
 
-const git = (args, cwd = ROOT, input) => execFileSync("git", args, { cwd, encoding: "utf8", input, maxBuffer: 1 << 28, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
+const git = (args: string[], cwd = ROOT, input?: string) => execFileSync("git", args, { cwd, encoding: "utf8", input, maxBuffer: 1 << 28, stdio: [input === undefined ? "ignore" : "pipe", "pipe", "pipe"] });
 const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 
 /** A pin's directory name: the commit, and the applied diff's hash when there is one. */
