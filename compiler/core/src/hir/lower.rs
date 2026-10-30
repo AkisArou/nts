@@ -20402,23 +20402,9 @@ impl std::ops::Deref for Representation<'_> {
 /// checker's property list is flattened, so nothing in it says a member came
 /// from a base whose storage this compiler models itself.
 fn inherited_typed_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<HirType> {
-    let mut stack = vec![(ty, 0u32)];
-    while let Some((at, depth)) = stack.pop() {
-        // A type that reaches itself through its bases is not a hierarchy.
-        if depth > 32 {
-            continue;
-        }
-        if at != ty
-            && let Some(name) = provided(snapshot, at)
-            && let Some(element) = super::builtin::typed_array_element(name)
-        {
-            return Some(element);
-        }
-        for base in snapshot.base_types.get(&at).into_iter().flatten() {
-            stack.push((*base, depth + 1));
-        }
-    }
-    None
+    type_bases::walk(snapshot, ty, type_bases::Order::Reversed)
+        .filter_map(|base| provided(snapshot, base))
+        .find_map(super::builtin::typed_array_element)
 }
 
 /// Whether a type declares storage of its own.
@@ -56242,23 +56228,10 @@ impl<'a> FuncBuilder<'a> {
     /// `NodeTypeError` extends `TypeError`, and only the last of those is
     /// provided here.
     fn provided_error_base(&self, ty: TypeId) -> Option<String> {
-        let mut stack = vec![(ty, 0u32)];
-        while let Some((at, depth)) = stack.pop() {
-            // A type that reaches itself through its bases is not a hierarchy.
-            if depth > 32 {
-                continue;
-            }
-            if at != ty
-                && let Some(name) = provided(self.snapshot, at)
-                && super::builtin::is_error(name)
-            {
-                return Some(name.to_owned());
-            }
-            for base in self.snapshot.base_types.get(&at).into_iter().flatten() {
-                stack.push((*base, depth + 1));
-            }
-        }
-        None
+        type_bases::walk(self.snapshot, ty, type_bases::Order::Reversed)
+            .filter_map(|base| provided(self.snapshot, base))
+            .find(|name| super::builtin::is_error(name))
+            .map(str::to_owned)
     }
 
     /// Every base in the chain has to be a type this compiler lays out itself.
@@ -56280,15 +56253,10 @@ impl<'a> FuncBuilder<'a> {
     /// the weaker test and inherit a layout it has no storage for — and it is
     /// checked through the whole chain, because a class two steps below a
     /// built-in has the same hole as one directly below it.
-    fn representable_bases(&self, id: NodeId, ty: TypeId, depth: u32) -> Result<(), Diagnostic> {
-        // A type that reaches itself through its bases is not a hierarchy, and
-        // recursing on one would not stop.
-        if depth > 32 {
-            return Ok(());
-        }
-        for base in self.snapshot.base_types.get(&ty).into_iter().flatten() {
+    fn representable_bases(&self, id: NodeId, ty: TypeId) -> Result<(), Diagnostic> {
+        for base in type_bases::walk(self.snapshot, ty, type_bases::Order::Written) {
             if !matches!(
-                self.represent(*base),
+                self.represent(base),
                 Some(HirType::Managed(ManagedType::Object(_)))
             ) {
                 let named = self
@@ -56298,9 +56266,8 @@ impl<'a> FuncBuilder<'a> {
                     .and_then(|record| record.symbol)
                     .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
                     .map_or_else(|| format!("#{}", base.0), |symbol| symbol.name.to_string());
-                return Err(self.unrepresentable_member(id, "a base", &named, *base));
+                return Err(self.unrepresentable_member(id, "a base", &named, base));
             }
-            self.representable_bases(id, *base, depth + 1)?;
         }
         Ok(())
     }
@@ -57203,7 +57170,7 @@ impl<'a> FuncBuilder<'a> {
         // the layouts of the object types its fields hold, which needs `&mut`.
         // Once per type, and a layout is built once.
         let properties = properties.clone();
-        self.representable_bases(id, ty, 0)?;
+        self.representable_bases(id, ty)?;
 
         let mut fields = self.fields_of(id, ty, &properties)?;
 
@@ -88018,6 +87985,11 @@ mod collection_tests;
 
 #[cfg(test)]
 mod carried_reference_tests;
+
+mod type_bases;
+
+#[cfg(test)]
+mod storage_ancestry_tests;
 
 #[cfg(test)]
 mod binding_ancestry_tests;
