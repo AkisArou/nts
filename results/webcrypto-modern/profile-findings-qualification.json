@@ -1,0 +1,1293 @@
+{
+  "schemaVersion": 1,
+  "fixtureCommit": "42b28b6c7c2ed368b54bac2d0e81fba6a9647fbe",
+  "pins": {
+    "main": {
+      "source": "634f0b85bbc00d00547d1977db2095928677cee4",
+      "sha256": "c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87"
+    },
+    "previous": {
+      "source": "091bda9e0740",
+      "sha256": "d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0"
+    }
+  },
+  "planner": {
+    "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90/oracle-plan",
+    "sha256": "4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90",
+    "source": "56847951d06d03d69e7a78391241ce0b881e3d20",
+    "role": "Node source-case planning only; the actual current/previous CLI checks independently verify complete populations"
+  },
+  "fixtures": [
+    {
+      "refusal": "a-byte-mask-through-an-asserted-index",
+      "control": "a-byte-mask-through-an-explicit-index-write",
+      "expect": "NTS1001 assignment to a computed target is not supported by this lowering yet",
+      "difference": "Only the compound write through a non-null asserted target changes to an explicit indexed write."
+    },
+    {
+      "refusal": "an-in-test-on-a-native-or-failure-result",
+      "control": "an-in-test-on-an-object-or-failure-result",
+      "expect": "NTS1001 an `in` on something that is not an object, which JavaScript throws for is not supported by this lowering yet",
+      "difference": "Only the successful result changes from Uint8Array to an ordinary object; both sides of the union are objects."
+    },
+    {
+      "refusal": "a-null-only-function-result-is-observed",
+      "control": "a-null-result-has-a-number-representation",
+      "expect": "NTS1001 a call result of unrepresentable type (null) is not supported by this lowering yet",
+      "difference": "Only the helper return annotation changes from null to number | null; both helpers actually return null."
+    },
+    {
+      "refusal": "a-length-field-in-a-disjunctive-class-guard",
+      "control": "an-extent-field-in-a-disjunctive-class-guard",
+      "expect": "NTS1001 `length` of something without one is not supported by this lowering yet",
+      "difference": "Only the property name changes from length to extent; the class layouts, values and disjunctive guard remain the same."
+    }
+  ],
+  "controls": [
+    {
+      "name": "main-a-byte-mask-through-an-explicit-index-write-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-a-byte-mask-through-an-explicit-index-write-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-a-byte-mask-through-an-explicit-index-write-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-an-in-test-on-an-object-or-failure-result-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-an-in-test-on-an-object-or-failure-result-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-an-in-test-on-an-object-or-failure-result-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-a-null-result-has-a-number-representation-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-a-null-result-has-a-number-representation-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-a-null-result-has-a-number-representation-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-an-extent-field-in-a-disjunctive-class-guard-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-an-extent-field-in-a-disjunctive-class-guard-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-an-extent-field-in-a-disjunctive-class-guard-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "main-builtin-study-es-weakmap-control-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 1,
+        "disagreements": 0,
+        "expected": 1,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 1,
+        "received": 1
+      }
+    },
+    {
+      "name": "main-builtin-study-es-weakmap-control-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 1,
+        "disagreements": 0,
+        "expected": 1,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 1,
+        "received": 1
+      }
+    },
+    {
+      "name": "main-builtin-study-es-weakmap-control-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 1,
+        "disagreements": 0,
+        "expected": 1,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 1,
+        "received": 1
+      }
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-explicit-index-write-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-explicit-index-write-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-explicit-index-write-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-an-in-test-on-an-object-or-failure-result-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-an-in-test-on-an-object-or-failure-result-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-an-in-test-on-an-object-or-failure-result-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-a-null-result-has-a-number-representation-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-a-null-result-has-a-number-representation-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-a-null-result-has-a-number-representation-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-an-extent-field-in-a-disjunctive-class-guard-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-an-extent-field-in-a-disjunctive-class-guard-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-an-extent-field-in-a-disjunctive-class-guard-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 29,
+        "disagreements": 0,
+        "expected": 29,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 29,
+        "received": 29
+      }
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap-control-c",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 1,
+        "disagreements": 0,
+        "expected": 1,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 1,
+        "received": 1
+      }
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap-control-llvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 1,
+        "disagreements": 0,
+        "expected": 1,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 1,
+        "received": 1
+      }
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap-control-jvm",
+      "counts": {
+        "aborts": 0,
+        "approximated": 0,
+        "compared": 1,
+        "disagreements": 0,
+        "expected": 1,
+        "functions": 1,
+        "runtime_declined": 0,
+        "timeouts": 0,
+        "unavailable": 0
+      },
+      "oracle": {
+        "complete": true,
+        "expected": 1,
+        "received": 1
+      }
+    }
+  ],
+  "commands": [
+    {
+      "name": "record",
+      "command": "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+      "args": [
+        "tooling/differential/record-oracles.ts",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write",
+        "tests/programs/an-in-test-on-an-object-or-failure-result",
+        "tests/programs/a-null-result-has-a-number-representation",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 48162.018639
+    },
+    {
+      "name": "main-a-byte-mask-through-an-asserted-index",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-byte-mask-through-an-asserted-index/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/a-byte-mask-through-an-asserted-index"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 57.236463000001095
+    },
+    {
+      "name": "main-an-in-test-on-a-native-or-failure-result",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/an-in-test-on-a-native-or-failure-result/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/an-in-test-on-a-native-or-failure-result"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 47.00777899999957
+    },
+    {
+      "name": "main-a-null-only-function-result-is-observed",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-null-only-function-result-is-observed/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/a-null-only-function-result-is-observed"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 51.36495400000422
+    },
+    {
+      "name": "main-a-length-field-in-a-disjunctive-class-guard",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-length-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/a-length-field-in-a-disjunctive-class-guard"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 85.99618400000327
+    },
+    {
+      "name": "main-weak-collections-have-no-representation",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/weak-collections-have-no-representation/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/weak-collections-have-no-representation"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 39.51763799999753
+    },
+    {
+      "name": "main-builtin-study-es-weakmap",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/builtin-study-es-weakmap/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/builtin-study-es-weakmap"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 50.92648200000258
+    },
+    {
+      "name": "main-a-field-read-through-an-erased-cast-with-a-method-supplier",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-field-read-through-an-erased-cast-with-a-method-supplier/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/main/a-field-read-through-an-erased-cast-with-a-method-supplier"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 45.907014999997045
+    },
+    {
+      "name": "main-a-byte-mask-through-an-explicit-index-write-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 562.1317710000003
+    },
+    {
+      "name": "main-a-byte-mask-through-an-explicit-index-write-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 589.6560919999974
+    },
+    {
+      "name": "main-a-byte-mask-through-an-explicit-index-write-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 350.9454089999999
+    },
+    {
+      "name": "main-an-in-test-on-an-object-or-failure-result-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 470.6314340000026
+    },
+    {
+      "name": "main-an-in-test-on-an-object-or-failure-result-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 482.11570600000414
+    },
+    {
+      "name": "main-an-in-test-on-an-object-or-failure-result-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 359.4724189999979
+    },
+    {
+      "name": "main-a-null-result-has-a-number-representation-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 510.5577189999967
+    },
+    {
+      "name": "main-a-null-result-has-a-number-representation-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 430.1935000000012
+    },
+    {
+      "name": "main-a-null-result-has-a-number-representation-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 410.18880799999897
+    },
+    {
+      "name": "main-an-extent-field-in-a-disjunctive-class-guard-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 554.4072779999988
+    },
+    {
+      "name": "main-an-extent-field-in-a-disjunctive-class-guard-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 477.9667709999994
+    },
+    {
+      "name": "main-an-extent-field-in-a-disjunctive-class-guard-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 371.662430999997
+    },
+    {
+      "name": "main-builtin-study-es-weakmap-control-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/builtin-study-es-weakmap-control/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 440.6826560000045
+    },
+    {
+      "name": "main-builtin-study-es-weakmap-control-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/builtin-study-es-weakmap-control/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 497.2058889999971
+    },
+    {
+      "name": "main-builtin-study-es-weakmap-control-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87/nts",
+      "args": [
+        "check",
+        "tests/programs/builtin-study-es-weakmap-control/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 329.4703289999961
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-asserted-index",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-byte-mask-through-an-asserted-index/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/a-byte-mask-through-an-asserted-index"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 60.146913999997196
+    },
+    {
+      "name": "previous-an-in-test-on-a-native-or-failure-result",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/an-in-test-on-a-native-or-failure-result/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/an-in-test-on-a-native-or-failure-result"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 58.08422699999937
+    },
+    {
+      "name": "previous-a-null-only-function-result-is-observed",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-null-only-function-result-is-observed/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/a-null-only-function-result-is-observed"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 44.731188000005204
+    },
+    {
+      "name": "previous-a-length-field-in-a-disjunctive-class-guard",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-length-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/a-length-field-in-a-disjunctive-class-guard"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 45.92433600000368
+    },
+    {
+      "name": "previous-weak-collections-have-no-representation",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/weak-collections-have-no-representation/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/weak-collections-have-no-representation"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 40.84216500000184
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/builtin-study-es-weakmap/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/builtin-study-es-weakmap"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 59.73563799999829
+    },
+    {
+      "name": "previous-a-field-read-through-an-erased-cast-with-a-method-supplier",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "emit",
+        "tests/refusals/a-field-read-through-an-erased-cast-with-a-method-supplier/tsconfig.json",
+        "--backends",
+        "c,llvm,jvm",
+        "--out",
+        "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030/emitted/previous/a-field-read-through-an-erased-cast-with-a-method-supplier"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 55.26023599999462
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-explicit-index-write-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 516.2918489999938
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-explicit-index-write-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 488.3457039999994
+    },
+    {
+      "name": "previous-a-byte-mask-through-an-explicit-index-write-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 350.1972170000008
+    },
+    {
+      "name": "previous-an-in-test-on-an-object-or-failure-result-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 544.844772000004
+    },
+    {
+      "name": "previous-an-in-test-on-an-object-or-failure-result-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 614.9910539999983
+    },
+    {
+      "name": "previous-an-in-test-on-an-object-or-failure-result-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 528.3360660000035
+    },
+    {
+      "name": "previous-a-null-result-has-a-number-representation-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 720.5906719999984
+    },
+    {
+      "name": "previous-a-null-result-has-a-number-representation-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 623.3339359999954
+    },
+    {
+      "name": "previous-a-null-result-has-a-number-representation-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 387.9763080000048
+    },
+    {
+      "name": "previous-an-extent-field-in-a-disjunctive-class-guard-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 635.0297659999997
+    },
+    {
+      "name": "previous-an-extent-field-in-a-disjunctive-class-guard-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 607.3227079999997
+    },
+    {
+      "name": "previous-an-extent-field-in-a-disjunctive-class-guard-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 363.992929
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap-control-c",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/builtin-study-es-weakmap-control/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 504.05391700000473
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap-control-llvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/builtin-study-es-weakmap-control/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 562.500546999996
+    },
+    {
+      "name": "previous-builtin-study-es-weakmap-control-jvm",
+      "command": "/home/akisarou/.cache/nts-gate/bin/d26a6462db678b9642e9d6b32bc87347d2472d1fdf5532aed728397e3bb5c2c0/nts",
+      "args": [
+        "check",
+        "tests/programs/builtin-study-es-weakmap-control/tsconfig.json",
+        "--json"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 475.01264299999457
+    }
+  ],
+  "inputFiles": [
+    {
+      "path": "tests/refusals/a-byte-mask-through-an-asserted-index/src/main.ts",
+      "sha256": "f2f3b798dc0aaf871c936e425b7ba8faeb398007961a0a25710bf4faa309e5b8"
+    },
+    {
+      "path": "tests/refusals/a-byte-mask-through-an-asserted-index/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "tests/programs/a-byte-mask-through-an-explicit-index-write/src/main.ts",
+      "sha256": "3d4283af3c3664118b0bf55bc1cb30ec8fd7c6f9e75155a82999db5b82f3398f"
+    },
+    {
+      "path": "tests/programs/a-byte-mask-through-an-explicit-index-write/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "results/oracle-counts/tests/programs/a-byte-mask-through-an-explicit-index-write.json",
+      "sha256": "1855048cbf3af9ea2f21421f642ebc3e39945238639e323a566cb0d403966fe5"
+    },
+    {
+      "path": "tests/refusals/an-in-test-on-a-native-or-failure-result/src/main.ts",
+      "sha256": "cdd46acbac089df3ce7f19a043f9ac1a40a8e10c0e4d4d69d6f6bafbc3dd167b"
+    },
+    {
+      "path": "tests/refusals/an-in-test-on-a-native-or-failure-result/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "tests/programs/an-in-test-on-an-object-or-failure-result/src/main.ts",
+      "sha256": "ca9b57f1833b81128318b39ca6b68089ce18022b2619625c6963db1212a8e7e2"
+    },
+    {
+      "path": "tests/programs/an-in-test-on-an-object-or-failure-result/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "results/oracle-counts/tests/programs/an-in-test-on-an-object-or-failure-result.json",
+      "sha256": "a2a3a8689edb30a4ede7e977d87f9c68a31580b237b5ff63a156d61c20655d1d"
+    },
+    {
+      "path": "tests/refusals/a-null-only-function-result-is-observed/src/main.ts",
+      "sha256": "5bb634b098ff4868a153d6474b0a57cb1b8c65838ef565da2944486f4ab09dc0"
+    },
+    {
+      "path": "tests/refusals/a-null-only-function-result-is-observed/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "tests/programs/a-null-result-has-a-number-representation/src/main.ts",
+      "sha256": "9c6d92a25cfc92033e28c6cecf4cf524a45d68d17e07a57a136020f87eed88d5"
+    },
+    {
+      "path": "tests/programs/a-null-result-has-a-number-representation/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "results/oracle-counts/tests/programs/a-null-result-has-a-number-representation.json",
+      "sha256": "f8056e0ed19021e0ba222c0bcd9995057a79f294509e98d61db42aa5a0481fde"
+    },
+    {
+      "path": "tests/refusals/a-length-field-in-a-disjunctive-class-guard/src/main.ts",
+      "sha256": "f42696fef83248fc8a369090c8fca352a5ea29f59f34e9eecd7213b4f22db653"
+    },
+    {
+      "path": "tests/refusals/a-length-field-in-a-disjunctive-class-guard/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "tests/programs/an-extent-field-in-a-disjunctive-class-guard/src/main.ts",
+      "sha256": "d32bfd62f881b6ac019700afacae9d365e73ccc3bf90b8bc0d3569007ff8222d"
+    },
+    {
+      "path": "tests/programs/an-extent-field-in-a-disjunctive-class-guard/tsconfig.json",
+      "sha256": "83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46"
+    },
+    {
+      "path": "results/oracle-counts/tests/programs/an-extent-field-in-a-disjunctive-class-guard.json",
+      "sha256": "900f5d1b9469a483e4c2fcaf245d724f958407a1a274e664c62fab3570cf2332"
+    }
+  ],
+  "rawEvidence": "/home/akisarou/.cache/nts-tmp/helper2-crypto-gap-qualification-20261030",
+  "existingFixtures": [
+    "weak-collections-have-no-representation",
+    "builtin-study-es-weakmap",
+    "a-field-read-through-an-erased-cast-with-a-method-supplier"
+  ],
+  "boundariesReview": "docs/language/boundaries.md does not exclude these constructs; WeakMap is an implementation gap, confirmed by compiler2."
+}

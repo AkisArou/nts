@@ -1,0 +1,1513 @@
+{
+  "base": "634f0b85bbc00d00547d1977db2095928677cee4",
+  "candidate": "9e16845d185775647c668b9e8632126e44748320",
+  "beforeCounts": {
+    "totalOccurrences": 17968,
+    "totalSites": 1442,
+    "distinctSites": 1394
+  },
+  "afterCounts": {
+    "totalOccurrences": 18432,
+    "totalSites": 1459,
+    "distinctSites": 1411
+  },
+  "added": [
+    {
+      "file": "runtime/web-platform/src/crypto/aead.ts",
+      "line": 51,
+      "column": 20,
+      "cause": "an `X` on something that is not an object, which JavaScript throws for",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  if (\"failure\" in result) throw operationError();"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/algorithms.ts",
+      "line": 640,
+      "column": 50,
+      "cause": "an unlicensed field `X` read through a structural cast of an erased value as `X` at nts-workspace:///../../web-platform/src/crypto/algorithms.ts:635:30",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  const iv = toCryptoBufferSource(requiredMember(input.iv, name + \".iv\"));"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/algorithms.ts",
+      "line": 668,
+      "column": 65,
+      "cause": "an unlicensed field `X` read through a structural cast of an erased value as `X` at nts-workspace:///../../web-platform/src/crypto/algorithms.ts:663:32",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "    const outputLength = toCryptoUnsignedInteger(requiredMember(input.outputLength, \"cSHAKE.outputLength\"), 32);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/capability.ts",
+      "line": 10,
+      "column": 3,
+      "cause": "a module-scope variable of unrepresentable type (...)",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  cryptoCapabilities.set(crypto, provider);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/capability.ts",
+      "line": 15,
+      "column": 10,
+      "cause": "a module-scope variable of unrepresentable type (...)",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  return cryptoCapabilities.get(crypto);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/kmac.ts",
+      "line": 110,
+      "column": 20,
+      "cause": "an `X` on something that is not an object, which JavaScript throws for",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  if (\"failure\" in bytes) throw new DOMException(\"The KMAC key cannot be exported\", \"OperationError\");"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/kmac.ts",
+      "line": 65,
+      "column": 25,
+      "cause": "assignment to a computed target",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  if (length % 8 !== 0) bytes[bytes.length - 1]! &= (1 << (length % 8)) - 1;"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/kmac.ts",
+      "line": 99,
+      "column": 7,
+      "cause": "assignment to a computed target",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      bytes[bytes.length - 1]! &= (1 << (length % 8)) - 1;"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/ml-kem.ts",
+      "line": 43,
+      "column": 20,
+      "cause": "an `X` on something that is not an object, which JavaScript throws for",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  if (\"failure\" in result || result.byteLength !== getMlKemSharedKeyLength() / 8) {"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/ml-key.ts",
+      "line": 152,
+      "column": 20,
+      "cause": "an `X` on something that is not an object, which JavaScript throws for",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  if (\"failure\" in result) throw new DOMException(\"The key cannot be exported\", \"OperationError\");"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+      "line": 197,
+      "column": 22,
+      "cause": "the `X` object",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "    requireArguments(arguments, 2, \"SubtleCrypto.supports\");"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+      "line": 422,
+      "column": 22,
+      "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      const usages = toKeyUsages(keyUsages);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+      "line": 446,
+      "column": 14,
+      "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      return cryptoTask(scheduler, () => {"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+      "line": 468,
+      "column": 22,
+      "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      const usages = toKeyUsages(keyUsages);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+      "line": 495,
+      "column": 14,
+      "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      return cryptoTask(scheduler, () => {"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/subtle-crypto.ts",
+      "line": 511,
+      "column": 22,
+      "cause": "a call inside a `X` whose `X` would not reach this handler: a function that itself calls something whose `X` cannot be carried: `X`, through a function value, which has no raising copy to call",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      const usages = toKeyUsages(keyUsages);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/supports.ts",
+      "line": 234,
+      "column": 119,
+      "cause": "a call result of unrepresentable type (...)",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "  if (name === \"HKDF\" || name === \"PBKDF2\" || name === \"Argon2d\" || name === \"Argon2i\" || name === \"Argon2id\") return getKdfKeyLength();"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/supports.ts",
+      "line": 251,
+      "column": 12,
+      "cause": "`X` of something without one",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "    return algorithm.length === undefined || (algorithm.length <= length && algorithm.length > length - 8);"
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/supports.ts",
+      "line": 72,
+      "column": 22,
+      "cause": "`X` of something without one",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "      if (!aesLength(algorithm.length)) return undefined;"
+    }
+  ],
+  "removed": [
+    {
+      "file": "runtime/web-platform/src/crypto/algorithms.ts",
+      "line": 466,
+      "column": 26,
+      "cause": "an unlicensed field `X` read through a structural cast of an erased value as `X` at nts-workspace:///../../web-platform/src/crypto/algorithms.ts:465:32",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "    const contextValue = input.context;",
+      "mappedCandidateLine": 712
+    },
+    {
+      "file": "runtime/web-platform/src/crypto/algorithms.ts",
+      "line": 626,
+      "column": 12,
+      "cause": "an erased value where a concrete representation is wanted",
+      "modules": [
+        "assert",
+        "child_process",
+        "cluster",
+        "console",
+        "crypto",
+        "dgram",
+        "events",
+        "fs",
+        "http",
+        "net",
+        "perf_hooks",
+        "process",
+        "readline",
+        "stream",
+        "util",
+        "zlib"
+      ],
+      "source": "    return normalizeRegisteredAlgorithm(algorithm, registration.name, operation, copyBuffers);",
+      "mappedCandidateLine": 904
+    }
+  ],
+  "moduleDeltas": [
+    {
+      "module": "assert",
+      "before": 568,
+      "after": 585,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "async_hooks",
+      "before": 35,
+      "after": 35,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "buffer",
+      "before": 24,
+      "after": 24,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "child_process",
+      "before": 699,
+      "after": 716,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "cluster",
+      "before": 753,
+      "after": 770,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "console",
+      "before": 588,
+      "after": 605,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "crypto",
+      "before": 827,
+      "after": 844,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "dgram",
+      "before": 724,
+      "after": 741,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "diagnostics_channel",
+      "before": 31,
+      "after": 31,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "dns",
+      "before": 102,
+      "after": 102,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "events",
+      "before": 493,
+      "after": 510,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "fs",
+      "before": 960,
+      "after": 977,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "http",
+      "before": 883,
+      "after": 900,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "net",
+      "before": 717,
+      "after": 734,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "os",
+      "before": 24,
+      "after": 24,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "path",
+      "before": 13,
+      "after": 13,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "perf_hooks",
+      "before": 498,
+      "after": 515,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "process",
+      "before": 890,
+      "after": 907,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "punycode",
+      "before": 0,
+      "after": 0,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "querystring",
+      "before": 24,
+      "after": 24,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "readline",
+      "before": 610,
+      "after": 627,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "stream",
+      "before": 742,
+      "after": 759,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "string_decoder",
+      "before": 24,
+      "after": 24,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "timers",
+      "before": 35,
+      "after": 35,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "tty",
+      "before": 0,
+      "after": 0,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "url",
+      "before": 57,
+      "after": 57,
+      "added": 0,
+      "removed": 0
+    },
+    {
+      "module": "util",
+      "before": 559,
+      "after": 576,
+      "added": 19,
+      "removed": 2
+    },
+    {
+      "module": "zlib",
+      "before": 765,
+      "after": 782,
+      "added": 19,
+      "removed": 2
+    }
+  ],
+  "schemaVersion": 1,
+  "compilerSha256": "c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87",
+  "beforeDefinitions": 57091,
+  "afterDefinitions": 57619,
+  "ceiling": {
+    "before": 1457,
+    "after": 1499,
+    "headroom": 40,
+    "formula": "1459 + 40"
+  },
+  "coordinateRule": "Map exactly unchanged source lines and embedded source-coordinate references across the source delta; the canonical census generalise function and counts are unchanged. Two apparent replacements are embedded coordinate drift.",
+  "delta": "19 genuinely new observed pairs minus 2 old pairs no longer observed = net 17 in each of 16 modules. No inference that the two disappeared refusals are fixed.",
+  "officialCandidateRun": "/home/akisarou/.cache/nts-land/runs/f62982f40cd2-1793355902678",
+  "officialMainRun": "/home/akisarou/.cache/nts-land/runs/634f0b85bbc0-1793357156681",
+  "rawEvidence": "/home/akisarou/.cache/nts-tmp/helper2-crypto-profile-red-20261030",
+  "canonicalCensusSourceSha256": "643cab40bf4389a63356a8b8fdea7c6709fe6facbf74528f27cceb0aaa0ea15e",
+  "baselineInputs": {
+    "source": "634f0b85bbc00d00547d1977db2095928677cee4",
+    "compilerSha256": "c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87",
+    "measurementPhase": "complete canonical profile emit-c --napi phase: all 28 module statuses are 0; canonical census consumes all 28 .sites files",
+    "definitions": 57091,
+    "moduleDefinitions": {
+      "url": 942,
+      "cluster": 3381,
+      "os": 679,
+      "util": 2648,
+      "zlib": 3182,
+      "process": 3813,
+      "path": 484,
+      "dns": 759,
+      "async_hooks": 504,
+      "punycode": 29,
+      "diagnostics_channel": 489,
+      "string_decoder": 664,
+      "stream": 3137,
+      "perf_hooks": 2823,
+      "http": 3744,
+      "querystring": 715,
+      "child_process": 3183,
+      "fs": 3707,
+      "buffer": 653,
+      "crypto": 3466,
+      "dgram": 3351,
+      "readline": 2970,
+      "events": 2577,
+      "net": 3320,
+      "tty": 2,
+      "assert": 2612,
+      "console": 2665,
+      "timers": 592
+    },
+    "statuses": {
+      "async_hooks": "0",
+      "dns": "0",
+      "cluster": "0",
+      "perf_hooks": "0",
+      "process": "0",
+      "querystring": "0",
+      "fs": "0",
+      "assert": "0",
+      "buffer": "0",
+      "crypto": "0",
+      "timers": "0",
+      "string_decoder": "0",
+      "path": "0",
+      "net": "0",
+      "punycode": "0",
+      "http": "0",
+      "os": "0",
+      "events": "0",
+      "dgram": "0",
+      "diagnostics_channel": "0",
+      "zlib": "0",
+      "readline": "0",
+      "url": "0",
+      "console": "0",
+      "util": "0",
+      "stream": "0",
+      "tty": "0",
+      "child_process": "0"
+    },
+    "files": [
+      {
+        "path": "stream.sites",
+        "sha256": "c785a44cc39b67b5d55261705fd8944321024b0d6f03bd5ec50a4c261b3caccf"
+      },
+      {
+        "path": "fs.refusals",
+        "sha256": "8d9e6ce5476109b242a48e33594132496623d7d0f9ab890407e955780ba73bfb"
+      },
+      {
+        "path": "async_hooks.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "http.refusals",
+        "sha256": "57539f58c62fecbccd2d8481f4acfc667168d6a8fd7b44b42db922ce2bcc0237"
+      },
+      {
+        "path": "url.defined",
+        "sha256": "7a3cc8ae6abd272d2adbb617cae2fab8f6f35ee6bff7f565291a49fcb1dc54b9"
+      },
+      {
+        "path": "cluster.sites",
+        "sha256": "076cbd727c0a1f9ed038bff20387cae7d77bbbb074be6aaa48397772ff2e4e1c"
+      },
+      {
+        "path": "cluster.defined",
+        "sha256": "945726203406f74ee098bce67a7c21e180a540bbfc6e9c3a6e76a8f89ac40d66"
+      },
+      {
+        "path": "os.defined",
+        "sha256": "b5feddddcf05a36102a60e41d70ce3a88939e8283ec42fbfc32b95c90c3e4af6"
+      },
+      {
+        "path": "dns.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "util.defined",
+        "sha256": "1fe2750762c2760f00fee8ac48940a8581ddf17b26944925a8ad4d8d4847dd69"
+      },
+      {
+        "path": "util.sites",
+        "sha256": "9de5d109cd05920304c834edc442b8776810934ea295c834f1eb5cb6c627174d"
+      },
+      {
+        "path": "assert.sites",
+        "sha256": "8e6f33228a61f645c4bf165751057155d9b2bdb656817686c28c64cb17119818"
+      },
+      {
+        "path": "zlib.defined",
+        "sha256": "ec36069b3c024573cbf502788ecc0f6c4ee36ae28cfad44e6733e775111323ac"
+      },
+      {
+        "path": "cluster.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "crypto.refusals",
+        "sha256": "d27377bec7060ce2746068b5e0bfed985b2f1ef38a1d25600231b1a281070069"
+      },
+      {
+        "path": "process.defined",
+        "sha256": "0799a7277c0db66edd0f55de14fb17311e7090b078df0e54fb71a22298214edb"
+      },
+      {
+        "path": "path.defined",
+        "sha256": "84b983f776fa270eac724d630c27d687dc01bde11f0677e7180eff0ce2797883"
+      },
+      {
+        "path": "fs.sites",
+        "sha256": "4097949e4d9919fade0f20df81c86b6c73d99297053df112995bb26f5aaddea8"
+      },
+      {
+        "path": "querystring.sites",
+        "sha256": "d6aa6c996e55b066e48012abbab6ad7bbcd8cacaaa28eb8cbfcb0c8b4af4e653"
+      },
+      {
+        "path": "perf_hooks.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "process.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "querystring.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "buffer.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "url.refusals",
+        "sha256": "6442bc26a7c562f5afe6467dab36365c709909f6a81afcecfc0c25cff0f1bab0"
+      },
+      {
+        "path": "dns.defined",
+        "sha256": "04d980dc3dd2b13d317fa60de5014bc7fa1e9da002152be45d1cbd0c4550133e"
+      },
+      {
+        "path": "process.sites",
+        "sha256": "a76af3fd0f4efdfca386b3583b2bc543ca98745844abea0678711f006660ff62"
+      },
+      {
+        "path": "punycode.refusals",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "child_process.sites",
+        "sha256": "8e14ea26e83bbf0abbcd9beb817082d430dd3eeaae0f978fb2b6fb61967fe016"
+      },
+      {
+        "path": "url.sites",
+        "sha256": "1fa4d12c980c30b81e7332e30ab0610245de6b8d0e740ec09fb2b1ddd25c95d5"
+      },
+      {
+        "path": "fs.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "util.refusals",
+        "sha256": "3b7eb8f7e67ef6aa50e3b3b6b98b4836b9263ee0086b57513e505e0ca3e11f6a"
+      },
+      {
+        "path": "async_hooks.defined",
+        "sha256": "81549590044d2f7b62378afe7234c54599e8cb643c760be28492c36d1aa5d90f"
+      },
+      {
+        "path": "punycode.defined",
+        "sha256": "3840bc236ee03aacbb1ef7d5108ddfa347c59f10b68d4174affbb53140f31273"
+      },
+      {
+        "path": "events.refusals",
+        "sha256": "d7d84b76d82872a2c03ae0dd97ff208ea7a9f506946c05dcc0e15e82542e8b5b"
+      },
+      {
+        "path": "assert.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "buffer.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "crypto.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "diagnostics_channel.defined",
+        "sha256": "b0ef7769d270570fe1ab58808890bb70761b8686576d021da265acbb9ffd5a5a"
+      },
+      {
+        "path": "perf_hooks.refusals",
+        "sha256": "e4fbd87a132e5570b32005c2c1e553bdaf16393dde4e58d53e9a0740c291c2c0"
+      },
+      {
+        "path": "net.sites",
+        "sha256": "43b383f63d6c0aa3596d76f8e2638ecf2a0436cd110b95166b65293921a311e9"
+      },
+      {
+        "path": "dgram.refusals",
+        "sha256": "055c2058cac3ade4ee78016492789d9c732b3cdac5169b00cce28e05f021125e"
+      },
+      {
+        "path": "crypto.sites",
+        "sha256": "e9f89836ac9d5ab4a63546c0b87729aeb6e11b4d8fecb60bf63aadf142e18d0a"
+      },
+      {
+        "path": "buffer.sites",
+        "sha256": "d6aa6c996e55b066e48012abbab6ad7bbcd8cacaaa28eb8cbfcb0c8b4af4e653"
+      },
+      {
+        "path": "timers.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "path.sites",
+        "sha256": "744533861c9b06852eed15b1f0f7d5ea4efcf31e3f045f387b3ac70f7db373fa"
+      },
+      {
+        "path": "string_decoder.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "path.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "string_decoder.defined",
+        "sha256": "af5a86efbcdf0dc2cdba643a99528c6ab92cfc7ead17d655b3f63b841d74efb7"
+      },
+      {
+        "path": "stream.defined",
+        "sha256": "4dfc015f8d51f815c1882a217271ba9de28d05157efe71d74e8a3608d597508f"
+      },
+      {
+        "path": "timers.refusals",
+        "sha256": "b1ce0aa6fdf3cf349d773243dab9fbbe09d30619f38b0c1e8977e28c4f0bc495"
+      },
+      {
+        "path": "diagnostics_channel.sites",
+        "sha256": "ec87dda5b37e160ee410a9f1e0e911cc857f67e057c252583d5ebf3f407ba190"
+      },
+      {
+        "path": "perf_hooks.defined",
+        "sha256": "1e90a954f8856005040b655f2750efa8deda9c649363f6e402103048d4665e1b"
+      },
+      {
+        "path": "http.defined",
+        "sha256": "5b22e78aa1d3f4434f8c23b42548b1445c9a9f0a7b71a82482987dae858759b8"
+      },
+      {
+        "path": "querystring.defined",
+        "sha256": "1d42234635e87f07d19c2a5b7e2f316dd40389c46abd2223052146caa5e3483e"
+      },
+      {
+        "path": "child_process.defined",
+        "sha256": "c0818b87db34017c029a519ac6086f7032912aef7209105c8d44ffbbf366fe4a"
+      },
+      {
+        "path": "net.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "fs.defined",
+        "sha256": "24b4a58388d39409c89b952e35e07b722923b2a14bc4baebddd9fe611191983e"
+      },
+      {
+        "path": "punycode.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "dns.sites",
+        "sha256": "3196ecef1b6543a3facf2b1d8931b8d7744e2bb29dbaad295a01f59d5c6a9041"
+      },
+      {
+        "path": "console.refusals",
+        "sha256": "a3af7f2c526ae7b3b95cff723f2605e9a24a60a78a0cdea9ede8bc746d4cae66"
+      },
+      {
+        "path": "timers.sites",
+        "sha256": "bb4e2e4ec63a157fe8438ac4c894c724208cb56b94ae344c5419da9fd907c53b"
+      },
+      {
+        "path": "buffer.defined",
+        "sha256": "207db6cbeab7cf4aa8ddfbcec34f4df58186e3354cbe7822756864df81e7dc6f"
+      },
+      {
+        "path": "querystring.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": ".emitted-by",
+        "sha256": "1bbd2b7ba50055577104c1af192be911cdecfb753467135b2190fb89c6a11f3e"
+      },
+      {
+        "path": "async_hooks.refusals",
+        "sha256": "90d7ec0f0acef104d8b6252794295f661a0149634868d02a1ae0c358099638f5"
+      },
+      {
+        "path": "crypto.defined",
+        "sha256": "cad0aa4f8a7f476a78866a09f86723988423b12235907c51010cb486791105de"
+      },
+      {
+        "path": "string_decoder.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "dgram.defined",
+        "sha256": "b0a7fc613bd30d8bca056033d5e468cc000e5869f2f0559a84e4ad24d89f4587"
+      },
+      {
+        "path": "process.refusals",
+        "sha256": "36043641189d4ed34f14a422c3f530aeda1d230b34cad7af8b70ea3062833afb"
+      },
+      {
+        "path": "readline.defined",
+        "sha256": "13974b2a6a8bd2427193e91c37a39407ed7f4b258ad3a99599efac5c5cbb9e41"
+      },
+      {
+        "path": "child_process.refusals",
+        "sha256": "551f1b6188ce7807a71909ecf56ad368f9748cf310bfc548120024516617c329"
+      },
+      {
+        "path": "cluster.refusals",
+        "sha256": "5d1ddf589d2db3aacc881bb6262519612883e1e86c87005509171225a47583d3"
+      },
+      {
+        "path": "assert.refusals",
+        "sha256": "2ddae79bf9f3a5030cddcf1ea2315f0323623c1ecbda8be81ee3b54bd4e22d48"
+      },
+      {
+        "path": "http.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "events.defined",
+        "sha256": "3ab9f297c8db066bd71acbde114baeae5644fc935656b29ed0855a102b68bd06"
+      },
+      {
+        "path": "stream.refusals",
+        "sha256": "debe502788bcbbb80f3fdc5f26a65f3f8a15e6a60dbc827c5029cddd42b9b88e"
+      },
+      {
+        "path": "tty.refusals",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "os.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "net.defined",
+        "sha256": "ba18e4340d2b4a414d6590bc129a42dc486479d5f16c46e51c78ba010ae3eba3"
+      },
+      {
+        "path": "events.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "tty.defined",
+        "sha256": "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+      },
+      {
+        "path": "dgram.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "diagnostics_channel.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "console.sites",
+        "sha256": "0cfe373cee5f97f490aa82dfbd36a55f7759de8635b8c26768c5aa1fa1f2e478"
+      },
+      {
+        "path": "diagnostics_channel.refusals",
+        "sha256": "32c2643e0dc65524c9f1f6f9f00937322fd68d59986bc381d9ff2285d23e353d"
+      },
+      {
+        "path": "punycode.sites",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "dgram.sites",
+        "sha256": "745fc46aa39af54a7b2835f146bf5f15d9e6a158f3a13510e0a136102168576a"
+      },
+      {
+        "path": "assert.defined",
+        "sha256": "37ed3b106027fffeee0052febe3ddcc78f6a54c867c781734dea23e8fb38632a"
+      },
+      {
+        "path": "zlib.sites",
+        "sha256": "cf63b8c28f796c5a939e27b40452448934e73e1bb7df0cfe8b2ce92d747ecdc5"
+      },
+      {
+        "path": "path.refusals",
+        "sha256": "1a252402972f6057fa53cc172b52b9ffca698e18311facd0f3b06ecaaef79e17"
+      },
+      {
+        "path": "console.defined",
+        "sha256": "0b729e94d10f89759bc9fe0b80f0e5f3b29221bda5dbbae7448bc235a90a53d2"
+      },
+      {
+        "path": "zlib.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "http.sites",
+        "sha256": "027d58b3b956aa4e19c36eda1d589d9c8c7c683481bef17b7ec7a9ee3a695d53"
+      },
+      {
+        "path": "events.sites",
+        "sha256": "7c41bcffaca1f161f2de01ee23d7b21bc6213bb9c3ad52f10758430543ba7ad7"
+      },
+      {
+        "path": "readline.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "timers.defined",
+        "sha256": "fbbbdc7231dc30612154b1808efeaf4b6f7e8756db6c205e6ff94579e0ba8aa0"
+      },
+      {
+        "path": "dns.refusals",
+        "sha256": "2fcae9c346ff9530cd3b7303a6456e3a296ff1876b18b50c324343638ec2bdf3"
+      },
+      {
+        "path": "os.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "readline.refusals",
+        "sha256": "9054838c23fde99e40178f46b4c8eb335e0791a4a5e0c7ddcc9f4b8864f7b457"
+      },
+      {
+        "path": "net.refusals",
+        "sha256": "81d05477a3dfd252c71b0b4b76c2d4613cdd14ee0f2fafead5be1a2f8544efe0"
+      },
+      {
+        "path": "async_hooks.sites",
+        "sha256": "495c9a86bd608c889d29c2f3afc61b99d693275c47884ad32b67251a0277616e"
+      },
+      {
+        "path": "url.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "console.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "util.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "stream.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "os.sites",
+        "sha256": "6a84de205f4185fca2df1401ccc2904bbb83ba4c86609abf3c826309fc54048b"
+      },
+      {
+        "path": "zlib.refusals",
+        "sha256": "0db37d367e257a4e0d74bf75dfc81489c63652b6c36551dd8dde9f79be6c8938"
+      },
+      {
+        "path": "tty.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "tty.sites",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "string_decoder.sites",
+        "sha256": "d6aa6c996e55b066e48012abbab6ad7bbcd8cacaaa28eb8cbfcb0c8b4af4e653"
+      },
+      {
+        "path": "perf_hooks.sites",
+        "sha256": "5566d49c2e3a3c1284df1ba87f899be27bc63cfddfcd560ac7b20dac7cd711bb"
+      },
+      {
+        "path": "child_process.status",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "readline.sites",
+        "sha256": "60636b05eba76e3f38a8159770da4f360683731146786002eaac55b5ac7fd783"
+      }
+    ],
+    "fullProfileVerdict": "not claimed: later HIR verification phase is being covered by the official lander baseline; private duplicate stops after retaining complete emission evidence"
+  },
+  "candidateInputs": {
+    "source": "f62982f40cd2b8c53f6d9445196bc8ac6ac8e429",
+    "base": "634f0b85bbc00d00547d1977db2095928677cee4",
+    "compilerSha256": "c04f76f054a8b3197d6129eec48eec1393e73b4f797a1a5055e35c6861e5fb87",
+    "gateRun": "/home/akisarou/.cache/nts-land/runs/f62982f40cd2-1793355902678",
+    "files": [
+      {
+        "path": "assert.refusals",
+        "sha256": "b5ed52891081bb7000bc44c6d92b3de673d90172d129ef972367cb16f00f3565"
+      },
+      {
+        "path": "assert.sites",
+        "sha256": "6d58743e7163f975cb720063fb467c9f1765405369a8a700b9e4197a1a2ed13d"
+      },
+      {
+        "path": "async_hooks.refusals",
+        "sha256": "90d7ec0f0acef104d8b6252794295f661a0149634868d02a1ae0c358099638f5"
+      },
+      {
+        "path": "async_hooks.sites",
+        "sha256": "1ef8bac4e1731c7cb2439435623be81926bf7e2b18de7aac1268241402976360"
+      },
+      {
+        "path": "buffer.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "buffer.sites",
+        "sha256": "98ba4e4850ca23ed9852f60d28b0895dc986b2047663ea57fabac84440718ea6"
+      },
+      {
+        "path": "child_process.refusals",
+        "sha256": "1bdce42a88b06a2ffad1ce3046cfb8f1eb155a0f15412bce938cabe8e8e1bc23"
+      },
+      {
+        "path": "child_process.sites",
+        "sha256": "afcf9918d3ab8569bd7e7562771cf63d2bffda858005ec68f5dff03fadd373f2"
+      },
+      {
+        "path": "cluster.refusals",
+        "sha256": "e529ccd564c84815b8b9eda022305e587d774ad63fd9e7c14c4607b38a16c8dc"
+      },
+      {
+        "path": "cluster.sites",
+        "sha256": "362ed7e1cfc835d47b35b25de3c2695c6b1e2f0b6710840ed19e1b93db187a13"
+      },
+      {
+        "path": "console.refusals",
+        "sha256": "50b7352424ae1004a9b340510824a0bc0f72a42922bb5794e1f32f610a141d93"
+      },
+      {
+        "path": "console.sites",
+        "sha256": "ad7db5bee579f59b01cab292b57eb84fd332b8068445c28261576a64e97ba619"
+      },
+      {
+        "path": "crypto.refusals",
+        "sha256": "114d5a907f518135f77fddecfb27e8a878a2bfd6ba6a159f7e85b9c8be76378e"
+      },
+      {
+        "path": "crypto.sites",
+        "sha256": "c36232161d0f0826c41a4028987f4699b1d2f4c0a0c1939861ea8964d124b0e9"
+      },
+      {
+        "path": "dgram.refusals",
+        "sha256": "2b7f13306363b97bc2969af0a03418f887e2cd93d84d8f3ecbf02d2207997e12"
+      },
+      {
+        "path": "dgram.sites",
+        "sha256": "deea853294ef1fd31a857580ac5b6eab086d8d74208b999ae47bff1da8ee2e80"
+      },
+      {
+        "path": "diagnostics_channel.refusals",
+        "sha256": "32c2643e0dc65524c9f1f6f9f00937322fd68d59986bc381d9ff2285d23e353d"
+      },
+      {
+        "path": "diagnostics_channel.sites",
+        "sha256": "1617ddd46d7cfa581b75e124b102790c32152c96d809bff3eedf5d334055b857"
+      },
+      {
+        "path": "dns.refusals",
+        "sha256": "2fcae9c346ff9530cd3b7303a6456e3a296ff1876b18b50c324343638ec2bdf3"
+      },
+      {
+        "path": "dns.sites",
+        "sha256": "cfe61a385dc95791cca10a4248998d704ed6db060375cbec753dcd01539b31a9"
+      },
+      {
+        "path": "events.refusals",
+        "sha256": "2159c00db79e11023298b62db4a2952eb8c85c276a9a120ab351e411d1665a35"
+      },
+      {
+        "path": "events.sites",
+        "sha256": "2098ecdbda63e769f79025217ba67caf9790f1acad934e03d96103232024c883"
+      },
+      {
+        "path": "fs.refusals",
+        "sha256": "718594a1612a6fe298a5119609573840798c362c30116de9aa0964f731687f7f"
+      },
+      {
+        "path": "fs.sites",
+        "sha256": "748d2e9e2e76f360a6dd4d40b5211836145766d83534a236994e5f86914bc80f"
+      },
+      {
+        "path": "http.refusals",
+        "sha256": "b79ba45cc3397d11b0995cb8ec0be2c8a58a22185b33d0bce897aa7fc59c18a0"
+      },
+      {
+        "path": "http.sites",
+        "sha256": "63096cb0cab5ac31285b1218bc07ac20993638a92e2ecc6362917712a682e7e9"
+      },
+      {
+        "path": "net.refusals",
+        "sha256": "07ad018d85136358c8255c7aa7ae663538f69433ca7f3f0ab28d402a4accffa4"
+      },
+      {
+        "path": "net.sites",
+        "sha256": "9dc1af1947ffec06335cab1e86862d3899367e9ced02c9ce6fb2ed5cbf72879d"
+      },
+      {
+        "path": "os.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "os.sites",
+        "sha256": "22b4a4b64f0fddde857f7dc6607acf07d434bba077fbe89de30db966b9cb6de9"
+      },
+      {
+        "path": "path.refusals",
+        "sha256": "1a252402972f6057fa53cc172b52b9ffca698e18311facd0f3b06ecaaef79e17"
+      },
+      {
+        "path": "path.sites",
+        "sha256": "e50df257ce9b94450db24b312a1455c5ad7fcfcf2e05f9b1c504cc3d599c6ffa"
+      },
+      {
+        "path": "perf_hooks.refusals",
+        "sha256": "5bf713239d6d72b6022a74451cfee41230bb9a90fda2d4ded87aa1cb319eea06"
+      },
+      {
+        "path": "perf_hooks.sites",
+        "sha256": "8d2799dd27a148b53e0f904d1f524b363b48fb1bf065fec2d8c9a5160f73b60b"
+      },
+      {
+        "path": "process.refusals",
+        "sha256": "268450b9a66c06c9d9c17524b4f5c6d9d299382426155a974202e2d047bb2c39"
+      },
+      {
+        "path": "process.sites",
+        "sha256": "19b9cd787ab7ebba92b9dd24af5477a062f7cdb7e1d663803c85349f0f9f1539"
+      },
+      {
+        "path": "punycode.refusals",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "punycode.sites",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "querystring.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "querystring.sites",
+        "sha256": "98ba4e4850ca23ed9852f60d28b0895dc986b2047663ea57fabac84440718ea6"
+      },
+      {
+        "path": "readline.refusals",
+        "sha256": "83017ffd1aa95077636dd71bb829c2541a67df7833f63b414a17663476a9ba97"
+      },
+      {
+        "path": "readline.sites",
+        "sha256": "4ac58fcfe172ef7aa63a263a4a6177daf9c808163bf16f2cd6e312d2acea4bd5"
+      },
+      {
+        "path": "stream.refusals",
+        "sha256": "33bd680a6a30c445be74a8a6316e7b770b3fb100002e45da74acc10af5616bee"
+      },
+      {
+        "path": "stream.sites",
+        "sha256": "2254bc977253b24edaf9509a11bad89f6a366a73323dbaf8ea781ffffdf3e811"
+      },
+      {
+        "path": "string_decoder.refusals",
+        "sha256": "20d2add851bf39edcc6b5e830930f962db7e19dffa2cab8610eed551eda6c302"
+      },
+      {
+        "path": "string_decoder.sites",
+        "sha256": "98ba4e4850ca23ed9852f60d28b0895dc986b2047663ea57fabac84440718ea6"
+      },
+      {
+        "path": "timers.refusals",
+        "sha256": "b1ce0aa6fdf3cf349d773243dab9fbbe09d30619f38b0c1e8977e28c4f0bc495"
+      },
+      {
+        "path": "timers.sites",
+        "sha256": "85903a690b226280167789ce0d1d757375043992b32f121f9158a5ca7670d536"
+      },
+      {
+        "path": "tty.refusals",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "tty.sites",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "url.refusals",
+        "sha256": "6442bc26a7c562f5afe6467dab36365c709909f6a81afcecfc0c25cff0f1bab0"
+      },
+      {
+        "path": "url.sites",
+        "sha256": "46447c0b24f379bb7a81242c75048bc98887a1e0ad78e6543edcd561135b06b0"
+      },
+      {
+        "path": "util.refusals",
+        "sha256": "a3af7f2c526ae7b3b95cff723f2605e9a24a60a78a0cdea9ede8bc746d4cae66"
+      },
+      {
+        "path": "util.sites",
+        "sha256": "9fc0df8c342b4f720d3a2e9372723e3518dce075b964e8ccee833f4c52c370f2"
+      },
+      {
+        "path": "zlib.refusals",
+        "sha256": "72a5a31e4922bae6e6d5107afff80b76e59f77c39a2b866fb4a202aabad572ba"
+      },
+      {
+        "path": "zlib.sites",
+        "sha256": "210a4dac7cf6a61f251168bfd33ab9e23ebc86103939b7b748c7a3853289b893"
+      }
+    ]
+  },
+  "comparisonScriptSha256": "18a832cfd40e5e5315431001c61b0d8ab9e7b27e0b0567d772a2b5a2e4f324fe"
+}
