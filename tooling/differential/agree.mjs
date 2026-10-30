@@ -85,7 +85,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
-import { newlyRecordedProjects, newBeforeProject, fullyMeasuredAgreement } from "./new-projects.ts";
+import { candidateAddedProjects, fullyMeasuredAgreement } from "./new-projects.ts";
 import { runCheck, reportCheckFailure, checkFailurePolicy, decodeCheck, Outcome } from "./check-report.ts";
 export { Outcome } from "./check-report.ts";
 import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
@@ -349,7 +349,7 @@ let newProjects = new Set();
 if (comparisonBase !== undefined) {
   try {
     if (pins.length !== 2 || !comparisonBase) throw new Error("--base requires two binaries and a before commit");
-    newProjects = newlyRecordedProjects(ROOT, binaries[0], comparisonBase, process.env.NTS_BACKEND || "c");
+    newProjects = candidateAddedProjects(ROOT, binaries[0], comparisonBase);
   } catch (error) {
     console.log(`  NOT MEASURED: ${error.message}`);
     process.exit(2);
@@ -495,24 +495,26 @@ if (pins.length === 1) {
 
 // Two binaries: confirm each difference, then attribute it.
 const verdicts = [];
-const differing = examples.filter((e) => !same(...runs.get(e)) || newBeforeProject(e, newProjects, runs.get(e)[0]));
+const differing = examples.filter((e) => !same(...runs.get(e)) || newProjects.has(e));
 for (const example of differing) {
   const [before, after] = runs.get(example);
-  const again = [await check(pins[0], example), await check(pins[1], example)];
-  const isNew = newBeforeProject(example, newProjects, before);
+  const isNew = newProjects.has(example);
+  // A candidate-added project has no baseline contract. Its one before observation
+  // is informational even if capture, execution or supervision could not finish.
+  const again = [isNew ? before : await check(pins[0], example), await check(pins[1], example)];
   const unfinished = [after, again[1], ...(!isNew ? [before, again[0]] : [])].filter(record => record.outcome === Outcome.NOT_MEASURED);
   if (unfinished.length) {
     verdicts.push({example, tag: "NOT MEASURED", before, after, unfinished});
     continue;
   }
-  if (!same(before, again[0]) || !same(after, again[1]) || (isNew && !newBeforeProject(example, newProjects, again[0]))) {
+  if ((!isNew && !same(before, again[0])) || !same(after, again[1])) {
     verdicts.push({ example, tag: "UNSTABLE", before, after, note: !same(before, again[0]) ? "before disagrees with itself" : "after disagrees with itself" });
     continue;
   }
   if (isNew) {
     const complete = fullyMeasuredAgreement(after) && fullyMeasuredAgreement(again[1]);
     verdicts.push({ example, tag: complete ? "NEW" : WRONG.has(after.outcome) ? "REGRESSED" : "NOT MEASURED", before, after,
-      note: complete ? "before: not comparable (new)" : "new project's after arm must be fully measured and agree" });
+      note: complete ? "before: not comparable (new)" : "new project's after arm must be fully measured and agree", unfinished: [after, again[1]] });
     continue;
   }
   const tag = before.outcome === Outcome.NOT_MEASURED || after.outcome === Outcome.NOT_MEASURED ? "NOT MEASURED" : attribute(before, after);

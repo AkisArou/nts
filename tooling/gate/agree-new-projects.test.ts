@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { newlyRecordedProjects, newBeforeProject, fullyMeasuredAgreement } from "../differential/new-projects.ts";
+import { candidateAddedProjects, fullyMeasuredAgreement } from "../differential/new-projects.ts";
 import { spawnTest } from "./test-wait.ts";
 import { writeRecords } from "../differential/oracle-records.ts";
 
@@ -25,14 +25,15 @@ function fixture(t:{after(fn:()=>void):void}) {
   mkdirSync(join(root,"benchmarks/cases"),{recursive:true});
   put("benchmarks/cases/.keep", "");
   put("tooling/lanes/inputs.sh", "#!/bin/sh\nexit 0\n");
-  for(const name of ["existing","previously-unrecorded"])put(`tests/programs/${name}/src/main.ts`,"export function work(n:number):number{return n;}");
+  for(const name of ["existing","previously-unrecorded","previously-no-config"])put(`tests/programs/${name}/src/main.ts`,"export function work(n:number):number{return n;}");
   put("tests/programs/existing/tsconfig.json","{}");put("tests/programs/previously-unrecorded/tsconfig.json","{}");
   put("results/oracle-counts.json",table(["existing"]));
   git("init","-q","-b","main");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
   put("tests/programs/new-fixture/tsconfig.json","{}");
+  put("tests/programs/previously-no-config/tsconfig.json","{}");
   put("tests/programs/new-fixture/src/main.ts","export function work(n:number):number{return n;}");
   rmSync(join(root,"results/oracle-counts.json"));
-  writeRecords(root,{...header,rows:["existing","new-fixture","previously-unrecorded"].map(row)});
+  writeRecords(root,{...header,rows:["existing","new-fixture","previously-unrecorded","previously-no-config"].map(row)});
   git("add",".");git("commit","-qm","candidate");
   for(const name of ["differential","conformance","gate"]) mkdirSync(join(root,"tooling",name),{recursive:true});
   const agree=new URL("../differential/agree.mjs",import.meta.url).pathname;
@@ -50,9 +51,9 @@ const role=${JSON.stringify(role)},name=process.argv[3].split("/")[2];
 const mode=process.env[role==="before"?(name==="new-fixture"?"TEST_NEW_BEFORE":"TEST_EXISTING_BEFORE"):"TEST_AFTER"]??(role==="before"&&name==="new-fixture"?"population":"agree");
 if(process.env.TEST_CHECK_LOG)require("node:fs").appendFileSync(process.env.TEST_CHECK_LOG,role+" "+name+"\\n");
 const value={version:1,status:"agrees",counts:{functions:1,expected:2,compared:2,unavailable:0,runtime_declined:0,timeouts:0,approximated:0,disagreements:0,aborts:0},oracle:{expected:2,received:2,complete:true},refusals:[],disagreements:[],aborts:[],error:null};
-if(mode==="population"||mode==="capture"){value.status="error";value.counts=null;value.oracle=null;value.error={kind:mode==="population"?"oracle_coverage":"capture",source:mode==="population"?"tests/programs/"+name+"/src/main.ts":null,message:"fixture error"};process.exitCode=1;}
+if(mode==="population"||mode==="capture"||mode==="execution"){value.status="error";value.counts=null;value.oracle=null;value.error={kind:mode==="population"?"oracle_coverage":mode,source:mode==="population"?"tests/programs/"+name+"/src/main.ts":null,message:role+" fixture error"};process.exitCode=1;}
 else if(mode==="partial"){value.status="partial";value.counts.compared=1;value.counts.runtime_declined=1;}
-else if(mode==="panic"){console.error("thread panicked during capture");process.exit(101);}
+else if(mode==="panic"){console.error(role+" thread panicked during capture");process.exit(101);}
 else if(mode==="wrong"){value.status="disagrees";value.counts.disagreements=1;value.disagreements.push({compiled:"f 1 -> 2",node:"f 1 -> 3"});process.exitCode=1;}
 else if(mode==="text"){console.log("checked 2 cases across 1 function(s)\\nagreed on every case");process.exit(0);}
 else if(mode==="contradictory"){value.counts.compared=0;}
@@ -62,13 +63,17 @@ console.log(JSON.stringify(value));
   const [before,after]=binaries;
   writeFileSync(join(dirname(before),"provenance.json"),JSON.stringify({sha:base,clean:true,applied:null,binary_sha256:createHash("sha256").update(readFileSync(before)).digest("hex")}));
   const run=(extra:NodeJS.ProcessEnv={},comparisonBase=base)=>spawnTest(process.execPath,[join(root,"tooling/differential/agree.mjs"),before,after,"--only=new-fixture,existing",`--base=${comparisonBase}`],{cwd:root,env:{...env,...extra},encoding:"utf8"});
-  return {root,directory,base,before,after,run};
+  return {root,directory,base,before,after,run,put,git};
 }
 
-test("newness needs a newly recorded project, not a changed row for an existing fixture",t=>{
+test("newness comes from added Git projects independently of oracle rows or backend keys",t=>{
   const f=fixture(t);
-  assert.deepEqual([...newlyRecordedProjects(f.root,f.before,f.base,"c")],["new-fixture"]);
-  assert.equal(newlyRecordedProjects(f.root,f.before,f.base,"jvm").size,0);
+  assert.deepEqual([...candidateAddedProjects(f.root,f.before,f.base)],["new-fixture"]);
+  rmSync(join(f.root,"results/oracle-counts"),{recursive:true});
+  f.put("tests/programs/untracked/tsconfig.json","{}");
+  f.put("tests/programs/previously-unrecorded/added.ts","export const n=1;");
+  f.git("add","tests/programs/previously-unrecorded/added.ts");f.git("commit","-qm","existing project addition");
+  assert.deepEqual([...candidateAddedProjects(f.root,f.before,f.base)],["new-fixture"]);
 });
 
 test("a new fixture's before population is not comparable, while the complete after arm decides",t=>{
@@ -85,11 +90,35 @@ test("an existing fixture made unmeasurable remains a failure beside a new fixtu
   assert.doesNotMatch(result.stdout,/NEW\s+existing/);
 });
 
-test("new fixtures cannot excuse capture failures, crashes or an unmeasured or partial after arm",t=>{
+test("a Git-added project's failed baseline is informational and never publishes a hold",t=>{
+  const f=fixture(t),frame=join(f.directory,"instrument.json"),log=join(f.directory,"checks");
+  for(const TEST_NEW_BEFORE of ["capture","execution","panic","text","contradictory","wrong"]) {
+    rmSync(log,{force:true});rmSync(frame,{force:true});
+    const result=f.run({TEST_NEW_BEFORE,TEST_CHECK_LOG:log,NTS_GATE_STEP_RESULT:frame,NTS_GATE_STEP:"agreement",NTS_GATE_STEP_ATTEMPT:"fixture"});
+    assert.equal(result.status,0,result.stdout+result.stderr);
+    assert.match(result.stdout,/NEW\s+new-fixture/);
+    assert.match(result.stdout,/before:/);
+    assert.equal(existsSync(frame),false);
+    const checks=readFileSync(log,"utf8").trim().split("\n");
+    assert.equal(checks.filter(line=>line==="before new-fixture").length,1);
+    assert.equal(checks.filter(line=>line==="after new-fixture").length,2);
+  }
+});
+
+test("new fixtures still require complete agreeing after arms",t=>{
   const f=fixture(t);
-  for(const env of [{TEST_NEW_BEFORE:"capture"},{TEST_NEW_BEFORE:"panic"},{TEST_AFTER:"capture"},{TEST_AFTER:"partial"},{TEST_AFTER:"panic"},{TEST_AFTER:"wrong"}]) {
-    const result=f.run(env);assert.notEqual(result.status,0,result.stdout+result.stderr);
+  for(const TEST_AFTER of ["capture","execution","partial","panic","wrong"]) {
+    const frame=join(f.directory,"after-instrument.json");rmSync(frame,{force:true});
+    const result=f.run({TEST_NEW_BEFORE:"panic",TEST_AFTER,NTS_GATE_STEP_RESULT:frame,NTS_GATE_STEP:"agreement",NTS_GATE_STEP_ATTEMPT:"fixture"});
+    assert.notEqual(result.status,0,result.stdout+result.stderr);
     assert.doesNotMatch(result.stdout,/NEW\s+new-fixture/);
+    if(TEST_AFTER!=="wrong") {
+      assert.equal(result.status,124,result.stdout+result.stderr);
+      const instrument=JSON.parse(readFileSync(frame,"utf8"));
+      assert.equal(instrument.verdict,"INSTRUMENT");
+      assert.equal(instrument.kind,"tooling-setup");
+      if(TEST_AFTER!=="partial") assert.doesNotMatch(instrument.reason,/before thread panicked/);
+    } else assert.equal(result.status,1);
   }
 });
 
@@ -104,14 +133,8 @@ test("unknown or mismatched before-pin provenance fails before any comparison ru
   }
 });
 
-test("new before eligibility and full after coverage reject every missing or timed-out measurement",()=>{
+test("full after coverage rejects every missing or timed-out measurement",()=>{
   const measured={status:0,outcome:"agrees",checked:2,expected:2,declined:0,refused:0,timeouts:0,oracleStopped:0};
-  const missing={...measured,status:1,outcome:"not measured",missingPopulation:"tests/programs/new-fixture/src/main.ts"};
-  const added=new Set(["new-fixture"]);
-  assert.equal(newBeforeProject("new-fixture",added,missing),true);
-  for(const delta of [{status:null},{timeouts:1},{oracleStopped:1},{missingPopulation:null},{missingPopulation:"tests/programs/existing/src/main.ts"}]) {
-    assert.equal(newBeforeProject("new-fixture",added,{...missing,...delta}),false);
-  }
   assert.equal(fullyMeasuredAgreement(measured),true);
   for(const delta of [{status:null},{checked:1},{declined:1},{refused:1},{timeouts:1},{oracleStopped:1},{expected:0},{outcome:"nothing to check"}]) {
     assert.equal(fullyMeasuredAgreement({...measured,...delta}),false);
