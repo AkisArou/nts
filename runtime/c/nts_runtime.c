@@ -4173,11 +4173,13 @@ static double nts_str_find(const NtsString *s, const NtsString *needle,
     return -1.0;
   }
 
-  for (uint32_t start = 0; start <= last; start++) {
-    uint32_t at = backwards ? last - start : start;
-    if (!backwards && at < from) {
-      continue;
-    }
+  uint32_t first = backwards ? (from < last ? from : last) : from;
+  if (first > last) {
+    return -1.0;
+  }
+  uint32_t count = backwards ? first : last - first;
+  for (uint32_t step = 0; step <= count; step++) {
+    uint32_t at = backwards ? first - step : first + step;
     uint32_t matched = 0;
     while (matched < needle->length &&
            nts_unit(s, at + matched) == nts_unit(needle, matched)) {
@@ -4222,36 +4224,60 @@ double nts_str_index_of_from(const NtsString *s, const NtsString *needle,
 }
 
 double nts_str_last_index_of(const NtsString *s, const NtsString *needle) {
-  return nts_str_find(s, needle, 0u, 1);
+  return nts_str_find(s, needle, s->length, 1);
+}
+
+/* NaN is special for lastIndexOf: unlike every other position here it
+ * selects the end, just as an omitted or undefined position does. */
+double nts_str_last_index_of_from(const NtsString *s, const NtsString *needle,
+                                  double from) {
+  uint32_t start = isnan(from) ? s->length : nts_str_clamp(from, s->length, 0);
+  return nts_str_find(s, needle, start, 1);
+}
+
+bool nts_str_includes_from(const NtsString *s, const NtsString *needle,
+                           double from) {
+  return nts_str_index_of_from(s, needle, from) >= 0.0;
 }
 
 bool nts_str_includes(const NtsString *s, const NtsString *needle) {
   return nts_str_find(s, needle, 0u, 0) >= 0.0;
 }
 
-bool nts_str_starts_with(const NtsString *s, const NtsString *needle) {
-  if (needle->length > s->length) {
+/* Compare at one UTF-16 position, without allocating a substring. The bounds
+ * use subtraction so no length/position addition can wrap. */
+static bool nts_str_matches_at(const NtsString *s, const NtsString *needle,
+                               uint32_t at) {
+  if (needle->length > s->length - at) {
     return false;
   }
-  for (uint32_t at = 0; at < needle->length; at++) {
-    if (nts_unit(s, at) != nts_unit(needle, at)) {
+  for (uint32_t unit = 0; unit < needle->length; unit++) {
+    if (nts_unit(s, at + unit) != nts_unit(needle, unit)) {
       return false;
     }
   }
   return true;
 }
 
+bool nts_str_starts_with(const NtsString *s, const NtsString *needle) {
+  return nts_str_matches_at(s, needle, 0u);
+}
+
+bool nts_str_starts_with_at(const NtsString *s, const NtsString *needle,
+                            double at) {
+  return nts_str_matches_at(s, needle, nts_str_clamp(at, s->length, 0));
+}
+
 bool nts_str_ends_with(const NtsString *s, const NtsString *needle) {
-  if (needle->length > s->length) {
-    return false;
-  }
-  uint32_t offset = s->length - needle->length;
-  for (uint32_t at = 0; at < needle->length; at++) {
-    if (nts_unit(s, offset + at) != nts_unit(needle, at)) {
-      return false;
-    }
-  }
-  return true;
+  return needle->length <= s->length &&
+         nts_str_matches_at(s, needle, s->length - needle->length);
+}
+
+bool nts_str_ends_with_at(const NtsString *s, const NtsString *needle,
+                          double at) {
+  uint32_t end = nts_str_clamp(at, s->length, 0);
+  return needle->length <= end &&
+         nts_str_matches_at(s, needle, end - needle->length);
 }
 
 NtsString *nts_str_char_at_into(NtsHeader *into, const NtsString *s,

@@ -334,6 +334,48 @@ fn a_diagnostic_stop_stores_nothing_without_becoming_pure() {
     assert!(!runtime::stores_nothing("nts_uncaught"));
 }
 
+/// Read a marked declaration through its parameter-list opener, including a
+/// return type and function name split across lines by clang-format.
+fn read_only_helpers(text: &str) -> Vec<String> {
+    let mut lines = text.lines();
+    let mut marked = Vec::new();
+    while let Some(line) = lines.next() {
+        let Some(rest) = line.trim_start().strip_prefix("NTS_READS_ONLY ") else {
+            continue;
+        };
+        let mut declaration = rest.to_owned();
+        while !declaration.contains('(') {
+            let Some(next) = lines.next() else { break };
+            declaration.push(' ');
+            declaration.push_str(next.trim());
+        }
+        let Some(open) = declaration.find('(') else {
+            continue;
+        };
+        let name = declaration[..open]
+            .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .next()
+            .unwrap_or("");
+        if name.starts_with("nts_") {
+            marked.push(name.to_owned());
+        }
+    }
+    marked.sort_unstable();
+    marked
+}
+
+#[test]
+fn read_only_declaration_wrapping_cannot_hide_a_helper() {
+    assert_eq!(
+        read_only_helpers("NTS_READS_ONLY double nts_probe(const void *p);"),
+        read_only_helpers("NTS_READS_ONLY double\nnts_probe(const void *p);")
+    );
+    assert_eq!(
+        read_only_helpers("NTS_READS_ONLY double\nnts_probe(const void *p);"),
+        ["nts_probe"]
+    );
+}
+
 /// `runtime::READS_ONLY` names exactly the helpers the header marks.
 ///
 /// Two lists again, and the failure this prevents is the quiet one: a helper
@@ -351,37 +393,21 @@ fn the_read_only_helpers_are_the_ones_the_header_marks() {
     let Ok(text) = std::fs::read_to_string(header) else {
         return;
     };
-    let mut marked: Vec<&str> = Vec::new();
-    for line in text.lines() {
-        let Some(rest) = line.trim_start().strip_prefix("NTS_READS_ONLY ") else {
-            continue;
-        };
-        // The declaration's name is the token before the parameter list.
-        let Some(open) = rest.find('(') else { continue };
-        let before = &rest[..open];
-        let name = before
-            .rsplit(|c: char| !(c.is_alphanumeric() || c == '_'))
-            .next()
-            .unwrap_or("");
-        if name.starts_with("nts_") {
-            marked.push(name);
-        }
-    }
-    marked.sort_unstable();
+    let marked = read_only_helpers(&text);
 
     let mut ours: Vec<&str> = runtime::READS_ONLY.to_vec();
     ours.sort_unstable();
 
     for name in &ours {
         assert!(
-            marked.contains(name),
+            marked.iter().any(|marked| marked == name),
             "`{name}` is on `runtime::READS_ONLY` and the header does not mark it \
              `NTS_READS_ONLY` -- a borrow is being kept across a call that may store"
         );
     }
     for name in &marked {
         assert!(
-            ours.contains(name),
+            ours.contains(&name.as_str()),
             "the header marks `{name}` `NTS_READS_ONLY` and `runtime::READS_ONLY` \
              does not list it -- a missed elision rather than a hazard, but the two \
              lists are meant to be one fact"

@@ -838,6 +838,26 @@ fn string_external(name: &str) -> Option<(&'static str, &'static str, &'static s
         "nts_concat" => (RUNTIME, "concat", STRING_STRING_TO_STRING),
         "nts_str_index_of" => (RUNTIME, "strIndexOf", STRING_STRING_TO_D),
         "nts_str_last_index_of" => (RUNTIME, "strLastIndexOf", STRING_STRING_TO_D),
+        "nts_str_ends_with_at" => (
+            RUNTIME,
+            "strEndsWithAt",
+            "(Ljava/lang/String;Ljava/lang/String;D)Z",
+        ),
+        "nts_str_includes_from" => (
+            RUNTIME,
+            "strIncludesFrom",
+            "(Ljava/lang/String;Ljava/lang/String;D)Z",
+        ),
+        "nts_str_last_index_of_from" => (
+            RUNTIME,
+            "strLastIndexOfFrom",
+            "(Ljava/lang/String;Ljava/lang/String;D)D",
+        ),
+        "nts_str_starts_with_at" => (
+            RUNTIME,
+            "strStartsWithAt",
+            "(Ljava/lang/String;Ljava/lang/String;D)Z",
+        ),
         "nts_str_includes" => (RUNTIME, "strIncludes", STRING_STRING_TO_Z),
         "nts_str_starts_with" => (RUNTIME, "strStartsWith", STRING_STRING_TO_Z),
         "nts_str_ends_with" => (RUNTIME, "strEndsWith", STRING_STRING_TO_Z),

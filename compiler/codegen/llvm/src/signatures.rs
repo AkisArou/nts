@@ -2236,9 +2236,21 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
+        name: "nts_str_ends_with_at",
+        returns: "zeroext i1",
+        params: &["ptr", "ptr", "double"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
         name: "nts_str_includes",
         returns: "zeroext i1",
         params: &["ptr", "ptr"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_str_includes_from",
+        returns: "zeroext i1",
+        params: &["ptr", "ptr", "double"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
@@ -2263,6 +2275,12 @@ pub const SIGNATURES: &[Signature] = &[
         name: "nts_str_last_index_of",
         returns: "double",
         params: &["ptr", "ptr"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_str_last_index_of_from",
+        returns: "double",
+        params: &["ptr", "ptr", "double"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
@@ -2335,6 +2353,12 @@ pub const SIGNATURES: &[Signature] = &[
         name: "nts_str_starts_with",
         returns: "zeroext i1",
         params: &["ptr", "ptr"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_str_starts_with_at",
+        returns: "zeroext i1",
+        params: &["ptr", "ptr", "double"],
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {

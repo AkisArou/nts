@@ -7,7 +7,7 @@
 
 use super::{
     BinOp, BlockId, Diagnostic, FuncBuilder, HirType, ManagedType, MethodsOf, NodeId, OpKind,
-    Terminator, ValueId,
+    Terminator, ValueId, syntax,
 };
 use crate::hir::tags;
 
@@ -81,7 +81,10 @@ impl FuncBuilder<'_> {
         string: ValueId,
         argument: NodeId,
     ) -> Result<ValueId, Diagnostic> {
-        let value = self.lower_expression(argument)?;
+        let value = self.builtin_raw_argument(
+            argument,
+            contract(Builtin::Method(MethodsOf::String, "charCodeAt"), 1).is_some(),
+        )?;
         let index = self.builtin_number_argument(
             (at, argument),
             Builtin::Method(MethodsOf::String, "charCodeAt"),
@@ -99,14 +102,49 @@ impl FuncBuilder<'_> {
         ))
     }
 
+    /// Evaluate before conversion, retaining ordinary admission at storage,
+    /// needle and text positions. Only a caller that owns ignored surplus
+    /// arguments may supply its admitted arity in `ignored_after`.
     pub(super) fn builtin_raw_arguments(
         &mut self,
+        builtin: Builtin<'_>,
         arguments: &[NodeId],
+        ignored_after: Option<usize>,
     ) -> Result<Vec<ValueId>, Diagnostic> {
         arguments
             .iter()
-            .map(|source| self.lower_expression(*source))
+            .enumerate()
+            .map(|(index, source)| {
+                let position = index + 1;
+                let raw_absence = contract(builtin, position).is_some()
+                    || ignored_after.is_some_and(|arity| position > arity);
+                self.builtin_raw_argument(*source, raw_absence)
+            })
             .collect()
+    }
+
+    fn builtin_raw_argument(
+        &mut self,
+        source: NodeId,
+        raw_absence: bool,
+    ) -> Result<ValueId, Diagnostic> {
+        if !raw_absence {
+            return self.lower_expression(source);
+        }
+        let literal = self.through_parentheses(source);
+        let absence = if self.kind_of(literal) == Some(syntax::NULL_KEYWORD) {
+            Some(OpKind::ConstNull)
+        } else if self.is_the_undefined_literal(literal) {
+            Some(OpKind::ConstUndefined)
+        } else {
+            None
+        };
+        if let Some(absence) = absence {
+            // The call's number parameter is not the literal's representation:
+            // raw evaluation precedes the builtin's ToNumber/default policy.
+            return self.absent_at(absence, Some(HirType::Erased), source);
+        }
+        self.lower_expression(source)
     }
 
     /// Evaluate the source list before a builtin can throw while converting it.
@@ -116,7 +154,7 @@ impl FuncBuilder<'_> {
         builtin: Builtin<'_>,
         arguments: &[NodeId],
     ) -> Result<Vec<ValueId>, Diagnostic> {
-        let values = self.builtin_raw_arguments(arguments)?;
+        let values = self.builtin_raw_arguments(builtin, arguments, None)?;
         arguments
             .iter()
             .zip(values)
@@ -147,6 +185,16 @@ impl FuncBuilder<'_> {
         undefined: Undefined,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(at);
+        // Literal absences have no native scalar payload to erase. This is a
+        // semantic numeric argument position, so consume the actual constant
+        // with its catalog policy before asking for a representation change.
+        match self.values[value.0 as usize].kind {
+            OpKind::ConstUndefined => return Ok(self.builtin_undefined_value(at, undefined)),
+            OpKind::ConstNull => {
+                return Ok(self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin));
+            }
+            _ => {}
+        }
         let native = match self.values[value.0 as usize].ty {
             // An i32 is already a JavaScript number. Keep its width, as a
             // StringUnitAt index does, instead of pinning its loop to f64.

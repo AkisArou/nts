@@ -67920,10 +67920,8 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
         args: &mut Vec<ValueId>,
     ) -> Result<(), Diagnostic> {
-        let values = arguments
-            .iter()
-            .map(|argument| self.lower_expression(*argument))
-            .collect::<Result<Vec<_>, _>>()?;
+        let values =
+            self.builtin_raw_arguments(NumericBuiltin::Method(receiver, method), arguments, None)?;
         for (argument, value) in arguments.iter().zip(values) {
             let position = args.len();
             let value = self.builtin_number_argument(
@@ -78854,7 +78852,7 @@ impl<'a> FuncBuilder<'a> {
         let Some(text) = arguments.first() else {
             return Err(self.unsupported(id, "`parseInt` with no argument"));
         };
-        let values = self.builtin_raw_arguments(arguments)?;
+        let values = self.builtin_raw_arguments(NumericBuiltin::ParseRadix, arguments, None)?;
         let value = values[0];
         let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
         let origin = self.origin(id);
@@ -79733,27 +79731,16 @@ impl<'a> FuncBuilder<'a> {
             return self.builtin_string_unit_at(id, receiver, *argument);
         }
 
+        if let Some(value) = self.lower_positioned_string_method(id, receiver, &name, arguments)? {
+            return Ok(value);
+        }
+
         // `s.concat()` concatenates nothing: `s` itself, which is immutable.
         if name == "concat" && arguments.is_empty() {
             return Ok(receiver);
         }
         let (helper, arity, ty) = match name.as_str() {
             "codePointAt" => ("nts_str_code_point_at", 1, HirType::NUMBER),
-            "indexOf" if arguments.len() == 2 => ("nts_str_index_of_from", 2, HirType::NUMBER),
-            "indexOf" => ("nts_str_index_of", 1, HirType::NUMBER),
-            "lastIndexOf" => ("nts_str_last_index_of", 1, HirType::NUMBER),
-            "includes" => ("nts_str_includes", 1, HirType::Bool),
-            "startsWith" => ("nts_str_starts_with", 1, HirType::Bool),
-            "endsWith" => ("nts_str_ends_with", 1, HirType::Bool),
-            // **`s.at(i)` is neither `s[i]` nor `s.charAt(i)`**, and the
-            // runtime keeps all three apart because the language does: `charAt`
-            // answers `""` for an index that is not there, `s[i]` stops the
-            // program the way an out-of-range array index does, and `at`
-            // answers `undefined` -- the null pointer, which is what a
-            // `string | undefined` is. `at` is also the only one of the three
-            // that counts a negative index from the end, which is why it
-            // exists.
-            "at" => ("nts_str_relative_at", 1, string.clone()),
             "charAt" => ("nts_str_char_at", 1, string.clone()),
             "repeat" => ("nts_str_repeat", 1, string.clone()),
             "slice" => ("nts_str_slice", 2, string.clone()),
@@ -81310,7 +81297,11 @@ impl<'a> FuncBuilder<'a> {
         // Evaluate every argument before conversion can throw, including
         // ignored extra arguments. LengthOfArrayLike follows argument evaluation
         // but precedes ToNumber(index), which can itself have effects.
-        let values = self.builtin_raw_arguments(arguments)?;
+        let values = self.builtin_raw_arguments(
+            NumericBuiltin::Method(MethodsOf::Array, "with"),
+            arguments,
+            None,
+        )?;
         let origin = self.origin(id);
         let length = self.push(OpKind::Length(receiver), HirType::NUMBER, origin.clone());
         let index = match values.first().copied() {
@@ -88801,6 +88792,7 @@ mod parameter_entries;
 mod printed;
 mod project_semantics;
 mod property_keys;
+mod string_positions;
 mod typed_signatures;
 mod uniform_inputs;
 mod virtual_returns;

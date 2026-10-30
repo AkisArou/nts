@@ -1960,8 +1960,20 @@ static SIGNATURES: &[Declared] = &[
         Raising::NoRaise,
     ),
     (
+        "nts_str_ends_with_at",
+        Some(&[None, None, Some(HirType::Float { bits: 64 })]),
+        Some(HirType::Bool),
+        Raising::NoRaise,
+    ),
+    (
         "nts_str_includes",
         Some(&[None, None]),
+        Some(HirType::Bool),
+        Raising::NoRaise,
+    ),
+    (
+        "nts_str_includes_from",
+        Some(&[None, None, Some(HirType::Float { bits: 64 })]),
         Some(HirType::Bool),
         Raising::NoRaise,
     ),
@@ -1986,6 +1998,12 @@ static SIGNATURES: &[Declared] = &[
     (
         "nts_str_last_index_of",
         Some(&[None, None]),
+        Some(HirType::Float { bits: 64 }),
+        Raising::NoRaise,
+    ),
+    (
+        "nts_str_last_index_of_from",
+        Some(&[None, None, Some(HirType::Float { bits: 64 })]),
         Some(HirType::Float { bits: 64 }),
         Raising::NoRaise,
     ),
@@ -2042,6 +2060,12 @@ static SIGNATURES: &[Declared] = &[
     (
         "nts_str_starts_with",
         Some(&[None, None]),
+        Some(HirType::Bool),
+        Raising::NoRaise,
+    ),
+    (
+        "nts_str_starts_with_at",
+        Some(&[None, None, Some(HirType::Float { bits: 64 })]),
         Some(HirType::Bool),
         Raising::NoRaise,
     ),
@@ -2980,10 +3004,15 @@ pub fn keeps(name: &str) -> Option<&'static [usize]> {
         | "nts_str_concat_slice"
         | "nts_string_eq"
         | "nts_str_index_of"
+        | "nts_str_index_of_from"
         | "nts_str_last_index_of"
+        | "nts_str_last_index_of_from"
         | "nts_str_includes"
+        | "nts_str_includes_from"
         | "nts_str_starts_with"
+        | "nts_str_starts_with_at"
         | "nts_str_ends_with"
+        | "nts_str_ends_with_at"
         | "nts_map_keys_into"
         | "nts_map_values_into" => Some(&[]),
         // The left is consumed and the result may *be* it, so it is kept; the
@@ -3149,11 +3178,16 @@ pub const READS_ONLY: &[&str] = &[
     "nts_str_char_code_at_int_fn",
     "nts_str_code_point_at",
     "nts_str_ends_with",
+    "nts_str_ends_with_at",
     "nts_str_includes",
+    "nts_str_includes_from",
     "nts_str_index_of",
+    "nts_str_index_of_from",
     "nts_str_last_index_of",
+    "nts_str_last_index_of_from",
     "nts_str_point_width",
     "nts_str_starts_with",
+    "nts_str_starts_with_at",
     "nts_string_truthy",
     "nts_unit_fn",
     "nts_value_eq_boolean_fn",

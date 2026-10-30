@@ -1112,6 +1112,20 @@ public final class NtsRuntime {
     public static double strIndexOfFrom(String s, String needle, double from) {
         return s.indexOf(needle, clamp(from, s.length(), false));
     }
+    public static double strLastIndexOfFrom(String s, String needle, double from) {
+        int start = Double.isNaN(from) ? s.length() : clamp(from, s.length(), false);
+        return s.lastIndexOf(needle, start);
+    }
+    public static boolean strIncludesFrom(String s, String needle, double from) {
+        return strIndexOfFrom(s, needle, from) >= 0;
+    }
+    public static boolean strStartsWithAt(String s, String needle, double at) {
+        return s.startsWith(needle, clamp(at, s.length(), false));
+    }
+    public static boolean strEndsWithAt(String s, String needle, double at) {
+        int end = clamp(at, s.length(), false);
+        return needle.length() <= end && s.startsWith(needle, end - needle.length());
+    }
     public static String strToLowerCase(String s) { return s.toLowerCase(Locale.ROOT); }
     public static String strToUpperCase(String s) { return s.toUpperCase(Locale.ROOT); }
     public static boolean strIsWellFormed(String s) {

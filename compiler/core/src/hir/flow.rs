@@ -945,7 +945,9 @@ fn foreign_result(key: &str) -> Option<Facts> {
 /// A position a search answers, or -1.
 const INDEX: &[&str] = &[
     "nts_str_index_of",
+    "nts_str_index_of_from",
     "nts_str_last_index_of",
+    "nts_str_last_index_of_from",
     "nts_array_index_of",
     "nts_array_last_index_of",
 ];

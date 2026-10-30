@@ -2030,12 +2030,21 @@ NTS_READS_ONLY double nts_str_index_of(const NtsString *s,
                                        const NtsString *needle);
 NTS_READS_ONLY double nts_str_last_index_of(const NtsString *s,
                                             const NtsString *needle);
+NTS_READS_ONLY double nts_str_last_index_of_from(const NtsString *s,
+                                                 const NtsString *needle,
+                                                 double from);
 NTS_READS_ONLY bool nts_str_includes(const NtsString *s,
                                      const NtsString *needle);
+NTS_READS_ONLY bool nts_str_includes_from(const NtsString *s,
+                                          const NtsString *needle, double from);
 NTS_READS_ONLY bool nts_str_starts_with(const NtsString *s,
                                         const NtsString *needle);
+NTS_READS_ONLY bool nts_str_starts_with_at(const NtsString *s,
+                                           const NtsString *needle, double at);
 NTS_READS_ONLY bool nts_str_ends_with(const NtsString *s,
                                       const NtsString *needle);
+NTS_READS_ONLY bool nts_str_ends_with_at(const NtsString *s,
+                                         const NtsString *needle, double at);
 NtsString *nts_str_char_at(const NtsString *s, double at);
 NtsString *nts_str_repeat(const NtsString *s, double times);
 /* `Number(s)`: ECMAScript StringToNumber, which is not `strtod`.

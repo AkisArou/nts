@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-string-prefix-test-at-a-given-position",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-string-prefix-test-at-a-given-position/src/main.ts",
+      "signature": "585528c646923698bc5901a5775c75c3650c7266db08a803e2acd64b62d6e779",
+      "keys": {
+        "c": "b52e1dcf5c2e8dc27b185f1a048bcb70",
+        "jvm": "5ba5027e68c7b5fd119e408506893ab3",
+        "llvm": "c917baee8684088f251b1b91e05b5a18"
+      },
+      "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45",
+      "driver_sha256": "4d31e0e6de9031f322edf45adde708e816a38ada31933b043476c7cdb934dc8e",
+      "populations": {
+        "work": {
+          "count": 29,
+          "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

@@ -809,3 +809,11 @@ fn standard_stream_failures_and_terminal_state_follow_each_descriptor() {
         );
     }
 }
+
+#[test]
+fn string_search_positions_keep_their_numeric_boundaries() {
+    assert_eq!(
+        run_suite("string_positions", &[]),
+        "string positions agree\n"
+    );
+}

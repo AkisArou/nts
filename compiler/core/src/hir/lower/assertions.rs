@@ -75,6 +75,23 @@ fn check(probe: &FuncBuilder<'_>, id: NodeId) -> Option<Check> {
     Some(Check::Primitive { target, tag })
 }
 
+/// Admission after lowering may retain an erased-to-primitive assertion's
+/// checked target, rather than stripping back to its unchecked source type.
+/// This reads the same plan as `lower`; it creates no optimizer fact.
+pub(super) fn checks_erased_primitive(
+    probe: &FuncBuilder<'_>,
+    id: NodeId,
+    target: &HirType,
+) -> bool {
+    let Some(source) = probe.children(id).first().copied() else {
+        return false;
+    };
+    probe.type_of(source) == Some(HirType::Erased)
+        && matches!(check(probe, id),
+            Some(Check::Primitive { target: checked, .. } | Check::Literals { target: checked, .. })
+                if checked == *target)
+}
+
 pub(super) fn is_nominal_class(probe: &FuncBuilder<'_>, ty: TypeId) -> bool {
     probe
         .snapshot

@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/string-search-positions",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/string-search-positions/src/main.ts",
+      "signature": "4d28c458d72a1abea8cd96639dce3b872df71b689258d4e8f401ab2a7360f51a",
+      "keys": {
+        "c": "3a28281593193746598355a63bbe7e10",
+        "jvm": "3a9891ce3bbbf2156d0610f9b5e8eb8c",
+        "llvm": "e373927b314f3b1a7c418fca91d60945"
+      },
+      "cases_sha256": "316611cfc9da48af4fdce5205d56c60693b5b631bcf72c68692a011a752c3f18",
+      "driver_sha256": "c1bc50fd728892a4e5675e88a7c7ecdba9971069b1ea36d2f928f7b1f6a93e28",
+      "populations": {
+        "argumentOrder": {
+          "count": 29,
+          "cases_sha256": "e628ed8c02d7a3a3bdc2d7ba7f3895419579463369c963c50d23aa651c1c9805"
+        },
+        "checkedErasedNeedle": {
+          "count": 29,
+          "cases_sha256": "1e9129b9a7c753fd95eeda134e4bbe052d24d6005e6a284480b0f9a9f16c5e57"
+        },
+        "defaults": {
+          "count": 29,
+          "cases_sha256": "1bb19d8573139eca2b405129b57099a33f4dfaafad951e03166068129733dd1a"
+        },
+        "emptyReceiver": {
+          "count": 29,
+          "cases_sha256": "a122b372f2baadc2ca49e0a9521056a261a04c11bbeb307425712bb5d51792fc"
+        },
+        "ends": {
+          "count": 29,
+          "cases_sha256": "457d358949a5cef880d9fcf3825c774a49304f69ed997155bb901643781c406c"
+        },
+        "includes": {
+          "count": 29,
+          "cases_sha256": "d108c9f330af60317b809b12394ac23b1d2f511b332bf8a585d1ef68759e5fc1"
+        },
+        "index": {
+          "count": 29,
+          "cases_sha256": "e8a9439bad7457338c4e1a6291afb0991a852880e7139ff5be1019e3ee36454a"
+        },
+        "last": {
+          "count": 29,
+          "cases_sha256": "e795c0e95a766d8d9bd25d6514c1858e01dbf70991466d04d36b77b0fcc33325"
+        },
+        "longerNeedle": {
+          "count": 29,
+          "cases_sha256": "866de5746b2f25791da41d17fc2760443a4f3d05dc71c1034c4e361296b54499"
+        },
+        "nanDefaults": {
+          "count": 29,
+          "cases_sha256": "03af0808eb5baa4f4475ea56c7ed334ca58556ee5b1f3dce968e30dc850e940a"
+        },
+        "noPosition": {
+          "count": 29,
+          "cases_sha256": "db6f6dd0af254834403f712de293888814adca4d107a3a97025b8c0cccd18cac"
+        },
+        "nullAt": {
+          "count": 29,
+          "cases_sha256": "1aeee8cfb644eb9cb4ec64d2c0fcd43fda01b04fab202c6db64a9f1e8b94b66c"
+        },
+        "omittedAt": {
+          "count": 29,
+          "cases_sha256": "1a0e7482173dfb423aec7c030da969e0bd49fb8de209250969fc874291286554"
+        },
+        "positionTypeError": {
+          "count": 29,
+          "cases_sha256": "f4c35826db579eff13506d89cb0de9fe98b566f4362f678e1935a44d80066bc3"
+        },
+        "primitivePosition": {
+          "count": 29,
+          "cases_sha256": "8c0ce2dbeeacc51a7d8c02085fc6459dd7325f5da9043d08d3004003c5b76067"
+        },
+        "relative": {
+          "count": 29,
+          "cases_sha256": "dbe3c72ed51fb3747616b0653128c00a055b158a7a48943e256133b3e2047b30"
+        },
+        "shadowedUndefined": {
+          "count": 29,
+          "cases_sha256": "b4792a1fb22bcfcf7ecd5dde43d9a3ecc1640b05e5cb323283f58ba90e8cf269"
+        },
+        "starts": {
+          "count": 29,
+          "cases_sha256": "dc5296e8132a33fb0b45779b03a51bcf52f15b1daa9e077f2f48160a7fee4384"
+        },
+        "surplusAbsent": {
+          "count": 29,
+          "cases_sha256": "32e1b61268b5ec4f656c28b0748bba4aea32c0fed8a315d77c324473794a89a3"
+        },
+        "surplusAt": {
+          "count": 29,
+          "cases_sha256": "461842e7d538af0cd7c670cc592471d5f7382b5c7d52ae9d2090b8635a9c21ca"
+        },
+        "surplusNotCoerced": {
+          "count": 29,
+          "cases_sha256": "71a22a42709d2c2e37d774e53057bc16b00e9ebcc31fb83ac5c12394d472bd8e"
+        },
+        "utf16": {
+          "count": 29,
+          "cases_sha256": "fc17fc39e3201083ed60e4b429469696f3c77a15b783dbe69acf23537c6507cd"
+        }
+      },
+      "complete": true,
+      "count": 638
+    }
+  ]
+}
