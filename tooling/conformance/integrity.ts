@@ -140,16 +140,16 @@ import { FIXED_AMBIENT } from "../gate/canonical-environment.ts";
 // and passes; any other fails. A listed one that no longer occurs prints
 // "remove it" and passes -- going red on a fix is the wrong direction.
 //
-// # Not measured is a failure
+// # Incomplete measurement holds
 //
 // A project whose parsed definitions disagree with its own "N function(s)"
-// summary, or whose command fails, is NOT MEASURED and fails the run: a
+// summary, or whose command fails, is NOT MEASURED and holds the run: a
 // listing parsed as empty satisfies every rule above.
 //
 // Exit 0: every project measured, nothing but known violations. Exit 1: a
-// violation or a project not measured. Exit 2: the tool could not start.
+// completed violation. Incomplete work uses the shared typed hold; a completed
+// violation still wins over a hang. Exit 2: the tool could not start.
 
-import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -160,9 +160,11 @@ import { OUTCOMES, materialise, outcomeFixtures, runMode } from "./outcomes-proj
 
 import { limiter, longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
-import { COUNTER_SCOPE, spawnCounted } from "../gate/cputime.mjs";
+import { COUNTER_SCOPE } from "../gate/cputime.mjs";
 import { COMPILE_WORK_PROFILE, compileWorkSettings, compileCommand } from "../gate/compile-counter.ts";
 import { measuredCompileEnvironment } from "../gate/canonical-environment.ts";
+import {ToolingInstrumentError} from "../gate/step-result.ts";
+import {runIntegrityListing,integrityListingFailure,finishIntegrity} from "./integrity-command.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -1298,32 +1300,20 @@ if (disorder) {
 // start while every worker is still free.
 const slot = limiter(WORKERS);
 // Each process holds one of the gate's tokens while it runs (tokens.mjs).
-const run = (args) => slot(() => withToken(() =>
-  new Promise((resolve) => {
+const run = (args) => slot(() => withToken(() => {
     // The native producer captures anew; there is no producer-cache mode.
     // Only a kept prepared listing supplies the compile-time step's counters.
     const timedRun = KEEP && ADDON.test(args.at(-1)) && args[0] === "hir" && args[1] === "--prepared";
     const measuredEnvironment=timedRun?measuredCompileEnvironment(env):env;
     const work_settings=timedRun?compileWorkSettings(measuredEnvironment):undefined;
-    const counted = timedRun ? spawnCounted(NTS, compileCommand("nogc", args.at(-1)), { cwd: ROOT, env:measuredEnvironment,
-      counterFile: join(KEEP, `${args.at(-1).replaceAll("/", "_")}.perf`) }) : null;
-    const child = counted?.child ?? spawn(NTS, args, { cwd: ROOT, env });
-    // Only the prepared listing supplies compile-time's launch-time counters.
-    const cpu = counted?.measurement ?? Promise.resolve({});
-    let stdout = "";
-    let stderr = "";
-    const timer = counted ? undefined : setTimeout(() => child.kill("SIGTERM"), 900_000);
-    child.stdout.on("data", (c) => (stdout += c));
-    child.stderr.on("data", (c) => (stderr += c));
-    child.on("error", (error) => { clearTimeout(timer); resolve({ error, stdout, stderr }); });
-    child.on("close", (status, signal) => {
-      clearTimeout(timer);
-      cpu.then((counters) => resolve({ ...counters, work_profile: timedRun ? COMPILE_WORK_PROFILE : undefined, work_settings, status, signal, stdout, stderr }));
-    });
-  })));
+    return runIntegrityListing(NTS,timedRun?compileCommand("nogc",args.at(-1)):args,{cwd:ROOT,env:measuredEnvironment,
+      ...(timedRun?{counterFile:join(KEEP,`${args.at(-1).replaceAll("/", "_")}.perf`)}:{})})
+      .then(result=>timedRun?{...result,work_settings}:result);
+  }));
 
 const found = [];
 const unmeasured = [];
+const incomplete = [];
 const skipped = [];
 let measured = 0;
 let functions = 0;
@@ -1355,15 +1345,17 @@ async function scan(project) {
   const at = pathOf.get(project) ?? project;
   const began = Date.now();
   const commands = [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]];
-  const results = await Promise.all(commands.map(([, args]) => run(args)));
+  const results = await Promise.all(commands.map(([, args]) => run(args).catch(error=>({error,stdout:"",stderr:""}))));
   cost[project] = (Date.now() - began) / 1000;
   keep(project, results[0]);
   for (const [i, [key, args]] of commands.entries()) {
     const done = results[i];
     // The wrapper expresses command signals as nonzero statuses. Counter
     // failure must remain a not-measured listing, even if output was complete.
-    if (done.error || done.signal || done.counter_error) {
-      unmeasured.push(`${project}: nts ${args[0]} ${done.counter_error ?? done.signal ?? done.error?.message}`);
+    const failure=integrityListingFailure(done,`${project}: nts ${args[0]}`,DOES_NOT_TYPECHECK.has(project));
+    if (failure) {
+      incomplete.push(failure);
+      unmeasured.push(`${project}: nts ${args[0]} ${failure instanceof Error?failure.message:String(failure)}`);
       return;
     }
     // Diagnostics (the cascades) arrive on stderr beside the listing.
@@ -1371,7 +1363,10 @@ async function scan(project) {
   }
   if (DOES_NOT_TYPECHECK.has(project)) {
     if (/does not typecheck/.test(listings.prepared)) skipped.push(`${project}: ${DOES_NOT_TYPECHECK.get(project)}`);
-    else unmeasured.push(`${project}: listed as not typechecking, and now it does -- the reason has expired`);
+    else {
+      const reason=`${project}: listed as not typechecking, and now it does -- the reason has expired`;
+      unmeasured.push(reason);incomplete.push(new ToolingInstrumentError("tooling-setup",reason));
+    }
     return;
   }
   // A runtime module is an addon, whose values arrive across its boundary;
@@ -1385,7 +1380,8 @@ async function scan(project) {
     // on alternate runs of one pin with nothing to go on until this line.
     const prepared = results[0];
     const said = prepared.stderr.trim().split("\n").at(-1)?.slice(0, 200) ?? "";
-    unmeasured.push(`${project}: ${verdict.unmeasured} (exit ${prepared.status}${said ? `; stderr: ${said}` : ""})`);
+    const reason=`${project}: ${verdict.unmeasured} (exit ${prepared.status}${said ? `; stderr: ${said}` : ""})`;
+    unmeasured.push(reason);incomplete.push(new ToolingInstrumentError("tooling-setup",reason));
     return;
   }
   measured += 1;
@@ -1465,4 +1461,5 @@ const ok = fresh.length === 0 && unmeasured.length === 0 && measured > 0;
 console.log(ok ? `  whole: no violation beyond the ${held.length} known`
   : measured === 0 ? `  NOT MEASURED: none of ${projects.length} project(s) was measured, so no violation count means anything`
   : `  ${fresh.length} violation(s), ${unmeasured.length} project(s) not measured`);
-process.exit(ok ? 0 : 1);
+if(measured===0&&!incomplete.length)incomplete.push(new ToolingInstrumentError("tooling-setup","integrity measured no projects"));
+process.exit(finishIntegrity(incomplete,fresh.length));
