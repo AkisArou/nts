@@ -28019,6 +28019,40 @@ impl<'a> FuncBuilder<'a> {
         )
     }
 
+    fn narrowed_collection_view(&mut self, id: NodeId, value: ValueId) -> Option<ValueId> {
+        let have = &self.values[value.0 as usize].ty;
+        if !matches!(
+            have,
+            HirType::Managed(ManagedType::Map(..) | ManagedType::Set(_))
+        ) {
+            return None;
+        }
+        // An untyped allocation and the choice passing it on already share
+        // their contextual destination. Preserve that chosen view rather
+        // than restoring the library overload's unconstrained arguments.
+        let want = self.instead_of_an_unchosen_collection(id, self.type_of(id)?);
+        if *have == want || !Self::tagged_collection_view(have, &want) {
+            return None;
+        }
+        Some(self.push(OpKind::Convert(value), want, self.origin(id)))
+    }
+
+    /// Map and Set arguments describe a source view of tagged entries. They
+    /// never change the carrier's layout or identity. Array arguments also
+    /// choose physical element storage and cannot use this rule.
+    fn tagged_collection_view(have: &HirType, want: &HirType) -> bool {
+        matches!(
+            (have, want),
+            (
+                HirType::Managed(ManagedType::Map(..)),
+                HirType::Managed(ManagedType::Map(..))
+            ) | (
+                HirType::Managed(ManagedType::Set(_)),
+                HirType::Managed(ManagedType::Set(_))
+            )
+        )
+    }
+
     /// A read of an erased binding at the type the checker narrowed it to.
     ///
     /// This is the whole of `Unerase`, and it is one function on purpose. The
@@ -28150,7 +28184,7 @@ impl<'a> FuncBuilder<'a> {
             return Ok(self.push(OpKind::unerase(erased), want, origin));
         }
         if self.values[value.0 as usize].ty != HirType::Erased {
-            return Ok(value);
+            return Ok(self.narrowed_collection_view(id, value).unwrap_or(value));
         }
         let Some(want) = self.type_of(id) else {
             return Ok(value);
@@ -29632,6 +29666,9 @@ impl<'a> FuncBuilder<'a> {
                 return Err(self.unsupported(id, &why));
             }
             self.record_arrival(&have, want, id);
+            if Self::tagged_collection_view(&have, want) {
+                return Ok(self.push(OpKind::Convert(value), want.clone(), self.origin(id)));
+            }
             return Ok(view.map_or(value, |kind| self.push(kind, want.clone(), self.origin(id))));
         }
         // **A `void` value erases to `undefined`, because that is what it is.** A
