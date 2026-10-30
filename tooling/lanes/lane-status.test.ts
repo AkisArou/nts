@@ -1,5 +1,5 @@
 import {test} from "node:test";import assert from "node:assert/strict";
-import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
+import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,utimesSync,writeFileSync} from "node:fs";
 import {homedir} from "node:os";import {join} from "node:path";
 import {spawnTest} from "../gate/test-wait.ts";
 test("status uses registered heads and survives a slow or disappearing worktree",t=>{
@@ -13,12 +13,21 @@ test("status uses registered heads and survives a slow or disappearing worktree"
  writeFileSync(script,`#!${process.execPath}\nconst fs=require('node:fs'),cp=require('node:child_process');const args=process.argv.slice(2);\n
 if(args.includes('rev-parse')&&args.includes('--git-common-dir'))Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0,1200);
 if(args.includes('rev-parse')&&args.includes('HEAD'))throw new Error('status must use registered HEADs, not probe each tree');\nif(args.includes('status')&&process.cwd()===${JSON.stringify(slow)})fs.readFileSync(${JSON.stringify(fifo)});\nif(args.includes('status')&&process.cwd()===${JSON.stringify(gone)}){fs.rmSync(${JSON.stringify(gone)},{recursive:true,force:true});process.exit(2);}\nconst r=cp.spawnSync('/usr/bin/git',args,{stdio:'inherit'});process.exit(r.status??1);\n`);chmodSync(script,0o755);
+ const fingerprint=join(repo,"target/debug/.fingerprint/example-123");mkdirSync(fingerprint,{recursive:true});writeFileSync(join(fingerprint,"lib-example"),"0123456789abcdef");
+ const staleFingerprint=join(slow,"target/nts-dev/.fingerprint/example-123");mkdirSync(staleFingerprint,{recursive:true});const oldMarker=join(staleFingerprint,"lib-example");writeFileSync(oldMarker,"0123456789abcdef");utimesSync(oldMarker,new Date("2000-01-01T00:00:00Z"),new Date("2000-01-01T00:00:00Z"));
+ const scanned=join(dir,"du-was-called");writeFileSync(join(bin,"du"),`#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(scanned)},'called');process.exit(1);\n`);chmodSync(join(bin,"du"),0o755);
  const state=join(home,".cache/nts-land");mkdirSync(join(state,"pending"),{recursive:true});mkdirSync(join(state,"results"));writeFileSync(join(state,"status.json"),JSON.stringify({state:"gating",holder_unit:"nts-land-train-control",train:["a","b"]}));writeFileSync(join(state,"pending/done.json"),JSON.stringify({id:"done",sha:"done",at:0}));writeFileSync(join(state,"results/done.json"),JSON.stringify({state:"landed"}));
  const result=spawnTest(process.execPath,[new URL('./lane.ts',import.meta.url).pathname,"status","--json"],{cwd:repo,env:{...env,PATH:bin+":"+process.env.PATH},encoding:"utf8"});
  assert.equal(result.status,0,result.stderr);const status=JSON.parse(result.stdout);assert.equal(status.queue.length,0);assert.equal(status.landing.holder_unit,"nts-land-train-control");
+ assert.equal(status.trees.some((row:any)=>"storage" in row),false,"ordinary status keeps its original shape");
  assert.equal(status.trees.find((row:any)=>row.path===slow).state,"slow");assert.equal(status.trees.find((row:any)=>row.path===gone).state,existsSync(gone)?"slow":"missing");
  assert.equal(existsSync(fifo),true,"the hung probe was bounded without a release event");
  writeFileSync(join(state,"status.json"),"{");
  const partial=spawnTest(process.execPath,[new URL('./lane.ts',import.meta.url).pathname,"status","--json"],{cwd:repo,env:{...env,PATH:bin+":"+process.env.PATH},encoding:"utf8"});
  assert.equal(partial.status,0,partial.stderr);assert.equal(JSON.parse(partial.stdout).landing.state,"unknown");
+ assert.equal(existsSync(scanned),false,"ordinary status must never start a disk scan");
+ const storageEnv={...env,PATH:process.env.PATH};
+ const disk=spawnTest(process.execPath,[new URL('./lane.ts',import.meta.url).pathname,"storage","--json","--deep"],{cwd:repo,env:storageEnv,encoding:"utf8"});assert.equal(disk.status,0,disk.stderr);
+ const observed=JSON.parse(disk.stdout);assert.equal(observed.trees[0].path,slow,"stale target precedes the unflagged main tree");assert.equal(observed.summary.trees,3);assert.equal(observed.summary.targets,2);assert.equal(observed.summary.flagged,1);assert.equal(observed.summary.profiles,2);
+ const text=spawnTest(process.execPath,[new URL('./lane.ts',import.meta.url).pathname,"storage"],{cwd:repo,env:storageEnv,encoding:"utf8"});assert.equal(text.status,0,text.stderr);assert.ok(text.stdout.indexOf(slow)<text.stdout.indexOf(repo+"/target"));assert.match(text.stdout,/total: 3 trees; 2 targets; 2 profiles;/);
 });

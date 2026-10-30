@@ -5,6 +5,7 @@ import {acquireSubmission} from "./dependency-inputs.ts";
 //
 //   node tooling/lanes/lane.ts status                 a table
 //   node tooling/lanes/lane.ts status --json          the same, for an agent
+//   node tooling/lanes/lane.ts storage [--deep] [--json]  allocated targets/profiles
 //   node tooling/lanes/lane.ts start <lane> <topic>   ~/Projects/nts-lanes/<lane>, on
 //                                                     branch <prefix><topic> from main
 //
@@ -22,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { branchHealth, healthLines } from "./health.ts";
 import { upkeepStatus } from "./topics.ts";
 import { readLedger } from "./verification-ledger.ts";
+import {collectTargetStorage, sortStorage, storageLines, storageSummary} from "./target-storage.ts";
 
 type Lane = { session: string; branch: string; owns: string[] };
 type Row = {
@@ -157,6 +159,16 @@ async function status(json: boolean, deep = false): Promise<void> {
   }
 }
 
+async function storage(json: boolean, deep = false): Promise<void> {
+  const {trees} = gitWorktreeRegistry(process.cwd());
+  const measurements = await collectTargetStorage(trees, {budgetMs:deep?30_000:5_000});
+  const rows = sortStorage(trees.map((tree, index) => ({
+    path:tree.path.replace(homedir(), "~"), lane:laneOf(tree.branch), branch:tree.branch, storage:measurements[index],
+  })));
+  if (json) console.log(JSON.stringify({summary:storageSummary(rows), trees:rows}, null, 2));
+  else console.log(storageLines(rows).join("\n"));
+}
+
 /**
  * A lane's tree at `~/Projects/nts-lanes/<lane>`, on a new topic branch from
  * main, with its inputs linked (`inputs.sh lane`).
@@ -197,8 +209,9 @@ async function start(name: string | undefined, topic: string | undefined): Promi
 const [command, ...rest] = process.argv.slice(2);
 try {
   if (command === "status") await status(rest.includes("--json"),rest.includes("--deep"));
+  else if (command === "storage") await storage(rest.includes("--json"),rest.includes("--deep"));
   else if (command === "start") {root=gitWorktreeRegistry(process.cwd()).root;await start(rest[0], rest[1]);}
-  else throw new Error("usage: node tooling/lanes/lane.ts status [--json] | start <lane> <topic>");
+  else throw new Error("usage: node tooling/lanes/lane.ts status [--json] [--deep] | storage [--json] [--deep] | start <lane> <topic>");
 } catch (e) {
   console.error(`lane: ${(e as Error).message}`);
   process.exitCode = 2;
