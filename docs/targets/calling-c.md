@@ -57,6 +57,8 @@ derives the C prototype from it, never from a call site.
 | `@ntsPackage pkg` | the pkg-config packages the module's headers and symbols come from |
 | `@ntsConstant v` | an exported `const` is a constant, folded where it is read: a number, a string, or a data or function pointer kept bit for bit |
 | `@ntsAbi managed` | an nts host bridge with the managed convention, not a C ABI |
+| `@ntsStruct struct point`, `@ntsStruct point_t` | the class is that C struct, named by its tag or by its typedef, and its objects are the struct's storage (a branded class); bare, on a record nested in another, an anonymous struct |
+| `@ntsUnion union value`, `@ntsUnion value_t` | the same for a union |
 
 The tags that state facts a header cannot (`@ntsNoEscape`, `@ntsFree`,
 `@ntsThrows`, `@ntsDefault`, the closure kinds, `Counted`, `CBytes`,
