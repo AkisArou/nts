@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-in-test-on-an-object-or-failure-result",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-in-test-on-an-object-or-failure-result/src/main.ts",
+      "signature": "05a8cd80d7b3197f0a17dd18f2a3f8b2fc03b7b911edd2ffa2ba53b60fc20555",
+      "keys": {
+        "c": "82b11d301d5aac63690065e791847e66",
+        "jvm": "82a44cf2f22f8ff9869c96a829f1774f",
+        "llvm": "45e02c285df24fa16f253200dc6cf7b8"
+      },
+      "cases_sha256": "8edd78c08e20d8a706e10739f12cdf92987d367e1e01dbda3cffe6e811e83644",
+      "driver_sha256": "8d409890646644582bfee597ef33af48ffb3a24c278fb9d012dbf37c8e907041",
+      "populations": {
+        "hasFailure": {
+          "count": 29,
+          "cases_sha256": "8edd78c08e20d8a706e10739f12cdf92987d367e1e01dbda3cffe6e811e83644"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

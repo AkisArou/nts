@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-null-result-has-a-number-representation",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-null-result-has-a-number-representation/src/main.ts",
+      "signature": "32b658c7794b6ed3031cc6658cfd3bc4901b4ffb999bcdf8301106e7d1b9d8d1",
+      "keys": {
+        "c": "01b0898d73c5b5d453b624d4f0478d93",
+        "jvm": "ec1f1b36e162520d8f1746c9fcf269b7",
+        "llvm": "930c54720b3587597d467c9dc42bd4f2"
+      },
+      "cases_sha256": "9e44d183ce2e7a83451b053aadf14386f4ca545dbef051dd5ecece961e0f82e2",
+      "driver_sha256": "1bda5b64fcbb45f13f805041b42dab5c721933c6dee34906fc2ff3506c1d7902",
+      "populations": {
+        "keyLength": {
+          "count": 29,
+          "cases_sha256": "9e44d183ce2e7a83451b053aadf14386f4ca545dbef051dd5ecece961e0f82e2"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

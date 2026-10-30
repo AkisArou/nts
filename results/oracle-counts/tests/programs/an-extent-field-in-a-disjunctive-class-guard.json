@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-extent-field-in-a-disjunctive-class-guard",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-extent-field-in-a-disjunctive-class-guard/src/main.ts",
+      "signature": "5bdccbacb3a9d30bb7b21fb9769a29b1ba5a042105ca050234507bd85932366b",
+      "keys": {
+        "c": "ba48dc35ad5c6150631c2a46bcb6a0e6",
+        "jvm": "ef8b51a8f724c68a12ba1792624a234d",
+        "llvm": "190aba425dba57533dcef5e8f74b11c2"
+      },
+      "cases_sha256": "255f853001d8292ebf54383466af8696542a359ccef4fa50609bb675b4f0496d",
+      "driver_sha256": "1b28f93ebee4957293f274d06bcbd7c02d8d66bbe4f44d5f8fed1a5b583d2434",
+      "populations": {
+        "width": {
+          "count": 29,
+          "cases_sha256": "255f853001d8292ebf54383466af8696542a359ccef4fa50609bb675b4f0496d"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-byte-mask-through-an-explicit-index-write",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-byte-mask-through-an-explicit-index-write/src/main.ts",
+      "signature": "68dcdf135048cce61e62854b284aa23ba321e1b63cf9ed1505e3c3a3630d489a",
+      "keys": {
+        "c": "f46080af37b5dbe06d7a1bdec6ef1fbf",
+        "jvm": "b47facd768fd269994e36cc3d1235e20",
+        "llvm": "bc768823a663f6a7a0c0f80ff490ebde"
+      },
+      "cases_sha256": "54fbe39ed978870e6eeb934576f2c3e4801bc0e9f8539e9c480922c71ab68f79",
+      "driver_sha256": "33d5eeb1d895cb4dbbbf988ff0b8c13a9b4509300546e0e71cd7c11c4861ce55",
+      "populations": {
+        "mask": {
+          "count": 29,
+          "cases_sha256": "54fbe39ed978870e6eeb934576f2c3e4801bc0e9f8539e9c480922c71ab68f79"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}
