@@ -1,9 +1,11 @@
 # Scalar numbers in nts: the plan
 
 **Status:** under discussion, 2026-10-08.
+
 - **Decided:** D1-D8 (section 6). The plan is settled; next is step 0.
 
 **Inputs:**
+
 - the playground: `~/Projects/nts-playground` (`DESIGN.md`, `DECISIONS.md`,
   `QUESTIONS.md`);
 - the ScriptC comparison;
@@ -16,6 +18,7 @@ case).
 
 **No compatibility layer** (the user, 2026-10-08). The old forms are removed,
 not kept beside the new:
+
 - `libc.d.ts`'s brands (`c_int8` …, `CNumber`);
 - the `ToInt32` conversion at native calls;
 - the two hard-coded ABI models.
@@ -45,18 +48,19 @@ scalar types, with **one** analysis.
 
 ## 2. Where nts stands today
 
-| Question | Today in nts | Gap |
-|---|---|---|
-| **Speed** | **Done, and further than ScriptC.** `facts.rs` proves ranges and wholeness. `specialize.rs` turns every provable integer into `i32`/`i64` across the whole program; ScriptC does this only for loop counters and a few patterns. `loops.rs` bounds loop counters, and `bounds.rs` removes array bounds checks it can prove. | Only what the analysis can't prove yet. |
-| **Safety** at native calls | **Not done.** A `number` passed to a C `int` goes through JavaScript's ToInt32, as browsers do for WebIDL: `2**31` wraps to `-2147483648`, and `w / 3` is truncated, with no error. 64-bit C types take a `bigint`. | The main gap. |
-| **Scalar types** in the program | **Not done.** nts reads only the C-boundary brands in `libc.d.ts` (`c_int` …). An `Int32` in ordinary code is just a `number`. | The playground's library and rules. |
-| **Bigints** | No range analysis for bigints. | Needed to prove a `bigint` fits `int64_t`. |
-| **Targets** | Two hard-coded ABI models; 64-bit `long` assumed (LP64). | Windows' 32-bit `long`, 32-bit platforms, wasm. |
+| Question                        | Today in nts                                                                                                                                                                                                                                                                                                                | Gap                                             |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------- |
+| **Speed**                       | **Done, and further than ScriptC.** `facts.rs` proves ranges and wholeness. `specialize.rs` turns every provable integer into `i32`/`i64` across the whole program; ScriptC does this only for loop counters and a few patterns. `loops.rs` bounds loop counters, and `bounds.rs` removes array bounds checks it can prove. | Only what the analysis can't prove yet.         |
+| **Safety** at native calls      | **Not done.** A `number` passed to a C `int` goes through JavaScript's ToInt32, as browsers do for WebIDL: `2**31` wraps to `-2147483648`, and `w / 3` is truncated, with no error. 64-bit C types take a `bigint`.                                                                                                         | The main gap.                                   |
+| **Scalar types** in the program | **Not done.** nts reads only the C-boundary brands in `libc.d.ts` (`c_int` …). An `Int32` in ordinary code is just a `number`.                                                                                                                                                                                              | The playground's library and rules.             |
+| **Bigints**                     | No range analysis for bigints.                                                                                                                                                                                                                                                                                              | Needed to prove a `bigint` fits `int64_t`.      |
+| **Targets**                     | Two hard-coded ABI models; 64-bit `long` assumed (LP64).                                                                                                                                                                                                                                                                    | Windows' 32-bit `long`, 32-bit platforms, wasm. |
 
 ## 3. What the playground settled
 
 The playground patched TypeScript's checker so scalar types are checked while
 you type. It produced:
+
 - **the rules** (`DESIGN.md`);
 - **about 60 decisions** (`DECISIONS.md`);
 - **a complete type library** (`scalars/scalars.d.ts`);
@@ -127,6 +131,7 @@ compiler would have drifted.
 
 A per-platform table says how big each C type is and what it can hold: 17
 triples today (`linux-x64`, `windows-x64-msvc`, `ios-arm64`, `wasm32` …).
+
 - It replaces nts's hard-coded ABI models and the LP64 assumption.
 - A proof must hold on **every** platform the build targets. A program built
   for Linux and Windows can't pass a value above 2^31 to a `c_long`.
@@ -135,15 +140,17 @@ triples today (`linux-x64`, `windows-x64-msvc`, `ios-arm64`, `wasm32` …).
 
 Wherever a number goes somewhere with a fixed width, nts must prove it fits.
 That covers:
+
 - an argument to C, Java or wasm;
 - a store into a written scalar type (a variable, a field, an array element);
 - a result returned to native code (an export, a callback).
 
 Then:
+
 - **Proven:** it passes as it is, at no cost.
 - **Not proven:** a compile error. The program can:
   - guard it: `if (n >= 0 && n <= 0xffff)`;
-  - saturate it: `Uint16.clamp(n)` (`Math.min(…, Math.max(…))` is *not*
+  - saturate it: `Uint16.clamp(n)` (`Math.min(…, Math.max(…))` is _not_
     enough: it lets NaN through, and `Math.round(NaN)` is NaN);
   - mask it: `n & 0xffff`;
   - **convert it explicitly**: `Uint16(n)` throws a `RangeError` if it
@@ -153,7 +160,7 @@ Then:
 
 **And `as` keeps TypeScript's meaning.** `n as Uint16` is an assertion with
 no run-time effect, as everywhere in TypeScript, and node erases it. nts
-*verifies* it: accepted where nts proves it, a compile error otherwise
+_verifies_ it: accepted where nts proves it, a compile error otherwise
 (pointing to `Uint16(n)`, a guard or `clamp`). So `as` is never a hidden lie
 and never a hidden check, and nts and node run the same line the same way.
 
@@ -173,15 +180,18 @@ or a fixed-width store is checked, and there a value that may have passed
 
 Writing `Uint8` changes what nts knows and checks, **never what an operator
 computes**. `+ - * / %` give exactly node's answer and never wrap. The width
-matters only where a result is *stored* into a fixed width (part D):
+matters only where a result is _stored_ into a fixed width (part D):
 
 ```ts
-const a: Uint8 = 200, b: Uint8 = 100;
-const sum = a + b;                 // 300, as node; nts knows 0..510, whole
-const s16: Uint16 = a + b;         // proven: fits
-const s8: Uint8 = a + b;           // compile error: 0..510 may not fit 0..255
-const w: Uint8 = Uint8.wrappingAdd(a, b);   // 44, if wrapping is what's meant
-if (a + b <= 255) { const g: Uint8 = a + b; }   // proven by the guard
+const a: Uint8 = 200,
+  b: Uint8 = 100;
+const sum = a + b; // 300, as node; nts knows 0..510, whole
+const s16: Uint16 = a + b; // proven: fits
+const s8: Uint8 = a + b; // compile error: 0..510 may not fit 0..255
+const w: Uint8 = Uint8.wrappingAdd(a, b); // 44, if wrapping is what's meant
+if (a + b <= 255) {
+  const g: Uint8 = a + b;
+} // proven by the guard
 ```
 
 - **`*`:** two large `Int32`s can multiply past 2^53, where a double rounds, so
@@ -204,15 +214,16 @@ if (a + b <= 255) { const g: Uint8 = a + b; }   // proven by the guard
 Every function, on every kind it makes sense for. The playground designed all
 of it:
 
-| Group | Functions | Example |
-|---|---|---|
-| **Convert** | `Uint16(x)` (throws, like `BigInt(x)`), `try` (or `undefined`), `is` (a guard), `wrap` (keep the low bits), `clamp` (round and saturate) | `crc16(buf, Uint16(len))`, `bytes[i] = Uint8.wrap(v)` |
+| Group                  | Functions                                                                                                                                                                                                                                         | Example                                                                                                            |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| **Convert**            | `Uint16(x)` (throws, like `BigInt(x)`), `try` (or `undefined`), `is` (a guard), `wrap` (keep the low bits), `clamp` (round and saturate)                                                                                                          | `crc16(buf, Uint16(len))`, `bytes[i] = Uint8.wrap(v)`                                                              |
 | **Integer operations** | five overflow modes (`wrapping`, `saturating`, `checked`, `strict`, `overflowing`) for `add`, `sub`, `mul`, `div`, `rem`, `neg`, `abs`, `pow`, `shl`, `shr`; plus Euclidean division, `absDiff`, `midpoint`, `isqrt`, `ilog2`, powers of two (D6) | `h = Uint32.wrappingMul((h ^ b) >>> 0, 16777619)` (FNV; `^` gives a signed result, so `>>> 0` makes it a `Uint32`) |
-| **Bits and bytes** | `leadingZeros`, `trailingZeros`, `countOnes`, `rotateLeft/Right`, `swapBytes`, `reverseBits`, `toBytes`/`fromBytes` | hashing, compression, codecs |
-| **Floats** | `round`, `toBits`/`fromBits`, `mulAdd`, `copySign`, `nextUp`/`nextDown`, `totalCompare` (D6) | serialization, numerics |
-| **Constants** | `MIN`, `MAX`, `BITS`; for floats, `MIN_POSITIVE`, `EPSILON` | `if (n > Uint16.MAX) …` |
+| **Bits and bytes**     | `leadingZeros`, `trailingZeros`, `countOnes`, `rotateLeft/Right`, `swapBytes`, `reverseBits`, `toBytes`/`fromBytes`                                                                                                                               | hashing, compression, codecs                                                                                       |
+| **Floats**             | `round`, `toBits`/`fromBits`, `mulAdd`, `copySign`, `nextUp`/`nextDown`, `totalCompare` (D6)                                                                                                                                                      | serialization, numerics                                                                                            |
+| **Constants**          | `MIN`, `MAX`, `BITS`; for floats, `MIN_POSITIVE`, `EPSILON`                                                                                                                                                                                       | `if (n > Uint16.MAX) …`                                                                                            |
 
 How each function exists, once:
+
 - **A compiler operation, not a function call.** `Uint8.wrap(x)` becomes one
   instruction, and the engine (A) knows its result is 0..255.
 - **A real TypeScript implementation** (`runtime.js`) in a package node can
@@ -221,8 +232,9 @@ How each function exists, once:
 
 ### G. Representation: real widths on every backend
 
-The engine's facts and the written types decide what each value *is* in the
+The engine's facts and the written types decide what each value _is_ in the
 machine:
+
 - a proven-integer `number` is an `i32`/`i64` register (exists);
 - a `Uint8[]` field is bytes, and a `Uint32` is 4 bytes in memory;
 - an `Int8[]` passed where a `number[]` is expected is refused (D2), since that
@@ -260,6 +272,7 @@ The scope is all of section 4. This is only the sequence; each step lands
 through the gate on its own.
 
 **0. Measure.**
+
 - An internal tool lists every native call where a number crosses into an
   integer, and whether the engine proves it. It's for us, not a user-facing
   warning mode.
@@ -282,19 +295,20 @@ through the gate on its own.
 
 What the 589 unproven are, and what clears each group:
 
-| Group | Count | Example | Cleared by |
-|---|---|---|---|
-| **Generated GTK wrappers' parameters** (`bind-gir`'s `*.values.ts`) | 452 | `default_port: CNumber<"uint16">` passed straight to C | **Written types as facts** (Q1). No program changes. |
-| **A native function's result passed on** | 22 | `close(open(…))`; `remove(list, sel.get_selected())` | **A binding's return type as a fact** (a `guint` result is 0..2^32-1) |
-| **Loop counters over native counts** | 8 | `for (i = 0; i < n; i++) get_object(model, i)`, `n` from `get_n_items()` | the same, plus the existing `i < n` relation |
-| **Constructor properties** | 31 | `new Gtk.Box({ spacing: 6, … })` | **The bound property's type as a written type** |
-| **Globals holding native values** | 16 | `weak_alive(tallyWatch)` (macOS) | written types and binding results |
-| **Parameters of the program's own functions** | 34 | test entry points `export function f(n: number)` passing `n` to C; callback parameters (`DefWindowProcW`, GObject overrides) | callbacks: the binding's parameter types. Exports: **the example declares `n: c_int`**, and the test harness generates inputs that fit. |
-| **Arithmetic that can really overflow** | 11 | `get_n_items() - 1` and `badge_number -= 1` send -1 (as 4294967295) when empty; `size + 300`, `width_chars += 3` can pass `int`'s range | **Real bugs or real edges: the program must guard.** Strict is right here. |
-| **Values from outside** | 9 | `Number(args[0])` in the GJS workbench | **An explicit `c_int(…)` or a guard.** Strict is right here. |
-| Other (a field, an element, a program call's result) | 6 | | individually |
+| Group                                                               | Count | Example                                                                                                                                 | Cleared by                                                                                                                              |
+| ------------------------------------------------------------------- | ----- | --------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------- |
+| **Generated GTK wrappers' parameters** (`bind-gir`'s `*.values.ts`) | 452   | `default_port: CNumber<"uint16">` passed straight to C                                                                                  | **Written types as facts** (Q1). No program changes.                                                                                    |
+| **A native function's result passed on**                            | 22    | `close(open(…))`; `remove(list, sel.get_selected())`                                                                                    | **A binding's return type as a fact** (a `guint` result is 0..2^32-1)                                                                   |
+| **Loop counters over native counts**                                | 8     | `for (i = 0; i < n; i++) get_object(model, i)`, `n` from `get_n_items()`                                                                | the same, plus the existing `i < n` relation                                                                                            |
+| **Constructor properties**                                          | 31    | `new Gtk.Box({ spacing: 6, … })`                                                                                                        | **The bound property's type as a written type**                                                                                         |
+| **Globals holding native values**                                   | 16    | `weak_alive(tallyWatch)` (macOS)                                                                                                        | written types and binding results                                                                                                       |
+| **Parameters of the program's own functions**                       | 34    | test entry points `export function f(n: number)` passing `n` to C; callback parameters (`DefWindowProcW`, GObject overrides)            | callbacks: the binding's parameter types. Exports: **the example declares `n: c_int`**, and the test harness generates inputs that fit. |
+| **Arithmetic that can really overflow**                             | 11    | `get_n_items() - 1` and `badge_number -= 1` send -1 (as 4294967295) when empty; `size + 300`, `width_chars += 3` can pass `int`'s range | **Real bugs or real edges: the program must guard.** Strict is right here.                                                              |
+| **Values from outside**                                             | 9     | `Number(args[0])` in the GJS workbench                                                                                                  | **An explicit `c_int(…)` or a guard.** Strict is right here.                                                                            |
+| Other (a field, an element, a program call's result)                | 6     |                                                                                                                                         | individually                                                                                                                            |
 
 **What the engine must learn** (from the census's own probes):
+
 - guards through `&&`, an early return through `||`, and `Number.isInteger`:
   today only nested `if`s narrow;
 - `Math.round`/`floor`/`trunc` give whole numbers;
@@ -306,6 +320,7 @@ else clears by making written and binding types facts, which step 1 does
 first.
 
 **1. Strict native calls** (A, C, D):
+
 - the facts step 0 found missing, including validators' assertions and written
   parameter types;
 - the platform tables;
@@ -340,16 +355,16 @@ caller filled with `3.7`.
 
 The sub-steps, landed together through the gate when strict is on:
 
-| | Sub-step |
-|---|---|
-| 1a | One recognizer for a type's scalar kind; a kind's range (64-bit `long` everywhere until 1h) |
-| 1b | Written kinds on the slots, filled by the lowering |
-| 1c | The obligation check, generalizing the census to every store above |
-| 1d | Facts at reads of written slots and native results |
-| 1e | The engine's missing facts: `&&`, `\|\|` and early-return guards, `Number.isInteger`, `Math.round/floor/trunc/ceil` |
-| 1f | Closing TypeScript's holes (Q1): width-changing conversions refused |
-| 1g | Strict on: the refusal as an error that teaches; `integer_argument`'s `ToInt32` deleted; every example and binding generator fixed; the test harness generating inputs that fit |
-| 1h | Platform tables (replacing the two ABI models); bigint ranges |
+|     | Sub-step                                                                                                                                                                        |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1a  | One recognizer for a type's scalar kind; a kind's range (64-bit `long` everywhere until 1h)                                                                                     |
+| 1b  | Written kinds on the slots, filled by the lowering                                                                                                                              |
+| 1c  | The obligation check, generalizing the census to every store above                                                                                                              |
+| 1d  | Facts at reads of written slots and native results                                                                                                                              |
+| 1e  | The engine's missing facts: `&&`, `\|\|` and early-return guards, `Number.isInteger`, `Math.round/floor/trunc/ceil`                                                             |
+| 1f  | Closing TypeScript's holes (Q1): width-changing conversions refused                                                                                                             |
+| 1g  | Strict on: the refusal as an error that teaches; `integer_argument`'s `ToInt32` deleted; every example and binding generator fixed; the test harness generating inputs that fit |
+| 1h  | Platform tables (replacing the two ABI models); bigint ranges                                                                                                                   |
 
 **Step 1 as built (in progress, branch `claude/scalar-step1`).** What the
 design above became in the code, and the choices made on the way:
@@ -396,7 +411,7 @@ design above became in the code, and the choices made on the way:
   `2^63 - 1` from `2^63`, the very edge `BigInt.asIntN(64, x)` sits on, so the
   strict check runs a small local analysis of exact 128-bit intervals over
   them: written kinds, native results, literals, `asIntN`/`asUintN`, `+ - * &
-  >>` and negation, joins, and comparison guards.
+  > > ` and negation, joins, and comparison guards.
 - **A `float` slot takes a value proven exact**, judged from how it was made:
   `Math.fround(x)` (JavaScript's own narrowing, so node runs it too), a value
   that was a `float` already, a number a `float` holds exactly, or a join of
@@ -437,11 +452,9 @@ design above became in the code, and the choices made on the way:
   the declaration wrote the check. A method keeps its signature, which every
   implementation of its slot shares.
 - **Tests that asserted the old conversions now assert the rule.** `add(2.9,
-  …)` into an `int` truncated to 2; it is refused. A constant too wide for
+…)` into an `int` truncated to 2; it is refused. A constant too wide for
   Win64's `long` is refused at its `as` when the build's targets include
   Win64, and `-1n as c_ulong` on every target.
-
-
 
 **Step 1 results (2026-10-09).** The strict check itself (`nts facts
 --strict`, the compile errors a build now stops on), over the same 648
@@ -457,7 +470,7 @@ projects, by a release build of the step-1 branch:
   generator. Everything else, `runtime/node` whole included, is clean.
 - **644 measured, 0 errors.** The last two were the Chromium lane's page
   script (`clearTimeout(state.pending)`, `clearInterval(<a number from an
-  attribute>)`): WebIDL converts a timer id with ToInt32, so that lane's
+attribute>)`): WebIDL converts a timer id with ToInt32, so that lane's
   binding takes a `double` and converts it as Blink does, as `setTimeout`'s
   timeout already was (5b3dec787).
 - The 4 not measured fail to typecheck on main too: `tests/programs/invalid` on
@@ -475,6 +488,7 @@ projects, by a release build of the step-1 branch:
   writing the kind it already meant (`let watch: c_int`, `Promise<Int>`).
 
 **2. Written scalar types** (B, D, E, G):
+
 - the library replaces `libc.d.ts`, which is deleted; the binding generators
   emit the new names, every checked-in binding is regenerated, and every
   example and runtime file is rewritten to it, in the same change;
@@ -484,15 +498,15 @@ projects, by a release build of the step-1 branch:
 **Step 2 plan (2026-10-09).** In this order, each landing through the gate;
 the vocabulary switch (2d) is one landing, with no compatibility layer:
 
-| | Sub-step |
-|---|---|
-| 2a | **The library, `@nts/scalars`, types only** (step 3 adds the operations): the fixed widths as optional labels (`Scalar<K>`), C's own types as per-target tables (`CType<Name, Table>`), `CBool`, `CEnum`, `AsNumber`. Adapted from the playground's `scalars.d.ts`, with nts's decided rules in place of its own: an `as` is verified (D4), a float slot takes only an exact value (Q3), and nothing rounds or throws on its own. |
-| 2b | **Recognition by the library's marker** (S7): a kind is read from the label the library declares, never from a property name a program could write, and a program's own brand on a scalar keeps the kind. |
-| 2c | **Platform tables replace the two ABI models:** the build's targets select each C type's width, the check holds on every target (`Scalar::on` reads the tables), and `NativeAbi` keeps only the calling convention. |
-| 2d | **The switch:** every binding generator emits the library's names (C headers, GIR, Objective-C, WinMD, Java); checked-in bindings regenerated; examples, runtime and tests rewritten; `libc.d.ts`'s scalar brands and `CNumber` deleted. Its memory vocabulary (`Ptr`, `Struct`, `Opaque`, `local`) stays in `c:types`. |
-| 2e | **Q1 made whole:** arrays and functions invariant in their scalar positions (objects already are), `any` or a type parameter into a written slot a store like any other, and `as` on a container refused unless proven. |
-| 2f | **Storage at the written width:** a written field, global, local or array element held at its kind's width in every backend, and a written array as typed storage under S4. **The -0 decision is taken before this**, because a slot that *is* 32 bits cannot hold -0 at all. |
-| 2g | **The JVM's unsigned instructions** (E1), before unsigned widths become common. |
+|     | Sub-step                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| --- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 2a  | **The library, `@nts/scalars`, types only** (step 3 adds the operations): the fixed widths as optional labels (`Scalar<K>`), C's own types as per-target tables (`CType<Name, Table>`), `CBool`, `CEnum`, `AsNumber`. Adapted from the playground's `scalars.d.ts`, with nts's decided rules in place of its own: an `as` is verified (D4), a float slot takes only an exact value (Q3), and nothing rounds or throws on its own. |
+| 2b  | **Recognition by the library's marker** (S7): a kind is read from the label the library declares, never from a property name a program could write, and a program's own brand on a scalar keeps the kind.                                                                                                                                                                                                                         |
+| 2c  | **Platform tables replace the two ABI models:** the build's targets select each C type's width, the check holds on every target (`Scalar::on` reads the tables), and `NativeAbi` keeps only the calling convention.                                                                                                                                                                                                               |
+| 2d  | **The switch:** every binding generator emits the library's names (C headers, GIR, Objective-C, WinMD, Java); checked-in bindings regenerated; examples, runtime and tests rewritten; `libc.d.ts`'s scalar brands and `CNumber` deleted. Its memory vocabulary (`Ptr`, `Struct`, `Opaque`, `local`) stays in `c:types`.                                                                                                           |
+| 2e  | **Q1 made whole:** arrays and functions invariant in their scalar positions (objects already are), `any` or a type parameter into a written slot a store like any other, and `as` on a container refused unless proven.                                                                                                                                                                                                           |
+| 2f  | **Storage at the written width:** a written field, global, local or array element held at its kind's width in every backend, and a written array as typed storage under S4. **The -0 decision is taken before this**, because a slot that _is_ 32 bits cannot hold -0 at all.                                                                                                                                                     |
+| 2g  | **The JVM's unsigned instructions** (E1), before unsigned widths become common.                                                                                                                                                                                                                                                                                                                                                   |
 
 **Step 2's first landing, as built (2026-10-09): 2a, 2b and 2d together,
 and Q4's check for `AsNumber`.**
@@ -539,6 +553,7 @@ and Q4's check for `AsNumber`.**
 
 **2c, as designed (2026-10-09).** The research behind it found three facts
 the plan did not have:
+
 - the CLI never told the compiler the product's targets, so the strict check
   used the build machine's data model;
 - `char` was signed on every target, though it is unsigned on Linux and
@@ -590,6 +605,7 @@ It lands in three pieces:
    clang's `-funsigned-char`: a `char` of 200 from C reaches the program as 200
    and goes back to C as 200 on both backends. The signed row's `program.c`
    refuses to compile under that flag, and ignoring the row reads -56 on LLVM.
+
 3. **`CBool` and `CEnum` are recognised by their library's label** (built). Each
    names the integer a value crosses as, which the strict check holds the value
    to, so each now counts only when declared in `c:types`, as a number kind
@@ -610,6 +626,7 @@ It lands in three pieces:
 **2e, as built (2026-10-09): Q1's holes, measured rather than assumed.** Each
 of the seven ways TypeScript lets a plain number into a written kind was
 written as a program and given to the strict check:
+
 - `number[]` passed as `Uint8[]`;
 - `{ x: number }` passed as `{ x: Uint8 }`;
 - a function taking `Uint8` used as one taking `number`;
@@ -619,6 +636,7 @@ written as a program and given to the strict check:
 - a function returning `number` called as one returning `Uint8`.
 
 Every one was already closed by step 1:
+
 - an array element and a field read through a structural type carry no kind
   yet, so a value read from one must still be proven;
 - a function type's parameters must be written alike (NTS5002), and its result
@@ -629,7 +647,7 @@ Every one was already closed by step 1:
 The test `the_holes_typescript_leaves_into_a_kind_are_closed` holds all seven,
 each beside a control the check accepts.
 
-The controls found the one real gap. An `any` *guarded* in full
+The controls found the one real gap. An `any` _guarded_ in full
 (`typeof x === "number" && Number.isInteger(x) && x >= 0 && x <= 255`) could
 still not be passed on, because the lowering reads an erased value afresh at
 every mention: the guards narrowed three reads and the call passed a fourth.
@@ -648,10 +666,11 @@ an unsigned four, `low: Int16` two, `ratio: Float32` a float.
 `hir::written_storage` decides it from the written kind (`Scalar::width_on`,
 the narrowest width holding the kind on every target), unconditionally, the
 way `written_roots` gives a root's parameters theirs.
+
 - **Stores** were already proven to fit (`Into::Field`, `Into::Global`), so
   `specialize` converts each one exactly to the slot's type.
-- **Reads** widen at once to the `number` the program computes with, so `p.r
-  + 1` is 256 and not a byte's wrap.
+- **Reads** widen at once to the `number` the program computes with, so
+  `p.r + 1` is 256 and not a byte's wrap.
 - **The fact-driven narrowing** (`fields`, `globals`) now takes only a slot
   still held as a `number`, so it never turns a written `Float32` into an
   integer.
@@ -686,6 +705,7 @@ of interfaces satisfied by shape, and the design takes it first.
 **2g, as built (2026-10-09): the JVM's unsigned integers.** The JVM has no
 unsigned type, so a `u32` is held raw in an `int` and a `u64` in a `long`. Their
 top bit is a value bit, and every signed instruction read it as a sign:
+
 - an ordering comparison: `if_icmp` and `lcmp` made `3000000000 > 1` false;
 - `l2d` and `l2f`: 2^64 - 1 became -1;
 - an `Erase`: a `u32` of 3000000000 read as -1294967296.
@@ -712,33 +732,35 @@ The previous backend gets every unsigned case in it wrong. The JVM lane reviewed
 the plan and pointed at the `Erase` and the shared conversion table.
 
 **3. The operations** (F):
+
 - as compiler operations, with the node package and the oracle;
 - **the convert group first.** nts's own runtime writes it by hand today:
   `& 0xff` 67 times, `| 0` 40, `>>> 0` 26;
 - then arithmetic, bits and float bits.
 
 **4. Backends and editor** (G, H):
+
 - the remaining kinds on every backend (128-bit, `Float16`/`Float80`/`Float128`);
 - the JVM's unsigned instructions;
 - later, a language server (D7).
 
 **Measured, not assumed:** ScriptC's "integer views" (an integer copy kept
-beside a double, for values that are *sometimes* fractional). nts's per-class
+beside a double, for values that are _sometimes_ fractional). nts's per-class
 specialization covers the common case. Measure once step 2 lands.
 
 ## 6. Decisions
 
 ### Decided (2026-10-08)
 
-| # | Decision |
-|---|---|
-| D1 | **Strict from day one.** Step 0's internal tool gives us the list; no user-facing warning mode. |
-| D2 | **Written slots are strict too.** One rule: nts adds no check the program didn't write. So passing an `Int8[]` where a `number[]` is expected is refused, though TypeScript allows it. |
-| D3 | **The complete library is the target** (section 4F). Usage only orders the work. |
-| D4 | **The explicit escape is `Uint16(x)`**, a real call that throws `RangeError` if the value doesn't fit (as `BigInt(1.5)` does). It behaves the same under nts and node, since node runs the polyfill. **`x as Uint16` keeps TypeScript's meaning** (erased, no run-time effect): nts accepts it only where it can prove it, and otherwise it's a compile error pointing to `Uint16(x)`. Revised 2026-10-08: the first answer, `as` throwing, would have made nts and node disagree, because TypeScript erases `as`. This supersedes the playground's U31. |
-| D5 | **Safety first.** The build order above. |
-| D6 | **Rust's complete integer API, designed as a TC39 proposal** (below), including `overflowing`. |
-| D7 | **Errors at build time, from the compiler, for now.** A language server comes later, once the whole design is built correctly, with more features than errors (hovers showing what nts proved, for instance). No tsgo fork. |
+| #   | Decision                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| --- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| D1  | **Strict from day one.** Step 0's internal tool gives us the list; no user-facing warning mode.                                                                                                                                                                                                                                                                                                                                                                                                                                                          |
+| D2  | **Written slots are strict too.** One rule: nts adds no check the program didn't write. So passing an `Int8[]` where a `number[]` is expected is refused, though TypeScript allows it.                                                                                                                                                                                                                                                                                                                                                                   |
+| D3  | **The complete library is the target** (section 4F). Usage only orders the work.                                                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| D4  | **The explicit escape is `Uint16(x)`**, a real call that throws `RangeError` if the value doesn't fit (as `BigInt(1.5)` does). It behaves the same under nts and node, since node runs the polyfill. **`x as Uint16` keeps TypeScript's meaning** (erased, no run-time effect): nts accepts it only where it can prove it, and otherwise it's a compile error pointing to `Uint16(x)`. Revised 2026-10-08: the first answer, `as` throwing, would have made nts and node disagree, because TypeScript erases `as`. This supersedes the playground's U31. |
+| D5  | **Safety first.** The build order above.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| D6  | **Rust's complete integer API, designed as a TC39 proposal** (below), including `overflowing`.                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| D7  | **Errors at build time, from the compiler, for now.** A language server comes later, once the whole design is built correctly, with more features than errors (hovers showing what nts proved, for instance). No tsgo fork.                                                                                                                                                                                                                                                                                                                              |
 
 ### D6. Integer operations: Rust's complete family, designed as a TC39 proposal (decided)
 
@@ -750,19 +772,20 @@ designed the way a TC39 proposal would be.
 **The key observation.** Rust's overflow modes are exactly the conversion
 group we already decided, applied to an operation instead of a value:
 
-| Mode | The conversion (decided) | The operation (proposed) | `Uint8`, 200 + 100 | Rust |
-|---|---|---|---|---|
-| wrapping: keep the low bits | `Uint8.wrap(x)` | `Uint8.wrappingAdd(a, b)` | `44` | `wrapping_add` |
-| saturating: stop at the edge | `Uint8.clamp(x)` | `Uint8.saturatingAdd(a, b)` | `255` | `saturating_add` |
-| checked: nothing if it doesn't fit | `Uint8.try(x)` | `Uint8.checkedAdd(a, b)` | `undefined` | `checked_add` |
-| strict: throw if it doesn't fit | `Uint8(x)` | `Uint8.strictAdd(a, b)` | throws `RangeError` | `strict_add` |
-| overflowing: the result and whether it wrapped | (none) | `Uint8.overflowingAdd(a, b)` | `[44, true]` | `overflowing_add` |
+| Mode                                           | The conversion (decided) | The operation (proposed)     | `Uint8`, 200 + 100  | Rust              |
+| ---------------------------------------------- | ------------------------ | ---------------------------- | ------------------- | ----------------- |
+| wrapping: keep the low bits                    | `Uint8.wrap(x)`          | `Uint8.wrappingAdd(a, b)`    | `44`                | `wrapping_add`    |
+| saturating: stop at the edge                   | `Uint8.clamp(x)`         | `Uint8.saturatingAdd(a, b)`  | `255`               | `saturating_add`  |
+| checked: nothing if it doesn't fit             | `Uint8.try(x)`           | `Uint8.checkedAdd(a, b)`     | `undefined`         | `checked_add`     |
+| strict: throw if it doesn't fit                | `Uint8(x)`               | `Uint8.strictAdd(a, b)`      | throws `RangeError` | `strict_add`      |
+| overflowing: the result and whether it wrapped | (none)                   | `Uint8.overflowingAdd(a, b)` | `[44, true]`        | `overflowing_add` |
 
 So one vocabulary covers everything: a reader who knows `wrap` knows
 `wrappingAdd`.
 
 **The operations each mode applies to** (every integer kind, number or bigint):
 `add`, `sub`, `mul`, `div`, `rem`, `neg`, `abs`, `pow`, `shl`, `shr`.
+
 - `div` is **integer** division, cut toward zero (JavaScript's `/` gives a
   fraction, so integer kinds need it).
 - Dividing by zero throws `RangeError` in every mode except `checked`, which
@@ -771,18 +794,19 @@ So one vocabulary covers everything: a reader who knows `wrap` knows
 
 **The rest of Rust's integer API** (no modes, every integer kind):
 
-| Group | Functions |
-|---|---|
-| Division | `divEuclid`, `remEuclid` (the remainder is never negative), `divCeil`, `divFloor` |
-| Arithmetic helpers | `absDiff`, `midpoint` (no overflow), `sign` |
-| Roots and logarithms | `isqrt`, `ilog2`, `ilog10` |
-| Powers of two | `isPowerOfTwo`, `nextPowerOfTwo` |
-| Bits | `leadingZeros`, `trailingZeros`, `leadingOnes`, `trailingOnes`, `countOnes`, `countZeros`, `rotateLeft`, `rotateRight`, `swapBytes`, `reverseBits` |
-| Bytes | `toBytes(x, "le" \| "be")`, `fromBytes(bytes, "le" \| "be")` |
-| Constants | `MIN`, `MAX`, `BITS` |
+| Group                | Functions                                                                                                                                          |
+| -------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Division             | `divEuclid`, `remEuclid` (the remainder is never negative), `divCeil`, `divFloor`                                                                  |
+| Arithmetic helpers   | `absDiff`, `midpoint` (no overflow), `sign`                                                                                                        |
+| Roots and logarithms | `isqrt`, `ilog2`, `ilog10`                                                                                                                         |
+| Powers of two        | `isPowerOfTwo`, `nextPowerOfTwo`                                                                                                                   |
+| Bits                 | `leadingZeros`, `trailingZeros`, `leadingOnes`, `trailingOnes`, `countOnes`, `countZeros`, `rotateLeft`, `rotateRight`, `swapBytes`, `reverseBits` |
+| Bytes                | `toBytes(x, "le" \| "be")`, `fromBytes(bytes, "le" \| "be")`                                                                                       |
+| Constants            | `MIN`, `MAX`, `BITS`                                                                                                                               |
 
 **For floats** (every float kind), overflow is already defined by IEEE: it
 becomes Infinity. So floats have no modes. Their completeness is:
+
 - `round` (to the width), `clamp`, `try`, `is`;
 - `toBits`, `fromBits`;
 - `mulAdd` (fused multiply-add: one rounding, which JavaScript can't express
@@ -792,6 +816,7 @@ becomes Infinity. So floats have no modes. Their completeness is:
 - `MIN`, `MAX`, `MIN_POSITIVE`, `EPSILON`.
 
 **The TC39 discipline,** which is how each function gets specified:
+
 1. **Namespaces, not methods.** Functions live on a namespace object per
    kind, as `Math` and `Atomics` do (`Uint8.wrappingAdd(a, b)`), never on
    `Number.prototype`. Numbers are primitives, and extending built-in
@@ -812,13 +837,13 @@ becomes Infinity. So floats have no modes. Their completeness is:
    under node. nts compiles the same function to an instruction.
 4. **Consistent with what JavaScript already has**, and saying so:
 
-   | Proposed | Existing built-in |
-   |---|---|
-   | `Int32.wrappingMul(a, b)` | `Math.imul(a, b)` |
-   | `Uint32.leadingZeros(x)` | `Math.clz32(x)` |
-   | `BigInt64.wrap(x)` | `BigInt.asIntN(64, x)` |
-   | `Float32.round(x)` | `Math.fround(x)` |
-   | `Float16.round(x)` | `Math.f16round(x)` |
+   | Proposed                  | Existing built-in      |
+   | ------------------------- | ---------------------- |
+   | `Int32.wrappingMul(a, b)` | `Math.imul(a, b)`      |
+   | `Uint32.leadingZeros(x)`  | `Math.clz32(x)`        |
+   | `BigInt64.wrap(x)`        | `BigInt.asIntN(64, x)` |
+   | `Float32.round(x)`        | `Math.fround(x)`       |
+   | `Float16.round(x)`        | `Math.f16round(x)`     |
 
 5. **One name, one meaning,** across every kind and mode. `wrapping` always
    means modulo 2^bits, and `strict` always throws `RangeError`.
@@ -827,6 +852,7 @@ becomes Infinity. So floats have no modes. Their completeness is:
    docs say.
 
 **Settled within D6:**
+
 - the names are Rust's, camel-cased, as above;
 - `overflowing` is in: it's what multi-word arithmetic (big-number libraries,
   cryptography) needs;
@@ -840,28 +866,28 @@ into the compiler (section 4) settles nine of them by itself. **Six are yours.**
 
 **Settled by the architecture (no decision needed):**
 
-| Call | What it was | Why it's settled now |
-|---|---|---|
-| C28 | The bit functions | Part of the complete library (D3, D6). |
-| C36 | Library additions: `Float80`, `c_wint_t`, Windows' `-gnu`/`-msvc` platforms | Part of the complete library (D3). |
-| C33 | How the checker ranked overloads for plain numbers | Concerned only the frozen checker. |
-| C34 | Printing a result's type as `Int16 & Uint16` | Concerned only the frozen checker's hovers. |
-| C38 | A library without a platform list | nts's build decides the platforms (part C). |
-| C35 | The rule for exports is the build's, not the checker's | It is, since errors are the compiler's (D7). |
-| C31 | `i % n` where `n` may be 0 keeps its kind | Now an engine fact: the result "may be NaN". A strict slot (D2) refuses it until the program guards `n !== 0`. |
-| C32 | `Math.round(x)` of a double is a plain number | Now an engine fact: `Math.round(w / 3)` is whole, with `w`'s range divided by 3, so `set_size(Math.round(w / 3), 480)` proves where `w`'s range is known. |
-| C40 | A callback whose arithmetic might not fit its integer return got a warning | A value returned to native code is a boundary (part D). It must be proven, so it's an error, not a warning. |
+| Call | What it was                                                                 | Why it's settled now                                                                                                                                      |
+| ---- | --------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C28  | The bit functions                                                           | Part of the complete library (D3, D6).                                                                                                                    |
+| C36  | Library additions: `Float80`, `c_wint_t`, Windows' `-gnu`/`-msvc` platforms | Part of the complete library (D3).                                                                                                                        |
+| C33  | How the checker ranked overloads for plain numbers                          | Concerned only the frozen checker.                                                                                                                        |
+| C34  | Printing a result's type as `Int16 & Uint16`                                | Concerned only the frozen checker's hovers.                                                                                                               |
+| C38  | A library without a platform list                                           | nts's build decides the platforms (part C).                                                                                                               |
+| C35  | The rule for exports is the build's, not the checker's                      | It is, since errors are the compiler's (D7).                                                                                                              |
+| C31  | `i % n` where `n` may be 0 keeps its kind                                   | Now an engine fact: the result "may be NaN". A strict slot (D2) refuses it until the program guards `n !== 0`.                                            |
+| C32  | `Math.round(x)` of a double is a plain number                               | Now an engine fact: `Math.round(w / 3)` is whole, with `w`'s range divided by 3, so `set_size(Math.round(w / 3), 480)` proves where `w`'s range is known. |
+| C40  | A callback whose arithmetic might not fit its integer return got a warning  | A value returned to native code is a boundary (part D). It must be proven, so it's an error, not a warning.                                               |
 
 **The six that needed a decision.** All decided 2026-10-08:
 
-| Call | The rule | Example | Recommendation |
-|---|---|---|---|
-| C27 | **Typed arrays keep JavaScript's behaviour.** A store wraps, and is not a strict slot. | `bytes[0] = 300` in a `Uint8Array` stores 44, as node does. | **Decided: keep.** Plain JavaScript uses typed arrays, and nts must compute what node computes. Their reads still give the engine facts (0..255). |
-| C29 | **Conversions are imported, never global.** `import { Uint8 } from "@nts/scalars"`. | A global `Uint8` would clash with a program's own `const Uint8`, and wouldn't exist under node. | **Decided: imported only** (below). |
-| C30 | **Inferred types are never slots.** Only types the program wrote are checked where stored. | `const idx = count - 1` holds -1 for an empty list, as in node. Passing `idx` to a `guint` is where it's refused. | **Decided: keep.** Otherwise plain JavaScript stops computing what node computes. |
-| C37 | **Sentinels past 2^53.** Apple's `NSNotFound` is 2^63-1, which a number can't hold exactly, so `NSRange.location` is a `bigint`. | `range.location === NSNotFound` | **Decided (left to Claude): change.** The binding generator maps a known sentinel to `null`, so `location` is a number or `null`. It's natural for a JavaScript developer, and it's the final architecture. A sentinel the generator doesn't know stays exact (a `bigint`). |
-| C39 | **Floats have `round`, not `wrap`.** | `Float32.round(0.1)` is the nearest float. A float has no modulus, so `wrap` means nothing. | **Decided: keep.** |
-| C41 | **A float `clamp` keeps Infinity and NaN.** | `Float32.clamp(1e39)` is `Float32.MAX`, but `Float32.clamp(Infinity)` is Infinity, and NaN stays NaN. | **Decided: keep.** Infinity and NaN are values every float kind holds; `clamp` is about the finite range. |
+| Call | The rule                                                                                                                         | Example                                                                                                           | Recommendation                                                                                                                                                                                                                                                              |
+| ---- | -------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| C27  | **Typed arrays keep JavaScript's behaviour.** A store wraps, and is not a strict slot.                                           | `bytes[0] = 300` in a `Uint8Array` stores 44, as node does.                                                       | **Decided: keep.** Plain JavaScript uses typed arrays, and nts must compute what node computes. Their reads still give the engine facts (0..255).                                                                                                                           |
+| C29  | **Conversions are imported, never global.** `import { Uint8 } from "@nts/scalars"`.                                              | A global `Uint8` would clash with a program's own `const Uint8`, and wouldn't exist under node.                   | **Decided: imported only** (below).                                                                                                                                                                                                                                         |
+| C30  | **Inferred types are never slots.** Only types the program wrote are checked where stored.                                       | `const idx = count - 1` holds -1 for an empty list, as in node. Passing `idx` to a `guint` is where it's refused. | **Decided: keep.** Otherwise plain JavaScript stops computing what node computes.                                                                                                                                                                                           |
+| C37  | **Sentinels past 2^53.** Apple's `NSNotFound` is 2^63-1, which a number can't hold exactly, so `NSRange.location` is a `bigint`. | `range.location === NSNotFound`                                                                                   | **Decided (left to Claude): change.** The binding generator maps a known sentinel to `null`, so `location` is a number or `null`. It's natural for a JavaScript developer, and it's the final architecture. A sentinel the generator doesn't know stays exact (a `bigint`). |
+| C39  | **Floats have `round`, not `wrap`.**                                                                                             | `Float32.round(0.1)` is the nearest float. A float has no modulus, so `wrap` means nothing.                       | **Decided: keep.**                                                                                                                                                                                                                                                          |
+| C41  | **A float `clamp` keeps Infinity and NaN.**                                                                                      | `Float32.clamp(1e39)` is `Float32.MAX`, but `Float32.clamp(Infinity)` is Infinity, and NaN stays NaN.             | **Decided: keep.** Infinity and NaN are values every float kind holds; `clamp` is about the finite range.                                                                                                                                                                   |
 
 #### C29 in detail: imported, or global?
 
@@ -877,11 +903,13 @@ const pixel: Uint8 = Uint8.clamp(r * 1.2);
 ```
 
 Who meets this at all:
+
 - **A JavaScript developer calling a native library** writes no scalar and
   imports nothing (cases 1 and 3). The bindings import the types themselves.
 - Only **a program that writes scalar types** (case 2) needs the line.
 
 **What TC39 would say.** Two things pull in opposite directions:
+
 - **If it were part of the language, it would be global**, as `Math`,
   `Atomics` and `Temporal` are.
 - **A library must not claim global names before the standard does.**
@@ -896,18 +924,20 @@ Who meets this at all:
   the language.
 
 So a library that isn't standard yet ships as a module. It's designed as if
-it were a proposal (D6), so it *could* become one, and if it ever were
+it were a proposal (D6), so it _could_ become one, and if it ever were
 standardized, the global would follow the standard. That's how
 `@js-temporal/polyfill` works today: `import { Temporal } from
 "@js-temporal/polyfill"`.
 
 The other costs of (b):
+
 - **node** would need a setup step before the program runs (`--import
-  @nts/scalars/global`), or `Uint8` would be undefined there;
+@nts/scalars/global`), or `Uint8` would be undefined there;
 - **a script's own `const Uint8`** would collide with the global's
   declaration (playground audit B6).
 
 **Options:**
+
 - **(a) imported only.** One way to get it, and it works under node with
   nothing else.
 - **(b) global only.**
@@ -929,6 +959,7 @@ are recommendations.
 ### The four big ones (decided)
 
 **Q1. Can a written type be trusted as a fact?**
+
 - **The problem:** TypeScript lets a plain number into a `Uint8` place in many
   ways, without any check:
   - `number[]` passed as `Uint8[]`;
@@ -950,6 +981,7 @@ are recommendations.
   never from its type, is weaker: a parameter `n: Uint16` would prove nothing.
 
 **Q2. Which facts may prove a strict obligation?**
+
 - **The problem:** nts's optimizer infers a function's parameter ranges from
   all its callers. If that also discharged strict checks:
   - adding a caller elsewhere could break the build at a native call nobody
@@ -969,6 +1001,7 @@ are recommendations.
   it's checked too. Errors stay where the cause is.
 
 **Q3. Floats and -0: node parity.**
+
 - **The problem:** two of the playground's exceptions make nts and node
   disagree:
   - a `Float32` slot rounds in nts and not in node, so `f === 0.1`,
@@ -986,7 +1019,7 @@ are recommendations.
 
 **Q3 elaborated, before 2f (2026-10-09).** 2f stores a written kind at its real
 width: a `Uint8` field becomes one byte, an `Int32` local a 32-bit integer. A
-slot that *is* an integer cannot hold `-0`. So 2f rests on Q3's answer, and
+slot that _is_ an integer cannot hold `-0`. So 2f rests on Q3's answer, and
 this spells out what that answer costs.
 
 - **What `-0` is.** JavaScript numbers have two zeros, `0` and `-0`. They are
@@ -1003,6 +1036,7 @@ this spells out what that answer costs.
   Counters, indices, lengths, sums of integers, bitwise results (`x | 0` is
   never `-0`) and anything read from C never are, and the analysis already
   proves so.
+
 - **The rule decided (Q3), as step 1 built it.** A value going into one of the
   program's own integer slots must be proven not `-0`, or it is a compile
   error that says how to prove it (`x + 0` turns `-0` into `0`). A value going
@@ -1012,27 +1046,29 @@ this spells out what that answer costs.
   1,248 projects, 1,016 strict errors needed fixing, and **none** was about
   `-0`. The rule is there for parity; in real code it almost never fires.
 - **The alternatives, and why not:**
-  - *Turn `-0` into `0` silently at the slot.* Fast and invisible, but nts
+  - _Turn `-0` into `0` silently at the slot._ Fast and invisible, but nts
     would then compute a different value from node for a program that later
     tells the zeros apart: a silent difference. That is the one thing this
     plan rules out everywhere else.
-  - *Keep a slot that may hold `-0` as a double.* Correct, but the slot loses
+  - _Keep a slot that may hold `-0` as a double._ Correct, but the slot loses
     its width exactly where the program asked for one, and when it does would
     depend on the analysis: the same source could change layout between
     compiler versions.
-  - *Track `-0` in the slot (an extra bit).* Doubles the representation for
+  - _Track `-0` in the slot (an extra bit)._ Doubles the representation for
     something that, measured, never happens.
 - **Recommendation: keep Q3 as decided.** 2f can store every written kind at
   its width with no exception, and nts still computes exactly node's values.
   The cost is a compile error, with its fix in the message, in a case the
   census has not found once.
 
-**Q4. Values coming *from* native code.**
+**Q4. Values coming _from_ native code.**
+
 - **The problem:**
   - a `size_t` above 2^53 can't be a `number` exactly;
   - a closed C enum can receive a value it doesn't name.
 
   Both need a run-time check, against "nts never inserts a check".
+
 - **Recommendation: the rule is about values the program sends, and a binding
   is the author of what it receives.** Inbound values are checked where the
   binding's types say so:
@@ -1045,21 +1081,21 @@ this spells out what that answer costs.
 
 ### The smaller ones (recommendations)
 
-| # | Topic | Recommendation |
-|---|---|---|
-| S1 | **Overloads that differ only by kind** (Java's `append(int)` vs `append(char)`): stock TypeScript picks the first | The binding generators rename kind-only overloads (`appendChar`). D8 wrongly filed this (C33) as checker-only. |
-| S2 | **`Uint8.is(x)` under stock TypeScript:** its `else` branch narrows to `never` | `is` is declared returning `boolean`, not a TypeScript guard. nts's engine treats `if (Uint8.is(n))` as the guard. |
-| S3 | **What counts as "written"** | Annotations on variables, fields, parameters and returns; explicit type arguments (`new Set<Float32>()`); everything a binding declares, callback parameters included. `T \| undefined` of a scalar is written. Storage width never comes from an inferred type (`let crc = crc16()` is a plain number). |
-| S4 | **Arrays and fields of written types** | Never unset: no `!` or `declare` on a scalar field, no holes, `length` growth only by `push`. `x?: Uint8` is "absent or a `Uint8`", with a presence bit. `new Array<Uint8>(n)` is refused (holes); `Uint8Array` or `Array.from` instead. |
-| S5 | **Exports and callbacks** | As the playground decided (U59): parameters and returns written, a `number` is a `double`, a plain `bigint` refused. A throw crossing native frames (a `Uint16(x)` failing inside a GTK callback, say) is reported and aborts, and the docs say so. |
-| S6 | **Where the targets come from** | The build's config lists targets; the default is the host. A proof holds on every listed target. A type's carrier is the same on every target (a `c_long` is a `bigint` if any target's `long` is 64 bits). C types apply only where C is called. |
-| S7 | **Recognising scalar types** | By the library's own marker, not by property names as nts does today. A program's own brand on a scalar (`type UserId = Int32 & {…}`) is still an `Int32`. No compatibility: `__c_*` brands go, and `size_t` and `long` become `AsNumber` numbers. |
-| S8 | **Guards on fields** | A guard narrows a local, not a field (`this.n` may change between the test and the use). The error says: copy it to a `const` first. |
-| S9 | **Backend rules** | `-ffp-contract=off` (no fused multiply-add JavaScript wouldn't do). Wrapping operations use unsigned arithmetic in C, never signed overflow (undefined behaviour). `Float16` rounds from the double directly. The JVM's `ByteBuffer` set to little-endian where C's layout is meant. To check: whether today's C output already risks fused multiply-add. |
-| S10 | **What bindings must carry** | Per-argument types for C variadics (`printf`, `g_object_set`) or they stay refused; string-length units (bytes vs UTF-16 units); range annotations (`@IntRange`, `NonZero`); bit-field widths; sentinels (C37). |
-| S11 | **The `@nts/scalars` package** | nts recognises the package by its resolved identity and compiles its functions as operations. The package version ships with the compiler, so they can't skew. |
-| S12 | **Testing** | Port the playground's named cases and audit findings as nts fixtures; its ABI tables check (`abi-tables.py`) in the gate; an nts-versus-node run of every scalar program; NaN payloads (node may canonicalize them). |
-| S13 | **The census counts stores too** | It already does: step 0 counts native call arguments *and* stores through native pointers (struct fields, buffers). Only values returned by callbacks are not counted yet. |
+| #   | Topic                                                                                                             | Recommendation                                                                                                                                                                                                                                                                                                                                            |
+| --- | ----------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S1  | **Overloads that differ only by kind** (Java's `append(int)` vs `append(char)`): stock TypeScript picks the first | The binding generators rename kind-only overloads (`appendChar`). D8 wrongly filed this (C33) as checker-only.                                                                                                                                                                                                                                            |
+| S2  | **`Uint8.is(x)` under stock TypeScript:** its `else` branch narrows to `never`                                    | `is` is declared returning `boolean`, not a TypeScript guard. nts's engine treats `if (Uint8.is(n))` as the guard.                                                                                                                                                                                                                                        |
+| S3  | **What counts as "written"**                                                                                      | Annotations on variables, fields, parameters and returns; explicit type arguments (`new Set<Float32>()`); everything a binding declares, callback parameters included. `T \| undefined` of a scalar is written. Storage width never comes from an inferred type (`let crc = crc16()` is a plain number).                                                  |
+| S4  | **Arrays and fields of written types**                                                                            | Never unset: no `!` or `declare` on a scalar field, no holes, `length` growth only by `push`. `x?: Uint8` is "absent or a `Uint8`", with a presence bit. `new Array<Uint8>(n)` is refused (holes); `Uint8Array` or `Array.from` instead.                                                                                                                  |
+| S5  | **Exports and callbacks**                                                                                         | As the playground decided (U59): parameters and returns written, a `number` is a `double`, a plain `bigint` refused. A throw crossing native frames (a `Uint16(x)` failing inside a GTK callback, say) is reported and aborts, and the docs say so.                                                                                                       |
+| S6  | **Where the targets come from**                                                                                   | The build's config lists targets; the default is the host. A proof holds on every listed target. A type's carrier is the same on every target (a `c_long` is a `bigint` if any target's `long` is 64 bits). C types apply only where C is called.                                                                                                         |
+| S7  | **Recognising scalar types**                                                                                      | By the library's own marker, not by property names as nts does today. A program's own brand on a scalar (`type UserId = Int32 & {…}`) is still an `Int32`. No compatibility: `__c_*` brands go, and `size_t` and `long` become `AsNumber` numbers.                                                                                                        |
+| S8  | **Guards on fields**                                                                                              | A guard narrows a local, not a field (`this.n` may change between the test and the use). The error says: copy it to a `const` first.                                                                                                                                                                                                                      |
+| S9  | **Backend rules**                                                                                                 | `-ffp-contract=off` (no fused multiply-add JavaScript wouldn't do). Wrapping operations use unsigned arithmetic in C, never signed overflow (undefined behaviour). `Float16` rounds from the double directly. The JVM's `ByteBuffer` set to little-endian where C's layout is meant. To check: whether today's C output already risks fused multiply-add. |
+| S10 | **What bindings must carry**                                                                                      | Per-argument types for C variadics (`printf`, `g_object_set`) or they stay refused; string-length units (bytes vs UTF-16 units); range annotations (`@IntRange`, `NonZero`); bit-field widths; sentinels (C37).                                                                                                                                           |
+| S11 | **The `@nts/scalars` package**                                                                                    | nts recognises the package by its resolved identity and compiles its functions as operations. The package version ships with the compiler, so they can't skew.                                                                                                                                                                                            |
+| S12 | **Testing**                                                                                                       | Port the playground's named cases and audit findings as nts fixtures; its ABI tables check (`abi-tables.py`) in the gate; an nts-versus-node run of every scalar program; NaN payloads (node may canonicalize them).                                                                                                                                      |
+| S13 | **The census counts stores too**                                                                                  | It already does: step 0 counts native call arguments _and_ stores through native pointers (struct fields, buffers). Only values returned by callbacks are not counted yet.                                                                                                                                                                                |
 
 ## 7. How we'll know it works
 
@@ -1076,13 +1112,13 @@ this spells out what that answer costs.
 
 ## 8. Glossary
 
-| Word | Meaning |
-|---|---|
-| **Range analysis / the engine** (`facts.rs`) | The compiler working out, without running the program, what values something can hold: "a whole number between 0 and 100", "may be a fraction", "may be NaN". |
-| **Specialization** (`specialize.rs`) | Using a 32- or 64-bit integer instead of a double for a value proven to be a whole number in range. Faster, same answer. |
-| **Strict** | Where a number goes somewhere with a fixed width, it must be proven to fit, or the build fails. Nothing is checked at run time unless the program wrote it. |
-| **ToInt32** | JavaScript's rule for turning any number into a 32-bit integer: drop the fraction, wrap around. `2**31` becomes `-2147483648`. Correct JavaScript, and silently wrong for a C function expecting a size. |
-| **Platform / ABI** | How a platform lays out C types. `long` is 8 bytes on Linux and macOS, 4 on Windows. |
-| **Binding** | The `.d.ts` file that describes a native library to TypeScript, generated from the library's own headers (GTK's GIR, Apple's headers, Win32 metadata). |
-| **Slot** | Anywhere a value is stored with a written type: a variable, a field, an array element, a parameter. |
-| **Compiler operation (intrinsic)** | A function the compiler understands and turns into an instruction, rather than calling it. |
+| Word                                         | Meaning                                                                                                                                                                                                  |
+| -------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Range analysis / the engine** (`facts.rs`) | The compiler working out, without running the program, what values something can hold: "a whole number between 0 and 100", "may be a fraction", "may be NaN".                                            |
+| **Specialization** (`specialize.rs`)         | Using a 32- or 64-bit integer instead of a double for a value proven to be a whole number in range. Faster, same answer.                                                                                 |
+| **Strict**                                   | Where a number goes somewhere with a fixed width, it must be proven to fit, or the build fails. Nothing is checked at run time unless the program wrote it.                                              |
+| **ToInt32**                                  | JavaScript's rule for turning any number into a 32-bit integer: drop the fraction, wrap around. `2**31` becomes `-2147483648`. Correct JavaScript, and silently wrong for a C function expecting a size. |
+| **Platform / ABI**                           | How a platform lays out C types. `long` is 8 bytes on Linux and macOS, 4 on Windows.                                                                                                                     |
+| **Binding**                                  | The `.d.ts` file that describes a native library to TypeScript, generated from the library's own headers (GTK's GIR, Apple's headers, Win32 metadata).                                                   |
+| **Slot**                                     | Anywhere a value is stored with a written type: a variable, a field, an array element, a parameter.                                                                                                      |
+| **Compiler operation (intrinsic)**           | A function the compiler understands and turns into an instruction, rather than calling it.                                                                                                               |

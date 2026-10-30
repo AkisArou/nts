@@ -38,13 +38,13 @@ the JVM nts's runtime implements them; on Wasm, by design, the JavaScript
 host does. How
 is [foundations/numbers.md](../foundations/numbers.md#number-and-text).
 
-| Conversion | The answer |
-|---|---|
-| `String(n)`, `` `${n}` ``, `n.toString()`, `JSON.stringify` | the shortest decimal that reads back as the same double, in ECMAScript's layout |
-| `Number(s)`, `+s` | the double nearest the decimal, correctly rounded, by the whole-string grammar: `Number("12abc")` is `NaN` |
-| `parseFloat(s)`, `parseInt(s, radix)` | the longest prefix their grammars admit: `parseFloat("12abc")` is `12` |
-| `n.toString(radix)`, `n.toFixed(d)` | node's digits; a radix or digit count out of range throws `RangeError` |
-| `n.toPrecision(p)`, `n.toExponential(d)` | refused |
+| Conversion                                                  | The answer                                                                                                 |
+| ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------- |
+| `String(n)`, `` `${n}` ``, `n.toString()`, `JSON.stringify` | the shortest decimal that reads back as the same double, in ECMAScript's layout                            |
+| `Number(s)`, `+s`                                           | the double nearest the decimal, correctly rounded, by the whole-string grammar: `Number("12abc")` is `NaN` |
+| `parseFloat(s)`, `parseInt(s, radix)`                       | the longest prefix their grammars admit: `parseFloat("12abc")` is `12`                                     |
+| `n.toString(radix)`, `n.toFixed(d)`                         | node's digits; a radix or digit count out of range throws `RangeError`                                     |
+| `n.toPrecision(p)`, `n.toExponential(d)`                    | refused                                                                                                    |
 
 ## `Math`
 
@@ -80,7 +80,7 @@ A `bigint` is exact, and nts holds it in 128 bits: every value from
   as in node.
 - A result that leaves the 128-bit range stops the program by name:
   `nts: refused at run time: a bigint past 128 bits, which this runtime does
-  not hold`. So does `BigInt(1.5)`, where node throws a `RangeError`, and
+not hold`. So does `BigInt(1.5)`, where node throws a `RangeError`, and
   `BigInt(x)` for a double outside the 128-bit range.
 - `BigInt("123")`, a conversion from a string, is refused, and so is `==`
   between a `bigint` and a `number`, since it coerces.
@@ -103,14 +103,14 @@ The module is declared by `runtime/native/scalars.d.ts`, which the program
 lists in its `tsconfig.json`; it is not distributed as a package yet
 ([modules.md](modules.md#nts)).
 
-| Kinds | Carried as |
-|---|---|
-| `Int8`, `Uint8`, `Int16`, `Uint16`, `Int32`, `Uint32` | `number` |
-| `Float32` (a value C's `float` holds exactly), `Float64` | `number` |
-| `BigInt64`, `BigUint64` | `bigint` |
-| C's own types, as C spells them: `c_char`, `c_int`, `c_uint`, `c_long32`, `c_ulong32` | `number` |
-| `c_long`, `c_ulong`, `c_size_t`, `c_ptrdiff_t`, `c_uintptr_t` | `bigint` |
-| `AsNumber<C>`: a 64-bit or pointer-wide integer a binding hands over as a number, such as a size or a count | `number` |
+| Kinds                                                                                                       | Carried as |
+| ----------------------------------------------------------------------------------------------------------- | ---------- |
+| `Int8`, `Uint8`, `Int16`, `Uint16`, `Int32`, `Uint32`                                                       | `number`   |
+| `Float32` (a value C's `float` holds exactly), `Float64`                                                    | `number`   |
+| `BigInt64`, `BigUint64`                                                                                     | `bigint`   |
+| C's own types, as C spells them: `c_char`, `c_int`, `c_uint`, `c_long32`, `c_ulong32`                       | `number`   |
+| `c_long`, `c_ulong`, `c_size_t`, `c_ptrdiff_t`, `c_uintptr_t`                                               | `bigint`   |
+| `AsNumber<C>`: a 64-bit or pointer-wide integer a binding hands over as a number, such as a size or a count | `number`   |
 
 A scalar is a `number` or `bigint` with an optional label that TypeScript
 checks nothing about: a plain number goes anywhere a scalar does, and the

@@ -10,13 +10,13 @@ mattered more than any of it.
 `objects` allocates 4096 short-lived two-field objects, reads each once, and
 drops it. It is the only case in `benches/` that allocates at all.
 
-| variant | ns per call | against C |
-| --- | --- | --- |
-| nts, NoGC (bump allocator) | 66.0 us | 31x slower |
-| nts, reference counting | 21.8 us | 10x slower |
-| nts, escape analysis | **2.1 us** | **parity** |
-| C (double), by hand | 2.1 us | — |
-| node 24 | 2.2 us | — |
+| variant                    | ns per call | against C  |
+| -------------------------- | ----------- | ---------- |
+| nts, NoGC (bump allocator) | 66.0 us     | 31x slower |
+| nts, reference counting    | 21.8 us     | 10x slower |
+| nts, escape analysis       | **2.1 us**  | **parity** |
+| C (double), by hand        | 2.1 us      | —          |
+| node 24                    | 2.2 us      | —          |
 
 Three things are in that table.
 
@@ -95,7 +95,7 @@ Releases go on edges, with the edge split when it needs to carry any.
 **`used ∪ (live_out \ defined)` is not liveness.** The subtraction has to cover
 `used` as well — "upward-exposed uses". A value defined in a block and read by
 that block's own terminator, which every loop-carried value is, was reported
-live on entry to its own loop and therefore *available* at a header where it is
+live on entry to its own loop and therefore _available_ at a header where it is
 not yet defined. It surfaced as a release the SSA verifier rejected, a long way
 from the mistake.
 

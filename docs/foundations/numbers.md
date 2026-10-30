@@ -3,23 +3,23 @@
 How `number` and `bigint` are represented on native (C and LLVM), what each
 operation on them costs, and how native code is compiled so that arithmetic is
 both fast and exactly node's. For compiler and runtime work. What a numeric
-program *means* (the language's `number`, the written scalar types such as
+program _means_ (the language's `number`, the written scalar types such as
 `Uint8` and `c_int`, and the rules at fixed-width boundaries) is
 [language/numbers.md](../language/numbers.md).
 
 ## What a number is
 
-| value | native representation | when |
-|---|---|---|
-| `number` | `double` | by default: always correct, sometimes slower |
-| `number`, proved whole and in `int32` | `int32_t` | the compiler proves it ([below](#integers-proved-from-doubles)) |
-| the same, proved in `uint32` | `uint32_t` | |
-| the same, proved within ±(2^53 − 1) | `int64_t` | |
-| an element of `number[]` | `double`, or `int32_t` or `int64_t` | narrowed per element type, for every array of that type in the program |
-| an element of a typed array | the array's own width (`Int8Array` to `Float64Array`) | always ([objects](objects.md#typed-arrays)) |
-| a value of a written scalar type | its width (`Uint8` is one byte) | [language/numbers.md](../language/numbers.md) |
-| `bigint` | `__int128`, signed | always ([below](#bigint)) |
-| a number or bigint in an erased value (`any`, `unknown`, a union) | a 16-byte tagged value, the number as a `double`; a bigint in an owned box | [objects](objects.md#dynamic-values) |
+| value                                                             | native representation                                                      | when                                                                   |
+| ----------------------------------------------------------------- | -------------------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| `number`                                                          | `double`                                                                   | by default: always correct, sometimes slower                           |
+| `number`, proved whole and in `int32`                             | `int32_t`                                                                  | the compiler proves it ([below](#integers-proved-from-doubles))        |
+| the same, proved in `uint32`                                      | `uint32_t`                                                                 |                                                                        |
+| the same, proved within ±(2^53 − 1)                               | `int64_t`                                                                  |                                                                        |
+| an element of `number[]`                                          | `double`, or `int32_t` or `int64_t`                                        | narrowed per element type, for every array of that type in the program |
+| an element of a typed array                                       | the array's own width (`Int8Array` to `Float64Array`)                      | always ([objects](objects.md#typed-arrays))                            |
+| a value of a written scalar type                                  | its width (`Uint8` is one byte)                                            | [language/numbers.md](../language/numbers.md)                          |
+| `bigint`                                                          | `__int128`, signed                                                         | always ([below](#bigint))                                              |
+| a number or bigint in an erased value (`any`, `unknown`, a union) | a 16-byte tagged value, the number as a `double`; a bigint in an owned box | [objects](objects.md#dynamic-values)                                   |
 
 ## Integers proved from doubles
 
@@ -89,13 +89,13 @@ nothing static says where it is. The general form is backward truncation
 demand, as V8's simplified lowering computes it, joined with the forward facts
 above.
 
-| operation | cost on native |
-|---|---|
-| arithmetic on proved integers | one integer instruction |
-| arithmetic on doubles | one floating-point instruction, never fused with the next |
+| operation                       | cost on native                                                                                               |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| arithmetic on proved integers   | one integer instruction                                                                                      |
+| arithmetic on doubles           | one floating-point instruction, never fused with the next                                                    |
 | `x \| 0`, `x >>> 0` on a double | inline: the hardware conversion when `x` is in range, about ten instructions when it is not; no library call |
-| an integer meeting a double | one conversion, at that use |
-| a number crossing a call | nothing where the callee's parameter is narrowed; one conversion otherwise |
+| an integer meeting a double     | one conversion, at that use                                                                                  |
+| a number crossing a call        | nothing where the callee's parameter is narrowed; one conversion otherwise                                   |
 
 **Bounds checks** fall out of the same intervals ([objects](objects.md#arrays)).
 
@@ -111,16 +111,16 @@ result is exact within that range. A result outside it stops the program by
 name, `a bigint past 128 bits, which this runtime does not hold`, on every
 backend. Arbitrary precision is to come (see [Decisions](#decisions)).
 
-| operation | how, on native | cost |
-|---|---|---|
-| `+`, `-`, `*` | `__builtin_*_overflow` on `__int128` | two-word arithmetic and a branch; no call unless the result leaves the range |
-| `/`, `%` | C's operators, with the one overflowing case (`MIN / -1n`) stopped | a zero divisor throws `RangeError`, as JavaScript does |
-| `<<`, `>>`, `**` | runtime helpers | a call. An upward shift or a power past 128 bits stops; a downward shift saturates arithmetically, as JavaScript's does |
-| `BigInt.asIntN`, `asUintN` | runtime helpers | a call |
-| `BigInt(x)` of a number | a range and integrality check | a non-integer, or a value outside 128 bits, stops by name where JavaScript throws `RangeError` |
-| comparisons, equality | two-word compares | inline; comparison with a string is exact against `StringToBigInt`'s grammar |
-| into an erased slot | an owned, immutable box (`NtsBigIntBox`) | one allocation; compared by value, never by identity |
-| in an array | unboxed 128-bit slots | none |
+| operation                  | how, on native                                                     | cost                                                                                                                    |
+| -------------------------- | ------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------- |
+| `+`, `-`, `*`              | `__builtin_*_overflow` on `__int128`                               | two-word arithmetic and a branch; no call unless the result leaves the range                                            |
+| `/`, `%`                   | C's operators, with the one overflowing case (`MIN / -1n`) stopped | a zero divisor throws `RangeError`, as JavaScript does                                                                  |
+| `<<`, `>>`, `**`           | runtime helpers                                                    | a call. An upward shift or a power past 128 bits stops; a downward shift saturates arithmetically, as JavaScript's does |
+| `BigInt.asIntN`, `asUintN` | runtime helpers                                                    | a call                                                                                                                  |
+| `BigInt(x)` of a number    | a range and integrality check                                      | a non-integer, or a value outside 128 bits, stops by name where JavaScript throws `RangeError`                          |
+| comparisons, equality      | two-word compares                                                  | inline; comparison with a string is exact against `StringToBigInt`'s grammar                                            |
+| into an erased slot        | an owned, immutable box (`NtsBigIntBox`)                           | one allocation; compared by value, never by identity                                                                    |
+| in an array                | unboxed 128-bit slots                                              | none                                                                                                                    |
 
 The stops by name (a result past 128 bits, `BigInt(x)` of a non-integer) are
 not yet catchable errors, like the other run-time stops (L14 in
@@ -159,11 +159,11 @@ fast_float's slow path behind it, and independent of the C library's locale.
 
 ECMAScript divides `Math` in two, and so does nts.
 
-| group | members | on native |
-|---|---|---|
-| exact: one right answer per input | `abs`, `sign`, `floor`, `ceil`, `trunc`, `round`, `sqrt`, `fround`, `min`, `max`, `imul`, the constants | computed exactly. `floor`, `ceil`, `trunc`, `round`, `abs`, `sqrt`, `min` and `max` are operations the analysis knows, so their results can be integers; `sign`, `fround` and `imul` are small runtime helpers |
-| approximated: the specification names the function and its special cases | `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `exp`, `expm1`, `log`, `log1p`, `log2`, `log10`, `cbrt`, `hypot`, `pow` | a call into the C library's libm, with `pow`'s ECMAScript special cases (`1 ** NaN` and `(±1) ** ±Infinity` are `NaN`) |
-| absent | `asinh`, `acosh`, `atanh`, `clz32`, `f16round`, `random` | `NTS1100` |
+| group                                                                    | members                                                                                                                                               | on native                                                                                                                                                                                                      |
+| ------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| exact: one right answer per input                                        | `abs`, `sign`, `floor`, `ceil`, `trunc`, `round`, `sqrt`, `fround`, `min`, `max`, `imul`, the constants                                               | computed exactly. `floor`, `ceil`, `trunc`, `round`, `abs`, `sqrt`, `min` and `max` are operations the analysis knows, so their results can be integers; `sign`, `fround` and `imul` are small runtime helpers |
+| approximated: the specification names the function and its special cases | `sin`, `cos`, `tan`, `asin`, `acos`, `atan`, `atan2`, `sinh`, `cosh`, `tanh`, `exp`, `expm1`, `log`, `log1p`, `log2`, `log10`, `cbrt`, `hypot`, `pow` | a call into the C library's libm, with `pow`'s ECMAScript special cases (`1 ** NaN` and `(±1) ** ±Infinity` are `NaN`)                                                                                         |
+| absent                                                                   | `asinh`, `acosh`, `atanh`, `clz32`, `f16round`, `random`                                                                                              | `NTS1100`                                                                                                                                                                                                      |
 
 - **`x ** k` for a literal `k`** of 0, 1 or 2 is folded (`x * x` is exact);
   every other exponent calls `pow`, since a cube by multiplication rounds twice.
@@ -183,15 +183,15 @@ The flags live in one list (`compiler/codegen/common/src/compile_flags.rs`),
 read by `nts build` and by the benchmark harness alike, so a benchmark row
 measures what ships.
 
-| flag | applies to | why |
-|---|---|---|
-| `-O2` | every native compile | |
-| `-ffp-contract=off` | every native compile | JavaScript arithmetic is one IEEE-754 operation at a time. Fusing a multiply into an add (FMA) rounds once where the program rounds twice; FMA comes with x86-64-v3, and this keeps it out of the program's arithmetic |
-| `-fno-math-errno` | every native compile | no JavaScript program can read `errno`, and while `sqrt` may set it, clang cannot inline it |
-| `-march=x86-64-v3` | x86-64, unless the target says `cpu: "baseline"` | AVX2, BMI2 and FMA (Intel from Haswell, AMD from Zen). The program checks the CPU before anything else runs, in code built for the baseline, and stops with a sentence naming `cpu: "baseline"` |
-| `-falign-loops=32` | x86-64, at every CPU level | every loop starts on a 32-byte boundary, so a loop's speed does not depend on where it happens to land |
-| `-flto=thin` | builds whose compiler is clang | ThinLTO inlines the runtime's small helpers (a typed-array read, a bounds check, the string helpers) into the program across translation units |
-| `-ffunction-sections`, `-fdata-sections`, `--gc-sections` (`-dead_strip` on Mach-O) | every native link | only the parts of the runtime and its tables a program reaches are linked |
+| flag                                                                                | applies to                                       | why                                                                                                                                                                                                                    |
+| ----------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `-O2`                                                                               | every native compile                             |                                                                                                                                                                                                                        |
+| `-ffp-contract=off`                                                                 | every native compile                             | JavaScript arithmetic is one IEEE-754 operation at a time. Fusing a multiply into an add (FMA) rounds once where the program rounds twice; FMA comes with x86-64-v3, and this keeps it out of the program's arithmetic |
+| `-fno-math-errno`                                                                   | every native compile                             | no JavaScript program can read `errno`, and while `sqrt` may set it, clang cannot inline it                                                                                                                            |
+| `-march=x86-64-v3`                                                                  | x86-64, unless the target says `cpu: "baseline"` | AVX2, BMI2 and FMA (Intel from Haswell, AMD from Zen). The program checks the CPU before anything else runs, in code built for the baseline, and stops with a sentence naming `cpu: "baseline"`                        |
+| `-falign-loops=32`                                                                  | x86-64, at every CPU level                       | every loop starts on a 32-byte boundary, so a loop's speed does not depend on where it happens to land                                                                                                                 |
+| `-flto=thin`                                                                        | builds whose compiler is clang                   | ThinLTO inlines the runtime's small helpers (a typed-array read, a bounds check, the string helpers) into the program across translation units                                                                         |
+| `-ffunction-sections`, `-fdata-sections`, `--gc-sections` (`-dead_strip` on Mach-O) | every native link                                | only the parts of the runtime and its tables a program reaches are linked                                                                                                                                              |
 
 Array elements start on a 32-byte boundary, one AVX2 register, whatever the
 CPU level ([objects](objects.md#arrays)). Cross toolchains build without

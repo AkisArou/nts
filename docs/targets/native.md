@@ -9,12 +9,12 @@ library. The platform UI SDKs have pages of their own ([GTK](gtk.md),
 
 ## Where it runs
 
-| platform | architectures | how it is built | where it has run |
-|---|---|---|---|
-| Linux | x86-64 | this machine's clang, linked against libuv | gated |
-| Linux | aarch64 | cross-built, statically against musl (`CC=tooling/linux/cc-musl.sh`) | under qemu, in the interop tests |
-| macOS | x86-64, aarch64 | cross-built from Linux ([Apple](apple.md)) | x86-64 on a VM; arm64 never |
-| Windows | x86-64, aarch64 | cross-built with zig's mingw ([Windows](windows.md)) | x86-64 on a VM; arm64 never |
+| platform | architectures   | how it is built                                                      | where it has run                 |
+| -------- | --------------- | -------------------------------------------------------------------- | -------------------------------- |
+| Linux    | x86-64          | this machine's clang, linked against libuv                           | gated                            |
+| Linux    | aarch64         | cross-built, statically against musl (`CC=tooling/linux/cc-musl.sh`) | under qemu, in the interop tests |
+| macOS    | x86-64, aarch64 | cross-built from Linux ([Apple](apple.md))                           | x86-64 on a VM; arm64 never      |
+| Windows  | x86-64, aarch64 | cross-built with zig's mingw ([Windows](windows.md))                 | x86-64 on a VM; arm64 never      |
 
 The compiler itself runs on Linux. macOS on Apple silicon is to be its next
 host, then native Windows, and WSL serves meanwhile ([Decisions](#decisions)).
@@ -73,25 +73,25 @@ older CPU; a target with `cpu: "baseline"` builds for every x86-64 CPU.
 - one **host** per kind of event loop, each an implementation of `NtsHost`
   ([async](../language/async.md#the-event-loop-on-each-target)):
 
-| host | file | used by |
-|---|---|---|
-| libuv | `nts_uv_host.c` | executables |
-| GLib | `nts_glib_host.c` | GTK programs |
-| CoreFoundation | `nts_cf_host.c` | Apple programs that send Objective-C messages |
-| Win32 | `nts_win_host.c` | every Windows executable |
-| test | `nts_test_host.c` | `nts check`: virtual time, no I/O |
+| host           | file              | used by                                       |
+| -------------- | ----------------- | --------------------------------------------- |
+| libuv          | `nts_uv_host.c`   | executables                                   |
+| GLib           | `nts_glib_host.c` | GTK programs                                  |
+| CoreFoundation | `nts_cf_host.c`   | Apple programs that send Objective-C messages |
+| Win32          | `nts_win_host.c`  | every Windows executable                      |
+| test           | `nts_test_host.c` | `nts check`: virtual time, no I/O             |
 
 A library has no loop. A C program that embeds one and wants its timers or I/O
 installs a host of its own (`nts_host_install`).
 
 ## Products
 
-| product | constructor | artifact |
-|---|---|---|
-| executable | `app.cli`, `app.linux`, or `app({ kind: "executable", targets })` | the program, with its host |
-| shared library | `library.native` | `.so`, `.dylib`, or `.dll` with its import `.lib` |
-| static library | `library.staticNative` | `.a`, holding the runtime and the program |
-| XCFramework | `library.xcframework` | refused by name: build `shared-library` slices and assemble them |
+| product        | constructor                                                       | artifact                                                         |
+| -------------- | ----------------------------------------------------------------- | ---------------------------------------------------------------- |
+| executable     | `app.cli`, `app.linux`, or `app({ kind: "executable", targets })` | the program, with its host                                       |
+| shared library | `library.native`                                                  | `.so`, `.dylib`, or `.dll` with its import `.lib`                |
+| static library | `library.staticNative`                                            | `.a`, holding the runtime and the program                        |
+| XCFramework    | `library.xcframework`                                             | refused by name: build `shared-library` slices and assemble them |
 
 - A library's surface is what its `entry` module exports, and nothing else:
   the program is rooted there, and a shared library's link hides every other
@@ -131,16 +131,16 @@ gets a suffix: `bool` is `bool_`), a stable alias for each object type a
 signature names (`<export>_<parameter>_t`, `<export>_return_t`) with its
 checked layout, and the module initializer where there is one.
 
-| TypeScript | C |
-|---|---|
-| `number` | `double` |
-| `boolean` | `bool` |
-| `string` | `NtsString *` |
-| `number[]` | `NtsArray *` |
-| `Uint8Array` | `NtsView *` |
-| an object | `<export>_return_t *`, `<export>_<parameter>_t *` |
-| `Promise<T>` | `NtsPromise *` |
-| a generator | its frame, stepped by `<export>_next(frame, &value)` |
+| TypeScript   | C                                                    |
+| ------------ | ---------------------------------------------------- |
+| `number`     | `double`                                             |
+| `boolean`    | `bool`                                               |
+| `string`     | `NtsString *`                                        |
+| `number[]`   | `NtsArray *`                                         |
+| `Uint8Array` | `NtsView *`                                          |
+| an object    | `<export>_return_t *`, `<export>_<parameter>_t *`    |
+| `Promise<T>` | `NtsPromise *`                                       |
+| a generator  | its frame, stepped by `<export>_next(frame, &value)` |
 
 ```c
 #include "program.h"
