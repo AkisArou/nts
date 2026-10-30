@@ -23654,11 +23654,8 @@ impl<'a> FuncBuilder<'a> {
     /// and a function that only receives or returns one constructs nothing. A
     /// function type is the case that made this visible: no program ever
     /// constructs a signature, only closures that have it as their base.
-    fn materialize(&mut self, at: NodeId, ty: &HirType) -> Result<(), Diagnostic> {
-        self.materialize_within(at, ty, 0)
-    }
-
-    /// Every layout a type needs, not only its own.
+    ///
+    /// Discover every layout the type needs, not only its own.
     ///
     /// An array of objects needs one for its element as much as for itself, and
     /// the layout it is missing belongs to a type no *function* mentioned. A
@@ -23673,46 +23670,41 @@ impl<'a> FuncBuilder<'a> {
     /// touches -- 81 functions in the node profile, to fix nothing: the case
     /// that prompted it was not reached this way either.
     ///
-    /// Bounded rather than tracked: a field may hold the type it belongs to,
-    /// and a list node is the ordinary case rather than a strange one. The
-    /// depth is a backstop, not a limit -- the work is idempotent, so a type
-    /// reached twice is a lookup and not a rebuild.
-    fn materialize_within(
-        &mut self,
-        at: NodeId,
-        ty: &HirType,
-        depth: u32,
-    ) -> Result<(), Diagnostic> {
-        if depth > 16 {
-            return Ok(());
+    /// This visits every payload in the finite container tree iteratively,
+    /// including record tables and optional values. Objects are leaves: their
+    /// fields are deliberately not part of this discovery request.
+    fn materialize(&mut self, at: NodeId, mut ty: &HirType) -> Result<(), Diagnostic> {
+        let mut pending = Vec::new();
+        loop {
+            match ty {
+                HirType::Managed(ManagedType::Object(object)) => {
+                    self.layout_of(at, *object)?;
+                }
+                HirType::PossiblyUndefined(payload)
+                | HirType::Managed(
+                    ManagedType::Array(payload)
+                    | ManagedType::Promise(payload)
+                    | ManagedType::Set(payload),
+                ) => {
+                    ty = payload;
+                    continue;
+                }
+                HirType::Managed(ManagedType::Map(key, value) | ManagedType::Table(key, value)) => {
+                    // Only a fork needs a work stack. Scalar types and unary
+                    // container chains retain the former allocation-free path.
+                    pending.push(value.as_ref());
+                    ty = key;
+                    continue;
+                }
+                // Views have scalar elements, and object fields are handled
+                // by their own layout request rather than this container walk.
+                _ => {}
+            }
+            let Some(next) = pending.pop() else {
+                return Ok(());
+            };
+            ty = next;
         }
-        match ty {
-            HirType::Managed(ManagedType::Object(object)) => {
-                self.layout_of(at, *object)?;
-            }
-            // One payload each, and one arm: an array's element, a promise's
-            // settled value and a set's member are the same question asked of
-            // three containers.
-            HirType::Managed(
-                ManagedType::Array(payload)
-                | ManagedType::Promise(payload)
-                | ManagedType::Set(payload),
-            ) => {
-                self.materialize_within(at, payload, depth + 1)?;
-            }
-            // Two, and both of them read: `Map<string, Step>` hands a `Step`
-            // back from `get` and compares the key on the way in.
-            HirType::Managed(ManagedType::Map(key, value)) => {
-                self.materialize_within(at, key, depth + 1)?;
-                self.materialize_within(at, value, depth + 1)?;
-            }
-            // Not `View`, which carries an element and is nonetheless not a
-            // case here: every one comes from `builtin::typed_array_element`
-            // or is refused by `element_kind`, and both answer with an `Int`
-            // or a `Float`. An arm for it would be a line that cannot run.
-            _ => {}
-        }
-        Ok(())
     }
 
     /// Whether an expression's type is a signature -- so its value is a closure.
@@ -87990,6 +87982,9 @@ mod type_bases;
 
 #[cfg(test)]
 mod storage_ancestry_tests;
+
+#[cfg(test)]
+mod container_layout_tests;
 
 #[cfg(test)]
 mod binding_ancestry_tests;
