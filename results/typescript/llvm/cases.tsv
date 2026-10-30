@@ -374,6 +374,8 @@ tests/typescript/proofs-controls/bounds-conversion-string-template-index-change-
 tests/typescript/proofs-controls/bounds-conversion-to-string-shift-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/bounds-loop-fixed-view-resize-back-edge-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/length-conversion-to-string-splice-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/negative-zero-conversion-string-to-string-writes-sign-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/negative-zero-conversion-template-to-string-writes-sign-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/whole-number-conversion-template-safe-integer-write-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/whole-number-conversion-to-string-writes-fraction-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/whole-number-conversion-to-string-writes-nan-control.ts	{"kind":"pass"}
@@ -519,6 +521,49 @@ tests/typescript/proofs/length-suspension-await-microtask-splice.ts	{"kind":"pas
 tests/typescript/proofs/length-suspension-await-offset-view-resize.ts	{"kind":"pass"}
 tests/typescript/proofs/length-suspension-yield-buffer-transfer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/length-suspension-yield-caller-unshift.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/proofs/negative-zero-accessor-getter-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/negative-zero-alias-field-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-callee-return-observed-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-closure-writes-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-interface-adapter-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/negative-zero-call-later-caller-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-method-argument-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-nested-parameter-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-recursive-return-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-call-returned-closure-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-callback-for-each-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-chain-assignments-24-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-chain-field-links-16-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-chain-loop-carried-24-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-chain-return-chain-16-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-conversion-concatenation-value-of-writes-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/negative-zero-conversion-number-fallback-to-string-writes-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/negative-zero-conversion-number-value-of-writes-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/negative-zero-conversion-string-fallback-value-of-writes-sign.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: String() of `Type25`, whose type says nothing about how it prints"}}
+tests/typescript/proofs/negative-zero-conversion-string-to-string-writes-sign.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/negative-zero-conversion-template-fallback-value-of-writes-sign.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: String() of `Type25`, whose type says nothing about how it prints"}}
+tests/typescript/proofs/negative-zero-conversion-template-to-string-writes-sign.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/negative-zero-conversion-unary-plus-value-of-writes-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/negative-zero-exception-throw-before-reset.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-ceil-negative-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-continue-remainder.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-divide-negative-infinity.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-do-while-negation.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-multiply-negative.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-nested-negation.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-remainder-negative.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-loop-zero-trip-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-conditional-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-early-return-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-finally-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-if-else-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-logical-and-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-logical-or-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-min-max-sign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/negative-zero-merge-nullish-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-switch-fallthrough-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-merge-try-catch-sign.ts	{"kind":"pass"}
+tests/typescript/proofs/negative-zero-suspension-await-microtask-sign.ts	{"kind":"pass"}
 tests/typescript/proofs/whole-number-accessor-getter-writes-nan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/whole-number-alias-field-fraction.ts	{"kind":"pass"}
 tests/typescript/proofs/whole-number-call-closure-writes-fraction.ts	{"kind":"pass"}
