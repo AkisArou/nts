@@ -765,7 +765,21 @@ profile() {
   # the pairs **per module**, and name the module -- the remedy this file
   # prescribes five times above and could not perform until the count moved here.
   # =====================================================================
-  ceiling=1457
+  # Modern Web Crypto measured with the same c04f76f0 compiler: main 634f0b85b
+  # has 1442 pairs / 57091 definitions; candidate 9e16845d1 has 1459 / 57619.
+  # Source-coordinate drift removed: 19 new observations and 2 no longer seen,
+  # net +17 in each of the 16 modules importing the shared web-platform code.
+  # These are natural source additions meeting filed compiler gaps:
+  # - WeakMap (2): weak-collections-have-no-representation / builtin-study-es-weakmap.
+  # - asserted index writes (2): a-byte-mask-through-an-asserted-index.
+  # - native/failure in tests (4): an-in-test-on-a-native-or-failure-result.
+  # - structural field reads (2): a-field-read-through-an-erased-cast-with-a-method-supplier.
+  # - null-only result (1): a-null-only-function-result-is-observed.
+  # - class-union length (2): a-length-field-in-a-disjunctive-class-guard.
+  # - arguments (1): strict-arguments-length; indirect throws (5):
+  #   a-callback-held-in-a-field-with-the-raising-gate-off (L15).
+  # Keep the existing calibrated 40-pair headroom: 1459 + 40, no extra slack.
+  ceiling=1499
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
