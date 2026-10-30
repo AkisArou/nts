@@ -24,9 +24,11 @@
 //! that target emits could see the call.
 
 mod compiler;
+mod identity;
 
 pub(super) use compiler::compiler_global;
 pub use compiler::{CompilerProvider, ProviderKind, Use, compiler_providers};
+pub use identity::{GlobalBinding, GlobalMeaning, global_binding};
 
 use super::{OpKind, Program};
 

@@ -430,6 +430,22 @@ pub(in crate::hir) fn compiler_global(name: &str) -> bool {
         .is_ok()
 }
 
+/// Match the checked declaration family as well as the canonical global name.
+/// Package/module exports never inherit an ES or web compiler capability.
+pub(super) fn provides_binding(library: &nts_semantic_schema::Library, name: &str) -> bool {
+    use nts_semantic_schema::Library;
+    let namespace = match library {
+        Library::Es => "es",
+        Library::Dom => "web",
+        Library::Node | Library::Package(_) => return false,
+    };
+    if let Ok(index) = ROOTS.binary_search_by_key(&name, |root| root.global) {
+        return ROOTS[index].library == namespace;
+    }
+    matches!(library, Library::Es)
+        && (builtin::is_error(name) || builtin::typed_array_element(name).is_some())
+}
+
 /// The compiler's current capabilities, sorted by feature and member. This is
 /// generated on demand for tooling, never allocated by the hot global lookup.
 #[must_use]
