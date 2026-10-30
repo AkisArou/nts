@@ -47,7 +47,9 @@ declare module "c:types" {
   // is released when C calls the destroy function, not when the call returns.
   // `ScopedClosure` is for one C calls only during the call -- its C prototype
   // has the context and no destroy function -- and it is released after.
-  export type Closure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "retained" };
+  export type Closure<F extends (...args: never[]) => unknown> = F & {
+    readonly __c_closure?: "retained";
+  };
   // A retained closure handed to C as GLib's type-erased `GCallback`,
   // `void (*)(void)`, the shape of `g_signal_connect_data`. C calls it with
   // the signature `F` plus a trailing context -- which is how a GObject
@@ -63,22 +65,27 @@ declare module "c:types" {
     F extends (...args: never[]) => unknown,
     N extends (context: Ptr<void>, ...rest: never[]) => void,
   > = F & { readonly __c_closure?: "erased"; readonly __c_notify?: N };
-  export type ScopedClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "scoped" };
+  export type ScopedClosure<F extends (...args: never[]) => unknown> = F & {
+    readonly __c_closure?: "scoped";
+  };
   // A closure C calls exactly once, some time after the call that registered
   // it returns, and passes no destroy function for: GIO's
   // `GAsyncReadyCallback`, GIR's `scope="async"`. The context follows it as
   // for `ScopedClosure`, and the closure is released after that one call.
   // A callback C calls twice, or never, is not this.
-  export type OnceClosure<F extends (...args: never[]) => unknown> = F & { readonly __c_closure?: "once" };
+  export type OnceClosure<F extends (...args: never[]) => unknown> = F & {
+    readonly __c_closure?: "once";
+  };
   // A `string[]` as C's NULL-terminated array of strings -- `argv`, GLib's
   // `gchar **` -- converted for the call and released after it, the way a
   // `string` parameter is. `Q` is the header's spelling, which the witness
   // compares exactly: `"char"` is `char **`, `"const"` is `const char **`,
   // and `"const const"` is `const char * const *`. C that keeps the array
   // past the call cannot be declared this way.
-  export type CStrings<Q extends "char" | "const" | "const const" = "const const"> = readonly string[] & {
-    readonly __c_strings?: Q;
-  };
+  export type CStrings<Q extends "char" | "const" | "const const" = "const const"> =
+    readonly string[] & {
+      readonly __c_strings?: Q;
+    };
   // A `string` as NUL-terminated UTF-16, `const uint16_t *` -- Windows'
   // `LPCWSTR`, which every `W` function takes. Callers pass an ordinary
   // `string`; the brand is optional, so any `string` is one. Borrowed for the
@@ -102,8 +109,9 @@ declare module "c:types" {
   // the ones the array holds when the call returns. `Q` is the header's
   // pointee spelling, which the witness compares exactly. Like `CStrings`,
   // only for C that does not keep the pointer past the call.
-  export type CBytes<Q extends "const uint8_t" | "uint8_t" | "const char" | "const void" | "void" = "const uint8_t"> =
-    Uint8Array & { readonly __c_bytes?: Q };
+  export type CBytes<
+    Q extends "const uint8_t" | "uint8_t" | "const char" | "const void" | "void" = "const uint8_t",
+  > = Uint8Array & { readonly __c_bytes?: Q };
   // A typed array as C's pointer to its elements -- a Windows Runtime
   // `INT32 *` beside its count -- borrowed in place for the call, as `CBytes`
   // borrows a `Uint8Array`: no copy in or out, so elements C writes are the
@@ -112,11 +120,29 @@ declare module "c:types" {
   // `int32_t` -- and the compiler holds the two to it. Only for C that does
   // not keep the pointer past the call.
   export type CElements<
-    A extends Int8Array | Int16Array | Uint16Array | Int32Array | Uint32Array | Float32Array | Float64Array,
+    A extends
+      | Int8Array
+      | Int16Array
+      | Uint16Array
+      | Int32Array
+      | Uint32Array
+      | Float32Array
+      | Float64Array,
     Q extends
-      | "const int8_t" | "int8_t" | "const int16_t" | "int16_t" | "const uint16_t" | "uint16_t"
-      | "const int32_t" | "int32_t" | "const uint32_t" | "uint32_t" | "const float" | "float"
-      | "const double" | "double",
+      | "const int8_t"
+      | "int8_t"
+      | "const int16_t"
+      | "int16_t"
+      | "const uint16_t"
+      | "uint16_t"
+      | "const int32_t"
+      | "int32_t"
+      | "const uint32_t"
+      | "uint32_t"
+      | "const float"
+      | "float"
+      | "const double"
+      | "double",
   > = A & { readonly __c_elements?: Q };
   // An array of handles as C's array of pointers to them -- `GFile **files`,
   // or `gpointer *` where `Q` is "void" -- lent in place for the call: the
@@ -124,7 +150,9 @@ declare module "c:types" {
   // Like `CStrings`, only for C that does not keep the array past the call;
   // an element that is not there ends the process, since C reads a NULL as
   // an object.
-  export type CHandles<H, Q extends "element" | "void" = "element"> = readonly H[] & { readonly __c_handles?: Q };
+  export type CHandles<H, Q extends "element" | "void" = "element"> = readonly H[] & {
+    readonly __c_handles?: Q;
+  };
   // An array whose length C takes in a parameter of its own -- `argc` beside
   // `argv`, `gsize len` after `const guint8 *data`. The caller does not pass
   // it: the compiler does, from the array, into a slot of brand `L` placed
@@ -156,7 +184,9 @@ declare module "c:types" {
   // `T`. A trust boundary, not a check: the claim is believed, as gtk-rs
   // believes it (`unsafe_cast`), and a factory that returned a sibling of
   // `T` would be read as a `T`. Only a `D` unrelated to `T` is refused.
-  export type Declared<T extends ClassChain, D extends ClassChain> = T & { readonly __c_declared?: D };
+  export type Declared<T extends ClassChain, D extends ClassChain> = T & {
+    readonly __c_declared?: D;
+  };
   // A record C takes or returns **by value** -- `NSRect frame`, not
   // `NSRect *frame`. TypeScript holds a record only as storage, so this is a
   // pointer to it: an argument is read from the storage it points at, and C
@@ -179,7 +209,9 @@ declare module "c:types" {
   // write as `p.x = n` converts it. A record field takes its own literal.
   // Only a literal: an object held in a variable is the program's, and has
   // no storage to pass.
-  export type Fields<T> = ([T] extends [Struct<infer F, string>] ? { [K in keyof F]?: FieldOf<F[K]> } : never) & {
+  export type Fields<T> = ([T] extends [Struct<infer F, string>]
+    ? { [K in keyof F]?: FieldOf<F[K]> }
+    : never) & {
     readonly __c_fields?: T;
   };
   // A number field keeps its C type as `Slot` does (`__c_of`): a plain number
@@ -231,16 +263,22 @@ declare module "c:types" {
   // key the other interface does not name is no conflict, where two values
   // of one key are, and optional so that an implementing class, which has
   // none, is assignable too.
-  export type GObjectInterface<Tag extends string, Prerequisite extends ClassChain, Implements extends string = never> =
-    Interface<Tag, Prerequisite, Implements>;
+  export type GObjectInterface<
+    Tag extends string,
+    Prerequisite extends ClassChain,
+    Implements extends string = never,
+  > = Interface<Tag, Prerequisite, Implements>;
   // The same shape for any family: what makes it one is the prerequisite's
   // own marker (`__gobject`, `__c_host`, ...), which it carries. A DOM mixin
   // is one -- `ParentNode`, whose members every `Element`, `Document` and
   // `DocumentFragment` has, is an interface over `Node` in Blink's binding.
-  export type Interface<Tag extends string, Prerequisite extends ClassChain, Implements extends string = never> =
-    Prerequisite & { readonly [K in `__c_interface${Tag}`]?: true } & {
-      readonly __c_implements: { readonly [K in Tag | Implements]: true };
-    };
+  export type Interface<
+    Tag extends string,
+    Prerequisite extends ClassChain,
+    Implements extends string = never,
+  > = Prerequisite & { readonly [K in `__c_interface${Tag}`]?: true } & {
+    readonly __c_implements: { readonly [K in Tag | Implements]: true };
+  };
   type ImplementsOf<P> = P extends { readonly __c_implements: infer I } ? I : {};
   // An object a host's garbage collector owns and finds on the native stack
   // -- Blink's Oilpan, which scans the stack conservatively at every
@@ -266,7 +304,9 @@ declare module "c:types" {
     Retain extends string = HostPairOf<Parent>[0],
     Release extends string = HostPairOf<Parent>[1],
   > = Class<Tag, Parent> & { readonly __c_host: readonly [Retain, Release] };
-  type HostPairOf<P> = P extends { readonly __c_host: infer Pair extends readonly [string, string] } ? Pair : [never, never];
+  type HostPairOf<P> = P extends { readonly __c_host: infer Pair extends readonly [string, string] }
+    ? Pair
+    : [never, never];
   // A result the caller owns -- GIR's `transfer-ownership="full"`: the
   // reference comes with it, and is not taken again.
   export type Owned<T extends ClassChain> = T & { readonly __c_owned?: true };
@@ -299,7 +339,10 @@ declare module "c:types" {
     connect<S extends ClassChain, K extends keyof Sig & string>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<
+        (self: S, ...args: SignalArgs<Sig[K]>) => void,
+        (data: Ptr<void>, closure: Class<"_GClosure">) => void
+      >,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     /**
@@ -309,7 +352,10 @@ declare module "c:types" {
     connect_after<S extends ClassChain, K extends keyof Sig & string>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<Sig[K]>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<
+        (self: S, ...args: SignalArgs<Sig[K]>) => void,
+        (data: Ptr<void>, closure: Class<"_GClosure">) => void
+      >,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     // Lowered as a call of a thunk the compiler defines per signal, which
@@ -317,13 +363,19 @@ declare module "c:types" {
     /**
      * @ntsSymbol nts_gobject_emit
      */
-    emit<S extends ClassChain, K extends keyof Sig & string>(this: S, detailed_signal: K, ...args: SignalArgs<Sig[K]>): void;
+    emit<S extends ClassChain, K extends keyof Sig & string>(
+      this: S,
+      detailed_signal: K,
+      ...args: SignalArgs<Sig[K]>
+    ): void;
   }
   // A class's instance type with the signals a subclass adds, and the
   // interfaces it implements (`Impl`, a `{Name}Implementation` or a union of
   // them): itself where it adds neither, so a binding's own errors read as
   // they did.
-  export type Signalled<T, Sig extends SignalMap, Impl = never> = ({} extends Sig ? T : T & WithSignals<Sig>) &
+  export type Signalled<T, Sig extends SignalMap, Impl = never> = ({} extends Sig
+    ? T
+    : T & WithSignals<Sig>) &
     Implementing<Impl>;
   // What implementing interfaces makes an instance: the interfaces' optional
   // `vfunc_` methods, which an override is checked against; something that
@@ -341,10 +393,14 @@ declare module "c:types" {
             readonly __c_implements: { readonly [K in ImplTag<Impl>]: true };
             readonly __c_ifaces?: ImplIface<Impl>;
           };
-  type AllOf<U> = (U extends unknown ? (all: U) => void : never) extends (all: infer All) => void ? All : never;
+  type AllOf<U> = (U extends unknown ? (all: U) => void : never) extends (all: infer All) => void
+    ? All
+    : never;
   type ImplMethods<Impl> = Impl extends { readonly __c_methods?: infer M } ? M : never;
   type ImplTag<Impl> = Impl extends { readonly __c_tag?: infer Tag extends string } ? Tag : never;
-  type ImplIface<Impl> = Impl extends { readonly __c_iface?: infer Iface extends string } ? Iface : never;
+  type ImplIface<Impl> = Impl extends { readonly __c_iface?: infer Iface extends string }
+    ? Iface
+    : never;
   // A field of a GObject class the program writes that is also a GObject
   // property, GJS's `Properties`: `done: Property<boolean> = false` is a
   // field the class reads and writes as any other, installed on the class's
@@ -356,7 +412,10 @@ declare module "c:types" {
   // `readonly isbn = property<string>()`.
   // One brand carrying both keys, so the field is `T` and one brand as a
   // `Property<T>` is, which is what lowering represents.
-  export type RequiredProperty<T> = T & { readonly __c_property?: true; readonly __c_required?: true };
+  export type RequiredProperty<T> = T & {
+    readonly __c_property?: true;
+    readonly __c_required?: true;
+  };
   // The `gi:` surface's declaration of a property (`gi:gobject` re-exports
   // it): `title = property("")` is the field `title: Property<string> = ""`,
   // its default the argument and its type read from it -- a literal widened,
@@ -385,7 +444,11 @@ declare module "c:types" {
   // it is assignable to it, which every type is, the brand being optional --
   // so a plain field is not one here either.
   export type Properties<T, Base> = {
-    [K in keyof Base | PropertyKeys<T>]?: K extends keyof Base ? Base[K] : K extends keyof T ? T[K] : never;
+    [K in keyof Base | PropertyKeys<T>]?: K extends keyof Base
+      ? Base[K]
+      : K extends keyof T
+        ? T[K]
+        : never;
   };
   type PropertyKeys<T> = { [K in keyof T]: "__c_property" extends keyof T[K] ? K : never }[keyof T];
 
@@ -410,12 +473,18 @@ declare module "c:types" {
   // A class's own names, without the brands its base adds (`__c_signals`,
   // which is computed from these: reading it here would be a cycle).
   type OwnKeys<Self> = Exclude<keyof Self, `__c_${string}`>;
-  type SelfPropertyKeys<Self> = { [K in OwnKeys<Self>]: "__c_property" extends keyof Self[K] ? K : never }[OwnKeys<Self>];
-  type RequiredPropertyKeys<Self> = { [K in OwnKeys<Self>]: "__c_required" extends keyof Self[K] ? K : never }[OwnKeys<Self>];
+  type SelfPropertyKeys<Self> = {
+    [K in OwnKeys<Self>]: "__c_property" extends keyof Self[K] ? K : never;
+  }[OwnKeys<Self>];
+  type RequiredPropertyKeys<Self> = {
+    [K in OwnKeys<Self>]: "__c_required" extends keyof Self[K] ? K : never;
+  }[OwnKeys<Self>];
   type Unbranded<T> = T extends Property<infer U> ? U : T;
   // A class's own properties as a construction gives them: each optional,
   // but one with no default (`RequiredProperty`).
-  export type OwnProps<Self> = { [K in Exclude<SelfPropertyKeys<Self>, RequiredPropertyKeys<Self>>]?: Unbranded<Self[K]> } & {
+  export type OwnProps<Self> = {
+    [K in Exclude<SelfPropertyKeys<Self>, RequiredPropertyKeys<Self>>]?: Unbranded<Self[K]>;
+  } & {
     [K in RequiredPropertyKeys<Self>]: Unbranded<Self[K]>;
   };
   // What a `gi:` class's `new` takes: its props and the class's, required
@@ -426,7 +495,10 @@ declare module "c:types" {
     : [RequiredPropertyKeys<Self>] extends [never]
       ? [props?: Base & OwnProps<Self>]
       : [props: Base & OwnProps<Self>];
-  type SignalKeys<Self> = { [K in OwnKeys<Self>]-?: Self[K] extends Signal<any, any> ? K : never }[OwnKeys<Self>] & string;
+  type SignalKeys<Self> = {
+    [K in OwnKeys<Self>]-?: Self[K] extends Signal<any, any> ? K : never;
+  }[OwnKeys<Self>] &
+    string;
   type SignalOf<Self, K extends keyof Self> = Self[K] extends Signal<infer A, any> ? A : never;
   // A `gi:` instance's signals, read from its class (`Self`) lazily -- a
   // member's type is resolved when it is asked for, after the class is whole,
@@ -441,7 +513,10 @@ declare module "c:types" {
     connect<S extends ClassChain, K extends SignalKeys<Self>>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<
+        (self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void,
+        (data: Ptr<void>, closure: Class<"_GClosure">) => void
+      >,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     /**
@@ -451,13 +526,20 @@ declare module "c:types" {
     connectAfter<S extends ClassChain, K extends SignalKeys<Self>>(
       this: S,
       detailed_signal: K,
-      handler: ErasedClosure<(self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void, (data: Ptr<void>, closure: Class<"_GClosure">) => void>,
+      handler: ErasedClosure<
+        (self: S, ...args: SignalArgs<SignalOf<Self, K>>) => void,
+        (data: Ptr<void>, closure: Class<"_GClosure">) => void
+      >,
       connect_flags?: c_uint,
     ): AsNumber<c_ulong>;
     /**
      * @ntsSymbol nts_gobject_emit
      */
-    emit<S extends ClassChain, K extends SignalKeys<Self>>(this: S, detailed_signal: K, ...args: SignalArgs<SignalOf<Self, K>>): void;
+    emit<S extends ClassChain, K extends SignalKeys<Self>>(
+      this: S,
+      detailed_signal: K,
+      ...args: SignalArgs<SignalOf<Self, K>>
+    ): void;
   }
   // A `gi:` class's instance, as `Signalled` is a `c:` one's.
   export type Selfed<T, Self, Impl = never> = T & WithSelf<Self> & Implementing<Impl>;
@@ -472,7 +554,11 @@ declare module "c:types" {
   // struct opaque. A record a function hands over (`Owned<...>`) is boxed as
   // it is; one it lends is copied first, since the box will free what it
   // holds.
-  export type Boxed<Tag extends string, GetType extends string, Size extends number = 0> = Class<Tag> & {
+  export type Boxed<
+    Tag extends string,
+    GetType extends string,
+    Size extends number = 0,
+  > = Class<Tag> & {
     readonly __c_boxed?: GetType;
     readonly __c_size?: Size;
   };
@@ -619,68 +705,77 @@ declare module "c:types" {
   };
   // Only void selects the untyped view. In particular, any must retain its
   // marker so native lowering refuses it; undefined and never are not void.
-  type IsVoid<T> = 0 extends (1 & T) ? false
-    : [T] extends [void] ? ([void] extends [T] ? true : false) : false;
+  type IsVoid<T> = 0 extends 1 & T
+    ? false
+    : [T] extends [void]
+      ? [void] extends [T]
+        ? true
+        : false
+      : false;
   // C's void* accepts typed storage, but offers no element to dereference.
   // unknown makes the pointer marker covariant without an index signature.
-  export type Ptr<T> = IsVoid<T> extends true
-    ? { readonly __c_pointer: unknown; readonly __c_writable: true }
-    : { readonly __c_pointer: T; readonly __c_writable: true } & ([T] extends [
-    | Struct<infer Fields, string>
-    | Union<infer Fields, string>]
-    // In brackets, so a union element is one pointer and not a union of
-    // pointers: `Ptr<GError | null>` is `GError **`, which distributing over
-    // the `null` split into two types no C declaration spells.
-    // A struct-typed member is stored inline and projects as a *pointer to it*,
-    // never as a value: reading one as a value would be an aggregate copy, and
-    // `p.inner.field` should reach the bytes that are there rather than a
-    // duplicate of them. This is what `p[i]` already does for a block of
-    // structs, for the same reason.
-    ? { [K in keyof Fields]: Fields[K] extends
-          | { readonly __c_struct: unknown }
-          | { readonly __c_union: unknown }
-          ? Ptr<Fields[K]>
-            : Fields[K] extends Flexible<infer E>
-              ? Ptr<E>
-          : Fields[K] extends CArray<infer E, number>
-            ? Ptr<E>
-            : Fields[K] extends Bits<number, number>
-              ? number
-              : Slot<Fields[K]> }
-      & { [index: number]: Ptr<T> }
-    : { [index: number]: Slot<T> });
+  export type Ptr<T> =
+    IsVoid<T> extends true
+      ? { readonly __c_pointer: unknown; readonly __c_writable: true }
+      : { readonly __c_pointer: T; readonly __c_writable: true } & ([T] extends [
+          Struct<infer Fields, string> | Union<infer Fields, string>,
+        ]
+          ? // In brackets, so a union element is one pointer and not a union of
+            // pointers: `Ptr<GError | null>` is `GError **`, which distributing over
+            // the `null` split into two types no C declaration spells.
+            // A struct-typed member is stored inline and projects as a *pointer to it*,
+            // never as a value: reading one as a value would be an aggregate copy, and
+            // `p.inner.field` should reach the bytes that are there rather than a
+            // duplicate of them. This is what `p[i]` already does for a block of
+            // structs, for the same reason.
+            {
+              [K in keyof Fields]: Fields[K] extends
+                | { readonly __c_struct: unknown }
+                | { readonly __c_union: unknown }
+                ? Ptr<Fields[K]>
+                : Fields[K] extends Flexible<infer E>
+                  ? Ptr<E>
+                  : Fields[K] extends CArray<infer E, number>
+                    ? Ptr<E>
+                    : Fields[K] extends Bits<number, number>
+                      ? number
+                      : Slot<Fields[K]>;
+            } & { [index: number]: Ptr<T> }
+          : { [index: number]: Slot<T> });
   // A view that may be read and not written. `const` restricts this holder; it
   // is not a claim that the storage is immutable or unaliased, and nothing here
   // promises otherwise. Writing through one is `TS2542`, "only permits
   // reading", before the compiler is reached.
-  export type ConstPtr<T> = IsVoid<T> extends true
-    ? { readonly __c_pointer: unknown }
-    : { readonly __c_pointer: T } & ([T] extends [
-    | Struct<infer Fields, string>
-    | Union<infer Fields, string>]
-    // In brackets for the reason `Ptr`'s are.
-    // The same projection `Ptr` makes, restricted. A record member is storage,
-    // so it is a *pointer* to that storage here too -- a const one, because a
-    // view that could hand out a writable interior would not be a view.
-    //
-    // It did not mirror `Ptr` until a `copy(destination, source)` needed to
-    // pass a `Ptr<Sample>` where a `ConstPtr<Sample>` was wanted and could not:
-    // `Ptr` gives `Ptr<Pair>` for a nested record and this gave `Slot<Pair>`,
-    // which are unrelated types. Every `ConstPtr` to a record with a nested
-    // record or an inline array was unusable, and nothing had asked for one.
-    ? { readonly [K in keyof Fields]: Fields[K] extends
-          | { readonly __c_struct: unknown }
-          | { readonly __c_union: unknown }
-          ? ConstPtr<Fields[K]>
-            : Fields[K] extends Flexible<infer E>
-              ? ConstPtr<E>
-          : Fields[K] extends CArray<infer E, number>
-            ? ConstPtr<E>
-            : Fields[K] extends Bits<number, number>
-              ? number
-              : Slot<Fields[K]> }
-      & { readonly [index: number]: ConstPtr<T> }
-    : { readonly [index: number]: Slot<T> });
+  export type ConstPtr<T> =
+    IsVoid<T> extends true
+      ? { readonly __c_pointer: unknown }
+      : { readonly __c_pointer: T } & ([T] extends [
+          Struct<infer Fields, string> | Union<infer Fields, string>,
+        ]
+          ? // In brackets for the reason `Ptr`'s are.
+            // The same projection `Ptr` makes, restricted. A record member is storage,
+            // so it is a *pointer* to that storage here too -- a const one, because a
+            // view that could hand out a writable interior would not be a view.
+            //
+            // It did not mirror `Ptr` until a `copy(destination, source)` needed to
+            // pass a `Ptr<Sample>` where a `ConstPtr<Sample>` was wanted and could not:
+            // `Ptr` gives `Ptr<Pair>` for a nested record and this gave `Slot<Pair>`,
+            // which are unrelated types. Every `ConstPtr` to a record with a nested
+            // record or an inline array was unusable, and nothing had asked for one.
+            {
+              readonly [K in keyof Fields]: Fields[K] extends
+                | { readonly __c_struct: unknown }
+                | { readonly __c_union: unknown }
+                ? ConstPtr<Fields[K]>
+                : Fields[K] extends Flexible<infer E>
+                  ? ConstPtr<E>
+                  : Fields[K] extends CArray<infer E, number>
+                    ? ConstPtr<E>
+                    : Fields[K] extends Bits<number, number>
+                      ? number
+                      : Slot<Fields[K]>;
+            } & { readonly [index: number]: ConstPtr<T> }
+          : { readonly [index: number]: Slot<T> });
 }
 
 /**
@@ -730,7 +825,9 @@ declare module "c:memory" {
   // C, from storage or from a declared `@ntsConstant`, and its bits cannot be
   // turned back into something to read through.
   /** @ntsAbi intrinsic */
-  export function pointerBits(pointer: ConstPtr<void> | Opaque<string> | ClassChain | null): c_uintptr_t;
+  export function pointerBits(
+    pointer: ConstPtr<void> | Opaque<string> | ClassChain | null,
+  ): c_uintptr_t;
   // `*destination = *source` -- one whole `T`, copied.
   //
   // **An operation rather than an assignment**, because there is nowhere to
@@ -774,7 +871,10 @@ declare module "c:memory" {
   // `char **contents` -- or as untyped memory, `gconstpointer`
   // (`g_bytes_get_data`): the bytes are the bytes, whatever C calls them.
   /** @ntsAbi intrinsic */
-  export function bytesFrom(bytes: ConstPtr<c_char> | ConstPtr<void> | null, length: number): Uint8Array;
+  export function bytesFrom(
+    bytes: ConstPtr<c_char> | ConstPtr<void> | null,
+    length: number,
+  ): Uint8Array;
   // `value` as the handle type `T` when `is` holds, and `null` otherwise:
   // a downcast along a declared `Class` hierarchy, `GTK_BOX(w)` with its
   // check made explicit.
