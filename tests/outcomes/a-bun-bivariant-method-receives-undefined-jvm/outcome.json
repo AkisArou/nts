@@ -1,0 +1,35 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "aborted",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 28,
+      "unavailable": 0,
+      "runtime_declined": 1,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 1
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [
+      "the program threw rather than refusing: java.lang.NullPointerException: Cannot read the array length because \"<parameter2>\" is null"
+    ],
+    "error": null
+  },
+  "run": "check",
+  "category": "aborted",
+  "nts": "the program threw rather than refusing: java.lang.NullPointerException: Cannot read the array length because \"<parameter2>\" is null",
+  "node": null,
+  "measured_with": "71d588db456371b0",
+  "source": "measured"
+}

@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "kind": "adapted-upstream-test",
+  "upstream": "https://github.com/oven-sh/bun/blob/3a9ea00437f8065cd5a4604d7423299a769e2d9e/test/aot/parallel/mistyped-values/method-bivariance.ts",
+  "source_sha256": "9c49e18278059d1235b9ba107fa912a9f391095cf9986c74b261fcd02f97b52b",
+  "retained_original": "upstream.ts.txt",
+  "adaptation": "Replace test-runner calls and console output with exported work(n); keep the adversarial value route. The adjacent named control differs in one expression."
+}

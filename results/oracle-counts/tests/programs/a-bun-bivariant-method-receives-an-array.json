@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bun-bivariant-method-receives-an-array",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bun-bivariant-method-receives-an-array/src/main.ts",
+      "signature": "585528c646923698bc5901a5775c75c3650c7266db08a803e2acd64b62d6e779",
+      "keys": {
+        "c": "b52e1dcf5c2e8dc27b185f1a048bcb70",
+        "jvm": "5ba5027e68c7b5fd119e408506893ab3",
+        "llvm": "c917baee8684088f251b1b91e05b5a18"
+      },
+      "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45",
+      "driver_sha256": "c452604073501a788e0467929f1f1d234ca1b7b2850d3285bbe604642d890517",
+      "populations": {
+        "work": {
+          "count": 29,
+          "cases_sha256": "93a253466e9772fecc7244b7ce13ef95b74767df09adc0e8d1713bc99f771f45"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}
