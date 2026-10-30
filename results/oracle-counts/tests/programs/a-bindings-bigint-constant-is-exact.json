@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-bindings-bigint-constant-is-exact",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-bindings-bigint-constant-is-exact/src/main.ts",
+      "signature": "744d4f929b6199b625e3199453112d48fb12ba0f25ad5beb20abcfcd45a2b90f",
+      "keys": {
+        "c": "41f4bf277fe2712a4522765a5d80b54a",
+        "jvm": "105e893de6559a56cc857d9f1d70db63",
+        "llvm": "8637cfec0480fd003a13a6eb66c84a4f"
+      },
+      "cases_sha256": "0fc70984cfd6c07eb5a7946bcb21b942e674871f7158cdf954e1bc2df656898a",
+      "driver_sha256": "fa8cb7ae9ecdc4b6994aa96a538a5b4fe367da2df2bfb8f5c037d04094311105",
+      "populations": {
+        "negativeExact": {
+          "count": 1,
+          "cases_sha256": "ce13c95f70becbeb4acac774601c6156c5f6b569b09c00a950d39f7b1e57cb33"
+        },
+        "negativeLiteral": {
+          "count": 1,
+          "cases_sha256": "e48133b877a91e25a7f210877e5e34dbd69c8a60d979e98f66270f6b2940575d"
+        },
+        "positiveExact": {
+          "count": 1,
+          "cases_sha256": "9b190ed00889fbabf49d94e7a7eb1e11b24beca83b977b33c074287cbd064157"
+        },
+        "positiveLiteral": {
+          "count": 1,
+          "cases_sha256": "6519e12185c5c085416bbb2ecee871761f7418c448b5b3ad7f48769980d952c4"
+        },
+        "signedEndpoint": {
+          "count": 1,
+          "cases_sha256": "872f6f12872c9c230cf1c8ecf987dae7bbf634b5854d686c49ec20ba14a1945c"
+        },
+        "signedLiteral": {
+          "count": 1,
+          "cases_sha256": "02e7bf718a9ecbc95f58446951d6a3750add8492791a17a111a87e1ecbc836a4"
+        },
+        "unsignedEndpoint": {
+          "count": 1,
+          "cases_sha256": "b5d3489af8207362cd69dae3f09dbcf7595c72eaf52df7669dee9115f475ccf9"
+        },
+        "unsignedLiteral": {
+          "count": 1,
+          "cases_sha256": "58311c4f649b89f09bc2351a0765ade55c6505e363103652106d6ce2786355ff"
+        }
+      },
+      "complete": true,
+      "count": 8
+    }
+  ]
+}

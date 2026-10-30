@@ -347,6 +347,13 @@ pub(super) fn settle_printer_checks(lowered: &mut Lowered) {
     printed::settle_checks(&mut lowered.program, &mut lowered.arrivals.printer_checks);
 }
 
+/// A binding's constant outside JavaScript's floating-point evaluator.
+#[derive(Debug, Clone)]
+enum BindingConstant {
+    Pointer { bits: u64, ty: HirType },
+    BigInt(i128),
+}
+
 /// What a module declares outside any function.
 ///
 /// Two maps rather than one, because the two are not the same thing. A `const`
@@ -379,9 +386,9 @@ struct ModuleScope {
     /// bare `typeof` of an undeclared name in every call cost Bun 130 ns and
     /// the optimisation of the function asking.
     questions: rustc_hash::FxHashMap<u32, NodeId>,
-    /// A binding's native pointer constants, lossless bits beside their type.
-    /// Kept out of `constant_value`, which computes JavaScript arithmetic.
-    native_constants: rustc_hash::FxHashMap<u32, (u64, HirType)>,
+    /// A binding's exact integers and native pointers. Kept out of
+    /// `constant_value`, which computes JavaScript number arithmetic.
+    binding_constants: rustc_hash::FxHashMap<u32, BindingConstant>,
     /// Symbol to the foreign function a read of it calls, for a global the
     /// program does not own and a binding implements: lib.dom.d.ts's `declare
     /// var document`, `@ntsBoundBy "nts:dom" document`, is a call of
@@ -9096,10 +9103,27 @@ fn settle_by_binding(
                         "a zero pointer constant on a type that excludes null".to_owned(),
                     );
                 }
-                Some(bits) => drop(scope.native_constants.insert(symbol.0, (bits, ty.clone()))),
+                Some(bits) => drop(scope.binding_constants.insert(
+                    symbol.0,
+                    BindingConstant::Pointer { bits, ty: ty.clone() },
+                )),
                 None => drop(scope.unsupported.insert(
                     symbol.0,
                     format!("`@ntsConstant {text}`, which needs an integer fitting a 64-bit uncounted data pointer"),
+                )),
+            }
+            return true;
+        }
+        if *ty == HirType::BigInt {
+            match parse_bigint(text) {
+                Some(value) => drop(
+                    scope
+                        .binding_constants
+                        .insert(symbol.0, BindingConstant::BigInt(value)),
+                ),
+                None => drop(scope.unsupported.insert(
+                    symbol.0,
+                    format!("`@ntsConstant {text}`, which needs an exact integer fitting 128 bits"),
                 )),
             }
             return true;
@@ -50521,7 +50545,7 @@ impl<'a> FuncBuilder<'a> {
         {
             return Ok(Place::Global(global));
         }
-        if self.module.native_constants.contains_key(&symbol.0) {
+        if self.module.binding_constants.contains_key(&symbol.0) {
             return Err(self.unsupported(target, "assigning to a `const`"));
         }
         if self.module.bound.contains_key(&symbol.0) {
@@ -84107,7 +84131,7 @@ impl<'a> FuncBuilder<'a> {
             .module
             .constants
             .keys()
-            .chain(self.module.native_constants.keys())
+            .chain(self.module.binding_constants.keys())
             .chain(self.module.variables.keys())
             .chain(self.module.unsupported.keys())
             .chain(self.module.deferred.keys())
@@ -84144,19 +84168,23 @@ impl<'a> FuncBuilder<'a> {
         Err(self.unsupported(at, "a shorthand naming nothing in scope"))
     }
 
-    /// A declared pointer constant in its admitted native representation.
+    /// A binding's constant in its admitted exact representation.
     fn native_constant(
         &mut self,
         id: NodeId,
         symbol: nts_semantic_schema::SymbolId,
     ) -> Option<ValueId> {
-        let (bits, ty) = self.module.native_constants.get(&symbol.0).cloned()?;
-        // Admission proved the declaration includes null for zero. Keep
-        // that absence as the existing typed null, with no integer form.
-        let constant = if bits == 0 {
-            OpKind::ConstNull
-        } else {
-            OpKind::ConstHandle(bits)
+        let (constant, ty) = match self.module.binding_constants.get(&symbol.0)?.clone() {
+            BindingConstant::BigInt(value) => (OpKind::ConstInt(value), HirType::BigInt),
+            BindingConstant::Pointer { bits, ty } => {
+                // Admission proved the declaration includes null for zero.
+                let constant = if bits == 0 {
+                    OpKind::ConstNull
+                } else {
+                    OpKind::ConstHandle(bits)
+                };
+                (constant, ty)
+            }
         };
         let origin = self.origin(id);
         Some(self.push(constant, ty, origin))

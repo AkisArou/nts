@@ -16,6 +16,9 @@ mod dispatch;
 #[path = "native/constants.rs"]
 mod constants;
 
+#[path = "native/bigint_constants.rs"]
+mod bigint_constants;
+
 #[path = "native/hresult.rs"]
 mod hresult;
 
