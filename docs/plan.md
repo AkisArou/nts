@@ -244,36 +244,44 @@ The designs and their build orders are in [`foundations/`](foundations).
    parallel with the rest of this phase: the C API as each header declares it,
    written with TypeScript's values and checked against the header at every
    build. In this order:
-   1. **The vocabulary:** struct classes over C memory (`new T`, read-only
-      nested fields, `Object.assign` and copy constructors), `Ref<T>`,
-      `CArray<T>`, `addrOf` as a direct argument, pointer fields that keep
-      their targets alive, nullable pointers and handles, `errno()`,
-      `cstring` and `Handle`, with the checks that hold everywhere: an
-      interior zero and a NULL non-null result as `TypeError`s, and the
-      owner-thread check with or without a host (C-3, I-3). `local<T>()` goes.
-      Owner: runtime, with the compiler lane reviewing every core change.
-   2. **The binder:** C's number types first, then whole headers per target,
-      nullability and enum openness read from the header, C shims for
-      function-like macros and `static inline` functions, variadic calls
-      typed per call with `format` checked, and a `node:ffi` implementation
-      generated beside each binding. Owner: runtime2.
+   1. **The vocabulary:** branded struct classes over C memory with their
+      fields as own properties (`new T`, read-only nested references that
+      hold their root, `copy` and copy constructors), `Ref<T>`,
+      `CArray<T, N>` with checked indexing, `addrOf` as a direct argument,
+      `Handle` tokens, `CFunction`, `unsafeCast`, `cstring`, and `errno()`
+      and `lastError()` saved where they are read. With them, the lifetimes
+      and checks that hold everywhere: a lent value living to its block's
+      end, stored pointers held by their object, a lent buffer never detached,
+      what the program knew about C-reachable memory ending at each C call,
+      an interior zero and a NULL non-null result as `TypeError`s, and
+      callbacks only on the owner thread inside a C call, with or without a
+      host (C-3, I-3). Then the checking build. `local<T>()` goes. Owner:
+      runtime, with the compiler lane reviewing every core change, the
+      lifetime rule and the end of facts at a C call above all.
+   2. **The binder:** C's number types first, each kind also a value; then
+      whole headers per target, type-checked against what every target of a
+      build declares, with the type map of [calling C](targets/calling-c.md#types-at-the-boundary);
+      nullability, enum openness, `counted_by` and the other attributes read
+      from the header; constants, pointer casts included; C shims for
+      function-like macros and `static inline` functions; variadic arguments
+      of a C kind with `format` checked; the refusals (`va_list`, `setjmp`,
+      a TypeScript signal or exit handler). Owner: runtime2.
    3. **The existing bindings** move to the new forms (`tests/interop`,
-      `runtime/native/libc.d.ts` and its README), and the fact tags stay only
-      where metadata generates them. Owner: helper2, with the lanes whose
-      bindings move.
-   4. **Node 26 and `node:ffi`:** the node reference moves to Node 26, the
-      latest LTS line, re-recording what changes. C-interop programs then join
-      the node-compared corpus through the generated `node:ffi`
-      implementations (owner: tsrs), and `node:ffi` itself compiles ahead of
-      time, with libffi bundled from source for definitions built at run time
-      (owner: runtime).
-   5. **Rows:** the cost of a C call against `node:ffi`, a struct-heavy
-      binding and a callback-heavy one (owner: helper2).
+      `runtime/native/libc.d.ts` and its README), the hand-written ones
+      included, so `Counted`, `CBytes`, `CStrings`, copied string results and
+      `local` leave plain C and the fact tags stay only where metadata
+      generates them. Owner: helper2, with the lanes whose bindings move.
+   4. **Rows:** the cost of a C call, a struct-heavy binding and a
+      callback-heavy one, each against the same work written in C and against
+      node calling the library through a Node-API addon (owner: helper2).
 
    `runtime/node`'s libraries (libuv, llhttp, zlib, the crypto library) are
    the first bound this way. TypeScript's `using` and `DisposableStack`, which
-   `node:ffi`'s handles also use, follow from the compiler lane after its
-   soundness classes.
+   C handles can use, follow from the compiler lane after its soundness
+   classes. `node:ffi` is kept in mind for later, not scheduled
+   ([calling C](targets/calling-c.md#later-nodeffi)). Separately, the node
+   reference moves to Node 26, the latest LTS line, as a landing of its own
+   that re-records what changes (owner: tsrs).
 
 ## Phase 3: conformance-driven development
 

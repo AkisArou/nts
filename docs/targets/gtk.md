@@ -150,10 +150,10 @@ task, so a handler still runs to completion first, as in JavaScript.
 ## Strings at the boundary
 
 A `string` argument crosses as UTF-8 lent for the call (a lone surrogate
-becomes U+FFFD; a U+0000 inside the string stops the program); a string
-result is copied, and a string a callback returns is a `malloc`ed copy GLib
-takes over. `StringView` lends the exact units where a binding wants them
-([native](native.md#strings-at-the-boundary)).
+becomes U+FFFD; a U+0000 inside the string throws a `TypeError` at the call);
+a string result is copied, and a string a callback returns is a `malloc`ed
+copy GLib takes over. `StringView` lends the exact units where a binding wants
+them ([Calling C](calling-c.md#strings)).
 
 ## Errors in callbacks
 

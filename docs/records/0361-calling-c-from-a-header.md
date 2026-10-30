@@ -99,7 +99,8 @@ contested: strings converted for the call, buffers borrowed for the call,
 their own thread, ownership left untracked, and `using` on the library
 handle. It has no structs, arrays, variadic calls or errno, so it is nts's
 bridge for compatibility and for comparing C interop with node, not its main
-surface. The node reference moves to Node 26 for it.
+surface. The user keeps it in mind for later rather than building it now;
+the node reference moves to Node 26 on its own.
 
 ## What this changed
 
@@ -108,6 +109,48 @@ surface. The node reference moves to Node 26 for it.
   plain C its work is the checks of the specification.
 - `local<T>()` is removed. The fact tags remain only where a platform's
   metadata generates them.
+
+## The audit
+
+An independent audit of the accepted design, before it was written down
+([report](notebooks/c-interop-research/audit.md)), found four rules that let
+ordinary-looking TypeScript reach freed memory, each with a local fix:
+
+| finding | why | fix |
+|---|---|---|
+| "keep a reference" did not keep a struct alive | nts releases a value at its last use (`rc.rs`), so `uv_timer_start(timer, ...)` as the last use frees the timer before `uv_run` | a value lent to C lives to the end of its block, as a C local does |
+| `transfer()` freed bytes C was given | nts frees a transferred buffer's old block at once | a buffer once lent to C can never be detached |
+| nested references kept nothing alive | today the same projection is a raw pointer, so `return rect.a` dangles | a nested reference holds its root; a `CArray` index is checked |
+| `Handle.from<T>(ctx)` cast any `void *` | a closed handle, another type, C memory or NULL all read as a live `T` | handles are integer tokens in a runtime table, checked at every lookup, as Go's `cgo.Handle` is |
+
+Twelve more were fixed in the same pass. The largest:
+
+- **TypeScript keeps a narrowing across a C call** that rewrites a `Ref`
+  (tested with TypeScript 7.0.2), so a C call ends every fact about memory C
+  can reach, and no LLVM attribute comes from such a narrowing.
+- **Struct classes:** a literal satisfied an unbranded class structurally,
+  `readonly` held only on the class's own type, and `Object.assign` copied
+  nothing over prototype accessors (node printed `0 0`). Classes are branded,
+  fields are own accessors, nested fields are getter-only, and `copy` is C's
+  struct assignment.
+- **Callbacks:** a plain-C callback's pointer arguments die with the call, so
+  it cannot be carried to another thread; it runs only on the owner thread,
+  inside a C call, and a TypeScript signal or exit handler is refused.
+- **The generated types are stated:** pointers C produces are `Ptr<T>`,
+  `Ref` holds only scalars, pointers, handles and function pointers, buffers
+  without a same-width typed array are `CArray`s of the kind, and
+  `const char *` also takes bytes.
+- **Variadic arguments carry a C kind,** since a plain `number` would pass a
+  `double` where curl reads a `long`, and a format that is not a literal is
+  refused.
+- **The header's own attributes are read,** `counted_by` among them, and the
+  check `Counted` gave is stated as lost for plain C.
+
+The coordinator took the audit's fixes with three changes: a plain-C callback
+arriving on another thread is never carried, even a scalar-only one, so no
+callback becomes asynchronous by its signature; `SIG_IGN`, `SIG_DFL` and C
+functions remain accepted as signal and exit handlers; and every C kind is
+also a value, so element types are named at run time (`new Ref(c_ulong, 0)`).
 
 ## Gaps found in the code as it stood
 

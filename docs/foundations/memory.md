@@ -495,6 +495,19 @@ From the open-questions audit (10-28,
   reported by name, as principle 8 fails closed (P-7,
   [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
 
+From the calling-C audit (10-30,
+[record 0361](../records/0361-calling-c-from-a-header.md#the-audit)):
+
+- **A value lent to C is released no earlier than the end of its block,** the
+  one exception to releasing at the last use: C may still hold its address
+  when the program's last use has passed. That covers a struct object,
+  `CArray`, `Ref`, typed array and its buffer, and the root of a nested
+  reference or an `addrOf`. A parameter lives to the function's end and a
+  temporary to the end of its statement; the frame slot of such a value is not
+  shared before then, and one live across an `await` lives on the heap
+  ([Calling C](../targets/calling-c.md#structs-and-unions)). The cost is
+  memory held to the block's end, for lent values only.
+
 ## Evidence
 
 The study behind this page, with its measurements, the comparison with 15

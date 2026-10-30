@@ -146,7 +146,7 @@ In a message, a `string` is an `NSString`, as Swift's `String` is: an
 argument's UTF-16 is lent, an `NSString` is made of it and released after the
 send, and a result is read back through `UTF8String` and copied. `CString`
 (`objc:types`) is a C string in a message; outside a message, a `string` is the
-UTF-8 C string every [native](native.md#strings-at-the-boundary) binding
+UTF-8 C string every [C](calling-c.md#strings) binding
 passes, and a C function's `NSString *` is `BridgedString`.
 
 ## Errors in callbacks

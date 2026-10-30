@@ -1041,3 +1041,29 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
 - **The plan.** The user: "I think it should placed directly into our plan
   and be built in parallel." It is phase 2, item 9 of
   [the plan](../../plan.md), with owners for each stage.
+- **The audit's fixes.** The user had asked for "one last audit" and accepted
+  the coordinator's recommendations. The audit
+  ([report](c-interop-research/audit.md)) found four rules that let ordinary
+  TypeScript reach freed memory, and the coordinator took its fixes into
+  [Calling C](../../targets/calling-c.md): a value lent to C lives to its
+  block's end; a buffer once lent cannot be detached; nested references hold
+  their root, with `CArray` indexes checked; handles are checked integer
+  tokens. With them: a C call ends what the program knew about memory C can
+  reach; stored pointers are held by their object; the generated types are
+  stated; plain-C callbacks run only on the owner thread inside a C call, and
+  TypeScript signal and exit handlers and `setjmp` are refused; struct
+  classes are branded, with their fields as own properties and `copy` as C's
+  struct assignment; header attributes such as `counted_by` are read;
+  variadic arguments carry a C kind; `CFunction`, `unsafeCast` and pointer
+  constants; `errno()` and `lastError()` are saved only where read. The
+  coordinator departed from the audit in three places
+  ([record 0361](../0361-calling-c-from-a-header.md#the-audit)). Five decided
+  pages changed with it: native.md (stored pointers are held), errors.md (a
+  throw escaping a C callback ends the process on every target), gtk.md and
+  windows.md (a zero inside a string throws) and memory.md (a lent value's
+  lifetime).
+- **`node:ffi` later.** The user, after the decision: "we will tackle node:ffi
+  at some point later. no need to integrate it now. we just have to keep it in
+  mind." It leaves the plan's stages, and the design keeps room for it
+  ([Calling C](../../targets/calling-c.md#later-nodeffi)). The node reference
+  still moves to Node 26, as an item of its own.

@@ -171,14 +171,19 @@ int main(void) {
 
 ## Ownership of C pointers
 
-- **A plain C pointer is a word nts never counts.** An opaque handle or a
+- **A pointer C holds is a word nts never counts.** An opaque handle or a
   `Ptr` has no header, no retain, no release and no tracing. The program
   releases it with the library's own call or with `free`, as C does
   ([Calling C](calling-c.md#handles)).
+- **A pointer the program stores into its own C memory is held.** A struct
+  object, `CArray` or `Ref` keeps the target of a pointer stored into it
+  alive until another value replaces it or the object dies, in a side table
+  the cycle collector traces ([Calling C](calling-c.md#arrays-and-buffers)).
 - **What the compiler checks** is in
-  [Calling C](calling-c.md#what-nts-checks): an address passed only as a
-  direct argument, pointer fields keeping their targets alive, a lent buffer
-  held for the call, and every pointer tested for `null` before use.
+  [Calling C](calling-c.md#what-nts-checks): a lent value living to its
+  block's end, nested references holding their root, an address passed only
+  as a direct argument, a lent buffer never detached, and every pointer tested
+  for `null` before use.
 - **Counted families are the exception.** GObject, Objective-C, COM and Blink
   objects are counted by the compiler with their family's own pair, from
   their metadata, and their pages say how.
@@ -265,6 +270,6 @@ From 10-30:
 
 - **Calling C** is the C API as the header declares it, written with
   TypeScript's values; refined APIs are TypeScript packages over a binding, or
-  Node-API addons; nts implements `node:ffi`, and the node reference moves to
-  Node 26 ([Calling C](calling-c.md#decisions),
+  Node-API addons; `node:ffi` is kept in mind for later
+  ([Calling C](calling-c.md#decisions),
   [log](../records/notebooks/decisions-log.md#calling-c-10-30)). Not built.

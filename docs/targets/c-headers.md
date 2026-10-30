@@ -15,9 +15,8 @@ calls the binding, and the contract each call keeps, is
 | A name for every C number type, interchangeable with the fixed widths | decided; the first to build |
 | Binding whole headers directly, with no file of facts beside them | decided, not built |
 | A binding per target, from that target's headers | decided, not built |
-| Nullability, enum openness and `format` read from the header | decided, not built |
+| The header's attributes read: nullability, enum openness, `format`, `counted_by` and the rest | decided, not built |
 | C shims for function-like macros and `static inline` functions | decided, not built |
-| A `node:ffi` implementation of each binding, for the node reference | decided, not built |
 
 ## Binding named items: `nts bind-c`
 
@@ -113,18 +112,41 @@ beside them:
   `static inline` functions. Each item is bound or refused by name with its
   reason, in a report beside the binding.
 - **Per target.** A binding is generated from each target's headers, with
-  that target's layouts and number widths, and the witness checks each.
-- **What it reads beyond the types:** nullability (`_Nullable`, `_Nonnull`,
-  `nonnull`, `returns_nonnull`), an enum's openness (`enum_extensibility`) and
-  flags (`flag_enum`), and `format` for printf-style functions. Upstream clang
-  cannot put a count on a function parameter, and glibc writes its buffer and
-  deallocator attributes only for GCC; this design needs neither.
+  that target's layouts and number widths, and the witness checks each. A
+  build for several targets type-checks against what every one of them
+  declares: a function one target lacks, or a record laid out differently
+  (`struct stat`, x86-64's packed `epoll_event`), is used only through a
+  target's own module.
+- **What it reads beyond the types,** every attribute clang keeps, each with
+  one use:
+
+  | attribute | use |
+  |---|---|
+  | `_Nullable`, `_Nonnull`, `nonnull`, `returns_nonnull` | which pointers may be `null` ([null](calling-c.md#null)) |
+  | `enum_extensibility`, `flag_enum` | an enum's openness, and flags |
+  | `format` | a literal format string checked, and any other refused |
+  | `counted_by`, `sized_by` on a struct field | a count larger than a TypeScript-owned buffer throws a `RangeError` |
+  | `noescape` | a value lent there may be released at its last use, not its block's end |
+  | `ownership_returns`, `ownership_takes`, `malloc(deallocator)` | the releasing function, named in the binding's documentation and not enforced |
+
+  Every other attribute is ignored. Upstream clang cannot put a count on a
+  function parameter, and glibc writes its buffer and deallocator attributes
+  only for GCC, so they are absent from a clang-read glibc.
+- **Constants** come through clang: integers, strings, floating point, and a
+  macro that casts to a pointer (`SQLITE_TRANSIENT`, `MAP_FAILED`) as a typed
+  pointer constant. An extern variable (`stdout`, `optarg`, `environ`) is a
+  property that reads and writes the global.
 - **Function-like macros and `static inline` functions** become C functions
   that nts generates from the header, compiles into the program and checks
-  with the witness, so every target calls them through a real symbol.
-- **A `node:ffi` implementation** of each binding is generated beside it, so a
-  program that calls C runs under node as the reference
-  ([Calling C](calling-c.md#nodeffi)).
+  with the witness, so every target calls them through a real symbol. A macro
+  is bound when it expands to a single call whose arguments are its own
+  parameters, which take that callee's types (zlib's `deflateInit` calls
+  `deflateInit_`); any other is refused by name, with the reason.
+- **Refused by name:** `va_list` parameters; the functions that return twice
+  (`setjmp`, `sigsetjmp`, `_setjmp`, `vfork`); and a TypeScript function as a
+  signal or exit handler (`signal`, `sigset`, `bsd_signal`, `sigaction`'s
+  handler fields, `atexit`), which take C functions only
+  ([Calling C](calling-c.md#callbacks)).
 
 ## Open questions
 

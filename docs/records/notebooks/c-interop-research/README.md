@@ -9,7 +9,8 @@ the specification [Calling C](../../../targets/calling-c.md).
 | [`survey-a.md`](survey-a.md) | a Claude research agent | Swift 6.4, Rust 2024, .NET 10 and Java 25's FFM API, from primary sources |
 | [`survey-b.md`](survey-b.md) | a Claude research agent | Go 1.27, Zig 0.17, Kotlin/Native 2.4, Dart 3.13, Vala 0.56 and Nim 2.4, and the annotation vocabularies (clang's bounds-safety and nullability, GCC's attributes, SAL, win32metadata, GObject Introspection), with tests against clang 23.1.3 and GCC 16.2.1 |
 | [`chatgpt-report.md`](chatgpt-report.md) | ChatGPT, verbatim | A: JavaScript runtimes and dynamic languages; B: inferring facts from code and documentation, with the authors' own numbers; C: a catalogue of real C API patterns over 243 entries in 9 libraries |
-| [`node-ffi.md`](node-ffi.md) | the coordinator | Node 26's `node:ffi`, and how nts uses it |
+| [`node-ffi.md`](node-ffi.md) | the coordinator | Node 26's `node:ffi`, and how nts could use it (kept for later) |
+| [`audit.md`](audit.md) | a Claude research agent, reading main at `c5549ea5a` | the accepted design audited before it was written down: 4 blockers, 12 should-fix, 9 minor, with its TypeScript and node probes |
 | [`experiments.md`](experiments.md), [`zlib-pointer-params.tsv`](zlib-pointer-params.tsv) | the coordinator | clang's view of header annotations, LLVM's proofs on a small library and on zlib, and TypeScript's view of an out-variable |
 
 ## Where the reports agree

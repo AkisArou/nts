@@ -120,8 +120,8 @@ its cost measured first ([Decisions](#decisions)).
 ## Callbacks a host invokes
 
 An exception that escapes a callback a host invokes (a GTK signal, a Windows
-Runtime event, a C function pointer, a timer) is the program's uncaught error,
-and the target decides what that does:
+Runtime event, a timer) is the program's uncaught error, and the target
+decides what that does:
 
 | Target | The rule | Built |
 |---|---|---|
@@ -133,7 +133,13 @@ and the target decides what that does:
 Two parts of the rule hold everywhere. The error never unwinds through the
 host's frames: the boundary catches it. And a callback that must return a
 value to the host (a comparator, a C function with a result) and throws
-instead is fatal on every target, since no value can be made up. An unhandled
+instead is fatal on every target, since no value can be made up.
+
+A plain C function pointer is fatal on every target too, whatever it returns:
+C cannot be told that a callback failed, and carrying on would leave it
+working with whatever it believes the callback did. The error is printed as a
+command-line program prints it, naming the C boundary, and the process ends
+([Calling C](../targets/calling-c.md#callbacks)). An unhandled
 promise rejection follows the same split.
 
 ## Stack traces

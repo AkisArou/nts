@@ -146,8 +146,9 @@ dispatches the message and runs on `uv_run` as usual.
   deleted. A string array crosses as a block of `HSTRING`s.
 - **Win32:** a `W` function's `LPCWSTR` is `Utf16String`, lent in place when
   the string is already two bytes a unit. A lone surrogate passes unchanged
-  (Windows' strings are WTF-16), and a U+0000 inside the string stops the
-  program ([native](native.md#strings-at-the-boundary)).
+  (Windows' strings are WTF-16), and a U+0000 inside the string throws a
+  `TypeError` at the call, as for every C call
+  ([Calling C](calling-c.md#strings)).
 
 ## Errors in callbacks
 
