@@ -1,0 +1,1113 @@
+{
+  "schemaVersion": 1,
+  "sourceCommit": "22f1c1c567809e0e344f9942ffb8dfaff6228faa",
+  "testedSourceCommit": "56847951d06d03d69e7a78391241ce0b881e3d20",
+  "replay": {
+    "base": "48ce80cc2b12c1f66126ba4b9ebbd8569e4c380a",
+    "reviewedSource": "56847951d06d03d69e7a78391241ce0b881e3d20",
+    "patchSha256": "7484900d41482b9edc054104c8a74cf4f0def6db3152ab04f5be73bb19d15b15",
+    "identicalChangedBlobs": [
+      "benchmarks/cases/str-search-defaults/case.ts",
+      "benchmarks/cases/str-search-defaults/ref.cpp",
+      "benchmarks/cases/str-search-defaults/ref.java",
+      "benchmarks/cases/str-search-defaults/ref.provenance.json",
+      "compiler/codegen/c/tests/runtime_checkpoint.rs",
+      "compiler/codegen/jvm/src/ops.rs",
+      "compiler/codegen/llvm/src/signatures.rs",
+      "compiler/codegen/llvm/src/signatures_arm64.rs",
+      "compiler/codegen/llvm/src/signatures_arm64_linux.rs",
+      "compiler/codegen/llvm/src/signatures_arm64_windows.rs",
+      "compiler/codegen/llvm/src/signatures_win64.rs",
+      "compiler/core/src/hir/flow.rs",
+      "compiler/core/src/hir/lower/assertions.rs",
+      "compiler/core/src/hir/lower/numeric_arguments.rs",
+      "compiler/core/src/hir/lower/string_positions.rs",
+      "compiler/core/src/hir/runtime.rs",
+      "compiler/core/tests/programs/builtin-absence-admission/src/main.ts",
+      "compiler/core/tests/programs/builtin-absence-admission/tsconfig.json",
+      "compiler/core/tests/programs/string-needle-claims/src/main.ts",
+      "compiler/core/tests/programs/string-needle-claims/tsconfig.json",
+      "compiler/core/tests/programs/string-position-arguments/src/main.ts",
+      "compiler/core/tests/programs/string-position-arguments/tsconfig.json",
+      "compiler/core/tests/runtime_signatures.rs",
+      "compiler/core/tests/string_position_arguments.rs",
+      "results/oracle-counts/benchmarks/cases/str-search-defaults.json",
+      "results/oracle-counts/tests/programs/a-string-prefix-test-at-a-given-position.json",
+      "results/oracle-counts/tests/programs/a-string-search-uses-a-string-needle.json",
+      "results/oracle-counts/tests/programs/string-search-positions.json",
+      "runtime/c/nts_runtime.c",
+      "runtime/c/nts_runtime.h",
+      "runtime/c/tests/string_positions.c",
+      "runtime/jvm/nts-runtime.jar",
+      "runtime/jvm/src/nts/rt/NtsRuntime.java",
+      "tests/programs/a-module-constant-read-through-calls/src/main.ts",
+      "tests/programs/a-string-prefix-test-at-a-given-position/src/main.ts",
+      "tests/programs/a-string-prefix-test-at-a-given-position/tsconfig.json",
+      "tests/programs/a-string-search-uses-a-string-needle/src/main.ts",
+      "tests/programs/a-string-search-uses-a-string-needle/tsconfig.json",
+      "tests/programs/string-search-positions/src/main.ts",
+      "tests/programs/string-search-positions/tsconfig.json",
+      "tests/refusals/a-string-search-requires-a-string-needle/src/main.ts",
+      "tests/refusals/a-string-search-requires-a-string-needle/tsconfig.json"
+    ],
+    "upstreamMergedChangedBlobs": [
+      "compiler/core/src/hir/lower.rs"
+    ]
+  },
+  "sourceClearance": {
+    "previousProduction": "bb1ee2032",
+    "finalReplayAndTestDelta": "89c22571-5031-4c53-ac8c-3504e9368915"
+  },
+  "commandsAndResults": {
+    "corrected-r11": {
+      "source": "56847951d06d03d69e7a78391241ce0b881e3d20",
+      "pins": {
+        "nts": {
+          "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "sha256": "9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f",
+          "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+        },
+        "oracle-plan": {
+          "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90/oracle-plan",
+          "sha256": "4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90",
+          "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+        },
+        "nts-bench": {
+          "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/beb53ee7695c1b8371f989fe2e8f3c5740e9bcc25a510ded1c839943e6f62da5/nts-bench",
+          "sha256": "beb53ee7695c1b8371f989fe2e8f3c5740e9bcc25a510ded1c839943e6f62da5",
+          "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+        }
+      },
+      "rows": [
+        {
+          "name": "focused",
+          "cmd": "cargo",
+          "args": [
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-core",
+            "--test",
+            "string_position_arguments",
+            "--test",
+            "builtin_numeric_arguments"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 774.219533
+        },
+        {
+          "name": "clippy",
+          "cmd": "cargo",
+          "args": [
+            "clippy",
+            "--workspace",
+            "--all-targets",
+            "--",
+            "-D",
+            "warnings"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 39222.975403000004
+        },
+        {
+          "name": "release",
+          "cmd": "cargo",
+          "args": [
+            "build",
+            "--release"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 295976.714784
+        },
+        {
+          "name": "main-admission",
+          "cmd": "/home/akisarou/.cache/nts-gate/bin/6d9a82e23aa5420bdb86eff1644aa05529f8225a6a912f3de9d9c0322f080ee4/nts",
+          "args": [
+            "hir",
+            "--prepared",
+            "--backend",
+            "c",
+            "compiler/core/tests/programs/builtin-absence-admission/tsconfig.json"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 62.57560999999987
+        },
+        {
+          "name": "widened-admission",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions/0672df7e4333a7ccce432269896b85d657e4901c1aaa9bb8f56ef60216fd0943/nts",
+          "args": [
+            "hir",
+            "--prepared",
+            "--backend",
+            "c",
+            "compiler/core/tests/programs/builtin-absence-admission/tsconfig.json"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 78.38645400002133
+        },
+        {
+          "name": "corrected-admission",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "hir",
+            "--prepared",
+            "--backend",
+            "c",
+            "compiler/core/tests/programs/builtin-absence-admission/tsconfig.json"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 32.12049500003923
+        },
+        {
+          "name": "family-c",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/string-search-positions/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 1102.5941749999765
+        },
+        {
+          "name": "needle-c",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/a-string-search-uses-a-string-needle/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 327.9931080000242
+        },
+        {
+          "name": "prefix-c",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/a-string-prefix-test-at-a-given-position/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 348.18815600004746
+        },
+        {
+          "name": "cost-row-c",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "/home/akisarou/.cache/nts-tmp/helper2-string-position/corrected-r11/str-search-defaults.tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 320.6809169999906
+        },
+        {
+          "name": "family-llvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/string-search-positions/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "llvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 878.926306999987
+        },
+        {
+          "name": "needle-llvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/a-string-search-uses-a-string-needle/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "llvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 331.1077599999844
+        },
+        {
+          "name": "prefix-llvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/a-string-prefix-test-at-a-given-position/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "llvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 319.8599699999904
+        },
+        {
+          "name": "cost-row-llvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "/home/akisarou/.cache/nts-tmp/helper2-string-position/corrected-r11/str-search-defaults.tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "llvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 327.9663549999823
+        },
+        {
+          "name": "family-jvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/string-search-positions/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "jvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 451.32758799998555
+        },
+        {
+          "name": "needle-jvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/a-string-search-uses-a-string-needle/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "jvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 285.04366999998456
+        },
+        {
+          "name": "prefix-jvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/a-string-prefix-test-at-a-given-position/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "jvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 222.81986600003438
+        },
+        {
+          "name": "cost-row-jvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "/home/akisarou/.cache/nts-tmp/helper2-string-position/corrected-r11/str-search-defaults.tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "jvm"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 262.6537150000222
+        },
+        {
+          "name": "sanitized-c",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/string-search-positions/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "c",
+            "NTS_RC": "1",
+            "NTS_POISON": "1",
+            "NTS_SANITIZE": "address"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 1516.0577049999847
+        },
+        {
+          "name": "sanitized-llvm",
+          "cmd": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "args": [
+            "check",
+            "tests/programs/string-search-positions/tsconfig.json",
+            "--json"
+          ],
+          "extra": {
+            "NTS_BACKEND": "llvm",
+            "NTS_RC": "1",
+            "NTS_POISON": "1",
+            "NTS_SANITIZE": "address"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 1474.1937240000116
+        },
+        {
+          "name": "broad",
+          "cmd": "cargo",
+          "args": [
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-core",
+            "-p",
+            "nts-common",
+            "-p",
+            "nts-codegen-c",
+            "-p",
+            "nts-codegen-llvm",
+            "-p",
+            "nts-codegen-jvm",
+            "-p",
+            "nts-frontend-ts",
+            "-p",
+            "nts-frontend-tsrs"
+          ],
+          "extra": {},
+          "status": 101,
+          "signal": null,
+          "elapsedMs": 144.22803400002886
+        }
+      ]
+    },
+    "corrected-r12": {
+      "source": "56847951d06d03d69e7a78391241ce0b881e3d20",
+      "pins": {
+        "nts": {
+          "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+          "sha256": "9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f",
+          "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+        },
+        "oracle-plan": {
+          "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90/oracle-plan",
+          "sha256": "4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90",
+          "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+        },
+        "nts-bench": {
+          "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/beb53ee7695c1b8371f989fe2e8f3c5740e9bcc25a510ded1c839943e6f62da5/nts-bench",
+          "sha256": "beb53ee7695c1b8371f989fe2e8f3c5740e9bcc25a510ded1c839943e6f62da5",
+          "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+        }
+      },
+      "rows": [
+        {
+          "name": "broad",
+          "cmd": "cargo",
+          "args": [
+            "test",
+            "--profile",
+            "nts-dev",
+            "--no-fail-fast",
+            "-p",
+            "nts-core",
+            "-p",
+            "nts-codegen-common",
+            "-p",
+            "nts-codegen-c",
+            "-p",
+            "nts-codegen-llvm",
+            "-p",
+            "nts-codegen-jvm",
+            "-p",
+            "nts-frontend-ts",
+            "-p",
+            "nts-frontend-tsrs"
+          ],
+          "extra": {},
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 937620.773942
+        },
+        {
+          "name": "test262-cases",
+          "cmd": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "test262-cases"
+          ],
+          "extra": {
+            "NTS_BIN": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 90744.90541899996
+        },
+        {
+          "name": "test262-builtins-cases",
+          "cmd": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "test262-builtins-cases"
+          ],
+          "extra": {
+            "NTS_BIN": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 16549.728874000022
+        },
+        {
+          "name": "test262-rest-cases",
+          "cmd": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "test262-rest-cases"
+          ],
+          "extra": {
+            "NTS_BIN": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 10831.87724000006
+        },
+        {
+          "name": "integrity",
+          "cmd": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "integrity"
+          ],
+          "extra": {
+            "NTS_BIN": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 690370.0018789999
+        },
+        {
+          "name": "integrity-runtime",
+          "cmd": "sh",
+          "args": [
+            "tooling/gate/all.sh",
+            "--call",
+            "integrity-runtime"
+          ],
+          "extra": {
+            "NTS_BIN": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+            "NTS_BACKEND": "c"
+          },
+          "status": 0,
+          "signal": null,
+          "elapsedMs": 574247.280125
+        }
+      ]
+    },
+    "jvm-canonical-r17": {
+      "source": "56847951d06d03d69e7a78391241ce0b881e3d20",
+      "command": "cargo",
+      "args": [
+        "test",
+        "--profile",
+        "nts-dev",
+        "--no-fail-fast",
+        "-p",
+        "nts-codegen-jvm"
+      ],
+      "JAVA_HOME": "/home/akisarou/.asdf/installs/java/corretto-21.0.5.11.1",
+      "ANDROID_HOME": "/home/akisarou/Android/Sdk",
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 204872.30019200002
+    },
+    "baseline-build-r19": {
+      "source": "cf229f39bce5c1fc5721c91dc29d92906d94b694",
+      "cmd": "cargo",
+      "args": [
+        "build",
+        "--release",
+        "--jobs",
+        "4"
+      ],
+      "status": 0,
+      "signal": null,
+      "elapsedMs": 189498.726582
+    }
+  },
+  "summary": {
+    "rust": {
+      "passed": 1901,
+      "failed": 0,
+      "ignored": 4,
+      "groups": 267
+    },
+    "supplementalCanonicalJvm": {
+      "passed": 185,
+      "failed": 0,
+      "groups": 53,
+      "overlapsBroadTests": true
+    },
+    "family": {
+      "callsPerBackend": 638,
+      "backends": [
+        "C",
+        "LLVM",
+        "JVM"
+      ],
+      "nativeRcPoisonAsanCallsPerBackend": 638
+    },
+    "fiveCRecords": {
+      "language": [
+        6974,
+        8367
+      ],
+      "builtins": [
+        828,
+        1034
+      ],
+      "annexB": [
+        9,
+        12
+      ],
+      "staging": [
+        53,
+        58
+      ],
+      "harness": [
+        17,
+        17
+      ],
+      "changed": 0
+    },
+    "integrity": {
+      "additionalViolations": 0,
+      "knownGeneral": 335,
+      "knownRuntime": 1427
+    }
+  },
+  "cost": {
+    "method": "A/B/A; official benchmark loop; CPU4; with-lock --wait; NTS_BENCH_LANES=c,llvm,jvm; all omissions recorded explicitly; intentionally beside any gate",
+    "unit": "nts-helper2-string-position-cost-r20-20261030",
+    "times": [
+      "2026-10-30T07:47:57.737Z",
+      "2026-10-30T07:50:33.039Z"
+    ],
+    "baselinePins": {
+      "nts": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-position-verified-baseline/66df7d4a7ffb3cc82e415974517340b268e5b0fdc7fb2df113d6a40dd90714b0/nts",
+        "sha256": "66df7d4a7ffb3cc82e415974517340b268e5b0fdc7fb2df113d6a40dd90714b0",
+        "source": "cf229f39bce5c1fc5721c91dc29d92906d94b694"
+      },
+      "nts-bench": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-position-verified-baseline/b4ddb5abeb14240754acf91a291811be210f2b43c825149c5ca9a74287cf1084/nts-bench",
+        "sha256": "b4ddb5abeb14240754acf91a291811be210f2b43c825149c5ca9a74287cf1084",
+        "source": "cf229f39bce5c1fc5721c91dc29d92906d94b694"
+      },
+      "oracle-plan": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-position-verified-baseline/59fe0185ba432643511748da8e9ee771c960ab1baa602d0062bb36f8761bab0a/oracle-plan",
+        "sha256": "59fe0185ba432643511748da8e9ee771c960ab1baa602d0062bb36f8761bab0a",
+        "source": "cf229f39bce5c1fc5721c91dc29d92906d94b694"
+      }
+    },
+    "candidatePins": {
+      "nts": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f/nts",
+        "sha256": "9dc82d80c6a6d98ac09cd5e1b3efd5857ec31fb10e0fbe4d1ff803f9bb9dc76f",
+        "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+      },
+      "oracle-plan": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90/oracle-plan",
+        "sha256": "4eabdc0e033a0b75972c60540643819389ae77b5ee76c577e741b2d0ec4d7b90",
+        "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+      },
+      "nts-bench": {
+        "path": "/home/akisarou/.cache/nts-pins/helper2-string-positions-corrected/beb53ee7695c1b8371f989fe2e8f3c5740e9bcc25a510ded1c839943e6f62da5/nts-bench",
+        "sha256": "beb53ee7695c1b8371f989fe2e8f3c5740e9bcc25a510ded1c839943e6f62da5",
+        "source": "56847951d06d03d69e7a78391241ce0b881e3d20"
+      }
+    },
+    "runs": [
+      {
+        "arm": "A-before",
+        "record": "results/benchmarks/runs/2026-10-30-cf229f39bce5-3bd315a1e6ce4e75a6463905097592ac.json",
+        "sha256": "77b234bf4c5c60d069a22dc36e7d05417456010ab1f7266d2eccac0d2bb7b463",
+        "conditions": {
+          "coreDumps": "all comparator children disable core dumps",
+          "cpu": "4",
+          "sibling": 5,
+          "start": {
+            "cpu5": "cpu5 66186 32207 340817 18902551 913910 40520 14462 0 0 0",
+            "landingLockHeld": false,
+            "load": "1.53 8.40 19.75 2/1964 453089",
+            "memoryAvailableBytes": 26423803904,
+            "time": "2026-10-30T07:47:57.785Z"
+          },
+          "end": {
+            "time": "2026-10-30T07:48:48.450Z",
+            "load": "2.24 7.40 18.76 3/2039 459626",
+            "memoryAvailableBytes": 25122648064,
+            "cpu5": "cpu5 66186 32207 340822 18907614 913911 40520 14462 0 0 0",
+            "landingLockHeld": false
+          }
+        }
+      },
+      {
+        "arm": "B",
+        "record": "results/benchmarks/runs/2026-10-30-93874078681d-e785186df70d415b8494fd97e17bb52b.json",
+        "sha256": "364bb7f9ae38d32bcc9c07920cd6d6b476910397217a28ed6ebdb7321d9129e1",
+        "conditions": {
+          "coreDumps": "all comparator children disable core dumps",
+          "cpu": "4",
+          "sibling": 5,
+          "start": {
+            "cpu5": "cpu5 66186 32207 340822 18907670 913911 40520 14462 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.24 7.40 18.76 5/2016 459820",
+            "memoryAvailableBytes": 25095516160,
+            "time": "2026-10-30T07:48:49.015Z"
+          },
+          "end": {
+            "time": "2026-10-30T07:49:40.092Z",
+            "load": "2.31 6.62 17.89 3/2116 465275",
+            "memoryAvailableBytes": 24067063808,
+            "cpu5": "cpu5 66186 32207 340824 18912777 913911 40520 14462 0 0 0",
+            "landingLockHeld": false
+          }
+        }
+      },
+      {
+        "arm": "A-after",
+        "record": "results/benchmarks/runs/2026-10-30-ff9cef25432b-3524119ac18948f2a9291530c1080fe5.json",
+        "sha256": "c39edf131e4f65c791e939a99904fb09509e6e0658deea356f604ed59a4d9ab7",
+        "conditions": {
+          "coreDumps": "all comparator children disable core dumps",
+          "cpu": "4",
+          "sibling": 5,
+          "start": {
+            "cpu5": "cpu5 66186 32207 340824 18912831 913911 40520 14462 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.31 6.62 17.89 11/2085 465647",
+            "memoryAvailableBytes": 23847763968,
+            "time": "2026-10-30T07:49:40.629Z"
+          },
+          "end": {
+            "time": "2026-10-30T07:50:32.881Z",
+            "load": "4.17 6.47 17.25 4/2007 471129",
+            "memoryAvailableBytes": 24271433728,
+            "cpu5": "cpu5 66186 32207 340827 18918052 913913 40520 14463 0 0 0",
+            "landingLockHeld": false
+          }
+        }
+      }
+    ],
+    "comparison": [
+      {
+        "name": "str-search-defaults",
+        "backend": "nts C",
+        "nanosecondsABA": [
+          10940.2723,
+          11260.2941,
+          11150.6424
+        ],
+        "ratioToGeometricBaseline": 1.0194964639191584,
+        "ratioToEachAnchor": [
+          1.0292517216413342,
+          1.009833666623548
+        ],
+        "baselineDriftRatio": 1.0192289637982777,
+        "trialSpreadRatios": [
+          1.0131152220041177,
+          1.0159979125234393,
+          1.0155287465769685
+        ],
+        "verdict": "noise",
+        "qualification": "The A/B/A anchors and control move on the same scale; this sitting does not establish a regression or improvement."
+      },
+      {
+        "name": "str-search-defaults",
+        "backend": "nts LLVM",
+        "nanosecondsABA": [
+          10897.2966,
+          11164.3964,
+          11300.6409
+        ],
+        "ratioToGeometricBaseline": 1.0060610256382907,
+        "ratioToEachAnchor": [
+          1.0245106478977548,
+          0.987943648399623
+        ],
+        "baselineDriftRatio": 1.0370132441838833,
+        "trialSpreadRatios": [
+          1.0300436165057671,
+          1.0228907135543843,
+          1.0249396916948312
+        ],
+        "verdict": "noise",
+        "qualification": "The A/B/A anchors and control move on the same scale; this sitting does not establish a regression or improvement."
+      },
+      {
+        "name": "str-search-defaults",
+        "backend": "nts JVM",
+        "nanosecondsABA": [
+          16533.7865,
+          17110.3957,
+          17022.5214
+        ],
+        "ratioToGeometricBaseline": 1.0199102260186206,
+        "ratioToEachAnchor": [
+          1.0348746005641238,
+          1.0051622375989493
+        ],
+        "baselineDriftRatio": 1.0295597684172348,
+        "trialSpreadRatios": [
+          1.0066356306221809,
+          1.0044922280786293,
+          1.0102128289878372
+        ],
+        "verdict": "noise",
+        "qualification": "The A/B/A anchors and control move on the same scale; this sitting does not establish a regression or improvement."
+      },
+      {
+        "name": "strings",
+        "backend": "nts C",
+        "nanosecondsABA": [
+          368.3787,
+          387.0986,
+          387.5385
+        ],
+        "ratioToGeometricBaseline": 1.024511689955215,
+        "ratioToEachAnchor": [
+          1.0508169989198615,
+          0.9988648869725201
+        ],
+        "baselineDriftRatio": 1.0520111504818277,
+        "trialSpreadRatios": [
+          1.001724041047976,
+          1.000605530477248,
+          1.0016573837180047
+        ],
+        "verdict": "noise",
+        "qualification": "The A/B/A anchors and control move on the same scale; this sitting does not establish a regression or improvement."
+      },
+      {
+        "name": "strings",
+        "backend": "nts LLVM",
+        "nanosecondsABA": [
+          385.6955,
+          387.3747,
+          387.0304
+        ],
+        "ratioToGeometricBaseline": 1.0026201477854997,
+        "ratioToEachAnchor": [
+          1.0043536935224808,
+          1.0008895942024194
+        ],
+        "baselineDriftRatio": 1.0034610204163648,
+        "trialSpreadRatios": [
+          1.0042409102517402,
+          1.0005150052391134,
+          1.0005110709649683
+        ],
+        "verdict": "noise",
+        "qualification": "The A/B/A anchors and control move on the same scale; this sitting does not establish a regression or improvement."
+      },
+      {
+        "name": "strings",
+        "backend": "nts JVM",
+        "nanosecondsABA": [
+          1582.5011,
+          1583.0481,
+          1581.053
+        ],
+        "ratioToGeometricBaseline": 1.000803663100434,
+        "ratioToEachAnchor": [
+          1.0003456553679488,
+          1.001261880531519
+        ],
+        "baselineDriftRatio": 0.9990849295460207,
+        "trialSpreadRatios": [
+          1.0205410915670137,
+          1.0091688306880884,
+          1.0034380884132283
+        ],
+        "verdict": "noise",
+        "qualification": "The A/B/A anchors and control move on the same scale; this sitting does not establish a regression or improvement."
+      }
+    ],
+    "omittedColumns": [
+      "C++",
+      "Bun JIT",
+      "Bun AOT",
+      "ScriptC",
+      "nts f64"
+    ],
+    "noPositionPath": "Omission selects the original helper with no numeric coercion or position clamp. Forward UTF-16 and reverse helper code also serves positioned calls; the corrected bounded reverse search changes inlined instructions, not helper selection. No whole-executable identity claim is made.",
+    "artifactComparison": {
+      "str-search-defaults": {
+        "sources": {
+          "specialized.c": {
+            "identical": true,
+            "sha256": [
+              "8ae666498b9221c894ceb158a914a13dc6cd4ce8dbce5ee2859986c81ac0ed7c",
+              "8ae666498b9221c894ceb158a914a13dc6cd4ce8dbce5ee2859986c81ac0ed7c"
+            ]
+          },
+          "specialized.ll": {
+            "identical": true,
+            "sha256": [
+              "9e0fb13d6d95780714617f9926ff4e94ac03ce8e92145598889d35e462edff6d",
+              "9e0fb13d6d95780714617f9926ff4e94ac03ce8e92145598889d35e462edff6d"
+            ]
+          }
+        },
+        "assembly": {
+          "nts:work": {
+            "identicalNormalized": false,
+            "instructions": [
+              350,
+              343
+            ]
+          },
+          "nts:nts_str_starts_with": {
+            "identicalNormalized": true,
+            "instructions": [
+              36,
+              36
+            ]
+          },
+          "nts:nts_str_ends_with": {
+            "identicalNormalized": true,
+            "instructions": [
+              39,
+              39
+            ]
+          },
+          "nts:nts_str_find": {
+            "identicalNormalized": false,
+            "instructions": [
+              120,
+              124
+            ]
+          },
+          "nts:nts_str_index_of": {
+            "identicalNormalized": true,
+            "instructions": [
+              4,
+              4
+            ]
+          },
+          "nts:nts_str_includes": {
+            "identicalNormalized": true,
+            "instructions": [
+              12,
+              12
+            ]
+          },
+          "nts:nts_str_last_index_of": {
+            "identicalNormalized": false,
+            "instructions": [
+              54,
+              54
+            ]
+          },
+          "ntsllvm:work": {
+            "identicalNormalized": false,
+            "instructions": [
+              368,
+              360
+            ]
+          },
+          "ntsllvm:nts_str_starts_with": {
+            "identicalNormalized": true,
+            "instructions": [
+              36,
+              36
+            ]
+          },
+          "ntsllvm:nts_str_ends_with": {
+            "identicalNormalized": true,
+            "instructions": [
+              39,
+              39
+            ]
+          },
+          "ntsllvm:nts_str_find": {
+            "identicalNormalized": false,
+            "instructions": [
+              120,
+              124
+            ]
+          },
+          "ntsllvm:nts_str_index_of": {
+            "identicalNormalized": true,
+            "instructions": [
+              4,
+              4
+            ]
+          },
+          "ntsllvm:nts_str_includes": {
+            "identicalNormalized": true,
+            "instructions": [
+              12,
+              12
+            ]
+          },
+          "ntsllvm:nts_str_last_index_of": {
+            "identicalNormalized": false,
+            "instructions": [
+              54,
+              54
+            ]
+          }
+        }
+      },
+      "strings": {
+        "sources": {
+          "specialized.c": {
+            "identical": true,
+            "sha256": [
+              "5c69a63e017879efee66cce298549a38582884dd6325fdcd3624cc63e43ce468",
+              "5c69a63e017879efee66cce298549a38582884dd6325fdcd3624cc63e43ce468"
+            ]
+          },
+          "specialized.ll": {
+            "identical": true,
+            "sha256": [
+              "dbd69aba0ac5cc8c83a8e6686ccfba7c8a44f5b5fc1b5d9b1bb066e1be5f0397",
+              "dbd69aba0ac5cc8c83a8e6686ccfba7c8a44f5b5fc1b5d9b1bb066e1be5f0397"
+            ]
+          }
+        },
+        "assembly": {
+          "nts:scan": {
+            "identicalNormalized": true,
+            "instructions": [
+              166,
+              166
+            ]
+          },
+          "nts:nts_str_starts_with": {
+            "identicalNormalized": true,
+            "instructions": [
+              34,
+              34
+            ]
+          },
+          "nts:nts_str_find": {
+            "identicalNormalized": false,
+            "instructions": [
+              118,
+              122
+            ]
+          },
+          "nts:nts_str_index_of": {
+            "identicalNormalized": true,
+            "instructions": [
+              4,
+              4
+            ]
+          },
+          "nts:nts_str_includes": {
+            "identicalNormalized": true,
+            "instructions": [
+              12,
+              12
+            ]
+          },
+          "ntsllvm:scan": {
+            "identicalNormalized": true,
+            "instructions": [
+              188,
+              188
+            ]
+          },
+          "ntsllvm:nts_str_starts_with": {
+            "identicalNormalized": true,
+            "instructions": [
+              34,
+              34
+            ]
+          },
+          "ntsllvm:nts_str_find": {
+            "identicalNormalized": false,
+            "instructions": [
+              118,
+              122
+            ]
+          },
+          "ntsllvm:nts_str_index_of": {
+            "identicalNormalized": true,
+            "instructions": [
+              4,
+              4
+            ]
+          },
+          "ntsllvm:nts_str_includes": {
+            "identicalNormalized": true,
+            "instructions": [
+              12,
+              12
+            ]
+          }
+        }
+      }
+    },
+    "interpretation": "Main accepted noise at the measured resolution. No causal regression or improvement is claimed; the roughly 6% preliminary C increase did not reproduce against a verified baseline."
+  },
+  "retainedFailures": {
+    "root": "/home/akisarou/.cache/nts-tmp/helper2-string-position",
+    "notes": [
+      "Earlier stale JVM jar NoSuchMethodError was setup failure and regenerated before final tests.",
+      "A stale ownership fixture was corrected to cross an actually writing call; its oracle row is unchanged.",
+      "Initial broadened raw-absence evaluator incorrectly admitted storage null; corrected contract-scoped source is the only proposed production source.",
+      "An unsupported fill start-arity control was replaced with supported with(index,replacement) controls.",
+      "The first broad tail invoked a nonexistent package and measured nothing; corrected r12 supplied the terminal suite.",
+      "Earlier runaway/stopped and unverified-baseline cost receipts remain retained."
+    ]
+  }
+}
