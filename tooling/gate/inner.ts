@@ -15,7 +15,8 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 // Run as the gate builds -- release, one code generation unit, thin LTO -- the
 // tests alone took 30 to 45 minutes beside a gate (2026-10-22), and the gate
 // then built them again. This runs the same tests in the `nts-dev` profile
-// (Cargo.toml): optimized, but incremental, so a change to one crate rebuilds
+// (Cargo.toml): optimized, incremental, with the gate test profile's overflow
+// checks and debug assertions, so a change to one crate rebuilds
 // that crate and what depends on it. It is not a gate and does not replace
 // one; it is what makes the gate not the place a change is found to be red.
 //
