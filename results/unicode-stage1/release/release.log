@@ -1,0 +1,7 @@
+   Compiling nts-codegen-c v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/c)
+   Compiling nts-bench v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/bench)
+   Compiling nts-differential v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/differential)
+   Compiling nts-codegen-napi v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/napi)
+   Compiling nts-suite v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/suite)
+   Compiling nts-cli v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/cli)
+    Finished `release` profile [optimized] target(s) in 2m 15s

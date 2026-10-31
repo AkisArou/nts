@@ -1,0 +1,35 @@
+{
+  "measuredTip": "23aba5c80fab1aeda1ce9ac088663dca29006c55",
+  "consolidatedSource": "9a343f8c799ed8b25fcec92fe59e22cae6a38b9f",
+  "finalTip": "c0df7595bb5be1638a50ce11f94f6da5cfa1ff7a",
+  "tree": "f7daab27830edfe50b5067e005b4ca4898c10ac2",
+  "sourceAndDataTreeExactlyUnchanged": true,
+  "base": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+  "ruleCommit": "5d08e810a",
+  "resultCommits": [
+    {
+      "original": "55a6dd1fde5423451de855abf6b13c44a4ba69ad",
+      "new": "27761e69a3fe9a04bc763385384965d2be90e54f"
+    },
+    {
+      "original": "d66141720bc6ad083f5c3eaff7a07b76df92bb6c",
+      "new": "ef87fcac9259427a20a5ecd881140668e6711c2d"
+    },
+    {
+      "original": "77320f248529b29725ea9d379e1faace740e69cd",
+      "new": "306d8f1367207ae9ec9f5cf97472062d62fd7dac"
+    },
+    {
+      "original": "2df01a690a655b7cedbe921e7fea98b5f6614f82",
+      "new": "dc8b74f58b0be35bf184738a8e0340f0123dab23"
+    },
+    {
+      "original": "d79fe154bf98bc9e79bb52fc64e5f6635286d638",
+      "new": "e4b235447813e057b306d4d971f64633a5fb9ccd"
+    },
+    {
+      "original": "23aba5c80fab1aeda1ce9ac088663dca29006c55",
+      "new": "c0df7595bb5be1638a50ce11f94f6da5cfa1ff7a"
+    }
+  ]
+}

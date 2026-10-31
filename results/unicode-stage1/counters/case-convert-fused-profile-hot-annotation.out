@@ -1,0 +1,825 @@
+ Percent |	Source code & Disassembly of case-convert-fused-c for cpu_core/cycles/u (5365 samples, percent: local period)
+-----------------------------------------------------------------------------------------------------------------------------
+         :
+         :
+         :
+         : 3    Disassembly of section .text:
+         :
+         : 5    000000000000a240 <nts_str_case_convert.llvm.14165513408623713557>:
+    3.83 :   a240:   push   %rbp
+    0.00 :   a241:   push   %r15
+    0.00 :   a243:   push   %r14
+    0.00 :   a245:   push   %r13
+    0.00 :   a247:   push   %r12
+    0.00 :   a249:   push   %rbx
+    0.00 :   a24a:   sub    $0x48,%rsp
+    0.00 :   a24e:   mov    %rdi,%r14
+    4.46 :   a251:   mov    %fs:0x28,%rax
+    0.00 :   a25a:   mov    %rax,0x40(%rsp)
+    0.00 :   a25f:   mov    0x10(%rdi),%ebp
+    0.99 :   a262:   mov    0x14(%rdi),%ebx
+    0.00 :   a265:   lea    0x1c(%rdi),%r15
+    0.00 :   a269:   test   $0x1,%bpl
+    0.00 :   a26d:   jne    a368 <nts_str_case_convert.llvm.14165513408623713557+0x128>
+    0.00 :   a273:   test   %edx,%edx
+    0.00 :   a275:   sete   %r12b
+    3.12 :   a279:   shl    $0x5,%r12b
+    0.00 :   a27d:   or     $0x41,%r12b
+    0.00 :   a281:   cmp    $0xf,%ebx
+    0.00 :   a284:   jbe    a43d <nts_str_case_convert.llvm.14165513408623713557+0x1fd>
+    0.67 :   a28a:   vmovdqu (%r15),%xmm0
+    0.00 :   a28f:   vpand  0x1dd9(%rip),%xmm0,%xmm2        # c070 <_IO_stdin_used+0x70>
+    0.00 :   a297:   vmovd  %r12d,%xmm1
+    0.00 :   a29c:   vpbroadcastb %xmm1,%xmm1
+    0.02 :   a2a1:   vpsubb %xmm1,%xmm0,%xmm0
+    3.26 :   a2a5:   vpminub 0x1dd3(%rip),%xmm0,%xmm3        # c080 <_IO_stdin_used+0x80>
+    0.04 :   a2ad:   vpcmpeqb %xmm3,%xmm0,%xmm0
+    0.02 :   a2b1:   vpsubb %xmm0,%xmm2,%xmm0
+    0.57 :   a2b5:   mov    $0x10,%ecx
+    0.02 :   a2ba:   cmp    $0x20,%ebx
+    0.00 :   a2bd:   jb     a310 <nts_str_case_convert.llvm.14165513408623713557+0xd0>
+    0.00 :   a2bf:   mov    $0x10,%eax
+    0.02 :   a2c4:   vpbroadcastd 0x1d3f(%rip),%xmm2        # c00c <_IO_stdin_used+0xc>
+    0.00 :   a2cd:   vpbroadcastd 0x1d3a(%rip),%xmm3        # c010 <_IO_stdin_used+0x10>
+    3.30 :   a2d6:   vpbroadcastd 0x1d35(%rip),%xmm4        # c014 <_IO_stdin_used+0x14>
+    0.00 :   a2df:   nop
+    0.04 :   a2e0:   mov    %eax,%ecx
+    0.60 :   a2e2:   vmovdqu (%r15,%rcx,1),%xmm5
+    0.00 :   a2e8:   vpand  %xmm2,%xmm5,%xmm6
+    0.06 :   a2ec:   vpor   %xmm0,%xmm6,%xmm0
+    0.23 :   a2f0:   vpsubb %xmm1,%xmm5,%xmm5
+    0.00 :   a2f4:   vpminub %xmm3,%xmm5,%xmm6
+    3.30 :   a2f8:   vpcmpeqb %xmm6,%xmm5,%xmm5
+    0.11 :   a2fc:   vpand  %xmm4,%xmm5,%xmm5
+    0.19 :   a300:   vpor   %xmm5,%xmm0,%xmm0
+    0.56 :   a304:   lea    0x10(%rax),%ecx
+    0.00 :   a307:   add    $0x20,%eax
+    0.00 :   a30a:   cmp    %ebx,%eax
+    0.13 :   a30c:   mov    %ecx,%eax
+    0.00 :   a30e:   jbe    a2e0 <nts_str_case_convert.llvm.14165513408623713557+0xa0>
+    3.95 :   a310:   cmp    %ebx,%ecx
+    0.00 :   a312:   jae    a33b <nts_str_case_convert.llvm.14165513408623713557+0xfb>
+    0.15 :   a314:   vmovdqu -0x10(%r15,%rbx,1),%xmm2
+    1.07 :   a31b:   vpand  0x1d4d(%rip),%xmm2,%xmm3        # c070 <_IO_stdin_used+0x70>
+    6.30 :   a323:   vpsubb %xmm1,%xmm2,%xmm1
+    1.14 :   a327:   vpminub 0x1d51(%rip),%xmm1,%xmm2        # c080 <_IO_stdin_used+0x80>
+    2.17 :   a32f:   vpcmpeqb %xmm2,%xmm1,%xmm1
+    1.68 :   a333:   vpsubb %xmm1,%xmm3,%xmm1
+    1.32 :   a337:   vpor   %xmm0,%xmm1,%xmm0
+    3.38 :   a33b:   vpshufd $0xee,%xmm0,%xmm1
+    1.83 :   a340:   vpor   %xmm0,%xmm1,%xmm0
+    1.24 :   a344:   vmovq  %xmm0,%rax
+    0.49 :   a349:   mov    %rax,%rcx
+    0.17 :   a34c:   shr    $0x20,%rcx
+    0.62 :   a350:   or     %rax,%rcx
+    1.38 :   a353:   mov    %rcx,%rax
+    0.52 :   a356:   shr    $0x10,%rax
+    3.56 :   a35a:   or     %ecx,%eax
+    2.48 :   a35c:   mov    %eax,%ecx
+    0.67 :   a35e:   shr    $0x8,%ecx
+    1.40 :   a361:   or     %eax,%ecx
+    0.73 :   a363:   jmp    a565 <nts_str_case_convert.llvm.14165513408623713557+0x325>
+    0.00 :   a368:   xor    %r12d,%r12d
+    0.00 :   a36b:   test   %edx,%edx
+    0.00 :   a36d:   setne  %al
+    0.00 :   a370:   test   %ebx,%ebx
+    0.00 :   a372:   je     a45b <nts_str_case_convert.llvm.14165513408623713557+0x21b>
+    0.00 :   a378:   mov    %al,%r12b
+    0.00 :   a37b:   shl    $0x5,%r12d
+    0.00 :   a37f:   or     $0xffffff9f,%r12d
+    0.00 :   a383:   xor    %eax,%eax
+    0.00 :   a385:   xor    %ecx,%ecx
+    0.00 :   a387:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a396:   cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a3a0:   movzwl (%r15,%rcx,2),%edi
+    0.00 :   a3a5:   cmp    $0x7f,%edi
+    0.00 :   a3a8:   ja     a6c5 <nts_str_case_convert.llvm.14165513408623713557+0x485>
+    0.00 :   a3ae:   add    %r12d,%edi
+    0.00 :   a3b1:   xor    %r8d,%r8d
+    0.00 :   a3b4:   cmp    $0x1a,%edi
+    0.00 :   a3b7:   setb   %r8b
+    0.00 :   a3bb:   or     %r8d,%eax
+    0.00 :   a3be:   inc    %rcx
+    0.00 :   a3c1:   cmp    %rcx,%rbx
+    0.00 :   a3c4:   jne    a3a0 <nts_str_case_convert.llvm.14165513408623713557+0x160>
+    0.00 :   a3c6:   test   %eax,%eax
+    0.00 :   a3c8:   je     a45b <nts_str_case_convert.llvm.14165513408623713557+0x21b>
+    0.00 :   a3ce:   cmp    $0x7fffffff,%ebx
+    0.00 :   a3d4:   jae    b0a4 <nts_str_case_convert.llvm.14165513408623713557+0xe64>
+    0.00 :   a3da:   lea    0x1d(%rbx),%rdi
+    0.00 :   a3de:   call   6050 <nts_alloc>
+    0.00 :   a3e3:   lea    0x106ee(%rip),%rcx        # 1aad8 <nts_desc_string1>
+    0.00 :   a3ea:   mov    %rcx,(%rax)
+    0.00 :   a3ed:   mov    %fs:0xfffffffffffffde0,%rcx
+    0.00 :   a3f6:   cmpq   $0x0,0x90(%rcx)
+    0.00 :   a3fe:   mov    $0x1,%edx
+    0.00 :   a403:   mov    $0xffffffff,%esi
+    0.00 :   a408:   cmove  %rdx,%rsi
+    0.00 :   a40c:   mov    %rsi,0x8(%rax)
+    0.00 :   a410:   incq   0x2b0(%rcx)
+    0.00 :   a417:   incq   0x2c8(%rcx)
+    0.00 :   a41e:   movl   $0x0,0x10(%rax)
+    0.00 :   a425:   mov    %ebx,0x14(%rax)
+    0.00 :   a428:   movb   $0x0,0x1c(%rax,%rbx,1)
+    0.00 :   a42d:   cmp    $0x8,%ebx
+    0.00 :   a430:   jae    a80f <nts_str_case_convert.llvm.14165513408623713557+0x5cf>
+    0.00 :   a436:   xor    %ecx,%ecx
+    0.00 :   a438:   jmp    ad20 <nts_str_case_convert.llvm.14165513408623713557+0xae0>
+    0.00 :   a43d:   test   %ebx,%ebx
+    0.00 :   a43f:   je     a7b1 <nts_str_case_convert.llvm.14165513408623713557+0x571>
+    0.00 :   a445:   mov    %ebx,%eax
+    0.00 :   a447:   and    $0x3,%eax
+    0.00 :   a44a:   lea    -0x1(%rbx),%ecx
+    0.00 :   a44d:   cmp    $0x3,%ecx
+    0.00 :   a450:   jae    a48d <nts_str_case_convert.llvm.14165513408623713557+0x24d>
+    0.00 :   a452:   xor    %edi,%edi
+    0.00 :   a454:   xor    %ecx,%ecx
+    0.00 :   a456:   jmp    a523 <nts_str_case_convert.llvm.14165513408623713557+0x2e3>
+    0.00 :   a45b:   mov    0x8(%r14),%rax
+    0.00 :   a45f:   mov    $0xffffffff,%ecx
+    0.00 :   a464:   cmp    %rcx,%rax
+    0.00 :   a467:   sete   %cl
+    0.00 :   a46a:   mov    %ebp,%edx
+    0.00 :   a46c:   and    $0x8,%edx
+    0.00 :   a46f:   shr    $0x3,%edx
+    0.00 :   a472:   or     %cl,%dl
+    0.00 :   a474:   jne    ad47 <nts_str_case_convert.llvm.14165513408623713557+0xb07>
+    0.00 :   a47a:   inc    %rax
+    0.00 :   a47d:   mov    %rax,0x8(%r14)
+    0.00 :   a481:   and    $0xffffffc7,%ebp
+    0.00 :   a484:   mov    %ebp,0x10(%r14)
+    0.00 :   a488:   jmp    ad47 <nts_str_case_convert.llvm.14165513408623713557+0xb07>
+    0.00 :   a48d:   mov    %ebx,%r8d
+    0.00 :   a490:   and    $0xc,%r8d
+    0.00 :   a494:   xor    %edi,%edi
+    0.00 :   a496:   xor    %ecx,%ecx
+    0.00 :   a498:   nopl   0x0(%rax,%rax,1)
+    0.00 :   a4a0:   movzbl 0x1c(%r14,%rdi,1),%r9d
+    0.00 :   a4a6:   movzbl 0x1d(%r14,%rdi,1),%r10d
+    0.00 :   a4ac:   mov    %r9d,%r11d
+    0.00 :   a4af:   sub    %r12b,%r11b
+    0.00 :   a4b2:   and    $0x80,%r9b
+    0.00 :   a4b6:   cmp    $0x1a,%r11b
+    0.00 :   a4ba:   setb   %r11b
+    0.00 :   a4be:   or     %cl,%r9b
+    0.00 :   a4c1:   mov    %r10d,%ecx
+    0.00 :   a4c4:   sub    %r12b,%cl
+    0.00 :   a4c7:   and    $0x80,%r10b
+    0.00 :   a4cb:   cmp    $0x1a,%cl
+    0.00 :   a4ce:   setb   %cl
+    0.00 :   a4d1:   or     %r9b,%r10b
+    0.00 :   a4d4:   or     %r11b,%r10b
+    0.00 :   a4d7:   movzbl 0x1e(%r14,%rdi,1),%r9d
+    0.00 :   a4dd:   mov    %r9d,%r11d
+    0.00 :   a4e0:   sub    %r12b,%r11b
+    0.00 :   a4e3:   and    $0x80,%r9b
+    0.00 :   a4e7:   cmp    $0x1a,%r11b
+    0.00 :   a4eb:   setb   %r11b
+    0.00 :   a4ef:   or     %cl,%r9b
+    0.00 :   a4f2:   or     %r10b,%r9b
+    0.00 :   a4f5:   movzbl 0x1f(%r14,%rdi,1),%ecx
+    0.00 :   a4fb:   mov    %ecx,%r10d
+    0.00 :   a4fe:   sub    %r12b,%r10b
+    0.00 :   a501:   and    $0x80,%cl
+    0.00 :   a504:   cmp    $0x1a,%r10b
+    0.00 :   a508:   setb   %r10b
+    0.00 :   a50c:   or     %r11b,%cl
+    0.00 :   a50f:   or     %r10b,%cl
+    0.00 :   a512:   or     %r9b,%cl
+    0.00 :   a515:   add    $0x4,%rdi
+    0.00 :   a519:   cmp    %rdi,%r8
+    0.00 :   a51c:   jne    a4a0 <nts_str_case_convert.llvm.14165513408623713557+0x260>
+    0.00 :   a51e:   test   %rax,%rax
+    0.00 :   a521:   je     a565 <nts_str_case_convert.llvm.14165513408623713557+0x325>
+    0.00 :   a523:   add    %r14,%rdi
+    0.00 :   a526:   add    $0x1c,%rdi
+    0.00 :   a52a:   xor    %r8d,%r8d
+    0.00 :   a52d:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a53c:   nopl   0x0(%rax)
+    0.00 :   a540:   movzbl (%rdi,%r8,1),%r9d
+    0.00 :   a545:   mov    %r9d,%r10d
+    0.00 :   a548:   sub    %r12b,%r10b
+    0.00 :   a54b:   and    $0x80,%r9b
+    0.00 :   a54f:   cmp    $0x1a,%r10b
+    0.00 :   a553:   setb   %r10b
+    0.00 :   a557:   or     %r9b,%cl
+    0.00 :   a55a:   or     %r10b,%cl
+    0.00 :   a55d:   inc    %r8
+    0.00 :   a560:   cmp    %r8,%rax
+    0.00 :   a563:   jne    a540 <nts_str_case_convert.llvm.14165513408623713557+0x300>
+    0.09 :   a565:   test   %cl,%cl
+    0.00 :   a567:   js     a5f9 <nts_str_case_convert.llvm.14165513408623713557+0x3b9>
+    1.46 :   a56d:   test   $0x1,%cl
+    0.00 :   a570:   je     a7b1 <nts_str_case_convert.llvm.14165513408623713557+0x571>
+    0.33 :   a576:   cmp    $0x7fffffff,%ebx
+    0.00 :   a57c:   jae    b0a4 <nts_str_case_convert.llvm.14165513408623713557+0xe64>
+    1.46 :   a582:   mov    %edx,%ebp
+    0.30 :   a584:   lea    0x1d(%rbx),%rdi
+    0.15 :   a588:   call   6050 <nts_alloc>
+    0.02 :   a58d:   lea    0x10544(%rip),%rcx        # 1aad8 <nts_desc_string1>
+    0.00 :   a594:   mov    %rcx,(%rax)
+    0.00 :   a597:   mov    %fs:0xfffffffffffffde0,%rcx
+    0.00 :   a5a0:   cmpq   $0x0,0x90(%rcx)
+    0.02 :   a5a8:   mov    $0x1,%edx
+    3.64 :   a5ad:   mov    $0xffffffff,%esi
+    0.00 :   a5b2:   cmove  %rdx,%rsi
+    0.00 :   a5b6:   mov    %rsi,0x8(%rax)
+    0.02 :   a5ba:   incq   0x2b0(%rcx)
+    0.02 :   a5c1:   incq   0x2c8(%rcx)
+    3.38 :   a5c8:   movl   $0x0,0x10(%rax)
+    0.00 :   a5cf:   mov    %ebx,0x14(%rax)
+    0.00 :   a5d2:   movb   $0x0,0x1c(%rax,%rbx,1)
+    0.00 :   a5d7:   cmp    $0x10,%ebx
+    0.00 :   a5da:   jae    a63c <nts_str_case_convert.llvm.14165513408623713557+0x3fc>
+    0.00 :   a5dc:   xor    %ecx,%ecx
+    0.00 :   a5de:   test   %ebp,%ebp
+    0.00 :   a5e0:   setne  %cl
+    0.00 :   a5e3:   shl    $0x5,%ecx
+    0.00 :   a5e6:   or     $0xffffff9f,%ecx
+    0.00 :   a5e9:   cmp    $0x8,%ebx
+    0.00 :   a5ec:   jae    a824 <nts_str_case_convert.llvm.14165513408623713557+0x5e4>
+    0.00 :   a5f2:   xor    %edx,%edx
+    0.00 :   a5f4:   jmp    a880 <nts_str_case_convert.llvm.14165513408623713557+0x640>
+    0.00 :   a5f9:   test   %edx,%edx
+    0.00 :   a5fb:   je     a66a <nts_str_case_convert.llvm.14165513408623713557+0x42a>
+    0.00 :   a5fd:   mov    (%rsi),%r12
+    0.00 :   a600:   lea    -0x1(%rbx),%ecx
+    0.00 :   a603:   xor    %r13d,%r13d
+    0.00 :   a606:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a615:   data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a620:   movzbl (%r15,%r13,1),%eax
+    0.00 :   a625:   cmp    %al,(%r12,%rax,1)
+    0.00 :   a629:   jne    a7a8 <nts_str_case_convert.llvm.14165513408623713557+0x568>
+    0.00 :   a62f:   inc    %r13
+    0.00 :   a632:   cmp    %r13,%rbx
+    0.00 :   a635:   jne    a620 <nts_str_case_convert.llvm.14165513408623713557+0x3e0>
+    0.00 :   a637:   jmp    a7b1 <nts_str_case_convert.llvm.14165513408623713557+0x571>
+    0.02 :   a63c:   vmovd  %r12d,%xmm0
+    0.00 :   a641:   vpbroadcastb %xmm0,%xmm0
+    0.00 :   a646:   lea    -0x10(%rbx),%rsi
+    3.28 :   a64a:   mov    %rsi,%rdx
+    0.04 :   a64d:   shr    $0x4,%rdx
+    0.00 :   a651:   inc    %rdx
+    0.00 :   a654:   mov    %edx,%ecx
+    0.00 :   a656:   and    $0x3,%ecx
+    0.00 :   a659:   cmp    $0x30,%rsi
+    0.00 :   a65d:   jae    a8a9 <nts_str_case_convert.llvm.14165513408623713557+0x669>
+    0.00 :   a663:   xor    %esi,%esi
+    0.00 :   a665:   jmp    a977 <nts_str_case_convert.llvm.14165513408623713557+0x737>
+    0.00 :   a66a:   mov    %r15,%rdi
+    0.00 :   a66d:   mov    %rsi,%r12
+    0.00 :   a670:   mov    $0xb5,%esi
+    0.00 :   a675:   mov    %edx,%r13d
+    0.00 :   a678:   mov    %rbx,%rdx
+    0.00 :   a67b:   call   10c0 <memchr@plt>
+    0.00 :   a680:   mov    %r12,%rsi
+    0.00 :   a683:   mov    %r13d,%edx
+    0.00 :   a686:   test   %rax,%rax
+    0.00 :   a689:   jne    a6c5 <nts_str_case_convert.llvm.14165513408623713557+0x485>
+    0.00 :   a68b:   mov    %r15,%rdi
+    0.00 :   a68e:   mov    $0xdf,%esi
+    0.00 :   a693:   mov    %rbx,%rdx
+    0.00 :   a696:   call   10c0 <memchr@plt>
+    0.00 :   a69b:   mov    %r12,%rsi
+    0.00 :   a69e:   mov    %r13d,%edx
+    0.00 :   a6a1:   test   %rax,%rax
+    0.00 :   a6a4:   jne    a6c5 <nts_str_case_convert.llvm.14165513408623713557+0x485>
+    0.00 :   a6a6:   mov    %r15,%rdi
+    0.00 :   a6a9:   mov    $0xff,%esi
+    0.00 :   a6ae:   mov    %rbx,%rdx
+    0.00 :   a6b1:   call   10c0 <memchr@plt>
+    0.00 :   a6b6:   mov    %r12,%rsi
+    0.00 :   a6b9:   mov    %r13d,%edx
+    0.00 :   a6bc:   test   %rax,%rax
+    0.00 :   a6bf:   je     a5fd <nts_str_case_convert.llvm.14165513408623713557+0x3bd>
+    0.00 :   a6c5:   lea    0x3c(%rsp),%r8
+    0.00 :   a6ca:   lea    0x38(%rsp),%r9
+    0.00 :   a6cf:   mov    %r14,%rdi
+    0.00 :   a6d2:   mov    %rsi,0x10(%rsp)
+    0.00 :   a6d7:   mov    %edx,0x8(%rsp)
+    0.00 :   a6db:   xor    %ecx,%ecx
+    0.00 :   a6dd:   call   b100 <nts_case_pass>
+    0.00 :   a6e2:   cmpl   $0x0,0x3c(%rsp)
+    0.00 :   a6e7:   je     a77a <nts_str_case_convert.llvm.14165513408623713557+0x53a>
+    0.00 :   a6ed:   mov    %rax,%rbx
+    0.00 :   a6f0:   cmp    $0x7fffffff,%rax
+    0.00 :   a6f6:   jae    b0c3 <nts_str_case_convert.llvm.14165513408623713557+0xe83>
+    0.00 :   a6fc:   mov    0x38(%rsp),%ebp
+    0.00 :   a700:   lea    0x1(%rbx),%rax
+    0.00 :   a704:   xor    %r12d,%r12d
+    0.00 :   a707:   test   %ebp,%ebp
+    0.00 :   a709:   setne  %r12b
+    0.00 :   a70d:   shlx   %r12,%rax,%rdi
+    0.00 :   a712:   lea    0x10427(%rip),%rax        # 1ab40 <nts_desc_string2>
+    0.00 :   a719:   lea    0x103b8(%rip),%r13        # 1aad8 <nts_desc_string1>
+    0.00 :   a720:   cmovne %rax,%r13
+    0.00 :   a724:   add    $0x1c,%rdi
+    0.00 :   a728:   call   6050 <nts_alloc>
+    0.00 :   a72d:   mov    %rax,%r15
+    0.00 :   a730:   mov    %r13,(%rax)
+    0.00 :   a733:   mov    %fs:0xfffffffffffffde0,%rax
+    0.00 :   a73c:   cmpq   $0x0,0x90(%rax)
+    0.00 :   a744:   mov    $0x1,%ecx
+    0.00 :   a749:   mov    $0xffffffff,%edx
+    0.00 :   a74e:   cmove  %rcx,%rdx
+    0.00 :   a752:   mov    %rdx,0x8(%r15)
+    0.00 :   a756:   incq   0x2b0(%rax)
+    0.00 :   a75d:   incq   0x2c8(%rax)
+    0.00 :   a764:   mov    %r12d,0x10(%r15)
+    0.00 :   a768:   mov    %ebx,0x14(%r15)
+    0.00 :   a76c:   test   %ebp,%ebp
+    0.00 :   a76e:   je     a7e3 <nts_str_case_convert.llvm.14165513408623713557+0x5a3>
+    0.00 :   a770:   movw   $0x0,0x1c(%r15,%rbx,2)
+    0.00 :   a778:   jmp    a7e9 <nts_str_case_convert.llvm.14165513408623713557+0x5a9>
+    0.00 :   a77a:   mov    0x8(%r14),%rax
+    0.00 :   a77e:   mov    $0xffffffff,%ecx
+    0.00 :   a783:   cmp    %rcx,%rax
+    0.00 :   a786:   sete   %cl
+    0.00 :   a789:   mov    %ebp,%edx
+    0.00 :   a78b:   and    $0x8,%edx
+    0.00 :   a78e:   shr    $0x3,%edx
+    0.00 :   a791:   or     %cl,%dl
+    0.00 :   a793:   jne    a7a3 <nts_str_case_convert.llvm.14165513408623713557+0x563>
+    0.00 :   a795:   inc    %rax
+    0.00 :   a798:   mov    %rax,0x8(%r14)
+    0.00 :   a79c:   and    $0xffffffc7,%ebp
+    0.00 :   a79f:   mov    %ebp,0x10(%r14)
+    0.00 :   a7a3:   mov    %r14,%r15
+    0.00 :   a7a6:   jmp    a807 <nts_str_case_convert.llvm.14165513408623713557+0x5c7>
+    0.00 :   a7a8:   cmp    %r13d,%ebx
+    0.00 :   a7ab:   jne    a9fe <nts_str_case_convert.llvm.14165513408623713557+0x7be>
+    0.00 :   a7b1:   mov    0x8(%r14),%rax
+    0.00 :   a7b5:   mov    $0xffffffff,%ecx
+    0.00 :   a7ba:   cmp    %rcx,%rax
+    0.00 :   a7bd:   sete   %cl
+    0.00 :   a7c0:   mov    %ebp,%edx
+    0.00 :   a7c2:   and    $0x8,%edx
+    0.00 :   a7c5:   shr    $0x3,%edx
+    0.00 :   a7c8:   or     %cl,%dl
+    0.00 :   a7ca:   jne    ad47 <nts_str_case_convert.llvm.14165513408623713557+0xb07>
+    0.00 :   a7d0:   inc    %rax
+    0.00 :   a7d3:   mov    %rax,0x8(%r14)
+    0.00 :   a7d7:   and    $0xffffffc6,%ebp
+    0.00 :   a7da:   mov    %ebp,0x10(%r14)
+    0.00 :   a7de:   jmp    ad47 <nts_str_case_convert.llvm.14165513408623713557+0xb07>
+    0.00 :   a7e3:   movb   $0x0,0x1c(%r15,%rbx,1)
+    0.00 :   a7e9:   mov    0x8(%rsp),%edx
+    0.00 :   a7ed:   mov    0x10(%rsp),%rsi
+    0.00 :   a7f2:   lea    0x3c(%rsp),%r8
+    0.00 :   a7f7:   lea    0x38(%rsp),%r9
+    0.00 :   a7fc:   mov    %r14,%rdi
+    0.00 :   a7ff:   mov    %r15,%rcx
+    0.00 :   a802:   call   b100 <nts_case_pass>
+    0.00 :   a807:   mov    %r15,%r14
+    0.00 :   a80a:   jmp    ad47 <nts_str_case_convert.llvm.14165513408623713557+0xb07>
+    0.00 :   a80f:   vmovd  %r12d,%xmm0
+    0.00 :   a814:   cmp    $0x40,%ebx
+    0.00 :   a817:   jae    aaa0 <nts_str_case_convert.llvm.14165513408623713557+0x860>
+    0.00 :   a81d:   xor    %ecx,%ecx
+    0.00 :   a81f:   jmp    ac7b <nts_str_case_convert.llvm.14165513408623713557+0xa3b>
+    0.00 :   a824:   vmovd  %ecx,%xmm0
+    0.00 :   a828:   vpbroadcastd %xmm0,%ymm0
+    0.00 :   a82d:   mov    %ebx,%edx
+    0.00 :   a82f:   and    $0x8,%edx
+    0.00 :   a832:   vmovq  (%r15),%xmm1
+    0.00 :   a837:   vpmovzxbd %xmm1,%ymm2
+    0.00 :   a83c:   vpaddd %ymm2,%ymm0,%ymm0
+    0.00 :   a840:   vpbroadcastd 0x17bf(%rip),%ymm2        # c008 <_IO_stdin_used+0x8>
+    0.00 :   a849:   vpminud %ymm2,%ymm0,%ymm2
+    0.00 :   a84e:   vpcmpeqd %ymm2,%ymm0,%ymm0
+    0.00 :   a852:   vextracti128 $0x1,%ymm0,%xmm2
+    0.00 :   a858:   vpackssdw %xmm2,%xmm0,%xmm0
+    0.00 :   a85c:   vpacksswb %xmm0,%xmm0,%xmm0
+    0.00 :   a860:   vpsllw $0x5,%xmm0,%xmm0
+    0.00 :   a865:   vpand  0x1843(%rip),%xmm0,%xmm0        # c0b0 <_IO_stdin_used+0xb0>
+    0.00 :   a86d:   vpxor  %xmm1,%xmm0,%xmm0
+    0.00 :   a871:   vmovq  %xmm0,0x1c(%rax)
+    0.00 :   a876:   cmp    %rbx,%rdx
+    0.00 :   a879:   je     ad44 <nts_str_case_convert.llvm.14165513408623713557+0xb04>
+    0.00 :   a87f:   nop
+    0.00 :   a880:   movzbl (%r15,%rdx,1),%esi
+    0.00 :   a885:   mov    %esi,%edi
+    0.00 :   a887:   add    %ecx,%edi
+    0.00 :   a889:   cmp    $0x1a,%edi
+    0.00 :   a88c:   setb   %dil
+    0.00 :   a890:   shl    $0x5,%dil
+    0.00 :   a894:   xor    %sil,%dil
+    0.00 :   a897:   mov    %dil,0x1c(%rax,%rdx,1)
+    0.00 :   a89c:   inc    %rdx
+    0.00 :   a89f:   cmp    %rdx,%rbx
+    0.00 :   a8a2:   jne    a880 <nts_str_case_convert.llvm.14165513408623713557+0x640>
+    0.00 :   a8a4:   jmp    ad44 <nts_str_case_convert.llvm.14165513408623713557+0xb04>
+    0.00 :   a8a9:   and    $0xfffffffffffffffc,%rdx
+    0.00 :   a8ad:   xor    %esi,%esi
+    0.00 :   a8af:   vpbroadcastd 0x1758(%rip),%xmm1        # c010 <_IO_stdin_used+0x10>
+    0.00 :   a8b8:   vpbroadcastd 0x1757(%rip),%xmm2        # c018 <_IO_stdin_used+0x18>
+    0.00 :   a8c1:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a8d0:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   a8df:   nop
+    0.00 :   a8e0:   vmovdqu 0x1c(%r14,%rsi,1),%xmm3
+    0.00 :   a8e7:   vpsubb %xmm0,%xmm3,%xmm4
+    0.00 :   a8eb:   vpminub %xmm1,%xmm4,%xmm5
+    0.00 :   a8ef:   vpcmpeqb %xmm5,%xmm4,%xmm4
+    0.00 :   a8f3:   vpand  %xmm2,%xmm4,%xmm4
+    0.00 :   a8f7:   vpxor  %xmm3,%xmm4,%xmm3
+    0.00 :   a8fb:   vmovdqu %xmm3,0x1c(%rax,%rsi,1)
+    0.00 :   a901:   vmovdqu 0x2c(%r14,%rsi,1),%xmm3
+    0.00 :   a908:   vpsubb %xmm0,%xmm3,%xmm4
+    0.00 :   a90c:   vpminub %xmm1,%xmm4,%xmm5
+    0.00 :   a910:   vpcmpeqb %xmm5,%xmm4,%xmm4
+    0.00 :   a914:   vpand  %xmm2,%xmm4,%xmm4
+    0.00 :   a918:   vpxor  %xmm3,%xmm4,%xmm3
+    0.00 :   a91c:   vmovdqu %xmm3,0x2c(%rax,%rsi,1)
+    0.00 :   a922:   vmovdqu 0x3c(%r14,%rsi,1),%xmm3
+    0.00 :   a929:   vpsubb %xmm0,%xmm3,%xmm4
+    0.00 :   a92d:   vpminub %xmm1,%xmm4,%xmm5
+    0.00 :   a931:   vpcmpeqb %xmm5,%xmm4,%xmm4
+    0.00 :   a935:   vpand  %xmm2,%xmm4,%xmm4
+    0.00 :   a939:   vpxor  %xmm3,%xmm4,%xmm3
+    0.00 :   a93d:   vmovdqu %xmm3,0x3c(%rax,%rsi,1)
+    0.00 :   a943:   vmovdqu 0x4c(%r14,%rsi,1),%xmm3
+    0.00 :   a94a:   vpsubb %xmm0,%xmm3,%xmm4
+    0.00 :   a94e:   vpminub %xmm1,%xmm4,%xmm5
+    0.00 :   a952:   vpcmpeqb %xmm5,%xmm4,%xmm4
+    0.00 :   a956:   vpand  %xmm2,%xmm4,%xmm4
+    0.00 :   a95a:   vpxor  %xmm3,%xmm4,%xmm3
+    0.00 :   a95e:   vmovdqu %xmm3,0x4c(%rax,%rsi,1)
+    0.00 :   a964:   add    $0x40,%rsi
+    0.00 :   a968:   add    $0xfffffffffffffffc,%rdx
+    0.00 :   a96c:   jne    a8e0 <nts_str_case_convert.llvm.14165513408623713557+0x6a0>
+    0.00 :   a972:   test   %rcx,%rcx
+    0.00 :   a975:   je     a9c7 <nts_str_case_convert.llvm.14165513408623713557+0x787>
+    3.41 :   a977:   lea    (%rax,%rsi,1),%rdx
+    0.00 :   a97b:   add    $0x1c,%rdx
+    0.00 :   a97f:   add    %r14,%rsi
+    0.00 :   a982:   add    $0x1c,%rsi
+    0.00 :   a986:   shl    $0x4,%ecx
+    0.00 :   a989:   xor    %edi,%edi
+    0.00 :   a98b:   vpbroadcastd 0x167c(%rip),%xmm1        # c010 <_IO_stdin_used+0x10>
+    0.00 :   a994:   vpbroadcastd 0x167b(%rip),%xmm2        # c018 <_IO_stdin_used+0x18>
+    3.29 :   a99d:   nopl   (%rax)
+    0.00 :   a9a0:   vmovdqu (%rsi,%rdi,1),%xmm3
+    0.00 :   a9a5:   vpsubb %xmm0,%xmm3,%xmm4
+    0.02 :   a9a9:   vpminub %xmm1,%xmm4,%xmm5
+    0.00 :   a9ad:   vpcmpeqb %xmm5,%xmm4,%xmm4
+    0.02 :   a9b1:   vpand  %xmm2,%xmm4,%xmm4
+    0.00 :   a9b5:   vpxor  %xmm3,%xmm4,%xmm3
+    2.62 :   a9b9:   vmovdqu %xmm3,(%rdx,%rdi,1)
+    3.37 :   a9be:   add    $0x10,%rdi
+    0.00 :   a9c2:   cmp    %rdi,%rcx
+    0.00 :   a9c5:   jne    a9a0 <nts_str_case_convert.llvm.14165513408623713557+0x760>
+    0.00 :   a9c7:   test   $0xf,%bl
+    0.00 :   a9ca:   je     ad44 <nts_str_case_convert.llvm.14165513408623713557+0xb04>
+    0.00 :   a9d0:   vmovdqu -0x10(%r15,%rbx,1),%xmm1
+    0.02 :   a9d7:   vpsubb %xmm0,%xmm1,%xmm0
+    0.09 :   a9db:   vpminub 0x169d(%rip),%xmm0,%xmm2        # c080 <_IO_stdin_used+0x80>
+    0.07 :   a9e3:   vpcmpeqb %xmm2,%xmm0,%xmm0
+    3.67 :   a9e7:   vpand  0x16b1(%rip),%xmm0,%xmm0        # c0a0 <_IO_stdin_used+0xa0>
+    0.00 :   a9ef:   vpxor  %xmm1,%xmm0,%xmm0
+    0.02 :   a9f3:   vmovdqu %xmm0,0xc(%rax,%rbx,1)
+    0.00 :   a9f9:   jmp    ad44 <nts_str_case_convert.llvm.14165513408623713557+0xb04>
+    0.00 :   a9fe:   mov    %ecx,0x10(%rsp)
+    0.00 :   aa02:   cmp    $0x7fffffff,%ebx
+    0.00 :   aa08:   jae    b0a4 <nts_str_case_convert.llvm.14165513408623713557+0xe64>
+    0.00 :   aa0e:   lea    0x1d(%rbx),%rdi
+    0.00 :   aa12:   call   6050 <nts_alloc>
+    0.00 :   aa17:   mov    %rax,%rbp
+    0.00 :   aa1a:   lea    0x100b7(%rip),%rax        # 1aad8 <nts_desc_string1>
+    0.00 :   aa21:   mov    %rax,0x0(%rbp)
+    0.00 :   aa25:   mov    %fs:0xfffffffffffffde0,%rax
+    0.00 :   aa2e:   cmpq   $0x0,0x90(%rax)
+    0.00 :   aa36:   mov    $0x1,%ecx
+    0.00 :   aa3b:   mov    $0xffffffff,%edx
+    0.00 :   aa40:   cmove  %rcx,%rdx
+    0.00 :   aa44:   mov    %rdx,0x8(%rbp)
+    0.00 :   aa48:   incq   0x2b0(%rax)
+    0.00 :   aa4f:   incq   0x2c8(%rax)
+    0.00 :   aa56:   movl   $0x0,0x10(%rbp)
+    0.00 :   aa5d:   mov    %ebx,0x14(%rbp)
+    0.00 :   aa60:   movb   $0x0,0x1c(%rbp,%rbx,1)
+    0.00 :   aa65:   test   %r13,%r13
+    0.00 :   aa68:   je     aa79 <nts_str_case_convert.llvm.14165513408623713557+0x839>
+    0.00 :   aa6a:   lea    0x1c(%rbp),%rdi
+    0.00 :   aa6e:   mov    %r15,%rsi
+    0.00 :   aa71:   mov    %r13,%rdx
+    0.00 :   aa74:   call   10b0 <memcpy@plt>
+    0.00 :   aa79:   cmp    %r13d,%ebx
+    0.00 :   aa7c:   jbe    b094 <nts_str_case_convert.llvm.14165513408623713557+0xe54>
+    0.00 :   aa82:   mov    0x10(%rsp),%edi
+    0.00 :   aa86:   mov    %r13d,%ecx
+    0.00 :   aa89:   mov    %rdi,%rax
+    0.00 :   aa8c:   sub    %r13,%rax
+    0.00 :   aa8f:   cmp    $0x7,%eax
+    0.00 :   aa92:   jae    ad70 <nts_str_case_convert.llvm.14165513408623713557+0xb30>
+    0.00 :   aa98:   mov    %rcx,%r8
+    0.00 :   aa9b:   jmp    b056 <nts_str_case_convert.llvm.14165513408623713557+0xe16>
+    0.00 :   aaa0:   mov    %ebx,%ecx
+    0.00 :   aaa2:   and    $0x7fffffc0,%ecx
+    0.00 :   aaa8:   vmovdqa %xmm0,0x10(%rsp)
+    0.00 :   aaae:   vpbroadcastd %xmm0,%ymm1
+    0.00 :   aab3:   xor    %edx,%edx
+    0.00 :   aab5:   vpbroadcastd 0x154a(%rip),%ymm2        # c008 <_IO_stdin_used+0x8>
+    0.00 :   aabe:   vpbroadcastd 0x153d(%rip),%ymm3        # c004 <_IO_stdin_used+0x4>
+    0.00 :   aac7:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   aad6:   cs nopw 0x0(%rax,%rax,1)
+    0.00 :   aae0:   vmovdqu 0x1c(%r14,%rdx,2),%ymm4
+    0.00 :   aae7:   vmovdqu 0x3c(%r14,%rdx,2),%ymm5
+    0.00 :   aaee:   vmovdqu 0x5c(%r14,%rdx,2),%ymm6
+    0.00 :   aaf5:   vmovdqu 0x7c(%r14,%rdx,2),%ymm7
+    0.00 :   aafc:   vpmovzxwd 0x2c(%r14,%rdx,2),%ymm8
+    0.00 :   ab03:   vpmovzxwd %xmm4,%ymm9
+    0.00 :   ab08:   vpmovzxwd 0x4c(%r14,%rdx,2),%ymm10
+    0.00 :   ab0f:   vpmovzxwd %xmm5,%ymm11
+    0.00 :   ab14:   vpmovzxwd 0x6c(%r14,%rdx,2),%ymm12
+    0.00 :   ab1b:   vpmovzxwd 0x8c(%r14,%rdx,2),%ymm13
+    0.00 :   ab25:   vpmovzxwd %xmm6,%ymm14
+    0.00 :   ab2a:   vpmovzxwd %xmm7,%ymm15
+    0.00 :   ab2f:   vpaddd %ymm1,%ymm9,%ymm9
+    0.00 :   ab33:   vpaddd %ymm1,%ymm8,%ymm8
+    0.00 :   ab37:   vpaddd %ymm1,%ymm11,%ymm11
+    0.00 :   ab3b:   vpaddd %ymm1,%ymm10,%ymm10
+    0.00 :   ab3f:   vpaddd %ymm1,%ymm14,%ymm14
+    0.00 :   ab43:   vpaddd %ymm1,%ymm12,%ymm12
+    0.00 :   ab47:   vpaddd %ymm1,%ymm15,%ymm15
+    0.00 :   ab4b:   vpaddd %ymm1,%ymm13,%ymm13
+    0.00 :   ab4f:   vpminud %ymm2,%ymm8,%ymm0
+    0.00 :   ab54:   vpcmpeqd %ymm0,%ymm8,%ymm0
+    0.00 :   ab58:   vpminud %ymm2,%ymm9,%ymm8
+    0.00 :   ab5d:   vpcmpeqd %ymm8,%ymm9,%ymm8
+    0.00 :   ab62:   vpackssdw %ymm0,%ymm8,%ymm0
+    0.00 :   ab66:   vpermq $0xd8,%ymm0,%ymm0
+    0.00 :   ab6c:   vpsrlw $0xf,%ymm0,%ymm0
+    0.00 :   ab71:   vpsllw $0x5,%ymm0,%ymm0
+    0.00 :   ab76:   vpminud %ymm2,%ymm10,%ymm8
+    0.00 :   ab7b:   vpcmpeqd %ymm8,%ymm10,%ymm8
+    0.00 :   ab80:   vpminud %ymm2,%ymm11,%ymm9
+    0.00 :   ab85:   vpcmpeqd %ymm9,%ymm11,%ymm9
+    0.00 :   ab8a:   vpackssdw %ymm8,%ymm9,%ymm8
+    0.00 :   ab8f:   vpermq $0xd8,%ymm8,%ymm8
+    0.00 :   ab95:   vpsrlw $0xf,%ymm8,%ymm8
+    0.00 :   ab9b:   vpsllw $0x5,%ymm8,%ymm8
+    0.00 :   aba1:   vpminud %ymm2,%ymm12,%ymm9
+    0.00 :   aba6:   vpcmpeqd %ymm9,%ymm12,%ymm9
+    0.00 :   abab:   vpminud %ymm2,%ymm14,%ymm10
+    0.00 :   abb0:   vpcmpeqd %ymm10,%ymm14,%ymm10
+    0.00 :   abb5:   vpackssdw %ymm9,%ymm10,%ymm9
+    0.00 :   abba:   vpermq $0xd8,%ymm9,%ymm9
+    0.00 :   abc0:   vpsrlw $0xf,%ymm9,%ymm9
+    0.00 :   abc6:   vpsllw $0x5,%ymm9,%ymm9
+    0.00 :   abcc:   vpminud %ymm2,%ymm13,%ymm10
+    0.00 :   abd1:   vpcmpeqd %ymm10,%ymm13,%ymm10
+    0.00 :   abd6:   vpminud %ymm2,%ymm15,%ymm11
+    0.00 :   abdb:   vpcmpeqd %ymm11,%ymm15,%ymm11
+    0.00 :   abe0:   vpackssdw %ymm10,%ymm11,%ymm10
+    0.00 :   abe5:   vpermq $0xd8,%ymm10,%ymm10
+    0.00 :   abeb:   vpsrlw $0xf,%ymm10,%ymm10
+    0.00 :   abf1:   vpsllw $0x5,%ymm10,%ymm10
+    0.00 :   abf7:   vpxor  %ymm4,%ymm0,%ymm0
+    0.00 :   abfb:   vpxor  %ymm5,%ymm8,%ymm4
+    0.00 :   abff:   vpxor  %ymm6,%ymm9,%ymm5
+    0.00 :   ac03:   vpxor  %ymm7,%ymm10,%ymm6
+    0.00 :   ac07:   vpand  %ymm3,%ymm0,%ymm0
+    0.00 :   ac0b:   vextracti128 $0x1,%ymm0,%xmm7
+    0.00 :   ac11:   vpackuswb %xmm7,%xmm0,%xmm0
+    0.00 :   ac15:   vpand  %ymm3,%ymm4,%ymm4
+    0.00 :   ac19:   vextracti128 $0x1,%ymm4,%xmm7
+    0.00 :   ac1f:   vpackuswb %xmm7,%xmm4,%xmm4
+    0.00 :   ac23:   vpand  %ymm3,%ymm5,%ymm5
+    0.00 :   ac27:   vextracti128 $0x1,%ymm5,%xmm7
+    0.00 :   ac2d:   vpackuswb %xmm7,%xmm5,%xmm5
+    0.00 :   ac31:   vpand  %ymm3,%ymm6,%ymm6
+    0.00 :   ac35:   vextracti128 $0x1,%ymm6,%xmm7
+    0.00 :   ac3b:   vpackuswb %xmm7,%xmm6,%xmm6
+    0.00 :   ac3f:   vmovdqu %xmm0,0x1c(%rax,%rdx,1)
+    0.00 :   ac45:   vmovdqu %xmm4,0x2c(%rax,%rdx,1)
+    0.00 :   ac4b:   vmovdqu %xmm5,0x3c(%rax,%rdx,1)
+    0.00 :   ac51:   vmovdqu %xmm6,0x4c(%rax,%rdx,1)
+    0.00 :   ac57:   add    $0x40,%rdx
+    0.00 :   ac5b:   cmp    %rdx,%rcx
+    0.00 :   ac5e:   jne    aae0 <nts_str_case_convert.llvm.14165513408623713557+0x8a0>
+    0.00 :   ac64:   cmp    %ebx,%ecx
+    0.00 :   ac66:   je     ad44 <nts_str_case_convert.llvm.14165513408623713557+0xb04>
+    0.00 :   ac6c:   test   $0x38,%bl
+    0.00 :   ac6f:   vmovdqa 0x10(%rsp),%xmm0
+    0.00 :   ac75:   je     ad20 <nts_str_case_convert.llvm.14165513408623713557+0xae0>
+    0.00 :   ac7b:   mov    %rcx,%rdx
+    0.00 :   ac7e:   mov    %ebx,%ecx
+    0.00 :   ac80:   and    $0x7ffffff8,%ecx
+    0.00 :   ac86:   vpbroadcastd %xmm0,%ymm0
+    0.00 :   ac8b:   vpbroadcastd 0x1374(%rip),%ymm1        # c008 <_IO_stdin_used+0x8>
+    0.00 :   ac94:   vpbroadcastd 0x137f(%rip),%xmm2        # c01c <_IO_stdin_used+0x1c>
+    0.00 :   ac9d:   vmovq  0x139b(%rip),%xmm3        # c040 <_IO_stdin_used+0x40>
+    0.00 :   aca5:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   acb4:   data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   acc0:   vmovdqu (%r15,%rdx,2),%xmm4
+    0.00 :   acc6:   vpmovzxwd %xmm4,%ymm5
+    0.00 :   accb:   vpaddd %ymm5,%ymm0,%ymm5
+    0.00 :   accf:   vpminud %ymm1,%ymm5,%ymm6
+    0.00 :   acd4:   vpcmpeqd %ymm6,%ymm5,%ymm5
+    0.00 :   acd8:   vextracti128 $0x1,%ymm5,%xmm6
+    0.00 :   acde:   vpackssdw %xmm6,%xmm5,%xmm5
+    0.00 :   ace2:   vpand  %xmm2,%xmm5,%xmm5
+    0.00 :   ace6:   vpxor  %xmm4,%xmm5,%xmm4
+    0.00 :   acea:   vpshufb %xmm3,%xmm4,%xmm4
+    0.00 :   acef:   vmovq  %xmm4,0x1c(%rax,%rdx,1)
+    0.00 :   acf5:   add    $0x8,%rdx
+    0.00 :   acf9:   cmp    %rdx,%rcx
+    0.00 :   acfc:   jne    acc0 <nts_str_case_convert.llvm.14165513408623713557+0xa80>
+    0.00 :   acfe:   cmp    %ebx,%ecx
+    0.00 :   ad00:   je     ad44 <nts_str_case_convert.llvm.14165513408623713557+0xb04>
+    0.00 :   ad02:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   ad11:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   ad20:   movzwl (%r15,%rcx,2),%edx
+    0.00 :   ad25:   lea    (%r12,%rdx,1),%esi
+    0.00 :   ad29:   xor    %edi,%edi
+    0.00 :   ad2b:   cmp    $0x1a,%esi
+    0.00 :   ad2e:   setb   %dil
+    0.00 :   ad32:   shl    $0x5,%edi
+    0.00 :   ad35:   xor    %edx,%edi
+    0.00 :   ad37:   mov    %dil,0x1c(%rax,%rcx,1)
+    0.00 :   ad3c:   inc    %rcx
+    0.00 :   ad3f:   cmp    %rcx,%rbx
+    0.00 :   ad42:   jne    ad20 <nts_str_case_convert.llvm.14165513408623713557+0xae0>
+    0.00 :   ad44:   mov    %rax,%r14
+    0.02 :   ad47:   mov    %fs:0x28,%rax
+    0.00 :   ad50:   cmp    0x40(%rsp),%rax
+    0.00 :   ad55:   jne    b09c <nts_str_case_convert.llvm.14165513408623713557+0xe5c>
+    0.02 :   ad5b:   mov    %r14,%rax
+    3.14 :   ad5e:   add    $0x48,%rsp
+    0.00 :   ad62:   pop    %rbx
+    0.02 :   ad63:   pop    %r12
+    0.00 :   ad65:   pop    %r13
+    0.00 :   ad67:   pop    %r14
+    0.00 :   ad69:   pop    %r15
+    0.00 :   ad6b:   pop    %rbp
+    0.00 :   ad6c:   vzeroupper
+    4.21 :   ad6f:   ret
+    0.00 :   ad70:   sub    %r13,%rdi
+    0.00 :   ad73:   mov    %eax,%edx
+    0.00 :   ad75:   inc    %rdx
+    0.00 :   ad78:   movabs $0x1ffffffe0,%r9
+    0.00 :   ad82:   cmp    $0x1f,%eax
+    0.00 :   ad85:   jae    ad8e <nts_str_case_convert.llvm.14165513408623713557+0xb4e>
+    0.00 :   ad87:   xor    %esi,%esi
+    0.00 :   ad89:   jmp    af91 <nts_str_case_convert.llvm.14165513408623713557+0xd51>
+    0.00 :   ad8e:   mov    %rdx,%rsi
+    0.00 :   ad91:   and    %r9,%rsi
+    0.00 :   ad94:   lea    (%rcx,%rsi,1),%r8
+    0.00 :   ad98:   mov    %edi,%r9d
+    0.00 :   ad9b:   inc    %r9
+    0.00 :   ad9e:   and    $0xffffffffffffffe0,%r9
+    0.00 :   ada2:   mov    %r13d,%eax
+    0.00 :   ada5:   lea    (%r14,%rax,1),%r10
+    0.00 :   ada9:   add    $0x3b,%r10
+    0.00 :   adad:   lea    (%rax,%rbp,1),%r11
+    0.00 :   adb1:   add    $0x1c,%r11
+    0.00 :   adb5:   xor    %r15d,%r15d
+    0.00 :   adb8:   movzbl -0x1f(%r10,%r15,1),%eax
+    0.00 :   adbe:   movzbl (%r12,%rax,1),%eax
+    0.00 :   adc3:   vmovd  %eax,%xmm0
+    0.00 :   adc7:   movzbl -0x1e(%r10,%r15,1),%eax
+    0.00 :   adcd:   vpinsrb $0x1,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   add4:   movzbl -0x1d(%r10,%r15,1),%eax
+    0.00 :   adda:   vpinsrb $0x2,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ade1:   movzbl -0x1c(%r10,%r15,1),%eax
+    0.00 :   ade7:   vpinsrb $0x3,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   adee:   movzbl -0x1b(%r10,%r15,1),%eax
+    0.00 :   adf4:   vpinsrb $0x4,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   adfb:   movzbl -0x1a(%r10,%r15,1),%eax
+    0.00 :   ae01:   vpinsrb $0x5,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae08:   movzbl -0x19(%r10,%r15,1),%eax
+    0.00 :   ae0e:   vpinsrb $0x6,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae15:   movzbl -0x18(%r10,%r15,1),%eax
+    0.00 :   ae1b:   vpinsrb $0x7,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae22:   movzbl -0x17(%r10,%r15,1),%eax
+    0.00 :   ae28:   vpinsrb $0x8,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae2f:   movzbl -0x16(%r10,%r15,1),%eax
+    0.00 :   ae35:   vpinsrb $0x9,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae3c:   movzbl -0x15(%r10,%r15,1),%eax
+    0.00 :   ae42:   vpinsrb $0xa,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae49:   movzbl -0x14(%r10,%r15,1),%eax
+    0.00 :   ae4f:   vpinsrb $0xb,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae56:   movzbl -0x13(%r10,%r15,1),%eax
+    0.00 :   ae5c:   vpinsrb $0xc,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae63:   movzbl -0x12(%r10,%r15,1),%eax
+    0.00 :   ae69:   vpinsrb $0xd,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae70:   movzbl -0x11(%r10,%r15,1),%eax
+    0.00 :   ae76:   vpinsrb $0xe,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae7d:   movzbl -0x10(%r10,%r15,1),%eax
+    0.00 :   ae83:   vpinsrb $0xf,(%r12,%rax,1),%xmm0,%xmm0
+    0.00 :   ae8a:   movzbl -0xf(%r10,%r15,1),%eax
+    0.00 :   ae90:   movzbl (%r12,%rax,1),%eax
+    0.00 :   ae95:   vmovd  %eax,%xmm1
+    0.00 :   ae99:   movzbl -0xe(%r10,%r15,1),%eax
+    0.00 :   ae9f:   vpinsrb $0x1,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aea6:   movzbl -0xd(%r10,%r15,1),%eax
+    0.00 :   aeac:   vpinsrb $0x2,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aeb3:   movzbl -0xc(%r10,%r15,1),%eax
+    0.00 :   aeb9:   vpinsrb $0x3,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aec0:   movzbl -0xb(%r10,%r15,1),%eax
+    0.00 :   aec6:   vpinsrb $0x4,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aecd:   movzbl -0xa(%r10,%r15,1),%eax
+    0.00 :   aed3:   vpinsrb $0x5,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aeda:   movzbl -0x9(%r10,%r15,1),%eax
+    0.00 :   aee0:   vpinsrb $0x6,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aee7:   movzbl -0x8(%r10,%r15,1),%eax
+    0.00 :   aeed:   vpinsrb $0x7,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   aef4:   movzbl -0x7(%r10,%r15,1),%eax
+    0.00 :   aefa:   vpinsrb $0x8,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af01:   movzbl -0x6(%r10,%r15,1),%eax
+    0.00 :   af07:   vpinsrb $0x9,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af0e:   movzbl -0x5(%r10,%r15,1),%eax
+    0.00 :   af14:   vpinsrb $0xa,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af1b:   movzbl -0x4(%r10,%r15,1),%eax
+    0.00 :   af21:   vpinsrb $0xb,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af28:   movzbl -0x3(%r10,%r15,1),%eax
+    0.00 :   af2e:   vpinsrb $0xc,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af35:   movzbl -0x2(%r10,%r15,1),%eax
+    0.00 :   af3b:   vpinsrb $0xd,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af42:   movzbl -0x1(%r10,%r15,1),%eax
+    0.00 :   af48:   vpinsrb $0xe,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af4f:   movzbl (%r10,%r15,1),%eax
+    0.00 :   af54:   vpinsrb $0xf,(%r12,%rax,1),%xmm1,%xmm1
+    0.00 :   af5b:   vmovdqu %xmm1,0x10(%r11,%r15,1)
+    0.00 :   af62:   vmovdqu %xmm0,(%r11,%r15,1)
+    0.00 :   af68:   add    $0x20,%r15
+    0.00 :   af6c:   cmp    %r15,%r9
+    0.00 :   af6f:   jne    adb8 <nts_str_case_convert.llvm.14165513408623713557+0xb78>
+    0.00 :   af75:   cmp    %rsi,%rdx
+    0.00 :   af78:   je     b094 <nts_str_case_convert.llvm.14165513408623713557+0xe54>
+    0.00 :   af7e:   test   $0x18,%dl
+    0.00 :   af81:   movabs $0x1ffffffe0,%r9
+    0.00 :   af8b:   je     b056 <nts_str_case_convert.llvm.14165513408623713557+0xe16>
+    0.00 :   af91:   add    $0x18,%r9
+    0.00 :   af95:   mov    %rdx,0x30(%rsp)
+    0.00 :   af9a:   and    %rdx,%r9
+    0.00 :   af9d:   mov    %r9,0x28(%rsp)
+    0.00 :   afa2:   add    %r9,%rcx
+    0.00 :   afa5:   mov    %rcx,0x8(%rsp)
+    0.00 :   afaa:   mov    %edi,%eax
+    0.00 :   afac:   inc    %rax
+    0.00 :   afaf:   and    $0xfffffffffffffff8,%rax
+    0.00 :   afb3:   mov    %r13d,%r8d
+    0.00 :   afb6:   lea    (%r14,%r8,1),%rdi
+    0.00 :   afba:   add    $0x23,%rdi
+    0.00 :   afbe:   mov    %rbp,0x10(%rsp)
+    0.00 :   afc3:   add    %rbp,%r8
+    0.00 :   afc6:   add    $0x1c,%r8
+    0.00 :   afca:   movzbl -0x7(%rdi,%rsi,1),%r9d
+    0.00 :   afd0:   movzbl -0x6(%rdi,%rsi,1),%r10d
+    0.00 :   afd6:   movzbl -0x5(%rdi,%rsi,1),%r11d
+    0.00 :   afdc:   movzbl -0x4(%rdi,%rsi,1),%r15d
+    0.00 :   afe2:   movzbl -0x3(%rdi,%rsi,1),%r13d
+    0.00 :   afe8:   movzbl -0x2(%rdi,%rsi,1),%ecx
+    0.00 :   afed:   movzbl -0x1(%rdi,%rsi,1),%edx
+    0.00 :   aff2:   movzbl (%rdi,%rsi,1),%ebp
+    0.00 :   aff6:   movzbl (%r12,%r9,1),%r9d
+    0.00 :   affb:   vmovd  %r9d,%xmm0
+    0.00 :   b000:   vpinsrb $0x1,(%r12,%r10,1),%xmm0,%xmm0
+    0.00 :   b007:   vpinsrb $0x2,(%r12,%r11,1),%xmm0,%xmm0
+    0.00 :   b00e:   vpinsrb $0x3,(%r12,%r15,1),%xmm0,%xmm0
+    0.00 :   b015:   vpinsrb $0x4,(%r12,%r13,1),%xmm0,%xmm0
+    0.00 :   b01c:   vpinsrb $0x5,(%r12,%rcx,1),%xmm0,%xmm0
+    0.00 :   b023:   vpinsrb $0x6,(%r12,%rdx,1),%xmm0,%xmm0
+    0.00 :   b02a:   vpinsrb $0x7,(%r12,%rbp,1),%xmm0,%xmm0
+    0.00 :   b031:   vmovq  %xmm0,(%r8,%rsi,1)
+    0.00 :   b037:   add    $0x8,%rsi
+    0.00 :   b03b:   cmp    %rsi,%rax
+    0.00 :   b03e:   jne    afca <nts_str_case_convert.llvm.14165513408623713557+0xd8a>
+    0.00 :   b040:   mov    0x8(%rsp),%r8
+    0.00 :   b045:   mov    0x28(%rsp),%rax
+    0.00 :   b04a:   cmp    %rax,0x30(%rsp)
+    0.00 :   b04f:   mov    0x10(%rsp),%rbp
+    0.00 :   b054:   je     b094 <nts_str_case_convert.llvm.14165513408623713557+0xe54>
+    0.00 :   b056:   sub    %r8d,%ebx
+    0.00 :   b059:   lea    (%r8,%rbp,1),%rax
+    0.00 :   b05d:   add    $0x1c,%rax
+    0.00 :   b061:   lea    (%r14,%r8,1),%rcx
+    0.00 :   b065:   add    $0x1c,%rcx
+    0.00 :   b069:   xor    %edx,%edx
+    0.00 :   b06b:   data16 data16 data16 data16 data16 cs nopw 0x0(%rax,%rax,1)
+    0.00 :   b07a:   nopw   0x0(%rax,%rax,1)
+    0.00 :   b080:   movzbl (%rcx,%rdx,1),%esi
+    0.00 :   b084:   movzbl (%r12,%rsi,1),%esi
+    0.00 :   b089:   mov    %sil,(%rax,%rdx,1)
+    0.00 :   b08d:   inc    %rdx
+    0.00 :   b090:   cmp    %edx,%ebx
+    0.00 :   b092:   jne    b080 <nts_str_case_convert.llvm.14165513408623713557+0xe40>
+    0.00 :   b094:   mov    %rbp,%r14
+    0.00 :   b097:   jmp    ad47 <nts_str_case_convert.llvm.14165513408623713557+0xb07>
+    0.00 :   b09c:   vzeroupper
+    0.00 :   b09f:   call   10d0 <__stack_chk_fail@plt>
+    0.00 :   b0a4:   mov    0xff1d(%rip),%rax        # 1afc8 <stderr@GLIBC_2.2.5>
+    0.00 :   b0ab:   mov    (%rax),%rdi
+    0.00 :   b0ae:   lea    0x138e(%rip),%rsi        # c443 <.str.55.llvm.211938650821702734>
+    0.00 :   b0b5:   mov    %ebx,%edx
+    0.00 :   b0b7:   xor    %eax,%eax
+    0.00 :   b0b9:   call   1180 <fprintf@plt>
+    0.00 :   b0be:   call   1070 <abort@plt>
+    0.00 :   b0c3:   mov    0xfefe(%rip),%rax        # 1afc8 <stderr@GLIBC_2.2.5>
+    0.00 :   b0ca:   mov    (%rax),%rcx
+    0.00 :   b0cd:   lea    0x172a(%rip),%rdi        # c7fe <.str.156.llvm.211938650821702734+0x53>
+    0.00 :   b0d4:   mov    $0x32,%esi
+    0.00 :   b0d9:   mov    $0x1,%edx
+    0.00 :   b0de:   call   11c0 <fwrite@plt>
+    0.00 :   b0e3:   call   1070 <abort@plt>

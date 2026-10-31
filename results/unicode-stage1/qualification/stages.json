@@ -1,0 +1,202 @@
+[
+  {
+    "name": "fmt",
+    "args": [
+      "cargo",
+      "fmt"
+    ],
+    "status": 0,
+    "seconds": 6.449277877807617
+  },
+  {
+    "name": "clang-format",
+    "args": [
+      "clang-format",
+      "--style=file",
+      "--dry-run",
+      "-Werror",
+      "runtime/c/nts_unicode.c",
+      "runtime/c/nts_unicode.h"
+    ],
+    "status": 0,
+    "seconds": 0.02695178985595703
+  },
+  {
+    "name": "build-dev",
+    "args": [
+      "cargo",
+      "build",
+      "--profile",
+      "nts-dev",
+      "-p",
+      "nts-cli"
+    ],
+    "status": 0,
+    "seconds": 165.50592756271362
+  },
+  {
+    "name": "tests",
+    "args": [
+      "cargo",
+      "test",
+      "--profile",
+      "nts-dev",
+      "--no-fail-fast",
+      "-p",
+      "nts-unicode",
+      "-p",
+      "nts-codegen-c",
+      "-p",
+      "nts-codegen-llvm",
+      "-p",
+      "nts-codegen-jvm",
+      "-p",
+      "nts-bench",
+      "-p",
+      "nts-frontend-tsrs"
+    ],
+    "status": 0,
+    "seconds": 935.6047887802124
+  },
+  {
+    "name": "clippy",
+    "args": [
+      "cargo",
+      "clippy",
+      "--workspace",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "status": 0,
+    "seconds": 36.889931440353394
+  },
+  {
+    "name": "guards",
+    "args": [
+      "node",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/guards.mts"
+    ],
+    "status": 0,
+    "seconds": 2.8578007221221924
+  },
+  {
+    "name": "test262-language",
+    "args": [
+      "node",
+      "tooling/census/conformance262.ts",
+      "--under",
+      "test/language",
+      "--recorded",
+      "results/test262/c/language.tsv",
+      "--rows",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/language.rows.jsonl",
+      "--json",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/language.json"
+    ],
+    "status": 0,
+    "seconds": 133.84556984901428
+  },
+  {
+    "name": "test262-builtins",
+    "args": [
+      "node",
+      "tooling/census/conformance262.ts",
+      "--under",
+      "test/built-ins",
+      "--recorded",
+      "results/test262/c/builtins.tsv",
+      "--rows",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/builtins.rows.jsonl",
+      "--json",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/builtins.json"
+    ],
+    "status": 0,
+    "seconds": 27.447859287261963
+  },
+  {
+    "name": "test262-annexb",
+    "args": [
+      "node",
+      "tooling/census/conformance262.ts",
+      "--under",
+      "test/annexB",
+      "--recorded",
+      "results/test262/c/annexb.tsv",
+      "--rows",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/annexb.rows.jsonl",
+      "--json",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/annexb.json"
+    ],
+    "status": 0,
+    "seconds": 3.755699872970581
+  },
+  {
+    "name": "test262-staging",
+    "args": [
+      "node",
+      "tooling/census/conformance262.ts",
+      "--under",
+      "test/staging",
+      "--recorded",
+      "results/test262/c/staging.tsv",
+      "--rows",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/staging.rows.jsonl",
+      "--json",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/staging.json"
+    ],
+    "status": 0,
+    "seconds": 7.901744604110718
+  },
+  {
+    "name": "test262-harness",
+    "args": [
+      "node",
+      "tooling/census/conformance262.ts",
+      "--under",
+      "test/harness",
+      "--recorded",
+      "results/test262/c/harness.tsv",
+      "--rows",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/harness.rows.jsonl",
+      "--json",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/harness.json"
+    ],
+    "status": 0,
+    "seconds": 6.3640594482421875
+  },
+  {
+    "name": "tooling",
+    "args": [
+      "bash",
+      "tooling/gate/all.sh",
+      "--call",
+      "tooling"
+    ],
+    "status": 0,
+    "seconds": 257.6603238582611
+  },
+  {
+    "name": "strict",
+    "args": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--project",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-qualification-r2/tsconfig.json"
+    ],
+    "status": 0,
+    "seconds": 0.07070779800415039
+  },
+  {
+    "name": "dry",
+    "args": [
+      "node",
+      "tooling/lanes/land.ts",
+      "23aba5c80fab1aeda1ce9ac088663dca29006c55",
+      "--dry-run"
+    ],
+    "status": 1,
+    "seconds": 0.09287691116333008
+  }
+]

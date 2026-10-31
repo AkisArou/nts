@@ -1,0 +1,176 @@
+[
+  {
+    "bracket": "Scalar first-change implementation",
+    "arm": "A0",
+    "path": "/home/akisarou/.cache/nts-tmp/helper2-unicode-ab-20261031-r2/A0/2026-10-31-236b96e009f8-576c90ffe6bc4b6d95aff473024d44cc.json",
+    "sha256": "08af6832f616852cb909f4a78bc0e63df36c47727b3e081ab53f03fad2c8123a",
+    "compiler": {
+      "commit": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+      "sha256": "7d9ce3f0c7b0ca5346267b29ee42e3cd2c5ef50de2b0961970e2f8f3f85fa682"
+    },
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68576 32208 407908 25363200 1223909 49270 17100 0 0 0",
+        "landingLockHeld": true,
+        "load": "27.85 42.31 29.28 6/2126 3240443",
+        "memoryAvailableBytes": 25761320960,
+        "time": "2026-10-31T02:48:43.592Z"
+      },
+      "end": {
+        "time": "2026-10-31T02:52:18.640Z",
+        "load": "9.86 24.83 24.86 2/2150 3280047",
+        "memoryAvailableBytes": 24781889536,
+        "cpu5": "cpu5 68577 32208 408101 25384466 1223948 49281 17103 0 0 0",
+        "landingLockHeld": true
+      }
+    }
+  },
+  {
+    "bracket": "Scalar first-change implementation",
+    "arm": "B",
+    "path": "/home/akisarou/.cache/nts-tmp/helper2-unicode-ab-20261031-r2/B/2026-10-31-55a6dd1fde54-05e524658b59458e94e5566942ef0202.json",
+    "sha256": "a2c1f2089f395b4ae7cab8c7d3bd4a291d23a983438221f29f4afd816d89f300",
+    "compiler": {
+      "commit": "236b96e009f89ad144e49d71cb87a3f19cf02797",
+      "sha256": "d2b0e2a457d8f5c3d96cd379befb0a17ce802b6590a68574015bab36fb9f9005"
+    },
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68577 32208 408104 25384542 1223949 49281 17103 0 0 0",
+        "landingLockHeld": true,
+        "load": "9.86 24.83 24.86 7/2113 3280316",
+        "memoryAvailableBytes": 25040072704,
+        "time": "2026-10-31T02:52:19.431Z"
+      },
+      "end": {
+        "time": "2026-10-31T02:56:26.142Z",
+        "load": "87.04 48.52 33.59 7/2716 3794602",
+        "memoryAvailableBytes": 21612314624,
+        "cpu5": "cpu5 68582 32208 408910 25400824 1231553 49330 17128 0 0 0",
+        "landingLockHeld": true
+      }
+    }
+  },
+  {
+    "bracket": "Scalar first-change implementation",
+    "arm": "A1",
+    "path": "/home/akisarou/.cache/nts-tmp/helper2-unicode-ab-20261031-r2/A1/2026-10-31-d66141720bc6-20e647c1c7d04cc59d8af808c0dfd6e1.json",
+    "sha256": "1706a5b7bc79c1e918244b51c8bce8ad57a19524008f9a79078ce2c59631f523",
+    "compiler": {
+      "commit": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+      "sha256": "7d9ce3f0c7b0ca5346267b29ee42e3cd2c5ef50de2b0961970e2f8f3f85fa682"
+    },
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68582 32208 408985 25401971 1232612 49334 17129 0 0 0",
+        "landingLockHeld": true,
+        "load": "86.20 51.34 34.91 11/2557 3817099",
+        "memoryAvailableBytes": 22685380608,
+        "time": "2026-10-31T02:56:48.903Z"
+      },
+      "end": {
+        "time": "2026-10-31T03:01:26.002Z",
+        "load": "62.15 65.24 45.86 40/2978 321198",
+        "memoryAvailableBytes": 19637305344,
+        "cpu5": "cpu5 68664 32208 410039 25423218 1237936 49441 17163 0 0 0",
+        "landingLockHeld": true
+      }
+    }
+  },
+  {
+    "bracket": "Fused SIMD implementation",
+    "arm": "A0",
+    "path": "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-ab-r1/A0/2026-10-31-2911419f553c-39b77dd059c74e3e90be42d05a46feb4.json",
+    "sha256": "48282324a389b610c803de5c838a811722aff4e4206afc2ad50af0b95915ca33",
+    "compiler": {
+      "commit": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+      "sha256": "7d9ce3f0c7b0ca5346267b29ee42e3cd2c5ef50de2b0961970e2f8f3f85fa682"
+    },
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68691 32208 410844 25534685 1239646 49517 17198 0 0 0",
+        "landingLockHeld": false,
+        "load": "6.57 10.42 21.94 6/2253 1037553",
+        "memoryAvailableBytes": 25477197824,
+        "time": "2026-10-31T03:20:26.424Z"
+      },
+      "end": {
+        "time": "2026-10-31T03:23:58.879Z",
+        "load": "6.67 8.48 18.78 15/2259 1084519",
+        "memoryAvailableBytes": 22967881728,
+        "cpu5": "cpu5 68691 32208 410951 25555787 1239680 49524 17201 0 0 0",
+        "landingLockHeld": false
+      }
+    }
+  },
+  {
+    "bracket": "Fused SIMD implementation",
+    "arm": "B",
+    "path": "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-ab-r1/B/2026-10-31-2df01a690a65-186f3bb71f234d68ad4b0411cf0261b4.json",
+    "sha256": "e643f94bb0536d65279cbd915653700a37fa875a916406d170c5fc9c176dfe51",
+    "compiler": {
+      "commit": "2911419f553c99dcc4068204ec43a0a3e548b424",
+      "sha256": "65ec8f4fd1553ad54773e41e5e21cb04358760489760f0423752b8b5c8afeccd"
+    },
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68691 32208 410952 25555893 1239680 49524 17201 0 0 0",
+        "landingLockHeld": false,
+        "load": "6.67 8.48 18.78 20/2241 1084804",
+        "memoryAvailableBytes": 23011282944,
+        "time": "2026-10-31T03:23:59.943Z"
+      },
+      "end": {
+        "time": "2026-10-31T03:27:27.577Z",
+        "load": "7.69 7.99 16.48 5/2455 1460102",
+        "memoryAvailableBytes": 24577183744,
+        "cpu5": "cpu5 68692 32208 410996 25576272 1239997 49531 17209 0 0 0",
+        "landingLockHeld": false
+      }
+    }
+  },
+  {
+    "bracket": "Fused SIMD implementation",
+    "arm": "A1",
+    "path": "/home/akisarou/.cache/nts-tmp/helper2-unicode-fused-ab-r1/A1/2026-10-31-d79fe154bf98-5f3b8692955045628f0f8d73b3ca72cb.json",
+    "sha256": "a0c8ae785246ab0dc1140d82a61c2f93e73c184e173b78fbdcb7202c7294fe3f",
+    "compiler": {
+      "commit": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+      "sha256": "7d9ce3f0c7b0ca5346267b29ee42e3cd2c5ef50de2b0961970e2f8f3f85fa682"
+    },
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68692 32208 410999 25576515 1240070 49531 17209 0 0 0",
+        "landingLockHeld": false,
+        "load": "7.69 7.99 16.48 10/2287 1462005",
+        "memoryAvailableBytes": 24479870976,
+        "time": "2026-10-31T03:27:30.753Z"
+      },
+      "end": {
+        "time": "2026-10-31T03:30:58.266Z",
+        "load": "4.27 6.13 14.02 3/2345 1524406",
+        "memoryAvailableBytes": 24579022848,
+        "cpu5": "cpu5 68692 32208 411007 25597243 1240087 49532 17210 0 0 0",
+        "landingLockHeld": false
+      }
+    }
+  }
+]

@@ -1,0 +1,33 @@
+[
+  {
+    "name": "release",
+    "command": [
+      "cargo",
+      "build",
+      "--release"
+    ],
+    "status": 0,
+    "seconds": 135.92752194404602
+  },
+  {
+    "name": "census",
+    "command": [
+      "node",
+      "tooling/gate/tooling-runner.ts",
+      "tooling/gate/unicode-census.test.ts"
+    ],
+    "status": 0,
+    "seconds": 4.008825302124023
+  },
+  {
+    "name": "memory",
+    "command": [
+      "bash",
+      "tooling/memory/run.sh",
+      "--case",
+      "tests/memory/case-convert-unchanged"
+    ],
+    "status": 0,
+    "seconds": 6.3820481300354
+  }
+]

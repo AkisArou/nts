@@ -1,0 +1,1408 @@
+   Compiling nts-frontend-ts v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/frontend-ts)
+   Compiling nts-bench v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/bench)
+   Compiling nts-unicode v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/unicode)
+   Compiling nts-frontend-tsrs v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/frontend-tsrs)
+   Compiling nts-codegen-jvm v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/jvm)
+   Compiling nts-codegen-llvm v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/llvm)
+   Compiling nts-codegen-c v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/c)
+    Finished `nts-dev` profile [optimized] target(s) in 1m 29s
+     Running unittests src/main.rs (target/nts-dev/deps/nts_bench-6e24b5bf3a1c6c9d)
+
+running 33 tests
+test cli::tests::help_is_a_command_before_any_repository_or_measurement_setup ... ok
+test cli::tests::measurement_and_render_inputs_have_one_parse ... ok
+test execution::tests::a_signal_is_distinct_from_an_exit_code ... ok
+test cli::tests::unknown_options_refuse_by_name_instead_of_selecting_all_cases ... ok
+test reference_link::tests::libraries_keep_order_and_allow_comments_but_not_flags ... ok
+test reference_link::tests::only_declared_missing_libraries_are_optional ... ok
+test references::tests::duplicate_reference_declarations_are_errors ... ok
+test references::tests::every_existing_reference_has_one_valid_declaration ... ok
+test references::tests::missing_and_stale_reference_metadata_is_an_error ... ok
+test execution::tests::child_failure_retains_the_exit_and_exact_stderr ... ok
+test references::tests::only_third_party_references_relax_warning_fatality ... ok
+test references::tests::origins_are_strict_and_third_party_requires_an_upstream ... ok
+test tests::a_case_that_now_compiles_is_named_too ... ok
+test tests::a_declared_but_undefined_entry_is_a_refusal ... ok
+test tests::a_default_timed_child_keeps_the_gate_cpu_reservation ... ok
+test tests::a_nested_block_is_not_a_definition ... ok
+test tests::a_new_refusal_is_named_as_a_regression ... ok
+test tests::a_pointer_return_defines_and_a_longer_name_does_not ... ok
+test tests::a_saved_run_assembles_the_same_rows ... ok
+test tests::an_explicit_measurement_cpu_is_kept ... ok
+test tests::an_unmeasured_build_failure_also_fails_the_run ... ok
+test tests::default_measurement_cpus_never_widen_the_inherited_set ... ok
+test tests::every_case_refusing_is_drift_not_success ... ok
+test tests::exceptions_says_whose_trace_its_node_ratio_measures ... ok
+test tests::missing_optional_cpp_library_keeps_a_valid_row_and_its_reason ... ok
+test tests::runtime_abort_keeps_independent_columns_and_cells ... ok
+test tests::the_expected_refusals_are_not_drift ... ok
+test tests::the_module_init_root_is_not_a_driver_entry ... ok
+test references::tests::the_same_warning_is_fatal_only_for_an_authored_reference ... ok
+test capture::tests::a_local_declaration_content_change_changes_the_captured_workload ... ok
+test reference_link::tests::actual_link_accepts_available_and_reports_missing_without_a_build_error ... ok
+test workload::tests::benchmark_corpus_uses_source_contracts ... ok
+test workload::tests::source_contract_and_driver_controls ... ok
+
+test result: ok. 33 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.27s
+
+     Running tests/layouts.rs (target/nts-dev/deps/layouts-0aeb1dbf095b1878)
+
+running 1 test
+test layout_instrument_controls ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.58s
+
+     Running unittests src/lib.rs (target/nts-dev/deps/nts_codegen_c-537429c16a89edd9)
+
+running 20 tests
+test emit::tests::a_c_keyword_is_not_a_usable_function_name ... ok
+test emit::tests::a_bodiless_closure_is_refused_only_where_native_code_can_call_it ... ok
+test emit::tests::a_leading_underscore_is_reserved_to_the_implementation ... ok
+test emit::tests::a_function_this_backend_refuses_takes_its_callers_with_it ... ok
+test emit::tests::a_name_this_backend_generates_is_also_reserved ... ok
+test emit::tests::an_ordinary_name_is_left_alone ... ok
+test emit::tests::eight_bytes_is_two_element_types_and_they_differ_only_here ... ok
+test emit::tests::every_element_type_this_backend_can_spell_has_a_kind ... ok
+test emit::tests::frame_objects_initialize_scalar_and_boolean_fields ... ok
+test emit::tests::integer_arithmetic_is_emitted_wrapping ... ok
+test emit::tests::literal_hashes_are_settled_before_read_only_storage_is_used ... ok
+test emit::tests::the_erasure_table_is_searchable ... ok
+test emit::tests::a_dropped_bodys_case_calls_select_no_tables ... ok
+test emit::tests::the_two_erasure_lists_agree ... ok
+test emit::tests::the_two_erasure_lists_agree_about_handles ... ok
+test emit::notices::tests::program_notices_cover_exactly_the_third_party_components ... ok
+test emit::unicode_tables::tests::the_header_names_its_version_and_both_directions ... ok
+test emit::tests::both_backends_answer_an_array_element_alike ... ok
+test emit::unicode_tables::tests::an_uncalled_direction_is_not_generated ... ok
+test emit::tests::the_erasures_still_match_the_header ... ok
+
+test result: ok. 20 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/bitwise.rs (target/nts-dev/deps/bitwise-5c8c5b4a489001fd)
+
+running 1 test
+test an_or_of_two_booleans_converts_neither ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/class_factories.rs (target/nts-dev/deps/class_factories-1f441f7af9fc7032)
+
+running 1 test
+test exported_classes_on_one_shape_have_distinct_native_identities ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 7.44s
+
+     Running tests/com.rs (target/nts-dev/deps/com-829dbc15273326b8)
+
+running 27 tests
+test a_class_over_a_sealed_class_is_refused ... ok
+test a_bound_constant_is_its_number_where_it_is_read ... ok
+test a_declared_number_with_no_value_is_refused ... ok
+test a_com_binding_that_cannot_be_right_is_refused_by_name ... ok
+test a_boolean_array_is_lent_in_place_and_received_by_copy ... ok
+test a_delegate_that_cannot_be_built_is_refused_by_name ... ok
+test a_com_method_is_a_call_through_its_table ... ok
+test a_query_is_a_runtime_call_and_a_wrong_one_is_refused ... ok
+test a_delegate_is_an_object_whose_invoke_calls_the_closure ... ok
+test a_handle_at_module_scope_is_a_global ... ok
+test a_static_in_a_namespace_is_called_on_its_factory ... ok
+test a_reference_is_read_as_its_value_or_null ... ok
+test a_received_array_of_objects_is_an_array_of_the_program_s ... ok
+test a_sealed_class_is_constructed_by_the_constructor_the_checker_chose ... ok
+test a_struct_holding_a_string_is_never_storage ... ok
+test a_static_taking_bytes_passes_the_count_before_them ... ok
+test a_string_array_is_lent_and_received_as_hstrings ... ok
+test a_struct_holding_a_string_is_copied_at_the_call ... ok
+test a_struct_out_parameter_is_copied_into_its_field ... ok
+test a_value_or_null_is_passed_as_a_reference_made_for_the_call ... ok
+test an_array_of_structs_is_copied_both_ways ... ok
+test an_array_of_objects_is_lent_as_the_interface_the_call_takes ... ok
+test an_overloaded_method_calls_the_slot_the_checker_chose ... ok
+test tags_on_one_line_are_refused_as_one_tag ... ok
+test hresult_outputs_remain_local_inside_a_suspending_loop ... ok
+test arrays_the_callee_fills_are_written_into_the_programs ... ok
+test out_parameters_are_the_fields_of_the_result ... ok
+
+test result: ok. 27 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.71s
+
+     Running tests/com_failure.rs (target/nts-dev/deps/com_failure-2b3fbd786e01456e)
+
+running 1 test
+test only_successful_hresult_outputs_are_taken_and_released ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.50s
+
+     Running tests/com_output_kinds.rs (target/nts-dev/deps/com_output_kinds-2f470c0c58c34e07)
+
+running 1 test
+test failed_outputs_are_not_interpreted_and_successful_outputs_are_preserved has been running for over 60 seconds
+test failed_outputs_are_not_interpreted_and_successful_outputs_are_preserved ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 90.57s
+
+     Running tests/com_status.rs (target/nts-dev/deps/com_status-4790f9f7d55e9e4b)
+
+running 1 test
+test recorded_gap_direct_hresult_status_long_is_rejected_on_llp64 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.56s
+
+     Running tests/execute.rs (target/nts-dev/deps/execute-00a296ac4ff0e343)
+
+running 37 tests
+test a_call_reaches_a_function_whose_name_c_reserves ... ok
+test a_closure_is_an_object_and_costs_what_one_costs ... ok
+test a_loop_computes_the_right_sum ... ok
+test a_field_view_keeps_its_object_after_an_owning_slot_is_replaced ... ok
+test a_field_chain_can_test_an_unallocated_union_arm ... ok
+test a_method_something_overrides_dispatches_and_the_rest_do_not ... ok
+test a_literal_adapter_checks_the_uniform_result_before_decoding_it ... ok
+test a_store_gives_up_the_reference_the_slot_was_holding ... ok
+test a_timer_callback_runs_and_its_effect_is_visible ... ok
+test a_standalone_program_runs_its_loop_and_exits ... ok
+test a_void_literal_interface_call_releases_its_discarded_result ... ok
+test an_array_grows_without_moving ... ok
+test an_if_inside_a_loop_merges_both_arms ... ok
+test an_absent_reference_is_the_null_pointer_and_costs_nothing ... ok
+test an_index_its_non_null_assertion_promised_declines_by_name ... ok
+test an_out_of_bounds_index_traps_rather_than_reading_past_the_end ... ok
+test arithmetic_and_comparison_agree_with_typescript ... ok
+test array_methods_follow_javascript_and_not_intuition ... ok
+test arrays_allocate_index_and_measure ... ok
+test branches_pick_the_right_arm ... ok
+test bitwise_operators_follow_javascript_and_not_c ... ok
+test conditionals_short_circuit_and_use_javascript_truthiness ... ok
+test idiomatic_integer_typescript_computes_the_same_answers ... ok
+test facts_cross_function_boundaries ... ok
+test cycles_are_collected_and_acyclic_objects_are_never_considered ... ok
+test literal_types_make_a_parameter_provable ... ok
+test math_intrinsics_follow_javascript_and_not_c ... ok
+test methods_are_static_calls_with_an_explicit_receiver ... ok
+test module_scope_state_persists_between_calls ... ok
+test objects_are_flat_structs_with_fields_at_fixed_offsets ... ok
+test objects_hold_references_and_arrays_hold_objects ... ok
+test string_methods_count_utf16_code_units ... ok
+test reference_counting_balances_and_still_computes_the_right_answers ... ok
+test strings_are_utf16_code_units_and_compare_by_value ... ok
+test pattern_extraction_does_not_rename_later_arguments ... ok
+test unary_operators_mean_what_they_say ... ok
+test without_reference_counting_the_same_program_leaks ... ok
+
+test result: ok. 37 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 62.08s
+
+     Running tests/export_kinds.rs (target/nts-dev/deps/export_kinds-2c80c73ae5e7631e)
+
+running 1 test
+test recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/external_erased_fields.rs (target/nts-dev/deps/external_erased_fields-8f3f3ec6d4bf643a)
+
+running 1 test
+test a_recovered_external_field_survives_folding_and_reads_the_callers_value ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.57s
+
+     Running tests/foreign_callback_overloads.rs (target/nts-dev/deps/foreign_callback_overloads-26bf9fd8b5808026)
+
+running 1 test
+test inline_foreign_overload_callbacks_have_the_shared_alias_abi ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/foreign_window.rs (target/nts-dev/deps/foreign_window-a5831e4683c98bb9)
+
+running 1 test
+test global_window_overloads_use_the_selected_binding_argument_contract ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.93s
+
+     Running tests/header.rs (target/nts-dev/deps/header-13e4edb71f587d55)
+
+running 18 tests
+test a_published_class_is_reported_as_crossing_no_symbol ... ok
+test a_global_whose_spelling_a_function_holds_keeps_its_own_symbol ... ok
+test an_export_borrows_even_the_parameters_it_keeps ... ok
+test a_local_function_published_under_an_alias_has_external_linkage ... ok
+test emitted_programs_ship_only_the_notices_for_their_linked_components ... ok
+test anonymous_alias_survives_type_renumbering_and_named_layout_merging ... ok
+test exported_generators_step_without_a_typescript_consumer_and_stay_done ... ok
+test c_constructed_numeric_arrays_cross_the_export_boundary ... ok
+test a_public_field_keeps_its_c_abi_among_private_symbol_and_escaped_keys ... ok
+test exposed_and_internal_fields_keep_distinct_facts_in_one_program ... ok
+test generator_parameter_entry_keeps_its_exported_step ... ok
+test library_constructor_signatures_survive_type_symbol_resolution ... ok
+test managed_returns_and_promises_are_callable_from_the_header ... ok
+test object_aliases_do_not_collide_with_exported_functions ... ok
+test scalar_header_links_without_runtime_and_rejects_wrong_prototypes ... ok
+test generator_object_yields_can_be_retained_past_the_next_step ... ok
+test nested_objects_returned_to_c_remain_mutable_between_calls ... ok
+test module_initialization_is_declared_and_callable ... ok
+
+test result: ok. 18 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 16.50s
+
+     Running tests/native.rs (target/nts-dev/deps/native-c779cb60eef85cf8)
+
+running 21 tests
+test a_callback_bridge_finds_its_closure_beside_an_override ... ok
+test a_closure_answering_a_host_handle_crosses_only_where_its_result_is_dropped ... ok
+test a_gobject_a_call_hands_a_never_free_program_brings_the_support_file ... ok
+test a_foreign_declaration_survives_a_function_like_macro_of_its_name ... ok
+test a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit ... ok
+/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/target/native-c-tests/3721950-witness-unsigned-14/native_witness.c:15:16: error: static assertion failed: pollfd.events type
+   15 | _Static_assert(_Generic(&(((struct pollfd *)0)->events), uint16_t *: 1, default: 0), "pollfd.events type");
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/target/native-c-tests/3721950-witness-unsigned-14/native_witness.c:17:16: error: static assertion failed: pollfd.revents type
+   17 | _Static_assert(_Generic(&(((struct pollfd *)0)->revents), uint16_t *: 1, default: 0), "pollfd.revents type");
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+2 errors generated.
+/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/target/native-c-tests/3721950-witness-signed-count-15/native_witness.c:20:16: error: static assertion failed due to requirement '__builtin_types_compatible_p(int (struct pollfd *, unsigned long, int), int (struct pollfd *, long, int))': the header declares poll as the binding does
+   20 | _Static_assert(__builtin_types_compatible_p(__typeof__(poll), int (struct pollfd *, long, int)), "the header declares poll as the binding does");
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+test a_witness_agrees_with_the_real_header_and_refuses_a_schema_that_does_not ... ok
+test a_witnessed_function_is_called_through_its_header_only_where_the_header_is_included ... ok
+test conflicting_authored_abis_and_runtime_symbol_collisions_are_errors ... ok
+test curated_libc_bindings_match_system_headers_and_call_the_real_symbols ... ok
+test identity_between_related_host_handles_is_valid_c ... ok
+test non_null_array_accesses_emit_no_receiver_guard ... ok
+test object_key_refusal_keeps_primitive_and_erased_keys_licensed ... ok
+test record_string_keys_bypass_the_primitive_formatter ... ok
+test scalar_abi_matches_an_independently_compiled_c_library ... ok
+test two_declarations_of_one_symbol_that_disagree_are_refused ... ok
+test type_headers_preserve_brands_and_boolean_abi ... ok
+test unbranded_parameter_and_return_are_separate_refusals ... ok
+test unrelated_declarations_cannot_supply_a_calls_abi ... ok
+test a_count_narrower_than_an_array_is_bounded_before_the_call ... ok
+test a_closure_lent_to_c_comes_back_as_the_same_callable_closure ... ok
+test a_held_record_lends_its_string_member_for_the_call ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.10s
+
+     Running tests/objc.rs (target/nts-dev/deps/objc-a94c60df69fb136d)
+
+running 21 tests
+test a_class_extending_an_objective_c_class_is_registered_with_the_runtime ... ok
+test a_class_is_a_value_and_a_class_method_a_message_to_it ... ok
+test a_closure_crosses_as_a_stack_block ... ok
+test a_class_value_is_declared_by_an_objc_module_with_a_class_name ... ok
+test a_closure_in_an_objective_c_subclass_field_is_called ... ok
+test a_constructor_or_a_reaching_initializer_on_an_objective_c_subclass_is_refused_by_name ... ok
+test a_constant_is_the_extern_variable_read ... ok
+test a_field_meets_a_protocols_property_requirement ... ok
+test a_handle_with_both_absences_is_one_null ... ok
+test a_property_reads_and_writes_by_message ... ok
+test a_message_is_a_typed_cast_of_objc_msg_send ... ok
+test a_string_crosses_a_message_as_an_nsstring ... ok
+test a_selector_is_the_one_its_method_was_registered_under ... ok
+test a_string_parameter_is_the_nsstring_the_runtime_lends ... ok
+test an_objective_c_class_is_a_typescript_class ... ok
+test an_override_takes_the_selector_it_replaces_and_a_record_by_value ... ok
+test labels_are_passed_without_building_an_object ... ok
+test labels_that_are_not_a_literal_are_read_from_their_fields ... ok
+test the_fields_of_an_objective_c_subclass_live_in_its_state ... ok
+test a_malformed_message_is_refused_by_name ... ok
+test swift_numbers_take_plain_numbers_and_cross_as_c_types ... ok
+
+test result: ok. 21 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests/ownership.rs (target/nts-dev/deps/ownership-2a0f68180148aecf)
+
+running 3 tests
+test a_method_returning_its_receiver_is_owned_when_a_table_holds_it ... ok
+test a_method_returning_a_fresh_object_still_owes_nothing_extra ... ok
+test an_export_gives_back_what_it_overwrites_in_a_parameter ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/possibly_undefined.rs (target/nts-dev/deps/possibly_undefined-42baea68f8747474)
+
+running 1 test
+test optional_pairs_preserve_bits_absence_null_and_conditional_ownership ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 12.35s
+
+     Running tests/refused_names.rs (target/nts-dev/deps/refused_names-6f02f03eb6920ab0)
+
+running 1 test
+test a_refused_nested_function_leaves_no_unread_immortal_name ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/remainder.rs (target/nts-dev/deps/remainder-f4c0711936b1ca00)
+
+running 1 test
+test a_remainder_answered_from_its_integers_compiles_warning_free ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.11s
+
+     Running tests/runtime_checkpoint.rs (target/nts-dev/deps/runtime_checkpoint-3c57797b4f0925c6)
+
+running 44 tests
+test a_handle_value_counts_through_its_family ... ok
+test a_date_normalises_its_argument ... ok
+test a_grown_array_gives_its_elements_back ... ok
+test a_foreign_release_preserves_an_unrelated_pending_raise ... ok
+test a_process_wide_count_still_answers_for_the_process ... ok
+test a_pump_consumes_a_cross_thread_wakeup ... ok
+test a_number_is_written_with_the_shortest_digits_that_read_back ... ok
+test a_region_gives_back_everything_its_call_made ... ok
+test a_rejection_is_released_at_a_host_checkpoints_end ... ok
+test a_symbol_is_the_address_of_its_own_cell ... ok
+test a_view_is_a_window_onto_a_buffer ... ok
+test an_append_writes_in_place_only_into_a_grown_string_nobody_else_holds ... ok
+test access_error_keys_describe_primitives_without_program_callbacks ... ok
+test an_element_is_read_by_kind_and_not_by_width ... ok
+test an_erased_needle_answers_by_its_tag ... ok
+test an_erased_reference_is_counted_and_traced ... ok
+test an_erased_value_keeps_its_tag_across_a_promise ... ok
+test an_open_records_membership_has_three_distinct_results ... ok
+test an_unhandled_rejection_ends_the_process ... ok
+test an_outstanding_operation_holds_the_libuv_loop ... ok
+test an_erased_bigint_keeps_value_semantics_and_owned_storage ... ok
+test a_json_string_is_quoted_as_text_ts_quotes_it_by_both_kernels ... ok
+test combinators_settle_in_the_order_node_settles_them ... ok
+test bigint_string_ordering_uses_the_integer_grammar_without_rounding ... ok
+test array_printers_forward_a_pending_throw_before_consuming_the_result ... ok
+test parse_shaped_iteration_rss_stays_bounded ... ok
+test collector_progress_and_candidate_indices ... ok
+test decimal_text_is_read_as_the_nearest_double ... ok
+test failed_hresult_clears_the_slot_and_success_preserves_it ... ok
+test promise_join_stops_at_settlement_on_the_test_host ... ok
+test promise_join_stops_at_settlement_on_libuv ... ok
+test promises_resolve_in_the_order_node_resolves_them ... ok
+test string_search_positions_keep_their_numeric_boundaries ... ok
+test the_bigint_upper_endpoint_is_refused_rather_than_converted ... ok
+test the_checkpoint_orders_ticks_microtasks_and_macrotasks_as_node_does ... ok
+test standard_stream_failures_and_terminal_state_follow_each_descriptor ... ok
+test the_libuv_host_keeps_the_same_contract_as_the_deterministic_one ... ok
+test the_map_table_agrees_with_node ... ok
+test the_runtime_keeps_the_contracts_its_header_states ... ok
+test timers_behave_as_the_capability_says ... ok
+test the_collector_reclaims_a_chain_and_keeps_what_is_still_held ... ok
+test utf8_decoding_agrees_with_textdecoder ... ok
+test typed_contents_cleanup_preserves_the_runtime_death_protocol ... ok
+test typed_tracing_preserves_collector_and_holder_protocols ... ok
+
+test result: ok. 44 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 79.66s
+
+     Running tests/runtime_effects.rs (target/nts-dev/deps/runtime_effects-fea631322956705d)
+
+running 3 tests
+test transitive_raise_and_cycles_do_not_evade_the_check ... ok
+test clang_sees_a_transitive_raise_but_not_diagnostic_text ... ok
+test no_raise_contracts_cannot_reach_the_c_raise_producer ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.52s
+
+     Running tests/runtime_sabotage.rs (target/nts-dev/deps/runtime_sabotage-c20f7e3d72585251)
+
+running 1 test
+test every_sabotage_of_the_erased_payload_is_caught ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 18.67s
+
+     Running tests/tag_range.rs (target/nts-dev/deps/tag_range-fb3a804cd4663ef7)
+
+running 1 test
+test folded_object_tests_answer_for_exactly_the_object_band ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.92s
+
+     Running unittests src/lib.rs (target/nts-dev/deps/nts_codegen_jvm-2b17ee63ab8a5093)
+
+running 60 tests
+test body::tests::a_number_converted_to_a_bool_puts_a_label_between_a_definition_and_its_read ... ok
+test body::tests::a_key_passed_unboxed_is_read_where_its_call_is ... ok
+test body::tests::a_tested_unerase_reads_its_operand_after_its_own_label ... ok
+test dispatch_identity_tests::different_machine_contract_or_projection_chain_keeps_its_own_body ... ok
+test dispatch_identity_tests::recorded_identity_selects_one_direct_body_in_both_slot_orders ... ok
+test dispatch_identity_tests::void_identity_has_no_result_absence_to_convert ... ok
+test dispatch_identity_tests::missing_wrong_and_absence_mismatched_identity_cannot_share_a_member ... ok
+test guarded_member_tests::a_concrete_interface_row_keeps_the_existing_conflict_boundary ... ok
+test guarded_member_tests::both_slot_bodies_and_original_public_surface_survive_in_both_layout_orders ... ok
+test guarded_member_tests::adding_a_refused_receiver_does_not_change_the_old_plain_public_surface ... ok
+test guarded_member_tests::an_unrelated_unlicensed_receiver_cannot_be_hidden_by_a_licensed_family ... ok
+test guarded_member_tests::class_contract::class_contract_keeps_mixed_roots_foreign_and_incomplete_families_closed ... ok
+test guarded_member_tests::class_contract::owned_class_contract_has_class_receiver_calls_and_two_distinct_entries ... ok
+test guarded_member_tests::compatibility_and_dropped_tail_bridge_share_one_ownership_plan_in_both_slot_orders ... ok
+test guarded_member_tests::class_contract::class_contract_requires_unique_owned_abstract_interface_identity ... ok
+test guarded_member_tests::concrete_override::coherent_certified_good_stop_keeps_old_subclass_public_override ... ok
+test guarded_member_tests::externally_bound_java_interface_names_cannot_gain_internal_selectors ... ok
+test guarded_member_tests::field_family_and_uniform_runtime_slot_authorities_cannot_be_qualified ... ok
+test guarded_member_tests::missing_stale_renamed_and_mismatched_certificates_fail_closed ... ok
+test guarded_member_tests::class_contract::class_contract_name_does_not_license_cross_class_store_or_field_cast ... ok
+test guarded_member_tests::concrete_override::old_subclass_of_nonfinal_concrete_good_keeps_plain_virtual_override ... ok
+test guarded_member_tests::reserved_names_do_not_capture_written_lookalikes_and_raising_names_stay_owned ... ok
+test guarded_member_tests::split_face::actual_stateful_companion_domain_keeps_both_public_surfaces_in_both_slot_orders ... ok
+test guarded_member_tests::split_face::an_uncovered_receiver_and_field_selector_cannot_gain_a_companion_alias ... ok
+test guarded_member_tests::split_face::concrete_companion_and_missing_certificates_keep_the_actual_split_domain_closed ... ok
+test guarded_member_tests::class_contract::class_contract_old_subclass_binary_and_actual_receiver_named_stops_execute ... ok
+test guarded_member_tests::ordinary_abstract::ordinary_abstract_implementer_keeps_old_plain_subclass_override ... ok
+test guarded_member_tests::split_face::retained_erased_error_and_callable_descriptor_reaches_the_consumer ... ok
+test guarded_member_tests::split_face::sibling_and_transitive_companions_inherit_one_default_in_both_layout_orders ... ok
+test guarded_member_tests::split_face::unrelated_interface_roots_cannot_share_a_new_internal_default ... ok
+test guarded_members::guarded_member_tests::cyclic_emitted_parent_graph_cannot_introduce_an_internal_default ... ok
+test hierarchy::tests::a_field_familys_selector_keeps_its_face_and_raising_identity ... ok
+test hierarchy::tests::a_flattened_record_field_belongs_to_its_emitted_class ... ok
+test hierarchy::tests::owned_raising_slot_names_do_not_depend_on_the_implementation ... ok
+test intcall::tests::a_helper_with_no_integral_form_is_absent_from_both ... ok
+test intcall::tests::the_two_spellings_cover_the_same_helpers ... ok
+test ops::agrees_with_hir::every_mapped_name_agrees_about_scalar_kinds ... ok
+test ops::agrees_with_hir::every_mapped_runtime_helper_has_a_shared_raising_contract ... ok
+test ops::literal_tests::a_literal_outside_its_unsigned_kind_has_no_spelling ... ok
+test ops::literal_tests::a_signed_literal_is_itself ... ok
+test ops::literal_tests::an_unsigned_literal_is_its_raw_bits ... ok
+test ops::set_length::the_name_lower_emits_resolves_to_a_void_method ... ok
+test ops::signatures::every_call_this_backend_emits_exists_in_the_jar ... ok
+test split::tests::a_call_ends_a_run_and_stays ... ok
+test split::tests::a_name_whose_jvm_spelling_is_taken_is_skipped ... ok
+test split::tests::a_run_moves_and_its_live_out_keeps_its_value ... ok
+test split::tests::a_stretch_whose_every_cut_leaves_two_values_live_is_not_split ... ok
+test types::tests::a_bigint_is_a_reference_to_two_longs ... ok
+test types::tests::a_bool_is_an_int_to_compute_and_a_z_to_declare ... ok
+test types::tests::a_map_and_a_set_are_different_classes ... ok
+test types::tests::a_narrow_integer_is_an_int_in_every_vocabulary_but_none ... ok
+test types::tests::a_reference_descriptor_and_its_frame_type_name_one_class ... ok
+test types::tests::an_array_of_bigints_is_a_reference_array ... ok
+test types::tests::callable_storage_needs_actual_identity_and_never_supplies_an_entry ... ok
+test types::tests::sixty_four_bits_is_the_only_wide_integer ... ok
+test types::tests::void_is_a_return_descriptor_and_not_a_field_one ... ok
+test types::tests::what_this_slice_does_not_represent_says_so ... ok
+test guarded_member_tests::split_face::old_sibling_companion_implementer_and_root_caller_binaries_remain_compatible ... ok
+test guarded_member_tests::old_java_binary_uses_the_new_default_and_generated_calls_keep_distinct_reasons ... ok
+test guarded_member_tests::split_face::old_companion_implementer_and_abstract_class_subclass_keep_their_binary_abi ... ok
+
+test result: ok. 60 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.40s
+
+     Running tests/accumulators.rs (target/nts-dev/deps/accumulators-55fd7846cc0bd0b1)
+
+running 1 test
+test an_accumulator_is_held_only_where_the_three_rules_allow ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.48s
+
+     Running tests/android.rs (target/nts-dev/deps/android-ab7348b9c1074813)
+
+running 9 tests
+test a_handover_sweeps_the_sockets_and_nothing_else_does ... ok
+test the_device_cases_compile_against_api_29 ... ok
+test both_adapters_negotiate_the_same_application_protocol ... ok
+test the_library_compiles_against_the_api_level_it_declares ... ok
+test both_artifacts_dex_at_api_29_with_no_invoke_custom ... ok
+test the_library_is_java_eight_and_names_no_sdk_outside_its_one_sdk_file ... ok
+test the_primitives_pass_their_own_suite_against_real_sockets_and_tls ... ok
+test r8_keeps_the_ffi_surface_and_removes_the_rest ... ok
+test the_two_tunnels_answer_the_same_through_one_proxy ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 15.67s
+
+     Running tests/callable_projection_override.rs (target/nts-dev/deps/callable_projection_override-a12ad4412874fcec)
+
+running 1 test
+test projected_callable_keeps_old_plain_virtual_override ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.97s
+
+     Running tests/callable_storage.rs (target/nts-dev/deps/callable_storage-634dbaecfabe8eff)
+
+running 2 tests
+test unused_callbacks_keep_the_root_without_retaining_entries ... ok
+test live_entries_and_ignored_storage_share_one_root ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
+
+     Running tests/callbacks.rs (target/nts-dev/deps/callbacks-3fea0de3e3cac556)
+
+running 2 tests
+test every_callback_interface_has_the_shape_the_table_claims ... ok
+test the_table_is_a_function_in_both_directions ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/check_protocol.rs (target/nts-dev/deps/check_protocol-d48478bfa67b11d2)
+
+running 2 tests
+test an_old_case_header_is_rejected_without_a_result_or_done_marker ... ok
+test result_labels_are_independent_of_the_invocation_cache ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.08s
+
+     Running tests/constructor_capabilities.rs (target/nts-dev/deps/constructor_capabilities-48c7b136f850629a)
+
+running 1 test
+test the_real_stream_constructor_prepares_with_both_ambient_contracts has been running for over 60 seconds
+test the_real_stream_constructor_prepares_with_both_ambient_contracts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 214.27s
+
+     Running tests/dead_closures.rs (target/nts-dev/deps/dead_closures-dbf183f10b919940)
+
+running 4 tests
+test a_closure_static_no_block_holds_gets_no_singleton ... ok
+test an_uncallable_closure_refuses_its_raising_entry_by_name ... ok
+test an_uncallable_closure_refuses_by_name ... ok
+test an_uncallable_closure_under_a_typed_signature_refuses_by_name ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/empty_face.rs (target/nts-dev/deps/empty_face-021841d31af95249)
+
+running 9 tests
+test merged_families::a_value_of_the_opaque_face_cannot_escape_into_the_merged_class ... ok
+test merged_families::actual_return_field_store_and_frame_share_the_object_reference ... ok
+test merged_families::cached_selectors_keep_each_family_when_one_default_body_is_shared ... ok
+test merged_families::identity_state_subclass_and_foreign_boundaries_do_not_become_opaque ... ok
+test merged_families::other_faces_rows_do_not_change_each_opaque_specializations_reference ... ok
+test merged_families::unknown_ordinary_and_outside_layout_slots_keep_the_conservative_boundary ... ok
+test each_specialization_is_root_typed_on_its_own_facts ... ok
+test a_store_out_of_an_empty_face_into_a_class_declines ... ok
+test a_store_into_an_empty_face_is_a_verified_upcast ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/environment.rs (target/nts-dev/deps/environment-ba178dab61981ab0)
+
+running 5 tests
+test a_rejection_keeps_the_tag_it_arrived_with ... ok
+test closing_under_arriving_completions_loses_nothing ... ok
+test an_environment_is_isolated_clocked_bounded_and_lets_go ... ok
+test one_default_environment_and_one_lane_owns_it ... ok
+test close_waits_for_delayed_credits_without_losing_notifications ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.82s
+
+     Running tests/erase_absence.rs (target/nts-dev/deps/erase_absence-feea6fb4b0f73b85)
+
+running 1 test
+test a_null_reference_erases_to_the_absence_the_ir_names ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.35s
+
+     Running tests/erased_length.rs (target/nts-dev/deps/erased_length-c545d3ac9724edfb)
+
+running 1 test
+test an_erased_length_reads_every_actual_representation ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/execute.rs (target/nts-dev/deps/execute-ee90a7182360aa9e)
+
+running 3 tests
+test arithmetic_and_comparison_answer_what_the_source_says ... ok
+test map_and_set_walks_use_the_runtime_cursor_contract ... ok
+test a_loop_runs_the_number_of_times_its_condition_says ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/field_rows.rs (target/nts-dev/deps/field_rows-ed76c0133252e1b2)
+
+running 1 test
+test accessor_rows_preserve_record_inheritance_and_real_methods_still_block_it ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/field_views.rs (target/nts-dev/deps/field_views-2d24cdb9f2eb368e)
+
+running 2 tests
+test a_view_and_a_prefix_store_to_a_face_of_fields_compile_through_its_interface ... ok
+test a_split_face_takes_its_interface_name_from_its_layout ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/field_visibility.rs (target/nts-dev/deps/field_visibility-acb42f69be99df5b)
+
+running 2 tests
+test statics_are_globals_and_a_public_one_is_already_excluded_from_narrowing ... ok
+test no_generated_field_is_public ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/foreign_key_format.rs (target/nts-dev/deps/foreign_key_format-458e49d23be051b2)
+
+running 4 tests
+test the_two_guards_accept_the_same_keys ... ok
+test a_key_built_upstream_splits_downstream ... ok
+test a_source_form_owner_keeps_its_member ... ok
+test the_escape_table_builds_the_same_key ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.25s
+
+     Running tests/fused_answers.rs (target/nts-dev/deps/fused_answers-a5c1ee8ac45501d4)
+
+running 1 test
+test an_answer_read_only_as_a_float_is_never_boxed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.13s
+
+     Running tests/gzip.rs (target/nts-dev/deps/gzip-df46ca065a7cfc3d)
+
+running 2 tests
+test every_corruption_is_refused_rather_than_absorbed ... ok
+test every_split_of_every_stream_decodes_to_the_same_bytes ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests/identifier_parts.rs (target/nts-dev/deps/identifier_parts-f092f29384e0cbf3)
+
+running 2 tests
+test the_original_joiner_exports_and_ascii_control_all_emit ... ok
+test declarations_direct_refs_and_generated_java_calls_keep_escape_identity ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/inbox.rs (target/nts-dev/deps/inbox-dc2e566731f69468)
+
+running 1 test
+test every_producer_publishes_and_every_credit_returns ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.92s
+
+     Running tests/inherited_faces.rs (target/nts-dev/deps/inherited_faces-05c69add27a5f0da)
+
+running 1 test
+test declared_ancestry_splits_the_chain_and_keeps_concrete_floors ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/intrinsics.rs (target/nts-dev/deps/intrinsics-1831c3e4dff36cdb)
+
+running 2 tests
+test the_declarations_the_table_and_the_jar_agree ... ok
+test typescript_reaches_the_provider_through_the_intrinsic_table ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.48s
+
+     Running tests/java_surface.rs (target/nts-dev/deps/java_surface-2612de0b42efb045)
+
+running 3 tests
+test a_methods_static_is_synthetic_and_a_free_functions_is_not ... ok
+test no_emitted_class_names_a_java_collection_interface ... ok
+test a_class_carries_an_instance_method_for_each_of_its_statics ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/literal_assertions.rs (target/nts-dev/deps/literal_assertions-e4e0d3bd05a24793)
+
+running 1 test
+test erased_literal_membership_is_checked_from_a_foreign_caller ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.41s
+
+     Running tests/memory.rs (target/nts-dev/deps/memory-84676f4a2cfc29cb)
+
+running 2 tests
+test every_accessor_agrees_with_node_by_bit_pattern ... ok
+test the_vectors_reach_the_cases_they_claim ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.49s
+
+     Running tests/method_split.rs (target/nts-dev/deps/method_split-1385a627095fb6ea)
+
+running 1 test
+test a_body_past_the_method_limit_is_split_into_private_helpers ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.22s
+
+     Running tests/mixed_equality.rs (target/nts-dev/deps/mixed_equality-319e01743d3eb0ef)
+
+running 1 test
+test a_string_against_another_reference_is_identity_in_both_forms ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.33s
+
+     Running tests/number_to_string.rs (target/nts-dev/deps/number_to_string-ac9b489fbd32c56a)
+
+running 1 test
+test every_double_prints_the_characters_node_prints ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.47s
+
+     Running tests/owned_interface_contracts.rs (target/nts-dev/deps/owned_interface_contracts-c07d04377c12538f)
+
+running 2 tests
+test an_inherited_optional_tail_keeps_the_one_argument_interface_contract ... ok
+test real_stream_retains_its_owned_identity_and_parameter_authorities ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.87s
+
+     Running tests/possibly_undefined.rs (target/nts-dev/deps/possibly_undefined-85c097bfea9c7da8)
+
+running 1 test
+test optional_jvm_values_preserve_every_bit_and_keep_null_distinct ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.89s
+
+     Running tests/proved_views.rs (target/nts-dev/deps/proved_views-8b6d561359652f40)
+
+running 1 test
+test a_proven_view_access_takes_the_proved_accessor ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/provides.rs (target/nts-dev/deps/provides-2b955fa9a8c0f70a)
+
+running 1 test
+test the_jvm_provides_what_its_table_maps ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/refusals.rs (target/nts-dev/deps/refusals-2599faf7802a74d7)
+
+running 3 tests
+test two_properties_that_become_one_jvm_field_are_refused_by_name ... ok
+test stateful_literal_container_contracts_are_refused_before_a_runtime_cast ... ok
+test an_interface_that_carries_state_compiles_through_its_interface ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/refused_names.rs (target/nts-dev/deps/refused_names-22e9313566bd2dbd)
+
+running 1 test
+test a_discarded_jvm_body_keeps_no_literal_from_its_unwritten_code ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+
+     Running tests/runtime_agrees_with_hir.rs (target/nts-dev/deps/runtime_agrees_with_hir-e52d85c839428bf3)
+
+running 2 tests
+test every_name_this_lane_renders_names_a_method_the_jar_has ... ok
+test every_promise_all_spelling_names_a_method_the_jar_has ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.41s
+
+     Running tests/runtime_jar.rs (target/nts-dev/deps/runtime_jar-a59cb07eda958a4c)
+
+running 4 tests
+test nothing_in_the_runtime_needs_a_feature_android_lacks ... ok
+test the_jar_names_no_method_android_spells_differently ... ok
+test d8_accepts_the_runtime_jar ... ok
+test the_jar_matches_the_sources_it_was_built_from ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.37s
+
+     Running tests/runtime_regression.rs (target/nts-dev/deps/runtime_regression-315fcaaf3e9b9664)
+
+running 1 test
+test the_runtime_passes_its_own_tests ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.57s
+
+     Running tests/sabotage.rs (target/nts-dev/deps/sabotage-a96b4306358c9463)
+
+running 2 tests
+test every_driver_passes_against_an_unsabotaged_runtime ... ok
+test every_named_sabotage_breaks_the_case_it_names ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.91s
+
+     Running tests/store.rs (target/nts-dev/deps/store-d925bc4d11841c73)
+
+running 3 tests
+test a_commit_syncs_the_file_then_renames_then_syncs_the_directory ... ok
+test a_value_is_whole_or_absent_and_a_name_cannot_escape ... ok
+test the_sabotages_break_what_they_name_and_nothing_else ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.95s
+
+     Running tests/string_chains.rs (target/nts-dev/deps/string_chains-3dfb3623ed57a03c)
+
+running 3 tests
+test a_declined_optional_carrier_stub_has_every_descriptor_local ... ok
+test split_optional_arguments_and_a_private_carrier_share_one_descriptor ... ok
+test private_chains_transfer_one_builder_while_observed_versions_stay_strings ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.44s
+
+     Running tests/string_keys.rs (target/nts-dev/deps/string_keys-ed565b64138a5ed0)
+
+running 1 test
+test a_string_key_that_cannot_be_absent_is_passed_unboxed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.20s
+
+     Running tests/structural_adapters.rs (target/nts-dev/deps/structural_adapters-be62329b3a081c6e)
+
+running 3 tests
+test conflicting_absence_adapters_decline_the_class_by_name ... ok
+test a_new_slot_cannot_replace_an_inherited_slots_absence_conversion ... ok
+test a_covariant_bridge_shares_a_slot_only_with_a_proven_identity ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.14s
+
+     Running tests/tag_table.rs (target/nts-dev/deps/tag_table-c1b005b8fc58823f)
+
+running 1 test
+test the_three_tag_tables_agree ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/throwing_dispatch.rs (target/nts-dev/deps/throwing_dispatch-59f6e8bfff83056f)
+
+running 1 test
+test the_throwing_override_and_its_throwing_base_control_both_emit ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running tests/transport.rs (target/nts-dev/deps/transport-d57b730dcf128df9)
+
+running 7 tests
+test a_full_io_queue_refuses_at_submission_and_gives_the_credit_back ... ok
+test a_gzip_response_survives_the_socket_and_keeps_its_headers ... ok
+test a_tunnel_carries_bytes_and_keeps_the_targets_name ... ok
+test alpn_negotiates_and_the_servers_order_is_the_one_that_counts ... ok
+test the_reference_transport_delivers_on_the_owner_lane ... ok
+test dropping_endpoint_identification_lets_a_wrong_name_through ... ok
+test tls_refuses_a_certificate_that_names_another_host ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.08s
+
+     Running tests/typed_face.rs (target/nts-dev/deps/typed_face-a5dcd6778938ed30)
+
+running 1 test
+test a_java_caller_passes_arguments_through_the_typed_face_in_order ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.37s
+
+     Running tests/unsigned.rs (target/nts-dev/deps/unsigned-66ba3422f4cabb5d)
+
+running 1 test
+test an_unsigned_integer_compares_and_converts_as_one ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.34s
+
+     Running tests/unsigned_const.rs (target/nts-dev/deps/unsigned_const-2f583e186c793119)
+
+running 1 test
+test an_unsigned_literal_at_its_maximum_emits ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.03s
+
+     Running tests/unsigned_entries.rs (target/nts-dev/deps/unsigned_entries-d2b603d93670360f)
+
+running 3 tests
+test public_slot_limit_preserves_internal_bodies_and_refusal_stubs ... ok
+test unsigned_entries_use_long_and_internal_forwarding_uses_int ... ok
+test a_private_implementation_stays_linked_but_java_source_cannot_call_it ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.37s
+
+     Running tests/whole_program.rs (target/nts-dev/deps/whole_program-c70fd24c2fc753bd)
+
+running 16 tests
+test a_bigint_ordering_runs_to_completion ... ok
+test a_buffer_too_large_for_the_machine_throws_a_range_error ... ok
+test a_clean_run_evaluates_the_module_then_drains_the_loop ... ok
+test a_global_initialised_to_negative_zero_keeps_its_sign ... ok
+test a_program_with_nothing_to_evaluate_exits_zero ... ok
+test a_rejection_awaited_in_the_same_turn_is_handled ... ok
+test a_number_table_handed_a_string_turns_its_columns ... ok
+test a_run_time_refusal_exits_as_c_aborts ... ok
+test a_shift_typed_i64_takes_the_low_32_bits ... ok
+test a_told_apart_global_skips_the_names_other_globals_spell ... ok
+test a_var_read_before_anything_assigns_it_is_undefined ... ok
+test an_uncaught_throw_at_module_scope_exits_one ... ok
+test an_uncaught_throw_names_a_class_that_shares_its_layout_as_c_does ... ok
+test exp_and_hypot_answer_as_node_does ... ok
+test an_unhandled_rejection_is_reported_after_the_turn ... ok
+test globals_the_mangling_makes_alike_are_told_apart ... ok
+
+test result: ok. 16 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.54s
+
+     Running tests/wide_cursor.rs (target/nts-dev/deps/wide_cursor-79d0bedf32535da8)
+
+running 1 test
+test a_wide_view_subscript_is_bounded_as_a_long ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.16s
+
+     Running unittests src/lib.rs (target/nts-dev/deps/nts_codegen_llvm-354e98f8abca4a27)
+
+running 4 tests
+test emitted_name_guards::quoted_names_allow_escaped_display_characters_but_never_raw_delimiters ... ok
+test signatures::tests::the_table_is_sorted_because_it_is_binary_searched ... ok
+test frame_tests::frame_objects_initialize_scalar_and_boolean_fields ... ok
+test signatures::tests::every_native_helper_signature_has_a_shared_raising_contract ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/agrees_with_c.rs (target/nts-dev/deps/agrees_with_c-20f5ec287a67a9e8)
+
+running 8 tests
+test the_two_backends_agree_about_erased_values ... ok
+test the_two_backends_agree_about_bitwise_operators_on_doubles ... ok
+test the_two_backends_agree_about_module_scope_state ... ok
+test the_two_backends_agree_about_strings ... ok
+test the_two_backends_agree_about_objects_they_allocate ... ok
+test the_two_backends_agree_about_where_a_field_is ... ok
+test bigints_keep_exact_boundaries_and_stop_overflow_by_name ... ok
+test the_two_backends_compute_the_same_numbers ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.67s
+
+     Running tests/by_value.rs (target/nts-dev/deps/by_value-dbd5a27705820549)
+
+running 10 tests
+test a_program_with_no_record_results_declares_no_stret ... ok
+test a_record_crosses_by_value_in_c ... ok
+test a_local_stored_in_a_global_is_refused ... ok
+test arm64_refuses_only_what_its_convention_places ... ok
+test byval_is_a_pointer_to_a_copy_on_win64 ... ok
+test the_llvm_declarations_are_clangs_on_arm64 ... ok
+test the_llvm_declarations_are_clangs ... ok
+test the_llvm_backend_refuses_what_it_cannot_classify_by_name ... ok
+test the_llvm_declarations_are_clangs_on_win64 ... ok
+test a_record_that_cannot_cross_by_value_is_refused_by_name ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.18s
+
+     Running tests/com_classes.rs (target/nts-dev/deps/com_classes-f5d2c35cfb071db1)
+
+running 25 tests
+test a_bindings_composable_class_is_made_by_its_factory ... ok
+test a_class_over_a_composable_class_is_composed_by_the_runtime ... ok
+test a_composed_class_has_methods_of_its_own ... ok
+test a_delegate_taking_a_boolean_is_ir ... ok
+test a_composed_class_constructor_runs_after_its_composition ... ok
+test a_handle_passed_as_its_base_is_asked_for_the_base_interface ... ok
+test a_generic_interfaces_surface_is_called_on_its_own_table ... ok
+test a_forwarded_record_is_passed_as_win64_passes_it ... ok
+test a_composed_class_keeps_its_fields_in_its_outer_object ... ok
+test a_listener_naming_no_event_is_refused ... ok
+test a_primitive_where_an_object_is_taken_is_boxed ... ok
+test a_string_argument_is_the_text_of_the_lent_hstring ... ok
+test a_slot_the_class_leaves_is_forwarded_to_its_base ... ok
+test a_surface_name_other_than_the_slots_is_refused ... ok
+test a_static_property_is_called_on_its_factory ... ok
+test a_vector_is_walked_by_count_through_its_own_table ... ok
+test a_surface_member_is_called_through_its_interface ... ok
+test an_instanceof_narrows_a_com_value_to_its_interface ... ok
+test an_event_listener_is_added_and_removed_by_the_runtime ... ok
+test an_override_answers_a_string_as_an_hstring_of_its_own ... ok
+test an_object_read_back_is_unboxed ... ok
+test an_override_answers_an_object_the_caller_owns ... ok
+test what_a_composed_class_cannot_hold_is_refused_by_name ... ok
+test an_override_answers_through_the_result_pointer ... ok
+test super_in_an_override_calls_the_base_through_its_slot ... ok
+
+test result: ok. 25 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.96s
+
+     Running tests/container_contents.rs (target/nts-dev/deps/container_contents-7ebc5acfb9ffee8c)
+
+running 1 test
+test actual_writers_and_executed_cleanup_agree_on_both_native_emitters ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 23.44s
+
+     Running tests/count_free_sort.rs (target/nts-dev/deps/count_free_sort-2ddde9d084fe379f)
+
+running 1 test
+test native_sort_snapshots_survive_collection_reentrancy_and_throws ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 10.60s
+
+     Running tests/literal_assertions.rs (target/nts-dev/deps/literal_assertions-c6fd018db69c92e0)
+
+running 1 test
+test erased_literal_membership_is_checked_on_both_native_backends ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.57s
+
+     Running tests/native.rs (target/nts-dev/deps/native-e0bd877e05fdfa79)
+
+running 100 tests
+bitfields: version=6 ihl=5 ttl=200 byte0=0x65 q=0x2aaaaaaa
+bitfields: version=6 ihl=5 ttl=200 byte0=0x65 q=0x2aaaaaaa
+test a_bit_field_reads_and_writes_the_same_bits_on_c_and_llvm ... ok
+test a_64_bit_integer_read_as_a_number_is_exact_or_a_range_error ... ok
+test a_c_function_is_a_method_of_the_handle_it_takes_on_both_backends ... ok
+test a_c_int_boolean_crosses_as_a_boolean_on_both_backends ... ok
+test a_c_long32_is_a_number_on_win64_and_refused_where_long_is_64_bits ... ok
+test a_c_long_constant_too_wide_for_win64_is_refused_on_both_backends ... ok
+test a_char_is_signed_as_its_row_says_on_both_backends ... ok
+test a_class_downcast_by_assertion_is_refused ... ok
+test a_c_string_read_from_a_slot_is_copied_on_both_backends ... ok
+test a_class_over_an_unregistered_handle_is_refused_with_its_new ... ok
+test a_class_handle_upcasts_to_its_ancestors_on_both_backends ... ok
+test a_capturing_closure_crosses_to_c_on_both_backends ... ok
+test a_c_long_with_bit_31_set_crosses_the_win64_slot_on_both_backends ... ok
+test a_closure_to_c_keeps_its_refusals_and_its_boundary ... ok
+test a_consumed_argument_is_handed_over_on_both_backends ... ok
+test a_direct_call_of_a_virtual_function_is_refused_by_name ... ok
+test a_cycle_through_a_gobject_is_collected_on_both_backends ... ok
+test a_construct_only_property_is_its_constructors_argument_on_both_backends ... ok
+test a_dropped_host_handle_result_keeps_no_root_on_both_backends ... ok
+flexible: level=1 type=1 len=20 data=de5abeef
+flexible: level=1 type=1 len=20 data=de5abeef
+test a_flexible_array_member_reaches_the_bytes_after_the_record ... ok
+test a_declared_result_is_the_handle_the_binding_says_on_both_backends ... ok
+test a_gobject_is_counted_and_seen_by_c_as_its_instance_on_both_backends ... ok
+test a_function_value_reaches_c_through_its_table_on_both_backends ... ok
+test a_getter_read_after_a_write_keeps_its_declared_null ... ok
+test a_host_handle_needs_the_reference_counting_provider ... ok
+test a_host_handle_is_rooted_only_where_it_leaves_the_stack_on_both_backends ... ok
+test a_local_read_past_a_branch_of_its_own_iteration_is_allowed_in_a_loop ... ok
+test a_handle_named_by_a_typedef_on_both_backends ... ok
+test a_local_used_where_it_is_made_is_allowed_in_a_loop_and_an_async_function ... ok
+test a_handle_is_constructed_with_properties_on_both_backends ... ok
+test a_native_property_reads_and_writes_through_its_methods_on_both_backends ... ok
+test a_nullable_callback_and_a_void_pointer_cross_on_both_backends ... ok
+test a_program_with_every_function_refused_still_emits ... ok
+test a_once_closure_is_released_after_its_one_call_on_both_backends ... ok
+test a_promise_of_a_gobject_holds_a_reference_on_both_backends ... ok
+test a_one_byte_boolean_field_is_read_and_written_as_a_boolean_on_both_backends ... ok
+test a_plain_number_crosses_as_its_c_type_on_both_backends ... ok
+test a_promise_carries_a_c_handle_across_an_await_on_both_backends ... ok
+typedef: sizeof(__sigset_t)=128 holds(SIGUSR1)=1 other=0
+typedef: sizeof(__sigset_t)=128 holds(SIGUSR1)=1 other=0
+test a_record_named_only_by_a_typedef_is_spelled_without_the_keyword ... ok
+test a_refused_function_taking_a_boolean_is_declared_as_ir ... ok
+test a_proven_number_reaches_c_integer_storage_exactly_on_both_backends ... ok
+test a_record_by_value_is_written_as_a_literal_on_both_backends ... ok
+test a_record_is_read_through_a_const_pointer_on_both_backends ... ok
+test a_static_member_of_a_declared_value_is_its_c_function_on_both_backends ... ok
+test a_string_intersected_with_a_real_property_is_not_a_utf16_string ... ok
+test a_reported_c_error_is_thrown_on_both_backends ... ok
+test a_returned_string_array_is_copied_and_freed_on_both_backends ... ok
+test a_string_array_crosses_as_a_null_terminated_char_pointer_array_on_both_backends ... ok
+test a_string_parameter_crosses_as_utf8_on_both_backends ... ok
+/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/target/native-llvm-tests/4178372-native-fd-typed-95/native_witness.c:11:16: error: static assertion failed due to requirement '__builtin_types_compatible_p(long (int, void *, unsigned long), long (int, unsigned char *, unsigned long))': the header declares read as the binding does
+   11 | _Static_assert(__builtin_types_compatible_p(__typeof__(read), ptrdiff_t (int, uint8_t *, size_t)), "the header declares read as the binding does");
+      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+1 error generated.
+test a_typed_buffer_where_read_wants_void_is_refused_by_the_witness ... ok
+test a_string_view_crosses_as_the_string_itself_on_both_backends ... ok
+test a_string_view_result_is_copied_exactly_on_both_backends ... ok
+test a_typed_array_s_elements_are_borrowed_in_place_with_their_count_on_both_backends ... ok
+test a_typed_signal_view_calls_through_an_erased_callback_on_both_backends ... ok
+test aggregate_arguments_respect_register_exhaustion ... ok
+test an_async_callback_is_bridged_only_where_callbacks_checkpoint ... ok
+test a_uint8_array_is_borrowed_in_place_on_both_backends ... ok
+test a_utf16_string_crosses_lent_when_wide_and_copied_when_narrow_on_both_backends ... ok
+test an_erased_result_is_the_handle_the_program_holds_on_both_backends ... ok
+test an_inline_struct_member_agrees_with_the_system_header ... ok
+test an_exported_generators_resumption_links_from_c_on_both_backends ... ok
+test an_ascii_string_is_lent_to_c_in_place_on_both_backends ... ok
+test an_enum_crosses_to_c_as_its_integer_on_both_backends ... ok
+test an_object_parameter_takes_any_handle_as_void_and_refuses_a_managed_value ... ok
+test an_interface_takes_the_classes_implementing_it_on_both_backends ... ok
+test an_ntscall_function_is_the_programs_function_on_both_backends ... ok
+test an_ntscall_method_is_the_programs_function_with_the_receiver_first_on_both_backends ... ok
+test an_out_parameter_of_a_nullable_handle_is_one_slot_on_both_backends ... ok
+test an_owned_handle_parameter_is_released_after_a_loop_on_both_backends ... ok
+test authored_allocator_symbols_cannot_redefine_storage_operations ... ok
+test an_unsafe_downcast_follows_its_check_and_refuses_what_no_check_can_fix ... ok
+test an_upcast_borrows_its_handles_reference_on_both_backends ... ok
+test an_omitted_argument_takes_the_bindings_default_on_both_backends ... ok
+nts: a callback threw across a C boundary that cannot carry it: from inside a callback
+throughTable(21) = 42
+reentrant(1) = 5
+wideRoundTrip(2^53+1) = 9007199254740994
+aJobStaysQueued() = 0
+native callback: C called a TypeScript function through a bridge, a throw stopped at it, and a retained one outlived its call
+nts: a callback threw across a C boundary that cannot carry it: from inside a callback
+throughTable(21) = 42
+reentrant(1) = 5
+wideRoundTrip(2^53+1) = 9007199254740994
+aJobStaysQueued() = 0
+native callback: C called a TypeScript function through a bridge, a throw stopped at it, and a retained one outlived its call
+test c_bytes_read_from_a_pointer_are_copied_on_both_backends ... ok
+test conflicting_abis_and_runtime_collisions_are_refused ... ok
+test conflicting_native_struct_tags_refuse_in_both_backends ... ok
+test compatible_c_aliases_share_one_symbol_in_both_backends ... ok
+nts: a callback threw across a C boundary that cannot carry it: from inside a callback
+throughTable(21) = 42
+reentrant(1) = 5
+wideRoundTrip(2^53+1) = 9007199254740994
+aJobStaysQueued() = 0
+native callback: C called a TypeScript function through a bridge, a throw stopped at it, and a retained one outlived its call
+nts: a callback threw across a C boundary that cannot carry it: from inside a callback
+throughTable(21) = 42
+reentrant(1) = 5
+wideRoundTrip(2^53+1) = 9007199254740994
+aJobStaysQueued() = 0
+native callback: C called a TypeScript function through a bridge, a throw stopped at it, and a retained one outlived its call
+test c_calls_a_typescript_function_through_a_bridge ... ok
+test dispatch::an_omitted_live_column_is_rejected_at_both_native_emitters ... ok
+test bigint_constants::bigint_constants_cross_c_without_a_floating_point_step ... ok
+test constants::pointer_constants_keep_exact_bits_and_native_equality ... ok
+test hresult::a_hresult_output_size_reaches_win64_as_size_t ... ok
+test intrinsic_annotations_do_not_authorize_arbitrary_foreign_symbols ... ok
+test dispatch::a_context_bridge_reads_the_moved_column_of_an_unknown_closure ... ok
+test managed_runtime_declarations_must_agree_with_the_header ... ok
+test narrow_extension::narrow_integer_extensions_follow_the_platform ... ok
+test native_address_verifier_rejects_wrong_field_type_and_index ... ok
+test dispatch::promise_and_timer_callbacks_read_the_moved_column ... ok
+test native_header_alias_survives_an_unrelated_layout_declaration ... ok
+test every_scalar_and_libm_cross_the_real_c_abi ... ok
+test managed_declarations_execute_with_the_nts_abi_on_c_and_llvm ... ok
+native fd: read through void * and write through const void *; count, contents, eof, error, capacity, round trip
+native fd: read through void * and write through const void *; count, contents, eof, error, capacity, round trip
+native poll: local, fixed array, heap; idle, readable, drained; layout agrees
+native poll: local, fixed array, heap; idle, readable, drained; layout agrees
+test native_struct_fields_addresses_and_aliases_agree_with_c ... ok
+test native_struct_rejections_preserve_the_valid_arm ... ok
+native fd: read through void * and write through const void *; count, contents, eof, error, capacity, round trip
+native fd: read through void * and write through const void *; count, contents, eof, error, capacity, round trip
+test native_fd_reads_through_a_void_pointer_and_agrees_with_unistd ... ok
+test native_owned_storage_executes_on_c_and_llvm ... ok
+native poll: local, fixed array, heap; idle, readable, drained; layout agrees
+native poll: local, fixed array, heap; idle, readable, drained; layout agrees
+test native_poll_calls_libc_and_matches_the_platform_header ... ok
+test scalar_pointer_memory_agrees_with_c_layout_and_aliasing ... ok
+test string_view_lend::a_view_lent_from_a_field_outlives_a_callback_that_overwrites_it ... ok
+test opaque_handles_keep_pointer_bits_and_manual_lifetime_on_both_backends ... ok
+test pointer_bits::pointer_bits_are_c_uintptr_with_no_load_or_count ... ok
+
+test result: ok. 100 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 79.99s
+
+     Running tests/objc_arc.rs (target/nts-dev/deps/objc_arc-ec50719bf639eac1)
+
+running 2 tests
+test arc_reserved_selectors_and_uncounted_ownership_are_refused ... ok
+test every_object_the_program_owns_is_released_once_on_both_backends ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.44s
+
+     Running tests/optimizations_hold.rs (target/nts-dev/deps/optimizations_hold-61f8b547f152b7bf)
+
+running 6 tests
+test a_byte_does_not_travel_through_a_double ... ok
+test a_proven_index_costs_no_check ... ok
+test a_length_bounded_counter_is_an_integer ... ok
+test an_elementwise_loop_vectorizes ... ok
+test the_check_for_a_check_can_see_one ... ok
+test read_only_literals_carry_settled_native_hashes ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.05s
+
+     Running tests/possibly_undefined.rs (target/nts-dev/deps/possibly_undefined-ebace5628b4459b7)
+
+running 2 tests
+test generated_optional_calls_assemble_on_all_six_native_abis ... ok
+test optional_pairs_preserve_bits_absence_null_and_conditional_ownership ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 5.69s
+
+     Running tests/proved_int32_accumulators.rs (target/nts-dev/deps/proved_int32_accumulators-472842b4e5a1620c)
+
+running 1 test
+test proved_operands_remove_executed_conversions_on_both_native_emitters ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.80s
+
+     Running tests/provides.rs (target/nts-dev/deps/provides-17307f85a3add01b)
+
+running 1 test
+test the_header_provides_scalar_and_pointer_only_helpers ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/refused_names.rs (target/nts-dev/deps/refused_names-19e6175ac318bc5d)
+
+running 2 tests
+test discarded_native_bodies_publish_neither_literals_nor_templates ... ok
+test refused_function_names_do_not_leave_unreferenced_private_data ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.04s
+
+     Running tests/rounding_width.rs (target/nts-dev/deps/rounding_width-3fe6a1635f870832)
+
+running 1 test
+test integer_rounding_agrees_with_explicit_conversion_and_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.29s
+
+     Running tests/runtime_abi.rs (target/nts-dev/deps/runtime_abi-6abaf4aa2de16252)
+
+running 4 tests
+test arm64_exports_an_erased_value_through_a_c_entry ... ok
+test win64_exports_a_sixteen_byte_value_through_a_c_entry ... ok
+test arm64_passes_an_erased_value_as_two_words ... ok
+test every_runtime_call_agrees_with_its_declaration ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+     Running tests/signatures.rs (target/nts-dev/deps/signatures-9d2ade7ddbf3bc9f)
+
+running 6 tests
+test no_win64_helper_takes_more_indirect_arguments_than_there_are_slots ... ok
+test the_table_still_matches_the_header ... ok
+test the_arm64_table_still_matches_the_header ... ok
+test the_arm64_windows_table_still_matches_the_header ... ok
+test the_arm64_linux_table_still_matches_the_header ... ok
+test the_win64_table_still_matches_the_header ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+
+     Running tests/store_cycle_roots.rs (target/nts-dev/deps/store_cycle_roots-d516c0003ef34f2d)
+
+running 1 test
+test abandoned_callback_cycles_leave_no_live_storage ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 8.65s
+
+     Running tests/typed_release.rs (target/nts-dev/deps/typed_release-a74222146b4acc52)
+
+running 1 test
+test typed_release_callbacks_execute_with_both_providers_and_native_emitters ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 21.80s
+
+     Running unittests src/lib.rs (target/nts-dev/deps/nts_frontend_tsrs-dff9bc66b383385c)
+
+running 102 tests
+test ast::tests::phase_import_callees_have_distinct_typed_meta_properties ... ok
+test ast::tests::empty_argument_list_token_start_skips_comments_to_closing_parenthesis ... ok
+test ast::tests::field_edges_preserve_native_order_alias_names_and_list_presence ... ok
+test ast::tests::documentation_retains_tag_text_and_source_association ... ok
+test ast::tests::semantic_attributes_keep_inherited_ambient_chain_and_export_meta_facts ... ok
+test ast::tests::utf16_literal_values_raw_spellings_and_spans_are_lossless ... ok
+test ast::tests::source_file_keeps_its_statement_list_and_eof_in_native_order ... ok
+test cache_replay::tests::a_previously_missing_module_index_invalidates_native_inputs ... ok
+test cache_replay::tests::a_missing_sibling_module_outside_the_config_directory_invalidates_reuse ... ok
+test cache_replay::tests::a_previously_missing_types_package_invalidates_native_inputs ... ok
+test cache_replay::tests::a_new_file_takes_precedence_over_a_directory_from_a_sibling_importer ... ok
+test config_sources::captured_strict_options_match_the_native_group ... ok
+test cache_replay::tests::physical_reads_before_transformed_overlays_are_a_separate_revision_group ... ok
+test cache_replay::tests::non_unicode_observations_remain_permanently_absent_on_replay ... ok
+test config_sources::work_controls::cycles_and_an_excessive_edge_population_are_unavailable ... ok
+test config_sources::work_controls::a_deep_graph_exhausts_provenance_without_losing_effective_values ... ok
+test config_sources::work_controls::malformed_strict_values_lose_only_provenance ... ok
+test cache_replay::tests::every_observation_is_replayed_through_its_original_host_method ... ok
+test config_sources::work_controls::unrelated_raw_enum_options_are_not_reinterpreted ... ok
+test exported_checker_identity_matches_the_vendored_provenance ... ok
+test program::diagnostic_scope_tests::composed_matches_plain_for_corpus_and_interop_configs ... ignored, one-off audit; NTS_SCOPE_CONFIGS is a newline-separated absolute config list
+test config_sources::work_controls::a_shared_graph_parses_each_config_once ... ok
+test program::diagnostic_scope_tests::selected_files_use_the_native_diagnostic_pool ... ok
+test program::diagnostic_scope_tests::bad_reference_control_exercises_the_public_include_processor_step ... ok
+test program::diagnostic_tests::explicit_unchecked_js_does_not_report_semantic_errors ... ok
+test program::diagnostic_tests::capture_type_queries_cannot_pollute_jsx_program_diagnostics ... ok
+test program::diagnostic_tests::native_no_check_option_skips_the_raw_plain_js_view_too ... ok
+test program::diagnostic_tests::independent_diagnostics_still_report_a_real_type_error_exactly_once ... ok
+test program::diagnostic_tests::plain_js_assignment_early_error_is_a_separate_raw_fact ... ok
+test program::diagnostic_scope_tests::selected_files_never_check_default_libraries_but_program_scope_does ... ok
+test program::diagnostic_tests::native_nocheck_ignore_and_check_directives_keep_their_own_policy ... ok
+test program::no_emit_tests::effective_no_emit_stays_true_through_checking_without_rewriting_the_config ... ok
+test program::no_emit_tests::a_commonjs_generated_name_is_not_an_nts_source_error ... ok
+test program::diagnostic_tests::type_only_plain_js_diagnostics_never_become_ordinary_program_errors ... ok
+test program::resolution_tests::native_resolutions_preserve_order_paths_versions_and_unresolved_inputs_in_both_phases ... ok
+test program::tests::always_strict_false_is_a_removed_native_option_not_a_sloppy_mode ... ok
+test program::no_emit_tests::import_extensions_do_not_require_typescripts_emitter ... ok
+test program::no_emit_tests::no_emit_does_not_hide_a_real_type_error ... ok
+test program::tests::capture_unwind_joins_diagnostics_before_freeing_the_program - should panic ... ok
+test program::tests::extends_and_composite_references_remain_native_at_both_counts ... ok
+test program::tests::file_facts_and_owned_diagnostics_are_identical_at_one_and_four_checkers ... ok
+test program::tests::always_strict_uses_its_independent_default_and_native_extends_precedence ... ok
+test program::tests::individual_strict_options_can_enable_the_whole_group_with_strict_false ... ok
+test program::tests::one_checker_is_exact_and_runs_on_the_checking_thread ... ok
+test program::tests::panic_drops_a_live_program_and_propagates - should panic ... ok
+test program::tests::parallel_capture_uses_a_separate_diagnostic_thread_within_the_total_budget ... ok
+test program::tests::resolution_starts_no_checker_and_has_only_config_program_and_syntax_diagnostics ... ok
+test program::tests::disabled_strict_sources_follow_native_extends_order_and_null_resets ... ok
+test program::tests::runtime_semantics_use_native_effective_defaults_and_overrides ... ok
+test program::tests::revisions_replace_text_and_repeated_sessions_release_programs ... ok
+test program::tests::shared_graph_environment_probe ... ignored, child-process helper for the shared-graph environment test
+test program::tests::native_always_strict_false_survives_every_provenance_bound ... ok
+test program::tests::unchecked_javascript_still_reports_native_early_errors ... ok
+test program::tests::workspace_capture_opens_only_requested_config_and_redirects_sources ... ok
+test program::tests::strictness_uses_effective_native_defaults_inheritance_and_overrides ... ok
+test semantic::graph::tuple_flag_tests::combined_flags_are_rejected - should panic ... ok
+test semantic::graph::tuple_flag_tests::unknown_flags_are_rejected - should panic ... ok
+test semantic::tests::a_parameter_named_arguments_is_not_the_checker_builtin ... ok
+test semantic::tests::a_surrogate_pair_module_name_resolves_to_a_real_unicode_file ... ok
+test semantic::tests::aliases_merged_symbols_literals_and_constants_remain_distinct ... ok
+test program::tests::shared_graph_environment_preserves_one_and_four_checker_facts ... ok
+test semantic::tests::commonjs_exports_use_the_native_export_table ... ok
+test program::tests::workspace_resolution_matches_full_program_imports_without_any_checker ... ok
+test semantic::tests::builtin_bindings_use_checker_identity_and_ignore_legal_local_shadows ... ok
+test semantic::tests::cross_program_assignability_is_a_bug_with_both_config_paths - should panic ... ok
+test semantic::tests::every_host_observation_rejects_non_unicode_before_the_filesystem ... ok
+test program::diagnostic_scope_tests::composed_file_set_preserves_ordinary_filters_and_global_errors ... ok
+test semantic::tests::finishing_preserves_syntax_metadata_and_finishes_diagnostics ... ok
+test semantic::tests::function_smoke_keeps_semantic_identity_and_owned_facts_at_one_and_four_checkers ... ok
+test semantic::tests::generic_conditional_index_template_and_substitution_facts_are_native ... ok
+test semantic::tests::local_aliases_resolve_to_the_actual_global_or_source_supplier ... ok
+test semantic::tests::parameters_keep_defaults_rest_this_and_generic_types ... ok
+test semantic::tests::global_binding_meanings_are_independent_and_shadowing_keeps_its_own_identity ... ok
+test semantic::tests::predicates_include_inference_asserts_and_this_subjects ... ok
+test semantic::tests::polymorphic_this_is_independent_of_display_names_and_ordinary_constraints ... ok
+test semantic::tests::erroneous_predicate_subjects_keep_checker_diagnostics_before_and_after_capture ... ok
+test semantic::tests::private_names_keep_written_spelling_and_distinct_class_identity ... ok
+test semantic::tests::pristine_capture_and_private_fixture_facts_do_not_depend_on_checker_count ... ok
+test semantic::tests::resolved_calls_constructs_and_library_declarations_keep_source_identity ... ok
+test semantic::tests::reference_arity_separates_declared_this_arguments_and_receiver_bindings ... ok
+test semantic::tests::rest_tail_is_not_an_ordinary_optional_parameter ... ok
+test semantic::tests::structured_graph_preserves_instantiation_order_members_and_absence ... ok
+test semantic::tests::special_export_names_are_semantic_while_member_names_are_plain ... ok
+test semantic::tests::symbol_keyed_properties_preserve_the_unique_key_type_and_declaration ... ok
+test semantic::tests::tagged_template_calls_have_a_native_selected_signature ... ok
+test semantic::tests::unrepresentable_config_roots_are_a_named_load_error ... ok
+test semantic::tests::tuple_shapes_keep_optional_rest_variadic_and_readonly_metadata ... ok
+test semantic::tests::semantic_views_release_with_each_revision_and_session ... ok
+test session::tests::owned_output_returns_from_a_distinct_named_checking_thread ... ok
+test session::tests::panic_is_resumed_on_the_calling_thread - should panic ... ok
+test strings::tests::diagnostic_display_escapes_each_lone_surrogate_and_preserves_pairs ... ok
+test strings::tests::sentinel_surrogates_are_lossless_and_pairs_have_a_unicode_view ... ok
+test text::tests::block_eof_at_the_maximum_source_offset_fits ... ok
+test text::tests::end_and_empty_source_positions_exist ... ok
+test text::tests::every_representation_preserves_interior_bytes_and_surrogate_pairs ... ok
+test text::tests::non_ascii_and_astral_offsets_are_utf16_code_units ... ok
+test text::tests::real_files_match_the_dense_reference_at_every_byte ... ok
+test text::tests::scalars_crossing_each_block_boundary_match_the_dense_reference ... ok
+test semantic::tests::unrepresentable_module_paths_never_become_public_invalid_utf8 ... ok
+test semantic::tests::well_known_keys_require_the_default_library_property_identity ... ok
+test semantic::tests::erroneous_declarations_keep_registered_sources_and_complete_type_payloads ... ok
+test yield_diagnostics_tests::invalid_async_yields_preserve_diagnostics_and_present_inference ... ok
+
+test result: ok. 100 passed; 0 failed; 2 ignored; 0 measured; 0 filtered out; finished in 1.50s
+
+     Running unittests src/lib.rs (target/nts-dev/deps/nts_unicode-92cfda0d88e45da6)
+
+running 6 tests
+test tests::astral_and_lone_surrogates ... ok
+test tests::final_sigma_context ... ok
+test tests::latin1_and_exceptions ... ok
+test tests::the_license_travels_with_the_data ... ok
+test tests::version_signature_letters ... ok
+test tests::sentinel_is_reserved ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests nts_codegen_c
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests nts_codegen_jvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests nts_codegen_llvm
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests nts_frontend_tsrs
+
+running 6 tests
+test compiler/frontend-tsrs/src/semantic.rs - semantic (line 24) - compile fail ... ok
+test compiler/frontend-tsrs/src/semantic.rs - semantic (line 10) - compile fail ... ok
+test compiler/frontend-tsrs/src/semantic.rs - semantic (line 4) - compile fail ... ok
+test compiler/frontend-tsrs/src/program.rs - program::Resolved (line 740) - compile fail ... ok
+test compiler/frontend-tsrs/src/program.rs - program::Checked (line 624) - compile fail ... ok
+test compiler/frontend-tsrs/src/semantic.rs - semantic (line 38) - compile fail ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+
+   Doc-tests nts_unicode
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

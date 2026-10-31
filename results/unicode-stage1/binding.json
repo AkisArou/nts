@@ -1,0 +1,122 @@
+{
+  "schemaVersion": 1,
+  "baseline": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+  "scalarMeasuredSource": "236b96e009f89ad144e49d71cb87a3f19cf02797",
+  "fusedMeasuredSource": "2911419f553c99dcc4068204ec43a0a3e548b424",
+  "consolidatedSource": "9a343f8c799ed8b25fcec92fe59e22cae6a38b9f",
+  "measuredProductionAndToolingBlobsExactlyMatchConsolidation": {
+    "Cargo.lock": "4d6e33f859410f39efa8b0adaa9453060901d3f8",
+    "benchmarks/cases/case-convert-greek/case.ts": "9c07fe74e258b266d11a6d963d4e5e4dfd073b80",
+    "compiler/codegen/c/Cargo.toml": "40608d87b9d6dad66decb41e1b4bf7d31a68c64b",
+    "compiler/codegen/c/src/emit.rs": "4fb61febd3a6291de9e0f3cc934b33578c1d03a1",
+    "compiler/codegen/c/src/emit/notices.rs": "f7263db2a9d231c0108e56bc616a1cbd168bc812",
+    "compiler/codegen/c/src/emit/unicode_tables.rs": "d56f5775a9ed9cc2bda25530538a646259eec76d",
+    "compiler/codegen/c/src/lib.rs": "f5321027d363d03b3f51ed7e66d757b56db304d1",
+    "compiler/codegen/c/tests/header.rs": "90378e176fc8a94f65678a3ded789d7c804667b1",
+    "compiler/codegen/llvm/tests/agrees_with_c.rs": "0fcd9d64b6c927765d1a93dfef65ec8d819a934b",
+    "compiler/codegen/llvm/tests/rounding_width.rs": "0031724131366b7ef1e9b315419c360a5c1ac455",
+    "compiler/unicode/data/README.md": "a739be11d3f74d1f19ac23d2f81278e0ec420245",
+    "compiler/unicode/src/lib.rs": "3332765499c31b798106294c6975b3769f97f239",
+    "runtime/c/nts_unicode.c": "63e5c3a171dd3bbb90fa3146600c13633749fbf6",
+    "runtime/c/nts_unicode.h": "e62bff5ac6623d4cc7aa7527e03d54e7e453adcd",
+    "tests/memory/case-convert-unchanged/expected": "52d8da6bd3983bbc533acc3b28c2e9f91620c226",
+    "tests/memory/case-convert-unchanged/src/main.ts": "dec5755cf2fb960d3091a8f61d363b6d64ca7451",
+    "tests/memory/case-convert-unchanged/tsconfig.json": "b5f565c946f5466b2708276f6ae7568e78e99fed",
+    "tests/outcomes/a-final-sigma-lowercased/outcome.json": null,
+    "tests/outcomes/a-final-sigma-lowercased/src/main.ts": null,
+    "tests/programs/a-final-sigma-lowercased/src/main.ts": "ccabb57ff8b431c201d80b19da4e75c571fd2471",
+    "tests/programs/a-final-sigma-lowercased/tsconfig.json": "b5f565c946f5466b2708276f6ae7568e78e99fed",
+    "tooling/bench/src/main.rs": "22cb2a3a1b7834b482b341d68f665d1dfa30c42c",
+    "tooling/gate/owed.mjs": "bd02f3e1b192f7ad6cc0f42078acbcc7e3e8b7cc",
+    "tooling/gate/unicode-census.test.ts": "5fd10fa1b81fe955d3c5087e42629c64c35edbb3"
+  },
+  "qualifiedTree": "f7daab27830edfe50b5067e005b4ca4898c10ac2",
+  "benchmarkRecords": [
+    {
+      "path": "results/benchmarks/runs/2026-10-31-236b96e009f8-576c90ffe6bc4b6d95aff473024d44cc.json",
+      "sha256": "08af6832f616852cb909f4a78bc0e63df36c47727b3e081ab53f03fad2c8123a",
+      "bracket": "Scalar first-change implementation",
+      "arm": "A0"
+    },
+    {
+      "path": "results/benchmarks/runs/2026-10-31-55a6dd1fde54-05e524658b59458e94e5566942ef0202.json",
+      "sha256": "a2c1f2089f395b4ae7cab8c7d3bd4a291d23a983438221f29f4afd816d89f300",
+      "bracket": "Scalar first-change implementation",
+      "arm": "B"
+    },
+    {
+      "path": "results/benchmarks/runs/2026-10-31-d66141720bc6-20e647c1c7d04cc59d8af808c0dfd6e1.json",
+      "sha256": "1706a5b7bc79c1e918244b51c8bce8ad57a19524008f9a79078ce2c59631f523",
+      "bracket": "Scalar first-change implementation",
+      "arm": "A1"
+    },
+    {
+      "path": "results/benchmarks/runs/2026-10-31-2911419f553c-39b77dd059c74e3e90be42d05a46feb4.json",
+      "sha256": "48282324a389b610c803de5c838a811722aff4e4206afc2ad50af0b95915ca33",
+      "bracket": "Fused SIMD implementation",
+      "arm": "A0"
+    },
+    {
+      "path": "results/benchmarks/runs/2026-10-31-2df01a690a65-186f3bb71f234d68ad4b0411cf0261b4.json",
+      "sha256": "e643f94bb0536d65279cbd915653700a37fa875a916406d170c5fc9c176dfe51",
+      "bracket": "Fused SIMD implementation",
+      "arm": "B"
+    },
+    {
+      "path": "results/benchmarks/runs/2026-10-31-d79fe154bf98-5f3b8692955045628f0f8d73b3ca72cb.json",
+      "sha256": "a0c8ae785246ab0dc1140d82a61c2f93e73c184e173b78fbdcb7202c7294fe3f",
+      "bracket": "Fused SIMD implementation",
+      "arm": "A1"
+    }
+  ],
+  "qualification": {
+    "rust": {
+      "passed": 719,
+      "failed": 0,
+      "ignored": 2
+    },
+    "tooling": {
+      "passed": 725,
+      "failed": 0,
+      "todo": 2
+    },
+    "test262": {
+      "records": 5,
+      "regressions": 0,
+      "fixed": [
+        "String/prototype/toLowerCase/Final_Sigma_U180E.js",
+        "String/prototype/toLowerCase/special_casing_conditional.js"
+      ]
+    },
+    "finalSigma": {
+      "configurations": 10,
+      "casesPerConfiguration": 87
+    },
+    "nativeBoundaryCases": 4768768,
+    "compiledAllCodePointAndSigmaCensus": "PASS",
+    "clangFormat": "PASS",
+    "cargoFmt": "PASS",
+    "clippy": "PASS",
+    "strictTypeScript": "PASS",
+    "portableRebuildWithIcu4x": "PASS",
+    "dryRun": {
+      "treeChecks": 9,
+      "status": "PASS",
+      "owedSteps": 48
+    }
+  },
+  "rawArchive": {
+    "path": "raw-observations.tar.zst",
+    "sha256": "ef5a1e9266524736be6497a5bd98984be8d923ff659e15a143dc048ee039a7d3",
+    "uncompressedSha256": "f7938b540c0b1f1eaa23ed1826c53fa6688344af90626bf0c00042a86a54ce5b",
+    "roundTripVerified": true
+  },
+  "family143": {
+    "authorHead": "08982cb5133862c9aa71a8e87893c077a8eb08f6",
+    "cases": 207,
+    "baselineAndCandidateEachBackend": "207 REFUSED; no executions",
+    "cause": "module-scope loop binding NTS1001",
+    "freshExactRunsPerBackend": 2
+  },
+  "rawObservationsAreUnchanged": true
+}

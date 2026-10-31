@@ -1,0 +1,3735 @@
+{
+  "base": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+  "tip": "c0df7595bb5be1638a50ce11f94f6da5cfa1ff7a",
+  "checks": {
+    "steps": [
+      "build",
+      "clippy",
+      "tests",
+      "rustfmt",
+      "old-paths",
+      "doctests",
+      "audit",
+      "format",
+      "reformat",
+      "records",
+      "test262",
+      "test262-cases",
+      "test262-builtins-cases",
+      "test262-rest-cases",
+      "test262-jvm",
+      "test262-llvm",
+      "typescript-cases",
+      "outcomes",
+      "expect-ir",
+      "integrity",
+      "definitions",
+      "compile-time",
+      "compile-time-rc",
+      "tooling",
+      "integrity-runtime",
+      "assembles",
+      "c-compiles",
+      "types",
+      "jvm-verifies",
+      "primitives",
+      "corpus",
+      "benches",
+      "example-refusals",
+      "config",
+      "licenses",
+      "frontend-tsrs",
+      "llvm",
+      "llvm-rc",
+      "jvm",
+      "dex",
+      "on-device",
+      "bench-agree",
+      "examples",
+      "rc",
+      "memory",
+      "addons",
+      "blockers",
+      "interop"
+    ],
+    "interop": null,
+    "doctests": null
+  },
+  "strict": true,
+  "views": [
+    {
+      "revision": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+      "checks": {
+        "steps": [
+          "build",
+          "clippy",
+          "tests",
+          "rustfmt",
+          "old-paths",
+          "doctests",
+          "audit",
+          "format",
+          "reformat",
+          "records",
+          "test262",
+          "test262-cases",
+          "test262-builtins-cases",
+          "test262-rest-cases",
+          "test262-jvm",
+          "test262-llvm",
+          "typescript-cases",
+          "outcomes",
+          "expect-ir",
+          "integrity",
+          "definitions",
+          "compile-time",
+          "compile-time-rc",
+          "tooling",
+          "integrity-runtime",
+          "assembles",
+          "c-compiles",
+          "types",
+          "jvm-verifies",
+          "primitives",
+          "corpus",
+          "benches",
+          "example-refusals",
+          "config",
+          "licenses",
+          "frontend-tsrs",
+          "llvm",
+          "llvm-rc",
+          "jvm",
+          "dex",
+          "on-device",
+          "bench-agree",
+          "examples",
+          "rc",
+          "memory",
+          "addons",
+          "blockers",
+          "interop"
+        ],
+        "interop": null,
+        "doctests": null
+      },
+      "catalogue": [
+        "doctests",
+        "audit",
+        "build",
+        "clippy",
+        "format",
+        "rustfmt",
+        "reformat",
+        "records",
+        "old-paths",
+        "test262",
+        "test262-cases",
+        "test262-builtins-cases",
+        "test262-rest-cases",
+        "test262-jvm",
+        "test262-llvm",
+        "typescript-cases",
+        "outcomes",
+        "expect-ir",
+        "integrity",
+        "definitions",
+        "compile-time",
+        "compile-time-rc",
+        "tooling",
+        "integrity-runtime",
+        "assembles",
+        "c-compiles",
+        "types",
+        "jvm-verifies",
+        "primitives",
+        "tests",
+        "corpus",
+        "benches",
+        "example-refusals",
+        "config",
+        "react-sources",
+        "licenses",
+        "frontend-tsrs",
+        "profile",
+        "sweep",
+        "llvm",
+        "llvm-rc",
+        "jvm",
+        "dex",
+        "on-device",
+        "bench-agree",
+        "examples",
+        "rc",
+        "memory",
+        "addons",
+        "blockers",
+        "divergence",
+        "interop"
+      ],
+      "strict": true,
+      "rules": [
+        {
+          "name": "compiler dependency notices",
+          "paths": [
+            "Cargo.lock",
+            "compiler/codegen/c/Cargo.toml"
+          ],
+          "steps": [
+            "licenses"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "workspace dependency and toolchain inputs",
+          "paths": [
+            "Cargo.lock"
+          ],
+          "steps": [
+            "frontend-tsrs"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": true
+        },
+        {
+          "name": "an input to the bench cases",
+          "paths": [
+            "benchmarks/cases/case-convert-greek/case.ts"
+          ],
+          "steps": [
+            "benches",
+            "bench-agree",
+            "dex",
+            "expect-ir"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false
+        },
+        {
+          "name": "an input to what a gate step runs",
+          "paths": [
+            "benchmarks/cases/case-convert-greek/case.ts",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h",
+            "tests/memory/case-convert-unchanged/expected",
+            "tests/memory/case-convert-unchanged/src/main.ts",
+            "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+            "tests/memory/case-convert-unchanged/tsconfig.json",
+            "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+            "tests/outcomes/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json",
+            "tooling/gate/owed.mjs"
+          ],
+          "steps": [
+            "old-paths",
+            "tooling",
+            "bench-agree",
+            "examples",
+            "rc",
+            "expect-ir",
+            "primitives",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "dex",
+            "on-device",
+            "benches",
+            "audit",
+            "test262",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases",
+            "tests",
+            "licenses",
+            "frontend-tsrs",
+            "addons",
+            "blockers",
+            "interop",
+            "format",
+            "outcomes",
+            "integrity",
+            "integrity-runtime",
+            "jvm-verifies",
+            "definitions",
+            "compile-time",
+            "compile-time-rc",
+            "types",
+            "config"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the C backend",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml",
+            "compiler/codegen/c/src/emit.rs",
+            "compiler/codegen/c/src/emit/notices.rs",
+            "compiler/codegen/c/src/emit/unicode_tables.rs",
+            "compiler/codegen/c/src/lib.rs",
+            "compiler/codegen/c/tests/header.rs"
+          ],
+          "steps": [
+            "examples",
+            "rc",
+            "memory",
+            "outcomes",
+            "c-compiles",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "typescript-cases",
+            "benches"
+          ],
+          "arms": [
+            {
+              "kind": "answers",
+              "asks": "which code is emitted: does every example answer as it did, case by case",
+              "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+            },
+            {
+              "kind": "answers",
+              "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+              "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "native addon code generation",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml",
+            "compiler/codegen/c/src/emit.rs",
+            "compiler/codegen/c/src/emit/notices.rs",
+            "compiler/codegen/c/src/emit/unicode_tables.rs",
+            "compiler/codegen/c/src/lib.rs",
+            "compiler/codegen/c/tests/header.rs"
+          ],
+          "steps": [
+            "addons"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false
+        },
+        {
+          "name": "native addon code generation, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.c (through nts-codegen-c)",
+            "runtime/c/nts_unicode.c (through nts-codegen-common)",
+            "runtime/c/nts_unicode.h",
+            "runtime/c/nts_unicode.h (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.h (through nts-codegen-c)",
+            "runtime/c/nts_unicode.h (through nts-codegen-common)"
+          ],
+          "steps": [
+            "addons"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the N-API backend, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.h (through nts-codegen-napi)"
+          ],
+          "steps": [
+            "addons",
+            "profile",
+            "divergence"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the printed diagnostics, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-cli)",
+            "compiler/codegen/c/Cargo.toml (through nts-differential)",
+            "compiler/codegen/c/src/emit.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit.rs (through nts-differential)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-differential)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-differential)",
+            "compiler/codegen/c/src/lib.rs (through nts-cli)",
+            "compiler/codegen/c/src/lib.rs (through nts-differential)",
+            "compiler/codegen/c/tests/header.rs (through nts-cli)",
+            "compiler/codegen/c/tests/header.rs (through nts-differential)",
+            "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-differential)",
+            "compiler/codegen/llvm/tests/rounding_width.rs (through nts-differential)",
+            "runtime/c/nts_unicode.c (through nts-cli)",
+            "runtime/c/nts_unicode.c (through nts-differential)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h (through nts-cli)",
+            "runtime/c/nts_unicode.h (through nts-differential)",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "outcomes",
+            "integrity",
+            "example-refusals",
+            "blockers",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the CLI, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-cli)",
+            "compiler/codegen/c/src/emit.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-cli)",
+            "compiler/codegen/c/src/lib.rs (through nts-cli)",
+            "compiler/codegen/c/tests/header.rs (through nts-cli)",
+            "runtime/c/nts_unicode.c (through nts-cli)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h (through nts-cli)",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "interop",
+            "config",
+            "addons",
+            "profile",
+            "dex",
+            "bench-agree",
+            "examples",
+            "llvm",
+            "jvm",
+            "rc",
+            "expect-ir",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the bench driver, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-bench)",
+            "compiler/codegen/c/src/emit.rs (through nts-bench)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-bench)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-bench)",
+            "compiler/codegen/c/src/lib.rs (through nts-bench)",
+            "compiler/codegen/c/tests/header.rs (through nts-bench)",
+            "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-bench)",
+            "compiler/codegen/llvm/tests/rounding_width.rs (through nts-bench)",
+            "runtime/c/nts_unicode.c (through nts-bench)",
+            "runtime/c/nts_unicode.h (through nts-bench)"
+          ],
+          "steps": [
+            "benches",
+            "bench-agree",
+            "on-device"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the suite and the test262 protocol, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-suite)",
+            "compiler/codegen/c/src/emit.rs (through nts-suite)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-suite)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-suite)",
+            "compiler/codegen/c/src/lib.rs (through nts-suite)",
+            "compiler/codegen/c/tests/header.rs (through nts-suite)",
+            "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-suite)",
+            "compiler/codegen/llvm/tests/rounding_width.rs (through nts-suite)",
+            "runtime/c/nts_unicode.c (through nts-suite)",
+            "runtime/c/nts_unicode.h (through nts-suite)"
+          ],
+          "steps": [
+            "corpus",
+            "test262",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the LLVM backend",
+          "paths": [
+            "compiler/codegen/llvm/tests/agrees_with_c.rs",
+            "compiler/codegen/llvm/tests/rounding_width.rs"
+          ],
+          "steps": [
+            "llvm",
+            "llvm-rc",
+            "assembles",
+            "benches",
+            "interop",
+            "outcomes",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [
+            {
+              "kind": "answers",
+              "asks": "which code is emitted, on LLVM",
+              "run": "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "documentation",
+          "paths": [
+            "compiler/unicode/data/README.md"
+          ],
+          "steps": [
+            "records",
+            "primitives"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "benchmark run records",
+          "paths": [
+            "results/benchmarks/full.md",
+            "results/benchmarks/runs/2026-10-31-236b96e009f8-576c90ffe6bc4b6d95aff473024d44cc.json",
+            "results/benchmarks/runs/2026-10-31-2911419f553c-39b77dd059c74e3e90be42d05a46feb4.json",
+            "results/benchmarks/runs/2026-10-31-2df01a690a65-186f3bb71f234d68ad4b0411cf0261b4.json",
+            "results/benchmarks/runs/2026-10-31-55a6dd1fde54-05e524658b59458e94e5566942ef0202.json",
+            "results/benchmarks/runs/2026-10-31-d66141720bc6-20e647c1c7d04cc59d8af808c0dfd6e1.json",
+            "results/benchmarks/runs/2026-10-31-d79fe154bf98-5f3b8692955045628f0f8d73b3ca72cb.json"
+          ],
+          "steps": [
+            "records",
+            "format"
+          ],
+          "arms": [],
+          "precise": true,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the oracle record inventory",
+          "paths": [
+            "results/oracle-counts/tests/programs/a-final-sigma-lowercased.json"
+          ],
+          "steps": [
+            "tooling"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "a program's recorded oracle population",
+          "paths": [
+            "results/oracle-counts/tests/programs/a-final-sigma-lowercased.json"
+          ],
+          "steps": [
+            "examples",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "tool-written results",
+          "paths": [
+            "results/oracle-counts/tests/programs/a-final-sigma-lowercased.json"
+          ],
+          "steps": [
+            "rustfmt",
+            "format",
+            "reformat",
+            "records",
+            "old-paths",
+            "primitives",
+            "config",
+            "licenses",
+            "audit"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the C runtime",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "format",
+            "examples",
+            "rc",
+            "llvm",
+            "llvm-rc",
+            "memory",
+            "assembles"
+          ],
+          "arms": [
+            {
+              "kind": "hygiene",
+              "asks": "is the binary testing the new runtime",
+              "run": "rebuild nts: runtime/c is include_str!-ed, so an old binary tests the old runtime"
+            },
+            {
+              "kind": "answers",
+              "asks": "which code is emitted: does every example answer as it did, case by case",
+              "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+            },
+            {
+              "kind": "answers",
+              "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+              "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the C backend, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.c (through nts-codegen-c)",
+            "runtime/c/nts_unicode.h",
+            "runtime/c/nts_unicode.h (through nts-codegen-c)"
+          ],
+          "steps": [
+            "examples",
+            "rc",
+            "memory",
+            "outcomes",
+            "c-compiles",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "typescript-cases",
+            "benches"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the backends' common code, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.c (through nts-codegen-common)",
+            "runtime/c/nts_unicode.h",
+            "runtime/c/nts_unicode.h (through nts-codegen-common)"
+          ],
+          "steps": [
+            "examples",
+            "llvm",
+            "jvm",
+            "rc",
+            "llvm-rc",
+            "assembles",
+            "jvm-verifies",
+            "dex",
+            "bench-agree",
+            "benches",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the LLVM backend, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c (through nts-codegen-llvm)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h (through nts-codegen-llvm)",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "llvm",
+            "llvm-rc",
+            "assembles",
+            "benches",
+            "interop",
+            "outcomes",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the JVM backend, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+            "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+          ],
+          "steps": [
+            "jvm",
+            "dex",
+            "jvm-verifies",
+            "bench-agree",
+            "benches",
+            "on-device",
+            "interop",
+            "outcomes",
+            "test262-jvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": [
+            "android-shape",
+            "java-from-ts",
+            "ts-from-java"
+          ]
+        },
+        {
+          "name": "the JVM's own wide steps, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+            "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+          ],
+          "steps": [
+            "dex",
+            "bench-agree",
+            "interop"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": [
+            "android-shape",
+            "java-from-ts",
+            "ts-from-java"
+          ]
+        },
+        {
+          "name": "lowering, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "expect-ir",
+            "examples",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc",
+            "outcomes",
+            "integrity",
+            "integrity-runtime",
+            "definitions",
+            "example-refusals",
+            "blockers",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases",
+            "benches",
+            "jvm-verifies",
+            "compile-time",
+            "compile-time-rc",
+            "addons",
+            "profile",
+            "assembles",
+            "memory",
+            "bench-agree",
+            "corpus",
+            "dex"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an input to the memory cases",
+          "paths": [
+            "tests/memory/case-convert-unchanged/expected",
+            "tests/memory/case-convert-unchanged/src/main.ts",
+            "tests/memory/case-convert-unchanged/tsconfig.json"
+          ],
+          "steps": [
+            "memory"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false
+        },
+        {
+          "name": "an outcomes fixture",
+          "paths": [
+            "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+            "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+            "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+          ],
+          "steps": [
+            "outcomes",
+            "integrity"
+          ],
+          "arms": [
+            {
+              "kind": "hygiene",
+              "asks": "is the record a claim about main",
+              "run": "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.ts --record <name>"
+            },
+            {
+              "kind": "answers",
+              "asks": "is the defect specific to what the fixture names",
+              "run": "a control differing in one thing, measured"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an input to the outcomes",
+          "paths": [
+            "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+            "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+            "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+          ],
+          "steps": [
+            "outcomes",
+            "integrity",
+            "jvm-verifies"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the native TypeScript frontend",
+          "paths": [
+            "tests/programs/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json"
+          ],
+          "steps": [
+            "frontend-tsrs"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an input to the examples",
+          "paths": [
+            "tests/programs/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json"
+          ],
+          "steps": [
+            "examples",
+            "expect-ir",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc",
+            "integrity",
+            "example-refusals",
+            "dex"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "a new example",
+          "paths": [
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json"
+          ],
+          "steps": [
+            "examples",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc",
+            "integrity"
+          ],
+          "arms": [
+            {
+              "kind": "answers",
+              "asks": "does it agree on every backend -- by hand, because the differential reads the shared tree and cannot see an example not yet in it",
+              "run": "node tooling/differential/agree.mjs <after> --only=<example>   # and NTS_BACKEND=llvm, llvm+NTS_RC=1, jvm, NTS_RC=1"
+            },
+            {
+              "kind": "answers",
+              "asks": "does it guard the change: it must not agree on the binary before",
+              "run": "node tooling/differential/agree.mjs <before> <after> --only=<example>"
+            },
+            {
+              "kind": "hygiene",
+              "asks": "can a pinned gate see it",
+              "run": "commit it before a pinned gate run: a worktree gate cannot see an uncommitted example"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the bench driver",
+          "paths": [
+            "tooling/bench/src/main.rs"
+          ],
+          "steps": [
+            "benches",
+            "bench-agree",
+            "on-device"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an instrument",
+          "paths": [
+            "tooling/gate/owed.mjs",
+            "tooling/gate/unicode-census.test.ts"
+          ],
+          "steps": [],
+          "arms": [
+            {
+              "kind": "valid",
+              "asks": "does it catch what it guards",
+              "run": "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing"
+            },
+            {
+              "kind": "valid",
+              "asks": "has every loop in it had input",
+              "run": "feed any list it loops over one entry, in a scratch copy, before relying on it"
+            },
+            {
+              "kind": "valid",
+              "asks": "does a clean result mean it judged something",
+              "run": "print the population beside the verdict"
+            },
+            {
+              "kind": "valid",
+              "asks": "does it work where it will be run",
+              "run": "run it from a worktree, and every mode it has: the one its author tests is the easy one"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the gate's own tests",
+          "paths": [
+            "tooling/gate/owed.mjs"
+          ],
+          "steps": [
+            "tooling"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "owes the full gate",
+          "full": true,
+          "paths": [
+            "compiler/unicode/data/README.md (nts-unicode has no rule in owed.mjs)",
+            "compiler/unicode/src/lib.rs (nts-unicode has no rule in owed.mjs)",
+            "compiler/unicode/src/lib.rs",
+            "tooling/gate/unicode-census.test.ts (an instrument no step's scripts were found to run)"
+          ],
+          "steps": [],
+          "arms": [
+            {
+              "kind": "hygiene",
+              "asks": "what does this path reach",
+              "run": "a rule in tooling/gate/owed.mjs, so the next change to it owes what it reaches and not everything"
+            }
+          ]
+        },
+        {
+          "name": "every change",
+          "steps": [
+            "clippy",
+            "tests",
+            "rustfmt",
+            "old-paths"
+          ],
+          "arms": [],
+          "paths": []
+        }
+      ],
+      "selector": {
+        "identity": "401874d8d47bbfb8d06a56091e3227b3d68d095440e03b2291de9b003a938da2",
+        "existing": {
+          "revision": "80007ec8e273f6e5c1b8848a02f99db10f1cfbed",
+          "checks": {
+            "steps": [
+              "build",
+              "clippy",
+              "tests",
+              "rustfmt",
+              "old-paths",
+              "doctests",
+              "audit",
+              "format",
+              "reformat",
+              "records",
+              "test262",
+              "test262-cases",
+              "test262-builtins-cases",
+              "test262-rest-cases",
+              "test262-jvm",
+              "test262-llvm",
+              "typescript-cases",
+              "outcomes",
+              "expect-ir",
+              "integrity",
+              "definitions",
+              "compile-time",
+              "compile-time-rc",
+              "tooling",
+              "integrity-runtime",
+              "assembles",
+              "c-compiles",
+              "types",
+              "jvm-verifies",
+              "primitives",
+              "corpus",
+              "benches",
+              "example-refusals",
+              "config",
+              "licenses",
+              "frontend-tsrs",
+              "llvm",
+              "llvm-rc",
+              "jvm",
+              "dex",
+              "on-device",
+              "bench-agree",
+              "examples",
+              "rc",
+              "memory",
+              "addons",
+              "blockers",
+              "interop"
+            ],
+            "interop": null,
+            "doctests": null
+          },
+          "catalogue": [
+            "doctests",
+            "audit",
+            "build",
+            "clippy",
+            "format",
+            "rustfmt",
+            "reformat",
+            "records",
+            "old-paths",
+            "test262",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases",
+            "outcomes",
+            "expect-ir",
+            "integrity",
+            "definitions",
+            "compile-time",
+            "compile-time-rc",
+            "tooling",
+            "integrity-runtime",
+            "assembles",
+            "c-compiles",
+            "types",
+            "jvm-verifies",
+            "primitives",
+            "tests",
+            "corpus",
+            "benches",
+            "example-refusals",
+            "config",
+            "react-sources",
+            "licenses",
+            "frontend-tsrs",
+            "profile",
+            "sweep",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "dex",
+            "on-device",
+            "bench-agree",
+            "examples",
+            "rc",
+            "memory",
+            "addons",
+            "blockers",
+            "divergence",
+            "interop"
+          ],
+          "strict": true,
+          "rules": [
+            {
+              "name": "compiler dependency notices",
+              "paths": [
+                "Cargo.lock",
+                "compiler/codegen/c/Cargo.toml"
+              ],
+              "steps": [
+                "licenses"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "workspace dependency and toolchain inputs",
+              "paths": [
+                "Cargo.lock"
+              ],
+              "steps": [
+                "frontend-tsrs"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": true
+            },
+            {
+              "name": "an input to the bench cases",
+              "paths": [
+                "benchmarks/cases/case-convert-greek/case.ts"
+              ],
+              "steps": [
+                "benches",
+                "bench-agree",
+                "dex",
+                "expect-ir"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": true,
+              "full": false
+            },
+            {
+              "name": "an input to what a gate step runs",
+              "paths": [
+                "benchmarks/cases/case-convert-greek/case.ts",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h",
+                "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+                "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+                "tests/outcomes/a-final-sigma-lowercased/src/main.ts",
+                "tooling/gate/owed.mjs"
+              ],
+              "steps": [
+                "old-paths",
+                "tooling",
+                "bench-agree",
+                "examples",
+                "rc",
+                "expect-ir",
+                "primitives",
+                "llvm",
+                "llvm-rc",
+                "jvm",
+                "dex",
+                "on-device",
+                "benches",
+                "audit",
+                "test262",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases",
+                "tests",
+                "licenses",
+                "frontend-tsrs",
+                "addons",
+                "blockers",
+                "interop",
+                "format",
+                "outcomes",
+                "integrity",
+                "integrity-runtime",
+                "jvm-verifies",
+                "definitions",
+                "compile-time",
+                "compile-time-rc"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": true,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the C backend",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml",
+                "compiler/codegen/c/src/emit.rs",
+                "compiler/codegen/c/src/emit/notices.rs",
+                "compiler/codegen/c/src/lib.rs",
+                "compiler/codegen/c/tests/header.rs"
+              ],
+              "steps": [
+                "examples",
+                "rc",
+                "memory",
+                "outcomes",
+                "c-compiles",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "typescript-cases",
+                "benches"
+              ],
+              "arms": [
+                {
+                  "kind": "answers",
+                  "asks": "which code is emitted: does every example answer as it did, case by case",
+                  "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+                  "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "native addon code generation",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml",
+                "compiler/codegen/c/src/emit.rs",
+                "compiler/codegen/c/src/emit/notices.rs",
+                "compiler/codegen/c/src/lib.rs",
+                "compiler/codegen/c/tests/header.rs"
+              ],
+              "steps": [
+                "addons"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": true,
+              "full": false
+            },
+            {
+              "name": "native addon code generation, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.c (through nts-codegen-c)",
+                "runtime/c/nts_unicode.c (through nts-codegen-common)",
+                "runtime/c/nts_unicode.h",
+                "runtime/c/nts_unicode.h (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.h (through nts-codegen-c)",
+                "runtime/c/nts_unicode.h (through nts-codegen-common)"
+              ],
+              "steps": [
+                "addons"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the N-API backend, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.h (through nts-codegen-napi)"
+              ],
+              "steps": [
+                "addons",
+                "profile",
+                "divergence"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the printed diagnostics, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-cli)",
+                "compiler/codegen/c/Cargo.toml (through nts-differential)",
+                "compiler/codegen/c/src/emit.rs (through nts-cli)",
+                "compiler/codegen/c/src/emit.rs (through nts-differential)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-differential)",
+                "compiler/codegen/c/src/lib.rs (through nts-cli)",
+                "compiler/codegen/c/src/lib.rs (through nts-differential)",
+                "compiler/codegen/c/tests/header.rs (through nts-cli)",
+                "compiler/codegen/c/tests/header.rs (through nts-differential)",
+                "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-differential)",
+                "compiler/codegen/llvm/tests/rounding_width.rs (through nts-differential)",
+                "runtime/c/nts_unicode.c (through nts-cli)",
+                "runtime/c/nts_unicode.c (through nts-differential)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h (through nts-cli)",
+                "runtime/c/nts_unicode.h (through nts-differential)",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "outcomes",
+                "integrity",
+                "example-refusals",
+                "blockers",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the CLI, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-cli)",
+                "compiler/codegen/c/src/emit.rs (through nts-cli)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+                "compiler/codegen/c/src/lib.rs (through nts-cli)",
+                "compiler/codegen/c/tests/header.rs (through nts-cli)",
+                "runtime/c/nts_unicode.c (through nts-cli)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h (through nts-cli)",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "interop",
+                "config",
+                "addons",
+                "profile",
+                "dex",
+                "bench-agree",
+                "examples",
+                "llvm",
+                "jvm",
+                "rc",
+                "expect-ir",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the bench driver, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-bench)",
+                "compiler/codegen/c/src/emit.rs (through nts-bench)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-bench)",
+                "compiler/codegen/c/src/lib.rs (through nts-bench)",
+                "compiler/codegen/c/tests/header.rs (through nts-bench)",
+                "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-bench)",
+                "compiler/codegen/llvm/tests/rounding_width.rs (through nts-bench)",
+                "runtime/c/nts_unicode.c (through nts-bench)",
+                "runtime/c/nts_unicode.h (through nts-bench)"
+              ],
+              "steps": [
+                "benches",
+                "bench-agree",
+                "on-device"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the suite and the test262 protocol, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-suite)",
+                "compiler/codegen/c/src/emit.rs (through nts-suite)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-suite)",
+                "compiler/codegen/c/src/lib.rs (through nts-suite)",
+                "compiler/codegen/c/tests/header.rs (through nts-suite)",
+                "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-suite)",
+                "compiler/codegen/llvm/tests/rounding_width.rs (through nts-suite)",
+                "runtime/c/nts_unicode.c (through nts-suite)",
+                "runtime/c/nts_unicode.h (through nts-suite)"
+              ],
+              "steps": [
+                "corpus",
+                "test262",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the LLVM backend",
+              "paths": [
+                "compiler/codegen/llvm/tests/agrees_with_c.rs",
+                "compiler/codegen/llvm/tests/rounding_width.rs"
+              ],
+              "steps": [
+                "llvm",
+                "llvm-rc",
+                "assembles",
+                "benches",
+                "interop",
+                "outcomes",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [
+                {
+                  "kind": "answers",
+                  "asks": "which code is emitted, on LLVM",
+                  "run": "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "documentation",
+              "paths": [
+                "compiler/unicode/data/README.md"
+              ],
+              "steps": [
+                "records",
+                "primitives"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "benchmark run records",
+              "paths": [
+                "results/benchmarks/full.md"
+              ],
+              "steps": [
+                "records",
+                "format"
+              ],
+              "arms": [],
+              "precise": true,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the C runtime",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "format",
+                "examples",
+                "rc",
+                "llvm",
+                "llvm-rc",
+                "memory",
+                "assembles"
+              ],
+              "arms": [
+                {
+                  "kind": "hygiene",
+                  "asks": "is the binary testing the new runtime",
+                  "run": "rebuild nts: runtime/c is include_str!-ed, so an old binary tests the old runtime"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "which code is emitted: does every example answer as it did, case by case",
+                  "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+                  "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the C backend, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.c (through nts-codegen-c)",
+                "runtime/c/nts_unicode.h",
+                "runtime/c/nts_unicode.h (through nts-codegen-c)"
+              ],
+              "steps": [
+                "examples",
+                "rc",
+                "memory",
+                "outcomes",
+                "c-compiles",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "typescript-cases",
+                "benches"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the backends' common code, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.c (through nts-codegen-common)",
+                "runtime/c/nts_unicode.h",
+                "runtime/c/nts_unicode.h (through nts-codegen-common)"
+              ],
+              "steps": [
+                "examples",
+                "llvm",
+                "jvm",
+                "rc",
+                "llvm-rc",
+                "assembles",
+                "jvm-verifies",
+                "dex",
+                "bench-agree",
+                "benches",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the LLVM backend, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c (through nts-codegen-llvm)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h (through nts-codegen-llvm)",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "llvm",
+                "llvm-rc",
+                "assembles",
+                "benches",
+                "interop",
+                "outcomes",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the JVM backend, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+                "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+              ],
+              "steps": [
+                "jvm",
+                "dex",
+                "jvm-verifies",
+                "bench-agree",
+                "benches",
+                "on-device",
+                "interop",
+                "outcomes",
+                "test262-jvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": [
+                "android-shape",
+                "java-from-ts",
+                "ts-from-java"
+              ]
+            },
+            {
+              "name": "the JVM's own wide steps, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+                "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+              ],
+              "steps": [
+                "dex",
+                "bench-agree",
+                "interop"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": [
+                "android-shape",
+                "java-from-ts",
+                "ts-from-java"
+              ]
+            },
+            {
+              "name": "lowering, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "expect-ir",
+                "examples",
+                "llvm",
+                "llvm-rc",
+                "jvm",
+                "rc",
+                "outcomes",
+                "integrity",
+                "integrity-runtime",
+                "definitions",
+                "example-refusals",
+                "blockers",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases",
+                "benches",
+                "jvm-verifies",
+                "compile-time",
+                "compile-time-rc",
+                "addons",
+                "profile",
+                "assembles",
+                "memory",
+                "bench-agree",
+                "corpus",
+                "dex"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "an outcomes fixture",
+              "paths": [
+                "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+                "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+                "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+              ],
+              "steps": [
+                "outcomes",
+                "integrity"
+              ],
+              "arms": [
+                {
+                  "kind": "hygiene",
+                  "asks": "is the record a claim about main",
+                  "run": "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.ts --record <name>"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "is the defect specific to what the fixture names",
+                  "run": "a control differing in one thing, measured"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "an input to the outcomes",
+              "paths": [
+                "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+                "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+                "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+              ],
+              "steps": [
+                "outcomes",
+                "integrity",
+                "jvm-verifies"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the bench driver",
+              "paths": [
+                "tooling/bench/src/main.rs"
+              ],
+              "steps": [
+                "benches",
+                "bench-agree",
+                "on-device"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "an instrument",
+              "paths": [
+                "tooling/gate/owed.mjs"
+              ],
+              "steps": [],
+              "arms": [
+                {
+                  "kind": "valid",
+                  "asks": "does it catch what it guards",
+                  "run": "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing"
+                },
+                {
+                  "kind": "valid",
+                  "asks": "has every loop in it had input",
+                  "run": "feed any list it loops over one entry, in a scratch copy, before relying on it"
+                },
+                {
+                  "kind": "valid",
+                  "asks": "does a clean result mean it judged something",
+                  "run": "print the population beside the verdict"
+                },
+                {
+                  "kind": "valid",
+                  "asks": "does it work where it will be run",
+                  "run": "run it from a worktree, and every mode it has: the one its author tests is the easy one"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the gate's own tests",
+              "paths": [
+                "tooling/gate/owed.mjs"
+              ],
+              "steps": [
+                "tooling"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "owes the full gate",
+              "full": true,
+              "paths": [
+                "compiler/unicode/data/README.md (nts-unicode has no rule in owed.mjs)",
+                "compiler/unicode/src/lib.rs (nts-unicode has no rule in owed.mjs)",
+                "compiler/unicode/src/lib.rs"
+              ],
+              "steps": [],
+              "arms": [
+                {
+                  "kind": "hygiene",
+                  "asks": "what does this path reach",
+                  "run": "a rule in tooling/gate/owed.mjs, so the next change to it owes what it reaches and not everything"
+                }
+              ]
+            },
+            {
+              "name": "every change",
+              "steps": [
+                "clippy",
+                "tests",
+                "rustfmt",
+                "old-paths"
+              ],
+              "arms": [],
+              "paths": []
+            }
+          ]
+        }
+      }
+    },
+    {
+      "revision": "c0df7595bb5be1638a50ce11f94f6da5cfa1ff7a",
+      "checks": {
+        "steps": [
+          "build",
+          "clippy",
+          "tests",
+          "rustfmt",
+          "old-paths",
+          "doctests",
+          "audit",
+          "format",
+          "reformat",
+          "records",
+          "test262",
+          "test262-cases",
+          "test262-builtins-cases",
+          "test262-rest-cases",
+          "test262-jvm",
+          "test262-llvm",
+          "typescript-cases",
+          "outcomes",
+          "expect-ir",
+          "integrity",
+          "definitions",
+          "compile-time",
+          "compile-time-rc",
+          "tooling",
+          "integrity-runtime",
+          "assembles",
+          "c-compiles",
+          "types",
+          "jvm-verifies",
+          "primitives",
+          "corpus",
+          "benches",
+          "example-refusals",
+          "config",
+          "licenses",
+          "frontend-tsrs",
+          "llvm",
+          "llvm-rc",
+          "jvm",
+          "dex",
+          "on-device",
+          "bench-agree",
+          "examples",
+          "rc",
+          "memory",
+          "addons",
+          "blockers",
+          "interop"
+        ],
+        "interop": null,
+        "doctests": null
+      },
+      "catalogue": [
+        "doctests",
+        "audit",
+        "build",
+        "clippy",
+        "format",
+        "rustfmt",
+        "reformat",
+        "records",
+        "old-paths",
+        "test262",
+        "test262-cases",
+        "test262-builtins-cases",
+        "test262-rest-cases",
+        "test262-jvm",
+        "test262-llvm",
+        "typescript-cases",
+        "outcomes",
+        "expect-ir",
+        "integrity",
+        "definitions",
+        "compile-time",
+        "compile-time-rc",
+        "tooling",
+        "integrity-runtime",
+        "assembles",
+        "c-compiles",
+        "types",
+        "jvm-verifies",
+        "primitives",
+        "tests",
+        "corpus",
+        "benches",
+        "example-refusals",
+        "config",
+        "react-sources",
+        "licenses",
+        "frontend-tsrs",
+        "profile",
+        "sweep",
+        "llvm",
+        "llvm-rc",
+        "jvm",
+        "dex",
+        "on-device",
+        "bench-agree",
+        "examples",
+        "rc",
+        "memory",
+        "addons",
+        "blockers",
+        "divergence",
+        "interop"
+      ],
+      "strict": true,
+      "rules": [
+        {
+          "name": "compiler dependency notices",
+          "paths": [
+            "Cargo.lock",
+            "compiler/codegen/c/Cargo.toml"
+          ],
+          "steps": [
+            "licenses"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "workspace dependency and toolchain inputs",
+          "paths": [
+            "Cargo.lock"
+          ],
+          "steps": [
+            "frontend-tsrs"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": true
+        },
+        {
+          "name": "an input to the bench cases",
+          "paths": [
+            "benchmarks/cases/case-convert-greek/case.ts"
+          ],
+          "steps": [
+            "benches",
+            "bench-agree",
+            "dex",
+            "expect-ir"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false
+        },
+        {
+          "name": "an input to what a gate step runs",
+          "paths": [
+            "benchmarks/cases/case-convert-greek/case.ts",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h",
+            "tests/memory/case-convert-unchanged/expected",
+            "tests/memory/case-convert-unchanged/src/main.ts",
+            "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+            "tests/memory/case-convert-unchanged/tsconfig.json",
+            "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+            "tests/outcomes/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json",
+            "tooling/gate/owed.mjs",
+            "tooling/gate/unicode-census.test.ts"
+          ],
+          "steps": [
+            "old-paths",
+            "tooling",
+            "bench-agree",
+            "examples",
+            "rc",
+            "expect-ir",
+            "primitives",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "dex",
+            "on-device",
+            "benches",
+            "audit",
+            "test262",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases",
+            "tests",
+            "licenses",
+            "frontend-tsrs",
+            "addons",
+            "blockers",
+            "interop",
+            "format",
+            "memory",
+            "outcomes",
+            "integrity",
+            "integrity-runtime",
+            "jvm-verifies",
+            "definitions",
+            "compile-time",
+            "compile-time-rc",
+            "types",
+            "config",
+            "example-refusals"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the C backend",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml",
+            "compiler/codegen/c/src/emit.rs",
+            "compiler/codegen/c/src/emit/notices.rs",
+            "compiler/codegen/c/src/emit/unicode_tables.rs",
+            "compiler/codegen/c/src/lib.rs",
+            "compiler/codegen/c/tests/header.rs"
+          ],
+          "steps": [
+            "examples",
+            "rc",
+            "memory",
+            "outcomes",
+            "c-compiles",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "typescript-cases",
+            "benches"
+          ],
+          "arms": [
+            {
+              "kind": "answers",
+              "asks": "which code is emitted: does every example answer as it did, case by case",
+              "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+            },
+            {
+              "kind": "answers",
+              "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+              "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "native addon code generation",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml",
+            "compiler/codegen/c/src/emit.rs",
+            "compiler/codegen/c/src/emit/notices.rs",
+            "compiler/codegen/c/src/emit/unicode_tables.rs",
+            "compiler/codegen/c/src/lib.rs",
+            "compiler/codegen/c/tests/header.rs"
+          ],
+          "steps": [
+            "addons"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false
+        },
+        {
+          "name": "native addon code generation, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+            "compiler/unicode/data/README.md (through nts-codegen-c)",
+            "compiler/unicode/data/README.md (through nts-codegen-napi)",
+            "compiler/unicode/src/lib.rs (through nts-codegen-c)",
+            "compiler/unicode/src/lib.rs (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.c (through nts-codegen-c)",
+            "runtime/c/nts_unicode.c (through nts-codegen-common)",
+            "runtime/c/nts_unicode.h",
+            "runtime/c/nts_unicode.h (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.h (through nts-codegen-c)",
+            "runtime/c/nts_unicode.h (through nts-codegen-common)"
+          ],
+          "steps": [
+            "addons"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the N-API backend, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+            "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+            "compiler/unicode/data/README.md (through nts-codegen-napi)",
+            "compiler/unicode/src/lib.rs (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+            "runtime/c/nts_unicode.h (through nts-codegen-napi)"
+          ],
+          "steps": [
+            "addons",
+            "profile",
+            "divergence"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the printed diagnostics, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-cli)",
+            "compiler/codegen/c/Cargo.toml (through nts-differential)",
+            "compiler/codegen/c/src/emit.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit.rs (through nts-differential)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-differential)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-differential)",
+            "compiler/codegen/c/src/lib.rs (through nts-cli)",
+            "compiler/codegen/c/src/lib.rs (through nts-differential)",
+            "compiler/codegen/c/tests/header.rs (through nts-cli)",
+            "compiler/codegen/c/tests/header.rs (through nts-differential)",
+            "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-differential)",
+            "compiler/codegen/llvm/tests/rounding_width.rs (through nts-differential)",
+            "compiler/unicode/data/README.md (through nts-cli)",
+            "compiler/unicode/data/README.md (through nts-differential)",
+            "compiler/unicode/src/lib.rs (through nts-cli)",
+            "compiler/unicode/src/lib.rs (through nts-differential)",
+            "runtime/c/nts_unicode.c (through nts-cli)",
+            "runtime/c/nts_unicode.c (through nts-differential)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h (through nts-cli)",
+            "runtime/c/nts_unicode.h (through nts-differential)",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "outcomes",
+            "integrity",
+            "example-refusals",
+            "blockers",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the CLI, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-cli)",
+            "compiler/codegen/c/src/emit.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-cli)",
+            "compiler/codegen/c/src/lib.rs (through nts-cli)",
+            "compiler/codegen/c/tests/header.rs (through nts-cli)",
+            "compiler/unicode/data/README.md (through nts-cli)",
+            "compiler/unicode/src/lib.rs (through nts-cli)",
+            "runtime/c/nts_unicode.c (through nts-cli)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h (through nts-cli)",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "interop",
+            "config",
+            "addons",
+            "profile",
+            "dex",
+            "bench-agree",
+            "examples",
+            "llvm",
+            "jvm",
+            "rc",
+            "expect-ir",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the bench driver, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-bench)",
+            "compiler/codegen/c/src/emit.rs (through nts-bench)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-bench)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-bench)",
+            "compiler/codegen/c/src/lib.rs (through nts-bench)",
+            "compiler/codegen/c/tests/header.rs (through nts-bench)",
+            "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-bench)",
+            "compiler/codegen/llvm/tests/rounding_width.rs (through nts-bench)",
+            "compiler/unicode/data/README.md (through nts-bench)",
+            "compiler/unicode/src/lib.rs (through nts-bench)",
+            "runtime/c/nts_unicode.c (through nts-bench)",
+            "runtime/c/nts_unicode.h (through nts-bench)"
+          ],
+          "steps": [
+            "benches",
+            "bench-agree",
+            "on-device"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the suite and the test262 protocol, through the crate graph",
+          "paths": [
+            "compiler/codegen/c/Cargo.toml (through nts-suite)",
+            "compiler/codegen/c/src/emit.rs (through nts-suite)",
+            "compiler/codegen/c/src/emit/notices.rs (through nts-suite)",
+            "compiler/codegen/c/src/emit/unicode_tables.rs (through nts-suite)",
+            "compiler/codegen/c/src/lib.rs (through nts-suite)",
+            "compiler/codegen/c/tests/header.rs (through nts-suite)",
+            "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-suite)",
+            "compiler/codegen/llvm/tests/rounding_width.rs (through nts-suite)",
+            "compiler/unicode/data/README.md (through nts-suite)",
+            "compiler/unicode/src/lib.rs (through nts-suite)",
+            "runtime/c/nts_unicode.c (through nts-suite)",
+            "runtime/c/nts_unicode.h (through nts-suite)"
+          ],
+          "steps": [
+            "corpus",
+            "test262",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the LLVM backend",
+          "paths": [
+            "compiler/codegen/llvm/tests/agrees_with_c.rs",
+            "compiler/codegen/llvm/tests/rounding_width.rs"
+          ],
+          "steps": [
+            "llvm",
+            "llvm-rc",
+            "assembles",
+            "benches",
+            "interop",
+            "outcomes",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [
+            {
+              "kind": "answers",
+              "asks": "which code is emitted, on LLVM",
+              "run": "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the Unicode model and its runtime",
+          "paths": [
+            "compiler/unicode/data/README.md",
+            "compiler/unicode/src/lib.rs",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "tooling"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "documentation",
+          "paths": [
+            "compiler/unicode/data/README.md"
+          ],
+          "steps": [
+            "records",
+            "primitives"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the C backend, through the crate graph",
+          "paths": [
+            "compiler/unicode/data/README.md (through nts-codegen-c)",
+            "compiler/unicode/src/lib.rs (through nts-codegen-c)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.c (through nts-codegen-c)",
+            "runtime/c/nts_unicode.h",
+            "runtime/c/nts_unicode.h (through nts-codegen-c)"
+          ],
+          "steps": [
+            "examples",
+            "rc",
+            "memory",
+            "outcomes",
+            "c-compiles",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "typescript-cases",
+            "benches"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "benchmark run records",
+          "paths": [
+            "results/benchmarks/full.md",
+            "results/benchmarks/runs/2026-10-31-236b96e009f8-576c90ffe6bc4b6d95aff473024d44cc.json",
+            "results/benchmarks/runs/2026-10-31-2911419f553c-39b77dd059c74e3e90be42d05a46feb4.json",
+            "results/benchmarks/runs/2026-10-31-2df01a690a65-186f3bb71f234d68ad4b0411cf0261b4.json",
+            "results/benchmarks/runs/2026-10-31-55a6dd1fde54-05e524658b59458e94e5566942ef0202.json",
+            "results/benchmarks/runs/2026-10-31-d66141720bc6-20e647c1c7d04cc59d8af808c0dfd6e1.json",
+            "results/benchmarks/runs/2026-10-31-d79fe154bf98-5f3b8692955045628f0f8d73b3ca72cb.json"
+          ],
+          "steps": [
+            "records",
+            "format"
+          ],
+          "arms": [],
+          "precise": true,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the oracle record inventory",
+          "paths": [
+            "results/oracle-counts/tests/programs/a-final-sigma-lowercased.json"
+          ],
+          "steps": [
+            "tooling"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "a program's recorded oracle population",
+          "paths": [
+            "results/oracle-counts/tests/programs/a-final-sigma-lowercased.json"
+          ],
+          "steps": [
+            "examples",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "tool-written results",
+          "paths": [
+            "results/oracle-counts/tests/programs/a-final-sigma-lowercased.json"
+          ],
+          "steps": [
+            "rustfmt",
+            "format",
+            "reformat",
+            "records",
+            "old-paths",
+            "primitives",
+            "config",
+            "licenses",
+            "audit"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the C runtime",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "format",
+            "examples",
+            "rc",
+            "llvm",
+            "llvm-rc",
+            "memory",
+            "assembles"
+          ],
+          "arms": [
+            {
+              "kind": "hygiene",
+              "asks": "is the binary testing the new runtime",
+              "run": "rebuild nts: runtime/c is include_str!-ed, so an old binary tests the old runtime"
+            },
+            {
+              "kind": "answers",
+              "asks": "which code is emitted: does every example answer as it did, case by case",
+              "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+            },
+            {
+              "kind": "answers",
+              "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+              "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the backends' common code, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.c (through nts-codegen-common)",
+            "runtime/c/nts_unicode.h",
+            "runtime/c/nts_unicode.h (through nts-codegen-common)"
+          ],
+          "steps": [
+            "examples",
+            "llvm",
+            "jvm",
+            "rc",
+            "llvm-rc",
+            "assembles",
+            "jvm-verifies",
+            "dex",
+            "bench-agree",
+            "benches",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the LLVM backend, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c (through nts-codegen-llvm)",
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h (through nts-codegen-llvm)",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "llvm",
+            "llvm-rc",
+            "assembles",
+            "benches",
+            "interop",
+            "outcomes",
+            "test262-llvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": "all"
+        },
+        {
+          "name": "the JVM backend, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+            "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+          ],
+          "steps": [
+            "jvm",
+            "dex",
+            "jvm-verifies",
+            "bench-agree",
+            "benches",
+            "on-device",
+            "interop",
+            "outcomes",
+            "test262-jvm",
+            "typescript-cases"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": [
+            "android-shape",
+            "java-from-ts",
+            "ts-from-java"
+          ]
+        },
+        {
+          "name": "the JVM's own wide steps, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+            "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+          ],
+          "steps": [
+            "dex",
+            "bench-agree",
+            "interop"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false,
+          "interop": [
+            "android-shape",
+            "java-from-ts",
+            "ts-from-java"
+          ]
+        },
+        {
+          "name": "lowering, through the crate graph",
+          "paths": [
+            "runtime/c/nts_unicode.c",
+            "runtime/c/nts_unicode.h"
+          ],
+          "steps": [
+            "expect-ir",
+            "examples",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc",
+            "outcomes",
+            "integrity",
+            "integrity-runtime",
+            "definitions",
+            "example-refusals",
+            "blockers",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases",
+            "benches",
+            "jvm-verifies",
+            "compile-time",
+            "compile-time-rc",
+            "addons",
+            "profile",
+            "assembles",
+            "memory",
+            "bench-agree",
+            "corpus",
+            "dex"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an input to the memory cases",
+          "paths": [
+            "tests/memory/case-convert-unchanged/expected",
+            "tests/memory/case-convert-unchanged/src/main.ts",
+            "tests/memory/case-convert-unchanged/tsconfig.json"
+          ],
+          "steps": [
+            "memory"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": true,
+          "full": false
+        },
+        {
+          "name": "an outcomes fixture",
+          "paths": [
+            "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+            "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+            "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+          ],
+          "steps": [
+            "outcomes",
+            "integrity"
+          ],
+          "arms": [
+            {
+              "kind": "hygiene",
+              "asks": "is the record a claim about main",
+              "run": "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.ts --record <name>"
+            },
+            {
+              "kind": "answers",
+              "asks": "is the defect specific to what the fixture names",
+              "run": "a control differing in one thing, measured"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an input to the outcomes",
+          "paths": [
+            "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+            "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+            "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+          ],
+          "steps": [
+            "outcomes",
+            "integrity",
+            "jvm-verifies"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the native TypeScript frontend",
+          "paths": [
+            "tests/programs/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json"
+          ],
+          "steps": [
+            "frontend-tsrs"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an input to the examples",
+          "paths": [
+            "tests/programs/a-final-sigma-lowercased/src/main.ts",
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json"
+          ],
+          "steps": [
+            "examples",
+            "expect-ir",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc",
+            "integrity",
+            "example-refusals",
+            "dex"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "a new example",
+          "paths": [
+            "tests/programs/a-final-sigma-lowercased/tsconfig.json"
+          ],
+          "steps": [
+            "examples",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "rc",
+            "integrity"
+          ],
+          "arms": [
+            {
+              "kind": "answers",
+              "asks": "does it agree on every backend -- by hand, because the differential reads the shared tree and cannot see an example not yet in it",
+              "run": "node tooling/differential/agree.mjs <after> --only=<example>   # and NTS_BACKEND=llvm, llvm+NTS_RC=1, jvm, NTS_RC=1"
+            },
+            {
+              "kind": "answers",
+              "asks": "does it guard the change: it must not agree on the binary before",
+              "run": "node tooling/differential/agree.mjs <before> <after> --only=<example>"
+            },
+            {
+              "kind": "hygiene",
+              "asks": "can a pinned gate see it",
+              "run": "commit it before a pinned gate run: a worktree gate cannot see an uncommitted example"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the bench driver",
+          "paths": [
+            "tooling/bench/src/main.rs"
+          ],
+          "steps": [
+            "benches",
+            "bench-agree",
+            "on-device"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "an instrument",
+          "paths": [
+            "tooling/gate/owed.mjs",
+            "tooling/gate/unicode-census.test.ts"
+          ],
+          "steps": [],
+          "arms": [
+            {
+              "kind": "valid",
+              "asks": "does it catch what it guards",
+              "run": "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing"
+            },
+            {
+              "kind": "valid",
+              "asks": "has every loop in it had input",
+              "run": "feed any list it loops over one entry, in a scratch copy, before relying on it"
+            },
+            {
+              "kind": "valid",
+              "asks": "does a clean result mean it judged something",
+              "run": "print the population beside the verdict"
+            },
+            {
+              "kind": "valid",
+              "asks": "does it work where it will be run",
+              "run": "run it from a worktree, and every mode it has: the one its author tests is the easy one"
+            }
+          ],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "the gate's own tests",
+          "paths": [
+            "tooling/gate/owed.mjs"
+          ],
+          "steps": [
+            "tooling"
+          ],
+          "arms": [],
+          "precise": false,
+          "wide": false,
+          "full": false
+        },
+        {
+          "name": "every change",
+          "steps": [
+            "clippy",
+            "tests",
+            "rustfmt",
+            "old-paths"
+          ],
+          "arms": [],
+          "paths": []
+        }
+      ],
+      "selector": {
+        "identity": "1004b0867175a22253fd2e3b871244d259de6c05114be3444230e382fb67a949",
+        "existing": {
+          "revision": "c0df7595bb5be1638a50ce11f94f6da5cfa1ff7a",
+          "checks": {
+            "steps": [
+              "build",
+              "clippy",
+              "tests",
+              "rustfmt",
+              "old-paths",
+              "doctests",
+              "audit",
+              "format",
+              "reformat",
+              "records",
+              "test262",
+              "test262-cases",
+              "test262-builtins-cases",
+              "test262-rest-cases",
+              "test262-jvm",
+              "test262-llvm",
+              "typescript-cases",
+              "outcomes",
+              "expect-ir",
+              "integrity",
+              "definitions",
+              "compile-time",
+              "compile-time-rc",
+              "tooling",
+              "integrity-runtime",
+              "assembles",
+              "c-compiles",
+              "types",
+              "jvm-verifies",
+              "primitives",
+              "corpus",
+              "benches",
+              "example-refusals",
+              "config",
+              "licenses",
+              "frontend-tsrs",
+              "llvm",
+              "llvm-rc",
+              "jvm",
+              "dex",
+              "on-device",
+              "bench-agree",
+              "examples",
+              "rc",
+              "memory",
+              "addons",
+              "blockers",
+              "interop"
+            ],
+            "interop": null,
+            "doctests": null
+          },
+          "catalogue": [
+            "doctests",
+            "audit",
+            "build",
+            "clippy",
+            "format",
+            "rustfmt",
+            "reformat",
+            "records",
+            "old-paths",
+            "test262",
+            "test262-cases",
+            "test262-builtins-cases",
+            "test262-rest-cases",
+            "test262-jvm",
+            "test262-llvm",
+            "typescript-cases",
+            "outcomes",
+            "expect-ir",
+            "integrity",
+            "definitions",
+            "compile-time",
+            "compile-time-rc",
+            "tooling",
+            "integrity-runtime",
+            "assembles",
+            "c-compiles",
+            "types",
+            "jvm-verifies",
+            "primitives",
+            "tests",
+            "corpus",
+            "benches",
+            "example-refusals",
+            "config",
+            "react-sources",
+            "licenses",
+            "frontend-tsrs",
+            "profile",
+            "sweep",
+            "llvm",
+            "llvm-rc",
+            "jvm",
+            "dex",
+            "on-device",
+            "bench-agree",
+            "examples",
+            "rc",
+            "memory",
+            "addons",
+            "blockers",
+            "divergence",
+            "interop"
+          ],
+          "strict": true,
+          "rules": [
+            {
+              "name": "compiler dependency notices",
+              "paths": [
+                "Cargo.lock",
+                "compiler/codegen/c/Cargo.toml"
+              ],
+              "steps": [
+                "licenses"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "workspace dependency and toolchain inputs",
+              "paths": [
+                "Cargo.lock"
+              ],
+              "steps": [
+                "frontend-tsrs"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": true
+            },
+            {
+              "name": "an input to the bench cases",
+              "paths": [
+                "benchmarks/cases/case-convert-greek/case.ts"
+              ],
+              "steps": [
+                "benches",
+                "bench-agree",
+                "dex",
+                "expect-ir"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": true,
+              "full": false
+            },
+            {
+              "name": "an input to what a gate step runs",
+              "paths": [
+                "benchmarks/cases/case-convert-greek/case.ts",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h",
+                "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+                "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+                "tests/outcomes/a-final-sigma-lowercased/src/main.ts",
+                "tooling/gate/owed.mjs"
+              ],
+              "steps": [
+                "old-paths",
+                "tooling",
+                "bench-agree",
+                "examples",
+                "rc",
+                "expect-ir",
+                "primitives",
+                "llvm",
+                "llvm-rc",
+                "jvm",
+                "dex",
+                "on-device",
+                "benches",
+                "audit",
+                "test262",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases",
+                "tests",
+                "licenses",
+                "frontend-tsrs",
+                "addons",
+                "blockers",
+                "interop",
+                "format",
+                "outcomes",
+                "integrity",
+                "integrity-runtime",
+                "jvm-verifies",
+                "definitions",
+                "compile-time",
+                "compile-time-rc"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": true,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the C backend",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml",
+                "compiler/codegen/c/src/emit.rs",
+                "compiler/codegen/c/src/emit/notices.rs",
+                "compiler/codegen/c/src/lib.rs",
+                "compiler/codegen/c/tests/header.rs"
+              ],
+              "steps": [
+                "examples",
+                "rc",
+                "memory",
+                "outcomes",
+                "c-compiles",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "typescript-cases",
+                "benches"
+              ],
+              "arms": [
+                {
+                  "kind": "answers",
+                  "asks": "which code is emitted: does every example answer as it did, case by case",
+                  "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+                  "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "native addon code generation",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml",
+                "compiler/codegen/c/src/emit.rs",
+                "compiler/codegen/c/src/emit/notices.rs",
+                "compiler/codegen/c/src/lib.rs",
+                "compiler/codegen/c/tests/header.rs"
+              ],
+              "steps": [
+                "addons"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": true,
+              "full": false
+            },
+            {
+              "name": "native addon code generation, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+                "compiler/unicode/data/README.md (through nts-codegen-c)",
+                "compiler/unicode/data/README.md (through nts-codegen-napi)",
+                "compiler/unicode/src/lib.rs (through nts-codegen-c)",
+                "compiler/unicode/src/lib.rs (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.c (through nts-codegen-c)",
+                "runtime/c/nts_unicode.c (through nts-codegen-common)",
+                "runtime/c/nts_unicode.h",
+                "runtime/c/nts_unicode.h (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.h (through nts-codegen-c)",
+                "runtime/c/nts_unicode.h (through nts-codegen-common)"
+              ],
+              "steps": [
+                "addons"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the N-API backend, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/src/lib.rs (through nts-codegen-napi)",
+                "compiler/codegen/c/tests/header.rs (through nts-codegen-napi)",
+                "compiler/unicode/data/README.md (through nts-codegen-napi)",
+                "compiler/unicode/src/lib.rs (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.c (through nts-codegen-napi)",
+                "runtime/c/nts_unicode.h (through nts-codegen-napi)"
+              ],
+              "steps": [
+                "addons",
+                "profile",
+                "divergence"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the printed diagnostics, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-cli)",
+                "compiler/codegen/c/Cargo.toml (through nts-differential)",
+                "compiler/codegen/c/src/emit.rs (through nts-cli)",
+                "compiler/codegen/c/src/emit.rs (through nts-differential)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-differential)",
+                "compiler/codegen/c/src/lib.rs (through nts-cli)",
+                "compiler/codegen/c/src/lib.rs (through nts-differential)",
+                "compiler/codegen/c/tests/header.rs (through nts-cli)",
+                "compiler/codegen/c/tests/header.rs (through nts-differential)",
+                "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-differential)",
+                "compiler/codegen/llvm/tests/rounding_width.rs (through nts-differential)",
+                "compiler/unicode/data/README.md (through nts-cli)",
+                "compiler/unicode/data/README.md (through nts-differential)",
+                "compiler/unicode/src/lib.rs (through nts-cli)",
+                "compiler/unicode/src/lib.rs (through nts-differential)",
+                "runtime/c/nts_unicode.c (through nts-cli)",
+                "runtime/c/nts_unicode.c (through nts-differential)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h (through nts-cli)",
+                "runtime/c/nts_unicode.h (through nts-differential)",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "outcomes",
+                "integrity",
+                "example-refusals",
+                "blockers",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the CLI, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-cli)",
+                "compiler/codegen/c/src/emit.rs (through nts-cli)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-cli)",
+                "compiler/codegen/c/src/lib.rs (through nts-cli)",
+                "compiler/codegen/c/tests/header.rs (through nts-cli)",
+                "compiler/unicode/data/README.md (through nts-cli)",
+                "compiler/unicode/src/lib.rs (through nts-cli)",
+                "runtime/c/nts_unicode.c (through nts-cli)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h (through nts-cli)",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "interop",
+                "config",
+                "addons",
+                "profile",
+                "dex",
+                "bench-agree",
+                "examples",
+                "llvm",
+                "jvm",
+                "rc",
+                "expect-ir",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the bench driver, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-bench)",
+                "compiler/codegen/c/src/emit.rs (through nts-bench)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-bench)",
+                "compiler/codegen/c/src/lib.rs (through nts-bench)",
+                "compiler/codegen/c/tests/header.rs (through nts-bench)",
+                "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-bench)",
+                "compiler/codegen/llvm/tests/rounding_width.rs (through nts-bench)",
+                "compiler/unicode/data/README.md (through nts-bench)",
+                "compiler/unicode/src/lib.rs (through nts-bench)",
+                "runtime/c/nts_unicode.c (through nts-bench)",
+                "runtime/c/nts_unicode.h (through nts-bench)"
+              ],
+              "steps": [
+                "benches",
+                "bench-agree",
+                "on-device"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the suite and the test262 protocol, through the crate graph",
+              "paths": [
+                "compiler/codegen/c/Cargo.toml (through nts-suite)",
+                "compiler/codegen/c/src/emit.rs (through nts-suite)",
+                "compiler/codegen/c/src/emit/notices.rs (through nts-suite)",
+                "compiler/codegen/c/src/lib.rs (through nts-suite)",
+                "compiler/codegen/c/tests/header.rs (through nts-suite)",
+                "compiler/codegen/llvm/tests/agrees_with_c.rs (through nts-suite)",
+                "compiler/codegen/llvm/tests/rounding_width.rs (through nts-suite)",
+                "compiler/unicode/data/README.md (through nts-suite)",
+                "compiler/unicode/src/lib.rs (through nts-suite)",
+                "runtime/c/nts_unicode.c (through nts-suite)",
+                "runtime/c/nts_unicode.h (through nts-suite)"
+              ],
+              "steps": [
+                "corpus",
+                "test262",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the LLVM backend",
+              "paths": [
+                "compiler/codegen/llvm/tests/agrees_with_c.rs",
+                "compiler/codegen/llvm/tests/rounding_width.rs"
+              ],
+              "steps": [
+                "llvm",
+                "llvm-rc",
+                "assembles",
+                "benches",
+                "interop",
+                "outcomes",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [
+                {
+                  "kind": "answers",
+                  "asks": "which code is emitted, on LLVM",
+                  "run": "NTS_BACKEND=llvm node tooling/differential/agree.mjs <before> <after>; NTS_RC=1 ..."
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the Unicode model and its runtime",
+              "paths": [
+                "compiler/unicode/data/README.md",
+                "compiler/unicode/src/lib.rs",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "tooling"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "documentation",
+              "paths": [
+                "compiler/unicode/data/README.md"
+              ],
+              "steps": [
+                "records",
+                "primitives"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the C backend, through the crate graph",
+              "paths": [
+                "compiler/unicode/data/README.md (through nts-codegen-c)",
+                "compiler/unicode/src/lib.rs (through nts-codegen-c)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.c (through nts-codegen-c)",
+                "runtime/c/nts_unicode.h",
+                "runtime/c/nts_unicode.h (through nts-codegen-c)"
+              ],
+              "steps": [
+                "examples",
+                "rc",
+                "memory",
+                "outcomes",
+                "c-compiles",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "typescript-cases",
+                "benches"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "benchmark run records",
+              "paths": [
+                "results/benchmarks/full.md"
+              ],
+              "steps": [
+                "records",
+                "format"
+              ],
+              "arms": [],
+              "precise": true,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the C runtime",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "format",
+                "examples",
+                "rc",
+                "llvm",
+                "llvm-rc",
+                "memory",
+                "assembles"
+              ],
+              "arms": [
+                {
+                  "kind": "hygiene",
+                  "asks": "is the binary testing the new runtime",
+                  "run": "rebuild nts: runtime/c is include_str!-ed, so an old binary tests the old runtime"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "which code is emitted: does every example answer as it did, case by case",
+                  "run": "node tooling/differential/agree.mjs <before> <after>   # and NTS_BACKEND=llvm, NTS_BACKEND=jvm, NTS_RC=1"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "expected neutral? neutral has two causes -- the construct is absent, or the arm never fired -- and only one is good: which runtime modules emit differently, and what node's tests say of them",
+                  "run": "node tooling/conformance/emitted-diff.ts <before> <after> --axis"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the backends' common code, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.c (through nts-codegen-common)",
+                "runtime/c/nts_unicode.h",
+                "runtime/c/nts_unicode.h (through nts-codegen-common)"
+              ],
+              "steps": [
+                "examples",
+                "llvm",
+                "jvm",
+                "rc",
+                "llvm-rc",
+                "assembles",
+                "jvm-verifies",
+                "dex",
+                "bench-agree",
+                "benches",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the LLVM backend, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c (through nts-codegen-llvm)",
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h (through nts-codegen-llvm)",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "llvm",
+                "llvm-rc",
+                "assembles",
+                "benches",
+                "interop",
+                "outcomes",
+                "test262-llvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": "all"
+            },
+            {
+              "name": "the JVM backend, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+                "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+              ],
+              "steps": [
+                "jvm",
+                "dex",
+                "jvm-verifies",
+                "bench-agree",
+                "benches",
+                "on-device",
+                "interop",
+                "outcomes",
+                "test262-jvm",
+                "typescript-cases"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": [
+                "android-shape",
+                "java-from-ts",
+                "ts-from-java"
+              ]
+            },
+            {
+              "name": "the JVM's own wide steps, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c (through nts-codegen-jvm)",
+                "runtime/c/nts_unicode.h (through nts-codegen-jvm)"
+              ],
+              "steps": [
+                "dex",
+                "bench-agree",
+                "interop"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false,
+              "interop": [
+                "android-shape",
+                "java-from-ts",
+                "ts-from-java"
+              ]
+            },
+            {
+              "name": "lowering, through the crate graph",
+              "paths": [
+                "runtime/c/nts_unicode.c",
+                "runtime/c/nts_unicode.h"
+              ],
+              "steps": [
+                "expect-ir",
+                "examples",
+                "llvm",
+                "llvm-rc",
+                "jvm",
+                "rc",
+                "outcomes",
+                "integrity",
+                "integrity-runtime",
+                "definitions",
+                "example-refusals",
+                "blockers",
+                "test262-cases",
+                "test262-builtins-cases",
+                "test262-rest-cases",
+                "test262-jvm",
+                "test262-llvm",
+                "typescript-cases",
+                "benches",
+                "jvm-verifies",
+                "compile-time",
+                "compile-time-rc",
+                "addons",
+                "profile",
+                "assembles",
+                "memory",
+                "bench-agree",
+                "corpus",
+                "dex"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "an outcomes fixture",
+              "paths": [
+                "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+                "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+                "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+              ],
+              "steps": [
+                "outcomes",
+                "integrity"
+              ],
+              "arms": [
+                {
+                  "kind": "hygiene",
+                  "asks": "is the record a claim about main",
+                  "run": "record it with NTS_BIN=<a clean main build> node tooling/conformance/outcomes-check.ts --record <name>"
+                },
+                {
+                  "kind": "answers",
+                  "asks": "is the defect specific to what the fixture names",
+                  "run": "a control differing in one thing, measured"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "an input to the outcomes",
+              "paths": [
+                "tests/outcomes/a-final-sigma-lowercased/tsconfig.json",
+                "tests/outcomes/a-final-sigma-lowercased/outcome.json",
+                "tests/outcomes/a-final-sigma-lowercased/src/main.ts"
+              ],
+              "steps": [
+                "outcomes",
+                "integrity",
+                "jvm-verifies"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the bench driver",
+              "paths": [
+                "tooling/bench/src/main.rs"
+              ],
+              "steps": [
+                "benches",
+                "bench-agree",
+                "on-device"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "an instrument",
+              "paths": [
+                "tooling/gate/owed.mjs"
+              ],
+              "steps": [],
+              "arms": [
+                {
+                  "kind": "valid",
+                  "asks": "does it catch what it guards",
+                  "run": "its --self-test, and a sabotage arm: break the thing it guards and watch it fail, naming the thing"
+                },
+                {
+                  "kind": "valid",
+                  "asks": "has every loop in it had input",
+                  "run": "feed any list it loops over one entry, in a scratch copy, before relying on it"
+                },
+                {
+                  "kind": "valid",
+                  "asks": "does a clean result mean it judged something",
+                  "run": "print the population beside the verdict"
+                },
+                {
+                  "kind": "valid",
+                  "asks": "does it work where it will be run",
+                  "run": "run it from a worktree, and every mode it has: the one its author tests is the easy one"
+                }
+              ],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "the gate's own tests",
+              "paths": [
+                "tooling/gate/owed.mjs"
+              ],
+              "steps": [
+                "tooling"
+              ],
+              "arms": [],
+              "precise": false,
+              "wide": false,
+              "full": false
+            },
+            {
+              "name": "every change",
+              "steps": [
+                "clippy",
+                "tests",
+                "rustfmt",
+                "old-paths"
+              ],
+              "arms": [],
+              "paths": []
+            }
+          ]
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+tooling scope: nts-tooling-683958f4f0d5458195f6069662505610-files.scope in nts-tooling-683958f4f0d5458195f6069662505610.slice
+✖ case conversion agrees with node over every code point (3236.249649ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 0
+ℹ fail 1
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3289.54323
+
+✖ failing tests:
+
+test at tooling/gate/unicode-census.test.ts:96:1
+✖ case conversion agrees with node over every code point (3236.249649ms)
+  AssertionError [ERR_ASSERTION]: compiled case conversion differs from node somewhere in 0..0x10FFFF; the model in compiler/unicode and node's tables have drifted (D2)
+  + actual - expected
+  
+  + 'bf5fc565'
+  - 'fb8f84a0'
+  
+      at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/gate/unicode-census.test.ts:122:12)
+      at Test.runInAsyncScope (node:async_hooks:227:14)
+      at Test.run (node:internal/test_runner/test:1397:25)
+      at Test.start (node:internal/test_runner/test:1257:17)
+      at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+    generatedMessage: false,
+    code: 'ERR_ASSERTION',
+    actual: 'bf5fc565',
+    expected: 'fb8f84a0',
+    operator: 'strictEqual',
+    diff: 'simple'
+  }

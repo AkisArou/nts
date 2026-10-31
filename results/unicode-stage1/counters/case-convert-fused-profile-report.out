@@ -1,0 +1,54 @@
+# To display the perf.data header info, please use --header/--header-only options.
+#
+#
+# Total Lost Samples: 0
+#
+# Samples: 9K of event 'cpu_core/cycles/u'
+# Event count (approx.): 12868385887
+#
+# Overhead  Symbol                                              IPC   [IPC Coverage]
+# ........  ..................................................  ....................
+#
+    57.03%  [.] nts_str_case_convert.llvm.14165513408623713557  -      -            
+    15.83%  [.] convert                                         -      -            
+    10.74%  [.] nts_release_counted.llvm.211938650821702734     -      -            
+     8.68%  [.] nts_alloc                                       -      -            
+     2.68%  [.] nts_str_regrow.llvm.211938650821702734          -      -            
+     0.96%  [.] 0x00000000001763a1                              -      -            
+     0.62%  [.] nts_destroy                                     -      -            
+     0.56%  [.] 0x00000000001763ab                              -      -            
+     0.46%  [.] nts_array_grow.llvm.211938650821702734          -      -            
+     0.43%  [.] cfree                                           -      -            
+     0.36%  [.] memcpy@plt                                      -      -            
+     0.34%  [.] nts_release                                     -      -            
+     0.32%  [.] nts_each_reference                              -      -            
+     0.12%  [.] 0x00000000000a8b0b                              -      -            
+     0.08%  [.] nts_free_storage                                -      -            
+     0.08%  [.] 0x00000000000a8b54                              -      -            
+     0.07%  [.] 0x00000000000a8b38                              -      -            
+     0.07%  [.] main                                            -      -            
+     0.07%  [.] 0x00000000000a8ac0                              -      -            
+     0.06%  [.] free@plt                                        -      -            
+     0.05%  [.] 0x0000000000176391                              -      -            
+     0.05%  [.] 0x00000000000a8b62                              -      -            
+     0.05%  [.] 0x0000000000176380                              -      -            
+     0.04%  [.] aligned_alloc@plt                               -      -            
+     0.04%  [.] 0x00000000000a8b3d                              -      -            
+     0.04%  [.] 0x00000000000a8ae5                              -      -            
+     0.03%  [.] 0x00000000000a8c91                              -      -            
+     0.03%  [.] 0x00000000000a8caf                              -      -            
+     0.02%  [.] 0x00000000000a8c77                              -      -            
+     0.01%  [.] 0x00000000000a8b58                              -      -            
+     0.01%  [.] 0x00000000000a8cab                              -      -            
+     0.01%  [.] 0x00000000000a8cb2                              -      -            
+     0.00%  [.] 0x0000000000010533                              -      -            
+     0.00%  [.] 0x000000000000ba63                              -      -            
+     0.00%  [.] 0x000000000000ba71                              -      -            
+     0.00%  [.] 0x000000000002949e                              -      -            
+     0.00%  [.] 0x000000000000aeae                              -      -            
+     0.00%  [.] 0x000000000000fc93                              -      -            
+
+
+#
+# (Tip: Search options using a keyword: perf report -h <keyword>)
+#

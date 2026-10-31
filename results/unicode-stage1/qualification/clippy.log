@@ -1,0 +1,129 @@
+   Compiling serde_core v1.0.229
+    Checking rustc-hash v2.1.3
+    Checking hashbrown v0.17.1
+   Compiling syn v3.0.4
+    Checking equivalent v1.0.2
+    Checking stable_deref_trait v1.2.1
+    Checking memchr v2.8.3
+   Compiling serde v1.0.229
+    Checking xxhash-rust v0.8.18
+   Compiling camino v1.2.5
+   Compiling semver v1.0.28
+    Checking scopeguard v1.2.0
+    Checking lock_api v0.4.14
+   Compiling rustc_version v0.4.1
+    Checking byteorder v1.5.0
+    Checking hash32 v0.2.1
+    Checking spin v0.9.9
+   Compiling heapless v0.7.17
+   Compiling autocfg v1.5.1
+    Checking indexmap v2.14.0
+   Compiling synstructure v0.14.0
+    Checking litemap v0.8.3
+    Checking writeable v0.6.4
+   Compiling icu_normalizer_data v2.3.0
+   Compiling libc v0.2.191
+   Compiling num-traits v0.2.19
+   Compiling dragonbox_ecma v0.1.12
+    Checking utf8_iter v1.0.4
+    Checking num-integer v0.1.47
+   Compiling tsrs_core v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_core)
+    Checking smallvec v1.16.4
+    Checking num-bigint v0.5.1
+    Checking simdutf8 v0.1.5
+    Checking unicode-id-start v1.1.2
+    Checking bitflags v2.13.2
+   Compiling serde_json v1.0.151
+    Checking zmij v1.0.23
+    Checking itoa v1.0.18
+    Checking tsrs_diagnostics v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_diagnostics)
+   Compiling crossbeam-utils v0.8.23
+   Compiling crossbeam-epoch v0.9.21
+   Compiling crossbeam-deque v0.8.8
+   Compiling rayon-core v1.13.0
+   Compiling rustix v1.1.5
+    Checking linux-raw-sys v0.12.1
+    Checking either v1.19.0
+    Checking rayon v1.12.0
+    Checking aho-corasick v1.1.5
+    Checking regex-syntax v0.8.11
+    Checking anyhow v1.0.104
+   Compiling nts-frontend-tsrs v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/frontend-tsrs)
+   Compiling nts-frontend-ts v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/frontend-ts)
+    Checking regex-automata v0.4.18
+    Checking hmac-sha256 v1.1.14
+   Compiling adler2 v2.0.1
+   Compiling miniz_oxide v0.9.1
+   Compiling nts-unicode v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/unicode)
+    Checking regex v1.13.1
+    Checking react_compiler_utils v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_utils)
+   Compiling nts-deps v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/deps)
+   Compiling nts-cli v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/cli)
+   Compiling nts-build v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/build)
+    Checking nts-surfaces v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/surfaces)
+    Checking roxmltree v0.21.1
+    Checking windows-metadata v0.100.0
+   Compiling nts-bench v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/bench)
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.20
+   Compiling zerofrom-derive v0.1.8
+   Compiling yoke-derive v0.8.4
+   Compiling displaydoc v0.2.7
+    Checking zerofrom v0.1.8
+    Checking yoke v0.8.4
+   Compiling zerovec-derive v0.11.7
+    Checking thiserror v2.0.20
+    Checking cobs v0.3.0
+    Checking tinystr v0.8.5
+    Checking nts-diagnostics v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/diagnostics)
+    Checking icu_locale_core v2.4.0
+    Checking postcard v1.1.3
+    Checking nts-semantic-schema v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/semantic-schema)
+    Checking zerotrie v0.2.5
+    Checking zerovec v0.11.9
+    Checking react_compiler_diagnostics v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_diagnostics)
+    Checking serde-transcode v1.1.1
+    Checking react_compiler_hir v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_hir)
+    Checking potential_utf v0.1.6
+    Checking icu_collections v2.3.0
+    Checking icu_provider v2.4.0
+    Checking icu_normalizer v2.3.0
+    Checking nts-core v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/core)
+    Checking nts-jvm-emitter v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/jvm-emitter)
+    Checking react_compiler_ast v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_ast)
+    Checking tsrs_spanmap v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_spanmap)
+    Checking tsrs_ast v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_ast)
+    Checking tsrs_vfs v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_vfs)
+    Checking tsrs_ipc v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_ipc)
+    Checking react_compiler_ssa v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_ssa)
+    Checking react_compiler_typeinference v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_typeinference)
+    Checking react_compiler_validation v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_validation)
+    Checking react_compiler_lowering v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_lowering)
+    Checking react_compiler_reactive_scopes v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_reactive_scopes)
+    Checking react_compiler_optimization v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_optimization)
+    Checking react_compiler_inference v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler_inference)
+    Checking tsrs_scanner v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_scanner)
+    Checking tsrs_module v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_module)
+    Checking tsrs_parser v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_parser)
+    Checking tsrs_sourcemap v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_sourcemap)
+    Checking tsrs_printer v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_printer)
+    Checking tsrs_binder v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_binder)
+    Checking tsrs_tsoptions v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_tsoptions)
+    Checking tsrs_astnav v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_astnav)
+    Checking tsrs_pseudochecker v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_pseudochecker)
+    Checking react_compiler v0.0.1-oidc.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/react-compiler/crates/react_compiler)
+    Checking tsrs_modulespecifiers v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_modulespecifiers)
+    Checking tsrs_contentmapper v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_contentmapper)
+    Checking tsrs_checker v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_checker)
+    Checking tsrs_transformers v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_transformers)
+    Checking nts-codegen-common v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/common)
+    Checking nts-codegen-jvm v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/jvm)
+    Checking nts-codegen-c v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/c)
+    Checking nts-codegen-llvm v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/llvm)
+    Checking tsrs_declarations v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_declarations)
+    Checking nts-codegen-napi v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/compiler/codegen/napi)
+    Checking tsrs_compiler v0.19.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/third_party/tsrs/crates/tsrs_compiler)
+    Checking nts-differential v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/differential)
+    Checking nts-react v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/runtime/react/compiler/nts-react)
+    Checking nts-suite v0.0.0 (/home/akisarou/Projects/nts-lanes/helper2-unicode-stage1/tooling/suite)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 35.89s

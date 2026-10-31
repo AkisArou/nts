@@ -1,0 +1,10 @@
+tooling scope: nts-tooling-59203274f87548149308bae030d1e115-files.scope in nts-tooling-59203274f87548149308bae030d1e115.slice
+✔ case conversion agrees with node over every code point (3159.335838ms)
+ℹ tests 1
+ℹ suites 0
+ℹ pass 1
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 3226.480173
