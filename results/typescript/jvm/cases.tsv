@@ -375,6 +375,7 @@ tests/typescript/proofs-controls/bounds-conversion-to-string-shift-control.ts	{"
 tests/typescript/proofs-controls/bounds-loop-fixed-view-resize-back-edge-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-alias-static-this-field-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-call-static-this-returned-constructor-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/call-target-loop-apply-dynamic-arity-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-loop-closure-replacement-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-loop-static-this-replacement-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-merge-static-this-constructor-control.ts	{"kind":"pass"}
@@ -467,7 +468,11 @@ tests/typescript/proofs/bounds-suspension-yield-caller-pop-before-write.ts	{"kin
 tests/typescript/proofs/bounds-suspension-yield-caller-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/bounds-suspension-yield-star-caller-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/call-target-accessor-getter-replaces-receiver.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/call-target-alias-apply-structural-this.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-alias-array-element-receiver.ts	{"kind":"pass"}
+tests/typescript/proofs/call-target-alias-bind-ignored-protocol-arguments.ts	{"kind":"pass"}
+tests/typescript/proofs/call-target-alias-bind-in-generic-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/call-target-alias-bind-into-rest.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-alias-closure-captured-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-alias-extracted-apply.ts	{"kind":"refused","diagnostics":[{"code":"TS2300","where":"body"},{"code":"TS2339","where":"body"},{"code":"TS2554","where":"body"}]}
 tests/typescript/proofs/call-target-alias-extracted-bind.ts	{"kind":"refused","diagnostics":[{"code":"TS2300","where":"body"},{"code":"TS2339","where":"body"},{"code":"TS2554","where":"body"}]}
@@ -479,6 +484,9 @@ tests/typescript/proofs/call-target-alias-map-value-receiver.ts	{"kind":"refused
 tests/typescript/proofs/call-target-alias-object-field-closure.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-alias-override-method-bind.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-alias-static-this-field.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/call-target-call-bind-ignored-protocol-arguments.ts	{"kind":"pass"}
+tests/typescript/proofs/call-target-call-bind-in-generic-class.ts	{"kind":"refused","diagnostics":[{"code":"TS2300","where":"body"},{"code":"TS2345","where":"body"}]}
+tests/typescript/proofs/call-target-call-bind-in-generic-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-call-direct-receiver-write.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-call-eleven-closure-classes.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-call-interface-returned-implementation.ts	{"kind":"refused","diagnostics":[{"code":"TS2420","where":"body"},{"code":"TS2740","where":"body"}]}
@@ -493,7 +501,9 @@ tests/typescript/proofs/call-target-callback-map-replaces-receiver.ts	{"kind":"p
 tests/typescript/proofs/call-target-chain-loop-carried-24-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-conversion-value-of-replaces-receiver.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-exception-throw-before-receiver-restore.ts	{"kind":"pass"}
+tests/typescript/proofs/call-target-loop-apply-dynamic-arity.ts	{"kind":"refused","diagnostics":[{"code":"NTS4001","where":"none"}]}
 tests/typescript/proofs/call-target-loop-back-edge-receiver.ts	{"kind":"pass"}
+tests/typescript/proofs/call-target-loop-bind-into-rest.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-loop-closure-replacement.ts	{"kind":"refused","diagnostics":[{"code":"NTS4001","where":"none"}]}
 tests/typescript/proofs/call-target-loop-continue-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-loop-do-while-receiver.ts	{"kind":"pass"}
@@ -503,7 +513,11 @@ tests/typescript/proofs/call-target-loop-mixin-replacement.ts	{"kind":"refused",
 tests/typescript/proofs/call-target-loop-nested-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-loop-static-this-replacement.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/call-target-loop-zero-trip-receiver.ts	{"kind":"pass"}
+tests/typescript/proofs/call-target-merge-apply-dynamic-arity.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/call-target-merge-bind-in-generic-function.ts	{"kind":"refused","diagnostics":[{"code":"TS2300","where":"body"},{"code":"TS2322","where":"body"},{"code":"TS2345","where":"body"}]}
+tests/typescript/proofs/call-target-merge-bind-into-rest.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-merge-bound-method-selection.ts	{"kind":"refused","diagnostics":[{"code":"TS2300","where":"body"},{"code":"TS2339","where":"body"},{"code":"TS2345","where":"body"},{"code":"TS4113","where":"body"}]}
+tests/typescript/proofs/call-target-merge-call-structural-this.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-merge-class-expression-mixin.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/call-target-merge-conditional-closure.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-merge-early-return-interface.ts	{"kind":"refused","diagnostics":[{"code":"TS2420","where":"body"},{"code":"TS2740","where":"body"}]}
@@ -520,9 +534,11 @@ tests/typescript/proofs/call-target-merge-try-catch-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-suspension-await-replaces-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-accessor-setter-writes-binding.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/capture-alias-holder-writer.ts	{"kind":"pass"}
+tests/typescript/proofs/capture-alias-per-iteration-holder-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-call-bound-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-call-intermediate-closure-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/capture-call-nested-function-writer.ts	{"kind":"pass"}
+tests/typescript/proofs/capture-call-per-iteration-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-call-recursive-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-call-returned-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-call-sibling-writer.ts	{"kind":"pass"}
@@ -534,6 +550,7 @@ tests/typescript/proofs/capture-callback-find-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-callback-for-each-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-callback-map-for-each-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-callback-map-writer.ts	{"kind":"pass"}
+tests/typescript/proofs/capture-callback-per-iteration-for-each.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-callback-reduce-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-callback-sort-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-chain-24-writer-aliases.ts	{"kind":"pass"}
@@ -542,14 +559,21 @@ tests/typescript/proofs/capture-exception-catch-writes.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-exception-finally-overrides-throw.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-exception-finally-writes.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-exception-nested-finally-writes.ts	{"kind":"pass"}
+tests/typescript/proofs/capture-exception-per-iteration-finally.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-exception-return-finally-writes.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-exception-throw-after-write.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-loop-back-edge-writer.ts	{"kind":"pass"}
+tests/typescript/proofs/capture-loop-per-iteration-body-step.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/capture-loop-per-iteration-continue.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/capture-loop-per-iteration-delayed-readers.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/capture-loop-per-iteration-labelled-break.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/capture-merge-conditional-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-suspension-async-generator-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
 tests/typescript/proofs/capture-suspension-await-microtask-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/capture-suspension-await-nested-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
 tests/typescript/proofs/capture-suspension-await-rejected-promise-writer.ts	{"kind":"wrong","errorClass":"Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Error: after write"}}
+tests/typescript/proofs/capture-suspension-per-iteration-await-resume-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
+tests/typescript/proofs/capture-suspension-per-iteration-yield-resume-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/capture-suspension-yield-caller-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/capture-suspension-yield-star-caller-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/element-kind-accessor-fill-negative-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}

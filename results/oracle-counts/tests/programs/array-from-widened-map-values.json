@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-from-widened-map-values",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-from-widened-map-values/src/main.ts",
+      "signature": "e7ece8ffac9261a548b5126d0a7092582d72243551aba9219aebeb33988736b1",
+      "keys": {
+        "c": "7b1b00becf677d552a6f18a82b9350fe",
+        "jvm": "3452821f2cb79e2f9fb44b1fbe88319d",
+        "llvm": "2d367cadb8556144f890bee0d3a87866"
+      },
+      "cases_sha256": "da9b34a62958f5aa1ddad0e135385bd64fbe181ca0e040730b34ea3f6a36ce95",
+      "driver_sha256": "d348a8ce9550fbdeed732e70f09232fdfa32d7ffc4b57aeaea8a4e59d4239704",
+      "populations": {
+        "directBare": {
+          "count": 29,
+          "cases_sha256": "f5b40a04ffc54f1ebbaf62e0c302c5993d2d2b04b6d86c2d5e7e448f6c0f62dd"
+        },
+        "directEntries": {
+          "count": 29,
+          "cases_sha256": "25e827e913dc1675d53ee193bd9be2735820c828dbe0b67e3c265ab29e18f627"
+        },
+        "directEntriesLoop": {
+          "count": 29,
+          "cases_sha256": "8cf9a3e0ee5937dda69b6b82eef8c3d727afc5bd79e78b06b1d71471f783cda3"
+        },
+        "directEntriesSpread": {
+          "count": 29,
+          "cases_sha256": "b56d74289914f6576d4a8a1ff12b007d2e8c57f67001f73f3cb934060b61d51d"
+        },
+        "directForEach": {
+          "count": 29,
+          "cases_sha256": "babeebbf397f40c0c5c86b0bec4dda6770af8ed331da7aa0c5cc7b024a21d175"
+        },
+        "directMapped": {
+          "count": 29,
+          "cases_sha256": "958bae449b178fdfb2bef74bb08a91ebc582a3f6cf8663b294046822b371cf5e"
+        },
+        "directOriginalViewCopy": {
+          "count": 29,
+          "cases_sha256": "72e2b02753024148f6836aa25ae8efba0f61f2f97d46c60ad48d463668571e7c"
+        },
+        "directOriginalViewLoop": {
+          "count": 29,
+          "cases_sha256": "f88380521cb253ee3aa23b4be7e27a991cba665f70f456c19eb6e826b13ac55d"
+        },
+        "directPairsLoop": {
+          "count": 29,
+          "cases_sha256": "5de919ffbf8326bec497e46f184d966969ba039a4cd03fa019b6c15b9b3cd23f"
+        },
+        "directSpread": {
+          "count": 29,
+          "cases_sha256": "6646595324ec8762e09f09376f61edc766e9605e1ccbe482e41f1ab1d4b086d7"
+        },
+        "directValuesLoop": {
+          "count": 29,
+          "cases_sha256": "0af9e37f7dffee73a8ca1890c5b5d4bf2127b3659fde0cc6083c373f5d7150f8"
+        },
+        "directWide": {
+          "count": 29,
+          "cases_sha256": "3046631797a82c215312251de049b03db4c06b44eb9d3f04952676a22440a0dc"
+        },
+        "throughBare": {
+          "count": 29,
+          "cases_sha256": "7a0e2c3a791bf2651d5a185e53b7f3f8aad4db8709a08363c4706f84ff273419"
+        },
+        "throughEntries": {
+          "count": 29,
+          "cases_sha256": "c1ae3417b8027d6c226ae285692923d68b7929a13f70fa57fa9b95e37f1d58c3"
+        },
+        "throughEntriesLoop": {
+          "count": 29,
+          "cases_sha256": "66fc5fcb0c1efd33e4af968827f288afea52d5140e2442726f7e8394d810830f"
+        },
+        "throughEntriesSpread": {
+          "count": 29,
+          "cases_sha256": "f779f167da06dce634ea9fbed9f2156d189d54f7e6b46525062a6e286d6f8614"
+        },
+        "throughForEach": {
+          "count": 29,
+          "cases_sha256": "3892ece334add10c7f04752ec97452396a3493db74d9578a7763e7a7619cbf72"
+        },
+        "throughMapped": {
+          "count": 29,
+          "cases_sha256": "8e46fc8dcf3e5fe37ad96952186f25c3c391f159ad902b4225d75b32dbd77e5d"
+        },
+        "throughPairsLoop": {
+          "count": 29,
+          "cases_sha256": "e124c25cf8fc6dde202642520c87e06d292eb120b1c5c6cf1c91b7b0a6bcc66f"
+        },
+        "throughSpread": {
+          "count": 29,
+          "cases_sha256": "dd4fce149d7bb077142b0020c08a9d8b2011889ca8ef58609f7f224cfea36ad9"
+        },
+        "throughValuesLoop": {
+          "count": 29,
+          "cases_sha256": "da351a4644f2c2e29207b0375f8754e60b59cf158f1ed4a32f25c195064fb515"
+        },
+        "throughWide": {
+          "count": 29,
+          "cases_sha256": "6afa2a28eddc1d6fcd954fca6eb5660809d30bc966a3df9151fce5358a26e3c2"
+        }
+      },
+      "complete": true,
+      "count": 638
+    }
+  ]
+}
