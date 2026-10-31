@@ -32,6 +32,11 @@ one; add a row here in the same commit as the first case that uses it.
    [proof contracts](#proof-contracts); `ts-proof-*` names the fact and
    `ts-route-*` names how it changes.
 
+5. **Unicode data and context, held to the pinned node**: case mappings,
+   RegExp properties and folding, normalization, URL hosts, locale case
+   and grapheme boundaries. [Unicode contracts](#unicode-contracts)
+   name the sources; `ts-unicode-*` identifies the area and test layer.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -64,6 +69,7 @@ flows through it.
 | `tuples/` | tuples with optional, rest and labelled elements, readonly, variadic |
 | `type-operators/` | values through keyof, typeof, indexed access, mapped and conditional types |
 | `typed-paths/` | where a static type and the run-time value part ways, and where a number's representation shows |
+| `unicode/` | exhaustive code-point blocks, contextual sequences and Unicode conformance inputs, with the pinned node as the oracle |
 | `unions/` | unions and every way TypeScript narrows them |
 
 Each family has one or more `combination-*.ts` cases pairing its concept
@@ -74,6 +80,16 @@ invalidation route per case, tagged with one `ts-proof-*`, one `ts-route-*`
 and the existing container and syntax tags. A literal allocation, range or
 guard establishes the fact before the route acts; several inputs exercise
 the same code, and an exact assertion observes the result after the route.
+
+The `unicode/` family uses `<area>-<detail>.ts` instead of combination
+cases. Exhaustive cases include lone surrogates and assert a separate
+32-bit FNV-1a hash over UTF-16 code units for each 4,096-code-point
+block. Sequence and conformance cases use escaped input and expected
+strings, with exact assertions and source-row diagnostics. Standalone
+TypeScript generators under `tooling/unicode-cases/` produce expected
+values with the node in `.tool-versions`; they reject a mismatched
+Node, Unicode or ICU version. They are not part of nts builds or runs.
+A compiler refusal remains a finding and does not alter the case.
 
 ## Coverage, source by source
 
@@ -136,7 +152,8 @@ the same code, and an exact assertion observes the result after the route.
 | generics over number, string, boolean, a class, a union, a function, an array and a nested generic, in a function, a class, a method, an interface member, a constraint and a default | `generics/<position>-<kind>.ts`, 48 cases |
 | interfaces: one implementing class, several in different field orders, an object literal | `typed-paths/interface-*.ts`, `interfaces/field-orders-differ.ts`, `interfaces/literals-in-different-orders.ts`, `interfaces/classes-and-literals-mixed.ts` |
 | structural assignment between classes and literals | `objects/class-to-literal-type.ts`, `objects/literal-to-class-type.ts`, `interfaces/class-without-implements.ts` |
-| unions and narrowing: typeof, instanceof, `in`, discriminants, type guards, assertion functions | `unions/` |
+| unions and narrowing: typeof, instanceof, `in`, discriminants, type guards, assertion functions | `unicode/` | exhaustive code-point blocks, contextual sequences and Unicode conformance inputs, with the pinned node as the oracle |
+| `unions/` |
 | tuples with optional, rest and labelled elements; readonly arrays and tuples | `tuples/` |
 | index signatures and Record | `interfaces/`, `objects/record-*.ts`, `typed-paths/missing-record-key.ts` |
 | optional, default and rest parameters; overloads | `functions/` |
@@ -181,6 +198,21 @@ The permanent exclusions are `eval`, `new Function` of a run-time string,
 `with` and sloppy-mode code. Strict checking and node's exact answer remain
 the admission criteria.
 
+### Unicode contracts
+
+| source | concepts |
+| --- | --- |
+| [Unicode, The design](../../docs/foundations/unicode.md#the-design) | one Unicode version across case conversion, RegExp data, normalization, URL hosts and grapheme breaking; locale case and ICU services |
+| [Unicode, Staying identical to node](../../docs/foundations/unicode.md#staying-identical-to-node) | exhaustive code-point comparisons, exact contextual sequences, official conformance inputs and observable locale-list behaviour |
+| [Unicode, Build order](../../docs/foundations/unicode.md#build-order) | cases retained for each stage even before nts supports the corresponding API |
+| [Unicode Character Database](https://www.unicode.org/ucd/), UAX #15, UAX #29 and UTS #46 | versioned case data and the NormalizationTest, GraphemeBreakTest and IdnaTestV2 inputs; each generator records its exact source versions and hashes |
+
+The expected values come from the pinned node, including its ICU and
+URL implementation. The generators retain source provenance and
+copyright notices, check input hashes, and provide `--check` for
+byte-for-byte regeneration. They keep areas independent so each can
+land without another open Unicode pull request.
+
 ## Tags
 
 <!-- tags:begin -->
@@ -191,7 +223,7 @@ the admission criteria.
 | `ts-accessors` | `get`/`set` accessors on a class or an object literal | conformance/classes/propertyMemberDeclarations; typed paths | 41 | 4 |
 | `ts-ambient` | an ambient declaration (`declare var/function/class/namespace/global`), which emits nothing | conformance/ambient; ts-eslint TSDeclareFunction, `declare` modifiers | 6 | 1 |
 | `ts-any` | an explicitly `any`-typed value, the dynamic escape hatch | conformance/types/any; ts-eslint TSAnyKeyword | 4 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 486 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 693 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 83 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 91 | 0 |
@@ -249,7 +281,7 @@ the admission criteria.
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 4 | 0 |
 | `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 65 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 2 | 0 |
-| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 682 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 889 | 0 |
 | `ts-jsx` | JSX in a `.tsx` file, compiled to factory calls | conformance/jsx; ts-eslint JSX nodes | 0 | 6 |
 | `ts-keyof` | `keyof T`, and values of that type | conformance/types/keyof; ts-eslint TSTypeOperator | 9 | 0 |
 | `ts-legacy-decorators` | `experimentalDecorators`: class, method, property, accessor and parameter decorators | conformance/decorators | 0 | 8 |
@@ -264,7 +296,7 @@ the admission criteria.
 | `ts-new-target` | `new.target` | conformance/es6/newTarget | 1 | 0 |
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
 | `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 89 | 0 |
-| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 212 | 0 |
+| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 246 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 1 | 0 |
 | `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 246 | 0 |
 | `ts-optional-chaining` | `?.` on properties, calls and elements, in typed code | conformance/expressions/optionalChaining | 8 | 0 |
@@ -299,7 +331,7 @@ the admission criteria.
 | `ts-satisfies` | the `satisfies` operator, which leaves its value and the value's type alone | conformance/expressions/typeSatisfaction; ts-eslint TSSatisfiesExpression | 3 | 0 |
 | `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 46 | 1 |
 | `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 22 | 4 |
-| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 16 | 0 |
+| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 223 | 0 |
 | `ts-structural-typing` | a value accepted for its shape, not its declared name: literals and classes that never say `implements` | conformance/types/typeRelationships; typed paths | 31 | 0 |
 | `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 14 | 2 |
 | `ts-tagged-templates` | a tagged template with a typed tag function | conformance/es6/templates | 1 | 0 |
@@ -313,13 +345,16 @@ the admission criteria.
 | `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 2 | 0 |
 | `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 2 | 0 |
 | `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 2 | 0 |
-| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 145 | 0 |
+| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 352 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 4 | 0 |
 | `ts-type-assertions` | a type assertion (`x as T`, `<T>x`), erased, never a conversion | conformance/expressions/asOperator; conformance/expressions/typeAssertions; ts-eslint TSAsExpression, TSTypeAssertion | 5 | 0 |
 | `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 96 | 0 |
 | `ts-type-operators` | values flowing through type-level operators: keyof, typeof, indexed access, mapped and conditional types | conformance/types (keyof, typeQueries, mapped, conditional) | 18 | 0 |
 | `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 511 | 0 |
 | `ts-typeof-type` | `typeof x` in a type position | conformance/types/typeQueries; ts-eslint TSTypeQuery | 6 | 0 |
+| `ts-unicode-case-mapping` | default lower/uppercase mappings, expansions, Final_Sigma, surrogate handling and newly assigned letters | Unicode contracts; UCD SpecialCasing, DerivedAge and UnicodeData | 207 | 0 |
+| `ts-unicode-exhaustive` | every code point, including lone surrogates, checked by a Node-generated FNV-1a UTF-16 hash per 4096-point block | Unicode contracts: Staying identical to node, exhaustive layer | 34 | 0 |
+| `ts-unicode-sequences` | exact contextual strings or API observations that a per-code-point sweep cannot establish | Unicode contracts: Staying identical to node, sequence and behaviour layers | 173 | 0 |
 | `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 135 | 0 |
 | `ts-unique-symbol` | a `unique symbol` constant as a member key | conformance/types/uniqueSymbol | 1 | 0 |
 | `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 191 | 0 |
