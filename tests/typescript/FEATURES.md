@@ -93,6 +93,8 @@ flows through it.
 | `resource-management/` | `using`, `await using`, DisposableStack |
 | `soundness/` | checker-accepted false type claims from variance, aliases and guards, with node as the oracle |
 | `symbols/` | symbols as keys, unique symbols, well-known symbols |
+| `throw-routes/` | exception identity, ordered cleanup and retained effects across typed routes, held to node |
+| `throw-routes-controls/` | direct calls to the same throwing bodies inside the caller try, with the same observations |
 | `tuples/` | tuples with optional, rest and labelled elements, readonly, variadic |
 | `type-operators/` | values through keyof, typeof, indexed access, mapped and conditional types |
 | `typed-paths/` | where a static type and the run-time value part ways, and where a number's representation shows |
@@ -449,7 +451,7 @@ land without another open Unicode pull request.
 <!-- tags:begin -->
 | tag | meaning | source | cases | pending |
 | --- | --- | --- | ---: | ---: |
-| `ts-abstract` | an `abstract` class and its abstract members | conformance/classes/classDeclarations/classAbstractKeyword; ts-eslint TSAbstractMethodDefinition, TSAbstractPropertyDefinition | 7 | 1 |
+| `ts-abstract` | an `abstract` class and its abstract members | conformance/classes/classDeclarations/classAbstractKeyword; ts-eslint TSAbstractMethodDefinition, TSAbstractPropertyDefinition | 9 | 1 |
 | `ts-accessor-fields` | an `accessor` field (auto-accessor), static, private or abstract | conformance/classes/propertyMemberDeclarations/autoAccessor; ts-eslint AccessorProperty, TSAbstractAccessorProperty | 0 | 7 |
 | `ts-accessors` | `get`/`set` accessors on a class or an object literal | conformance/classes/propertyMemberDeclarations; typed paths | 98 | 4 |
 | `ts-ambient` | an ambient declaration (`declare var/function/class/namespace/global`), which emits nothing | conformance/ambient; ts-eslint TSDeclareFunction, `declare` modifiers | 6 | 1 |
