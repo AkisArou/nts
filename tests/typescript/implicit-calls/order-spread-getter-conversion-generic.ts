@@ -7,7 +7,7 @@ interface TextHook { toString(): string; }
 interface Source { readonly item: TextHook; readItem(): TextHook; }
 const log: string[] = [];
 let state = 0;
-class Text implements TextHook {
+class OrderTextValue implements TextHook {
   value: number;
   constructor(value: number) { this.value = value; }
   toString(): string { state += 10; log.push(`toString:${this.value}:${state}`); return `text:${this.value}`; }
@@ -15,7 +15,7 @@ class Text implements TextHook {
 function render<T extends Source>(source: T): string { return String({ ...source }.item); }
 for (const n of [-2, 0, 3]) {
   log.length = 0; state = 0;
-  const text = new Text(n);
+  const text = new OrderTextValue(n);
   const source: Source = {
     readItem(): TextHook { state++; log.push(`get:${n}:${state}`); return text; },
     get item(): TextHook { return this.readItem(); }

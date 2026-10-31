@@ -7,7 +7,7 @@ interface Key { toString(): string; }
 interface TargetView { value: number; stored: number; writeValue(value: number): void; }
 const log: string[] = [];
 let state = 0;
-class PropertyKey implements Key {
+class OrderPropertyKey implements Key {
   input: number;
   constructor(input: number) { this.input = input; }
   toString(): string { state++; log.push(`key:${this.input}:${state}`); return "value"; }
@@ -21,7 +21,7 @@ function assign(target: TargetView, key: string | Key, value: number): TargetVie
   return Object.assign(target, Object.fromEntries([[key, value]]));
 }
 for (const n of [-2, 0, 3]) {
-  const keys: (string | Key)[] = ["value", new PropertyKey(n)];
+  const keys: (string | Key)[] = ["value", new OrderPropertyKey(n)];
   for (const key of keys) {
     log.length = 0; state = 0;
     const target = new Target(), result = assign(target, key, n);
