@@ -1,0 +1,25 @@
+/*---
+description: Map.groupBy keeps typed union keys and group order through a readonly reader.
+features: [ts-map-set-contents, ts-contents-enumeration, ts-map-set, ts-functions, ts-iteration, ts-typeof-operator, ts-readonly, ts-interfaces, ts-arrays, ts-arrow-functions, ts-spread, ts-numbers, ts-unions, ts-strings]
+---*/
+// Write groups with typed union keys; read a ReadonlyMap; node retains key identity, ordered rows and exact numeric values.
+interface Row { key: number | string; value: number }
+function check(n: number): void {
+  const first: number | string = n, second: number | string = String(n);
+  const rows: Row[] = [{ key: first, value: n }, { key: second, value: n + 1 },
+    { key: first, value: n + 2 }, { key: second, value: n + 3 }];
+  const grouped: Map<number | string, Row[]> = Map.groupBy(rows, (row: Row): number | string => row.key);
+  const view: ReadonlyMap<number | string, Row[]> = grouped;
+  const keys = Array.from(view.keys()), types: string[] = [];
+  for (const key of keys) types.push(typeof key);
+  assert.compareArray(keys, [n, String(n)]); assert.compareArray(types, ["number", "string"]);
+  assert.sameValue(view.size, 2);
+  const a = view.get(first), b = view.get(second);
+  if (a === undefined || b === undefined) throw new Test262Error("missing group");
+  assert.compareArray(a, [rows[0], rows[2]]); assert.compareArray(b, [rows[1], rows[3]]);
+  assert.compareArray(a.map(row => row.value), [n, n + 2]);
+  assert.compareArray(b.map(row => row.value), [n + 1, n + 3]);
+  for (const row of [...a, ...b]) { assert.sameValue(typeof row, "object"); assert.sameValue(typeof row.value, "number"); }
+  assert.sameValue(view.has("missing"), false);
+}
+for (const n of [2, 9, 40]) check(n);
