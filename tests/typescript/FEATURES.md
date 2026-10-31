@@ -152,8 +152,7 @@ A compiler refusal remains a finding and does not alter the case.
 | generics over number, string, boolean, a class, a union, a function, an array and a nested generic, in a function, a class, a method, an interface member, a constraint and a default | `generics/<position>-<kind>.ts`, 48 cases |
 | interfaces: one implementing class, several in different field orders, an object literal | `typed-paths/interface-*.ts`, `interfaces/field-orders-differ.ts`, `interfaces/literals-in-different-orders.ts`, `interfaces/classes-and-literals-mixed.ts` |
 | structural assignment between classes and literals | `objects/class-to-literal-type.ts`, `objects/literal-to-class-type.ts`, `interfaces/class-without-implements.ts` |
-| unions and narrowing: typeof, instanceof, `in`, discriminants, type guards, assertion functions | `unicode/` | exhaustive code-point blocks, contextual sequences and Unicode conformance inputs, with the pinned node as the oracle |
-| `unions/` |
+| unions and narrowing: typeof, instanceof, `in`, discriminants, type guards, assertion functions | `unions/` |
 | tuples with optional, rest and labelled elements; readonly arrays and tuples | `tuples/` |
 | index signatures and Record | `interfaces/`, `objects/record-*.ts`, `typed-paths/missing-record-key.ts` |
 | optional, default and rest parameters; overloads | `functions/` |
