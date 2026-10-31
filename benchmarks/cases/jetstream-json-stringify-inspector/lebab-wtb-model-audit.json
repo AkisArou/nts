@@ -1,0 +1,74 @@
+{
+  "name": "lebab-wtb",
+  "status": "blocked-active-prototype-preserving-copy",
+  "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "rule": "The current docs/contributing/cloud-agents.md forbids prototype/descriptor reflection. The executed Recast TreeCopier.copy clones each runtime prototype and defines a non-enumerable original-node backlink.",
+  "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/lebab.bundle.js",
+  "functions": [
+    {
+      "name": "TreeCopier.copy",
+      "span": [
+        38781,
+        38856
+      ],
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/web-tooling-benchmark/dist/lebab.bundle.js#L38781-L38856",
+      "criticalSpan": [
+        38797,
+        38806
+      ],
+      "operation": "Object.create(Object.getPrototypeOf(node), {original:{value:node,configurable:false,enumerable:false,writable:true}})",
+      "calls": 3310
+    }
+  ],
+  "originalInput": [
+    {
+      "preloadKey": "preact-8.2.5.js",
+      "path": "web-tooling-benchmark/third_party/preact-8.2.5.js",
+      "kind": "text-input",
+      "executed": false,
+      "sha256": "e5b962b9e5d1ee004d580358fa2e3432599b46fbb413a6d67f02709eb4c72922"
+    }
+  ],
+  "originalTransforms": [
+    "arg-rest",
+    "arg-spread",
+    "arrow",
+    "class",
+    "for-of",
+    "let",
+    "template",
+    "includes",
+    "obj-method",
+    "obj-shorthand"
+  ],
+  "originalOutput": {
+    "node": "v24.20.0",
+    "completeRuns": 1,
+    "successful": true,
+    "summary": [
+      {
+        "keys": [
+          "code",
+          "warnings"
+        ],
+        "codeLength": 21316,
+        "warnings": 35
+      }
+    ],
+    "fullResultJsonSha256": "7fa0f78858a5a3ecf83de29f500e9d43aea825e93be3e11c66ba11c028a906f1"
+  },
+  "proof": {
+    "script": "wtb-remaining-model-trace.mjs",
+    "trace": "lebab-wtb/model-trace.json",
+    "unchangedPinnedBundle": true,
+    "codeGenerationDisabled": true,
+    "corePrototypeReads": 3310
+  },
+  "notIndependentBlockers": [
+    "Generated _createSuper/Reflect.construct and super-method descriptor helpers implement fixed declared classes; those could be translated back to class syntax and are not the reason for this finding.",
+    "Own-symbol enumeration by itself is not the stated prototype/descriptor restriction.",
+    "Static Webpack export descriptors are packaging."
+  ],
+  "action": "No production port created. Replacing prototype-preserving copies with a different AST representation or dropping the hidden original backlink would alter the original algorithm.",
+  "ruleSource": "https://github.com/AkisArou/nts/blob/main/docs/contributing/cloud-agents.md"
+}
