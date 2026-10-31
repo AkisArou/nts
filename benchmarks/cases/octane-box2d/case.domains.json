@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 3,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "A finite count of complete fresh original nts worlds with all 24 scene steps, boxes, circles and joints; bound generated CPU work."
+      }
+    }
+  }
+}

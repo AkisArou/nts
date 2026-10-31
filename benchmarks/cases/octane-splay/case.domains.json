@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 8000,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "A finite initial tree population retaining the original 8000-node configuration, original depth-five payloads and all 80 modifications."
+      }
+    }
+  }
+}

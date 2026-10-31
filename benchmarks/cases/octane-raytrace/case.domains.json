@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 4,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "Complete original RayTrace scene repetitions; preserve the benchmark seed of four while bounding generated CPU work."
+      }
+    }
+  }
+}

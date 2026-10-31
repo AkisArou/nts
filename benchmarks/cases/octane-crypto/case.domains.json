@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 3,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "A finite count of complete original encrypt/decrypt pairs, covering original seed one and within-call RNG progress across three pairs."
+      }
+    },
+    "render": {
+      "n": {
+        "min": 0,
+        "max": 3,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "A finite count of complete original encrypt/decrypt pairs, covering original seed one and within-call RNG progress across three pairs."
+      }
+    }
+  }
+}

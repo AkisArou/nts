@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "third-party",
+      "upstream": [
+        "https://github.com/chromium/octane/blob/570ad1ccfe86e3eecba0636c8f932ac08edec517/navier-stokes.js"
+      ]
+    }
+  }
+}

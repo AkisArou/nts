@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 15,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "A finite count of original 128x128 fluid updates including the original fifteenth-frame validation; bound generated CPU work."
+      }
+    }
+  }
+}
