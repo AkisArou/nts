@@ -1,0 +1,5243 @@
+{
+  "schemaVersion": 1,
+  "id": "2026-10-30-20465399f76e-9f9d7df892a245baa7583d7c603a27da",
+  "startedAt": "2026-10-30T22:15:50.043Z",
+  "finishedAt": "2026-10-30T22:18:05.400Z",
+  "complete": false,
+  "inventory": [
+    "absences",
+    "accumulate",
+    "array-copying-methods",
+    "array-from",
+    "array-methods",
+    "array-mutations",
+    "array-predicates",
+    "arrays",
+    "awfy-bounce",
+    "awfy-list",
+    "awfy-mandelbrot",
+    "awfy-nbody",
+    "awfy-permute",
+    "awfy-queens",
+    "awfy-sieve",
+    "awfy-towers",
+    "bigint",
+    "bytes",
+    "case-convert",
+    "case-convert-cjk",
+    "case-convert-greek",
+    "case-convert-latin1",
+    "case-convert-unchanged",
+    "checksum",
+    "clbg-binary-trees",
+    "clbg-fannkuch-redux",
+    "clbg-fasta",
+    "clbg-k-nucleotide",
+    "clbg-mandelbrot",
+    "clbg-reverse-complement",
+    "clbg-spectral-norm",
+    "closure-merge",
+    "closures",
+    "cyclic-churn",
+    "dispatch",
+    "elementwise",
+    "erasure-stored-typed",
+    "erasure-stored-unknown",
+    "erasure-typed",
+    "erasure-unknown",
+    "event-state",
+    "exceptions",
+    "face-fields",
+    "fib",
+    "generator",
+    "generator-dispatched",
+    "generic-classes",
+    "growth-fixed",
+    "growth-grown",
+    "immutable-update",
+    "in-narrowing",
+    "instanceof",
+    "json-build-append",
+    "json-build-join",
+    "json-parse",
+    "json-quote",
+    "json-scan",
+    "json-serialize",
+    "json-stringify-builtin",
+    "json-stringify-doc",
+    "json-stringify-fused",
+    "json-stringify-inline",
+    "json-stringify-typed",
+    "logical-assignment",
+    "loop",
+    "map-and-set",
+    "map-entries-top-k",
+    "map-literal-keys",
+    "map-word-counts",
+    "module-closures",
+    "node-utf8",
+    "number-format",
+    "number-format-double",
+    "objects",
+    "optional-chain",
+    "pipeline",
+    "printer-erased",
+    "record-word-counts",
+    "release-acyclic",
+    "sort-objects",
+    "str-append-length",
+    "str-append-loop",
+    "str-compare",
+    "str-concat-pair",
+    "str-equal",
+    "str-index-of",
+    "str-index-read",
+    "str-join",
+    "str-map-keys",
+    "str-search-defaults",
+    "str-slice-keep",
+    "str-split",
+    "str-template",
+    "str-to-number",
+    "strings",
+    "substrings",
+    "symbol-keyed-map",
+    "symbol-keys",
+    "tree-teardown",
+    "uniform-callback",
+    "uniform-callback-arguments",
+    "uniform-callback-default",
+    "upcast",
+    "user-iterable",
+    "utf8-encode"
+  ],
+  "columns": [
+    "nts C",
+    "nts LLVM",
+    "nts JVM",
+    "C++",
+    "Java",
+    "node",
+    "Bun JIT",
+    "Bun AOT",
+    "ScriptC",
+    "nts f64"
+  ],
+  "sourceCommit": "20465399f76e1118a86515b32f540fed60a25de4",
+  "compiler": {
+    "commit": "b9cd0844fdab51b0a547945714f6a0d9371f6c64",
+    "sha256": "ca76a295459de22196efe6ee9f6887c3139180b711085d47b38c9f0e3380d240"
+  },
+  "harness": {
+    "identity": "b3668f69896479879e3ed25ac4561c7340a618562ca7159d5de8db3ca8c3fdc6",
+    "contract": "opaque-bit-input-v1",
+    "files": [
+      {
+        "path": "benchmarks/common/bench.mjs",
+        "sha256": "525d5144bf145ce668aa760cc3deb93f993bd9651389b5b30c810efd181dc0aa"
+      },
+      {
+        "path": "benchmarks/common/main.cpp",
+        "sha256": "d023ff60d20266e2508327b1f910fdb8c0fde507659b649f67b6d63608832309"
+      },
+      {
+        "path": "benchmarks/common/harness.h",
+        "sha256": "2fd583e8cdf6e5dc8c52cf59d3d28e546302b0eea1fc145071a228bd5bd879f9"
+      },
+      {
+        "path": "benchmarks/common/Bench.java",
+        "sha256": "a9babb7fe876a4a93a2dd5847600d43bc413d6a831b1adc5cadc16c0db1725a5"
+      },
+      {
+        "path": "tooling/bench/src/main.rs",
+        "sha256": "b5ba509801c61988c7e28b72b0609154c84c15ed3e2a704c03c5e0ebae7fc17e"
+      },
+      {
+        "path": "tooling/bench/host-columns.ts",
+        "sha256": "232ed5af9abab467519a90b4f59423077b79b1ba8e7b598b6811ab1baa6579ce"
+      },
+      {
+        "path": "tooling/bench/typed-timer.ts",
+        "sha256": "e1868c9dfecbeef05b3c0be5e0d58ac0377d17a7f060b357d83b8fd9a25ccc19"
+      }
+    ]
+  },
+  "machine": {
+    "identity": "2a0ebdca38ed2e192ae68a1a65aa04237c5e233e3518f1064eebe10c4d7efc61",
+    "conditions": {
+      "coreDumps": "all comparator children disable core dumps",
+      "cpu": "4",
+      "sibling": 5,
+      "start": {
+        "cpu5": "cpu5 68327 32208 398981 23778858 1180514 48420 16728 0 0 0",
+        "landingLockHeld": false,
+        "load": "3.13 6.06 8.71 4/1993 3588646",
+        "memoryAvailableBytes": 25646804992,
+        "time": "2026-10-30T22:15:50.084Z"
+      },
+      "end": {
+        "time": "2026-10-30T22:18:05.402Z",
+        "load": "3.81 5.08 7.96 6/2013 3602579",
+        "memoryAvailableBytes": 25559654400,
+        "cpu5": "cpu5 68327 32208 398990 23792348 1180550 48421 16729 0 0 0",
+        "landingLockHeld": false
+      }
+    }
+  },
+  "comparators": {
+    "node": {
+      "version": "v24.20.0",
+      "commit": null,
+      "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+      "command": [
+        "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+      ]
+    },
+    "Bun JIT": {
+      "version": "1.4.4-canary.1+3a9ea0043",
+      "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+      "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+      "command": [
+        "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+      ]
+    },
+    "Bun AOT": {
+      "version": "1.4.4-canary.1+3a9ea0043",
+      "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+      "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+      "command": [
+        "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+        "build",
+        "--compile",
+        "--aot"
+      ]
+    },
+    "ScriptC": {
+      "version": "0.4.5",
+      "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+      "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+      "command": [
+        "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+        "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+        "build",
+        "--node-islands=off",
+        "--optimization=release",
+        "--target-cpu=native"
+      ]
+    }
+  },
+  "verdictPolicy": {
+    "version": 1,
+    "authority": "docs/README.md#the-bar"
+  },
+  "provenance": {
+    "kind": "official nts-bench",
+    "pins": {
+      "bun": {
+        "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+        "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+        "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+        "version": "1.4.4-canary.1+3a9ea0043",
+        "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+      },
+      "node": "v24.20.0",
+      "scriptc": {
+        "argvPrefix": false,
+        "command": "packages/cli/dist/main.js",
+        "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+        "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+        "files": [
+          {
+            "path": "packages/cli/dist/main.js",
+            "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+          },
+          {
+            "path": "packages/compiler/dist/index.js",
+            "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+          },
+          {
+            "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+            "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+          },
+          {
+            "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+            "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+          }
+        ],
+        "nodeIslands": "off",
+        "version": "0.4.5"
+      },
+      "version": 1
+    },
+    "toolchain": {
+      "clang": "clang version 23.1.3\nTarget: x86_64-pc-linux-gnu\nThread model: posix\nInstalledDir: /usr/bin",
+      "java": "openjdk version \"21.0.5\" 2024-10-15 LTS\nOpenJDK Runtime Environment Corretto-21.0.5.11.1 (build 21.0.5+11-LTS)\nOpenJDK 64-Bit Server VM Corretto-21.0.5.11.1 (build 21.0.5+11-LTS, mixed mode, sharing)\n"
+    }
+  },
+  "rows": [
+    {
+      "name": "array-from",
+      "workloadIdentity": "11be0ba9eb31d6b32840fa5e2427d515f9e18866e81779572a21a1ee4fc728a4",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398983 23780536 1180518 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.88 5.86 8.60 2/1995 3590606",
+            "memoryAvailableBytes": 25724407808,
+            "time": "2026-10-30T22:16:06.900Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398981 23778866 1180514 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "3.13 6.06 8.71 4/1993 3588686",
+            "memoryAvailableBytes": 25675386880,
+            "time": "2026-10-30T22:15:50.159Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/array-from/case.ts",
+              "digest": "623982ee5e1dd4d45ef14d8e7c0f7e67",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+              "sha256": "3a2ddd4ebd65b8cb6083cf0d3a4cf8e13a2033ded99c0a71ed92a7f27d87621f"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "5e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 280745.6257,
+          "spread": 1.006104916490601,
+          "checksum": "41278f5000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 280745.6257,
+            "checksum": "41278f5000000000",
+            "spread": 1.006104916490601,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 281899.6,
+          "spread": 1.0148771516525743,
+          "checksum": "41278f5000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 281899.6,
+            "checksum": "41278f5000000000",
+            "spread": 1.0148771516525743,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 492196.2475,
+          "spread": 1.004322647746314,
+          "checksum": "41278f5000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    80,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:03.522Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:02.723Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c5831b4c000000\n",
+                "stdout": "493187.7968 41278f5000000000\n",
+                "wallNanoseconds": 798203551
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    83,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:04.356Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:03.522Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c73cda68000000\n",
+                "stdout": "493119.7871 41278f5000000000\n",
+                "wallNanoseconds": 834175615
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    83,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:05.189Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:04.356Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c73cda68000000\n",
+                "stdout": "492196.2475 41278f5000000000\n",
+                "wallNanoseconds": 832909388
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    1,
+                    79,
+                    2,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:06.001Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:05.189Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c633ce24000000\n",
+                "stdout": "493111.2124 41278f5000000000\n",
+                "wallNanoseconds": 811238462
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    81,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:06.813Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:06.001Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c6165b00000000\n",
+                "stdout": "494323.8385 41278f5000000000\n",
+                "wallNanoseconds": 812704838
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/array-from.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    3,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:06.836Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:06.814Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "2531616 41278f5000000000\n",
+                "wallNanoseconds": 22581534
+              },
+              "status": "OK",
+              "wallNanoseconds": 22581534
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5703936735112959,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5727382145472371,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "clbg-k-nucleotide",
+      "workloadIdentity": "22d2cb35a603b7665d1b4d97f31fa25ea3934d8b501bdd00884fd8eb5bc34096",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398983 23782338 1180521 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.70 5.63 8.46 3/2006 3592201",
+            "memoryAvailableBytes": 25703817216,
+            "time": "2026-10-30T22:16:24.957Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398983 23780539 1180518 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.88 5.86 8.60 2/1995 3590620",
+            "memoryAvailableBytes": 25724674048,
+            "time": "2026-10-30T22:16:06.931Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/clbg-k-nucleotide/case.ts",
+              "digest": "6874bf50c592b1f8ad5481dbe2812947",
+              "rewritten_by": null
+            },
+            {
+              "path": "nts-workspace:///../../benchmarks/common/clbg-fasta.ts",
+              "digest": "a1532372ffcfb8c0037375ff685463bd",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+              "sha256": "2d9df8b99c78d897321ce28430398a2bb460ec72b9880fb58fdf7ba3755b4027"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "1e3"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 982057.4688,
+          "spread": 1.0172903200061685,
+          "checksum": "41e176b309e00000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 982057.4688,
+            "checksum": "41e176b309e00000",
+            "spread": 1.0172903200061685,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 990243.9694,
+          "spread": 1.0097055050038057,
+          "checksum": "41e176b309e00000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 990243.9694,
+            "checksum": "41e176b309e00000",
+            "spread": 1.0097055050038057,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 1532254.5846,
+          "spread": 1.0195309891716282,
+          "checksum": "41e176b309e00000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+                  "1e3"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    80,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:21.568Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:20.765Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 4263c876d12fc000\n",
+                "stdout": "1539585.9483 41e176b309e00000\n",
+                "wallNanoseconds": 803404386
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+                  "1e3"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    85,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:22.419Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:21.569Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 42662bb14b896000\n",
+                "stdout": "1532254.5846 41e176b309e00000\n",
+                "wallNanoseconds": 850648468
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+                  "1e3"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    84,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:23.251Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:22.419Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 426525bccdf54000\n",
+                "stdout": "1562181.0323 41e176b309e00000\n",
+                "wallNanoseconds": 832016072
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+                  "1e3"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    84,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:24.096Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:23.252Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 4265d45fcc580000\n",
+                "stdout": "1543474.3125 41e176b309e00000\n",
+                "wallNanoseconds": 844225217
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+                  "1e3"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    77,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:24.867Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:24.096Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 4262c282539ba000\n",
+                "stdout": "1541836.2182 41e176b309e00000\n",
+                "wallNanoseconds": 770905450
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/clbg-k-nucleotide.hosts/entry.ts",
+                  "1e3"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    3,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:24.899Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:24.867Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "7228636 41e176b309e00000\n",
+                "wallNanoseconds": 31574097
+              },
+              "status": "OK",
+              "wallNanoseconds": 31574097
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6409231720826402,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6462659530292784,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "map-and-set",
+      "workloadIdentity": "34778faa6f61b4383ee3b3979e5dae8f59ad964180922b0480432e2cbb8fe634",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398983 23783441 1180523 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.59 5.51 8.39 2/1992 3593189",
+            "memoryAvailableBytes": 25737043968,
+            "time": "2026-10-30T22:16:36.009Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398983 23782342 1180521 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.70 5.63 8.46 2/2006 3592215",
+            "memoryAvailableBytes": 25707319296,
+            "time": "2026-10-30T22:16:24.994Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/map-and-set/case.ts",
+              "digest": "e63b6d9fcff92dea358e103bb073608e",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+              "sha256": "5a7e856fd1f3e9984be0ea2081a8a7184c31c1e417d52ca7ed76a7b96198799a"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "3e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 4573.9062,
+          "spread": 1.0090788044582113,
+          "checksum": "40e0500000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 4573.9062,
+            "checksum": "40e0500000000000",
+            "spread": 1.0090788044582113,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 4566.9157,
+          "spread": 1.037094203424863,
+          "checksum": "40e0500000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 4566.9157,
+            "checksum": "40e0500000000000",
+            "spread": 1.037094203424863,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 7271.2528,
+          "spread": 1.0162158300973938,
+          "checksum": "40e0500000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    37,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:34.497Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:34.134Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c69c6380000000\n",
+                "stdout": "7311.9676 40e0500000000000\n",
+                "wallNanoseconds": 363269956
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    36,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:34.857Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:34.497Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c71a8e40000000\n",
+                "stdout": "7325.9351 40e0500000000000\n",
+                "wallNanoseconds": 359833607
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    33,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:35.194Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:34.857Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c4032500000000\n",
+                "stdout": "7300.8445 40e0500000000000\n",
+                "wallNanoseconds": 336509514
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    36,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:35.551Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:35.194Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c66e8280000000\n",
+                "stdout": "7389.1622 40e0500000000000\n",
+                "wallNanoseconds": 357327640
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    37,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:35.916Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:35.552Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c8847d40000000\n",
+                "stdout": "7271.2528 40e0500000000000\n",
+                "wallNanoseconds": 364343082
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-and-set.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    2,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:35.938Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:35.916Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "1404462 40e0500000000000\n",
+                "wallNanoseconds": 22258558
+              },
+              "status": "OK",
+              "wallNanoseconds": 22258558
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6290396339953963,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6280782453334588,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "map-entries-top-k",
+      "workloadIdentity": "335b1505e0c1f31e765afa9133a1ad460541336e776b964165802c778f60fa78",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398983 23784806 1180530 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.46 5.33 8.29 2/2029 3594531",
+            "memoryAvailableBytes": 25736060928,
+            "time": "2026-10-30T22:16:49.732Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398983 23783444 1180523 48420 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.59 5.51 8.39 3/1998 3593257",
+            "memoryAvailableBytes": 25736597504,
+            "time": "2026-10-30T22:16:36.039Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/map-entries-top-k/case.ts",
+              "digest": "2bb64a8d622ccbc3e22bda52649abf59",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+              "sha256": "e5cea00a8a7796bfc738303911f21f1b929bed8bc6b18449ef3a698460880962"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "3e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 15687.7031,
+          "spread": 1.014251856920979,
+          "checksum": "40f635a000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 15687.7031,
+            "checksum": "40f635a000000000",
+            "spread": 1.014251856920979,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 16016.1246,
+          "spread": 1.0112289523521814,
+          "checksum": "40f635a000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 16016.1246,
+            "checksum": "40f635a000000000",
+            "spread": 1.0112289523521814,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 24651.959,
+          "spread": 1.0353544073312797,
+          "checksum": "40f635a000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    75,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:46.504Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:45.754Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41d685c98d800000\n",
+                "stdout": "25122.4282 40f635a000000000\n",
+                "wallNanoseconds": 749311532
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    78,
+                    1,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:47.288Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:46.504Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41d8d1fdc7000000\n",
+                "stdout": "24651.9590 40f635a000000000\n",
+                "wallNanoseconds": 783493831
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    79,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:48.078Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:47.288Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41d8c794a4000000\n",
+                "stdout": "25086.1781 40f635a000000000\n",
+                "wallNanoseconds": 789868238
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    78,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:48.855Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:48.078Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41d81164bf800000\n",
+                "stdout": "25202.7201 40f635a000000000\n",
+                "wallNanoseconds": 777539889
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    77,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:49.632Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:48.855Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41d799abad000000\n",
+                "stdout": "25523.5144 40f635a000000000\n",
+                "wallNanoseconds": 776315861
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-entries-top-k.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    3,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:16:49.656Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:16:49.632Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "1232422 40f635a000000000\n",
+                "wallNanoseconds": 23872565
+              },
+              "status": "OK",
+              "wallNanoseconds": 23872565
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6363674018766623,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6496897305402788,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "map-literal-keys",
+      "workloadIdentity": "6c6289b3207c38021bc46be6fd1720cd112f75d2de40d33eb1e3a59d58fda7f9",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398983 23786498 1180533 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.36 5.17 8.19 2/1993 3596208",
+            "memoryAvailableBytes": 25827110912,
+            "time": "2026-10-30T22:17:06.666Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398983 23784809 1180530 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.46 5.33 8.29 2/2029 3594545",
+            "memoryAvailableBytes": 25727565824,
+            "time": "2026-10-30T22:16:49.760Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/map-literal-keys/case.ts",
+              "digest": "c406ae96fe02cea03df565e49fce5827",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+              "sha256": "c47b8c7a81260bfdeddb906619b60b7c97ff75be1cbeed4541e4bdeccb51e188"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "5e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 26290.701,
+          "spread": 1.0034973544448282,
+          "checksum": "40d4000000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 26290.701,
+            "checksum": "40d4000000000000",
+            "spread": 1.0034973544448282,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 27627.0039,
+          "spread": 1.000713255048261,
+          "checksum": "40d4000000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 27627.0039,
+            "checksum": "40d4000000000000",
+            "spread": 1.000713255048261,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 46430.4565,
+          "spread": 1.257085512394219,
+          "checksum": "40d4000000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    77,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:03.456Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:02.687Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41a23fe000000000\n",
+                "stdout": "58367.0542 40d4000000000000\n",
+                "wallNanoseconds": 768854147
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    80,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:04.255Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:03.456Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41a7d40000000000\n",
+                "stdout": "46430.4565 40d4000000000000\n",
+                "wallNanoseconds": 798953701
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    76,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:05.023Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:04.256Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41a30b0000000000\n",
+                "stdout": "55560.8679 40d4000000000000\n",
+                "wallNanoseconds": 767517506
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    79,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:05.812Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:05.023Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41a5d6a000000000\n",
+                "stdout": "51375.7870 40d4000000000000\n",
+                "wallNanoseconds": 788438473
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    77,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:06.584Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:05.812Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41a5e00000000000\n",
+                "stdout": "47419.7042 40d4000000000000\n",
+                "wallNanoseconds": 772161356
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-literal-keys.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    3,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:06.607Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:06.584Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "2224529 40d4000000000000\n",
+                "wallNanoseconds": 22606147
+              },
+              "status": "OK",
+              "wallNanoseconds": 22606147
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5662382621631127,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5950190022361723,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "map-word-counts",
+      "workloadIdentity": "8acac277349fe857b52fdf28f572303e28efc46d36d35e7781ba091d048c843d",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398984 23787895 1180539 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.74 5.11 8.12 6/2045 3597933",
+            "memoryAvailableBytes": 24258826240,
+            "time": "2026-10-30T22:17:20.709Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398983 23786500 1180533 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.36 5.17 8.19 2/1993 3596222",
+            "memoryAvailableBytes": 25823092736,
+            "time": "2026-10-30T22:17:06.694Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/map-word-counts/case.ts",
+              "digest": "e3a56d829543f67d8ac7de5e18a68a72",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+              "sha256": "40ae7368ccfaf24867582f0357925a83ce0418a87213632421cd2ac755672d1d"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "3e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 4467.6497,
+          "spread": 1.0271107647495281,
+          "checksum": "40d2ee0000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 4467.6497,
+            "checksum": "40d2ee0000000000",
+            "spread": 1.0271107647495281,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 4540.3049,
+          "spread": 1.0415246121466424,
+          "checksum": "40d2ee0000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 4540.3049,
+            "checksum": "40d2ee0000000000",
+            "spread": 1.0415246121466424,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 8454.158,
+          "spread": 1.0622565961033612,
+          "checksum": "40d2ee0000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    46,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:18.741Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:18.278Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c0916ee0000000\n",
+                "stdout": "8598.4510 40d2ee0000000000\n",
+                "wallNanoseconds": 462856966
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    46,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:19.198Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:18.742Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41bf1d41f0000000\n",
+                "stdout": "8980.4851 40d2ee0000000000\n",
+                "wallNanoseconds": 456260391
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    45,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:19.650Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:19.198Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c0df130c000000\n",
+                "stdout": "8454.1580 40d2ee0000000000\n",
+                "wallNanoseconds": 451365431
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    47,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:20.126Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:19.650Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c16c4ec0000000\n",
+                "stdout": "8553.8508 40d2ee0000000000\n",
+                "wallNanoseconds": 475841641
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    47,
+                    1,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:20.605Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:20.126Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c0ff9c1c000000\n",
+                "stdout": "8952.0219 40d2ee0000000000\n",
+                "wallNanoseconds": 479178873
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/map-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    2,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:20.627Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:20.605Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "1002121 40d2ee0000000000\n",
+                "wallNanoseconds": 21466099
+              },
+              "status": "OK",
+              "wallNanoseconds": 21466099
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5284559030006301,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5370499226534446,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "record-word-counts",
+      "workloadIdentity": "abbc76bd60d3a4d7117c70aa8b3118c958970dba0080d9e89741127e70725096",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398986 23789350 1180540 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "3.54 5.17 8.09 6/2015 3599233",
+            "memoryAvailableBytes": 24049680384,
+            "time": "2026-10-30T22:17:35.294Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398984 23787898 1180539 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "2.74 5.11 8.12 6/2045 3597947",
+            "memoryAvailableBytes": 24241618944,
+            "time": "2026-10-30T22:17:20.745Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/record-word-counts/case.ts",
+              "digest": "bcbc4431733e968d49eee2ddd674d13f",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+              "sha256": "7bac5d6e67c6b59147666380001442c8895fa0468c2e72ab2987136aa215b543"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "3e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 4782.4401,
+          "spread": 1.0222641784891358,
+          "checksum": "40d2ee0000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 4782.4401,
+            "checksum": "40d2ee0000000000",
+            "spread": 1.0222641784891358,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 4623.3334,
+          "spread": 1.0303121120358743,
+          "checksum": "40d2ee0000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 4623.3334,
+            "checksum": "40d2ee0000000000",
+            "spread": 1.0303121120358743,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 8254.3072,
+          "spread": 1.1148496629735325,
+          "checksum": "40d2ee0000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    46,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:33.305Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:32.851Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c079c560000000\n",
+                "stdout": "8284.0011 40d2ee0000000000\n",
+                "wallNanoseconds": 453547003
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    46,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:33.768Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:33.305Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c0e7f29c000000\n",
+                "stdout": "8580.9146 40d2ee0000000000\n",
+                "wallNanoseconds": 462906285
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    49,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:34.261Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:33.768Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c0df130c000000\n",
+                "stdout": "9202.3116 40d2ee0000000000\n",
+                "wallNanoseconds": 492989536
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    47,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:34.731Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:34.262Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c0bf4748000000\n",
+                "stdout": "8760.1014 40d2ee0000000000\n",
+                "wallNanoseconds": 469328389
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    47,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:35.197Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:34.731Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41c2496684000000\n",
+                "stdout": "8254.3072 40d2ee0000000000\n",
+                "wallNanoseconds": 466098025
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/record-word-counts.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    2,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:35.218Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:35.197Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "960085 40d2ee0000000000\n",
+                "wallNanoseconds": 21006453
+              },
+              "status": "OK",
+              "wallNanoseconds": 21006453
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5793872198020447,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.5601116226931803,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "str-map-keys",
+      "workloadIdentity": "55867d5871bbf2af48620d65e7c5bc71afd47993b96c1ca8a919711713392a29",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398989 23790649 1180547 48421 16729 0 0 0",
+            "landingLockHeld": false,
+            "load": "3.53 5.12 8.04 3/2036 3600571",
+            "memoryAvailableBytes": 24567869440,
+            "time": "2026-10-30T22:17:48.385Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398986 23789353 1180540 48421 16728 0 0 0",
+            "landingLockHeld": false,
+            "load": "3.54 5.17 8.09 6/2015 3599247",
+            "memoryAvailableBytes": 24049680384,
+            "time": "2026-10-30T22:17:35.322Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/str-map-keys/case.ts",
+              "digest": "067f33183d25977432b76886f5c793ed",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+              "sha256": "d5eb3dfacc1b202a352f44107870fdd77133897005257c8f1afcab46da5b0d67"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "3e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 3837.1601,
+          "spread": 1.0363498776087035,
+          "checksum": "41dc499d68000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 3837.1601,
+            "checksum": "41dc499d68000000",
+            "spread": 1.0363498776087035,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 3802.7783,
+          "spread": 1.006679852990641,
+          "checksum": "41dc499d68000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 3802.7783,
+            "checksum": "41dc499d68000000",
+            "spread": 1.006679852990641,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 5470.3142,
+          "spread": 1.0433939973685606,
+          "checksum": "41dc499d68000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    35,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:46.856Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:46.501Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 42cf6e7bfab32000\n",
+                "stdout": "5470.3142 41dc499d68000000\n",
+                "wallNanoseconds": 354919766
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    33,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:47.186Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:46.857Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 42cc2f898ae42000\n",
+                "stdout": "5537.9482 41dc499d68000000\n",
+                "wallNanoseconds": 329637295
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    36,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:47.540Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:47.186Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 42cf74025b717000\n",
+                "stdout": "5634.2008 41dc499d68000000\n",
+                "wallNanoseconds": 353533709
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    39,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:47.934Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:47.540Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 42d2a11b01b5c000\n",
+                "stdout": "5611.5657 41dc499d68000000\n",
+                "wallNanoseconds": 393482136
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    36,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:48.289Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:47.934Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 42ce70569880c000\n",
+                "stdout": "5707.6930 41dc499d68000000\n",
+                "wallNanoseconds": 355481618
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/str-map-keys.hosts/entry.ts",
+                  "3e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    2,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:17:48.315Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:17:48.289Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "1000360 41dc499d68000000\n",
+                "wallNanoseconds": 25346728
+              },
+              "status": "OK",
+              "wallNanoseconds": 25346728
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.7014514998059892,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.6951663398054906,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    },
+    {
+      "name": "symbol-keyed-map",
+      "workloadIdentity": "fb8ae4ef7e13b2da21126d8ffebcfba18b2d6530cdbdc647b0532e12560a9ae2",
+      "eligibleForBest": true,
+      "conditions": {
+        "spoiled": false,
+        "machine": {
+          "after": {
+            "cpu5": "cpu5 68327 32208 398990 23792344 1180550 48421 16729 0 0 0",
+            "landingLockHeld": false,
+            "load": "3.81 5.08 7.96 7/2013 3602543",
+            "memoryAvailableBytes": 25603645440,
+            "time": "2026-10-30T22:18:05.357Z"
+          },
+          "before": {
+            "cpu5": "cpu5 68327 32208 398989 23790652 1180547 48421 16729 0 0 0",
+            "landingLockHeld": false,
+            "load": "3.53 5.12 8.04 3/2036 3600585",
+            "memoryAvailableBytes": 24577290240,
+            "time": "2026-10-30T22:17:48.412Z"
+          }
+        },
+        "sourceCapture": {
+          "algorithm": "xxh3-128-le-checked-utf8-v1",
+          "workload": [
+            {
+              "path": "nts-workspace:///../../benchmarks/cases/symbol-keyed-map/case.ts",
+              "digest": "eafe828d921f6ccc4aff7cb7d4834cac",
+              "rewritten_by": null
+            }
+          ],
+          "declarations": [],
+          "drivers": []
+        },
+        "hostProvenance": {
+          "artifacts": [
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/timer.ts",
+              "sha256": "a7fd6ce1584be05e821555a911c0367e3a9f94a8e03c54917c988103d23916ec"
+            },
+            {
+              "path": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+              "sha256": "31747875e8ebd4acc98865f84286f1219e159ff559904965866e197cee4827f5"
+            }
+          ],
+          "builds": {
+            "Bun AOT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+                "build",
+                "--compile",
+                "--aot"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "Bun JIT": {
+              "command": [
+                "/home/akisarou/.cache/nts-comparators/pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun"
+              ],
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043"
+            },
+            "ScriptC": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                "/home/akisarou/.cache/nts-comparators/src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b/packages/cli/dist/main.js",
+                "build",
+                "--node-islands=off",
+                "--optimization=release",
+                "--target-cpu=native"
+              ],
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc",
+              "version": "0.4.5"
+            },
+            "node": {
+              "command": [
+                "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node"
+              ],
+              "commit": null,
+              "sha256": "89af8424dd53e560b1933f87ba650d8bf57c83ca5a04600eefb31f416aabbae7",
+              "version": "v24.20.0"
+            }
+          },
+          "input": [
+            "5e0"
+          ],
+          "pins": {
+            "bun": {
+              "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",
+              "path": "pins/bun-3a9ea00437f8065cd5a4604d7423299a769e2d9e/bun",
+              "sha256": "33a5ca779f1ec3f14066c844657e3fb8e77fd07cb4dd1051ec410ecd63e61b21",
+              "version": "1.4.4-canary.1+3a9ea0043",
+              "webkitCommit": "f495db1d248886d7de1077d0abe3a604694ebb4c"
+            },
+            "node": "v24.20.0",
+            "scriptc": {
+              "argvPrefix": false,
+              "command": "packages/cli/dist/main.js",
+              "commit": "8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "directory": "src/scriptc-8971d694b18a81a9a52b8f8208be22b182cb092b",
+              "files": [
+                {
+                  "path": "packages/cli/dist/main.js",
+                  "sha256": "a177dda72def2b3ef26637d330e687627749de440ccbaf5c58c9653311c6e0bc"
+                },
+                {
+                  "path": "packages/compiler/dist/index.js",
+                  "sha256": "d000050624a073e58935b9c4b0b729ff5ef3c232333f266c2cc0ea5d27a00c18"
+                },
+                {
+                  "path": "packages/llvm-linux-x64-gnu/bin/scriptc-llvm-codegen",
+                  "sha256": "2fab2e742db12a4c5f24e0c9da90cef259687b0712e96621c36f565dc2eea5d3"
+                },
+                {
+                  "path": "packages/runtime-linux-x64-gnu/runtime-pack.json",
+                  "sha256": "05e89ac94d4699ae8ed431936f8de344e2a558b1f52592f4c25d5d5ca73f0237"
+                }
+              ],
+              "nodeIslands": "off",
+              "version": "0.4.5"
+            },
+            "version": 1
+          },
+          "sourceHarness": "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.bench.mjs",
+          "timerContract": "opaque-bit-input-v1"
+        }
+      },
+      "cells": {
+        "nts C": {
+          "status": "OK",
+          "nanoseconds": 15557.6021,
+          "spread": 1.2820472185748986,
+          "checksum": "40c4000000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 15557.6021,
+            "checksum": "40c4000000000000",
+            "spread": 1.2820472185748986,
+            "warm_capped": false
+          }
+        },
+        "nts LLVM": {
+          "status": "OK",
+          "nanoseconds": 17313.6141,
+          "spread": 1.1525992253691275,
+          "checksum": "40c4000000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "ns_per_op": 17313.6141,
+            "checksum": "40c4000000000000",
+            "spread": 1.1525992253691275,
+            "warm_capped": false
+          }
+        },
+        "nts JVM": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "C++": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "Java": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        },
+        "node": {
+          "status": "OK",
+          "nanoseconds": 40536.296,
+          "spread": 1.0928202147527242,
+          "checksum": "40c4000000000000",
+          "verified": true,
+          "reason": null,
+          "details": {
+            "attempts": [
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    78,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:18:02.106Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:18:01.322Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 419a996000000000\n",
+                "stdout": "40536.2960 40c4000000000000\n",
+                "wallNanoseconds": 784042153
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    75,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:18:02.855Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:18:02.106Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 41980c4000000000\n",
+                "stdout": "42319.7188 40c4000000000000\n",
+                "wallNanoseconds": 748856203
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    79,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:18:03.644Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:18:02.855Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 419ad4c000000000\n",
+                "stdout": "41624.1565 40c4000000000000\n",
+                "wallNanoseconds": 789173309
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    1,
+                    79,
+                    3,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:18:04.463Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:18:03.645Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 419a5ae000000000\n",
+                "stdout": "44298.8837 40c4000000000000\n",
+                "wallNanoseconds": 818646968
+              },
+              {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    80,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:18:05.263Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:18:04.463Z",
+                "status": 0,
+                "stderr": "NTS_BENCH_SINK 419af72000000000\n",
+                "stdout": "41870.3268 40c4000000000000\n",
+                "wallNanoseconds": 800079361
+              }
+            ],
+            "build": null,
+            "coldStartup": {
+              "kind": "process launch through first completed workload, separate from warm throughput",
+              "receipt": {
+                "command": [
+                  "timeout",
+                  "--kill-after=10s",
+                  "180s",
+                  "prlimit",
+                  "--cpu=120:125",
+                  "--core=0:0",
+                  "--",
+                  "taskset",
+                  "-c",
+                  "4",
+                  "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+                  "/home/akisarou/Projects/nts-lanes/compiler2-collections/target/bench/symbol-keyed-map.hosts/entry.ts",
+                  "5e0"
+                ],
+                "cpu5": {
+                  "clockTicksPerSecond": 100,
+                  "niceTicks": 0,
+                  "ticks": [
+                    0,
+                    0,
+                    0,
+                    3,
+                    0,
+                    0,
+                    0,
+                    0
+                  ],
+                  "userTicks": 0
+                },
+                "cwd": "/home/akisarou/Projects/nts-lanes/compiler2-collections",
+                "finishedAt": "2026-10-30T22:18:05.287Z",
+                "signal": null,
+                "startedAt": "2026-10-30T22:18:05.264Z",
+                "status": 0,
+                "stderr": "",
+                "stdout": "2425311 40c4000000000000\n",
+                "wallNanoseconds": 23184194
+              },
+              "status": "OK",
+              "wallNanoseconds": 23184194
+            }
+          }
+        },
+        "Bun JIT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "Bun AOT": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "ScriptC": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Filtered native run requests the node oracle only",
+          "details": null
+        },
+        "nts f64": {
+          "status": "NOT_RUN",
+          "nanoseconds": null,
+          "spread": null,
+          "checksum": null,
+          "verified": false,
+          "reason": "Lane was not requested",
+          "details": null
+        }
+      },
+      "verdicts": {
+        "nts C": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.3837943678919258,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts LLVM": {
+          "node": {
+            "kind": "WON",
+            "ratio": 0.42711386605229046,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "NOT_COMPARABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        },
+        "nts JVM": {
+          "node": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun JIT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "Bun AOT": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          },
+          "ScriptC": {
+            "kind": "UNAVAILABLE",
+            "ratio": null,
+            "tolerance": null
+          }
+        }
+      }
+    }
+  ]
+}
