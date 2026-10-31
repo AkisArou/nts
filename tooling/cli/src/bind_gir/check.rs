@@ -190,12 +190,15 @@ fn probe_text(binding: &Binding) -> (String, BTreeMap<usize, (String, String)>) 
         let result = function.result.c.c_type_expanded();
         let symbol = &function.symbol;
         // A signal's `emit` names a thunk the compiler defines, which no
-        // header declares; so does a construction's (`CONSTRUCT_WITH`),
-        // whose builder is the support file's.
+        // header declares. Explicit property-operation producers likewise
+        // have no header declaration; an authored prefix is never an exemption.
         if symbol == super::map::EMIT
-            || symbol.starts_with(super::map::SET_BY_NAME)
-            || symbol.starts_with(super::map::GET_BY_NAME)
-            || symbol.starts_with(super::map::CONSTRUCT_WITH)
+            || function.intrinsic.as_deref().is_some_and(|intrinsic| {
+                matches!(
+                    nts_core::hir::native::GObjectThunk::from_intrinsic(intrinsic),
+                    Ok(Some(_))
+                )
+            })
         {
             continue;
         }
@@ -262,6 +265,60 @@ mod tests {
     #![allow(clippy::unwrap_used)]
 
     use super::Binding;
+
+    #[test]
+    fn property_witness_exemptions_require_the_producer_tag() {
+        use super::super::map::{Function, Mapped, Shape};
+        use nts_core::hir::native::{Scalar, Type};
+        let dir = crate::bind_scratch::directory("gir-property-provenance").unwrap();
+        let header = dir.join("property.h");
+        for (operation, symbol) in [
+            ("get", "nts_gobject_propget_i__value"),
+            ("set", "nts_gobject_prop_i__value"),
+            ("construct", "nts_gobject_with_i__value"),
+        ] {
+            std::fs::write(&header, format!("double {symbol}(void);\n")).unwrap();
+            for tagged in [false, true] {
+                // The tag alone distinguishes a generated operation from an
+                // authored header function with this formerly exempt spelling.
+                let function = Function {
+                    name: symbol.to_owned(),
+                    symbol: symbol.to_owned(),
+                    parameters: Vec::new(),
+                    result: Mapped {
+                        shape: Shape::Other,
+                        ts: "c_int".to_owned(),
+                        c: Type::Scalar(Scalar::Int),
+                    },
+                    c_parameters: Vec::new(),
+                    deprecated: false,
+                    free: None,
+                    raw_result_owned: false,
+                    no_escape: Vec::new(),
+                    returns: None,
+                    method: None,
+                    throws: None,
+                    finish: None,
+                    omissible: std::collections::BTreeMap::new(),
+                    method_only: false,
+                    statics: None,
+                    vfunc: None,
+                    gir_name: None,
+                    intrinsic: tagged.then(|| format!("gobject.{operation}-by-name i value")),
+                };
+                let mut binding = Binding {
+                    module: "c:PropertyProbe-1.0".to_owned(),
+                    headers: vec![header.to_str().unwrap().to_owned()],
+                    functions: vec![function],
+                    ..Binding::default()
+                };
+                super::against_headers(&mut binding, &[]).unwrap();
+                assert_eq!(binding.functions.len(), usize::from(tagged));
+                assert_eq!(binding.refused.len(), usize::from(!tagged));
+            }
+        }
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn concurrent_module_checks_keep_their_own_probe() {

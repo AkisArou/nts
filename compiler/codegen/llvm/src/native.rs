@@ -124,17 +124,8 @@ pub(super) fn declarations(
             if target.send.is_some() || target.vtable.is_some() {
                 continue;
             }
-            // `new` of a GObject class the program writes, and its `GType`
-            // function, which `gobject` defines rather than declares.
-            if super::gobject::defined_here(&target.name)
-                || target
-                    .name
-                    .starts_with(nts_core::hir::native::PROGRAM_GTYPE)
-                || program.foreign_classes.iter().any(|class| {
-                    class.family == nts_core::hir::native::Family::GObject
-                        && super::gobject::maker(class) == target.name
-                })
-            {
+            // Only the lowering producer can request a backend-defined function.
+            if target.thunk.is_some() {
                 continue;
             }
             let symbol = target.name.as_str();

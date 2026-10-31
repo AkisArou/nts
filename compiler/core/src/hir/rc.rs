@@ -2089,6 +2089,7 @@ mod tests {
             },
         ));
         let read = crate::hir::native::Function {
+            thunk: None,
             name: "read".to_owned(),
             convention: crate::hir::native::Convention::C,
             retention: vec![crate::hir::native::Retention::Unknown],
@@ -2356,6 +2357,7 @@ mod tests {
         func.values.push(op(
             OpKind::Call {
                 callee: Callee::Native(std::sync::Arc::new(crate::hir::native::Function {
+                    thunk: None,
                     name: "platform_keeps_the_view".into(),
                     convention: crate::hir::native::Convention::C,
                     parameters: vec![crate::hir::native::Type::Pointer(

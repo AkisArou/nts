@@ -468,20 +468,6 @@ pub(crate) fn registered_by_a_runtime(snapshot: &SemanticSnapshot, declaration: 
 /// class the program writes: `nts_gobject_type_Counter`.
 pub const PROGRAM_GTYPE: &str = "nts_gobject_type_";
 
-/// Whether a binding's callee is a by-name thunk each backend defines for
-/// the program, with no header declaring it and a `void *` object: a write
-/// of a property with no setter method (`nts_gobject_prop_{kind}__{name}`,
-/// to `g_object_set`), a read of one with no getter (`nts_gobject_propget_`,
-/// from `g_object_get`), and a construct-only property a construction gives
-/// (`nts_gobject_with_{kind}__{name}`, to the support file's builder, whose
-/// own functions have no `__`).
-#[must_use]
-pub fn is_by_name_thunk(name: &str) -> bool {
-    name.starts_with("nts_gobject_prop_")
-        || name.starts_with("nts_gobject_propget_")
-        || (name.starts_with("nts_gobject_with_") && name.contains("__"))
-}
-
 /// For a class the program writes over a `GObject` class -- `class Counter
 /// extends GtkButton` -- the function answering that class's `GType`, which
 /// the subclass registers under: the `@ntsGType` on the `__c_gtype` member of
@@ -491,7 +477,10 @@ pub fn is_by_name_thunk(name: &str) -> bool {
 /// Read from the value's declaration, not its type: the snapshot keeps a
 /// value with a construct signature as that signature, and its members are
 /// gone from it.
-pub(crate) fn gobject_parent(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<String> {
+pub(crate) fn gobject_parent(
+    snapshot: &SemanticSnapshot,
+    declaration: NodeId,
+) -> Option<super::GType> {
     let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
     let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
     let base = syntax_children(snapshot, declaration)
@@ -507,7 +496,10 @@ pub(crate) fn gobject_parent(snapshot: &SemanticSnapshot, declaration: NodeId) -
 /// over a `GObject` class, its own ([`PROGRAM_GTYPE`]), which registers it;
 /// or a binding's, the `@ntsGType` on the `__c_gtype` member of its value.
 /// `None` for any other class.
-pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> Option<String> {
+pub(crate) fn gtype_function(
+    snapshot: &SemanticSnapshot,
+    symbol: SymbolId,
+) -> Option<super::GType> {
     let node = |id: NodeId| snapshot.nodes.get(id.0 as usize);
     let is = |id: NodeId, kind: u16| matches!(node(id).map(|n| &n.kind), Some(NodeKind::Syntax(k)) if *k == kind);
     let mut record = snapshot.symbols.get(symbol.0 as usize)?;
@@ -517,12 +509,10 @@ pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> O
     // A class the program wrote over one, `class Derived extends Base`: the
     // `GType` function the backends define for it, which registers `Base`
     // before `Derived` asks for it as its parent.
-    if let Some(class) = record
-        .declarations
-        .iter()
-        .copied()
-        .find(|d| is(*d, syntax::CLASS_DECLARATION))
-    {
+    if let Some(class) = record.declarations.iter().copied().find(|d| {
+        is(*d, syntax::CLASS_DECLARATION)
+            && node(*d).is_some_and(|record| record.flags & syntax::NODE_FLAGS_AMBIENT == 0)
+    }) {
         gobject_parent(snapshot, class)?;
         let name = syntax_children(snapshot, class)
             .into_iter()
@@ -537,7 +527,7 @@ pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> O
                     })
                     .flatten()
             })?;
-        return Some(format!("{PROGRAM_GTYPE}{name}"));
+        return Some(super::GType::ProgramClass(name));
     }
     let value = record
         .declarations
@@ -551,7 +541,7 @@ pub(crate) fn gtype_function(snapshot: &SemanticSnapshot, symbol: SymbolId) -> O
             .and_then(|n| n.native.as_ref())
             .and_then(|n| n.gtype.clone())
         {
-            return Some(gtype);
+            return Some(super::GType::Declared(gtype));
         }
         pending.extend(syntax_children(snapshot, at));
     }

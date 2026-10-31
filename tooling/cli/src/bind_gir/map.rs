@@ -267,6 +267,8 @@ pub(crate) struct Function {
     /// a view -- GIR's name for it (`init` for `gtk_init`), which the `gi:`
     /// surface exports it as (`naming`).
     pub(crate) gir_name: Option<String>,
+    /// Explicit compiler operation; emitted as @ntsIntrinsic, never inferred from symbol.
+    pub(crate) intrinsic: Option<String>,
 }
 
 /// A virtual function's slot: its class struct, member and the offset C's
@@ -936,6 +938,7 @@ pub(crate) fn bind<'a>(
         mapper.binding.functions.push(Function {
             name: STRDUP_RAW.to_owned(),
             gir_name: Some("strdup_raw".to_owned()),
+            intrinsic: None,
             parameters,
             result: Mapped {
                 shape: Shape::Other,
@@ -1074,6 +1077,7 @@ fn set_by_name<'a>(mapper: &mut Mapper<'a>, namespace: &'a Namespace) {
                 statics: None,
                 vfunc: None,
                 gir_name: None,
+                intrinsic: Some(format!("gobject.set-by-name {kind} {}", property.name)),
             });
             if let Some(accessor) = mapper
                 .binding
@@ -1117,6 +1121,7 @@ fn plain_function(
         statics: None,
         vfunc: None,
         gir_name: None,
+        intrinsic: None,
     }
 }
 
@@ -1307,6 +1312,29 @@ fn item_of_list(param: &Param) -> Option<Param> {
     Some(item)
 }
 
+/// One construct-only property operation, marked where its producer is known.
+fn construct_property_function(
+    c_type: &str,
+    ident: &str,
+    kind: char,
+    property: &str,
+    builder: Mapped,
+    value: Mapped,
+) -> Function {
+    let mut function = plain_function(
+        format!("{c_type}_with_{ident}"),
+        format!("{CONSTRUCT_WITH}{kind}__{}", property.replace('-', "_")),
+        vec![("builder".to_owned(), builder), ("value".to_owned(), value)],
+        Mapped {
+            shape: Shape::Other,
+            ts: "void".to_owned(),
+            c: Type::Void,
+        },
+    );
+    function.intrinsic = Some(format!("gobject.construct-by-name {kind} {property}"));
+    function
+}
+
 /// How a property's value crosses `g_object_set`/`g_object_get`, as a
 /// thunk's name says it (see `set_by_name`). `None` for any other C type.
 fn value_kind(c: &Type) -> Option<char> {
@@ -1419,6 +1447,7 @@ fn get_by_name(
         statics: None,
         vfunc: None,
         gir_name: None,
+        intrinsic: Some(format!("gobject.get-by-name {kind} {property}")),
     });
     if let Some(accessor) = mapper
         .binding
@@ -2308,21 +2337,13 @@ impl<'a> Mapper<'a> {
                             .to_owned(),
                     ));
                 }
-                withs.push(plain_function(
-                    format!("{c_type}_with_{ident}"),
-                    format!(
-                        "{CONSTRUCT_WITH}{kind}__{}",
-                        property.name.replace('-', "_")
-                    ),
-                    vec![
-                        ("builder".to_owned(), builder.clone()),
-                        ("value".to_owned(), value),
-                    ],
-                    Mapped {
-                        shape: Shape::Other,
-                        ts: "void".to_owned(),
-                        c: Type::Void,
-                    },
+                withs.push(construct_property_function(
+                    c_type,
+                    &ident,
+                    kind,
+                    &property.name,
+                    builder.clone(),
+                    value,
                 ));
                 names.push(ident);
             }
@@ -2716,6 +2737,7 @@ impl<'a> Mapper<'a> {
             statics,
             vfunc: None,
             gir_name: None,
+            intrinsic: None,
         })
     }
 
@@ -4210,6 +4232,7 @@ impl<'a> Mapper<'a> {
             statics: static_of(callable, owner),
             vfunc: None,
             gir_name: None,
+            intrinsic: None,
         })
     }
 
@@ -4388,6 +4411,7 @@ impl<'a> Mapper<'a> {
             statics: None,
             vfunc: None,
             gir_name: None,
+            intrinsic: None,
         };
         // What an emit answers: nothing, or a number or a boolean -- the
         // handlers' answer through the location `g_signal_emit` writes. A
@@ -4719,6 +4743,7 @@ impl<'a> Mapper<'a> {
             statics: None,
             vfunc: None,
             gir_name: None,
+            intrinsic: None,
         })
     }
 
@@ -5287,6 +5312,7 @@ fn get_type_function(get_type: &str) -> Function {
         statics: None,
         vfunc: None,
         gir_name: None,
+        intrinsic: None,
     }
 }
 

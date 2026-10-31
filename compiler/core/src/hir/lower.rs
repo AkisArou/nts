@@ -12312,7 +12312,7 @@ fn register_objc_class(
         family: super::native::Family::Objc,
         name,
         type_name: None,
-        superclass,
+        superclass: superclass.into(),
         methods,
         protocols,
         state,
@@ -12660,7 +12660,7 @@ fn lower_class(
 fn register_gobject_class(
     snapshot: &LoweringSnapshot<'_>,
     class: NodeId,
-    parent: String,
+    parent: super::native::GType,
     (methods, properties): (Vec<super::ForeignMethod>, Vec<super::ForeignProperty>),
     state: Option<String>,
     lowered: &mut Lowered,
@@ -12728,7 +12728,7 @@ fn register_gobject_class(
     // Signals are declared on the class over a binding's (`extends
     // GtkButton<{ ... }>`); one over a class the program wrote inherits its
     // parent's, which `emit` finds by name on the instance's type.
-    let signals = if parent.starts_with(super::native::PROGRAM_GTYPE) {
+    let signals = if parent.program_class().is_some() {
         Vec::new()
     } else {
         match gobject_signals(snapshot, class) {
@@ -12745,7 +12745,7 @@ fn register_gobject_class(
         family: super::native::Family::GObject,
         name,
         type_name: Some(type_name),
-        superclass: parent,
+        superclass: super::native::ForeignParent::GObject(parent),
         methods,
         protocols: gobject_interfaces(snapshot, class),
         state,
@@ -13551,7 +13551,7 @@ fn register_com_class(
         family: super::native::Family::Com,
         name,
         type_name: None,
-        superclass: composition.class.clone(),
+        superclass: composition.class.clone().into(),
         methods,
         protocols: Vec::new(),
         state,
@@ -22294,7 +22294,7 @@ struct FuncBuilder<'a> {
     /// A `GObject` class's state field that is a property (`Property<T>`),
     /// as a place resolved it -- the state object and the field -- with the
     /// instance and the thunk a write of it calls to notify.
-    notifying: rustc_hash::FxHashMap<(ValueId, u32), (ValueId, String)>,
+    notifying: rustc_hash::FxHashMap<(ValueId, u32), (ValueId, super::native::GObjectThunk)>,
     /// Each boxed record's pointer `coerce` read out of a box for a C
     /// argument, and the box: the call that passes the pointer lends the box
     /// (`Lent::Boxed`), so it lives until C is done with it.
@@ -26209,6 +26209,12 @@ impl<'a> FuncBuilder<'a> {
         // the witness has nothing to compare it with.
         let thunk = std::sync::Arc::make_mut(&mut target);
         thunk.name = format!("nts_gobject_chain_{name}_{offset}");
+        thunk.thunk = Some(super::native::GObjectThunk::Chain {
+            class: name,
+            slot: offset.parse().map_err(|_| {
+                self.unsupported(id, "a virtual function whose slot offset is not an integer")
+            })?,
+        });
         thunk.declared_at = None;
         let callee = Callee::Native(target);
         let (args, lent) = self.lower_call_arguments(id, &callee, arguments, Some(receiver))?;
@@ -27018,7 +27024,11 @@ impl<'a> FuncBuilder<'a> {
     /// The thunk a write of `member` notifies through, where `member` is a
     /// property (`Property<T>`) of a class in the chain of `class_ty`: the
     /// declaring class's own, numbered as its registration numbers them.
-    fn property_notify_thunk(&self, class_ty: TypeId, member: &str) -> Option<String> {
+    fn property_notify_thunk(
+        &self,
+        class_ty: TypeId,
+        member: &str,
+    ) -> Option<super::native::GObjectThunk> {
         for ty in self.objc_chain(class_ty) {
             let symbol = self.snapshot.types.get(ty.0 as usize)?.symbol?;
             let class = self
@@ -27032,7 +27042,10 @@ impl<'a> FuncBuilder<'a> {
             let fields = property_fields(self.snapshot, class).ok()?;
             if let Some(at) = fields.iter().position(|(name, _)| name == member) {
                 let name = foreign_class_name(self.snapshot, class)?;
-                return Some(super::ForeignProperty::notify_thunk(&name, at));
+                return Some(super::native::GObjectThunk::Notify {
+                    class: name,
+                    index: at,
+                });
             }
         }
         None
@@ -27095,7 +27108,13 @@ impl<'a> FuncBuilder<'a> {
             let at = fields_index(self.snapshot, class, property);
             self.notifying.insert(
                 (state, field),
-                (receiver, super::ForeignProperty::notify_thunk(name, at)),
+                (
+                    receiver,
+                    super::native::GObjectThunk::Notify {
+                        class: name.to_owned(),
+                        index: at,
+                    },
+                ),
             );
             self.returns = HirType::Void;
             self.write_place(
@@ -27313,13 +27332,17 @@ impl<'a> FuncBuilder<'a> {
         let (at, child) = found?;
         let child = super::native::pointer(self.snapshot, child)?;
         let name = foreign_class_name(self.snapshot, class)?;
-        let read = synthesized(
+        let mut read = synthesized(
             &super::Template::child_thunk(&name, at),
             vec![super::native::Type::Pointer(pointee)],
             super::native::Type::Pointer(child.clone()),
             None,
             Vec::new(),
         );
+        read.thunk = Some(super::native::GObjectThunk::Child {
+            class: name,
+            index: at,
+        });
         let origin = self.origin(access);
         Some(self.push(
             OpKind::Call {
@@ -48953,6 +48976,9 @@ impl<'a> FuncBuilder<'a> {
         let represented = HirType::NativePointer(pointee.clone());
         let written = self.constructed_properties(id)?;
         let make = super::native::Function {
+            thunk: Some(super::native::GObjectThunk::New {
+                class: name.to_owned(),
+            }),
             name: format!("nts_gobject_new_{name}"),
             convention: super::native::Convention::C,
             parameters: Vec::new(),
@@ -51950,13 +51976,14 @@ impl<'a> FuncBuilder<'a> {
         };
         let void = HirType::NativePointer(super::native::Pointee::Void);
         let instance = self.coerce(instance, &void, id)?;
-        let notify = synthesized(
-            &thunk,
+        let mut notify = synthesized(
+            &thunk.symbol(),
             vec![super::native::Type::Pointer(super::native::Pointee::Void)],
             super::native::Type::Void,
             None,
             Vec::new(),
         );
+        notify.thunk = Some(thunk);
         self.push(
             OpKind::Call {
                 callee: Callee::Native(std::sync::Arc::new(notify)),
@@ -70171,6 +70198,7 @@ impl<'a> FuncBuilder<'a> {
         // Everything lent to the call, given back before the throw leaves.
         self.give_back(id, lent.to_vec())?;
         let convert = std::sync::Arc::new(super::native::Function {
+            thunk: None,
             name: converter.to_owned(),
             convention: super::native::Convention::C,
             parameters: vec![super::native::Type::Pointer((*error).clone())],
@@ -72061,6 +72089,10 @@ impl<'a> FuncBuilder<'a> {
                 .map_err(|why| self.unsupported(id, &why))?
         };
         thunk.name = super::ForeignSignal::emit_thunk(&signal, &kinds);
+        thunk.thunk = Some(super::native::GObjectThunk::Signal {
+            name: signal.clone(),
+            kinds,
+        });
         thunk.declared_at = None;
         // Each argument as written, then converted to the thunk's parameter
         // (`native_arguments`): not `lower_call_arguments`, which reads the
@@ -72919,6 +72951,7 @@ impl<'a> FuncBuilder<'a> {
         };
         if let Some(free) = &string.free {
             let release = super::native::Function {
+                thunk: None,
                 name: free.clone(),
                 convention: super::native::Convention::C,
                 parameters: vec![if string.array {
@@ -74868,11 +74901,17 @@ impl<'a> FuncBuilder<'a> {
         // it, so a program carries the headers it reaches rather than every one
         // in the snapshot.
         native.declared_at = declaration.and_then(|decl| self.declaring_module(decl));
-        // A by-name thunk the backend defines (`is_by_name_thunk`): no
-        // header declares it, and its object is the `void *` it is to C
-        // whichever class a binding names it on, so every call of one prints
-        // one prototype.
-        if super::native::is_by_name_thunk(&native.name) {
+        // Only an explicit semantic operation can request a generated thunk.
+        // A header function with the same spelling retains its declaration.
+        native.thunk = declaration
+            .and_then(|decl| self.node(decl).native.as_ref())
+            .and_then(|metadata| metadata.intrinsic.as_deref())
+            .map(super::native::GObjectThunk::from_intrinsic)
+            .transpose()
+            .map_err(|why| self.unsupported(call, &why))?
+            .flatten();
+        if let Some(thunk) = &native.thunk {
+            native.name = thunk.symbol();
             native.declared_at = None;
             if let Some(object) = native.parameters.first_mut() {
                 *object = super::native::Type::Pointer(super::native::Pointee::Void);
@@ -76776,13 +76815,20 @@ impl<'a> FuncBuilder<'a> {
     /// A class's `GType`, from the function `gtype_function` named: a program
     /// class's own, which its backend defines and registers it in, or the
     /// binding's `get_type`.
-    fn call_gtype(&mut self, id: NodeId, gtype: &str) -> Result<ValueId, Diagnostic> {
-        if !gtype.starts_with(super::native::PROGRAM_GTYPE) {
-            return self.call_foreign_named(id, gtype, Vec::new());
-        }
+    fn call_gtype(
+        &mut self,
+        id: NodeId,
+        gtype: &super::native::GType,
+    ) -> Result<ValueId, Diagnostic> {
+        let super::native::GType::ProgramClass(class) = gtype else {
+            return self.call_foreign_named(id, &gtype.symbol(), Vec::new());
+        };
         let size = super::native::Type::Scalar(super::native::Scalar::Size);
         let ty = size.representation();
-        let function = synthesized(gtype, Vec::new(), size, None, Vec::new());
+        let mut function = synthesized(&gtype.symbol(), Vec::new(), size, None, Vec::new());
+        function.thunk = Some(super::native::GObjectThunk::Type {
+            class: class.clone(),
+        });
         let origin = self.origin(id);
         Ok(self.push(
             OpKind::Call {
@@ -88996,6 +89042,7 @@ fn synthesized(
     frameworks: Vec<String>,
 ) -> super::native::Function {
     super::native::Function {
+        thunk: None,
         name: name.to_owned(),
         convention: super::native::Convention::C,
         retention: vec![super::native::Retention::Unknown; parameters.len()],

@@ -8,7 +8,7 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, PROGRAM_GTYPE, Type};
+use nts_core::hir::native::{Family, GObjectThunk, GType, PROGRAM_GTYPE, PropertyOperation, Type};
 use nts_core::hir::{
     Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program, TemplateText,
 };
@@ -23,7 +23,8 @@ pub(super) fn maker(class: &ForeignClass) -> String {
 
 /// Whether the program makes one of `class`, and so defines its `new`.
 fn made(program: &Program, class: &ForeignClass) -> bool {
-    called(program, &maker(class))
+    nts_codegen_common::gobject::thunks(program)
+        .any(|(_, thunk)| matches!(thunk, GObjectThunk::New { class: name } if *name == class.name))
 }
 
 /// Whether the program calls `name` as a foreign function, and so declares it.
@@ -33,28 +34,15 @@ fn called(program: &Program, name: &str) -> bool {
     })
 }
 
-/// Whether `name` is a chain-up thunk this section defines.
-pub(super) fn is_chain(name: &str) -> bool {
-    name.starts_with("nts_gobject_chain_")
-}
-
-/// Whether a native callee is a thunk this module defines -- a chain-up or a
-/// signal's emit -- which the program therefore must not also declare: LLVM
-/// refuses a definition of a name already declared.
-pub(super) fn defined_here(name: &str) -> bool {
-    is_chain(name)
-        || name.starts_with("nts_gobject_emit_")
-        || name.starts_with("nts_gobject_notify_")
-        || name.starts_with("nts_gobject_child_")
-        || nts_core::hir::native::is_by_name_thunk(name)
-}
-
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(super) fn classes(
     program: &Program,
     platform: Platform,
     callbacks_declared: bool,
 ) -> Result<String, Diagnostic> {
+    let Some(provenance_origin) = program.funcs.first() else {
+        return Ok(String::new());
+    };
     // A parent's `get_type`, declared once however many classes extend it
     // and chain up to it: LLVM, unlike C, refuses a second declaration.
     let mut parents = std::collections::BTreeSet::new();
@@ -163,10 +151,16 @@ pub(super) fn classes(
             );
         }
         // A parent the program wrote is defined here, not declared.
-        let parent = &class.superclass;
-        if !parent.starts_with(PROGRAM_GTYPE)
-            && !called(program, parent)
-            && parents.insert(parent.clone())
+        let parent_type = class.superclass.gtype().ok_or_else(|| {
+            refuse(
+                provenance_origin,
+                "a GObject class without typed parent provenance",
+            )
+        })?;
+        let parent = parent_type.symbol();
+        if matches!(parent_type, GType::Declared(_))
+            && !called(program, &parent)
+            && parents.insert(parent.clone().into_owned())
         {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
@@ -451,26 +445,24 @@ fn children(program: &Program) -> String {
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_child_") => Some(target),
+            } if matches!(&target.thunk, Some(GObjectThunk::Child { .. })) => Some(target),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target
-            .name
-            .trim_start_matches("nts_gobject_child_")
-            .rsplit_once('_')
-        else {
+        let Some(GObjectThunk::Child { class, index }) = &target.thunk else {
             continue;
         };
         let Some(id) = program
             .foreign_classes
             .iter()
-            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .find(|foreign| {
+                foreign.family == Family::GObject && foreign.name.as_str() == class.as_str()
+            })
             .and_then(|foreign| foreign.template.as_ref())
-            .and_then(|template| template.children.get(index.parse::<usize>().ok()?))
+            .and_then(|template| template.children.get(*index))
         else {
             continue;
         };
@@ -577,18 +569,14 @@ fn notifies(program: &Program) -> String {
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_notify_") => Some(target),
+            } if matches!(&target.thunk, Some(GObjectThunk::Notify { .. })) => Some(target),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target
-            .name
-            .trim_start_matches("nts_gobject_notify_")
-            .rsplit_once('_')
-        else {
+        let Some(GObjectThunk::Notify { class, index }) = &target.thunk else {
             continue;
         };
         if done.len() == 1 {
@@ -646,22 +634,15 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_emit_") => Some((func, target)),
+            } if matches!(&target.thunk, Some(GObjectThunk::Signal { .. })) => Some((func, target)),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, signal)) = target
-            .name
-            .trim_start_matches("nts_gobject_emit_")
-            .split_once("__")
-        else {
-            return Err(refuse(
-                func,
-                "an emit thunk whose name does not say its signal",
-            ));
+        let Some(GObjectThunk::Signal { name: signal, .. }) = &target.thunk else {
+            continue;
         };
         if done.len() == 1 {
             out.push_str("declare i32 @nts_gobject_signal_id(ptr, ptr, ptr)\ndeclare void @g_signal_emit(ptr, i32, i32, ...)\n");
@@ -749,9 +730,9 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
     // A write of a property with no setter method, to `g_object_set`; a
     // construct-only property a construction gives, to the support file's
     // builder. Each thunk is `{prefix}{kind}__{name}`.
-    for (prefix, callee) in [
-        ("nts_gobject_prop_", "g_object_set"),
-        ("nts_gobject_with_", "nts_gobject_with_builder_add"),
+    for (operation, callee) in [
+        (PropertyOperation::Set, "g_object_set"),
+        (PropertyOperation::Construct, "nts_gobject_with_builder_add"),
     ] {
         let mut done = std::collections::BTreeSet::new();
         for (func, target) in program
@@ -761,7 +742,7 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
                 OpKind::Call {
                     callee: Callee::Native(target),
                     ..
-                } if target.name.starts_with(prefix) && defined_here(&target.name) => {
+                } if matches!(&target.thunk, Some(GObjectThunk::Property { operation: found, .. }) if *found == operation) => {
                     Some((func, target))
                 }
                 _ => None,
@@ -770,13 +751,7 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
             if !done.insert(target.name.clone()) {
                 continue;
             }
-            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__")
-            else {
-                return Err(refuse(
-                    func,
-                    "a property thunk whose name does not say its property",
-                ));
-            };
+            let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else { continue; };
             if target.parameters.len() != 2 {
                 return Err(refuse(
                     func,
@@ -790,7 +765,7 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
             bytes_constant(
                 &mut out,
                 &format!("{thunk}.name"),
-                &property.replace('_', "-"),
+                &property.clone(),
             );
             let slot = target.parameters[1].abi(platform.abi);
             let value = ty_of(&slot, func)?.to_owned();
@@ -818,32 +793,30 @@ fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_propget_") => Some((func, target)),
+            } if matches!(
+                &target.thunk,
+                Some(GObjectThunk::Property {
+                    operation: PropertyOperation::Get,
+                    ..
+                })
+            ) =>
+            {
+                Some((func, target))
+            }
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, property)) = target
-            .name
-            .trim_start_matches("nts_gobject_propget_")
-            .split_once("__")
-        else {
-            return Err(refuse(
-                func,
-                "a property thunk whose name does not say its property",
-            ));
+        let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else {
+            continue;
         };
         if done.len() == 1 {
             out.push_str("declare void @g_object_get(ptr, ptr, ...)\n");
         }
         let thunk = &target.name;
-        bytes_constant(
-            &mut out,
-            &format!("{thunk}.name"),
-            &property.replace('_', "-"),
-        );
+        bytes_constant(&mut out, &format!("{thunk}.name"), &property.clone());
         let value = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
         let zero = match value.as_str() {
             "float" | "double" => "0.0",
@@ -874,7 +847,7 @@ fn chains(
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if is_chain(&target.name) => Some((func, target)),
+            } if matches!(&target.thunk, Some(GObjectThunk::Chain { .. })) => Some((func, target)),
             _ => None,
         })
     {
@@ -884,20 +857,19 @@ fn chains(
         if done.len() == 1 {
             out.push_str("declare ptr @nts_gobject_parent_slot(i64, i64)\n");
         }
-        let Some((class, offset)) = target
-            .name
-            .trim_start_matches("nts_gobject_chain_")
-            .rsplit_once('_')
+        let Some(GObjectThunk::Chain {
+            class,
+            slot: offset,
+        }) = &target.thunk
         else {
-            return Err(refuse(
-                func,
-                "a chain-up whose name does not say its class and slot",
-            ));
+            continue;
         };
         let Some(parent) = program
             .foreign_classes
             .iter()
-            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .find(|foreign| {
+                foreign.family == Family::GObject && foreign.name.as_str() == class.as_str()
+            })
             .map(|foreign| foreign.superclass.clone())
         else {
             return Err(refuse(
@@ -905,9 +877,13 @@ fn chains(
                 "a chain-up in a class this program does not register",
             ));
         };
-        if !parent.starts_with(PROGRAM_GTYPE)
+        let parent_type = parent
+            .gtype()
+            .ok_or_else(|| refuse(func, "a GObject chain-up without typed parent provenance"))?;
+        let parent = parent_type.symbol();
+        if matches!(parent_type, GType::Declared(_))
             && !called(program, &parent)
-            && parents.insert(parent.clone())
+            && parents.insert(parent.clone().into_owned())
         {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }

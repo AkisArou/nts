@@ -26,7 +26,9 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, FnPointer, PROGRAM_GTYPE, Type};
+use nts_core::hir::native::{
+    Family, FnPointer, GObjectThunk, GType, PROGRAM_GTYPE, PropertyOperation, Type,
+};
 use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program, TemplateText};
 
 use super::c_string;
@@ -152,8 +154,12 @@ pub(super) fn classes(
         // one -- a builder file's included -- so it enters and leaves as an
         // entry point does.
         let make_state = state_maker(writer, origin, program, class)?;
-        let parent = &class.superclass;
-        if !parent.starts_with(PROGRAM_GTYPE) {
+        let parent_type = class
+            .superclass
+            .gtype()
+            .ok_or_else(|| refuse("a GObject class without typed parent provenance"))?;
+        let parent = parent_type.symbol();
+        if matches!(parent_type, GType::Declared(_)) {
             writer.line(origin, format!("size_t {parent}(void);"));
         }
         // Its signals, added to the type the moment it exists: before any
@@ -191,7 +197,7 @@ pub(super) fn classes(
                 OpKind::Call {
                     callee: Callee::Native(target),
                     ..
-                } if target.name == make => Some(target.result.c_type()),
+                } if matches!(&target.thunk, Some(GObjectThunk::New { class }) if class == name) => Some(target.result.c_type()),
                 _ => None,
             })
         {
@@ -350,14 +356,14 @@ fn implementations(
 /// `widget.width_request = 80`, to `g_object_set`; and a construct-only
 /// property a construction gives, `new GThemedIcon({ name })`, to the
 /// support file's builder.
-const BY_NAME: [(&str, &str, &str); 2] = [
+const BY_NAME: [(PropertyOperation, &str, &str); 2] = [
     (
-        "nts_gobject_prop_",
+        PropertyOperation::Set,
         "g_object_set",
         "void g_object_set(void *object, const char *first_property_name, ...);",
     ),
     (
-        "nts_gobject_with_",
+        PropertyOperation::Construct,
         "nts_gobject_with_builder_add",
         "void nts_gobject_with_builder_add(void *builder, const char *name, ...);",
     ),
@@ -372,7 +378,7 @@ fn set_by_name(
     program: &Program,
     mut wrote: bool,
 ) -> bool {
-    for (prefix, callee, declaration) in BY_NAME {
+    for (operation, callee, declaration) in BY_NAME {
         let mut done = std::collections::BTreeSet::new();
         for target in program
             .native_funcs()
@@ -381,13 +387,11 @@ fn set_by_name(
                 OpKind::Call {
                     callee: Callee::Native(target),
                     ..
-                } if target.name.starts_with(prefix) => Some(target),
+                } if matches!(&target.thunk, Some(GObjectThunk::Property { operation: found, .. }) if *found == operation) => Some(target),
                 _ => None,
             })
         {
-            // The builder's own functions have no `__`: the support file's.
-            let Some((_, property)) = target.name.trim_start_matches(prefix).split_once("__")
-            else {
+            let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else {
                 continue;
             };
             if !done.insert(target.name.clone()) {
@@ -413,7 +417,7 @@ fn set_by_name(
                     target.name,
                     object.c_type(),
                     value.c_type(),
-                    c_string(&property.replace('_', "-"))
+                    c_string(property)
                 ),
             );
         }
@@ -438,18 +442,23 @@ fn get_by_name(
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_propget_") => Some(target),
+            } if matches!(
+                &target.thunk,
+                Some(GObjectThunk::Property {
+                    operation: PropertyOperation::Get,
+                    ..
+                })
+            ) =>
+            {
+                Some(target)
+            }
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, property)) = target
-            .name
-            .trim_start_matches("nts_gobject_propget_")
-            .split_once("__")
-        else {
+        let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else {
             continue;
         };
         let [object] = target.parameters.as_slice() else {
@@ -475,7 +484,7 @@ fn get_by_name(
                 "{value} {}({} a0) {{ {value} r = 0; g_object_get(a0, {}, &r, (void *)0); return r; }}",
                 target.name,
                 object.c_type(),
-                c_string(&property.replace('_', "-"))
+                c_string(property)
             ),
         );
     }
@@ -494,26 +503,24 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_child_") => Some(target),
+            } if matches!(&target.thunk, Some(GObjectThunk::Child { .. })) => Some(target),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target
-            .name
-            .trim_start_matches("nts_gobject_child_")
-            .rsplit_once('_')
-        else {
+        let Some(GObjectThunk::Child { class, index }) = &target.thunk else {
             continue;
         };
         let Some(id) = program
             .foreign_classes
             .iter()
-            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .find(|foreign| {
+                foreign.family == Family::GObject && foreign.name.as_str() == class.as_str()
+            })
             .and_then(|foreign| foreign.template.as_ref())
-            .and_then(|template| template.children.get(index.parse::<usize>().ok()?))
+            .and_then(|template| template.children.get(*index))
         else {
             continue;
         };
@@ -559,18 +566,14 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_notify_") => Some(target),
+            } if matches!(&target.thunk, Some(GObjectThunk::Notify { .. })) => Some(target),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((class, index)) = target
-            .name
-            .trim_start_matches("nts_gobject_notify_")
-            .rsplit_once('_')
-        else {
+        let Some(GObjectThunk::Notify { class, index }) = &target.thunk else {
             continue;
         };
         if !wrote {
@@ -893,18 +896,14 @@ fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote:
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_emit_") => Some(target),
+            } if matches!(&target.thunk, Some(GObjectThunk::Signal { .. })) => Some(target),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let Some((_, signal)) = target
-            .name
-            .trim_start_matches("nts_gobject_emit_")
-            .split_once("__")
-        else {
+        let Some(GObjectThunk::Signal { name: signal, .. }) = &target.thunk else {
             continue;
         };
         if !wrote {
@@ -977,22 +976,26 @@ fn chains(
             OpKind::Call {
                 callee: Callee::Native(target),
                 ..
-            } if target.name.starts_with("nts_gobject_chain_") => Some(target),
+            } if matches!(&target.thunk, Some(GObjectThunk::Chain { .. })) => Some(target),
             _ => None,
         })
     {
         if !done.insert(target.name.clone()) {
             continue;
         }
-        let (class, offset) = target
-            .name
-            .trim_start_matches("nts_gobject_chain_")
-            .rsplit_once('_')
-            .ok_or_else(|| refuse("a chain-up whose name does not say its class and slot"))?;
+        let Some(GObjectThunk::Chain {
+            class,
+            slot: offset,
+        }) = &target.thunk
+        else {
+            continue;
+        };
         let parent = program
             .foreign_classes
             .iter()
-            .find(|foreign| foreign.family == Family::GObject && foreign.name == class)
+            .find(|foreign| {
+                foreign.family == Family::GObject && foreign.name.as_str() == class.as_str()
+            })
             .map(|foreign| foreign.superclass.clone())
             .ok_or_else(|| refuse("a chain-up in a class this program does not register"))?;
         if target
@@ -1016,7 +1019,11 @@ fn chains(
             origin,
             "void *nts_gobject_parent_slot(size_t parent, size_t offset);",
         );
-        if !parent.starts_with(PROGRAM_GTYPE) {
+        let parent_type = parent
+            .gtype()
+            .ok_or_else(|| refuse("a GObject chain-up without typed parent provenance"))?;
+        let parent = parent_type.symbol();
+        if matches!(parent_type, GType::Declared(_)) {
             writer.line(origin, format!("size_t {parent}(void);"));
         }
         let parameters: Vec<String> = target

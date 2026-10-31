@@ -1242,7 +1242,12 @@ pub struct NativeAttributes {
     /// itself, named by its family and its name rather than by the function's
     /// own name -- `c:types`' `property()` and `signal()`, which declare a
     /// `GObject` class's properties and signals. Lowering dispatches on this
-    /// value, never on what the function is called.
+    /// value, never on what the function is called. GIR also emits
+    /// `gobject.get-by-name <kind> <property>`,
+    /// `gobject.set-by-name <kind> <property>` and
+    /// `gobject.construct-by-name <kind> <property>` for compiler-produced
+    /// property thunks. Kinds are i/u/l/L/z/d/p; the property is its actual
+    /// `GObject` name. A matching C symbol spelling alone supplies no intrinsic.
     #[serde(default)]
     pub intrinsic: Option<String>,
     /// `@ntsGType gtk_button_get_type`, on the phantom `__c_gtype` member of

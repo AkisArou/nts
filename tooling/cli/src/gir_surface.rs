@@ -648,7 +648,7 @@ mod tests {
         // A `GType` one, which crosses as the `gsize` C holds it in, and
         // which reads back as the same.
         for present in [
-            "@ntsSymbol nts_gobject_with_z__item_type\n   */\n  export function GListStore_with_item_type(builder: Ptr<void>, value: c_size_t): void;",
+            "@ntsSymbol nts_gobject_with_z__item_type\n   * @ntsIntrinsic gobject.construct-by-name z item-type\n   */\n  export function GListStore_with_item_type(builder: Ptr<void>, value: c_size_t): void;",
             "  export interface GListStoreProps extends GObjectProps, GListModelProps {\n    item_type: c_size_t;\n  }",
             "@ntsSymbol nts_gobject_propget_z__item_type",
         ] {

@@ -1241,6 +1241,9 @@ fn notes(
     } else if symbol {
         notes.push(format!("@ntsSymbol {}", function.symbol));
     }
+    if let Some(intrinsic) = &function.intrinsic {
+        notes.push(format!("@ntsIntrinsic {intrinsic}"));
+    }
     if let Some(slot) = &function.throws {
         notes.push(format!("@ntsThrows {slot} nts_gerror_take_message"));
     }
@@ -2022,6 +2025,7 @@ mod tests {
             statics: None,
             vfunc: None,
             gir_name: None,
+            intrinsic: None,
         }
     }
 

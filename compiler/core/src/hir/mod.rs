@@ -2841,7 +2841,7 @@ pub struct ForeignClass {
     /// for every other family, whose runtime knows the class by `name`.
     pub type_name: Option<String>,
     /// The runtime's name for the class it extends.
-    pub superclass: String,
+    pub superclass: native::ForeignParent,
     pub methods: Vec<ForeignMethod>,
     /// The protocols it adopts (`implements NSWindowDelegate`), by the name
     /// the runtime knows each by, so `conformsToProtocol:` answers for them.

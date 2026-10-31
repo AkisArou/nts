@@ -7,6 +7,9 @@ use nts_semantic_schema::{
 
 use super::{HirType, ManagedType};
 
+mod generated;
+pub use generated::{ForeignParent, GObjectThunk, GType, PropertyOperation};
+
 /// Types currently being expanded, shared by the native type walkers.
 /// A repeated sibling is legal; only meeting a type still on this path is a cycle.
 #[derive(Default)]
@@ -37,6 +40,8 @@ impl TypePath {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Function {
     pub name: String,
+    /// Set only by the actual lowering producer, never inferred from a name.
+    pub thunk: Option<GObjectThunk>,
     pub convention: Convention,
     pub parameters: Vec<Type>,
     pub result: Type,
@@ -868,6 +873,7 @@ impl Function {
     pub(crate) fn vtable_method(name: &str, slot: u32, parameters: Vec<Type>) -> Self {
         let count = parameters.len();
         Self {
+            thunk: None,
             name: name.to_owned(),
             convention: Convention::C,
             parameters,
@@ -2731,6 +2737,7 @@ impl Function {
         let result_as_number = matches!(&result, Type::Scalar(kind) if kind.needs_exact_integer())
             && !over_bigint(snapshot, signature.return_type);
         Ok(Self {
+            thunk: None,
             name,
             convention: if abi == Some("managed") {
                 Convention::Nts
@@ -6033,7 +6040,7 @@ fn branded_members(
 }
 
 pub(crate) mod schema;
-pub use schema::{PROGRAM_GTYPE, is_by_name_thunk, is_layout, pointer, storage};
+pub use schema::{PROGRAM_GTYPE, is_layout, pointer, storage};
 pub(crate) use schema::{
     composable_base, extends_com, extends_objc, gobject_parent, gtype_function, implemented,
     is_com_class, is_objc_class, objc_meta, objc_name, registered_by_a_runtime, superclass,

@@ -3046,6 +3046,7 @@ mod foreign_contracts {
 
     fn native(retention: Vec<Retention>) -> Callee {
         Callee::Native(std::sync::Arc::new(Function {
+            thunk: None,
             name: "consume".to_owned(),
             convention: Convention::C,
             parameters: vec![Type::Void, Type::Void],

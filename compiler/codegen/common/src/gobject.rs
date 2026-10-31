@@ -1,7 +1,25 @@
 //! What both backends ask of the `GObject` classes a program writes.
 
-use nts_core::hir::native::{Family, PROGRAM_GTYPE};
+use nts_core::hir::native::{Family, Function, GObjectThunk};
 use nts_core::hir::{Callee, ForeignClass, OpKind, Program};
+
+/// Only genuine lowering producers enter the generated-function inventory.
+pub fn thunks(program: &Program) -> impl Iterator<Item = (&Function, &GObjectThunk)> {
+    program
+        .funcs
+        .iter()
+        .flat_map(|func| &func.values)
+        .filter_map(|op| {
+            let OpKind::Call {
+                callee: Callee::Native(target),
+                ..
+            } = &op.kind
+            else {
+                return None;
+            };
+            target.thunk.as_ref().map(|thunk| (target.as_ref(), thunk))
+        })
+}
 
 /// The classes the program writes whose `GType` it needs: each it makes, each
 /// a thunk of its own reads the type of -- a property's notify, a template
@@ -20,33 +38,20 @@ pub fn registered(program: &Program) -> Vec<&ForeignClass> {
             .find(|class| class.family == Family::GObject && class.name == name)
     };
     let mut wanted: Vec<&str> = Vec::new();
-    for op in program.funcs.iter().flat_map(|func| &func.values) {
-        let OpKind::Call {
-            callee: Callee::Native(target),
-            ..
-        } = &op.kind
-        else {
-            continue;
-        };
-        let name = target.name.as_str();
-        if let Some(made) = name
-            .strip_prefix("nts_gobject_new_")
-            .or_else(|| name.strip_prefix(PROGRAM_GTYPE))
-        {
-            wanted.push(made);
-        } else if let Some((class, _)) = name
-            .strip_prefix("nts_gobject_notify_")
-            .or_else(|| name.strip_prefix("nts_gobject_child_"))
-            .and_then(|rest| rest.rsplit_once('_'))
-        {
-            wanted.push(class);
-        } else if let Some((class, _)) = name
-            .strip_prefix("nts_gobject_chain_")
-            .and_then(|rest| rest.rsplit_once('_'))
-        {
-            wanted.extend(
-                gobject(class).and_then(|class| class.superclass.strip_prefix(PROGRAM_GTYPE)),
-            );
+    for (_, thunk) in thunks(program) {
+        match thunk {
+            GObjectThunk::Type { class }
+            | GObjectThunk::New { class }
+            | GObjectThunk::Child { class, .. }
+            | GObjectThunk::Notify { class, .. } => {
+                wanted.push(class.as_str());
+            }
+            GObjectThunk::Chain { class, .. } => wanted.extend(
+                gobject(class)
+                    .and_then(|class| class.superclass.gtype())
+                    .and_then(nts_core::hir::native::GType::program_class),
+            ),
+            GObjectThunk::Signal { .. } | GObjectThunk::Property { .. } => {}
         }
     }
     let mut order: Vec<&ForeignClass> = Vec::new();
@@ -62,7 +67,8 @@ pub fn registered(program: &Program) -> Vec<&ForeignClass> {
             chain.push(class);
             at = class
                 .superclass
-                .strip_prefix(PROGRAM_GTYPE)
+                .gtype()
+                .and_then(nts_core::hir::native::GType::program_class)
                 .and_then(gobject);
         }
         order.extend(chain.into_iter().rev());

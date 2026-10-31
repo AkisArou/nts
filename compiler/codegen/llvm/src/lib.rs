@@ -2156,7 +2156,11 @@ fn objc_classes(
             rows.join(", ")
         );
         text_constant(&mut out, &format!("{table}.name"), &class.name);
-        text_constant(&mut out, &format!("{table}.super"), &class.superclass);
+        text_constant(
+            &mut out,
+            &format!("{table}.super"),
+            &class.superclass.symbol(),
+        );
         let state = match state_maker(program, class, &mut out) {
             Ok(Some(maker)) => format!("ptr @{maker}"),
             Ok(None) => "ptr null".to_owned(),

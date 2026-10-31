@@ -7562,3 +7562,6 @@ export function errors(): number { return errors_seen() as number; }
         assert_eq!(output, "7 roots=0 errors=0 leak=0");
     }
 }
+
+#[path = "native/generated_provenance.rs"]
+mod generated_provenance;

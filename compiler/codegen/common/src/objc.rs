@@ -176,8 +176,10 @@ pub fn classes_in_order(program: &Program) -> Vec<&nts_core::hir::ForeignClass> 
     while !pending.is_empty() {
         let before = pending.len();
         pending.retain(|class| {
-            let waits = objc().any(|other| other.name == class.superclass)
-                && !ordered.iter().any(|done| done.name == class.superclass);
+            let waits = objc().any(|other| other.name == class.superclass.symbol())
+                && !ordered
+                    .iter()
+                    .any(|done| done.name == class.superclass.symbol());
             if !waits {
                 ordered.push(class);
             }
