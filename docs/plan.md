@@ -26,19 +26,23 @@ one page that changes as work goes; the designs it builds are in
 
 - **The team:** the coordinator decides, designs and reviews. Agents implement
   and measure:
-  - **compiler:** the core and lowering;
+  - **compiler2:** silent wrong answers in the core and lowering, and review
+    of every compiler change;
+  - **compiler3:** the foundations track: the one memory analysis, then
+    bounds-check placement;
   - **runtime:** `runtime/c`, allocation and benchmarks;
-  - **runtime2:** the JVM and the gate's telemetry;
+  - **runtime3:** calling C, and the JVM;
   - **tsrs:** the frontend and the gate tooling;
-  - **helper2:** landing the cloud agents' pull requests, fixtures, the
-    TypeScript runtimes and the Are We Fast Yet ports;
+  - **helper2** and **helper4:** landing the cloud agents' pull requests,
+    fixtures, Unicode, the TypeScript runtimes and the Are We Fast Yet ports;
+  - **nodejs:** the node lane, moving to Node 26;
   - **cloud agents** (ChatGPT, through pull requests): the web platform's
     conformance, the Web Cryptography API, WebSocket and EventSource, and
     benchmark ports ([cloud-agents](contributing/cloud-agents.md)).
 
   The JVM is maintained while its new work waits for phase 4; the Wasm backend
   is being rebuilt on Binaryen IR. Calling C is built in parallel with phase
-  2's other work, by runtime, runtime2, tsrs and helper2 (phase 2, item 9).
+  2's other work, by runtime, runtime3, tsrs and helper2 (phase 2, item 9).
 - **Node 26:** the node lane moves the node reference from Node 24.20.0 to
   26.13.0, the LTS line, on one branch:
   - one mechanical commit: the pin, node's sources, and the bundled
@@ -68,9 +72,8 @@ Benchmarks run through every phase.
 ## Phase 1: settle main
 
 1. **The tsrs switch.** *Done.*
-2. **What tsgo left behind.** The binary is gone; `NTS_TSGO` is still read by
-   two JVM test files (`compiler/codegen/jvm/tests/intrinsics.rs`,
-   `refusals.rs`).
+2. **What tsgo left behind.** *Done:* the binary is gone, and nothing reads
+   `NTS_TSGO`.
 3. **The memory defects the outside review found.** *Fixed*, with region and
    frame allocations kept within their proved lifetimes, and the frames that
    fix gave up restored; the follow-up is in its landing gate.
@@ -86,8 +89,8 @@ Benchmarks run through every phase.
    - every step runs in one canonical environment, whoever launches the gate
      (*done*);
    - the compile-time tripwire counts every compiler thread from the start,
-     against a threshold set from repeated runs of one binary (*done*); the
-     reference-counting build gets a row of its own next;
+     against a threshold set from repeated runs of one binary, and the
+     reference-counting build has a row of its own (*done*);
    - the compile-time guard adds backend code generation and link time (P-6);
    - native instruction counts per benchmark row gate the full run, against
      the noise band, starting with the counting drivers (P-5);
@@ -142,9 +145,9 @@ Benchmarks run through every phase.
     captures `this` no longer leaks: *done*):
     - an optional callable property in a structural type (the node stdio
       setup, *done*), then one writer per stream for `console.log`,
-      `process.stdout.write` and the node `console` (*landing*);
+      `process.stdout.write` and the node `console` (*done*);
     - a project that is not `strict` is refused, naming the flags that are
-      off, all nine, as NTS1006 (L8, *landing*);
+      off, all nine, as NTS1006 (L8, *done*);
     - decorators refused until implemented;
     - a throw through any indirect call is catchable (L15), so a failed
       check of an erased value is always a catchable `TypeError` (L6);
@@ -188,9 +191,10 @@ The designs and their build orders are in [`foundations/`](foundations).
      (P-2);
    - a differential program fuzzer (Q-6).
 2. **Memory stages 1 and 2** (cheap counting wins; the one placement analysis,
-   facts only), beside **Unicode stage 1** (case mapping). Stage 1 so far:
-   release by type, the count-free sort and proved-integer `Math.min` and
-   `Math.max` are on `main`; typed collector visitors are next
+   facts only), beside **Unicode stage 1** (case mapping: built on C and
+   LLVM; the JVM's tables are next). Memory stage 1 so far:
+   release by type, the count-free sort, proved-integer `Math.min` and
+   `Math.max`, and typed collector visitors are on `main`
    ([results](../results)).
 3. **Typed containers:** `Map` and `Set` stored by the proven layout of their
    keys and values (raw integers, doubles and references, with boxed values

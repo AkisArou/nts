@@ -1,6 +1,7 @@
 # Unicode and text data
 
-**Status:** decided (D1–D6 below); not built yet.
+**Status:** decided (D1–D6 below). Stage 1, case mapping on C and LLVM, is
+built; the later stages are not.
 
 JavaScript needs Unicode knowledge in more places than it looks:
 `toLowerCase`/`toUpperCase`, `normalize`, RegExp's `i`, `u` and `v` flags and
@@ -25,17 +26,16 @@ Terms used below:
 ## Where nts stands
 
 Unicode data reaches programs from four places, each with its own Unicode
-version: QuickJS's `libunicode` for native case conversion, a 191 KB TypeScript
-file generated from that `libunicode` for the RegExp engine, the JDK's tables on
-the JVM, and the checker's identifier tables in the frontend. Most other
-Unicode features are refused (`normalize`, `localeCompare`, the locale case
-forms, `Intl.Segmenter`).
+version: nts's own tables, generated from the UCD at node's version, for native
+case conversion; a 191 KB TypeScript file generated from QuickJS's `libunicode`
+for the RegExp engine; the JDK's tables on the JVM; and the checker's identifier
+tables in the frontend. Most other Unicode features are refused (`normalize`,
+`localeCompare`, the locale case forms, `Intl.Segmenter`).
 
 Answers that are wrong today:
 
 | defect | backends | evidence |
 |---|---|---|
-| Final_Sigma is missing: `"ΑΣ".toLowerCase()` gives `ασ`, node gives `ας` | C, LLVM | two recorded test262 failures (`results/test262/{c,llvm}/builtins.tsv`) |
 | JDK 21 carries Unicode 15.0, so a Unicode 16 letter such as `Ɤ` does not lowercase | JVM | probe on JDK 21.0.5 |
 | the JDK mishandles Final_Sigma after a supplementary combining mark | JVM | a recorded test262 failure |
 | the checker knows identifiers by Unicode 15.1, so a name starting with a Unicode 16 letter such as `Ɤ` is a syntax error (TS1127) that node accepts | every backend: it is the frontend's | a probe; upstream's tables, reported and not edited |
@@ -185,7 +185,7 @@ on four backends, its fixtures with controls, and its test262 records.
 | stage | work | rows |
 |---|---|---|
 | 0. Instruments | rows and fixtures only, plus the version pin check | `case-convert-latin1`, `-greek`, `-cjk`, `-unchanged`; Final_Sigma and new-letter fixtures |
-| 1. Case mapping | `compiler/unicode`; the C table emitter; rewritten case conversion with its exception records (expansions, context state, lone surrogates); the new "may return argument zero" contract in the memory passes; libunicode no longer emitted; JVM tables | `case-convert` stays ahead of node and Bun; the four new rows |
+| 1. Case mapping (*built* on C and LLVM; the JVM's tables remain) | `compiler/unicode`; the C table emitter; rewritten case conversion with its exception records (expansions, context state, lone surrogates); the new "may return argument zero" contract in the memory passes; libunicode no longer emitted; JVM tables | `case-convert` stays ahead of node and Bun; the four new rows (`-unchanged` is ahead; `-latin1`, `-greek` and `-cjk` still lose) |
 | 2. RegExp data | character sets compiled for literal patterns; tables for dynamic ones; the 191 KB TypeScript data goes | `\p{L}` matching, case-insensitive Unicode matching, dynamic patterns |
 | 3. Normalization and URL hosts | `normalize`; URL hosts by the full UTS #46 processing the WHATWG URL standard specifies (nontransitional, with its bidi, joiner and hyphen settings, and Punycode validation), with the mapping data vendored; QuickJS leaves `runtime/c` | `normalize` on ASCII, Latin-1, Greek and mixed text; URL host conversion. Node rejects `a‍b.com` and `́a.com`, which today's approximation accepts |
 | 4. Locale case, graphemes, widths | `toLocale*Case` for `az`/`tr`, `lt`, `el`; grapheme segmentation; terminal widths | locale case, grapheme segmentation |
@@ -199,7 +199,7 @@ entirely.
 
 | # | question | decision |
 |---|---|---|
-| D1 | Who owns the Unicode data | **Our own generator from the UCD, in the compiler.** Exact to node's version, the smallest cost per program, one source for four backends. ICU4X becomes a second oracle in the tests. The 10-22 rule "whichever measures faster" is honoured by an A/B on `case-convert-greek` in stage 1. |
+| D1 | Who owns the Unicode data | **Our own generator from the UCD, in the compiler.** Exact to node's version, the smallest cost per program, one source for four backends. ICU4X becomes a second oracle in the tests. The 10-22 rule "whichever measures faster" is honoured by an A/B on `case-convert-greek` in stage 1, which the generated tables won against ICU4X ([results](../../results/unicode-stage1)). |
 | D2 | Which Unicode version | **Node's, moved in lockstep with the pinned node,** not the latest. |
 | D3 | Intl's engine on native | **ICU4C, the same as node.** It needs a C++ standard library, linked statically and only into programs that use Intl: an exception to the 10-22 rule "no C++ standard library linked". ICU4X needs no C++ but does not format dates and numbers byte-identically to node. Not needed before stage 5. |
 | D4 | The JVM's Unicode data | **nts's tables,** so answers do not depend on which JDK a user runs. |

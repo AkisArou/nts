@@ -52,7 +52,7 @@ means it is on main.
 |---|---|---|---|
 | **Numbers** ([design](numbers.md)) | integers proved from doubles, BigInt, `Math`, number ↔ text | Built: integer specialization, BigInt exact to 128 bits, zmij for number → text, ffc for text → number, x86-64-v3 builds, ThinLTO, aligned hot loops. | `Math` bit-identical to node (V8's fdlibm): decided, not built. BigInt past 128 bits: stops by name today, real bignums later. `Math.random` as V8's generator: designed. |
 | **Strings** ([design](strings.md)) | layout, building, slicing, comparing, hashing, UTF-8 | One or two bytes per character, inline, with a cached hash. Built: in-place append, strings written where they are appended, SIMD JSON quoting, literal hashes. | Stage D (one data pointer, proved flags, slices that own their owner) and stage E (fewer passes and temporaries): designed. simdutf for UTF-8: prototyped, not built. |
-| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | QuickJS's `libunicode` tables for case conversion; Final_Sigma is wrong on C and LLVM; most other features are refused. | Decided: the compiler owns the Unicode data, pinned to node's version, and emits only the tables a program uses. Not built. |
+| **Unicode and text data** ([design](unicode.md)) | case mapping, character classes, normalization, encodings | Case conversion from the compiler's own tables, at node's Unicode version, emitting only the tables a program uses; Final_Sigma and lone surrogates as node does them. Most other features are refused. | Decided: the same data for the JVM, RegExp, normalization and URL hosts, then ICU for locale services. The Latin-1, Greek and CJK case rows still lose to node and Bun. |
 | **Hash tables** ([design](hashing.md)) | `Map`, `Set`, objects used as dictionaries | Insertion-ordered tables of 16-byte tagged keys and values; the static key type picks the hash and comparison, and the index keeps each entry's hash so growth never rehashes. | **Contradicts a decision:** main's hash is unseeded FNV-1a with literal hashes fixed at compile time; BigInt keys collide structurally; the JVM table can be flooded. Designed: one keyed definition (rapidhash with random secrets against SipHash-1-3, by the rows), lazy literal hashes, and a per-table tree fallback when probes run long. |
 | **Objects and classes** ([design](objects.md)) | layouts, field access, interfaces, method calls | Fixed layouts per class, interfaces satisfied by shape, and a call through a value with at most two known classes becomes a direct call. | `instanceof` as a class-id range test, nullable fields: designed, not built. |
 | **Arrays** ([design](objects.md#arrays)) | layout, growth, element sizes, bounds checks, typed arrays | Element widths and bounds facts; a compare no longer costs a field its array length. | A sort that moves elements without counting them: designed, not built. |
@@ -63,7 +63,7 @@ means it is on main.
 | **RegExp** | the regular-expression engine | Not provided. | Decided: matchers generated at compile time for literal patterns, plus the TypeScript interpreter in `runtime/ecmascript` for dynamic ones. Needs the Unicode data. |
 | **JSON** | parse and stringify | `JSON.stringify` writes each layout through a writer the compiler generates. `JSON.parse` is not provided (NTS1100). | Designed: a parser generated per static type for `JSON.parse(text) as T`, simdjson's scanner on native, a new representation for untyped values. |
 | **Builtins** ([design](builtins.md)) | which implementation of each global and module a target uses | One name list for every target; NTS1100 stops a build that reaches a missing builtin. | Approved: features, providers and per-target profiles, resolved at build time; the clock and randomness with deterministic providers for the tests. |
-| **Host boundary** | bytes, buffers, files, the network, C interop | C interop and the event loop are built. | Decided, not done: build libuv, zlib, brotli, zstd and OpenSSL from node's own sources instead of system libraries. |
+| **Host boundary** | bytes, buffers, files, the network, C interop | C interop and the event loop are built, with libuv, zlib, brotli, zstd and OpenSSL built from node's own sources instead of system libraries. | Decided, not built: the rest of [calling C](../targets/calling-c.md#status), from struct classes and lifetimes to shims and typed variadic calls. |
 
 Dates, time zones and Intl are built on these foundations
 ([design](time-and-intl.md)). On JS hosts (Wasm in a browser or node,
@@ -81,8 +81,8 @@ only where used. nts never depends on a system package.
 | simdutf | UTF-8 ↔ string conversion | prototyped: 3-8x faster on the UTF-8 rows |
 | simdjson (its scanner only) | JSON parsing | decided |
 | V8's fdlibm | `Math` matching node bit for bit | decided |
-| libuv, zlib, brotli, zstd, OpenSSL | I/O, compression, crypto | decided |
-| QuickJS `libunicode` | case conversion | to be replaced by the compiler's own Unicode data ([design](unicode.md)) |
+| libuv, zlib, brotli, zstd, OpenSSL | I/O, compression, crypto | built, from node's own sources |
+| QuickJS `libunicode` | RegExp's Unicode data, through a generated TypeScript file | to be replaced by the compiler's own Unicode data in stage 2 ([design](unicode.md)); case conversion no longer uses it |
 | ICU4C 78.3 (node's version) | locale services only: collation, word breaking, Intl formatting | proposed ([design](unicode.md), decision D3) |
 
 ## The JVM and Wasm
