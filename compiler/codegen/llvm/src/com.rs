@@ -429,6 +429,7 @@ fn adapter(
         "define internal i32 @{name}({}) nounwind {{",
         parameters.join(", ")
     );
+    crate::entry_parameters::pad(program, compiled, &mut arguments, platform, &mut body)?;
     out.push_str(&body);
     let have = compiled.return_type.clone();
     let have_ty = ty_of(&have, compiled)?;

@@ -1874,7 +1874,7 @@ fn declared_members<'a>(program: &'a hir::Program, class: &str) -> Vec<(&'a hir:
 }
 
 fn emit_classes<'a>(
-    program: &'a hir::Program,
+    context: &ClassProgram<'_, 'a>,
     classes: &FxHashSet<String>,
     ownership: &hir::own::Summaries,
     release_managed: bool,
@@ -1882,13 +1882,14 @@ fn emit_classes<'a>(
     out: &mut String,
 ) -> (String, Vec<&'a str>, Vec<manifest::Export>) {
     let mut exports = Vec::new();
+    let program = context.program;
     let mut class_inits = String::new();
     let mut published_classes: Vec<&str> = Vec::new();
     for (emitted, publish) in defined_classes(program) {
         if let Some((code, init, export)) = class_definition(
             emitted,
             publish,
-            program,
+            context,
             classes,
             ownership,
             release_managed,
@@ -1956,20 +1957,24 @@ fn member_kind(member: &str) -> (&str, Option<&'static str>) {
 /// One member's callback: the instance out of `this`, then the ordinary
 /// argument path.
 fn member_callback(
-    func: &hir::Func,
+    entry: &nts_codegen_c::PhysicalEntry<'_>,
     instance: &str,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
     release_managed: bool,
     return_is_borrowed: bool,
 ) -> Result<String, Skipped> {
+    let func = entry.function;
     let (ret, crossings) = member_crossings(func, layouts, classes)?;
-    let symbol = c_identifier(&func.name);
-    let params: Vec<String> = func.params.iter().map(|p| c_type(&p.ty, layouts)).collect();
+    let symbol = &entry.symbol;
+    let canonical_receiver = entry
+        .parameters
+        .first()
+        .is_some_and(|ty| ty == "NtsHeader *");
     let mut out = format!(
         "{} {symbol}({});\nstatic napi_value nts_napi_{symbol}(napi_env env, napi_callback_info info) {{\n",
-        c_type(&func.return_type, layouts),
-        params.join(", ")
+        entry.result,
+        entry.parameters.join(", ")
     );
     let count = crossings.len();
     if count == 0 {
@@ -1985,7 +1990,12 @@ fn member_callback(
         "    {instance} *nts_self = NULL;\n    if (!nts_napi_check(env, napi_unwrap(env, self, (void **)&nts_self), \"could not read the instance\")) return NULL;\n"
     );
 
-    let mut args: Vec<String> = vec!["nts_self".to_owned()];
+    let receiver = if canonical_receiver {
+        "(NtsHeader *)nts_self"
+    } else {
+        "nts_self"
+    };
+    let mut args: Vec<String> = vec![receiver.to_owned()];
     for (index, (crossing, parameter)) in
         crossings.iter().zip(func.params.iter().skip(1)).enumerate()
     {
@@ -2011,6 +2021,15 @@ fn member_callback(
     }
     out.push_str(
         "    NtsLanding nts_landing;\n    if (setjmp(nts_landing.frame) != 0) {\n        nts_napi_raise(env, &nts_landing);\n        out = NULL;\n        goto nts_napi_cleanup;\n    }\n    nts_landing_push(&nts_landing);\n",
+    );
+    // Source arity controls JavaScript inputs; physical ignored parameters
+    // are supplied only to the exact definition selected by publication.
+    args.extend(
+        entry
+            .parameters
+            .iter()
+            .skip(func.params.len())
+            .map(|ty| format!("({ty}){{0}}")),
     );
     let call = format!("{symbol}({})", args.join(", "));
     out.push_str(&marshal(
@@ -2154,15 +2173,39 @@ fn why_uncompiled(program: &hir::Program, name: &str, absent: &str) -> String {
         .map_or_else(|| absent.to_owned(), |(_, why)| format!("{absent}: {why}"))
 }
 
+struct ClassProgram<'a, 'program> {
+    program: &'program hir::Program,
+    abi: &'a nts_codegen_c::EntryAbi<'program>,
+    published: Option<&'a nts_codegen_c::PublishedEntries<'a, 'program>>,
+}
+
+fn member_entry<'p>(
+    context: &ClassProgram<'_, 'p>,
+    func: &hir::Func,
+) -> Result<nts_codegen_c::PhysicalEntry<'p>, Skipped> {
+    let entry = context.published.map_or_else(
+        || context.abi.function(func),
+        |entries| entries.function(func),
+    );
+    match entry {
+        Ok(Some(entry)) if entry.linkable => Ok(entry),
+        result => Err(Skipped {
+            function: func.name.clone(),
+            reason: format!("has no linkable C member entry: {result:?}"),
+        }),
+    }
+}
+
 fn class_definition(
     class: &str,
     publish: &str,
-    program: &hir::Program,
+    context: &ClassProgram<'_, '_>,
     classes: &FxHashSet<String>,
     ownership: &hir::own::Summaries,
     release_managed: bool,
     skipped: &mut Vec<Skipped>,
 ) -> Option<(String, String, manifest::Export)> {
+    let program = context.program;
     let layouts = &program.layouts;
     let Some(constructor) = program
         .funcs
@@ -2232,14 +2275,16 @@ fn class_definition(
     // class does.
     let mut descriptors: Vec<String> = Vec::new();
     for (func, member) in declared_members(program, class) {
-        match member_callback(
-            func,
-            &instance,
-            layouts,
-            classes,
-            release_managed,
-            ownership.hands_back(&func.name),
-        ) {
+        match member_entry(context, func).and_then(|entry| {
+            member_callback(
+                &entry,
+                &instance,
+                layouts,
+                classes,
+                release_managed,
+                ownership.hands_back(&func.name),
+            )
+        }) {
             Ok(text) => {
                 out.push_str(&text);
                 let symbol = c_identifier(&func.name);
@@ -4317,6 +4362,22 @@ fn converted_layouts(
 
 #[must_use]
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
+    emit_with_plan(&nts_codegen_c::EntryAbi::new(program), refused, None)
+}
+
+/// Generate the addon using the C producer's authenticated surviving output.
+/// Every consumer, including class methods, borrows the same whole-addon plan.
+#[must_use]
+pub fn emit_published(entries: &nts_codegen_c::PublishedEntries<'_, '_>) -> Addon {
+    emit_with_plan(entries.plan(), entries.refused(), Some(entries))
+}
+
+fn emit_with_plan<'a, 'p>(
+    abi: &'a nts_codegen_c::EntryAbi<'p>,
+    refused: &[String],
+    publication: Option<&'a nts_codegen_c::PublishedEntries<'a, 'p>>,
+) -> Addon {
+    let program = abi.program();
     let mut out = preamble(program);
     let mut manifest = Manifest::default();
 
@@ -4400,7 +4461,11 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     }
 
     let (class_inits, published_classes, class_exports) = emit_classes(
-        program,
+        &ClassProgram {
+            program,
+            abi,
+            published: publication,
+        },
         &classes,
         &ownership,
         release_managed,

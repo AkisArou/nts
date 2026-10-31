@@ -373,37 +373,41 @@ fn adapter(
         };
         arguments.push(format!("({}){value}", cast(slot)?));
     }
-    let call = |arguments: &[String]| {
-        format!(
+    let call = |arguments: &[String]| -> Result<String, String> {
+        let mut arguments = arguments.to_vec();
+        program
+            .direct_arguments(compiled, &mut arguments)
+            .map_err(|diagnostic| diagnostic.message)?;
+        Ok(format!(
             "{}({})",
             program.function(&compiled.name),
             arguments.join(", ")
-        )
+        ))
     };
     let body = match result {
-        Type::Void => format!("{};", call(&arguments)),
+        Type::Void => format!("{};", call(&arguments)?),
         // A string: an `HSTRING` of its own, which the caller owns.
         Type::Managed(nts_core::hir::ManagedType::String) => {
             parameters.push(format!("void **{out}"));
             format!(
                 "*{out} = nts_com_answer_string((NtsString *){});",
-                call(&arguments)
+                call(&arguments)?
             )
         }
         // An object: a reference the caller owns, whichever the provider.
         Type::Pointer(_) => {
             parameters.push(format!("void **{out}"));
-            format!("*{out} = nts_com_answer((void *){});", call(&arguments))
+            format!("*{out} = nts_com_answer((void *){});", call(&arguments)?)
         }
         Type::Record(_) => {
             parameters.push(format!("{} *{out}", result.c_type()));
             let mut with_out = arguments.clone();
             with_out.push(format!("({}){out}", cast(declared)?));
-            format!("{};", call(&with_out))
+            format!("{};", call(&with_out)?)
         }
         _ => {
             parameters.push(format!("{} *{out}", result.c_type()));
-            format!("*{out} = ({}){};", result.c_type(), call(&arguments))
+            format!("*{out} = ({}){};", result.c_type(), call(&arguments)?)
         }
     };
     writer.line(

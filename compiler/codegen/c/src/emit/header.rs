@@ -153,6 +153,11 @@ pub(super) fn emit(
                     &param.origin,
                     &format!("{published}_{}_t", param.name),
                 )?;
+                let ty = if index == 0 {
+                    program.receiver_type(func).map_or(ty, str::to_owned)
+                } else {
+                    ty
+                };
                 params.push(format!("{ty} __nts_v{index}"));
             }
             writer.line(&func.origin, export_comment(published, internal));

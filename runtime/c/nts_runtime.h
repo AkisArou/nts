@@ -198,6 +198,14 @@ typedef struct NtsForeignSlot {
   const NtsFamilyOps *ops;
 } NtsForeignSlot;
 
+/* Fixed indirect entry roles. Generated definitions and runtime readers use
+ * these exact types: pointee constness is part of C function compatibility.
+ * Printers may invoke JavaScript hooks that mutate their receiver. */
+struct NtsHeader;
+typedef struct NtsHeader *(*NtsPrinterEntry)(struct NtsHeader *object);
+typedef void (*NtsManagedCallbackEntry)(struct NtsHeader *object);
+typedef void (*NtsTaskEntry)(void *state);
+
 typedef struct NtsDescriptor {
   uint32_t kind;
   uint32_t size;
@@ -309,7 +317,7 @@ typedef struct NtsDescriptor {
    * success. A raising printer records its original erased throw and returns
    * NULL. Forwarders preserve that pending state and never consume NULL;
    * the compiled language conversion boundary takes and throws it. */
-  struct NtsHeader *(*to_string)(const struct NtsHeader *object);
+  NtsPrinterEntry to_string;
   /* What a function of this type is called: `f.name` where the type does not
    * settle it, and the name in a function's text. A string the compiler
    * writes beside the descriptor for every closure class and every class used
@@ -2998,10 +3006,10 @@ NtsString *nts_access_key_description(NtsValue key);
 /* What a descriptor's `to_string` points at, for the kinds the compiler emits:
  * an object whose prototype chain adds nothing, a closure or a class token, a
  * bound function, and an array. */
-NtsString *nts_object_to_string(const NtsHeader *object);
-NtsString *nts_function_to_string(const NtsHeader *object);
-NtsString *nts_bound_function_to_string(const NtsHeader *object);
-NtsString *nts_array_to_string(const NtsHeader *object);
+NtsString *nts_object_to_string(NtsHeader *object);
+NtsString *nts_function_to_string(NtsHeader *object);
+NtsString *nts_bound_function_to_string(NtsHeader *object);
+NtsString *nts_array_to_string(NtsHeader *object);
 /* `f.name` where the type does not settle it: the function's descriptor's
  * `function_name`. */
 NtsString *nts_function_name(NtsValue function);
@@ -3972,9 +3980,9 @@ static inline double nts_max(double a, double b) {
  * give the reference back. A host that discards a task on teardown without
  * saying so leaks the frame and everything it holds. */
 typedef struct NtsTask {
-  void (*run)(void *state);
+  NtsTaskEntry run;
   /* Release `state` without running. Null when there is nothing owned. */
-  void (*drop)(void *state);
+  NtsTaskEntry drop;
   void *state;
 } NtsTask;
 

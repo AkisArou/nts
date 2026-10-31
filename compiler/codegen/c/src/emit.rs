@@ -23,6 +23,9 @@ use nts_core::hir::{
 use nts_diagnostics::Diagnostic;
 use nts_semantic_schema::{JsText, Origin};
 
+mod dispatch_abi;
+/// The C ABI of program-owned entry points, also read by native consumers.
+pub use dispatch_abi::{PhysicalEntry, PhysicalValue, Plan as EntryAbi, PublishedEntries};
 mod header;
 use nts_codegen_common::literals::Pool as Literals;
 mod notices;
@@ -456,6 +459,19 @@ pub fn main_for(shape: MainShape) -> String {
 fn operands_in_c(func: &Func, op: &nts_core::hir::Op) -> Vec<ValueId> {
     match &op.kind {
         OpKind::NativeBridge { .. } => Vec::new(),
+        OpKind::Call { callee, args, .. }
+            if dispatch_abi::slot_argument(callee)
+                .and_then(|at| args.get(at))
+                .is_some_and(|value| {
+                    matches!(func.value(*value).kind, OpKind::DispatchSlot(_))
+                }) =>
+        {
+            let slot = dispatch_abi::slot_argument(callee);
+            args.iter()
+                .enumerate()
+                .filter_map(|(at, value)| (Some(at) != slot).then_some(*value))
+                .collect()
+        }
         other => nts_core::hir::specialize::integral_remainder(func, op).map_or_else(
             || nts_core::hir::operands_of(other),
             |(dividend, divisor)| vec![dividend, divisor],
@@ -505,24 +521,29 @@ enum HelperName {
 /// escape; HIR/diagnostics retain their original source names.
 pub(super) struct Emission<'a> {
     source: &'a Program,
-    source_symbols: nts_codegen_common::source_symbols::SourceSymbols<'a>,
+    dispatch_abi: dispatch_abi::Plan<'a>,
+    source_symbols: std::rc::Rc<nts_codegen_common::source_symbols::SourceSymbols<'a>>,
     helper_names: [String; 8],
-    native_symbols: nts_codegen_common::native_symbols::NativeSymbols<'a>,
+    native_symbols: std::rc::Rc<nts_codegen_common::native_symbols::NativeSymbols<'a>>,
 }
 
 impl<'a> Emission<'a> {
+    #[cfg(test)]
     fn new(source: &'a Program) -> Self {
-        let source_symbols = nts_codegen_common::source_symbols::SourceSymbols::new(source);
+        Self::planned(&EntryAbi::new(source))
+    }
+
+    fn planned(plan: &EntryAbi<'a>) -> Self {
         let helper_names = [
             "object", "self", "visit", "slot", "bytes", "minimum", "a", "out",
         ]
         .map(|label| format!("__nts_{label}"));
-        let native_symbols = nts_codegen_common::native_symbols::NativeSymbols::new(source);
         Self {
-            source,
-            source_symbols,
+            source: plan.program(),
+            dispatch_abi: plan.clone(),
+            source_symbols: std::rc::Rc::clone(&plan.source_symbols),
             helper_names,
-            native_symbols,
+            native_symbols: std::rc::Rc::clone(&plan.native_symbols),
         }
     }
 
@@ -559,6 +580,38 @@ impl<'a> Emission<'a> {
 
     fn function(&self, name: &str) -> String {
         self.source_symbols.function(name)
+    }
+
+    fn direct_arguments(
+        &self,
+        function: &Func,
+        arguments: &mut Vec<String>,
+    ) -> Result<(), Diagnostic> {
+        self.dispatch_abi.direct_arguments(function, arguments);
+        self.pad_arguments(function, arguments)
+    }
+
+    fn pad_arguments(
+        &self,
+        function: &Func,
+        arguments: &mut Vec<String>,
+    ) -> Result<(), Diagnostic> {
+        let supplied = arguments.len().saturating_sub(function.params.len());
+        for ty in self
+            .dispatch_abi
+            .parameters
+            .extra(function)
+            .iter()
+            .skip(supplied)
+        {
+            let ty = dispatch_abi::channel_type(self, ty, false, &function.origin)?;
+            arguments.push(format!("({ty}){{0}}"));
+        }
+        Ok(())
+    }
+
+    fn receiver_type(&self, function: &Func) -> Option<&'static str> {
+        self.dispatch_abi.receiver_type(function)
     }
 }
 
@@ -673,6 +726,7 @@ impl UnicodeNeeds {
 /// C for one program, and what could not be emitted.
 #[derive(Debug)]
 pub struct Emitted {
+    publication: dispatch_abi::Published,
     pub writer: CodeWriter,
     /// C declarations and stable object aliases for the entry modules' exports.
     pub header: String,
@@ -727,6 +781,16 @@ pub struct Emitted {
 }
 
 impl Emitted {
+    /// The backend's surviving entries, authenticated by the exact shared plan
+    /// that emitted them. An independently rebuilt plan is not this proof.
+    #[must_use]
+    pub fn published_entries<'e, 'p>(
+        &'e self,
+        plan: &'e EntryAbi<'p>,
+    ) -> Option<PublishedEntries<'e, 'p>> {
+        self.publication.view(plan, &self.refused)
+    }
+
     #[must_use]
     pub fn is_complete(&self) -> bool {
         self.diagnostics.is_empty()
@@ -985,8 +1049,14 @@ fn drop_orphaned_bodies(
 impl Emitted {
     /// A program with no functions at all: nothing to emit and nothing to
     /// export, but still a well-formed answer rather than an error.
-    fn empty(writer: CodeWriter, diagnostics: Vec<Diagnostic>, refused: Vec<String>) -> Self {
+    fn empty(
+        writer: CodeWriter,
+        diagnostics: Vec<Diagnostic>,
+        refused: Vec<String>,
+        plan: &EntryAbi<'_>,
+    ) -> Self {
         Self {
+            publication: dispatch_abi::Published::empty(plan, &diagnostics),
             writer,
             header: header::empty(),
             diagnostics,
@@ -1058,16 +1128,26 @@ fn refused_by_lowering(program: &Emission<'_>, emitted: &str) -> bool {
 /// `abi`, which is required rather than defaulted so that no caller gets the
 /// host's answer by omission.
 #[must_use]
-#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn emit(input: &Program, abi: NativeAbi) -> Emitted {
-    let emission = Emission::new(input);
+    emit_planned(&EntryAbi::new(input), abi)
+}
+
+/// Emit using the caller's shared, immutable entry ABI plan. The returned C
+/// owns its output; only a later publication view borrows the plan's Program.
+#[must_use]
+#[expect(
+    clippy::too_many_lines,
+    reason = "assembles the translation unit in dependency order"
+)]
+pub fn emit_planned(plan: &EntryAbi<'_>, abi: NativeAbi) -> Emitted {
+    let emission = Emission::planned(plan);
     let program = &emission;
     let mut writer = CodeWriter::new();
     let mut diagnostics = program.reserved_public_names();
 
     let mut refused = Vec::new();
     let Some(first) = program.funcs.first() else {
-        return Emitted::empty(writer, diagnostics, refused);
+        return Emitted::empty(writer, diagnostics, refused, plan);
     };
     let origin = first.origin.clone();
 
@@ -1222,12 +1302,22 @@ pub fn emit(input: &Program, abi: NativeAbi) -> Emitted {
     }
     writer.blank(&origin);
 
+    let entries_available = match program
+        .dispatch_abi
+        .emit_adapters(&mut writer, program, &defined)
+    {
+        Ok(()) => true,
+        Err(diagnostic) => {
+            diagnostics.push(diagnostic);
+            false
+        }
+    };
     let kept = bodies
         .iter()
         .map(|(_, _, func, _)| func.name.as_str())
         .collect();
     let mut data = CodeWriter::new();
-    emit_object_descriptors(
+    let published_layouts = emit_object_descriptors(
         &mut data,
         &origin,
         program,
@@ -1240,7 +1330,8 @@ pub fn emit(input: &Program, abi: NativeAbi) -> Emitted {
     emit_templates(&mut data, program, &literals, &literals.templates(&kept));
     emit_literals(&mut writer, &origin, &literals.definitions(&kept));
     writer.append(data);
-    if let Err(diagnostic) = emit_globals(&mut writer, program) {
+    let mut published_values = rustc_hash::FxHashMap::default();
+    if let Err(diagnostic) = emit_globals(&mut writer, program, &mut published_values) {
         diagnostics.push(diagnostic);
     }
     if let Err(diagnostic) = emit_closure_call_slot(&mut writer, &origin, program) {
@@ -1256,7 +1347,16 @@ pub fn emit(input: &Program, abi: NativeAbi) -> Emitted {
     let witness = witness_file(program, abi, &origin, &mut diagnostics);
 
     let (exported_symbols, published_without_a_symbol) = published_symbols(program);
+    let publication = dispatch_abi::Published::new(
+        plan,
+        &defined,
+        published_layouts,
+        published_values,
+        entries_available,
+        &diagnostics,
+    );
     Emitted {
+        publication,
         writer,
         header,
         diagnostics,
@@ -1942,7 +2042,7 @@ fn dispatched_entry(
         |default| {
             format!(
                 "nts_family_row({receiver}->header.descriptor, {column}u, (void *){})",
-                program.function(default)
+                program.dispatch_abi.symbol(program, default)
             )
         },
     ))
@@ -1960,8 +2060,8 @@ fn call_text(
 ) -> Result<String, Diagnostic> {
     // A virtual call names the implementation the receiver's *static* type would
     // reach. That is not the one that runs -- the table decides that -- but it
-    // is what gives the call its signature, and an override has the same
-    // signature by definition.
+    // gives the call its logical signature; the shared entry plan appends
+    // any unused physical tail that this selector requires.
     //
     // A *closure* call has no such declaration -- every closure of a type has
     // its own implementation -- so its signature comes from the call site
@@ -1977,7 +2077,7 @@ fn call_text(
     // before any of this ran, so an argument that is not the parameter's type is
     // a subtype of it.
     let declared = context.program.declaration(callee);
-    let arguments = call_arguments(func, callee, args, context, origin, declared);
+    let arguments = abi_arguments(func, callee, args, context, origin, declared)?;
     let call_name = match callee {
         Callee::Direct(target) => context.program.function(target),
         _ => target.to_owned(),
@@ -2037,6 +2137,13 @@ fn call_text(
     };
 
     let wanted = &func.values[value.0 as usize].ty;
+    let call = if matches!(callee, Callee::Closure { .. } | Callee::Virtual { .. })
+        && matches!(wanted, HirType::Managed(ManagedType::Object(_)))
+    {
+        format!("({})({call})", c_type_of(context.program, wanted, origin)?)
+    } else {
+        call
+    };
     let cast = call_result_cast(declared, wanted, context, origin)?;
 
     // The recording this type exists for, at the one place a named call is
@@ -2056,6 +2163,51 @@ fn call_text(
         // The call still happens; only its result is unwanted.
         format!("{call};")
     })
+}
+
+fn abi_arguments(
+    func: &Func,
+    callee: &Callee,
+    args: &[ValueId],
+    context: &Context<'_>,
+    origin: &Origin,
+    declared: Option<&Func>,
+) -> Result<Vec<String>, Diagnostic> {
+    let mut arguments = call_arguments(func, callee, args, context, origin, declared);
+    if matches!(callee, Callee::Closure { .. } | Callee::Virtual { .. }) {
+        for (at, argument) in args.iter().enumerate() {
+            let ty = &func.value(*argument).ty;
+            if at == 0 || matches!(ty, HirType::Managed(ManagedType::Object(_))) {
+                arguments[at] = format!("(NtsHeader *){}", value_name(*argument));
+            }
+        }
+    } else if let Some(declared) = declared {
+        context.program.direct_arguments(declared, &mut arguments)?;
+    }
+    if matches!(callee, Callee::Virtual { .. })
+        && let Some(declared) = declared
+    {
+        context.program.pad_arguments(declared, &mut arguments)?;
+    }
+    if let Some(at) = dispatch_abi::slot_argument(callee)
+        && let Some(value) = args.get(at)
+        && let OpKind::DispatchSlot(selector) = func.value(*value).kind
+    {
+        let column = context
+            .program
+            .dispatch_abi
+            .callbacks
+            .column(selector)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "NTS2006",
+                    "a runtime callback has no compatible C ABI column",
+                    origin.location,
+                )
+            })?;
+        arguments[at] = format!("{column}u");
+    }
+    Ok(arguments)
 }
 
 fn call_arguments(
@@ -2937,19 +3089,12 @@ fn closure_signature(
     program: &Emission<'_>,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
-    let mut params = Vec::new();
-    for arg in args {
-        params.push(c_type_of(program, &func.values[arg.0 as usize].ty, origin)?);
-    }
-    Ok(format!(
-        "{} (*)({})",
-        c_type_of(program, &func.values[value.0 as usize].ty, origin)?,
-        if params.is_empty() {
-            "void".to_owned()
-        } else {
-            params.join(", ")
-        }
-    ))
+    dispatch_abi::pointer_type(
+        program,
+        &func.value(value).ty,
+        args.iter().map(|arg| &func.value(*arg).ty),
+        origin,
+    )
 }
 
 /// A function-pointer type for calling one implementation of a virtual method.
@@ -2958,26 +3103,19 @@ pub(super) fn virtual_signature(
     target: &str,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
-    let Some(func) = program.funcs.iter().find(|func| func.name == target) else {
+    let Some(func) = program.dispatch_abi.function_named(target) else {
         return Err(Diagnostic::error(
             "NTS2006",
             format!("no declaration for `{target}` to take a signature from"),
             origin.location,
         ));
     };
-    let mut params = Vec::new();
-    for param in &func.params {
-        params.push(c_type_of(program, &param.ty, origin)?);
-    }
-    Ok(format!(
-        "{} (*)({})",
-        return_c_type(program, &func.return_type, origin)?,
-        if params.is_empty() {
-            "void".to_owned()
-        } else {
-            params.join(", ")
-        }
-    ))
+    dispatch_abi::pointer_type(
+        program,
+        &func.return_type,
+        program.dispatch_abi.parameter_types(func),
+        origin,
+    )
 }
 
 /// The C name of a module-scope variable.
@@ -3072,7 +3210,11 @@ fn global_is_observed(program: &Emission<'_>, at: u32) -> bool {
     })
 }
 
-fn emit_globals(writer: &mut CodeWriter, program: &Emission<'_>) -> Result<(), Diagnostic> {
+fn emit_globals(
+    writer: &mut CodeWriter,
+    program: &Emission<'_>,
+    published: &mut rustc_hash::FxHashMap<usize, dispatch_abi::ValueReader>,
+) -> Result<(), Diagnostic> {
     for (at, global) in program.globals.iter().enumerate() {
         // Not `continue`-ing on an exported one: external linkage *is* a
         // reader, and the whole point of publishing a constant is that
@@ -3119,6 +3261,21 @@ fn emit_globals(writer: &mut CodeWriter, program: &Emission<'_>) -> Result<(), D
                 }
             ),
         );
+        if program.dispatch_abi.value_readers && visibility.is_empty() {
+            let result = dispatch_abi::channel_type(program, &global.ty, false, &global.origin)?;
+            let symbol = format!("__nts_value_reader_{at}");
+            let value = program.source_symbols.global(at);
+            let value = if matches!(global.ty, HirType::Managed(ManagedType::Object(_))) {
+                format!("(NtsHeader *)({value})")
+            } else {
+                value
+            };
+            writer.line(
+                &global.origin,
+                format!("{result} {symbol}(void) {{ return {value}; }}"),
+            );
+            published.insert(at, dispatch_abi::ValueReader { symbol, result });
+        }
     }
     if !program.globals.is_empty() {
         writer.blank(&program.globals[0].origin);
@@ -3649,7 +3806,8 @@ fn emit_object_descriptors(
     defined: &rustc_hash::FxHashSet<String>,
     literals: &Literals,
     diagnostics: &mut Vec<Diagnostic>,
-) {
+) -> rustc_hash::FxHashSet<usize> {
+    let mut published_layouts = rustc_hash::FxHashSet::default();
     let cyclic_layouts = &cycles.cyclic;
     let needed = layouts_needing_descriptors(program);
     let published = published_class_layouts(program);
@@ -3695,7 +3853,7 @@ fn emit_object_descriptors(
         // receiver's static type declares, and a class whose method was refused
         // is one no surviving call can reach. A *closure* is the exception, and
         // is refused above rather than nulled here.
-        let projected = match program.native_methods(layout) {
+        let projected = match program.dispatch_abi.row(layout) {
             Ok(row) => row,
             Err(why) => {
                 diagnostics.push(Diagnostic::error("NTS2006", why, origin.location));
@@ -3704,20 +3862,38 @@ fn emit_object_descriptors(
         };
         let entry = |method: Option<&str>| {
             method
-                .map(|name| program.function(name))
-                .filter(|symbol| defined.contains(symbol))
-                .map_or_else(|| "0".to_owned(), |symbol| format!("(void *){symbol}"))
+                .filter(|name| defined.contains(&program.function(name)))
+                .map_or_else(
+                    || "0".to_owned(),
+                    |name| format!("(void *){}", program.dispatch_abi.symbol(program, name)),
+                )
         };
-        let methods = if projected.iter().all(|method| entry(*method) == "0") {
+        let mut entries: Vec<String> = projected.iter().copied().map(entry).collect();
+        let callback_columns = dispatch_abi::append_callback_row(
+            &program.dispatch_abi.callbacks,
+            program,
+            layout,
+            defined,
+            &mut entries,
+        );
+        let methods = if entries.iter().all(|entry| entry == "0") {
             "0".to_owned()
         } else {
-            let entries: Vec<String> = projected.iter().copied().map(entry).collect();
-            let table = match program.native_table_index(layout) {
-                Ok(Some(index)) => format!("__nts_vtable_shared_{index}"),
-                Ok(None) => format!("__nts_vtable_{name}"),
-                Err(why) => {
-                    diagnostics.push(Diagnostic::error("NTS2006", why, origin.location));
-                    continue;
+            let table = if callback_columns {
+                let at = program
+                    .dispatch_abi
+                    .callbacks
+                    .row_index(layout)
+                    .unwrap_or(index);
+                format!("__nts_abi_vtable_{at}")
+            } else {
+                match program.native_table_index(layout) {
+                    Ok(Some(index)) => format!("__nts_vtable_shared_{index}"),
+                    Ok(None) => format!("__nts_vtable_{name}"),
+                    Err(why) => {
+                        diagnostics.push(Diagnostic::error("NTS2006", why, origin.location));
+                        continue;
+                    }
                 }
             };
             if emitted_rows.insert(table.clone()) {
@@ -3821,12 +3997,13 @@ fn emit_object_descriptors(
         // and null is a refusal by name.
         let to_string =
             |class: Option<&nts_core::hir::ClassIdentity>| match program.printing(layout, class) {
-                Some(Printed::By(function)) => Some(program.function(function))
-                    .filter(|symbol| defined.contains(symbol))
-                    .map_or_else(
-                        || "NULL".to_owned(),
-                        |symbol| format!("(NtsString *(*)(const NtsHeader *))(void *){symbol}"),
-                    ),
+                Some(Printed::By(function)) => {
+                    if defined.contains(&program.function(function)) {
+                        program.dispatch_abi.printer_symbol(program, function)
+                    } else {
+                        "NULL".to_owned()
+                    }
+                }
                 Some(Printed::Object) => "nts_object_to_string".to_owned(),
                 Some(Printed::Function) => "nts_function_to_string".to_owned(),
                 Some(Printed::BoundFunction) => "nts_bound_function_to_string".to_owned(),
@@ -3854,6 +4031,7 @@ fn emit_object_descriptors(
             )
         };
         emit_layout_descriptors(writer, origin, program, layout, &name, (&shared, &tail));
+        published_layouts.insert(index);
         if published.contains(&index) {
             // One hole per semantic class, even when their storage is shared.
             // The constructor receiver chooses an instantiated layout; the
@@ -3887,6 +4065,7 @@ fn emit_object_descriptors(
         }
         writer.blank(origin);
     }
+    published_layouts
 }
 
 /// The construction hole for a published class, and the only symbol among these
@@ -4939,8 +5118,29 @@ fn signature(program: &Emission<'_>, func: &Func) -> Result<String, Diagnostic> 
     let public = program.source_symbols.is_public(func.name.as_str());
     let mut params = Vec::new();
     for (index, (param, value)) in func.params.iter().zip(parameter_values(func)?).enumerate() {
-        let ty = c_type_of(program, &param.ty, &param.origin)?;
-        params.push(format!("{ty} {}", parameter_name(index, value)));
+        let (ty, name) = if index == 0
+            && let Some(ty) = program.dispatch_abi.receiver_type(func)
+        {
+            (ty.to_owned(), "__nts_receiver".to_owned())
+        } else {
+            (
+                c_type_of(program, &param.ty, &param.origin)?,
+                parameter_name(index, value),
+            )
+        };
+        params.push(format!("{ty} {name}"));
+    }
+    for (at, ty) in program
+        .dispatch_abi
+        .parameters
+        .extra(func)
+        .iter()
+        .enumerate()
+    {
+        params.push(format!(
+            "{} __nts_ignored{at}",
+            dispatch_abi::channel_type(program, ty, false, &func.origin)?
+        ));
     }
     Ok(format_signature(
         &program.function(&func.name),
@@ -5037,6 +5237,7 @@ fn emit_body(
             || !matches!(
                 func.values[value.0 as usize].kind,
                 OpKind::ClosureStatic
+                    | OpKind::DispatchSlot(_)
                     | OpKind::Call { .. }
                     | OpKind::NativeMalloc { .. }
                     | OpKind::ArrayGet { .. }
@@ -5051,12 +5252,34 @@ fn emit_body(
     // match, so the parameter stays and is discarded explicitly.
     writer.indent();
     for (index, (param, id)) in func.params.iter().zip(parameter_values(func)?).enumerate() {
-        if id.is_none_or(|id| !read.contains(&id)) {
+        if index == 0
+            && let Some(receiver) = context.program.dispatch_abi.receiver_type(func)
+        {
+            if let Some(id) = id.filter(|id| read.contains(id)) {
+                let ty = c_type_of(context.program, &param.ty, &param.origin)?;
+                writer.line(
+                    &param.origin,
+                    format!("{ty} {} = ({ty})__nts_receiver;", value_name(id)),
+                );
+            } else {
+                writer.line(&param.origin, format!("(void)({receiver})__nts_receiver;"));
+            }
+        } else if id.is_none_or(|id| !read.contains(&id)) {
             writer.line(
                 &param.origin,
                 format!("(void){};", parameter_name(index, id)),
             );
         }
+    }
+    for (at, _) in context
+        .program
+        .dispatch_abi
+        .parameters
+        .extra(func)
+        .iter()
+        .enumerate()
+    {
+        writer.line(&func.origin, format!("(void)__nts_ignored{at};"));
     }
     writer.dedent();
 
@@ -5799,7 +6022,7 @@ fn suspension(op: &nts_core::hir::Op, program: &Emission<'_>) -> Result<String, 
             frame,
             resume,
         } => Ok(format!(
-            "nts_promise_subscribe({}, (NtsTask){{ (void (*)(void *))&{}, 0, {} }});",
+            "nts_promise_subscribe({}, (NtsTask){{ &{}, 0, {} }});",
             value_name(*promise),
             program.function(resume),
             value_name(*frame)
@@ -6043,6 +6266,7 @@ fn emit_op(
         // parameter; a block parameter is written by the edges that jump here;
         // a return is spelled by the terminator.
         OpKind::Param(_) | OpKind::BlockParam(_) | OpKind::Return(_) => return Ok(()),
+        OpKind::DispatchSlot(_) if !context.read.contains(&value) => return Ok(()),
         // Answered by preparation's first step (`hir::features`); arriving with
         // one means a program was emitted unprepared.
         OpKind::Provided(helper) => {
@@ -6084,7 +6308,16 @@ fn emit_op(
             "nts_promise_subscribe({}, nts_callback_task((NtsHeader *){}, {}, false));",
             value_name(*promise),
             value_name(*reaction),
-            native_column(context.program, *slot, &op.origin)?
+            context
+                .program
+                .dispatch_abi
+                .callbacks
+                .column(*slot)
+                .ok_or_else(|| Diagnostic::error(
+                    "NTS2006",
+                    "a reaction has no compatible C ABI column",
+                    op.origin.location
+                ))?
         ),
         OpKind::InstanceOf {
             value: at, classes, ..
@@ -7454,7 +7687,10 @@ mod optional;
 fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Emission<'_>) {
     let held = nts_codegen_common::counting::held(program);
     let arrays = nts_codegen_common::counting::array_families(program);
-    for counting in nts_codegen_common::counting::foreign(program) {
+    for counting in nts_codegen_common::counting::foreign_with(
+        program,
+        program.dispatch_abi.callbacks.foreign_counters(),
+    ) {
         // **The name in parentheses**, which a function-like macro of that
         // name does not expand. A counting pair is declared here whether or
         // not its header is included (unlike a binding's own prototype, which

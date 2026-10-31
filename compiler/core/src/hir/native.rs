@@ -1443,7 +1443,7 @@ impl HostFamily {
 /// The two functions a counted handle is retained and released with. Both
 /// take the object; `retain` hands it back, as `objc_retain` and
 /// `g_object_ref` do.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Counting {
     pub retain: &'static str,
     pub release: &'static str,

@@ -1047,6 +1047,7 @@ fn entry_point(
             arguments.push(format!("{to_ty} %p{slot}"));
         }
     }
+    crate::entry_parameters::pad(program, compiled, &mut arguments, platform, &mut body)?;
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();
     let call = format!(

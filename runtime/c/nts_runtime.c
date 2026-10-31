@@ -503,23 +503,23 @@ void nts_counting_reset(void) {
  * for a typed array its elements joined, as `Array.prototype.toString` does. A
  * `Map` and a `Set` share a descriptor and differ in `holds_values`. */
 #define NTS_TEXT(literal) nts_string_from_utf8(literal, sizeof(literal) - 1u)
-static NtsString *nts_map_to_string(const NtsHeader *object) {
+static NtsString *nts_map_to_string(NtsHeader *object) {
   return ((const NtsMap *)object)->holds_values ? NTS_TEXT("[object Map]")
                                                 : NTS_TEXT("[object Set]");
 }
-static NtsString *nts_promise_to_string(const NtsHeader *object) {
+static NtsString *nts_promise_to_string(NtsHeader *object) {
   (void)object;
   return NTS_TEXT("[object Promise]");
 }
-static NtsString *nts_buffer_to_string(const NtsHeader *object) {
+static NtsString *nts_buffer_to_string(NtsHeader *object) {
   (void)object;
   return NTS_TEXT("[object ArrayBuffer]");
 }
-static NtsString *nts_dataview_to_string(const NtsHeader *object) {
+static NtsString *nts_dataview_to_string(NtsHeader *object) {
   (void)object;
   return NTS_TEXT("[object DataView]");
 }
-static NtsString *nts_view_to_string(const NtsHeader *object) {
+static NtsString *nts_view_to_string(NtsHeader *object) {
   NtsString *comma = NTS_TEXT(",");
   NtsString *text = nts_view_join((const NtsView *)object, comma);
   nts_release(comma);
@@ -528,14 +528,14 @@ static NtsString *nts_view_to_string(const NtsHeader *object) {
 
 /* An object whose prototype chain adds nothing: a class with no `toString` of
  * its own, an object literal. Not a fallback -- that *is* its text. */
-NtsString *nts_object_to_string(const NtsHeader *object) {
+NtsString *nts_object_to_string(NtsHeader *object) {
   (void)object;
   return NTS_TEXT("[object Object]");
 }
 
 /* A bound function: a built-in node has no name for, although its `name` is
  * `"bound f"`. */
-NtsString *nts_bound_function_to_string(const NtsHeader *object) {
+NtsString *nts_bound_function_to_string(NtsHeader *object) {
   (void)object;
   return NTS_TEXT("function () { [native code] }");
 }
@@ -2910,7 +2910,7 @@ NtsString *nts_value_to_string(NtsValue value) {
    * name rather than answering `"[object Object]"` for it. */
   case NTS_TAG_OBJECT:
   case NTS_TAG_FUNCTION: {
-    const NtsHeader *object = nts_value_reference(value);
+    NtsHeader *object = nts_value_reference(value);
     if (object && object->descriptor && object->descriptor->to_string) {
       return object->descriptor->to_string(object);
     }
@@ -5729,7 +5729,7 @@ NtsString *nts_array_join_str(const NtsArray *a, const NtsString *sep) {
 static _Thread_local const NtsHeader *nts_joining[NTS_JOIN_DEPTH];
 static _Thread_local uint32_t nts_joining_depth;
 
-NtsString *nts_array_to_string(const NtsHeader *object) {
+NtsString *nts_array_to_string(NtsHeader *object) {
   for (uint32_t at = 0; at < nts_joining_depth; at++) {
     if (nts_joining[at] == object) {
       return NTS_TEXT("");
@@ -5834,7 +5834,7 @@ NtsString *nts_function_name(NtsValue function) {
 /* A closure or a class token. Node prints the function's source text, which a
  * compiled program does not keep, so this prints what node and every browser
  * print for a function they have no source for: a built-in's, with its name. */
-NtsString *nts_function_to_string(const NtsHeader *object) {
+NtsString *nts_function_to_string(NtsHeader *object) {
   static const char head[] = "function ";
   static const char tail[] = "() { [native code] }";
   NtsString *name = nts_function_name_of(object);
@@ -12763,7 +12763,8 @@ static void nts_callback_call(NtsCallback *entry) {
    * stores untyped pointers and the caller spells the signature. A timer
    * callback takes nothing and returns nothing, so there is one signature
    * here rather than a family. */
-  ((void (*)(NtsHeader *))callback->descriptor->methods[entry->slot])(callback);
+  ((NtsManagedCallbackEntry)callback->descriptor->methods[entry->slot])(
+      callback);
 }
 
 /* A one-shot: running it is the last thing that happens to it, so running is

@@ -1051,11 +1051,28 @@ pub(super) fn bridges(
         } else {
             parameters.join(", ")
         };
+        let dispatch_receiver = arguments.first().cloned().unwrap_or_default();
+        if dispatched.is_some() {
+            for (at, argument) in arguments.iter_mut().enumerate() {
+                if at == 0
+                    || compiled.params.get(at).is_some_and(|param| {
+                        matches!(param.ty, HirType::Managed(ManagedType::Object(_)))
+                    })
+                {
+                    *argument = format!("(NtsHeader *)({argument})");
+                }
+            }
+        } else {
+            program.direct_arguments(compiled, &mut arguments)?;
+        }
+        if dispatched.is_some() {
+            program.pad_arguments(compiled, &mut arguments)?;
+        }
         let call = match dispatched {
             Some(slot) => format!(
                 "(({})({})->header.descriptor->methods[{slot}])({})",
                 virtual_signature(program, &compiled.name, origin)?,
-                arguments[0],
+                dispatch_receiver,
                 arguments.join(", ")
             ),
             None => format!(

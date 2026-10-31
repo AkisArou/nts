@@ -1641,3 +1641,103 @@ fn an_instanceof_narrows_a_com_value_to_its_interface() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
 }
+
+#[test]
+fn a_com_reader_publishes_an_indirect_ignored_tail_before_its_call() {
+    let (dir, mut prepared) = prepare("indirect-tail", PROGRAM);
+    let program = &mut prepared.program;
+    let original = program
+        .funcs
+        .iter()
+        .find(|f| f.name == "App#OnLaunched")
+        .unwrap()
+        .clone();
+    assert_eq!(original.params.len(), 1);
+    let mut declaration = original.clone();
+    declaration.name = "AbiTail#declared".to_owned();
+    declaration.params.push(hir::Param {
+        name: "ignored".to_owned(),
+        ty: hir::HirType::PossiblyUndefined(Box::new(hir::HirType::Float { bits: 64 })),
+        origin: original.origin.clone(),
+        shape: hir::ParamShape::Optional,
+        known: hir::facts::Facts::TOP,
+        written: None,
+    });
+    // This raw producer control keeps the actual COM method identity; a
+    // frontend source interface may legitimately insert its own wrapper first.
+    let mut reader = original.clone();
+    reader.name = "AbiTail#reader".to_owned();
+    let receiver = reader.parameter_values().unwrap()[0].unwrap();
+    let undefined = hir::ValueId(u32::try_from(reader.values.len()).unwrap());
+    reader.values.push(hir::Op {
+        kind: hir::OpKind::ConstUndefined,
+        ty: declaration.params[1].ty.clone(),
+        origin: original.origin.clone(),
+    });
+    reader.blocks[0].ops.push(undefined);
+    let id = hir::ValueId(u32::try_from(reader.values.len()).unwrap());
+    reader.values.push(hir::Op {
+        kind: hir::OpKind::Call {
+            callee: hir::Callee::Virtual {
+                slot: 0,
+                declared: declaration.name.clone(),
+            },
+            args: vec![receiver, undefined],
+            frame: None,
+        },
+        ty: hir::HirType::Void,
+        origin: original.origin.clone(),
+    });
+    reader.blocks[0].ops.push(id);
+    program.funcs.extend([declaration, reader]);
+    program.layouts.push(hir::Layout {
+        name: "AbiTail".to_owned(),
+        types: Vec::new(),
+        fields: Vec::new(),
+        methods: vec![Some(original.name.clone())],
+        interfaces: Vec::new(),
+        base: None,
+    });
+    hir::native_dispatch::plan(program);
+    let plan = nts_codegen_common::entry_parameters::EntryParameters::new(program);
+    let actual = program
+        .funcs
+        .iter()
+        .find(|f| f.name == original.name)
+        .unwrap();
+    assert_eq!(plan.extra(actual).len(), 1);
+    let llvm = nts_codegen_llvm::emit(program, nts_codegen_llvm::Platform::WIN64_X86_64);
+    assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
+    let start = llvm
+        .text
+        .find("define internal i32 @__nts_com_adapter_App_0(")
+        .unwrap();
+    let body = &llvm.text[start..];
+    let end = body.find("\n}").unwrap();
+    let body = &body[..end];
+    assert!(body.contains("%entry.ignored1 = alloca"), "{body}");
+    assert!(
+        body.find("%entry.ignored1 = alloca").unwrap()
+            < body.find("ptr align 8 %entry.ignored1").unwrap(),
+        "{body}"
+    );
+    std::fs::write(dir.join("tail.ll"), &llvm.text).unwrap();
+    let compiled = Command::new("clang")
+        .current_dir(&dir)
+        .args([
+            "-target",
+            "x86_64-w64-windows-gnu",
+            "-Wno-override-module",
+            "-c",
+            "tail.ll",
+            "-o",
+            "tail.o",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        compiled.status.success(),
+        "{}",
+        String::from_utf8_lossy(&compiled.stderr)
+    );
+}

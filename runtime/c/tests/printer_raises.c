@@ -34,7 +34,7 @@ static void expect(const char *what, bool holds) {
   failures += !holds;
 }
 
-static NtsHeader *print_item(const NtsHeader *object) {
+static NtsHeader *print_item(NtsHeader *object) {
   const Item *item = (const Item *)object;
   over_pending += nts_raising() != 0;
   trace[calls++] = item->name;
@@ -46,7 +46,7 @@ static NtsHeader *print_item(const NtsHeader *object) {
   return (NtsHeader *)nts_string_from_utf8(&item->name, 1);
 }
 
-static NtsHeader *print_array(const NtsHeader *object) {
+static NtsHeader *print_array(NtsHeader *object) {
   return (NtsHeader *)nts_array_to_string(object);
 }
 

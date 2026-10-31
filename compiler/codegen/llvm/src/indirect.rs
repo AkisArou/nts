@@ -98,9 +98,16 @@ pub(crate) fn call_returning(
 /// hidden pointer, and an erased value on arm64, which C passes and returns
 /// as `[2 x i64]`. The body is internal (`body_symbol`), and the exported name
 /// is the entry that calls it (`c_entry` in `lib.rs`).
-pub(crate) fn behind_entry(func: &Func, platform: Platform, public: bool) -> bool {
+pub(crate) fn behind_entry(
+    func: &Func,
+    platform: Platform,
+    public: bool,
+    extra: &[&HirType],
+) -> bool {
     let crosses = |test: &dyn Fn(&HirType) -> bool| {
-        func.params.iter().any(|param| test(&param.ty)) || test(&func.return_type)
+        func.params.iter().any(|param| test(&param.ty))
+            || extra.iter().any(|ty| test(ty))
+            || test(&func.return_type)
     };
     public
         && match (applies(platform), platform.arch) {
@@ -135,8 +142,9 @@ pub(crate) fn definition(
     func: &Func,
     platform: Platform,
     (symbol, public): (String, bool),
+    extra: &[&HirType],
 ) -> (&'static str, String, bool) {
-    if behind_entry(func, platform, public) {
+    if behind_entry(func, platform, public, extra) {
         ("internal ", body_symbol(&symbol), true)
     } else {
         (if public { "" } else { "internal " }, symbol, false)

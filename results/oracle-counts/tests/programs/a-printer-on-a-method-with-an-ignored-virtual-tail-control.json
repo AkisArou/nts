@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-printer-on-a-method-with-an-ignored-virtual-tail-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-printer-on-a-method-with-an-ignored-virtual-tail-control/src/main.ts",
+      "signature": "9994e345e65778e41c2ce08e18f679af3f3923896e2c160912480c6b7d90d6e9",
+      "keys": {
+        "c": "504597f37a3241511c9957d92b955956",
+        "jvm": "da5f81f9cbb1c2da84b5ceaf4834a243",
+        "llvm": "fecbd53950bcc8f04c6f9f9f25cf1dfb"
+      },
+      "cases_sha256": "045a32d89403cd04563b1a669d274785f4041c4fb40d29b56d1de90215e2a687",
+      "driver_sha256": "8c5710a4713462795818d5e0d4b60aa536e26b55b77d81cc7207b37a13affc57",
+      "populations": {
+        "consolePath": {
+          "count": 29,
+          "cases_sha256": "f067a421674963cbe2709e461c485dae4eff0d9540f082c4f89b06ed200912df"
+        },
+        "conversions": {
+          "count": 29,
+          "cases_sha256": "1dd60844fe7897c5dacf6f304deec74b3ee7e0d7fcb48d548be353ddee11473f"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

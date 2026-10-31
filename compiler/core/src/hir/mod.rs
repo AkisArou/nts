@@ -1916,7 +1916,7 @@ pub fn carries_a_length(ty: &HirType) -> bool {
 pub fn zero_of(ty: &HirType) -> OpKind {
     match ty {
         HirType::Bool => OpKind::ConstBool(false),
-        HirType::Int { .. } => OpKind::ConstInt(0),
+        HirType::Int { .. } | HirType::BigInt => OpKind::ConstInt(0),
         HirType::Managed(_) | HirType::NativePointer(_) => OpKind::ConstNull,
         HirType::Erased | HirType::Void | HirType::PossiblyUndefined(_) => OpKind::ConstUndefined,
         _ => OpKind::ConstFloat(0.0),

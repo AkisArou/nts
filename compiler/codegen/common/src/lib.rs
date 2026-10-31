@@ -39,3 +39,7 @@ pub mod optional;
 pub mod provider;
 pub mod release;
 pub mod string_hash;
+
+pub mod callback_abi;
+
+pub mod entry_parameters;

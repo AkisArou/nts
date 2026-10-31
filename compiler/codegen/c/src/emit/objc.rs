@@ -176,6 +176,7 @@ fn entry_point(
     if record_out {
         arguments.push(format!("&{answer_slot}"));
     }
+    program.direct_arguments(compiled, &mut arguments)?;
     let call = format!(
         "{}({})",
         program.function(&compiled.name),

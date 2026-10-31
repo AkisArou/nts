@@ -42,6 +42,7 @@
 
 mod aggregate;
 mod com;
+mod entry_parameters;
 mod gobject;
 mod indirect;
 mod native;
@@ -180,6 +181,8 @@ impl Platform {
 
 struct Emission<'a> {
     source: &'a Program,
+    callback_abi: nts_codegen_common::callback_abi::Callbacks<'a>,
+    entry_parameters: nts_codegen_common::entry_parameters::EntryParameters<'a>,
     source_symbols: nts_codegen_common::source_symbols::SourceSymbols<'a>,
     native_symbols: nts_codegen_common::native_symbols::NativeSymbols<'a>,
 }
@@ -188,6 +191,8 @@ impl<'program> Emission<'program> {
     fn new(source: &'program Program) -> Self {
         Self {
             source,
+            callback_abi: nts_codegen_common::callback_abi::Callbacks::new(source),
+            entry_parameters: nts_codegen_common::entry_parameters::EntryParameters::new(source),
             source_symbols: nts_codegen_common::source_symbols::SourceSymbols::new(source),
             native_symbols: nts_codegen_common::native_symbols::NativeSymbols::new(source),
         }
@@ -420,6 +425,10 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
             }
         }
     }
+    callback_adapters(&mut text, program, &kept, platform, &mut diagnostics);
+    if let Err(diagnostic) = entry_parameters::printers(program, &kept, platform, &mut text) {
+        diagnostics.push(diagnostic);
+    }
     let descriptors = descriptors(program, &pool, &mut diagnostics);
     let _ = writeln!(text, "{descriptors}");
     let _ = writeln!(text, "{}", literals(program, &pool, &kept));
@@ -427,6 +436,79 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
     text.push_str(&bodies);
     let _ = writeln!(text, "\n{TBAA_TREE}");
     Emitted { text, diagnostics }
+}
+
+/// The actual body symbol and convention, shared by definitions and native
+/// callback adapters. Public C entries can differ from their internal bodies.
+fn definition(
+    program: &Emission<'_>,
+    func: &Func,
+    platform: Platform,
+) -> (&'static str, String, bool) {
+    let public = program.source_symbols.is_public(&func.name);
+    let extra = program.entry_parameters.extra(func);
+    if optional::active_func(func)
+        || extra
+            .iter()
+            .any(|ty| matches!(ty, HirType::PossiblyUndefined(_)))
+    {
+        (
+            if public { "" } else { "internal " },
+            program.source_function(&func.name),
+            false,
+        )
+    } else {
+        indirect::definition(
+            func,
+            platform,
+            (program.source_function(&func.name), public),
+            extra,
+        )
+    }
+}
+
+fn callback_adapters(
+    text: &mut String,
+    program: &Emission<'_>,
+    kept: &std::collections::BTreeSet<&str>,
+    platform: Platform,
+    diagnostics: &mut Vec<Diagnostic>,
+) {
+    for (origin, reason) in program.callback_abi.errors() {
+        diagnostics.push(Diagnostic::error("NTS3006", reason, origin.location));
+    }
+    for adapter in program.callback_abi.adapters() {
+        let function = adapter.function;
+        if !kept.contains(function.name.as_str()) {
+            continue;
+        }
+        let mut args = vec!["ptr %receiver".to_owned()];
+        if adapter.uniform {
+            for _ in function.params.iter().skip(1) {
+                args.extend(["i32 0".to_owned(), "i64 0".to_owned()]);
+            }
+        }
+        match optional::discard_result(
+            function,
+            &definition(program, function, platform).1,
+            args,
+            platform,
+            adapter.release,
+        ) {
+            Ok(lines) => {
+                let _ = writeln!(
+                    text,
+                    "define internal void {}(ptr %receiver) nounwind {{",
+                    global(&adapter.name)
+                );
+                for line in lines {
+                    let _ = writeln!(text, "  {line}");
+                }
+                let _ = writeln!(text, "  ret void\n}}");
+            }
+            Err(diagnostic) => diagnostics.push(diagnostic),
+        }
+    }
 }
 
 /// What may alias what, which C tells clang and a module has to say for itself.
@@ -902,7 +984,14 @@ fn to_string_slot(
     class: Option<&nts_core::hir::ClassIdentity>,
 ) -> String {
     match program.printing(layout, class) {
-        Some(Printed::By(function)) => format!("ptr {}", program.source_function(function)),
+        Some(Printed::By(function)) => program
+            .source_symbols
+            .declaration(&Callee::Direct(function.clone()))
+            .and_then(|f| program.entry_parameters.printer_adapter(f))
+            .map_or_else(
+                || format!("ptr {}", program.source_function(function)),
+                |name| format!("ptr @{name}"),
+            ),
         Some(Printed::Object) => "ptr @nts_object_to_string".to_owned(),
         Some(Printed::Function) => "ptr @nts_function_to_string".to_owned(),
         Some(Printed::BoundFunction) => "ptr @nts_bound_function_to_string".to_owned(),
@@ -1523,7 +1612,12 @@ fn suspension(
             reaction,
             slot,
         } => {
-            let slot = native_column(program, *slot, op.origin.location)?;
+            let slot = program.callback_abi.column(*slot).ok_or_else(|| {
+                refuse(
+                    func,
+                    "a reaction has no compatible native callback ABI column",
+                )
+            })?;
             let made =
                 signatures::signature_on("nts_callback_task", platform).ok_or_else(|| {
                     refuse(
@@ -1638,10 +1732,7 @@ fn vtable(
     emitted_rows: &mut std::collections::BTreeSet<String>,
 ) -> Result<String, String> {
     let methods = program.native_methods(layout)?;
-    if methods.iter().all(Option::is_none) {
-        return Ok("ptr null".to_owned());
-    }
-    let entries: Vec<String> = methods
+    let mut entries: Vec<String> = methods
         .iter()
         .map(|method| {
             method.map_or_else(
@@ -1650,10 +1741,36 @@ fn vtable(
             )
         })
         .collect();
-    let table = program.native_table_index(layout)?.map_or_else(
-        || format!("__nts_vtable_{tag}"),
-        |index| format!("__nts_vtable_shared_{index}"),
-    );
+    let callbacks = &program.callback_abi;
+    let callback_columns = callbacks.slots().next().is_some();
+    if callback_columns {
+        entries.resize(callbacks.width(), "ptr null".to_owned());
+        entries.extend(callbacks.slots().map(|slot| {
+            callbacks.binding(layout, slot).map_or_else(
+                || "ptr null".to_owned(),
+                |(function, adapter)| {
+                    format!(
+                        "ptr {}",
+                        adapter.map_or_else(|| program.source_function(&function.name), global)
+                    )
+                },
+            )
+        }));
+    }
+    if entries.iter().all(|entry| entry == "ptr null") {
+        return Ok("ptr null".to_owned());
+    }
+    let table = if callback_columns {
+        let at = callbacks
+            .row_index(layout)
+            .ok_or("a callback row has no planned identity")?;
+        format!("__nts_abi_vtable_{at}")
+    } else {
+        program.native_table_index(layout)?.map_or_else(
+            || format!("__nts_vtable_{tag}"),
+            |index| format!("__nts_vtable_shared_{index}"),
+        )
+    };
     if emitted_rows.insert(table.clone()) {
         let _ = writeln!(
             out,
@@ -2405,6 +2522,7 @@ fn imp(
             "{{ ptr, ptr, ptr }} {{ ptr @{imp}.sel, ptr @{imp}, ptr @{imp}.types }}"
         ));
     }
+    entry_parameters::pad(program, compiled, &mut arguments, platform, &mut body)?;
     let want = method.signature.result.abi(platform.abi);
     let have = compiled.return_type.clone();
     let call = format!(
@@ -2997,7 +3115,7 @@ fn declaration(name: &str, platform: Platform) -> Option<String> {
 /// double went into an SSE register, the callee read an integer one, and
 /// `typeof v` answered "undefined" for a number. Found by the cross-backend
 /// test, which is the only thing that could have.
-fn externals(program: &Program, platform: Platform) -> Vec<String> {
+fn externals(program: &Emission<'_>, platform: Platform) -> Vec<String> {
     let mut seen: Vec<String> = ALWAYS_DECLARED
         .iter()
         .map(|name| (*name).to_owned())
@@ -3005,7 +3123,9 @@ fn externals(program: &Program, platform: Platform) -> Vec<String> {
     // A foreign family's pair, which `counting_declarations` declared -- and
     // which a program may also call by name: a COM object handed to a call is
     // released with `nts_com_release`, the family's own release.
-    for counting in nts_codegen_common::counting::foreign(program) {
+    for counting in
+        nts_codegen_common::counting::foreign_with(program, program.callback_abi.foreign_counters())
+    {
         seen.extend([counting.retain.to_owned(), counting.release.to_owned()]);
     }
     let mut lines = Vec::new();
@@ -3296,6 +3416,8 @@ fn function(
     templates: bool,
     pool: &LiteralPool,
 ) -> Result<String, Diagnostic> {
+    let physical = entry_parameters::physical(program, func);
+    let func = physical.as_ref();
     let mut out = String::new();
     let mut returns = return_ty_of(&func.return_type, func)?.to_owned();
     let mut params = Vec::new();
@@ -3346,19 +3468,7 @@ fn function(
         indirect::unexportable(func, platform, public)
             .map_or(Ok(()), |why| Err(refuse(func, why)))?;
     }
-    let (linkage, defined, entry) = if uses_optional_abi {
-        (
-            if public { "" } else { "internal " },
-            program.source_function(&func.name),
-            false,
-        )
-    } else {
-        indirect::definition(
-            func,
-            platform,
-            (program.source_function(&func.name), public),
-        )
-    };
+    let (linkage, defined, entry) = definition(program, func, platform);
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
     //
@@ -5154,6 +5264,18 @@ fn call(
                     arguments(func, &out, args, &mut before, platform)?
                 });
             }
+            if let Some(at) = nts_codegen_common::callback_abi::slot_argument(callee)
+                && let Some(argument) = args.get(at)
+                && let OpKind::DispatchSlot(slot) = func.value(*argument).kind
+            {
+                let column = program.callback_abi.column(slot).ok_or_else(|| {
+                    refuse(
+                        func,
+                        "a runtime callback has no compatible native ABI column",
+                    )
+                })?;
+                rendered[at] = format!("double {column}.0");
+            }
             // A helper the table does not carry is one this backend cannot
             // call. `nts_to_uint8` is `static inline` in the header, so there
             // is no symbol to link against and no signature to read -- and
@@ -6611,10 +6733,12 @@ fn open_chain_body(
     ))
 }
 
-fn counting_declarations(program: &Program) -> String {
+fn counting_declarations(program: &Emission<'_>) -> String {
     let mut text = String::new();
     let held = nts_codegen_common::counting::held(program);
-    for counting in nts_codegen_common::counting::foreign(program) {
+    for counting in
+        nts_codegen_common::counting::foreign_with(program, program.callback_abi.foreign_counters())
+    {
         let _ = writeln!(text, "declare ptr @{}(ptr)", counting.retain);
         let _ = writeln!(text, "declare void @{}(ptr)", counting.release);
         // A pair that does not take NULL quietly, guarded once here.

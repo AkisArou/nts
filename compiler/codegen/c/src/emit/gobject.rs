@@ -110,6 +110,7 @@ pub(super) fn classes(
                     c_type_of(program, &want.ty, &want.origin)?
                 ));
             }
+            program.direct_arguments(compiled, &mut arguments)?;
             let call = format!(
                 "{}({})",
                 program.function(&compiled.name),
@@ -791,6 +792,7 @@ fn callbacks(
             ));
         }
         parameters.push(format!("void *{receiver}"));
+        program.direct_arguments(compiled, &mut arguments)?;
         let call = format!(
             "{}({})",
             program.function(&compiled.name),
@@ -882,7 +884,10 @@ fn properties(
                 })
         };
         let (get, set) = (find(&property.getter)?, find(&property.setter)?);
-        let instance = c_type_of(program, &get.params[0].ty, &get.params[0].origin)?;
+        let instance = program.receiver_type(get).map_or_else(
+            || c_type_of(program, &get.params[0].ty, &get.params[0].origin),
+            |ty| Ok(ty.to_owned()),
+        )?;
         let value = c_type_of(program, &get.return_type, &get.origin)?;
         writer.line(
             origin,

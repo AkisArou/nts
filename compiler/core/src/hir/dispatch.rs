@@ -45,9 +45,11 @@
 //!   declared one is refused. The caller reads the result at the *declared*
 //!   record's offsets, so the declared record's fields have to be a prefix of
 //!   what actually arrives.
-//! - **Fewer parameters is allowed.** `_read()` overriding `_read(size)` is
-//!   ordinary, and C ignores arguments a callee does not declare exactly as
-//!   JavaScript does. Only the common prefix is compared.
+//! - **Fewer logical parameters is allowed.** `_read()` overriding `_read(size)`
+//!   is ordinary JavaScript. The native entry-parameter plan gives definitions
+//!   the shared physical arity, with unused trailing parameters; calling a
+//!   shorter C function through a different function type is not valid.
+//!   Only the logical common prefix is compared here.
 //! - **A covariant record that extends the declared one, or repeats its fields
 //!   in order, is allowed** -- that is what prefix-compatible means.
 //!
@@ -139,8 +141,8 @@ fn disagreement(
             continue;
         };
         // The receiver is exempt, so the walk starts at 1. A shorter
-        // implementation is compared over what it has: C ignores an argument a
-        // callee does not declare, as JavaScript does.
+        // implementation is compared over what its logical body reads. The
+        // shared native entry plan supplies unused physical tail parameters.
         for (index, (want, have)) in through
             .params
             .iter()

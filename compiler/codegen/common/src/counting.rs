@@ -10,6 +10,31 @@
 
 use nts_core::hir::native::{Counting, Family};
 use nts_core::hir::{HirType, OpKind, Program};
+use rustc_hash::FxHashSet;
+
+// Equality is the complete producer carrier, including NULL behavior. The
+// test observer charges real comparisons, whether made by the index or by an
+// accidentally restored linear scan of the first-seen vector.
+#[derive(Clone, Copy)]
+struct Pair(Counting);
+
+impl std::hash::Hash for Pair {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        std::hash::Hash::hash(&self.0, state);
+    }
+}
+
+impl PartialEq for Pair {
+    fn eq(&self, other: &Self) -> bool {
+        #[cfg(test)]
+        PAIR_COMPARISONS.with(|count| count.set(count.get() + 1));
+        self.0 == other.0
+    }
+}
+impl Eq for Pair {}
+
+#[cfg(test)]
+thread_local! { static PAIR_COMPARISONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) }; }
 
 /// What a `Retain`/`Release` of a value of some type calls.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -145,29 +170,103 @@ pub fn array_descriptor_name(counting: &Counting) -> String {
 /// ops, and from the fields and array elements a descriptor counts.
 #[must_use]
 pub fn foreign(program: &Program) -> Vec<Counting> {
-    let mut found: Vec<Counting> = Vec::new();
+    foreign_with(program, std::iter::empty())
+}
+
+/// Include counts emitted by a backend-owned physical adapter, using that
+/// adapter's published counter fact rather than scanning its generated text.
+#[must_use]
+pub fn foreign_with(
+    program: &Program,
+    additional: impl IntoIterator<Item = Counting>,
+) -> Vec<Counting> {
+    foreign_observed(program, additional, &mut || {})
+}
+
+fn foreign_observed(
+    program: &Program,
+    additional: impl IntoIterator<Item = Counting>,
+    visit: &mut impl FnMut(),
+) -> Vec<Counting> {
+    let mut found: Vec<Pair> = Vec::new();
+    let mut seen = FxHashSet::default();
+    let mut insert = |counting| {
+        visit();
+        let pair = Pair(counting);
+        if seen.insert(pair) {
+            found.push(pair);
+        }
+    };
     for field in program.layouts.iter().flat_map(|layout| &layout.fields) {
-        if let Some(counting) = field.ty.counting()
-            && !found.contains(&counting)
-        {
-            found.push(counting);
+        if let Some(counting) = field.ty.counting() {
+            insert(counting);
         }
     }
     for (counting, _) in array_families(program) {
-        if !found.contains(&counting) {
-            found.push(counting);
-        }
+        insert(counting);
     }
     for func in &program.funcs {
         for op in &func.values {
             if let OpKind::Retain(object) | OpKind::Release(object) = op.kind
                 && let Ok(Counter::Foreign(counting)) = counter(&func.values[object.0 as usize].ty)
-                && !found.contains(&counting)
             {
-                found.push(counting);
+                insert(counting);
             }
         }
     }
-    found.sort_by_key(|counting| counting.retain);
-    found
+    for counting in additional {
+        insert(counting);
+    }
+    found.sort_by_key(|pair| pair.0.retain);
+    found.into_iter().map(|pair| pair.0).collect()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn adapter_counter_construction_is_linear_and_preserves_complete_pairs() {
+        for n in [16, 64, 256] {
+            let pairs: Vec<_> = (0..n)
+                .map(|at| Counting {
+                    retain: Box::leak(format!("retain_{at:03}").into_boxed_str()),
+                    release: Box::leak(format!("release_{at:03}").into_boxed_str()),
+                    null_safe: at % 2 == 0,
+                })
+                .collect();
+            PAIR_COMPARISONS.with(|count| count.set(0));
+            let mut visits = 0;
+            let found = foreign_observed(
+                &Program::default(),
+                pairs.iter().chain(&pairs).copied(),
+                &mut || visits += 1,
+            );
+            let comparisons = PAIR_COMPARISONS.with(std::cell::Cell::get);
+            assert_eq!(visits, 2 * n);
+            assert_eq!(found, pairs);
+            assert!(comparisons <= 4 * n, "n={n} comparisons={comparisons}");
+            eprintln!("FOREIGN_COUNTER_WORK n={n} insertions={visits} comparisons={comparisons}");
+        }
+        let original = Counting {
+            retain: "same",
+            release: "drop_a",
+            null_safe: true,
+        };
+        let variants = [
+            original,
+            Counting {
+                release: "drop_b",
+                ..original
+            },
+            Counting {
+                null_safe: false,
+                ..original
+            },
+        ];
+        assert_eq!(
+            foreign_with(&Program::default(), variants.into_iter().chain(variants)),
+            variants
+        );
+    }
 }

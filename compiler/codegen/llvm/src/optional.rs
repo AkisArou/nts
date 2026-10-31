@@ -117,6 +117,48 @@ fn indirect_parameter(passing: &Passing, name: &str, result: bool) -> String {
     }
 }
 
+/// Unread trailing physical parameters use the same aggregate classification
+/// as the definition, including a real zeroed slot for an indirect argument.
+pub(super) fn zero_arguments(
+    function: &Func,
+    types: &[HirType],
+    platform: Platform,
+    prefix: &str,
+    lines: &mut Vec<String>,
+) -> Result<Vec<String>, Diagnostic> {
+    let plan = active(types, &function.return_type)
+        .then(|| abi::plan(types, &function.return_type, target(platform)));
+    let mut arguments = Vec::new();
+    for (at, ty) in types.iter().enumerate().skip(function.params.len()) {
+        let passing = plan.as_ref().and_then(|p| p.arguments[at].as_ref());
+        match passing {
+            Some(Passing::Registers(registers)) => arguments.extend(
+                registers
+                    .iter()
+                    .map(|r| format!("{} zeroinitializer", r.llvm())),
+            ),
+            Some(passing @ Passing::Indirect { .. }) => {
+                let slot = format!("{prefix}.ignored{at}");
+                lines.push(allocation(&slot, ty, function)?);
+                lines.push(format!(
+                    "store {} zeroinitializer, ptr {slot}, align 1",
+                    ty_of(ty, function)?
+                ));
+                arguments.push(indirect_parameter(passing, &slot, false));
+            }
+            None if *ty == HirType::Erased => {
+                arguments.extend(["i32 0".to_owned(), "i64 0".to_owned()]);
+            }
+            None => arguments.push(format!(
+                "{} {}zeroinitializer",
+                ty_of(ty, function)?,
+                platform.extension(ty)
+            )),
+        }
+    }
+    Ok(arguments)
+}
+
 pub(super) struct Signature {
     pub returns: String,
     pub parameters: Vec<String>,
@@ -475,4 +517,80 @@ pub(super) fn operation(func: &Func, id: ValueId) -> Result<String, Diagnostic> 
         OpKind::ConstUndefined => format!("{out} = insertvalue {pair} zeroinitializer, i8 0, 1"),
         _ => return Err(refuse(func, "an unsupported optional operation")),
     })
+}
+
+/// A physical adapter that ignores an answer still calls the exact result
+/// convention chosen for the body, including a hidden optional-result slot.
+/// Argument admission is the shared callback plan's job; this reads the same
+/// ABI authority as `signature` rather than guessing the LLVM return type.
+pub(super) fn discard_result(
+    function: &Func,
+    callee: &str,
+    mut arguments: Vec<String>,
+    platform: Platform,
+    release: Option<nts_codegen_common::counting::Counter>,
+) -> Result<Vec<String>, Diagnostic> {
+    let types: Vec<_> = function
+        .params
+        .iter()
+        .map(|param| param.ty.clone())
+        .collect();
+    // Native bodies keep split erased values. Only a function actually using
+    // the optional ABI gets that ABI's aggregate classification.
+    let plan =
+        active_func(function).then(|| abi::plan(&types, &function.return_type, target(platform)));
+    let passing = plan.as_ref().and_then(|plan| plan.result.as_ref());
+    let returns = passing.map_or_else(
+        || crate::return_ty_of(&function.return_type, function).map(str::to_owned),
+        |passing| Ok(passing.result_type()),
+    )?;
+    let mut lines = Vec::new();
+    if let Some(passing @ Passing::Indirect { .. }) = passing {
+        lines.push(allocation(
+            "%ignored.slot",
+            &function.return_type,
+            function,
+        )?);
+        arguments.insert(0, indirect_parameter(passing, "%ignored.slot", true));
+    }
+    let result = if returns == "void" { "" } else { "%ignored = " };
+    lines.push(format!(
+        "{result}call {returns} {callee}({})",
+        arguments.join(", ")
+    ));
+    if let Some(counter) = release {
+        // All counted optional payloads currently use a pointer; erased
+        // answers use the native body's logical pair. Never release the bits
+        // of a future aggregate representation as though they were a pointer.
+        if passing.is_some() {
+            return Err(refuse(
+                function,
+                "a counted callback answer with an unhandled aggregate ABI",
+            ));
+        }
+        release_result(function, counter, platform, &mut lines);
+    }
+    Ok(lines)
+}
+
+fn release_result(
+    function: &Func,
+    counter: nts_codegen_common::counting::Counter,
+    platform: Platform,
+    lines: &mut Vec<String>,
+) {
+    use nts_codegen_common::counting::Counter;
+    match counter {
+        Counter::Runtime => lines.push("call void @nts_release(ptr %ignored)".to_owned()),
+        Counter::Foreign(counting) => lines.push(format!(
+            "call void @{}(ptr %ignored)",
+            counting.called(false)
+        )),
+        Counter::Tagged => {
+            debug_assert_eq!(function.return_type, HirType::Erased);
+            let argument =
+                crate::erased_argument(platform, "%ignored", "%ignored.release", 0, lines);
+            lines.push(format!("call void @nts_value_release({argument})"));
+        }
+    }
 }
