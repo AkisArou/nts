@@ -15,6 +15,8 @@ pub struct Work {
     pub joins: usize,
     pub find_steps: usize,
     pub padding_parameters: usize,
+    pub task_targets: usize,
+    pub receiver_projections: usize,
 }
 impl Work {
     #[must_use]
@@ -26,12 +28,15 @@ impl Work {
             + self.joins
             + self.find_steps
             + self.padding_parameters
+            + self.task_targets
+            + self.receiver_projections
     }
 }
 
 #[derive(Debug)]
 pub struct EntryParameters<'a> {
     extra: FxHashMap<*const Func, Vec<&'a HirType>>,
+    task_receivers: FxHashSet<*const Func>,
     callers: FxHashSet<*const Func>,
     printers: FxHashMap<*const Func, String>,
     work: Work,
@@ -132,9 +137,16 @@ impl<'a> EntryParameters<'a> {
             .collect();
         let mut live = FxHashSet::default();
         let mut declared = Vec::new();
+        let mut tasks = FxHashSet::default();
         for function in &program.funcs {
             for value in function.blocks.iter().flat_map(|block| &block.ops) {
                 work.operations += 1;
+                if let OpKind::Suspend { resume, .. } = &function.value(*value).kind {
+                    work.task_targets += 1;
+                    if let Some(&at) = by_name.get(resume.as_str()) {
+                        tasks.insert(at);
+                    }
+                }
                 if let OpKind::Call {
                     callee:
                         Callee::Virtual {
@@ -155,6 +167,10 @@ impl<'a> EntryParameters<'a> {
         if live.is_empty() {
             return Self {
                 extra: FxHashMap::default(),
+                task_receivers: tasks
+                    .iter()
+                    .map(|&at| std::ptr::from_ref(&program.funcs[at]))
+                    .collect(),
                 callers: FxHashSet::default(),
                 printers: FxHashMap::default(),
                 work,
@@ -169,25 +185,30 @@ impl<'a> EntryParameters<'a> {
                 *best = at;
             }
         }
-        let extra: FxHashMap<*const Func, Vec<&'a HirType>> = program
-            .funcs
-            .iter()
-            .enumerate()
-            .filter_map(|(at, function)| {
-                let canonical = &program.funcs[longest[&families.root(at)]];
-                (canonical.params.len() > function.params.len()).then(|| {
-                    (
-                        std::ptr::from_ref(function),
-                        canonical
-                            .params
-                            .iter()
-                            .skip(function.params.len())
-                            .map(|param| &param.ty)
-                            .collect(),
-                    )
-                })
-            })
-            .collect();
+        let task_roots: FxHashSet<_> = tasks.iter().map(|&at| families.root(at)).collect();
+        let mut extra = FxHashMap::default();
+        let mut task_receivers = FxHashSet::default();
+        for (at, function) in program.funcs.iter().enumerate() {
+            let root = families.root(at);
+            let canonical = &program.funcs[longest[&root]];
+            if canonical.params.len() > function.params.len() {
+                extra.insert(
+                    std::ptr::from_ref(function),
+                    canonical
+                        .params
+                        .iter()
+                        .skip(function.params.len())
+                        .map(|param| &param.ty)
+                        .collect(),
+                );
+            }
+            if !task_roots.is_empty() {
+                work.receiver_projections += 1;
+                if task_roots.contains(&root) {
+                    task_receivers.insert(std::ptr::from_ref(function));
+                }
+            }
+        }
         let callers = Self::callers(program, &by_name, &extra, &mut work);
         let printers = printer_roles(program, &extra);
         work.joins = families.joins;
@@ -195,6 +216,7 @@ impl<'a> EntryParameters<'a> {
         work.padding_parameters = extra.values().map(Vec::len).sum();
         Self {
             extra,
+            task_receivers,
             callers,
             printers,
             work,
@@ -232,6 +254,13 @@ impl<'a> EntryParameters<'a> {
             }
         }
         callers
+    }
+
+    /// A fixed task role determines the receiver for every entry of its selector
+    /// family. C renders this as void*; LLVM renders either pointer as ptr.
+    #[must_use]
+    pub fn task_receiver(&self, function: &Func) -> bool {
+        self.task_receivers.contains(&std::ptr::from_ref(function))
     }
 
     /// The descriptor printer has a fixed one-argument contract. A virtual

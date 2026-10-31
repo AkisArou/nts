@@ -85,25 +85,27 @@ impl<'a> Plan<'a> {
                 }
             }
         }
+        let parameters = Rc::new(nts_codegen_common::entry_parameters::EntryParameters::new(
+            program,
+        ));
         let mut entries = FxHashMap::default();
         // Stable Func order also fixes private adapter names independently of
         // hash iteration and of how many times a descriptor names the entry.
         for (ordinal, function) in program.funcs.iter().enumerate() {
             let name = function.name.as_str();
-            let receiver = if table.contains(name) {
-                Receiver::Header
-            } else if tasks.contains(name) {
+            let receiver = if parameters.task_receiver(function) {
                 Receiver::Task
+            } else if table.contains(name) {
+                Receiver::Header
             } else {
                 continue;
             };
-            let changes_channel = receiver == Receiver::Header
-                && (function
-                    .params
-                    .iter()
-                    .skip(1)
-                    .any(|param| object_reference(&param.ty))
-                    || object_reference(&function.return_type));
+            let changes_channel = function
+                .params
+                .iter()
+                .skip(1)
+                .any(|param| object_reference(&param.ty))
+                || object_reference(&function.return_type);
             entries.insert(
                 name,
                 Entry {
@@ -144,9 +146,7 @@ impl<'a> Plan<'a> {
                 FxHashMap::default()
             }),
             value_readers,
-            parameters: Rc::new(nts_codegen_common::entry_parameters::EntryParameters::new(
-                program,
-            )),
+            parameters,
             source_symbols: Rc::new(nts_codegen_common::source_symbols::SourceSymbols::new(
                 program,
             )),
@@ -172,6 +172,14 @@ impl<'a> Plan<'a> {
                 Receiver::Header => "NtsHeader *",
                 Receiver::Task => "void *",
             })
+    }
+
+    pub(super) fn dispatch_receiver(&self, function: &Func) -> &'static str {
+        if self.parameters.task_receiver(function) {
+            "void *"
+        } else {
+            "NtsHeader *"
+        }
     }
 
     pub(super) fn parameter_types<'b>(
@@ -229,19 +237,16 @@ impl<'a> Plan<'a> {
             if !defined.contains(&program.function(&function.name)) {
                 continue;
             }
-            let Some(entry) = self.entries.get(function.name.as_str()) else {
+            if !self.entries.contains_key(function.name.as_str()) {
                 continue;
-            };
-            let pointer = if entry.receiver == Receiver::Task {
-                "NtsTaskEntry".to_owned()
-            } else {
-                pointer_type(
-                    program,
-                    &function.return_type,
-                    self.parameter_types(function),
-                    &function.origin,
-                )?
-            };
+            }
+            let pointer = pointer_type(
+                program,
+                &function.return_type,
+                self.parameter_types(function),
+                self.dispatch_receiver(function),
+                &function.origin,
+            )?;
             let symbol = self.symbol(program, &function.name);
             writer.line(&function.origin, format!(
                 "_Static_assert(_Generic(&{symbol}, {pointer}: 1, default: 0), \"dispatch entry ABI\");"));
@@ -281,11 +286,18 @@ pub(super) fn pointer_type<'a>(
     program: &Emission<'_>,
     returns: &HirType,
     parameters: impl Iterator<Item = &'a HirType>,
+    receiver: &str,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
     let params = parameters
         .enumerate()
-        .map(|(at, ty)| channel_type(program, ty, at == 0, origin))
+        .map(|(at, ty)| {
+            if at == 0 {
+                Ok(receiver.to_owned())
+            } else {
+                channel_type(program, ty, false, origin)
+            }
+        })
         .collect::<Result<Vec<_>, _>>()?;
     Ok(format!(
         "{} (*)({})",
@@ -311,7 +323,11 @@ fn emit_reference_adapter(
         .map(|(at, ty)| {
             Ok(format!(
                 "{} __nts_a{at}",
-                channel_type(program, ty, at == 0, &function.origin)?
+                if at == 0 {
+                    program.dispatch_abi.dispatch_receiver(function).to_owned()
+                } else {
+                    channel_type(program, ty, false, &function.origin)?
+                }
             ))
         })
         .collect::<Result<Vec<_>, Diagnostic>>()?;

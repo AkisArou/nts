@@ -3093,6 +3093,7 @@ fn closure_signature(
         program,
         &func.value(value).ty,
         args.iter().map(|arg| &func.value(*arg).ty),
+        "NtsHeader *",
         origin,
     )
 }
@@ -3114,6 +3115,7 @@ pub(super) fn virtual_signature(
         program,
         &func.return_type,
         program.dispatch_abi.parameter_types(func),
+        program.dispatch_abi.dispatch_receiver(func),
         origin,
     )
 }

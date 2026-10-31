@@ -138,7 +138,13 @@ impl<'p> Plan<'p> {
         let parameters = self
             .parameter_types(function)
             .enumerate()
-            .map(|(at, ty)| channel_type(&emission, ty, at == 0, &function.origin))
+            .map(|(at, ty)| {
+                if at == 0 {
+                    Ok(self.dispatch_receiver(function).to_owned())
+                } else {
+                    channel_type(&emission, ty, false, &function.origin)
+                }
+            })
             .collect::<Result<Vec<_>, Diagnostic>>()?;
         Ok(Some(PhysicalEntry {
             function,
