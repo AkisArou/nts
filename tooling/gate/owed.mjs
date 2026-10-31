@@ -274,6 +274,16 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does the affected probe still build and run through the shared native plan", run: "run its focused fixture or module mode from the committed tree; retain its status and stdout" }],
   },
   {
+    name: "the Unicode model and its runtime",
+    when: (p) => /^compiler\/unicode\//.test(p) || /^runtime\/c\/nts_unicode/.test(p),
+    // The version pin and the full-range census live in the tooling step
+    // (tooling/gate/unicode-*.test.ts) and name no path here, so without
+    // this rule a data or generator change would owe only what the crate
+    // graph derives and the census that guards it would not run.
+    steps: ["tooling"],
+    arms: [],
+  },
+  {
     // This is a standalone validation driver, not an input to a gate step.
     // Its command policy is covered by the tracked-launch tooling audit;
     // execute its provider witness explicitly when changing the driver.
