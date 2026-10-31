@@ -100,6 +100,65 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN WSL.
+{
+  const name = "jetstream-wsl";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isCase(module));
+    checked.add(name);
+    const wslCase = await import("./cases/jetstream-wsl/case.ts");
+    const wsl = await import("./cases/jetstream-wsl/wsl.ts");
+
+    test(`${name}: all 285 original tests and complete-trial allocation counters match upstream`, () => {
+      const result = wslCase.inspect();
+      assert.equal(result.eBuffers, 97397);
+      assert.equal(result.anonymousVariables, 1392);
+      assert.equal(result.testNames.length, 285);
+      assert.equal(sha256(JSON.stringify(result.testNames)), "e8f89e548db314b0da7e52c9b9344ac016692eab5b4de15a65aa224db84b5571");
+    });
+
+    test(`${name}: every original test and standard-library input literal is preserved`, () => {
+      const source = readFileSync(new URL(`${name}/wsl.ts`, root), "utf8");
+      for (const [file, expectedCount, digest] of [
+        ["Test.js", 365, "614ac75f3f5ffe5a28e6c359f3a524facd75b2f04b256c3610afa68f923a7f15"],
+        ["StandardLibrary.js", 5, "cb9d3588df9af43c8aa2bd650803f50a8d399edc765d241af0915cd124fba88e"]
+      ]) {
+        const marker = `// Upstream source: ./WSL/${file}\n`;
+        const start = source.indexOf(marker);
+        assert.ok(start >= 0);
+        const begin = start + marker.length;
+        const next = source.indexOf("// Upstream source:", begin);
+        const section = source.slice(begin, next < 0 ? source.length : next);
+        const literals = section.match(/`(?:\\[\s\S]|[^`\\])*`/g) ?? [];
+        assert.equal(literals.length, expectedCount);
+        assert.equal(sha256(JSON.stringify(literals)), digest);
+      }
+    });
+
+    test(`${name}: become changes the original object's prototype and preserves aliases`, () => {
+      const receiver = new wsl.Value();
+      const target = new wsl.Value();
+      const alias = receiver;
+      assert.equal(Object.getPrototypeOf(receiver), wsl.Value.prototype);
+      receiver.become(target);
+      assert.equal(alias, receiver);
+      assert.equal(Object.getPrototypeOf(alias), wsl.IdentityExpression.prototype);
+      assert.ok(alias instanceof wsl.IdentityExpression);
+      assert.equal(alias.target, target);
+    });
+
+    test(`${name}: opaque count repeats both complete original phases with fresh trial state`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 3020699);
+      assert.equal(module.work(2), 96662368);
+      assert.equal(module.work(1), 3020699);
+    });
+  }
+}
+// END WSL.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
