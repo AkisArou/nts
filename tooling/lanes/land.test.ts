@@ -1,4 +1,5 @@
 import {acquireRevision,dependencyCache} from "./dependency-inputs.ts";
+import {withPackageManager} from "./package-manager.ts";
 import {heldLandings,prepareHeldResolution} from "./held-landings.ts";
 import {queuedLandings} from "./landing-state.ts";
 import { hostEnvironment, launcherPolicyNames } from "../gate/canonical-environment.ts";
@@ -668,8 +669,7 @@ test("native inputs link the upstream TypeScript corpus without an external comp
   mkdirSync(corpus, { recursive: true });
   writeFileSync(join(corpus, "marker"), "upstream corpus\n");
   const a = lane(s, "native-inputs", { "package.json": JSON.stringify({name:"corpus-input-control",private:true,packageManager:"pnpm@10.15.0"}), "pnpm-lock.yaml": "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n" });
-  const locked=spawnTest("corepack",["pnpm@10.15.0","install","--offline","--lockfile-only","--ignore-scripts"],{cwd:a,encoding:"utf8",env:{...hostEnvironment(process.env),COREPACK_ENABLE_NETWORK:"0",COREPACK_ENABLE_DOWNLOAD_PROMPT:"0"}});
-  assert.equal(locked.status,0,locked.stdout+locked.stderr);
+  await withPackageManager(a,{},manager=>manager.run(["install","--offline","--lockfile-only","--ignore-scripts"]));
   run(s,a,["add","pnpm-lock.yaml"]);run(s,a,["commit","--allow-empty","-qm","canonical empty dependency lock"]);
   const cache=dependencyCache(s.root);t.after(()=>rmSync(cache,{recursive:true,force:true}));
   await acquireRevision(s.root,a,"HEAD");
