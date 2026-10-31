@@ -1,0 +1,13 @@
+{
+  "kind": "Corrected observer over immutable recorded compiler cells",
+  "root": "/home/akisarou/.cache/nts-scratch/compiler2/proofs-a",
+  "baseline": "09d840a3010e",
+  "candidate": "d2cfee7b56b47ad92a7743e3439771c362ddbe87",
+  "command": [
+    "python3",
+    "results/native-entry-abi/function-census/classify.py",
+    "/home/akisarou/.cache/nts-scratch/compiler2/proofs-a"
+  ],
+  "controls": "Actual captured rejected-input, native-build-failure and sampler-active completed execution; removing the sampler makes the completed control unmeasured.",
+  "legacy_structured_predicate_failures": 2
+}

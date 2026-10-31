@@ -1,0 +1,39 @@
+{
+  "controls": [
+    {
+      "control": "rejected-input",
+      "source": "/home/akisarou/.cache/nts-scratch/compiler2/proofs-a/function-programs-uniform2/rows/741-nogc/stdout",
+      "result": {
+        "category": "rejected-input",
+        "reason": "typecheck: the program does not typecheck",
+        "completed_measurement": false
+      }
+    },
+    {
+      "control": "build-failure",
+      "source": "/home/akisarou/.cache/nts-scratch/compiler2/proofs-a/function-programs-uniform2/rows/496-nogc/stdout",
+      "result": {
+        "category": "build-failure",
+        "reason": "clang: /home/akisarou/.cache/nts-scratch/compiler2/proofs-a/function-programs-uniform2/tmp/nts-check-1186670-0/program.c:299:16: error: static assertion failed: task entry ABI\n  299 | _Static_assert(_Generic(&__nts_fn_awaiting__resume_20, NtsTaskEntry: 1, default: 0), \"task entry ABI\");\n      |                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n/home/akisarou/.cache/nts-scratch/compiler2/proofs-a/function-programs-uniform2/tmp/nts-check-1186670-0/program.c:1123:48: error: incompatible function pointer types initializing 'NtsTaskEntry' (aka 'void (*)(void *)') with an expression of type 'void (*)(NtsHeader *)' (aka 'void (*)(struct NtsHeader *)') [-Wincompatible-function-pointer-types]\n 1123 |     nts_promise_subscribe(__nts_v9, (NtsTask){ &__nts_fn_awaiting__resume_20, 0, __nts_v0 });\n      |                                                ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n2 errors generated.\n",
+        "completed_measurement": false
+      }
+    },
+    {
+      "control": "completed",
+      "source": "/home/akisarou/.cache/nts-scratch/compiler2/proofs-a/function-programs-uniform2/rows/0-nogc/stdout",
+      "result": {
+        "category": "completed",
+        "reason": "Program ran to completion with sampler active",
+        "sampler_active": true,
+        "closed_report": true,
+        "completed_measurement": true,
+        "runs": 1,
+        "compared": 174,
+        "unavailable": 0,
+        "disagreements": 0
+      }
+    }
+  ],
+  "missing_sampler_control": "unmeasured",
+  "old_structured_predicate_fails": 2
+}

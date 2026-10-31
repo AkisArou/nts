@@ -1,0 +1,42 @@
+{
+  "table": {
+    "function-programs-main1": {
+      "nogc": {
+        "completed": 696,
+        "function-report": 175,
+        "runtime-decline": 10,
+        "named-decline": 10,
+        "no-runnable-exports": 2,
+        "rejected-input": 3
+      },
+      "rc": {
+        "completed": 696,
+        "function-report": 175,
+        "runtime-decline": 10,
+        "named-decline": 10,
+        "no-runnable-exports": 2,
+        "rejected-input": 3
+      }
+    },
+    "function-programs-uniform2": {
+      "nogc": {
+        "completed": 870,
+        "runtime-decline": 10,
+        "named-decline": 10,
+        "build-failure": 1,
+        "no-runnable-exports": 2,
+        "rejected-input": 3
+      },
+      "rc": {
+        "completed": 870,
+        "runtime-decline": 10,
+        "named-decline": 10,
+        "build-failure": 1,
+        "no-runnable-exports": 2,
+        "rejected-input": 3
+      }
+    }
+  },
+  "controls": "controls.json",
+  "note": "Raw reports are reclassified, never re-recorded. Findings, runtime declines and named refusals are distinct from completed executions."
+}
