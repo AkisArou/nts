@@ -1284,7 +1284,7 @@ function createBuffer(size: number): Buffer<ArrayBuffer> {
 // Factories have the same nonconstructible method objects as before the split.
 // They own allocation; FastBuffer owns only an already-selected backing view.
 class BufferFactories {
-  static poolSize = 8192;
+  static poolSize = 64 * 1024;
 
   /** Zero-filled. Upstream `lib/buffer.js`. */
   static alloc(size: number, fill?: string | number | Uint8Array, encoding?: string): Buffer<ArrayBuffer> {
