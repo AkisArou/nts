@@ -1,0 +1,43 @@
+  log: /home/akisarou/.cache/nts-tmp/nts-gate-tooling.lZudLm
+  ⚠ frontend identifier tables are at the pinned node's Unicode version (45.420399ms) # the native checker knows identifiers by Unicode 15.1, so a name starting with a newer letter such as U+A7CB is TS1127 here where node accepts it (docs/foundations/unicode.md). The identifier tables are upstream's, so this is reported upstream, not edited here.
+  ⚠ JVM case tables are at the pinned node's Unicode version (389.312893ms) # JDK 21's tables are Unicode 15.0 and node's are 17.0; the JVM answers through the JDK until stage 1 generates its tables from compiler/unicode (docs/foundations/unicode.md). Signature letters reproduce in tests/outcomes/a-unicode-16-letter-lowercased-on-the-jvm and a-unicode-17-letter-lowercased-on-the-jvm.
+  ℹ tests 726
+  ℹ suites 0
+  ℹ pass 724
+  ℹ fail 0
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 2
+  ℹ duration_ms 215765.135722
+  ✖ failing tests:
+  
+  test at tooling/gate/unicode-version.test.ts:86:1
+  ⚠ frontend identifier tables are at the pinned node's Unicode version (45.420399ms) # the native checker knows identifiers by Unicode 15.1, so a name starting with a newer letter such as U+A7CB is TS1127 here where node accepts it (docs/foundations/unicode.md). The identifier tables are upstream's, so this is reported upstream, not edited here.
+    AssertionError [ERR_ASSERTION]: frontend identifier tables lag node's Unicode version
+        at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/unicode-version.test.ts:91:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async Test.run (node:internal/test_runner/test:1404:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+  
+  test at tooling/gate/unicode-version.test.ts:95:1
+  ⚠ JVM case tables are at the pinned node's Unicode version (389.312893ms) # JDK 21's tables are Unicode 15.0 and node's are 17.0; the JVM answers through the JDK until stage 1 generates its tables from compiler/unicode (docs/foundations/unicode.md). Signature letters reproduce in tests/outcomes/a-unicode-16-letter-lowercased-on-the-jvm and a-unicode-17-letter-lowercased-on-the-jvm.
+    AssertionError [ERR_ASSERTION]: JVM case mappings lag node's Unicode version
+        at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/unicode-version.test.ts:100:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async Test.run (node:internal/test_runner/test:1404:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity

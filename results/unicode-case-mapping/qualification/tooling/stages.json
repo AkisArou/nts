@@ -1,0 +1,32 @@
+[
+  {
+    "name": "tooling",
+    "status": 0,
+    "seconds": 216.29631233215332,
+    "args": [
+      "bash",
+      "tooling/gate/all.sh",
+      "--call",
+      "tooling"
+    ]
+  },
+  {
+    "name": "strict",
+    "status": 1,
+    "seconds": 0.02000570297241211,
+    "args": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit",
+      "--strict",
+      "--target",
+      "ESNext",
+      "--module",
+      "NodeNext",
+      "--moduleResolution",
+      "NodeNext",
+      "--skipLibCheck",
+      "tooling/unicode-cases/case-mapping.ts"
+    ]
+  }
+]

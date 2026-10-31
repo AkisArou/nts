@@ -1,0 +1,158 @@
+gate: discarded launcher variable names: EDITOR, INVOCATION_ID, JOURNAL_STREAM, LOGNAME, MANAGERPID, MANAGERPIDFDID, MEMORY_PRESSURE_WATCH, MEMORY_PRESSURE_WRITE, SHELL, SYSTEMD_EXEC_PID, USER, VISUAL
+land: 5965fdf280ca owes: build clippy tests rustfmt old-paths format reformat records primitives config licenses audit typescript-cases tooling test262-cases test262-builtins-cases test262-rest-cases test262-jvm test262-llvm doctests test262 outcomes expect-ir assembles c-compiles types jvm-verifies corpus benches example-refusals frontend-tsrs llvm llvm-rc jvm examples rc memory blockers
+land: 5965fdf280ca on fb20438eb681 owes: build clippy tests rustfmt old-paths format reformat records primitives config licenses audit typescript-cases tooling test262-cases test262-builtins-cases test262-rest-cases test262-jvm test262-llvm doctests test262 outcomes expect-ir assembles c-compiles types jvm-verifies corpus benches example-refusals frontend-tsrs llvm llvm-rc jvm examples rc memory blockers
+gate: discarded launcher variable names: EDITOR, INVOCATION_ID, JOURNAL_STREAM, LOGNAME, MANAGERPID, MANAGERPIDFDID, MEMORY_PRESSURE_WATCH, MEMORY_PRESSURE_WRITE, NTS_CHECKERS, OLDPWD, PWD, SHELL, SHLVL, SYSTEMD_EXEC_PID, USER, VISUAL
+gate: 9 step(s), 24 slots, 20G, 24 frontends; logs in /home/akisarou/.cache/nts-land/tree-only/5965fdf280ca-3516948-1793423156816
+  nts /home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/target/release/nts
+  machine: 32 cores, 31.0G total, 23.2G available, load 3.15 4.63 12.74
+  cgroup /user.slice/user-1000.slice/user@1000.service/app.slice/nts-helper2-unicode-143-final-qualification-r4.service: memory.max max, memory.high max, cpu.max max 100000
+  environment:
+    ANDROID_AVD_HOME=/home/akisarou/.config/.android/avd
+    ANDROID_HOME=/home/akisarou/Android/Sdk
+    ANDROID_SDK_ROOT=/home/akisarou/Android/Sdk
+    CARGO_HOME=/home/akisarou/.cargo
+    CC=<unset>
+    CFLAGS=<unset>
+    CLASSPATH=<unset>
+    CPATH=<unset>
+    CPLUS_INCLUDE_PATH=<unset>
+    CPPFLAGS=<unset>
+    CXX=<unset>
+    CXXFLAGS=<unset>
+    C_INCLUDE_PATH=<unset>
+    DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/1000/bus
+    DEBUGINFOD_URLS=https://debuginfod.archlinux.org 
+    DISPLAY=<unset>
+    DYLD_FALLBACK_LIBRARY_PATH=<unset>
+    DYLD_INSERT_LIBRARIES=<unset>
+    DYLD_LIBRARY_PATH=<unset>
+    FORCE_COLOR=0
+    GI_GIR_PATH=<unset>
+    HOME=/home/akisarou
+    JAVA_HOME=/home/akisarou/.asdf/installs/java/corretto-21.0.5.11.1
+    JAVA_OPTS=<unset>
+    JAVA_TOOL_OPTIONS=<unset>
+    JDK_HOME=/home/akisarou/.asdf/installs/java/corretto-21.0.5.11.1
+    JDK_JAVAC_OPTIONS=<unset>
+    JDK_JAVA_OPTIONS=<unset>
+    JVM_OPTS=<unset>
+    LANG=C.UTF-8
+    LANGUAGE=<unset>
+    LC_ALL=C.UTF-8
+    LDFLAGS=<unset>
+    LD_AUDIT=<unset>
+    LD_LIBRARY_PATH=<unset>
+    LD_PRELOAD=<unset>
+    LIBRARY_PATH=<unset>
+    NODE_ENV=<unset>
+    NODE_ICU_DATA=<unset>
+    NODE_NO_WARNINGS=<unset>
+    NODE_OPTIONS=<unset>
+    NODE_PATH=<unset>
+    NODE_PENDING_DEPRECATION=<unset>
+    NODE_REPL_EXTERNAL_MODULE=<unset>
+    NODE_TEST_CONTEXT=<unset>
+    NO_COLOR=<unset>
+    NTS_APPLE_ROOT=<unset>
+    NTS_APPLE_SDK=<unset>
+    NTS_APPLE_SSH=<unset>
+    NTS_BIND_CC=<unset>
+    NTS_GATE_RUN_DIR=/home/akisarou/.cache/nts-land/tree-only/5965fdf280ca-3516948-1793423156816
+    NTS_GATE_STEPS=format rustfmt reformat records old-paths audit primitives config licenses
+    NTS_IOS_DEVICE=<unset>
+    NTS_IOS_SIMULATOR_SDK=<unset>
+    NTS_LLVM_AS=<unset>
+    NTS_LLVM_CC=<unset>
+    NTS_NAPI_INCLUDE=<unset>
+    NTS_WIN32_WINMD=<unset>
+    NTS_WINDOWS_ROOT=<unset>
+    NTS_WINDOWS_SSH=<unset>
+    NTS_WINRT_METADATA=<unset>
+    PATH=/home/akisarou/.asdf/plugins/nodejs/shims:/home/akisarou/.asdf/installs/nodejs/24.20.0/bin:/home/akisarou/.local/bin:/home/akisarou/.bun/bin:/home/akisarou/.cargo/bin:/home/akisarou/.asdf/shims:/home/akisarou/neovim/bin:/usr/bin/go/bin:/usr/bin:/home/akisarou/.codex/packages/app-server-daemon/releases/0.166.0-x86_64-unknown-linux-musl/codex-path:/home/akisarou/.codex/tmp/arg0-linux/codex-arg02CAyUr:/home/akisarou/.codex/tmp/arg0-linux/codex-arg0G8k8kW:/home/akisarou/.codex/packages/standalone/releases/0.166.0-x86_64-unknown-linux-musl/codex-path:/home/akisarou/.local/share/zinit/polaris/bin:/usr/local/sbin:/usr/local/bin:/home/akisarou/Android/Sdk/cmdline-tools/latest/bin:/home/akisarou/Android/Sdk/platform-tools:/home/akisarou/Android/Sdk/emulator:/usr/lib/jvm/default/bin:/usr/bin/site_perl:/usr/bin/vendor_perl:/usr/bin/core_perl:/usr/lib/rustup/bin:/home/akisarou/.local/libexec
+    RAYON_NUM_THREADS=<unset>
+    RUSTC=<unset>
+    RUSTDOC=<unset>
+    RUSTUP_HOME=/home/akisarou/.rustup
+    SSH_AUTH_SOCK=<unset>
+    TERM=dumb
+    TMPDIR=/home/akisarou/.cache/nts-land/tree-only/5965fdf280ca-3516948-1793423156816/tmp
+    TZ=UTC
+    WAYLAND_DISPLAY=<unset>
+    XAUTHORITY=<unset>
+    XDG_CACHE_HOME=/home/akisarou/.cache
+    XDG_DATA_DIRS=/usr/local/share:/usr/share:/var/lib/flatpak/exports/share:/home/akisarou/.local/share/flatpak/exports/share
+    XDG_RUNTIME_DIR=/run/user/1000
+    _JAVA_OPTIONS=<unset>
+  steps: format rustfmt reformat records old-paths audit primitives config licenses
+-- audit started (1 slot; 1 running)
+-- rustfmt started (1 slot; 2 running)
+-- config started (1 slot; 3 running)
+-- format started (1 slot; 4 running)
+-- old-paths started (1 slot; 5 running)
+-- licenses started (1 slot; 6 running)
+-- reformat started (1 slot; 7 running)
+-- records started (1 slot; 8 running)
+-- primitives started (1 slot; 9 running)
+
+[1mreformat[0m
+  0s (cpu 0s, 1 slot)
+
+[1mprimitives[0m
+primitives.md: every ratchet it names is there (numbers unchecked: pass a bench log)
+  0s (cpu 0s, 1 slot)
+
+[1maudit[0m
+  metadata only: registry, reasons and authorities; 1 exclusions (no case selection)
+  94 classified: 48 gap, 12 inapplicable, 34 supported
+  0s (cpu 0s, 1 slot)
+
+[1mlicenses[0m
+compiler attributions: 87 registry packages, 33 vendored crates in 2 projects, 6 vendored data inputs, 3 embedded components, 70 verbatim texts verified
+CC-BY benchmark inputs: 0 inventories, 0 data files; no compilation or product reach
+  1s (cpu 1s, 1 slot)
+
+[1mrecords[0m
+363 records, 4 numbers claimed twice and named; benchmark run records and table validated
+  1s (cpu 1s, 1 slot)
+
+[1mconfig[0m
+155 configs, 259 products, 296 targets, 18 interfaces, 68 fields
+
+NOTES
+
+── target families a build produces that no package claims -- a gap in the fixture, not a defect
+     linux-musl
+
+── shared libraries whose soname has no version to derive from -- the fixture has no package.json
+     tests/programs/library/nts.config.ts hello
+     tests/workspace/apps/windows-brownfield/nts.config.ts sdk
+
+clean
+  1s (cpu 3s, 1 slot)
+
+[1mold-paths[0m
+  0 file(s) under an old root, 0 line(s) naming one
+  1s (cpu 1s, 1 slot)
+
+[1mformat[0m
+  2s (cpu 2s, 1 slot)
+
+[1mrustfmt[0m
+  3s (cpu 3s, 1 slot)
+gate tmp: removed after green: /home/akisarou/.cache/nts-land/tree-only/5965fdf280ca-3516948-1793423156816/tmp
+
+[1mgate summary[0m  5965fdf280ca  nts missing
+  [32mPASS    [0m format                       2s cpu      2s
+  [32mPASS    [0m rustfmt                      3s cpu      3s
+  [32mPASS    [0m reformat                     0s cpu      0s
+  [32mPASS    [0m records                      1s cpu      1s
+  [32mPASS    [0m old-paths                    1s cpu      1s
+  [32mPASS    [0m audit                        0s cpu      0s
+  [32mPASS    [0m primitives                   0s cpu      0s
+  [32mPASS    [0m config                       1s cpu      3s
+  [32mPASS    [0m licenses                     1s cpu      1s
+  9 requested: 9 PASS, 0 FAIL, 0 INSTRUMENT, 0 SKIPPED, 0 NOT RUN in 3s  (slots 24, mem 20G, frontends 24)
+  logs: /home/akisarou/.cache/nts-land/tree-only/5965fdf280ca-3516948-1793423156816
+
+[32mgreen[0m
+land: format rustfmt reformat records old-paths audit primitives config licenses green on 5965fdf280ca

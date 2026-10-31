@@ -1,0 +1,24 @@
+[
+  {
+    "name": "strict",
+    "status": 0,
+    "seconds": 0.05965280532836914,
+    "args": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--project",
+      "/home/akisarou/.cache/nts-tmp/helper2-unicode-family-143/final-qualification-r4/tsconfig.json"
+    ]
+  },
+  {
+    "name": "dry",
+    "status": 0,
+    "seconds": 10.893311977386475,
+    "args": [
+      "node",
+      "tooling/lanes/land.ts",
+      "5965fdf280ca2facfca97a62f3d7bed126b862ae",
+      "--dry-run"
+    ]
+  }
+]

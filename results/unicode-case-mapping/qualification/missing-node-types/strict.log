@@ -1,0 +1,63 @@
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m9[0m:[93m28[0m - [91merror[0m[90m TS2591: [0mCannot find name 'node:crypto'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m9[0m import { createHash } from "node:crypto";
+[7m [0m [91m                           ~~~~~~~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m10[0m:[93m81[0m - [91merror[0m[90m TS2591: [0mCannot find name 'node:fs'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m10[0m import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+[7m  [0m [91m                                                                                ~~~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m11[0m:[93m31[0m - [91merror[0m[90m TS2591: [0mCannot find name 'node:path'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m11[0m import { join, resolve } from "node:path";
+[7m  [0m [91m                              ~~~~~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m13[0m:[93m34[0m - [91merror[0m[90m TS2339: [0mProperty 'dirname' does not exist on type 'ImportMeta'.
+
+[7m13[0m const ROOT = resolve(import.meta.dirname, "../..");
+[7m  [0m [91m                                 ~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m16[0m:[93m8[0m - [91merror[0m[90m TS7006: [0mParameter 'line' implicitly has an 'any' type.
+
+[7m16[0m   .map(line => line.split("#")[0].trim())
+[7m  [0m [91m       ~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m17[0m:[93m11[0m - [91merror[0m[90m TS7006: [0mParameter 'line' implicitly has an 'any' type.
+
+[7m17[0m   .filter(line => /^nodejs(?:\s|$)/.test(line));
+[7m  [0m [91m          ~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m23[0m:[93m7[0m - [91merror[0m[90m TS2591: [0mCannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m23[0m   if (process.versions[key] !== expected) {
+[7m  [0m [91m      ~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m24[0m:[93m57[0m - [91merror[0m[90m TS2591: [0mCannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m24[0m     throw new Error(`Expected ${key} ${expected}, got ${process.versions[key]}; no files written`);
+[7m  [0m [91m                                                        ~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m30[0m:[93m19[0m - [91merror[0m[90m TS2591: [0mCannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m30[0m for (const arg of process.argv.slice(2)) {
+[7m  [0m [91m                  ~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m275[0m:[93m104[0m - [91merror[0m[90m TS2591: [0mCannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m275[0m console.log(`${check ? "Verified" : "Generated"} ${files.size} cases; ${expansions} expansions; Node ${process.versions.node} / Unicode ${process.versions.unicode} / ICU ${process.versions.icu}`);
+[7m   [0m [91m                                                                                                       ~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m275[0m:[93m139[0m - [91merror[0m[90m TS2591: [0mCannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m275[0m console.log(`${check ? "Verified" : "Generated"} ${files.size} cases; ${expansions} expansions; Node ${process.versions.node} / Unicode ${process.versions.unicode} / ICU ${process.versions.icu}`);
+[7m   [0m [91m                                                                                                                                          ~~~~~~~[0m
+
+[96mtooling/unicode-cases/case-mapping.ts[0m:[93m275[0m:[93m173[0m - [91merror[0m[90m TS2591: [0mCannot find name 'process'. Do you need to install type definitions for node? Try `npm i --save-dev @types/node` and then add 'node' to the types field in your tsconfig.
+
+[7m275[0m console.log(`${check ? "Verified" : "Generated"} ${files.size} cases; ${expansions} expansions; Node ${process.versions.node} / Unicode ${process.versions.unicode} / ICU ${process.versions.icu}`);
+[7m   [0m [91m                                                                                                                                                                            ~~~~~~~[0m
+
+
+Found 12 errors in the same file, starting at: tooling/unicode-cases/case-mapping.ts[90m:9[0m
+

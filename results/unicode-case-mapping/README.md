@@ -30,3 +30,8 @@ endpoint Git-registry control. The latter is retained and routed to tsrs as a
 separate tooling defect. A subsequent green qualification does not repair it.
 Three inherited feature-index count discrepancies are reported separately in
 `feature-audit.json`; every count delta contributed by this family is exact.
+
+Full tooling after the records: 724 passed, zero failed, two existing TODOs.
+Strict checking with explicit Node types and the exact nine-check dry-run pass.
+The selection owes 38 core steps, including all six conformance-record steps.
+The preceding CLI/configuration failures are retained; source bytes are unchanged.

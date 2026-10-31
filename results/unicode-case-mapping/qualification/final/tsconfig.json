@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "noEmit": true,
+    "strict": true,
+    "target": "ESNext",
+    "module": "preserve",
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "skipLibCheck": true,
+    "types": [
+      "node"
+    ],
+    "typeRoots": [
+      "/home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/node_modules/@types"
+    ]
+  },
+  "files": [
+    "/home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/unicode-cases/case-mapping.ts"
+  ]
+}

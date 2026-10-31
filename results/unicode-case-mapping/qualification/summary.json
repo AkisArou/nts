@@ -1,0 +1,30 @@
+{
+  "complete": true,
+  "verifiedPacket": "5965fdf280ca2facfca97a62f3d7bed126b862ae",
+  "source": "26b4bea1f369e23491f52934990cfdfd646a19a6",
+  "tooling": {
+    "pass": 724,
+    "fail": 0,
+    "todo": 2
+  },
+  "strict": 0,
+  "dry": {
+    "status": 0,
+    "treeChecksPassed": 9,
+    "owedCoreSteps": 38
+  },
+  "recordSteps": [
+    "test262-cases",
+    "test262-builtins-cases",
+    "test262-rest-cases",
+    "test262-jvm",
+    "test262-llvm",
+    "typescript-cases"
+  ],
+  "earlierConcurrentRegistryFailure": {
+    "retained": true,
+    "owner": "tsrs",
+    "message": "31668704-5d6f-421c-a218-aa0d79fe1f9b",
+    "repairClaim": false
+  }
+}
