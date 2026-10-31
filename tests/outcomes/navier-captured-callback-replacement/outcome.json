@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "uncompilable-c",
+  "nts": "error: assignment to 'NtsObj_Fn19__N *' from incompatible pointer type 'NtsObj_ClosureN *' [-Wincompatible-pointer-types]",
+  "node": "exit 1; nts: uncaught Observed: replacement callback=23;",
+  "measured_with": "58ea87c81e2b5f12",
+  "source": "measured"
+}
