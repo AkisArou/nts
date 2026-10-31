@@ -77,7 +77,7 @@ pub const ARRAY_FOREIGN: u32 = 7;
 /// struct and each reference to it are written by different functions.
 #[must_use]
 pub fn ops_name(counting: &Counting) -> String {
-    format!("nts_family_ops_{}", counting.retain)
+    format!("__nts_family_ops_{}", counting.retain)
 }
 
 /// The families whose objects the runtime holds for the program -- in a
@@ -137,7 +137,7 @@ pub fn counted_element(element: &HirType) -> Option<Counting> {
 /// names the family's `NtsFamilyOps` through its one foreign slot.
 #[must_use]
 pub fn array_descriptor_name(counting: &Counting) -> String {
-    format!("nts_desc_foreign_{}", counting.retain)
+    format!("__nts_desc_foreign_{}", counting.retain)
 }
 
 /// Every foreign pair the program calls, in a stable order, so each backend

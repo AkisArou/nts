@@ -26,14 +26,13 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{
-    Family, FnPointer, GObjectThunk, GType, PROGRAM_GTYPE, PropertyOperation, Type,
-};
-use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, Program, TemplateText};
+use super::Emission as Program;
+use nts_core::hir::native::{Family, FnPointer, GObjectThunk, GType, PropertyOperation, Type};
+use nts_core::hir::{Callee, ForeignClass, ForeignMethod, OpKind, TemplateText};
 
 use super::c_string;
 
-use super::{CodeWriter, Diagnostic, Origin, c_identifier, c_type_of};
+use super::{CodeWriter, Diagnostic, Origin, c_type_of};
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub(super) fn classes(
@@ -45,7 +44,7 @@ pub(super) fn classes(
     let registered = nts_codegen_common::gobject::registered(program);
     let wrote = !registered.is_empty();
     if wrote {
-        header(writer, origin, &registered);
+        header(writer, origin, program, &registered);
     }
     for class in registered {
         let name = &class.name;
@@ -96,7 +95,7 @@ pub(super) fn classes(
                 .zip(&compiled.params)
                 .enumerate()
             {
-                parameters.push(format!("{} a{slot}", spelled[slot]));
+                parameters.push(format!("{} __nts_a{slot}", spelled[slot]));
                 if let Some(copy) = super::native_memory::lent_string(
                     ty,
                     &want.ty,
@@ -107,17 +106,21 @@ pub(super) fn classes(
                     continue;
                 }
                 arguments.push(format!(
-                    "({})a{slot}",
+                    "({})__nts_a{slot}",
                     c_type_of(program, &want.ty, &want.origin)?
                 ));
             }
-            let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
-            let entry = format!("nts_gobject_{name}_{at}");
+            let call = format!(
+                "{}({})",
+                program.function(&compiled.name),
+                arguments.join(", ")
+            );
+            let entry = format!("__nts_gobject_{name}_{at}");
             let body = if matches!(*method.signature.result, Type::Void) {
                 format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
             } else {
                 format!(
-                    "nts_callback_enter();{copies} {returns} r = ({returns}){call};{releases} nts_callback_leave(); return r;"
+                    "nts_callback_enter();{copies} {returns} __nts_r = ({returns}){call};{releases} nts_callback_leave(); return __nts_r;"
                 )
             };
             writer.line(
@@ -144,11 +147,11 @@ pub(super) fn classes(
             writer.line(
                 origin,
                 format!(
-                    "static const struct nts_gobject_slot nts_gobject_slots_{name}[] = {{ {} }};",
+                    "static const struct __nts_gobject_slot __nts_gobject_slots_{name}[] = {{ {} }};",
                     slots.join(", ")
                 ),
             );
-            format!("nts_gobject_slots_{name}")
+            format!("__nts_gobject_slots_{name}")
         };
         // The fields' maker, which `instance_init` calls wherever GTK makes
         // one -- a builder file's included -- so it enters and leaves as an
@@ -158,30 +161,35 @@ pub(super) fn classes(
             .superclass
             .gtype()
             .ok_or_else(|| refuse("a GObject class without typed parent provenance"))?;
-        let parent = parent_type.symbol();
+        let parent_symbol = program
+            .gtype_name(parent_type)
+            .ok_or_else(|| refuse("a GObject parent this program does not register"))?;
+        let type_symbol = program
+            .class_gtype(name)
+            .ok_or_else(|| refuse("a GObject class outside the emission index"))?;
         if matches!(parent_type, GType::Declared(_)) {
-            writer.line(origin, format!("size_t {parent}(void);"));
+            writer.line(origin, format!("size_t {parent_symbol}(void);"));
         }
         // Its signals, added to the type the moment it exists: before any
         // instance can be made or connected to.
         let hooks = template(writer, origin, program, class)?;
         let mut signals = registrations(class);
         if !signals.is_empty() {
-            writer.line(origin, "unsigned nts_gobject_add_signal(size_t type, const char *name, const char *kinds);");
+            writer.line(origin, "unsigned nts_gobject_add_signal(size_t __nts_type, const char *__nts_name, const char *__nts_kinds);");
         }
         signals.push_str(&implementations(writer, origin, class, &interfaces)?);
         if let Some(table) = properties(writer, origin, program, class)? {
             let _ = write!(
                 signals,
-                " nts_gobject_set_properties(type, {table}, {}u);",
+                " nts_gobject_set_properties(__nts_type, {table}, {}u);",
                 class.properties.len()
             );
         }
         writer.line(
             origin,
             format!(
-                "size_t nts_gobject_type_{name}(void) {{ static size_t type = 0; if (type == 0) {{ \
-                 type = nts_gobject_register({parent}(), {}, {table}, {}u, {make_state}, {hooks});{signals} }} return type; }}",
+                "size_t {type_symbol}(void) {{ static size_t __nts_type = 0; if (__nts_type == 0) {{ \
+                 __nts_type = nts_gobject_register({parent_symbol}(), {}, {table}, {}u, {make_state}, {hooks});{signals} }} return __nts_type; }}",
                 c_string(class.type_name.as_deref().unwrap_or(name.as_str())),
                 slots.len()
             ),
@@ -189,24 +197,23 @@ pub(super) fn classes(
         // What `new` makes, as the lowering spelled it: the prototype the
         // program already declares, which this definition has to match. An
         // ancestor made only through its descendants has none.
-        let make = format!("nts_gobject_new_{name}");
-        if let Some(result) = program
+        if let Some((make, result)) = program
             .native_funcs()
             .flat_map(|func| &func.values)
             .find_map(|op| match &op.kind {
                 OpKind::Call {
                     callee: Callee::Native(target),
                     ..
-                } if matches!(&target.thunk, Some(GObjectThunk::New { class }) if class == name) => Some(target.result.c_type()),
+                } if matches!(&target.thunk, Some(GObjectThunk::New { class }) if class == name) => Some((program.native_name(target), target.result.c_type())),
                 _ => None,
             })
         {
-            writer.line(origin, format!("{result} {make}(void) {{ return ({result})nts_gobject_new(nts_gobject_type_{name}()); }}"));
+            writer.line(origin, format!("{result} {make}(void) {{ return ({result})nts_gobject_new({type_symbol}()); }}"));
         }
     }
     let wrote = chains(writer, origin, program, wrote)?;
-    let wrote = notifies(writer, origin, program, wrote);
-    let wrote = children(writer, origin, program, wrote);
+    let wrote = notifies(writer, origin, program, wrote)?;
+    let wrote = children(writer, origin, program, wrote)?;
     let wrote = set_by_name(writer, origin, program, wrote);
     let wrote = get_by_name(writer, origin, program, wrote);
     emits(writer, origin, program, wrote);
@@ -215,33 +222,38 @@ pub(super) fn classes(
 
 /// What the classes' code below needs declared first: the support file's
 /// registration calls, the tables' types, and each class's `GType` function.
-fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]) {
+fn header(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    registered: &[&ForeignClass],
+) {
     writer.line(
         origin,
         "/* GObject classes the program declares: see `emit/gobject.rs`. */",
     );
     writer.line(
         origin,
-        "size_t nts_gobject_register(size_t parent, const char *name, const void *slots, size_t count, void *(*make_state)(void), void (*class_setup)(void *), void (*instance_setup)(void *));",
+        "size_t nts_gobject_register(size_t __nts_parent, const char *__nts_name, const void *__nts_slots, size_t __nts_count, void *(*__nts_make_state)(void), void (*__nts_class_setup)(void *), void (*__nts_instance_setup)(void *));",
     );
-    writer.line(origin, "void *nts_gobject_new(size_t type);");
+    writer.line(origin, "void *nts_gobject_new(size_t __nts_type);");
     writer.line(
         origin,
-        "struct nts_gobject_slot { size_t offset; void (*entry)(void); };",
+        "struct __nts_gobject_slot { size_t __nts_offset; void (*__nts_entry)(void); };",
     );
     if registered.iter().any(|class| !class.properties.is_empty()) {
-        writer.line(origin, "struct nts_gobject_property { const char *name; char kind; void (*get)(void); void (*set)(void); };");
+        writer.line(origin, "struct __nts_gobject_property { const char *__nts_name; char __nts_kind; void (*__nts_get)(void); void (*__nts_set)(void); };");
         writer.line(
             origin,
-            "void nts_gobject_set_properties(size_t type, const void *properties, size_t count);",
+            "void nts_gobject_set_properties(size_t __nts_type, const void *__nts_properties, size_t __nts_count);",
         );
     }
     if registered.iter().any(|class| !class.protocols.is_empty()) {
         writer.line(
             origin,
-            "void nts_gobject_add_interfaces(size_t type, const void *interfaces, size_t count);",
+            "void nts_gobject_add_interfaces(size_t __nts_type, const void *__nts_interfaces, size_t __nts_count);",
         );
-        writer.line(origin, "struct nts_gobject_interface { size_t (*get_type)(void); const struct nts_gobject_slot *slots; size_t count; };");
+        writer.line(origin, "struct __nts_gobject_interface { size_t (*__nts_get_type)(void); const struct __nts_gobject_slot *__nts_slots; size_t __nts_count; };");
     }
     // Each class's `GType` function, before any class names it as a
     // parent or a chain-up calls it. Not `static`: an `instanceof` calls it
@@ -250,7 +262,12 @@ fn header(writer: &mut CodeWriter, origin: &Origin, registered: &[&ForeignClass]
     for class in registered {
         writer.line(
             origin,
-            format!("size_t {PROGRAM_GTYPE}{}(void);", class.name),
+            format!(
+                "size_t {}(void);",
+                program
+                    .class_gtype(&class.name)
+                    .expect("registered class has an emission index entry")
+            ),
         );
     }
 }
@@ -332,20 +349,20 @@ fn implementations(
         let table = if slots.is_empty() {
             "0".to_owned()
         } else {
-            writer.line(origin, format!("static const struct nts_gobject_slot nts_gobject_interface_{name}_{at}[] = {{ {} }};", slots.join(", ")));
-            format!("nts_gobject_interface_{name}_{at}")
+            writer.line(origin, format!("static const struct __nts_gobject_slot __nts_gobject_interface_{name}_{at}[] = {{ {} }};", slots.join(", ")));
+            format!("__nts_gobject_interface_{name}_{at}")
         };
         rows.push(format!("{{ {get_type}, {table}, {}u }}", slots.len()));
     }
     writer.line(
         origin,
         format!(
-            "static const struct nts_gobject_interface nts_gobject_interfaces_{name}[] = {{ {} }};",
+            "static const struct __nts_gobject_interface __nts_gobject_interfaces_{name}[] = {{ {} }};",
             rows.join(", ")
         ),
     );
     Ok(format!(
-        " nts_gobject_add_interfaces(type, nts_gobject_interfaces_{name}, {}u);",
+        " nts_gobject_add_interfaces(__nts_type, __nts_gobject_interfaces_{name}, {}u);",
         rows.len()
     ))
 }
@@ -360,12 +377,12 @@ const BY_NAME: [(PropertyOperation, &str, &str); 2] = [
     (
         PropertyOperation::Set,
         "g_object_set",
-        "void g_object_set(void *object, const char *first_property_name, ...);",
+        "void g_object_set(void *__nts_object, const char *__nts_first_property_name, ...);",
     ),
     (
         PropertyOperation::Construct,
         "nts_gobject_with_builder_add",
-        "void nts_gobject_with_builder_add(void *builder, const char *name, ...);",
+        "void nts_gobject_with_builder_add(void *__nts_builder, const char *__nts_name, ...);",
     ),
 ];
 
@@ -394,7 +411,7 @@ fn set_by_name(
             let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else {
                 continue;
             };
-            if !done.insert(target.name.clone()) {
+            if !done.insert(program.native_name(target)) {
                 continue;
             }
             let [object, value] = target.parameters.as_slice() else {
@@ -413,8 +430,8 @@ fn set_by_name(
             writer.line(
                 origin,
                 format!(
-                    "void {}({} a0, {} a1) {{ {callee}(a0, {}, a1, (void *)0); }}",
-                    target.name,
+                    "void {}({} __nts_a0, {} __nts_a1) {{ {callee}(__nts_a0, {}, __nts_a1, (void *)0); }}",
+                    program.native_name(target),
                     object.c_type(),
                     value.c_type(),
                     c_string(property)
@@ -455,7 +472,7 @@ fn get_by_name(
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else {
@@ -474,15 +491,15 @@ fn get_by_name(
         if done.len() == 1 {
             writer.line(
                 origin,
-                "void g_object_get(void *object, const char *first_property_name, ...);",
+                "void g_object_get(void *__nts_object, const char *__nts_first_property_name, ...);",
             );
         }
         let value = target.result.c_type();
         writer.line(
             origin,
             format!(
-                "{value} {}({} a0) {{ {value} r = 0; g_object_get(a0, {}, &r, (void *)0); return r; }}",
-                target.name,
+                "{value} {}({} __nts_a0) {{ {value} __nts_r = 0; g_object_get(__nts_a0, {}, &__nts_r, (void *)0); return __nts_r; }}",
+                program.native_name(target),
                 object.c_type(),
                 c_string(property)
             ),
@@ -494,7 +511,12 @@ fn get_by_name(
 /// Each `nts_gobject_child_{Class}_{index}` the program calls -- a read of a
 /// child the class's template names -- defined as `gtk_widget_get_template_child`
 /// by the child's id, which lends it.
-fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+fn children(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    mut wrote: bool,
+) -> Result<bool, Diagnostic> {
     let mut done = std::collections::BTreeSet::new();
     for target in program
         .native_funcs()
@@ -507,7 +529,7 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Child { class, index }) = &target.thunk else {
@@ -534,7 +556,7 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
         if done.len() == 1 {
             writer.line(
                 origin,
-                "void *nts_gtk_template_child(void *widget, size_t type, const char *id);",
+                "void *nts_gtk_template_child(void *__nts_widget, size_t __nts_type, const char *__nts_id);",
             );
         }
         let returns = target.result.c_type();
@@ -542,22 +564,34 @@ fn children(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
             .parameters
             .first()
             .map_or_else(|| "void *".into(), Type::c_type);
+        let type_symbol = program.class_gtype(class).ok_or_else(|| {
+            Diagnostic::error(
+                "NTS2006",
+                "a GObject thunk whose class is not in the emission index".to_owned(),
+                origin.location,
+            )
+        })?;
         writer.line(
             origin,
             format!(
-                "{returns} {}({instance} a0) {{ return ({returns})nts_gtk_template_child(a0, {PROGRAM_GTYPE}{class}(), {}); }}",
-                target.name,
+                "{returns} {}({instance} __nts_a0) {{ return ({returns})nts_gtk_template_child(__nts_a0, {type_symbol}(), {}); }}",
+                program.native_name(target),
                 c_string(id)
             ),
         );
     }
-    wrote
+    Ok(wrote)
 }
 
 /// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
 /// a property's field -- defined as `g_object_notify_by_pspec` with the
 /// property's spec, found once and kept.
-fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote: bool) -> bool {
+fn notifies(
+    writer: &mut CodeWriter,
+    origin: &Origin,
+    program: &Program,
+    mut wrote: bool,
+) -> Result<bool, Diagnostic> {
     let mut done = std::collections::BTreeSet::new();
     for target in program
         .native_funcs()
@@ -570,7 +604,7 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Notify { class, index }) = &target.thunk else {
@@ -586,22 +620,29 @@ fn notifies(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wro
         if done.len() == 1 {
             writer.line(
                 origin,
-                "void *nts_gobject_property_spec(size_t type, unsigned index);",
+                "void *nts_gobject_property_spec(size_t __nts_type, unsigned __nts_index);",
             );
             writer.line(
                 origin,
-                "void g_object_notify_by_pspec(void *object, void *pspec);",
+                "void g_object_notify_by_pspec(void *__nts_object, void *__nts_pspec);",
             );
         }
+        let type_symbol = program.class_gtype(class).ok_or_else(|| {
+            Diagnostic::error(
+                "NTS2006",
+                "a GObject thunk whose class is not in the emission index".to_owned(),
+                origin.location,
+            )
+        })?;
         writer.line(
             origin,
             format!(
-                "void {}(void *self) {{ static void *spec; if (!spec) spec = nts_gobject_property_spec({PROGRAM_GTYPE}{class}(), {index}u); g_object_notify_by_pspec(self, spec); }}",
-                target.name
+                "void {}(void *__nts_self) {{ static void *__nts_spec; if (!__nts_spec) __nts_spec = nts_gobject_property_spec({type_symbol}(), {index}u); g_object_notify_by_pspec(__nts_self, __nts_spec); }}",
+                program.native_name(target)
             ),
         );
     }
-    wrote
+    Ok(wrote)
 }
 
 /// A class's template (`static readonly template`): `class_init` sets it and
@@ -619,17 +660,17 @@ fn template(
     let name = &class.name;
     writer.line(
         origin,
-        "void nts_gtk_class_children(void *klass, const char *const *children, size_t count);",
+        "void nts_gtk_class_children(void *__nts_klass, const char *const *children, size_t __nts_count);",
     );
-    writer.line(origin, "void nts_gtk_init_template(void *instance);");
+    writer.line(origin, "void nts_gtk_init_template(void *__nts_instance);");
     let set = match &template.text {
         TemplateText::Literal(text) => {
             writer.line(
                 origin,
-                "void nts_gtk_class_template(void *klass, const char *text, size_t length);",
+                "void nts_gtk_class_template(void *__nts_klass, const char *__nts_text, size_t __nts_length);",
             );
             format!(
-                "nts_gtk_class_template(klass, {}, {}u);",
+                "nts_gtk_class_template(__nts_klass, {}, {}u);",
                 c_string(text),
                 text.len()
             )
@@ -640,7 +681,7 @@ fn template(
         TemplateText::Read(reader) => {
             writer.line(
                 origin,
-                "void nts_gtk_class_template_text(void *klass, const char *text);",
+                "void nts_gtk_class_template_text(void *__nts_klass, const char *__nts_text);",
             );
             let compiled = program
                 .funcs
@@ -654,14 +695,14 @@ fn template(
                     )
                 })?;
             let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-                " nts_release((NtsHeader *)text);"
+                " nts_release((NtsHeader *)__nts_text);"
             } else {
                 ""
             };
             format!(
-                "nts_callback_enter(); NtsString *text = {}(); const char *c = nts_string_to_cstring(text); \
-                 nts_gtk_class_template_text(klass, c); nts_cstring_release(text, c);{release} nts_callback_leave();",
-                c_identifier(&compiled.name)
+                "nts_callback_enter(); NtsString *__nts_text = {}(); const char *__nts_c = nts_string_to_cstring(__nts_text); \
+                 nts_gtk_class_template_text(__nts_klass, __nts_c); nts_cstring_release(__nts_text, __nts_c);{release} nts_callback_leave();",
+                program.function(&compiled.name)
             )
         }
     };
@@ -677,21 +718,21 @@ fn template(
         writer.line(
             origin,
             format!(
-                "static const char *const nts_gobject_children_{name}[] = {{ {} }};",
+                "static const char *const __nts_gobject_children_{name}[] = {{ {} }};",
                 children.join(", ")
             ),
         );
-        format!("nts_gobject_children_{name}")
+        format!("__nts_gobject_children_{name}")
     };
     writer.line(
         origin,
         format!(
-            "static void nts_gobject_class_setup_{name}(void *klass) {{ {set} nts_gtk_class_children(klass, {table}, {}u);{binds} }}",
+            "static void __nts_gobject_class_setup_{name}(void *__nts_klass) {{ {set} nts_gtk_class_children(__nts_klass, {table}, {}u);{binds} }}",
             children.len()
         ),
     );
     Ok(format!(
-        "nts_gobject_class_setup_{name}, nts_gtk_init_template"
+        "__nts_gobject_class_setup_{name}, nts_gtk_init_template"
     ))
 }
 
@@ -712,7 +753,7 @@ fn callbacks(
     }
     writer.line(
         origin,
-        "void nts_gtk_bind_callback(void *klass, const char *name, void (*callback)(void));",
+        "void nts_gtk_bind_callback(void *__nts_klass, const char *__nts_name, void (*__nts_callback)(void));",
     );
     let name = &class.name;
     let mut binds = String::new();
@@ -730,9 +771,10 @@ fn callbacks(
                 "a template's handler whose entry point and compiled function disagree about arity",
             ));
         }
+        let receiver = "__nts_self";
         let mut parameters = Vec::new();
         let mut arguments = vec![format!(
-            "({})self",
+            "({}){receiver}",
             c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?
         )];
         for (slot, (ty, want)) in signature
@@ -742,23 +784,27 @@ fn callbacks(
             .enumerate()
             .skip(1)
         {
-            parameters.push(format!("{} a{slot}", ty.c_type()));
+            parameters.push(format!("{} __nts_a{slot}", ty.c_type()));
             arguments.push(format!(
-                "({})a{slot}",
+                "({})__nts_a{slot}",
                 c_type_of(program, &want.ty, &want.origin)?
             ));
         }
-        parameters.push("void *self".to_owned());
-        let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+        parameters.push(format!("void *{receiver}"));
+        let call = format!(
+            "{}({})",
+            program.function(&compiled.name),
+            arguments.join(", ")
+        );
         let returns = signature.result.c_type();
         let body = if matches!(*signature.result, Type::Void) {
             format!("nts_callback_enter(); {call}; nts_callback_leave();")
         } else {
             format!(
-                "nts_callback_enter(); {returns} r = ({returns}){call}; nts_callback_leave(); return r;"
+                "nts_callback_enter(); {returns} __nts_r = ({returns}){call}; nts_callback_leave(); return __nts_r;"
             )
         };
-        let entry = format!("nts_gobject_callback_{name}_{at}");
+        let entry = format!("__nts_gobject_callback_{name}_{at}");
         writer.line(
             origin,
             format!(
@@ -769,7 +815,7 @@ fn callbacks(
         let handler = callback.selector().trim_start_matches("callback ");
         let _ = write!(
             binds,
-            " nts_gtk_bind_callback(klass, {}, (void (*)(void)){entry});",
+            " nts_gtk_bind_callback(__nts_klass, {}, (void (*)(void)){entry});",
             c_string(handler)
         );
     }
@@ -802,11 +848,11 @@ fn state_maker(
     writer.line(
         origin,
         format!(
-            "static void *nts_gobject_state_maker_{name}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}",
-            c_identifier(&compiled.name)
+            "static void *__nts_gobject_state_maker_{name}(void) {{ nts_callback_enter(); void *__nts_made = (void *){}(); nts_callback_leave(); return __nts_made; }}",
+            program.function(&compiled.name)
         ),
     );
-    Ok(format!("nts_gobject_state_maker_{name}"))
+    Ok(format!("__nts_gobject_state_maker_{name}"))
 }
 
 /// A class's properties as the runtime's `get_property` and `set_property`
@@ -841,19 +887,19 @@ fn properties(
         writer.line(
             origin,
             format!(
-                "static {value} nts_gobject_get_{name}_{at}(void *self) {{ nts_callback_enter(); {value} r = {}(({instance})self); nts_callback_leave(); return r; }}",
-                c_identifier(&get.name)
+                "static {value} __nts_gobject_get_{name}_{at}(void *__nts_self) {{ nts_callback_enter(); {value} __nts_r = {}(({instance})__nts_self); nts_callback_leave(); return __nts_r; }}",
+                program.function(&get.name)
             ),
         );
         writer.line(
             origin,
             format!(
-                "static void nts_gobject_set_{name}_{at}(void *self, {value} v) {{ nts_callback_enter(); {}(({instance})self, v); nts_callback_leave(); }}",
-                c_identifier(&set.name)
+                "static void __nts_gobject_set_{name}_{at}(void *__nts_self, {value} __nts_v) {{ nts_callback_enter(); {}(({instance})__nts_self, __nts_v); nts_callback_leave(); }}",
+                program.function(&set.name)
             ),
         );
         rows.push(format!(
-            "{{ {}, '{}', (void (*)(void))nts_gobject_get_{name}_{at}, (void (*)(void))nts_gobject_set_{name}_{at} }}",
+            "{{ {}, '{}', (void (*)(void))__nts_gobject_get_{name}_{at}, (void (*)(void))__nts_gobject_set_{name}_{at} }}",
             c_string(&property.name),
             property.kind
         ));
@@ -861,11 +907,11 @@ fn properties(
     writer.line(
         origin,
         format!(
-            "static const struct nts_gobject_property nts_gobject_properties_{name}[] = {{ {} }};",
+            "static const struct __nts_gobject_property __nts_gobject_properties_{name}[] = {{ {} }};",
             rows.join(", ")
         ),
     );
-    Ok(Some(format!("nts_gobject_properties_{name}")))
+    Ok(Some(format!("__nts_gobject_properties_{name}")))
 }
 
 /// The calls adding a class's signals to its `GType`, one per signal.
@@ -874,7 +920,7 @@ fn registrations(class: &ForeignClass) -> String {
     for signal in &class.signals {
         let _ = write!(
             out,
-            " nts_gobject_add_signal(type, {}, \"{}\");",
+            " nts_gobject_add_signal(__nts_type, {}, \"{}\");",
             c_string(&signal.name),
             signal.kinds
         );
@@ -900,7 +946,7 @@ fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote:
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Signal { name: signal, .. }) = &target.thunk else {
@@ -914,40 +960,46 @@ fn emits(writer: &mut CodeWriter, origin: &Origin, program: &Program, mut wrote:
             wrote = true;
         }
         if done.len() == 1 {
-            writer.line(origin, "unsigned nts_gobject_signal_id(void *instance, const char *name, size_t cache[2]);");
+            writer.line(origin, "unsigned nts_gobject_signal_id(void *__nts_instance, const char *__nts_name, size_t __nts_cache[2]);");
             writer.line(
                 origin,
-                "void g_signal_emit(void *instance, unsigned signal, unsigned detail, ...);",
+                "void g_signal_emit(void *__nts_instance, unsigned __nts_signal, unsigned __nts_detail, ...);",
             );
         }
         let parameters: Vec<String> = target
             .parameters
             .iter()
             .enumerate()
-            .map(|(at, ty)| format!("{} a{at}", ty.c_type()))
+            .map(|(at, ty)| format!("{} __nts_a{at}", ty.c_type()))
             .collect();
         let mut arguments = String::new();
         for at in 1..target.parameters.len() {
-            let _ = write!(arguments, ", a{at}");
+            let _ = write!(arguments, ", __nts_a{at}");
         }
         // A signal that answers writes its handlers' result through a
         // location passed after the parameters, which the thunk returns.
-        let (returns, slot, answer) = if matches!(target.result, Type::Void) {
-            ("void".to_owned(), String::new(), String::new())
+        let result = "__nts_r";
+        let (returns, slot, answer, location) = if matches!(target.result, Type::Void) {
+            (
+                "void".to_owned(),
+                String::new(),
+                String::new(),
+                String::new(),
+            )
         } else {
             let ty = target.result.c_type();
             (
                 ty.to_string(),
-                format!(" {ty} r = 0;"),
-                " return r;".to_owned(),
+                format!(" {ty} {result} = 0;"),
+                format!(" return {result};"),
+                format!(", &{result}"),
             )
         };
-        let location = if slot.is_empty() { "" } else { ", &r" };
         writer.line(
             origin,
             format!(
-                "{returns} {}({}) {{ static size_t cache[2];{slot} g_signal_emit(a0, nts_gobject_signal_id(a0, {}, cache), 0u{arguments}{location});{answer} }}",
-                target.name,
+                "{returns} {}({}) {{ static size_t __nts_cache[2];{slot} g_signal_emit(__nts_a0, nts_gobject_signal_id(__nts_a0, {}, __nts_cache), 0u{arguments}{location});{answer} }}",
+                program.native_name(target),
                 parameters.join(", "),
                 c_string(signal),
             ),
@@ -980,7 +1032,7 @@ fn chains(
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Chain {
@@ -1017,20 +1069,22 @@ fn chains(
         }
         writer.line(
             origin,
-            "void *nts_gobject_parent_slot(size_t parent, size_t offset);",
+            "void *nts_gobject_parent_slot(size_t __nts_parent, size_t __nts_offset);",
         );
         let parent_type = parent
             .gtype()
             .ok_or_else(|| refuse("a GObject chain-up without typed parent provenance"))?;
-        let parent = parent_type.symbol();
+        let parent_symbol = program
+            .gtype_name(parent_type)
+            .ok_or_else(|| refuse("a GObject chain-up parent this program does not register"))?;
         if matches!(parent_type, GType::Declared(_)) {
-            writer.line(origin, format!("size_t {parent}(void);"));
+            writer.line(origin, format!("size_t {parent_symbol}(void);"));
         }
         let parameters: Vec<String> = target
             .parameters
             .iter()
             .enumerate()
-            .map(|(at, ty)| format!("{} a{at}", ty.c_type()))
+            .map(|(at, ty)| format!("{} __nts_a{at}", ty.c_type()))
             .collect();
         let types: Vec<String> = target
             .parameters
@@ -1038,25 +1092,26 @@ fn chains(
             .map(|ty| ty.c_type().into_owned())
             .collect();
         let arguments: Vec<String> = (0..target.parameters.len())
-            .map(|at| format!("a{at}"))
+            .map(|at| format!("__nts_a{at}"))
             .collect();
         let returns = target.result.c_type();
         let call = format!(
-            "(({returns} (*)({}))slot)({})",
+            "(({returns} (*)({}))__nts_slot)({})",
             types.join(", "),
             arguments.join(", ")
         );
         let body = if matches!(target.result, Type::Void) {
-            format!("if (slot) {call};")
+            format!("if (__nts_slot) {call};")
         } else {
-            format!("return slot ? {call} : ({returns})0;")
+            format!("return __nts_slot ? {call} : ({returns})0;")
         };
         writer.line(
             origin,
             format!(
-                "{returns} {}({}) {{ void *slot = nts_gobject_parent_slot({parent}(), {offset}u); {body} }}",
-                target.name,
-                parameters.join(", ")
+                "{returns} {}({}) {{ void *__nts_slot = nts_gobject_parent_slot({}(), {offset}u); {body} }}",
+                program.native_name(target),
+                parameters.join(", "),
+                parent_symbol
             ),
         );
     }

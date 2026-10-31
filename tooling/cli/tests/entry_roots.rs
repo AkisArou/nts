@@ -20,6 +20,10 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[allow(dead_code)]
+#[path = "../../../compiler/codegen/common/test-support/c_symbols.rs"]
+mod c_symbols;
+
 /// Two exports, each reaching one private helper and nothing else.
 ///
 /// The helpers are the point. Narrowing to `published` must drop `diagnostic`
@@ -71,14 +75,29 @@ fn defined(output: &str) -> BTreeSet<String> {
     NAMES
         .iter()
         .filter(|name| {
-            output.lines().any(|line| {
-                let trimmed = line.trim_start();
-                (trimmed.contains(&format!("{name}(double ")) && trimmed.ends_with('{'))
-                    || trimmed.starts_with(&format!("define double @{name}("))
-            })
+            c_symbols::source_symbol(output, name).is_some()
+                || output.lines().any(|line| {
+                    line.trim_start()
+                        .starts_with(&format!("define double @{name}("))
+                })
         })
         .map(|name| (*name).to_owned())
         .collect()
+}
+
+#[test]
+fn definition_reader_keeps_private_bodies_and_rejects_decoys() {
+    let text = "static double __nts_fn_onlyPublished_17(double __nts_v0) {\n}\ndouble published(double __nts_v0) {\n}\n";
+    let expected = ["published", "onlyPublished"]
+        .into_iter()
+        .map(str::to_owned)
+        .collect();
+    assert_eq!(defined(text), expected);
+    assert_eq!(
+        defined(&text.replace("onlyPublished_17", "onlyPublishedExtra_17")),
+        ["published".to_owned()].into_iter().collect()
+    );
+    assert!(defined("static double __nts_fn_onlyPublished_17(double __nts_v0);\n").is_empty());
 }
 
 fn emit(command: &str, project: &Path, extra: &[&str]) -> String {

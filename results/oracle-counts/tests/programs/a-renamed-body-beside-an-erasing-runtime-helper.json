@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-renamed-body-beside-an-erasing-runtime-helper",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-renamed-body-beside-an-erasing-runtime-helper/src/main.ts",
+      "signature": "7f3a1c39eea7fd762f75057c89ff4c807635d316ca35cb676c655dbb7181ff93",
+      "keys": {
+        "c": "0bb18e823d53441082fa45a8f8520a4d",
+        "jvm": "7c6bb9cd2492a814c4dc82fce12fc416",
+        "llvm": "2a7f1843bd385c6628843dbc7dbb1c46"
+      },
+      "cases_sha256": "c5043ed2986f82e6e3b54ce0216959a98055947da782840575c00a86447a7492",
+      "driver_sha256": "87c5e3850b77a499dfe0238a42e7490243c66ef1005afaca3d5d500fdf47940b",
+      "populations": {
+        "run": {
+          "count": 29,
+          "cases_sha256": "c5043ed2986f82e6e3b54ce0216959a98055947da782840575c00a86447a7492"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

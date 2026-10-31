@@ -19,7 +19,7 @@
 //! and not required to be: every send runs on the program's owner thread, as
 //! every other call does.
 
-use super::{CodeWriter, Diagnostic, Origin, Program, c_identifier, c_type_of};
+use super::{CodeWriter, Diagnostic, Emission as Program, Origin, c_type_of};
 use nts_codegen_common::objc::{
     block_descriptor_symbol, block_encoding, block_invoke_symbol, block_signatures, class_symbol,
     lookups, selector_symbol,
@@ -42,14 +42,14 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
     writer.line(origin, "struct objc_class;");
     writer.line(
         origin,
-        "extern struct objc_selector *sel_registerName(const char *name);",
+        "extern struct objc_selector *sel_registerName(const char *__nts_name);",
     );
     // `objc_getClass` answers nil for a class that is not loaded, and a message
     // to nil answers zero: the program would carry on with a null handle it was
     // promised was an object. The required form ends the process, naming it.
     writer.line(
         origin,
-        "extern struct objc_class *objc_getRequiredClass(const char *name);",
+        "extern struct objc_class *objc_getRequiredClass(const char *__nts_name);",
     );
     writer.line(origin, "extern void objc_msgSend(void);");
     if found.supers {
@@ -57,12 +57,12 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         // runtime starts looking from, `struct objc_super`'s two words.
         writer.line(
             origin,
-            "struct nts_objc_super { const void *receiver; struct objc_class *super_class; };",
+            "struct __nts_objc_super { const void *__nts_receiver; struct objc_class *__nts_super_class; };",
         );
         writer.line(origin, "extern void objc_msgSendSuper(void);");
         writer.line(
             origin,
-            "extern struct objc_class *class_getSuperclass(struct objc_class *cls);",
+            "extern struct objc_class *class_getSuperclass(struct objc_class *__nts_cls);",
         );
     }
     if found.returns_records {
@@ -77,12 +77,18 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
         writer.line(origin, "extern void objc_msgSendSuper_stret(void);");
         writer.line(
             origin,
-            "#define NTS_OBJC_SEND_FOR(size) ((size) > 16 ? objc_msgSend_stret : objc_msgSend)",
+            "#define __nts_objc_send_for(__nts_size) ((__nts_size) > 16 ? objc_msgSend_stret : objc_msgSend)",
         );
-        writer.line(origin, "#define NTS_OBJC_SUPER_FOR(size) ((size) > 16 ? objc_msgSendSuper_stret : objc_msgSendSuper)");
+        writer.line(origin, "#define __nts_objc_super_for(__nts_size) ((__nts_size) > 16 ? objc_msgSendSuper_stret : objc_msgSendSuper)");
         writer.line(origin, "#else");
-        writer.line(origin, "#define NTS_OBJC_SEND_FOR(size) objc_msgSend");
-        writer.line(origin, "#define NTS_OBJC_SUPER_FOR(size) objc_msgSendSuper");
+        writer.line(
+            origin,
+            "#define __nts_objc_send_for(__nts_size) objc_msgSend",
+        );
+        writer.line(
+            origin,
+            "#define __nts_objc_super_for(__nts_size) objc_msgSendSuper",
+        );
         writer.line(origin, "#endif");
     }
     for selector in found.selectors {
@@ -91,28 +97,28 @@ pub(super) fn declarations(writer: &mut CodeWriter, origin: &Origin, program: &P
             origin,
             format!("static struct objc_selector *{name}(void) {{"),
         );
-        writer.line(origin, "    static struct objc_selector *cached;");
+        writer.line(origin, "    static struct objc_selector *__nts_cached;");
         writer.line(
             origin,
-            format!("    if (!cached) cached = sel_registerName(\"{selector}\");"),
+            format!("    if (!__nts_cached) __nts_cached = sel_registerName(\"{selector}\");"),
         );
-        writer.line(origin, "    return cached;");
+        writer.line(origin, "    return __nts_cached;");
         writer.line(origin, "}");
     }
     for class in found.classes {
         let name = class_symbol(class);
         writer.line(origin, format!("static struct objc_class *{name}(void) {{"));
-        writer.line(origin, "    static struct objc_class *cached;");
+        writer.line(origin, "    static struct objc_class *__nts_cached;");
         writer.line(
             origin,
-            format!("    if (!cached) cached = objc_getRequiredClass(\"{class}\");"),
+            format!("    if (!__nts_cached) __nts_cached = objc_getRequiredClass(\"{class}\");"),
         );
-        writer.line(origin, "    return cached;");
+        writer.line(origin, "    return __nts_cached;");
         writer.line(origin, "}");
     }
 }
 
-/// One method's entry point, `nts_imp_<Class>_<at>`: the runtime's arguments
+/// One method's entry point, `__nts_imp_<Class>_<at>`: the runtime's arguments
 /// -- `self`, `_cmd`, then the method's -- converted to the compiled method's
 /// (a lent `NSString` copied into a string, a record read through its
 /// address), and its result answered as the runtime takes it (a string as
@@ -126,6 +132,7 @@ fn entry_point(
 ) -> Result<String, Diagnostic> {
     // A record result is written through an address the entry point
     // passes the compiled method last.
+    let answer_slot = "__nts_r";
     let record_out = matches!(*method.signature.result, Type::Record(_));
     if compiled.params.len() + 1 != method.signature.parameters.len() + usize::from(record_out) {
         return Err(refuse(
@@ -136,7 +143,7 @@ fn entry_point(
     let mut arguments = Vec::new();
     let (mut copies, mut releases) = (String::new(), String::new());
     for (slot, ty) in method.signature.parameters.iter().enumerate() {
-        parameters.push(format!("{} a{slot}", ty.c_type()));
+        parameters.push(format!("{} __nts_a{slot}", ty.c_type()));
         // `_cmd` is the runtime's; the compiled method never reads it.
         if slot == 1 {
             continue;
@@ -148,10 +155,10 @@ fn entry_point(
         if nts_core::hir::native::lent_ns_string(ty, &want.ty) {
             let _ = write!(
                 copies,
-                " NtsString *s{slot} = nts_string_of_nsstring(a{slot});"
+                " NtsString *__nts_s{slot} = nts_string_of_nsstring(__nts_a{slot});"
             );
-            let _ = write!(releases, " nts_release((NtsHeader *)s{slot});");
-            arguments.push(format!("s{slot}"));
+            let _ = write!(releases, " nts_release((NtsHeader *)__nts_s{slot});");
+            arguments.push(format!("__nts_s{slot}"));
             continue;
         }
         // A record arrives by value and the compiled method reads it
@@ -162,18 +169,22 @@ fn entry_point(
             ""
         };
         arguments.push(format!(
-            "({}){by_value}a{slot}",
+            "({}){by_value}__nts_a{slot}",
             c_type_of(program, &want.ty, &want.origin)?
         ));
     }
     if record_out {
-        arguments.push("&r".to_owned());
+        arguments.push(format!("&{answer_slot}"));
     }
-    let call = format!("{}({})", c_identifier(&compiled.name), arguments.join(", "));
+    let call = format!(
+        "{}({})",
+        program.function(&compiled.name),
+        arguments.join(", ")
+    );
     let result = method.signature.result.c_type();
     let body = if record_out {
         format!(
-            "{result} r; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return r;"
+            "{result} {answer_slot}; nts_callback_enter();{copies} {call};{releases} nts_callback_leave(); return {answer_slot};"
         )
     } else if matches!(*method.signature.result, Type::Void) {
         format!("nts_callback_enter();{copies} {call};{releases} nts_callback_leave();")
@@ -185,12 +196,12 @@ fn entry_point(
         // is: made of the method's, which is given back, and answered
         // at +0 where the program counts, as an object is.
         let answer = if counted {
-            "objc_autoreleaseReturnValue((void *)made)"
+            "objc_autoreleaseReturnValue((void *)__nts_made)"
         } else {
-            "made"
+            "__nts_made"
         };
         format!(
-            "nts_callback_enter();{copies} NtsString *t = {call};{releases} {result} made = ({result})nts_nsstring_of(t); nts_release((NtsHeader *)t); nts_callback_leave(); return ({result}){answer};"
+            "nts_callback_enter();{copies} NtsString *__nts_t = {call};{releases} {result} __nts_made = ({result})nts_nsstring_of(__nts_t); nts_release((NtsHeader *)__nts_t); nts_callback_leave(); return ({result}){answer};"
         )
     } else if counted && returns_object(&method.signature.result) {
         // An object answered at +0, as a message that is no `new` or
@@ -198,11 +209,11 @@ fn entry_point(
         // its own count, which goes to the pool. Without counting it
         // owns nothing to give.
         format!(
-            "nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return ({result})objc_autoreleaseReturnValue((void *)r);"
+            "nts_callback_enter();{copies} {result} {answer_slot} = ({result}){call};{releases} nts_callback_leave(); return ({result})objc_autoreleaseReturnValue((void *){answer_slot});"
         )
     } else {
         format!(
-            "nts_callback_enter();{copies} {result} r = ({result}){call};{releases} nts_callback_leave(); return r;"
+            "nts_callback_enter();{copies} {result} {answer_slot} = ({result}){call};{releases} nts_callback_leave(); return {answer_slot};"
         )
     };
     Ok(format!(
@@ -218,8 +229,8 @@ fn entry_point(
 /// The layout is `Block_layout` (libclosure's `Block_private.h`) and two
 /// captured words: the closure, lent for the call that built the block, and
 /// the bridge into its compiled body. A callee that keeps the block copies it;
-/// `nts_block_copy` lends the closure again for the copy, and
-/// `nts_block_dispose` gives that back when the copy is released. A callee
+/// `__nts_block_copy` lends the closure again for the copy, and
+/// `__nts_block_dispose` gives that back when the copy is released. A callee
 /// that keeps the block *without* copying it holds a pointer into a frame that
 /// is gone, which is the same bug in C.
 ///
@@ -258,7 +269,7 @@ pub(super) fn classes(
     {
         writer.line(
             origin,
-            "extern void *objc_autoreleaseReturnValue(void *value);",
+            "extern void *objc_autoreleaseReturnValue(void *__nts_value);",
         );
     }
     for class in &classes {
@@ -294,9 +305,9 @@ pub(super) fn classes(
             writer.line(
                 origin,
                 format!(
-                    "static void *{}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}",
+                    "static void *{}(void) {{ nts_callback_enter(); void *__nts_made = (void *){}(); nts_callback_leave(); return __nts_made; }}",
                     nts_codegen_common::objc::state_symbol(&class.name),
-                    c_identifier(&compiled.name)
+                    program.function(&compiled.name)
                 ),
             );
         }
@@ -318,7 +329,7 @@ pub(super) fn classes(
     }
     writer.line(
         origin,
-        "__attribute__((constructor)) static void nts_objc_register_classes(void) {",
+        "__attribute__((constructor)) static void __nts_objc_register_classes(void) {",
     );
     for class in &classes {
         writer.line(
@@ -355,11 +366,11 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
     writer.line(origin, "/* Objective-C blocks: see `emit/objc.rs`. */");
     writer.line(
         origin,
-        "struct nts_block { void *isa; int flags; int reserved; void *invoke; const void *descriptor; void *context; void *bridge; };",
+        "struct __nts_block { void *__nts_isa; int __nts_flags; int __nts_reserved; void *__nts_invoke; const void *__nts_descriptor; void *__nts_context; void *__nts_bridge; };",
     );
     writer.line(
         origin,
-        "struct nts_block_descriptor { unsigned long reserved; unsigned long size; void (*copy)(void *, const void *); void (*dispose)(const void *); const char *signature; const char *layout; };",
+        "struct __nts_block_descriptor { unsigned long __nts_reserved; unsigned long __nts_size; void (*__nts_copy)(void *, const void *); void (*__nts_dispose)(const void *); const char *__nts_signature; const char *__nts_layout; };",
     );
     writer.line(origin, "extern void *_NSConcreteStackBlock[32];");
     // A block returning an object hands it back at +0, as ARC's caller
@@ -368,83 +379,95 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
     // Without counting the closure owns nothing to give.
     writer.line(
         origin,
-        "extern void *objc_autoreleaseReturnValue(void *value);",
+        "extern void *objc_autoreleaseReturnValue(void *__nts_value);",
     );
     writer.line(origin, "#if defined(NTS_PROVIDER_RC)");
     writer.line(
         origin,
-        "#define NTS_BLOCK_RETURNED(value) objc_autoreleaseReturnValue((void *)(value))",
+        "#define __nts_block_returned(__nts_value) objc_autoreleaseReturnValue((void *)(__nts_value))",
     );
     writer.line(origin, "#else");
-    writer.line(origin, "#define NTS_BLOCK_RETURNED(value) (value)");
+    writer.line(
+        origin,
+        "#define __nts_block_returned(__nts_value) (__nts_value)",
+    );
     writer.line(origin, "#endif");
     writer.line(origin, "extern void abort(void);");
     writer.line(
         origin,
-        "extern int dprintf(int descriptor, const char *format, ...);",
+        "extern int dprintf(int __nts_descriptor, const char *__nts_format, ...);",
     );
-    writer.line(origin, "static void nts_block_on_owner(const char *what) {");
+    writer.line(
+        origin,
+        "static void __nts_block_on_owner(const char *__nts_what) {",
+    );
     writer.line(origin, "    if (nts_is_owner_thread()) return;");
     writer.line(
         origin,
-        "    dprintf(2, \"nts: a block was %s off the thread that owns its closure\\n\", what);",
+        "    dprintf(2, \"nts: a block was %s off the thread that owns its closure\\n\", __nts_what);",
     );
     writer.line(origin, "    abort();");
     writer.line(origin, "}");
     writer.line(
         origin,
-        "static void nts_block_copy(void *copy, const void *block) {",
+        "static void __nts_block_copy(void *__nts_copy, const void *__nts_block) {",
     );
-    writer.line(origin, "    (void)copy;");
-    writer.line(origin, "    nts_block_on_owner(\"copied\");");
+    writer.line(origin, "    (void)__nts_copy;");
+    writer.line(origin, "    __nts_block_on_owner(\"copied\");");
     writer.line(
         origin,
-        "    (void)nts_closure_lend((NtsHeader *)((const struct nts_block *)block)->context);",
+        "    (void)nts_closure_lend((NtsHeader *)((const struct __nts_block *)__nts_block)->__nts_context);",
     );
     writer.line(origin, "}");
     // A platform releases a handler on whatever thread called it, and the
     // closure's count is the owning thread's: the release is carried there.
-    writer.line(origin, "static void nts_block_dispose(const void *block) {");
     writer.line(
         origin,
-        "    void *context = ((const struct nts_block *)block)->context;",
+        "static void __nts_block_dispose(const void *__nts_block) {",
     );
     writer.line(
         origin,
-        "    if (!nts_is_owner_thread()) { nts_block_unlend(context); return; }",
+        "    void *__nts_context = ((const struct __nts_block *)__nts_block)->__nts_context;",
     );
-    writer.line(origin, "    nts_closure_unlend(context);");
+    writer.line(
+        origin,
+        "    if (!nts_is_owner_thread()) { nts_block_unlend(__nts_context); return; }",
+    );
+    writer.line(origin, "    nts_closure_unlend(__nts_context);");
     writer.line(origin, "}");
     for signature in signatures {
         let result = signature.result.c_type();
-        let mut parameters = vec!["void *block".to_owned()];
+        let mut parameters = vec!["void *__nts_block".to_owned()];
         let mut bridge_types = Vec::new();
         let mut arguments = Vec::new();
         for (at, ty) in signature.parameters.iter().enumerate() {
-            parameters.push(format!("{} a{at}", ty.c_type()));
+            parameters.push(format!("{} __nts_a{at}", ty.c_type()));
             bridge_types.push(ty.c_type().into_owned());
-            arguments.push(format!("a{at}"));
+            arguments.push(format!("__nts_a{at}"));
         }
         bridge_types.push("void *".to_owned());
-        arguments.push("b->context".to_owned());
+        arguments.push("__nts_b->__nts_context".to_owned());
         let give = if matches!(*signature.result, Type::Void) {
             ""
         } else {
             "return "
         };
-        let bridge = format!("(({result} (*)({}))b->bridge)", bridge_types.join(", "));
+        let bridge = format!(
+            "(({result} (*)({}))__nts_b->__nts_bridge)",
+            bridge_types.join(", ")
+        );
         let hop = nts_codegen_common::objc::hop_arguments(signature)
             .map(|carried| hop(writer, origin, signature, &carried, &bridge));
         let call = format!("{bridge}({})", arguments.join(", "));
         let call = if returns_object(&signature.result) {
-            format!("({result})NTS_BLOCK_RETURNED({call})")
+            format!("({result})__nts_block_returned({call})")
         } else {
             call
         };
         writer.line(
             origin,
             format!(
-                "static {result} {}({}) {{ const struct nts_block *b = block; {}{give}{call}; }}",
+                "static {result} {}({}) {{ const struct __nts_block *__nts_b = __nts_block; {}{give}{call}; }}",
                 block_invoke_symbol(signature),
                 parameters.join(", "),
                 hop.unwrap_or_default(),
@@ -453,7 +476,7 @@ pub(super) fn blocks(writer: &mut CodeWriter, origin: &Origin, program: &Program
         writer.line(
             origin,
             format!(
-                "static const struct nts_block_descriptor {} = {{ 0, sizeof(struct nts_block), nts_block_copy, nts_block_dispose, \"{}\", 0 }};",
+                "static const struct __nts_block_descriptor {} = {{ 0, sizeof(struct __nts_block), __nts_block_copy, __nts_block_dispose, \"{}\", 0 }};",
                 block_descriptor_symbol(signature),
                 block_encoding(signature)
             ),
@@ -479,23 +502,23 @@ fn hop(
     let mut objects = Vec::new();
     let mut arguments = Vec::new();
     for (at, (ty, carriage)) in signature.parameters.iter().zip(carried).enumerate() {
-        fields.push(format!("{} a{at};", ty.c_type()));
-        packed.push(format!("a{at}"));
-        arguments.push(format!("h->a{at}"));
+        fields.push(format!("{} __nts_a{at};", ty.c_type()));
+        packed.push(format!("__nts_a{at}"));
+        arguments.push(format!("__nts_h->__nts_a{at}"));
         if matches!(carriage, Carried::Counted(_)) {
-            objects.push(format!("(uint32_t)offsetof(struct {hop}, a{at})"));
+            objects.push(format!("(uint32_t)offsetof(struct {hop}, __nts_a{at})"));
         }
     }
     if fields.is_empty() {
-        fields.push("char unused;".to_owned());
+        fields.push("char __nts_unused;".to_owned());
         packed.push("0".to_owned());
     }
-    arguments.push("b->context".to_owned());
+    arguments.push("__nts_b->__nts_context".to_owned());
     writer.line(origin, format!("struct {hop} {{ {} }};", fields.join(" ")));
     writer.line(
         origin,
         format!(
-            "static void {hop}_run(const void *block, void *arguments) {{ const struct nts_block *b = block; struct {hop} *h = arguments; {bridge}({}); }}",
+            "static void {hop}_run(const void *__nts_block, void *__nts_arguments) {{ const struct __nts_block *__nts_b = __nts_block; struct {hop} *__nts_h = __nts_arguments; {bridge}({}); }}",
             arguments.join(", ")
         ),
     );
@@ -512,7 +535,7 @@ fn hop(
         format!("{hop}_objects")
     };
     format!(
-        "if (!nts_is_owner_thread()) {{ struct {hop} h = {{ {} }}; nts_block_carry(block, &h, sizeof h, {objects_table}, {}u, {hop}_run); return; }} ",
+        "if (!nts_is_owner_thread()) {{ struct {hop} __nts_h = {{ {} }}; nts_block_carry(__nts_block, &__nts_h, sizeof __nts_h, {objects_table}, {}u, {hop}_run); return; }} ",
         packed.join(", "),
         objects.len()
     )
@@ -534,9 +557,9 @@ pub(super) fn block_expression(
     // `BLOCK_HAS_COPY_DISPOSE` and `BLOCK_HAS_SIGNATURE`; a stack block's
     // reference count bits are zero.
     format!(
-        "{name}_block.isa = _NSConcreteStackBlock; {name}_block.flags = (1 << 25) | (1 << 30); {name}_block.reserved = 0; \
-         {name}_block.invoke = (void *){}; {name}_block.descriptor = &{}; {name}_block.context = {context}; \
-         {name}_block.bridge = (void *){invoke}; {name} = &{name}_block;",
+        "{name}_block.__nts_isa = _NSConcreteStackBlock; {name}_block.__nts_flags = (1 << 25) | (1 << 30); {name}_block.__nts_reserved = 0; \
+         {name}_block.__nts_invoke = (void *){}; {name}_block.__nts_descriptor = &{}; {name}_block.__nts_context = {context}; \
+         {name}_block.__nts_bridge = (void *){invoke}; {name} = &{name}_block;",
         block_invoke_symbol(signature),
         block_descriptor_symbol(signature)
     )
@@ -582,20 +605,20 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
     // `objc_msgSendSuper_stret`, as `objc_msgSend_stret` is for any receiver.
     if let Some(class) = &send.super_of {
         let mut types = vec![
-            "struct nts_objc_super *".to_owned(),
+            "struct __nts_objc_super *".to_owned(),
             "struct objc_selector *".to_owned(),
         ];
         types.extend(target.parameters.iter().skip(skip).map(parameter));
         let mut values = vec![
             format!(
-                "&(struct nts_objc_super){{ {receiver}, class_getSuperclass({}()) }}",
+                "&(struct __nts_objc_super){{ {receiver}, class_getSuperclass({}()) }}",
                 class_symbol(class)
             ),
             format!("{}()", selector_symbol(&send.selector)),
         ];
         values.extend(rest.iter().cloned());
         let entry = match target.result {
-            Type::Record(_) => format!("(NTS_OBJC_SUPER_FOR(sizeof({result})))"),
+            Type::Record(_) => format!("(__nts_objc_super_for(sizeof({result})))"),
             _ => "objc_msgSendSuper".to_owned(),
         };
         return format!(
@@ -609,7 +632,7 @@ pub(super) fn send_expression(target: &Function, send: &Send, arguments: &[Strin
     let mut values = vec![receiver, format!("{}()", selector_symbol(&send.selector))];
     values.extend(rest.iter().cloned());
     let entry = match target.result {
-        Type::Record(_) => format!("(NTS_OBJC_SEND_FOR(sizeof({result})))"),
+        Type::Record(_) => format!("(__nts_objc_send_for(sizeof({result})))"),
         _ => "objc_msgSend".to_owned(),
     };
     format!(

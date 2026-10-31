@@ -1,4 +1,4 @@
-// expect: once-c static bool hasArrayLikeShape(NtsValue v0) {
+// expect: once-c static bool __nts_fn_hasArrayLikeShape_17(NtsValue __nts_v0) {
 //
 // Kept as a guard. `"length" in value` over an `object`, refused because a type
 // **no value in the program can have** declares `length` optionally.

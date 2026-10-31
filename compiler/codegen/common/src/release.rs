@@ -15,8 +15,8 @@ impl Action {
     #[must_use]
     pub const fn symbol_prefix(self) -> &'static str {
         match self {
-            Self::Release => "nts_release_fields",
-            Self::Trace => "nts_trace_fields",
+            Self::Release => "__nts_release_fields",
+            Self::Trace => "__nts_trace_fields",
         }
     }
 }

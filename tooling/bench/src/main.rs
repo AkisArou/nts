@@ -2527,9 +2527,51 @@ fn human(ns: f64) -> String {
 }
 
 #[cfg(test)]
+#[path = "../../../compiler/test-support/scratch.rs"]
+mod symbol_scratch;
+
+#[cfg(test)]
 mod tests {
     use super::{REFUSES_TODAY, Row, driver_entries, missing_entry, refusal_drift};
     use anyhow::Context;
+
+    #[test]
+    fn published_entries_survive_private_symbol_names() {
+        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../..")
+            .canonicalize_utf8()
+            .expect("workspace");
+        let dir = super::symbol_scratch::ScratchDir::new(
+            &root.join("target/bench-symbol-tests"),
+            "private-symbols",
+        );
+        std::fs::write(
+            dir.join("tsconfig.json"),
+            format!(r#"{{"extends":"{root}/tsconfig.fixtures.json","files":["main.ts"]}}"#),
+        )
+        .expect("config");
+        std::fs::write(dir.join("main.ts"),
+            "function helper(n:number):number {let x=n; for(let i=0;i<3;i++) x+=i; return x;} export function work(n:number):number {return helper(n);}").expect("source");
+        let text = super::emit(
+            &dir.join("tsconfig.json"),
+            &["work".to_owned()],
+            true,
+            nts_core::hir::Memory::NoGc,
+            false,
+        )
+        .expect("benchmark emission");
+        assert!(text.contains("__nts_fn_helper_"), "{text}");
+        assert_eq!(missing_entry(&text, &["work".to_owned()]), None);
+        let changed = text.replace(" work(", " renamed_work(");
+        assert_ne!(
+            text, changed,
+            "entry mutation must change the actual definition"
+        );
+        assert_eq!(
+            missing_entry(&changed, &["work".to_owned()]),
+            Some("work".to_owned())
+        );
+    }
 
     #[test]
     fn default_measurement_cpus_never_widen_the_inherited_set() {

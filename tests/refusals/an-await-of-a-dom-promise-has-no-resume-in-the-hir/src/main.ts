@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c static void go__resume(NtsObj_go_frame * v0) {
+// expect: emit-c --rc -> emits-c static void __nts_fn_go__resume_3(NtsObj_go_frame * __nts_v0) {
 //
 // An async export awaiting a promise an nts:dom member answers
 // (`document().exitFullscreen()`, request 12) compiles, and the C defines its

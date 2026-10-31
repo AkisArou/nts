@@ -124,13 +124,13 @@ fn a_record_crosses_by_value_in_c() {
         .find(|line| line.contains("= inset("))
         .unwrap_or_default();
     assert!(
-        assigned.trim_start().starts_with('*') && assigned.contains("inset(*v"),
+        assigned.trim_start().starts_with('*') && assigned.contains("inset(*__nts_v"),
         "the record result is not assigned through its storage, or the argument is not dereferenced:\n{text}"
     );
     // A send returning a record picks its entry point by size, so x86_64 can
     // use `objc_msgSend_stret` and arm64, which has none, never names it.
     assert!(
-        text.contains("NTS_OBJC_SEND_FOR(sizeof(struct CGRect))"),
+        text.contains("__nts_objc_send_for(sizeof(struct CGRect))"),
         "no entry point chosen by size:\n{text}"
     );
     assert!(
@@ -177,7 +177,7 @@ export function run(): bigint {
     let emitted = nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
     let text = emitted.writer.text();
     assert!(
-        !text.contains("stret") && !text.contains("NTS_OBJC_SEND_FOR"),
+        !text.contains("stret") && !text.contains("__nts_objc_send_for"),
         "{text}"
     );
     // Its sends are the plain cast they were.

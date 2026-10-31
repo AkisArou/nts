@@ -8,29 +8,26 @@
 
 use std::fmt::Write as _;
 
-use nts_core::hir::native::{Family, GObjectThunk, GType, PROGRAM_GTYPE, PropertyOperation, Type};
-use nts_core::hir::{
-    Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, Program, TemplateText,
-};
+use super::Emission as Program;
+
+use nts_core::hir::native::{Family, GObjectThunk, GType, PropertyOperation, Type};
+use nts_core::hir::{Callee, ForeignClass, ForeignMethod, Func, HirType, OpKind, TemplateText};
 use nts_diagnostics::Diagnostic;
 
-use super::{Platform, conversion, is_not_zero, refuse, symbol, text_constant, ty_of};
+use super::{Platform, conversion, is_not_zero, refuse, text_constant, ty_of};
 
 /// The function `new` of `class` calls, which this section defines.
-pub(super) fn maker(class: &ForeignClass) -> String {
-    format!("nts_gobject_new_{}", class.name)
-}
-
-/// Whether the program makes one of `class`, and so defines its `new`.
-fn made(program: &Program, class: &ForeignClass) -> bool {
-    nts_codegen_common::gobject::thunks(program)
-        .any(|(_, thunk)| matches!(thunk, GObjectThunk::New { class: name } if *name == class.name))
+fn maker<'a>(program: &'a Program, class: &ForeignClass) -> Option<&'a str> {
+    nts_codegen_common::gobject::thunks(program).find_map(|(target, thunk)| {
+        matches!(thunk, GObjectThunk::New { class: name } if *name == class.name)
+            .then(|| program.native_name(target))
+    })
 }
 
 /// Whether the program calls `name` as a foreign function, and so declares it.
 fn called(program: &Program, name: &str) -> bool {
     program.native_funcs().flat_map(|func| &func.values).any(|op| {
-        matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. } if target.name == name)
+        matches!(&op.kind, OpKind::Call { callee: Callee::Native(target), .. } if program.native_name(target) == name)
     })
 }
 
@@ -50,8 +47,8 @@ pub(super) fn classes(
     out.push_str(&emits(program, platform)?);
     out.push_str(&set_by_name(program, platform)?);
     out.push_str(&get_by_name(program, platform)?);
-    out.push_str(&notifies(program));
-    out.push_str(&children(program));
+    out.push_str(&notifies(program, provenance_origin)?);
+    out.push_str(&children(program, provenance_origin)?);
     let classes = nts_codegen_common::gobject::registered(program);
     if classes.is_empty() {
         return Ok(out);
@@ -84,8 +81,8 @@ pub(super) fn classes(
                     "a GObject virtual function whose slot has no offset",
                 )
             })?;
-            let entry = format!("nts_gobject_{name}_{at}");
-            entry_point(&mut out, platform, &entry, method, compiled)?;
+            let entry = format!("__nts_gobject_{name}_{at}");
+            entry_point(program, &mut out, platform, &entry, method, compiled)?;
             let structure = method.selector().split_whitespace().next();
             let table = match class
                 .protocols
@@ -102,15 +99,15 @@ pub(super) fn classes(
         } else {
             let _ = writeln!(
                 out,
-                "@nts_gobject_slots_{name} = internal constant [{} x {{ i64, ptr }}] [{}]",
+                "@__nts_gobject_slots_{name} = internal constant [{} x {{ i64, ptr }}] [{}]",
                 slots.len(),
                 slots.join(", ")
             );
-            format!("@nts_gobject_slots_{name}")
+            format!("@__nts_gobject_slots_{name}")
         };
         text_constant(
             &mut out,
-            &format!("nts_gobject_name_{name}"),
+            &format!("__nts_gobject_name_{name}"),
             class.type_name.as_deref().unwrap_or(name.as_str()),
         );
         // The fields' maker, entered and left as an entry point is:
@@ -127,10 +124,10 @@ pub(super) fn classes(
                 };
                 let _ = writeln!(
                     out,
-                    "define internal ptr @nts_gobject_state_maker_{name}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
-                    symbol(&compiled.name)
+                    "define internal ptr @__nts_gobject_state_maker_{name}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
+                    program.source_function(&compiled.name)
                 );
-                format!("@nts_gobject_state_maker_{name}")
+                format!("@__nts_gobject_state_maker_{name}")
             }
             None => "null".to_owned(),
         };
@@ -157,31 +154,41 @@ pub(super) fn classes(
                 "a GObject class without typed parent provenance",
             )
         })?;
-        let parent = parent_type.symbol();
+        let parent = program.gtype_name(parent_type).ok_or_else(|| {
+            refuse(
+                provenance_origin,
+                "a GObject parent this program does not register",
+            )
+        })?;
+        let type_symbol = program.class_gtype(name).ok_or_else(|| {
+            refuse(
+                provenance_origin,
+                "a GObject class outside the emission index",
+            )
+        })?;
         if matches!(parent_type, GType::Declared(_))
-            && !called(program, &parent)
-            && parents.insert(parent.clone().into_owned())
+            && !called(program, parent)
+            && parents.insert(parent.to_owned())
         {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
         let _ = writeln!(
             out,
-            "@nts_gobject_type_{name}.cache = internal global i64 0\n\
-             define internal i64 @nts_gobject_type_{name}() nounwind {{\n\
-             entry:\n  %cached = load i64, ptr @nts_gobject_type_{name}.cache\n  %none = icmp eq i64 %cached, 0\n\
+            "@{type_symbol}.cache = internal global i64 0\n\
+             define internal i64 @{type_symbol}() nounwind {{\n\
+             entry:\n  %cached = load i64, ptr @{type_symbol}.cache\n  %none = icmp eq i64 %cached, 0\n\
              \x20 br i1 %none, label %register, label %done\n\
              register:\n  %parent = call i64 @{parent}()\n\
-             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state}, {hooks})\n\
+             \x20 %made = call i64 @nts_gobject_register(i64 %parent, ptr @__nts_gobject_name_{name}, ptr {table}, i64 {}, ptr {make_state}, {hooks})\n\
              {signals}\
-             \x20 store i64 %made, ptr @nts_gobject_type_{name}.cache\n  br label %done\n\
+             \x20 store i64 %made, ptr @{type_symbol}.cache\n  br label %done\n\
              done:\n  %type = phi i64 [ %cached, %entry ], [ %made, %register ]\n  ret i64 %type\n}}",
             slots.len()
         );
-        if made(program, class) {
+        if let Some(make) = maker(program, class) {
             let _ = writeln!(
                 out,
-                "define ptr @{}() nounwind {{\n  %type = call i64 @nts_gobject_type_{name}()\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}",
-                maker(class)
+                "define ptr @{make}() nounwind {{\n  %type = call i64 @{type_symbol}()\n  %made = call ptr @nts_gobject_new(i64 %type)\n  ret ptr %made\n}}"
             );
         }
     }
@@ -215,11 +222,11 @@ fn implementations(
         } else {
             let _ = writeln!(
                 out,
-                "@nts_gobject_interface_{name}_{at} = internal constant [{} x {{ i64, ptr }}] [{}]",
+                "@__nts_gobject_interface_{name}_{at} = internal constant [{} x {{ i64, ptr }}] [{}]",
                 slots.len(),
                 slots.join(", ")
             );
-            format!("@nts_gobject_interface_{name}_{at}")
+            format!("@__nts_gobject_interface_{name}_{at}")
         };
         rows.push(format!(
             "{{ ptr, ptr, i64 }} {{ ptr @{get_type}, ptr {table}, i64 {} }}",
@@ -231,12 +238,12 @@ fn implementations(
     }
     let _ = writeln!(
         out,
-        "@nts_gobject_interfaces_{name} = internal constant [{} x {{ ptr, ptr, i64 }}] [{}]",
+        "@__nts_gobject_interfaces_{name} = internal constant [{} x {{ ptr, ptr, i64 }}] [{}]",
         rows.len(),
         rows.join(", ")
     );
     format!(
-        "  call void @nts_gobject_add_interfaces(i64 %made, ptr @nts_gobject_interfaces_{name}, i64 {})\n",
+        "  call void @nts_gobject_add_interfaces(i64 %made, ptr @__nts_gobject_interfaces_{name}, i64 {})\n",
         rows.len()
     )
 }
@@ -295,9 +302,9 @@ fn template(
     let binds = callbacks(out, program, platform, class, &template.callbacks)?;
     let set = match &template.text {
         TemplateText::Literal(text) => {
-            bytes_constant(out, &format!("nts_gobject_template_{name}"), text);
+            bytes_constant(out, &format!("__nts_gobject_template_{name}"), text);
             format!(
-                "  call void @nts_gtk_class_template(ptr %klass, ptr @nts_gobject_template_{name}, i64 {})\n",
+                "  call void @nts_gtk_class_template(ptr %klass, ptr @__nts_gobject_template_{name}, i64 {})\n",
                 text.len()
             )
         }
@@ -321,33 +328,33 @@ fn template(
                 "  call void @nts_callback_enter()\n  %text = call ptr {}()\n  %c = call ptr @nts_string_to_cstring(ptr %text)\n  \
                  call void @nts_gtk_class_template_text(ptr %klass, ptr %c)\n  call void @nts_cstring_release(ptr %text, ptr %c)\n{release}  \
                  call void @nts_callback_leave()\n",
-                symbol(&compiled.name)
+                program.source_function(&compiled.name)
             )
         }
     };
     let mut names = Vec::new();
     for (at, child) in template.children.iter().enumerate() {
-        bytes_constant(out, &format!("nts_gobject_child_name_{name}_{at}"), child);
-        names.push(format!("ptr @nts_gobject_child_name_{name}_{at}"));
+        bytes_constant(out, &format!("__nts_gobject_child_name_{name}_{at}"), child);
+        names.push(format!("ptr @__nts_gobject_child_name_{name}_{at}"));
     }
     let table = if names.is_empty() {
         "null".to_owned()
     } else {
         let _ = writeln!(
             out,
-            "@nts_gobject_children_{name} = internal constant [{} x ptr] [{}]",
+            "@__nts_gobject_children_{name} = internal constant [{} x ptr] [{}]",
             names.len(),
             names.join(", ")
         );
-        format!("@nts_gobject_children_{name}")
+        format!("@__nts_gobject_children_{name}")
     };
     let _ = writeln!(
         out,
-        "define internal void @nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n{set}  call void @nts_gtk_class_children(ptr %klass, ptr {table}, i64 {})\n{binds}  ret void\n}}",
+        "define internal void @__nts_gobject_class_setup_{name}(ptr %klass) nounwind {{\n{set}  call void @nts_gtk_class_children(ptr %klass, ptr {table}, i64 {})\n{binds}  ret void\n}}",
         names.len()
     );
     Ok(format!(
-        "ptr @nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"
+        "ptr @__nts_gobject_class_setup_{name}, ptr @nts_gtk_init_template"
     ))
 }
 
@@ -377,8 +384,8 @@ fn callbacks(
                 None => Ok(String::new()),
             };
         };
-        let entry = format!("nts_gobject_entry_{name}_cb_{at}");
-        entry_point(out, platform, &entry, callback, compiled)?;
+        let entry = format!("__nts_gobject_entry_{name}_cb_{at}");
+        entry_point(program, out, platform, &entry, callback, compiled)?;
         let types = callback
             .signature
             .parameters
@@ -407,7 +414,7 @@ fn callbacks(
                     .map(|(at, ty)| format!("{ty} %a{at}")),
             )
             .collect();
-        let shim = format!("nts_gobject_callback_{name}_{at}");
+        let shim = format!("__nts_gobject_callback_{name}_{at}");
         if returns == "void" {
             let _ = writeln!(
                 out,
@@ -435,7 +442,7 @@ fn callbacks(
 
 /// Each `nts_gobject_child_{Class}_{index}` the program calls, defined as
 /// `gtk_widget_get_template_child` by the child's id, which lends it.
-fn children(program: &Program) -> String {
+fn children(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
@@ -449,7 +456,7 @@ fn children(program: &Program) -> String {
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Child { class, index }) = &target.thunk else {
@@ -469,14 +476,20 @@ fn children(program: &Program) -> String {
         if done.len() == 1 {
             out.push_str("declare ptr @nts_gtk_template_child(ptr, i64, ptr)\n");
         }
-        let thunk = &target.name;
+        let type_symbol = program.class_gtype(class).ok_or_else(|| {
+            refuse(
+                func,
+                "a GObject thunk whose class is not in the emission index",
+            )
+        })?;
+        let thunk = program.native_name(target);
         bytes_constant(&mut out, &format!("{thunk}.id"), id);
         let _ = writeln!(
             out,
-            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = call i64 @{PROGRAM_GTYPE}{class}()\n  %child = call ptr @nts_gtk_template_child(ptr %self, i64 %type, ptr @{thunk}.id)\n  ret ptr %child\n}}"
+            "define ptr @{thunk}(ptr %self) nounwind {{\n  %type = call i64 @{type_symbol}()\n  %child = call ptr @nts_gtk_template_child(ptr %self, i64 %type, ptr @{thunk}.id)\n  ret ptr %child\n}}"
         );
     }
-    out
+    Ok(out)
 }
 
 /// The calls adding a class's signals to its `GType` (`%made`), one per
@@ -487,17 +500,17 @@ fn registrations(out: &mut String, class: &ForeignClass) -> String {
     for (at, signal) in class.signals.iter().enumerate() {
         bytes_constant(
             out,
-            &format!("nts_gobject_signal_{name}_{at}"),
+            &format!("__nts_gobject_signal_{name}_{at}"),
             &signal.name,
         );
         bytes_constant(
             out,
-            &format!("nts_gobject_kinds_{name}_{at}"),
+            &format!("__nts_gobject_kinds_{name}_{at}"),
             &signal.kinds,
         );
         let _ = writeln!(
             calls,
-            "  call i32 @nts_gobject_add_signal(i64 %made, ptr @nts_gobject_signal_{name}_{at}, ptr @nts_gobject_kinds_{name}_{at})"
+            "  call i32 @nts_gobject_add_signal(i64 %made, ptr @__nts_gobject_signal_{name}_{at}, ptr @__nts_gobject_kinds_{name}_{at})"
         );
     }
     calls
@@ -529,37 +542,37 @@ fn properties(
         let value = ty_of(&get.return_type, get)?;
         let _ = writeln!(
             out,
-            "define internal {value} @nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  call void @nts_callback_enter()\n  %r = call {value} {}(ptr %self)\n  call void @nts_callback_leave()\n  ret {value} %r\n}}",
-            symbol(&get.name)
+            "define internal {value} @__nts_gobject_get_{name}_{at}(ptr %self) nounwind {{\n  call void @nts_callback_enter()\n  %r = call {value} {}(ptr %self)\n  call void @nts_callback_leave()\n  ret {value} %r\n}}",
+            program.source_function(&get.name)
         );
         let _ = writeln!(
             out,
-            "define internal void @nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  call void @nts_callback_enter()\n  call void {}(ptr %self, {value} %v)\n  call void @nts_callback_leave()\n  ret void\n}}",
-            symbol(&set.name)
+            "define internal void @__nts_gobject_set_{name}_{at}(ptr %self, {value} %v) nounwind {{\n  call void @nts_callback_enter()\n  call void {}(ptr %self, {value} %v)\n  call void @nts_callback_leave()\n  ret void\n}}",
+            program.source_function(&set.name)
         );
         bytes_constant(
             out,
-            &format!("nts_gobject_property_{name}_{at}"),
+            &format!("__nts_gobject_property_{name}_{at}"),
             &property.name,
         );
         rows.push(format!(
-            "{{ ptr, i8, ptr, ptr }} {{ ptr @nts_gobject_property_{name}_{at}, i8 {}, ptr @nts_gobject_get_{name}_{at}, ptr @nts_gobject_set_{name}_{at} }}",
+            "{{ ptr, i8, ptr, ptr }} {{ ptr @__nts_gobject_property_{name}_{at}, i8 {}, ptr @__nts_gobject_get_{name}_{at}, ptr @__nts_gobject_set_{name}_{at} }}",
             u32::from(property.kind)
         ));
     }
     let _ = writeln!(
         out,
-        "@nts_gobject_properties_{name} = internal constant [{} x {{ ptr, i8, ptr, ptr }}] [{}]",
+        "@__nts_gobject_properties_{name} = internal constant [{} x {{ ptr, i8, ptr, ptr }}] [{}]",
         rows.len(),
         rows.join(", ")
     );
-    Ok(Some(format!("@nts_gobject_properties_{name}")))
+    Ok(Some(format!("@__nts_gobject_properties_{name}")))
 }
 
 /// Each `nts_gobject_notify_{Class}_{index}` the program calls -- a write of
 /// a property's field -- defined as `g_object_notify_by_pspec` with the
 /// property's spec, found once and kept.
-fn notifies(program: &Program) -> String {
+fn notifies(program: &Program, func: &Func) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut done = std::collections::BTreeSet::new();
     for target in program
@@ -573,7 +586,7 @@ fn notifies(program: &Program) -> String {
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Notify { class, index }) = &target.thunk else {
@@ -582,19 +595,25 @@ fn notifies(program: &Program) -> String {
         if done.len() == 1 {
             out.push_str("declare ptr @nts_gobject_property_spec(i64, i32)\ndeclare void @g_object_notify_by_pspec(ptr, ptr)\n");
         }
-        let thunk = &target.name;
+        let type_symbol = program.class_gtype(class).ok_or_else(|| {
+            refuse(
+                func,
+                "a GObject thunk whose class is not in the emission index",
+            )
+        })?;
+        let thunk = program.native_name(target);
         let _ = writeln!(
             out,
             "@{thunk}.spec = internal global ptr null\n\
              define void @{thunk}(ptr %self) nounwind {{\nentry:\n\
              \x20 %kept = load ptr, ptr @{thunk}.spec\n  %none = icmp eq ptr %kept, null\n  br i1 %none, label %find, label %have\n\
-             find:\n  %type = call i64 @{PROGRAM_GTYPE}{class}()\n  %found = call ptr @nts_gobject_property_spec(i64 %type, i32 {index})\n\
+             find:\n  %type = call i64 @{type_symbol}()\n  %found = call ptr @nts_gobject_property_spec(i64 %type, i32 {index})\n\
              \x20 store ptr %found, ptr @{thunk}.spec\n  br label %have\n\
              have:\n  %spec = phi ptr [ %kept, %entry ], [ %found, %find ]\n\
              \x20 call void @g_object_notify_by_pspec(ptr %self, ptr %spec)\n  ret void\n}}"
         );
     }
-    out
+    Ok(out)
 }
 
 /// A NUL-terminated byte string constant, escaped as IR spells one: a signal's
@@ -638,7 +657,7 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Signal { name: signal, .. }) = &target.thunk else {
@@ -647,7 +666,7 @@ fn emits(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
         if done.len() == 1 {
             out.push_str("declare i32 @nts_gobject_signal_id(ptr, ptr, ptr)\ndeclare void @g_signal_emit(ptr, i32, i32, ...)\n");
         }
-        let thunk = &target.name;
+        let thunk = program.native_name(target);
         bytes_constant(&mut out, &format!("{thunk}.name"), signal);
         let types = target
             .parameters
@@ -748,7 +767,7 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
                 _ => None,
             })
         {
-            if !done.insert(target.name.clone()) {
+            if !done.insert(program.native_name(target)) {
                 continue;
             }
             let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else { continue; };
@@ -761,7 +780,7 @@ fn set_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
             if done.len() == 1 {
                 let _ = writeln!(out, "declare void @{callee}(ptr, ptr, ...)");
             }
-            let thunk = &target.name;
+            let thunk = program.native_name(target);
             bytes_constant(
                 &mut out,
                 &format!("{thunk}.name"),
@@ -806,7 +825,7 @@ fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         let Some(GObjectThunk::Property { name: property, .. }) = &target.thunk else {
@@ -815,7 +834,7 @@ fn get_by_name(program: &Program, platform: Platform) -> Result<String, Diagnost
         if done.len() == 1 {
             out.push_str("declare void @g_object_get(ptr, ptr, ...)\n");
         }
-        let thunk = &target.name;
+        let thunk = program.native_name(target);
         bytes_constant(&mut out, &format!("{thunk}.name"), &property.clone());
         let value = ty_of(&target.result.abi(platform.abi), func)?.to_owned();
         let zero = match value.as_str() {
@@ -851,7 +870,7 @@ fn chains(
             _ => None,
         })
     {
-        if !done.insert(target.name.clone()) {
+        if !done.insert(program.native_name(target)) {
             continue;
         }
         if done.len() == 1 {
@@ -880,10 +899,15 @@ fn chains(
         let parent_type = parent
             .gtype()
             .ok_or_else(|| refuse(func, "a GObject chain-up without typed parent provenance"))?;
-        let parent = parent_type.symbol();
+        let parent = program.gtype_name(parent_type).ok_or_else(|| {
+            refuse(
+                func,
+                "a GObject chain-up parent this program does not register",
+            )
+        })?;
         if matches!(parent_type, GType::Declared(_))
-            && !called(program, &parent)
-            && parents.insert(parent.clone().into_owned())
+            && !called(program, parent)
+            && parents.insert(parent.to_owned())
         {
             let _ = writeln!(out, "declare i64 @{parent}()");
         }
@@ -906,7 +930,7 @@ fn chains(
         let _ = writeln!(
             out,
             "define {returns} @{}({}) nounwind {{\nentry:\n  %parent = call i64 @{parent}()\n  %slot = call ptr @nts_gobject_parent_slot(i64 %parent, i64 {offset})\n  %none = icmp eq ptr %slot, null\n  br i1 %none, label %skip, label %call\ncall:",
-            target.name,
+            program.native_name(target),
             parameters.join(", ")
         );
         let arguments = parameters.join(", ");
@@ -936,6 +960,7 @@ fn chains(
 /// arguments converted to the compiled method's, and its result back.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn entry_point(
+    program: &Program,
     out: &mut String,
     platform: Platform,
     entry: &str,
@@ -1027,7 +1052,7 @@ fn entry_point(
     let call = format!(
         "call {} {}({})",
         ty_of(&have, compiled)?,
-        symbol(&compiled.name),
+        program.source_function(&compiled.name),
         arguments.join(", ")
     );
     if want == HirType::Void {

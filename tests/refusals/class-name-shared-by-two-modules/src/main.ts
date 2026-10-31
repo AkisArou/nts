@@ -1,4 +1,4 @@
-// expect: emit-c -> emits-c double useA(double v0)
+// expect: emit-c -> emits-c double useA(double __nts_v0)
 //
 // FIXED, kept as a guard. Two modules each declaring a class of the same name,
 // where **the one with nothing wrong with it was refused** -- reported as

@@ -1,8 +1,8 @@
 //! Native payloads have no managed header. C independently checks the shared
 //! layout calculator on every emitted definition.
 use super::{
-    CodeWriter, Diagnostic, Func, HirType, ManagedType, OpKind, Origin, Program, Spelling,
-    c_identifier, c_type_of, layout_of, native_function_type, native_prototype, return_c_type,
+    CodeWriter, Diagnostic, Emission as Program, Func, HirType, ManagedType, OpKind, Origin,
+    Spelling, c_type_of, layout_of, native_function_type, native_prototype, return_c_type,
     static_closure_name, value_name, virtual_signature,
 };
 use nts_codegen_common::symbols::native_member;
@@ -270,7 +270,7 @@ pub(super) fn operation(
                     Diagnostic::error("NTS2006", "malloc needs a native layout", origin.location)
                 })?
                 .size;
-            let call = format!("nts_native_malloc({}, {minimum});", value_name(bytes));
+            let call = format!("__nts_native_malloc({}, {minimum});", value_name(bytes));
             // Like an ordinary effectful call, an ignored allocation result
             // needs no C local. Keep the call even when its value is unused.
             if name.is_empty() {
@@ -447,13 +447,15 @@ pub(super) fn helpers(writer: &mut CodeWriter, origin: &Origin, program: &Progra
             .iter()
             .any(|v| matches!(v.kind, OpKind::NativeMalloc { .. }))
     }) {
+        let [bytes, minimum] =
+            program.helper_scope([super::HelperName::Bytes, super::HelperName::Minimum]);
         writer.line(origin, "extern void *malloc(size_t); ");
         writer.line(
             origin,
-            "static inline void *nts_native_malloc(double bytes, size_t minimum) {",
+            format!("static inline void *__nts_native_malloc(double {bytes}, size_t {minimum}) {{"),
         );
-        writer.line(origin, "    if (!(bytes >= (double)minimum && bytes <= 9007199254740991.0) || trunc(bytes) != bytes) return NULL;");
-        writer.line(origin, "    return malloc((size_t)bytes);");
+        writer.line(origin, format!("    if (!({bytes} >= (double){minimum} && {bytes} <= 9007199254740991.0) || trunc({bytes}) != {bytes}) return NULL;"));
+        writer.line(origin, format!("    return malloc((size_t){bytes});"));
         writer.line(origin, "}");
     }
     if program.native_funcs().any(|f| {
@@ -1017,13 +1019,13 @@ pub(super) fn bridges(
         let mut arguments = match receiver {
             Some(receiver) => vec![format!("&{receiver}")],
             None => vec![format!(
-                "({})a{last}",
+                "({})__nts_a{last}",
                 c_type_of(program, &compiled.params[0].ty, &compiled.params[0].origin)?
             )],
         };
         let (mut copies, mut releases) = (String::new(), String::new());
         for (at, ty) in signature.parameters.iter().enumerate() {
-            let slot = format!("a{at}");
+            let slot = format!("__nts_a{at}");
             parameters.push(format!("{} {slot}", ty.c_type()));
             if receiver.is_none() && at == last {
                 continue;
@@ -1056,7 +1058,11 @@ pub(super) fn bridges(
                 arguments[0],
                 arguments.join(", ")
             ),
-            None => format!("{}({})", c_identifier(&compiled.name), arguments.join(", ")),
+            None => format!(
+                "{}({})",
+                program.function(&compiled.name),
+                arguments.join(", ")
+            ),
         };
         let result = signature.result.c_type();
         // `nts_callback_enter` around the call, so a `throw` inside it stops
@@ -1069,7 +1075,7 @@ pub(super) fn bridges(
         // A once-bridge gives the closure back after its one call: C passes
         // nothing that would, and will not call it again.
         let unlend = if *once {
-            format!(" nts_closure_unlend_once(a{last});")
+            format!(" nts_closure_unlend_once(__nts_a{last});")
         } else {
             String::new()
         };
@@ -1078,7 +1084,7 @@ pub(super) fn bridges(
         } else {
             let answer = bridge_answer(program, signature, compiled, &call)?;
             format!(
-                "nts_callback_enter();{copies} {answer}{releases}{unlend} nts_callback_leave(); return r;"
+                "nts_callback_enter();{copies} {answer}{releases}{unlend} nts_callback_leave(); return __nts_r;"
             )
         };
         writer.line(
@@ -1102,16 +1108,16 @@ fn bridge_answer(
     let result = signature.result.c_type();
     if nts_core::hir::native::owned_string(&signature.result, &compiled.return_type) {
         let release = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-            " nts_release((NtsHeader *)v);"
+            " nts_release((NtsHeader *)__nts_v);"
         } else {
             ""
         };
         return Ok(format!(
-            "NtsString *v = {call}; {result} r = nts_string_to_owned_cstring(v);{release}"
+            "NtsString *__nts_v = {call}; {result} __nts_r = nts_string_to_owned_cstring(__nts_v);{release}"
         ));
     }
     let _ = return_c_type(program, &compiled.return_type, &compiled.origin)?;
-    Ok(format!("{result} r = ({result}){call};"))
+    Ok(format!("{result} __nts_r = ({result}){call};"))
 }
 
 /// Argument `at` of a C callback bridge, as the compiled function takes it:
@@ -1125,7 +1131,7 @@ fn bridge_argument(
     bridging: &nts_core::hir::Bridging,
     (copies, releases): (&mut String, &mut String),
 ) -> Result<String, Diagnostic> {
-    let slot = format!("a{at}");
+    let slot = format!("__nts_a{at}");
     let param = &compiled.params[parameter + 1];
     // The compiled function takes the managed representation -- a `number`
     // is a `double` there and an `int` here -- so each argument is converted
@@ -1149,25 +1155,25 @@ fn bridge_argument(
     // here. A managed result is given back after the call under counting, as
     // a boxed copy is.
     if let Some(converted) = bridging.converted(at) {
-        let function = nts_codegen_common::symbols::c_identifier(&converted.function);
-        let _ = write!(copies, " {want} q{at} = ({want}){function}({slot});");
+        let function = program.function(&converted.function);
+        let _ = write!(copies, " {want} __nts_q{at} = ({want}){function}({slot});");
         if program.provider == nts_core::hir::Memory::ReferenceCounting
             && matches!(param.ty, HirType::Managed(_))
         {
-            let _ = write!(releases, " nts_release((NtsHeader *)q{at});");
+            let _ = write!(releases, " nts_release((NtsHeader *)__nts_q{at});");
         }
-        return Ok(format!("q{at}"));
+        return Ok(format!("__nts_q{at}"));
     }
     if let Some(boxed) = bridging.boxed(at) {
         let _ = write!(
             copies,
-            " {want} b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());",
+            " {want} __nts_b{at} = ({want})nts_gobject_boxed_copy({slot}, {}());",
             boxed.get_type
         );
         if program.provider == nts_core::hir::Memory::ReferenceCounting {
-            let _ = write!(releases, " nts_release((NtsHeader *)b{at});");
+            let _ = write!(releases, " nts_release((NtsHeader *)__nts_b{at});");
         }
-        return Ok(format!("b{at}"));
+        return Ok(format!("__nts_b{at}"));
     }
     // C's array of objects and its length, as one array of the program's
     // whose elements each hold a count of their own: C may free its array
@@ -1191,13 +1197,13 @@ fn bridge_argument(
         let descriptor = nts_codegen_common::counting::array_descriptor_name(&counting);
         let _ = write!(
             copies,
-            " {want} h{at} = ({want})nts_array_from_handles((void *const *){slot}, (uint32_t)a{}, &{descriptor});",
+            " {want} __nts_h{at} = ({want})nts_array_from_handles((void *const *){slot}, (uint32_t)__nts_a{}, &{descriptor});",
             array.length_at
         );
         if program.provider == nts_core::hir::Memory::ReferenceCounting {
-            let _ = write!(releases, " nts_release((NtsHeader *)h{at});");
+            let _ = write!(releases, " nts_release((NtsHeader *)__nts_h{at});");
         }
-        return Ok(format!("h{at}"));
+        return Ok(format!("__nts_h{at}"));
     }
     if let Some(copy) = lent_string(ty, &param.ty, at, (copies, releases)) {
         return Ok(copy);
@@ -1206,15 +1212,15 @@ fn bridge_argument(
     if nts_core::hir::native::lent_ns_string(ty, &param.ty) {
         let _ = write!(
             copies,
-            " NtsString *s{at} = nts_string_of_nsstring({slot});"
+            " NtsString *__nts_s{at} = nts_string_of_nsstring({slot});"
         );
-        let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
-        return Ok(format!("s{at}"));
+        let _ = write!(releases, " nts_release((NtsHeader *)__nts_s{at});");
+        return Ok(format!("__nts_s{at}"));
     }
     Ok(format!("({want}){slot}"))
 }
 
-/// A string C lends to an entry point, argument `a{at}`: copied in for the
+/// A string C lends to an entry point, argument `__nts_a{at}`: copied in for the
 /// call, given back after it. Both entry points C calls take one so -- a
 /// closure's bridge and a `GObject` virtual function's -- and casting the C
 /// string to `NtsString *` instead hands the compiled function bytes it
@@ -1230,16 +1236,16 @@ pub(super) fn lent_string(
     }
     let _ = write!(
         copies,
-        " NtsString *s{at} = nts_string_from_cstring(a{at});"
+        " NtsString *__nts_s{at} = nts_string_from_cstring(__nts_a{at});"
     );
-    let _ = write!(releases, " nts_release((NtsHeader *)s{at});");
-    Some(format!("s{at}"))
+    let _ = write!(releases, " nts_release((NtsHeader *)__nts_s{at});");
+    Some(format!("__nts_s{at}"))
 }
 
 /// Every C function pointer typedef this program's foreign signatures need.
 ///
 /// Separate from the bridge definitions and emitted much earlier, because a
-/// *prototype* mentions the typedef: `int takes(NtsFn_int_int);` is a syntax
+/// *prototype* mentions the typedef: `int takes(__nts_fn_int_int);` is a syntax
 /// error before the typedef exists, and C reads it as an old-style parameter
 /// list rather than reporting the missing name. The same ordering trap as an
 /// inline struct member, in a different spelling.
@@ -1287,7 +1293,7 @@ pub(super) fn function_pointer_types(writer: &mut CodeWriter, origin: &Origin, p
     }
     // And every one a *record* holds. A member is a use like a parameter is,
     // and the struct's own definition names the typedef -- so without this the
-    // emitted `struct ops { int code; NtsFn_int_int run; };` referred to a
+    // emitted `struct ops { int code; __nts_fn_int_int run; };` referred to a
     // name no line declared and program.c did not compile.
     if let Ok(layouts) = nts_codegen_common::native::layouts(program) {
         for record in layouts.structs.values() {

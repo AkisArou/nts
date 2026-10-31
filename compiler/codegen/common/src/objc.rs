@@ -56,16 +56,16 @@ pub fn lookups(program: &Program) -> Lookups<'_> {
     found
 }
 
-/// The lookup that answers a selector's `SEL`: `nts_objc_sel_initWithUTF8String_c`.
+/// The lookup that answers a selector's `SEL`: `__nts_objc_sel_initWithUTF8String_c`.
 #[must_use]
 pub fn selector_symbol(selector: &str) -> String {
-    format!("nts_objc_sel_{}", mangle(selector))
+    format!("__nts_objc_sel_{}", mangle(selector))
 }
 
-/// The lookup that answers a class object: `nts_objc_class_NSString`.
+/// The lookup that answers a class object: `__nts_objc_class_NSString`.
 #[must_use]
 pub fn class_symbol(class: &str) -> String {
-    format!("nts_objc_class_{}", mangle(class))
+    format!("__nts_objc_class_{}", mangle(class))
 }
 
 /// Every distinct block signature a program builds, sorted by its spelled
@@ -86,16 +86,16 @@ pub fn block_signatures(program: &Program) -> Vec<&FnPointer> {
     found
 }
 
-/// A signature's invoke adapter, `nts_block_invoke_NtsFn_void_int`.
+/// A signature's invoke adapter, `__nts_block_invoke_NtsFn_void_int`.
 #[must_use]
 pub fn block_invoke_symbol(signature: &FnPointer) -> String {
-    format!("nts_block_invoke_{}", signature.name)
+    format!("__nts_block_invoke_{}", signature.name)
 }
 
-/// A signature's descriptor, `nts_block_descriptor_NtsFn_void_int`.
+/// A signature's descriptor, `__nts_block_descriptor_NtsFn_void_int`.
 #[must_use]
 pub fn block_descriptor_symbol(signature: &FnPointer) -> String {
-    format!("nts_block_descriptor_{}", signature.name)
+    format!("__nts_block_descriptor_{}", signature.name)
 }
 
 /// The block's Objective-C type encoding, as clang writes it for the same
@@ -144,20 +144,20 @@ pub fn method_encoding(signature: &FnPointer) -> String {
 /// The entry point the runtime calls for method `at` of class `class`.
 #[must_use]
 pub fn imp_symbol(class: &str, at: usize) -> String {
-    format!("nts_imp_{}_{at}", mangle(class))
+    format!("__nts_imp_{}_{at}", mangle(class))
 }
 
 /// The entry point the runtime calls to make the object holding class
 /// `class`'s fields: the compiled `{class}#state`, entered as a callback.
 #[must_use]
 pub fn state_symbol(class: &str) -> String {
-    format!("nts_objc_state_{class}")
+    format!("__nts_objc_state_{class}")
 }
 
 /// The table of class `class`'s methods, as `nts_objc_register_class` reads it.
 #[must_use]
 pub fn methods_symbol(class: &str) -> String {
-    format!("nts_objc_methods_{}", mangle(class))
+    format!("__nts_objc_methods_{}", mangle(class))
 }
 
 /// The program's Objective-C classes -- the foreign classes of that family --
@@ -348,8 +348,8 @@ pub fn hop_arguments(signature: &FnPointer) -> Option<Vec<Carried>> {
         .collect()
 }
 
-/// A signature's carried call, `nts_block_hop_NtsFn_void_id`.
+/// A signature's carried call, `__nts_block_hop_NtsFn_void_id`.
 #[must_use]
 pub fn block_hop_symbol(signature: &FnPointer) -> String {
-    format!("nts_block_hop_{}", signature.name)
+    format!("__nts_block_hop_{}", signature.name)
 }

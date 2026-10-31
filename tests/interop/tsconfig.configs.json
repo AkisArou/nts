@@ -29,6 +29,7 @@
     "native-inet/nts.config.ts",
     "native-open/nts.config.ts",
     "native-pointer-bits/nts.config.ts",
+    "native-private-names/nts.config.ts",
     "native-pointer-constants/nts.config.ts",
     "native-void-pointer/nts.config.ts",
     "native-poll/nts.config.ts",
@@ -90,6 +91,11 @@
     "windows-com/ownership/nts.config.ts",
     "windows-hello/nts.config.ts",
     "windows-window/nts.config.ts",
-    "windows-enum-tags/nts.config.ts"
+    "windows-enum-tags/nts.config.ts",
+    "gtk-return-signal/nts.config.ts",
+    "gtk-return-signal/control/nts.config.ts",
+    "gtk-template-receiver/nts.config.ts",
+    "gtk-template-receiver/control/nts.config.ts",
+    "native-reserved-exports/nts.config.ts"
   ]
 }

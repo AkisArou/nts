@@ -50,24 +50,57 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 // session's.
 const ADDON_DIR = process.env.NTS_ADDON_OUT ?? join(ROOT, "target/node");
 
+/** Read both old captures and current private source-readable entry names. */
+export function accessors(source) {
+  const found = [];
+  const definition = /^[A-Za-z_][\w *]*?\s(\w+)\((\w+) \* (\w+)\)\s*\{\n([\s\S]*?)\n\}/gm;
+  for (const [, symbol, , receiver, body] of source.matchAll(definition)) {
+    let name = symbol.startsWith("__nts_fn_")
+      ? symbol.slice("__nts_fn_".length).replace(/_\d+$/, "") : symbol;
+    const escapedSource = /^__nts_source_((?:[0-9a-f]{2})+)__/.exec(name);
+    if (escapedSource) {
+      name = Buffer.from(escapedSource[1], "hex").toString("utf8");
+      const getter = /^(.*)#get[ _](.*)$/.exec(name);
+      if (getter) name = `${getter[1]}__get_${getter[2]}`;
+    }
+    const at = name.lastIndexOf("__get_");
+    if (at < 0) continue;
+    found.push({ type: name.slice(0, at), name: name.slice(at + "__get_".length).replace(/^u0020_/, ""),
+      unused: body.includes(`(void)${receiver};`) });
+  }
+  return found;
+}
+
 const argv = process.argv.slice(2);
+if (argv.includes("--self-test")) {
+  const escaped = `__nts_fn___nts_source_${Buffer.from("__nts_Box#get status").toString("hex")}____nts_Box__get_u0020_status_23`;
+  for (const [symbol, receiver] of [["Response__get_status", "v0"],
+    ["__nts_fn_Response__get_status_17", "__nts_v0"],
+    ["__nts_fn_Response__get_u0020_status_19", "__nts_v0"],
+    ["__nts_fn_Response__get_status_18", "__nts_unread0"],
+    [escaped, "__nts_v0"]]) {
+    const body = `static double ${symbol}(NtsObj_Response * ${receiver}) {\n  (void)${receiver};\n  return 0;\n}\n`;
+    const found = accessors(body);
+    if (found.length !== 1 || found[0].type !== (symbol === escaped ? "__nts_Box" : "Response") || found[0].name !== "status" || !found[0].unused)
+      throw Error(`missed unused accessor: ${body}`);
+    const used = accessors(body.replace(`(void)${receiver};`, `return ${receiver}->status;`));
+    if (used.length !== 1 || used[0].unused) throw Error("a used receiver was reported unused");
+  }
+  console.log("accessor parser: old/private/unread names found; used-receiver controls retained");
+  process.exit(0);
+}
 const all = argv.includes("--all");
 const named = argv.filter((a) => !a.startsWith("--"));
-
 const files = all
   ? readdirSync(ADDON_DIR, { withFileTypes: true })
       .filter((e) => e.isDirectory() && e.name.endsWith(".build"))
       .map((e) => join(ADDON_DIR, e.name, "program.c"))
       .filter(existsSync)
   : named;
-
 if (files.length === 0) {
   console.error("usage: accessor-audit.mjs <program.c>... | --all");
   process.exit(2);
 }
-
-// `Type__get_name(NtsObj_Type * v0) {` through its closing brace at column 0.
-const accessor = /^[A-Za-z_][\w *]*?\s(\w+)__get_(\w+)\((\w+) \* v0\)\s*\{\n([\s\S]*?)\n\}/gm;
 
 let suspicious = 0;
 let checked = 0;
@@ -79,15 +112,14 @@ for (const file of files) {
   }
   const source = readFileSync(file, "utf8");
   const hits = [];
-  for (const m of source.matchAll(accessor)) {
+  for (const { type, name, unused } of accessors(source)) {
     checked++;
-    const [, type, name, , body] = m;
     // `(void)v0;` is the emitter's own statement that the receiver is unused.
     // Testing for the absence of `v0->` instead reports 131 of 301 here, because
     // a getter that delegates -- `get ok()` compiles to a call taking `v0` --
     // uses the receiver without dereferencing it. That first draft would have
     // sent a number four times too large to another lane.
-    if (body.includes("(void)v0;")) {
+    if (unused) {
       hits.push(`${type}.${name}`);
       names.add(name);
     }

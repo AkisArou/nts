@@ -1,7 +1,7 @@
 //! A COM method call: a cast of the receiver's table slot, which is how C
 //! calls through a vtable and what a `lpVtbl->Method(...)` macro expands to.
 
-use super::{CodeWriter, Diagnostic, Origin, Program, c_identifier, c_type_of};
+use super::{CodeWriter, Diagnostic, Emission as Program, Origin, c_type_of};
 use nts_codegen_common::com::{delegate_hop_symbol, delegate_invoke_symbol, delegate_signatures};
 use nts_codegen_common::objc::{Carried, hop_arguments};
 use nts_core::hir::native::{FnPointer, Function, Type, Vtable};
@@ -60,20 +60,20 @@ pub(super) fn delegates(writer: &mut CodeWriter, origin: &Origin, program: &Prog
         };
         let hop = hop_arguments(signature)
             .map(|carried| hop(writer, origin, signature, &carried, &bridge_type));
-        let mut parameters = vec!["void *self".to_owned()];
+        let mut parameters = vec!["void *__nts_self".to_owned()];
         let mut bridge = Vec::new();
         let mut arguments = Vec::new();
         for (at, ty) in signature.parameters.iter().enumerate() {
-            parameters.push(format!("{} a{at}", ty.c_type()));
+            parameters.push(format!("{} __nts_a{at}", ty.c_type()));
             bridge.push(ty.c_type().into_owned());
-            arguments.push(format!("a{at}"));
+            arguments.push(format!("__nts_a{at}"));
         }
         bridge.push("void *".to_owned());
-        arguments.push("d->context".to_owned());
+        arguments.push("__nts_d->context".to_owned());
         writer.line(
             origin,
             format!(
-                "static int32_t {}({}) {{ {}const NtsComDelegate *d = self; ((void (*)({}))d->bridge)({}); return 0; }}",
+                "static int32_t {}({}) {{ {}const NtsComDelegate *__nts_d = __nts_self; ((void (*)({}))__nts_d->bridge)({}); return 0; }}",
                 delegate_invoke_symbol(signature),
                 parameters.join(", "),
                 hop.unwrap_or_default(),
@@ -100,23 +100,23 @@ fn hop(
     let mut objects = Vec::new();
     let mut arguments = Vec::new();
     for (at, (ty, carriage)) in signature.parameters.iter().zip(carried).enumerate() {
-        fields.push(format!("{} a{at};", ty.c_type()));
-        packed.push(format!("a{at}"));
-        arguments.push(format!("h->a{at}"));
+        fields.push(format!("{} __nts_a{at};", ty.c_type()));
+        packed.push(format!("__nts_a{at}"));
+        arguments.push(format!("__nts_h->__nts_a{at}"));
         if matches!(carriage, Carried::Counted(_)) {
-            objects.push(format!("(uint32_t)offsetof(struct {hop}, a{at})"));
+            objects.push(format!("(uint32_t)offsetof(struct {hop}, __nts_a{at})"));
         }
     }
     if fields.is_empty() {
-        fields.push("char unused;".to_owned());
+        fields.push("char __nts_unused;".to_owned());
         packed.push("0".to_owned());
     }
-    arguments.push("d->context".to_owned());
+    arguments.push("__nts_d->context".to_owned());
     writer.line(origin, format!("struct {hop} {{ {} }};", fields.join(" ")));
     writer.line(
         origin,
         format!(
-            "static void {hop}_run(void *self, void *arguments) {{ const NtsComDelegate *d = self; struct {hop} *h = arguments; (({bridge_type})d->bridge)({}); }}",
+            "static void {hop}_run(void *__nts_self, void *__nts_arguments) {{ const NtsComDelegate *__nts_d = __nts_self; struct {hop} *__nts_h = __nts_arguments; (({bridge_type})__nts_d->bridge)({}); }}",
             arguments.join(", ")
         ),
     );
@@ -133,7 +133,7 @@ fn hop(
         format!("{hop}_objects")
     };
     format!(
-        "if (!nts_is_owner_thread()) {{ struct {hop} h = {{ {} }}; nts_com_carry(self, &h, sizeof h, {table}, {}u, {hop}_run); return 0; }} ",
+        "if (!nts_is_owner_thread()) {{ struct {hop} __nts_h = {{ {} }}; nts_com_carry(__nts_self, &__nts_h, sizeof __nts_h, {table}, {}u, {hop}_run); return 0; }} ",
         packed.join(", "),
         objects.len()
     )
@@ -244,10 +244,10 @@ pub(super) fn classes(
                     .ok_or_else(|| {
                         refuse("a class whose fields' maker this program does not define")
                     })?;
-                let maker = format!("nts_com_state_{}", class.name);
+                let maker = format!("__nts_com_state_{}", class.name);
                 writer.line(
                     origin,
-                    format!("static void *{maker}(void) {{ nts_callback_enter(); void *made = (void *){}(); nts_callback_leave(); return made; }}", c_identifier(&compiled.name)),
+                    format!("static void *{maker}(void) {{ nts_callback_enter(); void *__nts_made = (void *){}(); nts_callback_leave(); return __nts_made; }}", program.function(&compiled.name)),
                 );
                 maker
             }
@@ -268,7 +268,7 @@ pub(super) fn classes(
     }
     writer.line(
         origin,
-        "__attribute__((constructor)) static void nts_com_register_classes(void) {",
+        "__attribute__((constructor)) static void __nts_com_register_classes(void) {",
     );
     for class in &classes {
         writer.line(
@@ -301,15 +301,15 @@ fn forwarder(
     let parameters: Vec<String> = types
         .iter()
         .enumerate()
-        .map(|(at, ty)| format!("{ty} a{at}"))
+        .map(|(at, ty)| format!("{ty} __nts_a{at}"))
         .collect();
-    let arguments: Vec<String> = std::iter::once("base".to_owned())
-        .chain((1..types.len()).map(|at| format!("a{at}")))
+    let arguments: Vec<String> = std::iter::once("__nts_base".to_owned())
+        .chain((1..types.len()).map(|at| format!("__nts_a{at}")))
         .collect();
     writer.line(
         origin,
         format!(
-            "static int32_t {name}({}) {{ void *base = nts_com_outer_base(a0); return ((int32_t (*)({}))(*(void ***)base)[{}])({}); }}",
+            "static int32_t {name}({}) {{ void *__nts_base = nts_com_outer_base(__nts_a0); return ((int32_t (*)({}))(*(void ***)__nts_base)[{}])({}); }}",
             parameters.join(", "),
             types.join(", "),
             forward.slot,
@@ -335,6 +335,8 @@ fn adapter(
 ) -> Result<(), String> {
     use nts_core::hir::native::Type;
     let result = &*method.signature.result;
+    let parameter_names = program.argument_names(method.signature.parameters.len());
+    let [out] = program.helper_scope([super::HelperName::Out]);
     let record_out = matches!(result, Type::Record(_));
     let declared = compiled.params.len() - usize::from(record_out);
     if declared > method.signature.parameters.len() {
@@ -351,6 +353,7 @@ fn adapter(
     let mut parameters = Vec::new();
     let mut arguments = Vec::new();
     for (slot, ty) in method.signature.parameters.iter().enumerate() {
+        let parameter = &parameter_names[slot];
         // An interface pointer as `void *`: a struct the compiled method never
         // names would be declared by nothing, and each argument passed on is
         // cast to what the method takes.
@@ -359,44 +362,48 @@ fn adapter(
         } else {
             ty.c_type()
         };
-        parameters.push(format!("{spelled} a{slot}"));
+        parameters.push(format!("{spelled} {parameter}"));
         if slot >= declared {
             continue;
         }
         let value = match ty {
-            _ if slot == 0 => "nts_com_outer_instance(a0)".to_owned(),
-            Type::Record(_) => format!("&a{slot}"),
-            _ => format!("a{slot}"),
+            _ if slot == 0 => format!("nts_com_outer_instance({parameter})"),
+            Type::Record(_) => format!("&{parameter}"),
+            _ => parameter.clone(),
         };
         arguments.push(format!("({}){value}", cast(slot)?));
     }
     let call = |arguments: &[String]| {
-        format!("{}({})", c_identifier(&compiled.name), arguments.join(", "))
+        format!(
+            "{}({})",
+            program.function(&compiled.name),
+            arguments.join(", ")
+        )
     };
     let body = match result {
         Type::Void => format!("{};", call(&arguments)),
         // A string: an `HSTRING` of its own, which the caller owns.
         Type::Managed(nts_core::hir::ManagedType::String) => {
-            parameters.push("void **out".to_owned());
+            parameters.push(format!("void **{out}"));
             format!(
-                "*out = nts_com_answer_string((NtsString *){});",
+                "*{out} = nts_com_answer_string((NtsString *){});",
                 call(&arguments)
             )
         }
         // An object: a reference the caller owns, whichever the provider.
         Type::Pointer(_) => {
-            parameters.push("void **out".to_owned());
-            format!("*out = nts_com_answer((void *){});", call(&arguments))
+            parameters.push(format!("void **{out}"));
+            format!("*{out} = nts_com_answer((void *){});", call(&arguments))
         }
         Type::Record(_) => {
-            parameters.push(format!("{} *out", result.c_type()));
+            parameters.push(format!("{} *{out}", result.c_type()));
             let mut with_out = arguments.clone();
-            with_out.push(format!("({})out", cast(declared)?));
+            with_out.push(format!("({}){out}", cast(declared)?));
             format!("{};", call(&with_out))
         }
         _ => {
-            parameters.push(format!("{} *out", result.c_type()));
-            format!("*out = ({}){};", result.c_type(), call(&arguments))
+            parameters.push(format!("{} *{out}", result.c_type()));
+            format!("*{out} = ({}){};", result.c_type(), call(&arguments))
         }
     };
     writer.line(

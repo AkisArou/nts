@@ -70,7 +70,10 @@ fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let header = &emitted.header;
     // A `number` parameter and a `number` return cross at the kind's width.
-    for guard in ["double takesU32(uint32_t v0);", "uint32_t answer(void);"] {
+    for guard in [
+        "double takesU32(uint32_t __nts_v0);",
+        "uint32_t answer(void);",
+    ] {
         assert!(
             header.contains(guard),
             "a written kind lost its width at the boundary, which is a regression; \
@@ -78,7 +81,10 @@ fn recorded_gap_exported_kinds_reach_the_header_only_on_number_parameters() {
         );
     }
     // The gap: a bigint kind, either way.
-    for gap in ["double takesSize(__int128 v0);", "__int128 size(void);"] {
+    for gap in [
+        "double takesSize(__int128 __nts_v0);",
+        "__int128 size(void);",
+    ] {
         assert!(
             header.contains(gap),
             "this records the gap; when it fails because the header is right \

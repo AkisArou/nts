@@ -32,7 +32,7 @@ pub(super) fn operation(
                 .ok_or_else(|| refuse(func, "malloc needs native layout"))?
                 .size;
             return Ok(format!(
-                "{out} = call ptr @nts_native_malloc(double {}, i64 {size})",
+                "{out} = call ptr @__nts_native_malloc(double {}, i64 {size})",
                 name(bytes)
             ));
         }
@@ -237,7 +237,7 @@ pub(super) fn helpers(program: &super::Program) -> String {
     }
     if allocate {
         text.push_str(
-            r"define internal ptr @nts_native_malloc(double %bytes, i64 %minimum) {
+            r"define internal ptr @__nts_native_malloc(double %bytes, i64 %minimum) {
 entry:
   %min = uitofp i64 %minimum to double
   %lower = fcmp oge double %bytes, %min

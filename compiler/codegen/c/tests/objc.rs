@@ -19,6 +19,10 @@ use std::process::Command;
 
 /// A program whose binding is an ambient declaration file of its own, the way
 /// a real one is. See `native.rs`'s helper of the same name for why.
+#[path = "../../common/test-support/c_symbols.rs"]
+mod c_symbols;
+use c_symbols::function_symbol as private_symbol;
+
 fn prepare(name: &str, binding: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -104,7 +108,7 @@ fn a_message_is_a_typed_cast_of_objc_msg_send() {
     // The class method: the class object, the selector, and the C string, in
     // one cast with exactly those three parameter types.
     assert!(
-        text.contains("((void * (*)(struct objc_class *, struct objc_selector *, const void *))objc_msgSend)(nts_objc_class_NSString(), nts_objc_sel_stringWithUTF8String_c(), "),
+        text.contains("((void * (*)(struct objc_class *, struct objc_selector *, const void *))objc_msgSend)(__nts_objc_class_NSString(), __nts_objc_sel_stringWithUTF8String_c(), "),
         "no typed class send:\n{text}"
     );
     // An instance method with an object argument, and one with none, whose
@@ -112,7 +116,7 @@ fn a_message_is_a_typed_cast_of_objc_msg_send() {
     assert!(
         text.contains(
             "((void * (*)(const void *, struct objc_selector *, const void *))objc_msgSend)("
-        ) && text.contains("nts_objc_sel_stringByAppendingString_c()"),
+        ) && text.contains("__nts_objc_sel_stringByAppendingString_c()"),
         "no typed instance send with an argument:\n{text}"
     );
     assert!(
@@ -317,20 +321,20 @@ export function run(): number {
     assert!(emitted.diagnostics.is_empty(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
-        "struct nts_block {",
+        "struct __nts_block {",
         "extern void *_NSConcreteStackBlock[32];",
         // The block's own signature, as clang encodes `void (^)(int)`.
         "\"v12@?0i8\"",
         // A copy checks the thread before touching the count; a release off
         // it is carried to it, as is a call.
-        "nts_block_on_owner(\"copied\");",
-        "if (!nts_is_owner_thread()) { nts_block_unlend(context); return; }",
-        "nts_block_carry(block, &h, sizeof h, 0, 0u, nts_block_hop_",
+        "__nts_block_on_owner(\"copied\");",
+        "if (!nts_is_owner_thread()) { nts_block_unlend(__nts_context); return; }",
+        "nts_block_carry(__nts_block, &__nts_h, sizeof __nts_h, 0, 0u, __nts_block_hop_",
         // The adapter reads the bridge and the context out of the block.
-        "b->bridge)(a0, b->context);",
+        "__nts_b->__nts_bridge)(__nts_a0, __nts_b->__nts_context);",
         // `BLOCK_HAS_COPY_DISPOSE | BLOCK_HAS_SIGNATURE` on a stack block.
-        "_block.flags = (1 << 25) | (1 << 30);",
-        "_block.isa = _NSConcreteStackBlock;",
+        "_block.__nts_flags = (1 << 25) | (1 << 30);",
+        "_block.__nts_isa = _NSConcreteStackBlock;",
     ] {
         assert!(text.contains(expected), "no `{expected}`:\n{text}");
     }
@@ -397,7 +401,7 @@ fn a_class_is_a_value_and_a_class_method_a_message_to_it() {
     );
     let lookup = text
         .lines()
-        .find(|line| line.contains("= nts_objc_class_NSWindow();"))
+        .find(|line| line.contains("= __nts_objc_class_NSWindow();"))
         .unwrap_or_default();
     let value = lookup
         .trim()
@@ -407,7 +411,7 @@ fn a_class_is_a_value_and_a_class_method_a_message_to_it() {
         .to_owned();
     assert!(
         !value.is_empty()
-            && text.contains(&format!("objc_msgSend)({value}, nts_objc_sel_alloc())")),
+            && text.contains(&format!("objc_msgSend)({value}, __nts_objc_sel_alloc())")),
         "alloc is not sent to the class value:\n{text}"
     );
 }
@@ -539,23 +543,23 @@ fn an_objective_c_class_is_a_typescript_class() {
             .to_owned()
     };
     // `alloc` goes to the class the program named, by its Objective-C name.
-    let alloc = line("nts_objc_sel_alloc()");
+    let alloc = line("__nts_objc_sel_alloc()");
     assert!(
-        alloc.contains("(nts_objc_class_NSTimer(), nts_objc_sel_alloc())"),
+        alloc.contains("(__nts_objc_class_NSTimer(), __nts_objc_sel_alloc())"),
         "{text}"
     );
     // `init` goes to exactly what `alloc` answered.
     let allocated = alloc.split(" = ").next().unwrap_or_default();
     assert!(
-        line("nts_objc_sel_init()").contains(&format!("({allocated}, nts_objc_sel_init())")),
+        line("__nts_objc_sel_init()").contains(&format!("({allocated}, __nts_objc_sel_init())")),
         "{text}"
     );
     // A class property's getter goes to the class.
     assert!(
-        text.contains("(nts_objc_class_NSTimer(), nts_objc_sel_current())"),
+        text.contains("(__nts_objc_class_NSTimer(), __nts_objc_sel_current())"),
         "{text}"
     );
-    assert!(text.contains("nts_objc_sel_invalidate()"), "{text}");
+    assert!(text.contains("__nts_objc_sel_invalidate()"), "{text}");
     assert!(
         text.contains("sel_registerName(\"isKindOfClass:\")"),
         "{text}"
@@ -617,7 +621,7 @@ declare module "objc:Foundation" {
     // And passed as the selector declares them: x, then y.
     let send = body
         .lines()
-        .find(|line| line.contains("nts_objc_sel_moveView_ctoX_cy_c()"))
+        .find(|line| line.contains("__nts_objc_sel_moveView_ctoX_cy_c()"))
         .unwrap_or_default();
     let x = body
         .lines()
@@ -671,7 +675,7 @@ declare module "objc:Foundation" {
         .unwrap_or_default();
     let send = body
         .lines()
-        .find(|line| line.contains("nts_objc_sel_setX_cy_c()"))
+        .find(|line| line.contains("__nts_objc_sel_setX_cy_c()"))
         .unwrap_or_default();
     assert!(!send.is_empty(), "no send:\n{body}");
     // The two fields are read, and `x` -- declared second in the object's
@@ -767,7 +771,7 @@ fn a_string_crosses_a_message_as_an_nsstring() {
     // and shows under `--rc`, which `macos-classes` runs.)
     assert!(
         text.contains(&format!(
-            "nts_objc_sel_stringByAppendingString_c(), {object})"
+            "__nts_objc_sel_stringByAppendingString_c(), {object})"
         )),
         "{text}"
     );
@@ -805,28 +809,32 @@ fn a_class_extending_an_objective_c_class_is_registered_with_the_runtime() {
     let text = emitted.writer.text();
     for expected in [
         // The runtime's entry point: `self` and `_cmd`, then a `double`.
-        "static double nts_imp_Counter_0(struct Counter * a0, void * a1, double a2)",
+        "static double __nts_imp_Counter_0(struct Counter * __nts_a0, void * __nts_a1, double __nts_a2)",
         // The selector Swift's `@objc` rule makes, with clang's encoding.
-        "{ \"bump:\", (void (*)(void))nts_imp_Counter_0, \"d24@0:8d16\" }",
+        "{ \"bump:\", (void (*)(void))__nts_imp_Counter_0, \"d24@0:8d16\" }",
         // Registered before `main`, under its own name, over its superclass.
-        "__attribute__((constructor)) static void nts_objc_register_classes(void)",
+        "__attribute__((constructor)) static void __nts_objc_register_classes(void)",
         // No fields, so nothing to make at `init`.
-        "nts_objc_register_class(\"Counter\", \"NSObject\", nts_objc_methods_Counter, 2u, 0);",
+        "nts_objc_register_class(\"Counter\", \"NSObject\", __nts_objc_methods_Counter, 2u, 0);",
         // `new Counter()` is the runtime's class, found by that name.
         "objc_getRequiredClass(\"Counter\")",
     ] {
         assert!(text.contains(expected), "no `{expected}` in:\n{text}");
     }
     // `this.twice(by)` is the compiled method, called directly.
+    let bump_symbol = private_symbol(text, "Counter__bump");
+    let twice_symbol = private_symbol(text, "Counter__twice");
     let bump = text
-        .split("static double Counter__bump(struct Counter * v0, double v1) {")
+        .split(&format!(
+            "static double {bump_symbol}(struct Counter * __nts_v0, double __nts_v1) {{"
+        ))
         .nth(1)
         .unwrap_or_default();
     assert!(
         bump.split("\n}")
             .next()
             .unwrap_or_default()
-            .contains("Counter__twice(v0,"),
+            .contains(&format!("{twice_symbol}(__nts_v0,")),
         "{text}"
     );
 }
@@ -873,12 +881,15 @@ fn an_override_takes_the_selector_it_replaces_and_a_record_by_value() {
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
-        "{ \"drawRect:\", (void (*)(void))nts_imp_Canvas_0, \"v48@0:8{Box={Size=dd}{Size=dd}}16\" }",
-        "struct Box a2) { nts_callback_enter(); Canvas__draw((struct Canvas *)a0, (struct Box *)&a2);",
+        "{ \"drawRect:\", (void (*)(void))__nts_imp_Canvas_0, \"v48@0:8{Box={Size=dd}{Size=dd}}16\" }",
+        &format!(
+            "struct Box __nts_a2) {{ nts_callback_enter(); {}((struct Canvas *)__nts_a0, (struct Box *)&__nts_a2);",
+            private_symbol(text, "Canvas__draw")
+        ),
         // `super.draw(r)` is `[super drawRect:r]`: from the superclass of the
         // program's class, the receiver unchanged.
-        "objc_msgSendSuper)(&(struct nts_objc_super){ ",
-        "class_getSuperclass(nts_objc_class_Canvas()) }, nts_objc_sel_drawRect_c(), ",
+        "objc_msgSendSuper)(&(struct __nts_objc_super){ ",
+        "class_getSuperclass(__nts_objc_class_Canvas()) }, __nts_objc_sel_drawRect_c(), ",
     ] {
         assert!(text.contains(expected), "no `{expected}` in:\n{text}");
     }
@@ -987,12 +998,12 @@ fn a_selector_is_the_one_its_method_was_registered_under() {
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
-        "if (!cached) cached = sel_registerName(\"pressed:\");",
-        "if (!cached) cached = sel_registerName(\"tick\");",
-        "if (!cached) cached = sel_registerName(\"isEqual:\");",
-        "= nts_objc_sel_pressed_c();",
-        "= nts_objc_sel_tick();",
-        "= nts_objc_sel_isEqual_c();",
+        "if (!__nts_cached) __nts_cached = sel_registerName(\"pressed:\");",
+        "if (!__nts_cached) __nts_cached = sel_registerName(\"tick\");",
+        "if (!__nts_cached) __nts_cached = sel_registerName(\"isEqual:\");",
+        "= __nts_objc_sel_pressed_c();",
+        "= __nts_objc_sel_tick();",
+        "= __nts_objc_sel_isEqual_c();",
         // The one the runtime registers the method under is the same.
         "{ \"pressed:\", ",
     ] {
@@ -1029,10 +1040,13 @@ fn the_fields_of_an_objective_c_subclass_live_in_its_state() {
     for expected in [
         // The fields' object, and its maker running the initialisers.
         "struct NtsObj_Held_state {",
-        "static NtsObj_Held_state * Held__state(void)",
+        &format!(
+            "static NtsObj_Held_state * {}(void)",
+            private_symbol(text, "Held__state")
+        ),
         // The maker, entered as a callback, handed to the registration.
-        "static void *nts_objc_state_Held(void) { nts_callback_enter();",
-        "nts_objc_register_class(\"Held\", \"NSObject\", nts_objc_methods_Held, 1u, nts_objc_state_Held);",
+        "static void *__nts_objc_state_Held(void) { nts_callback_enter();",
+        "nts_objc_register_class(\"Held\", \"NSObject\", __nts_objc_methods_Held, 1u, __nts_objc_state_Held);",
         // Reads and writes, from a method and from outside, through the ivar.
         "= nts_objc_state(",
     ] {
@@ -1137,7 +1151,7 @@ fn a_constant_is_the_extern_variable_read() {
         "a constant was sent as a message:\n{text}"
     );
     assert!(
-        text.contains("nts_string_of_nsstring(v"),
+        text.contains("nts_string_of_nsstring(__nts_v"),
         "the NSString constant was not copied into a string:\n{text}"
     );
 }
@@ -1173,15 +1187,18 @@ declare module "objc:Foundation" {
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     for expected in [
-        "struct NSString * a2, struct NSString * a3",
-        "NtsString *s2 = nts_string_of_nsstring(a2);",
-        "NtsString *s3 = nts_string_of_nsstring(a3);",
-        "nts_release((NtsHeader *)s2); nts_release((NtsHeader *)s3);",
+        "struct NSString * __nts_a2, struct NSString * __nts_a3",
+        "NtsString *__nts_s2 = nts_string_of_nsstring(__nts_a2);",
+        "NtsString *__nts_s3 = nts_string_of_nsstring(__nts_a3);",
+        "nts_release((NtsHeader *)__nts_s2); nts_release((NtsHeader *)__nts_s3);",
         "{ \"read::\", ",
         // A string answered as the `NSString` made of it, the program's
         // copy given back.
-        "NtsString *t = Reader__title((struct Reader *)a0);",
-        "made = (struct NSString *)nts_nsstring_of(t); nts_release((NtsHeader *)t);",
+        &format!(
+            "NtsString *__nts_t = {}((struct Reader *)__nts_a0);",
+            private_symbol(text, "Reader__title")
+        ),
+        "__nts_made = (struct NSString *)nts_nsstring_of(__nts_t); nts_release((NtsHeader *)__nts_t);",
     ] {
         assert!(text.contains(expected), "no `{expected}` in:\n{text}");
     }

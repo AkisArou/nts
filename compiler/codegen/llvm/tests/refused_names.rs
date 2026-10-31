@@ -120,7 +120,7 @@ fn discarded_native_bodies_publish_neither_literals_nor_templates() {
     func.blocks[0].ops.push(template);
     let live = nts_codegen_llvm::emit(&prepared.program, Platform::SYSV_X86_64);
     assert!(live.diagnostics.is_empty(), "{:?}", live.diagnostics);
-    assert!(live.text.contains("@nts_template_123456 ="));
+    assert!(live.text.contains("@__nts_template_123456 ="));
     let live_c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(live_c.is_complete(), "{:?}", live_c.diagnostics);
     assert!(live_c.writer.text().contains("nts_template_123456 ="));
@@ -145,7 +145,7 @@ fn discarded_native_bodies_publish_neither_literals_nor_templates() {
         !dead.diagnostics.is_empty(),
         "the late await must be refused"
     );
-    assert!(!dead.text.contains("@nts_template_123456"));
+    assert!(!dead.text.contains("@__nts_template_123456"));
     let dead_c = nts_codegen_c::emit(&prepared.program, hir::native::NativeAbi::LP64);
     assert!(!dead_c.is_complete());
     assert!(!dead_c.writer.text().contains("nts_template_123456"));

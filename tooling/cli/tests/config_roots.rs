@@ -24,6 +24,10 @@ use std::collections::BTreeSet;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+#[allow(dead_code)]
+#[path = "../../../compiler/codegen/common/test-support/c_symbols.rs"]
+mod c_symbols;
+
 /// The entry. Publishes `published`, and reaches one private helper.
 const ENTRY: &str = r"
 import { helper } from './internal.js';
@@ -103,12 +107,7 @@ fn fixture(name: &str, config: Option<&str>) -> PathBuf {
 fn defined(output: &str) -> BTreeSet<String> {
     NAMES
         .iter()
-        .filter(|name| {
-            output.lines().any(|line| {
-                let trimmed = line.trim_start();
-                trimmed.contains(&format!("{name}(double ")) && trimmed.ends_with('{')
-            })
-        })
+        .filter(|name| c_symbols::source_symbol(output, name).is_some())
         .map(|name| (*name).to_owned())
         .collect()
 }

@@ -17,6 +17,7 @@
 
 pub mod backend;
 pub mod destruct;
+pub mod source_symbols;
 pub mod symbols;
 pub mod writer;
 
@@ -32,6 +33,7 @@ pub mod counting;
 pub mod gobject;
 pub mod literals;
 pub mod native;
+pub mod native_symbols;
 pub mod objc;
 pub mod optional;
 pub mod provider;

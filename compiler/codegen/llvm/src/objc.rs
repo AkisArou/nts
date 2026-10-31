@@ -412,7 +412,7 @@ pub(super) fn bare(ty: &HirType) -> &'static str {
     }
 }
 
-/// `R @nts_block_invoke_X(ptr %block, A...)`: the context and the bridge out
+/// `R @__nts_block_invoke_X(ptr %block, A...)`: the context and the bridge out
 /// of the block, then the bridge with the context last.
 /// Whether a block's result is an Objective-C object.
 pub(super) fn returns_object(result: &Type) -> bool {

@@ -268,6 +268,7 @@ pub(super) fn call(
     result: &HirType,
     out: &str,
     platform: Platform,
+    symbol: &str,
 ) -> Result<String, Diagnostic> {
     if target.convention == nts_core::hir::native::Convention::Variable {
         if *result != target.call_result() {
@@ -279,7 +280,7 @@ pub(super) fn call(
         return Ok(format!(
             "{out} = load {}, ptr @{}",
             ty_of(result, func)?,
-            target.name
+            symbol
         ));
     }
     let plan = plan(func, target, 0, platform)?;
@@ -307,7 +308,7 @@ pub(super) fn call(
     }
     let (args, destination) = split_destination(target, args);
     let mut before = Vec::new();
-    let callee = callee(target, args, out, &mut before);
+    let callee = callee(target, args, out, &mut before, symbol);
     let mut parameters = Vec::new();
     if let (Some(passing), Some(destination)) = (&plan.result, destination) {
         parameters.extend(aggregate::sret(passing, &name(destination)));
@@ -423,9 +424,15 @@ pub(super) fn call(
 /// What a native call calls: the symbol, or for a COM method the function in
 /// its slot of the receiver's table -- the table the receiver's first word
 /// points at, as C's `(*(void ***)r)[slot]` reads it.
-fn callee(target: &Function, args: &[ValueId], out: &str, before: &mut Vec<String>) -> String {
+fn callee(
+    target: &Function,
+    args: &[ValueId],
+    out: &str,
+    before: &mut Vec<String>,
+    symbol: &str,
+) -> String {
     let (Some(vtable), Some(receiver)) = (&target.vtable, args.first()) else {
-        return format!("@{}", target.name);
+        return format!("@{symbol}");
     };
     before.push(format!(
         "{out}.table = load ptr, ptr {}, align 8",

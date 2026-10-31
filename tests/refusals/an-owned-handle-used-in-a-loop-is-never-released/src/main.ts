@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> once-c nts_guarded_nts_dom_release((void *)
+// expect: emit-c --rc -> once-c __nts_guarded_nts_dom_release((void *)
 //
 // **FIXED 2026-10-07, and kept as a guard**: a parameter the function keeps is
 // released where it dies, after the loop. It was counted beside the closure's

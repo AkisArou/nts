@@ -94,7 +94,7 @@ fn optional_pairs_preserve_bits_absence_null_and_conditional_ownership() {
 
 fn assert_presence_mutation(dir: &Utf8Path, source: &str) {
     let original = source;
-    let broken = original.replace(".defined = v0", ".defined = !v0");
+    let broken = original.replace(".defined = __nts_v0", ".defined = !__nts_v0");
     assert_ne!(
         original, broken,
         "the mutation must change the emitted defined component"

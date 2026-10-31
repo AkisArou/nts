@@ -256,7 +256,7 @@ fn without_descriptor_callbacks(source: &str, llvm: bool, prefix: &str) -> Strin
 }
 
 fn check_unwired(dir: &Utf8Path, c: &str, llvm: &str, sources: &[std::path::PathBuf]) {
-    for (prefix, exit) in [("nts_release_fields", 3), ("nts_trace_fields", 6)] {
+    for (prefix, exit) in [("__nts_release_fields", 3), ("__nts_trace_fields", 6)] {
         for (extension, source, is_llvm) in [("c", c, false), ("ll", llvm, true)] {
             let query = if is_llvm { LLVM_ABI_QUERY } else { C_ABI_QUERY };
             let input = format!("unwired-{prefix}.{extension}");
@@ -287,13 +287,13 @@ fn count_traces(source: &str, llvm: bool) -> String {
         out.push_str(line);
         out.push('\n');
         if llvm {
-            if line.starts_with("define internal void @nts_trace_fields_") {
+            if line.starts_with("define internal void @__nts_trace_fields_") {
                 entry = true;
             } else if entry && line == "entry:" {
                 out.push_str("  %test.before = load i64, ptr @nts_test_trace_calls\n  %test.after = add i64 %test.before, 1\n  store i64 %test.after, ptr @nts_test_trace_calls\n");
                 entry = false;
             }
-        } else if line.starts_with("static void nts_trace_fields_") {
+        } else if line.starts_with("static void __nts_trace_fields_") {
             out.push_str("    nts_test_trace_calls++;\n");
         }
     }
@@ -381,19 +381,23 @@ fn typed_release_callbacks_execute_with_both_providers_and_native_emitters() {
             nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::SYSV_X86_64);
         assert!(c.is_complete(), "{:?}", c.diagnostics);
         assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
-        assert!(c.writer.text().contains("static void nts_release_fields_"));
+        assert!(
+            c.writer
+                .text()
+                .contains("static void __nts_release_fields_")
+        );
         assert!(
             llvm.text
-                .contains("define internal void @nts_release_fields_")
+                .contains("define internal void @__nts_release_fields_")
         );
         let counted = provider == hir::Memory::ReferenceCounting;
         assert_eq!(
-            c.writer.text().contains("static void nts_trace_fields_"),
+            c.writer.text().contains("static void __nts_trace_fields_"),
             counted
         );
         assert_eq!(
             llvm.text
-                .contains("define internal void @nts_trace_fields_"),
+                .contains("define internal void @__nts_trace_fields_"),
             counted
         );
         // Foreign tags must not take the generated managed-edge path.

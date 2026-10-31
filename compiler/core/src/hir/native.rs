@@ -1118,7 +1118,7 @@ impl FnPointer {
     /// for no reason. This is a function of the shape alone.
     #[must_use]
     pub fn spell(parameters: Vec<Type>, result: Type) -> Self {
-        let mut name = String::from("NtsFn");
+        let mut name = String::from("__nts_cfn");
         for part in std::iter::once(&result).chain(parameters.iter()) {
             name.push('_');
             for byte in part.c_type().bytes() {
@@ -1159,7 +1159,7 @@ impl FnPointer {
     ///
     /// The extra `*` goes inside the parentheses, where the declarator is.
     /// The witness needs this for `_Generic` on the address of a member that
-    /// holds a callback: it does not include `program.h`, so `NtsFn_int_int *`
+    /// holds a callback: it does not include `program.h`, so `__nts_cfn_int_int *`
     /// names nothing there -- which is what it emitted, and what the witness
     /// refused.
     #[must_use]
@@ -1173,7 +1173,7 @@ impl FnPointer {
     /// does not include `program.h`, which is where the typedef is defined, so
     /// a prototype it re-declares has to spell the shape out or name something
     /// that does not exist there. That is what it did: `native-callback`'s
-    /// witness said `extern int apply_twice(NtsFn_int_int, int);` and had never
+    /// witness said `extern int apply_twice(__nts_cfn_int_int, int);` and had never
     /// been compiled, because that example had no file that included it.
     #[must_use]
     pub fn anonymous(&self) -> String {
@@ -1288,14 +1288,14 @@ pub enum Pointee {
     ///
     /// The function and not the pointer, so the surrounding convention holds:
     /// `NativePointer(P)` spells `P *`, and `NativePointer(FnPointer)` is
-    /// therefore `int (*)(int)` -- which is exactly `NtsFn_int_int`, the
+    /// therefore `int (*)(int)` -- which is exactly `__nts_cfn_int_int`, the
     /// typedef, because C has no other spelling where a type precedes a name.
     ///
     /// A struct member holding a callback is `Pointer(FnPointer)`: a pointer
     /// to a function. Then `&p->run` is `NativePointer(Pointer(FnPointer))`
-    /// and spells `NtsFn_int_int *`, which is what it is. Reading this variant
+    /// and spells `__nts_cfn_int_int *`, which is what it is. Reading this variant
     /// as "the pointer" instead made those two the same type, and the emitted
-    /// `v5 = &v0->run` was declared `NtsFn_int_int` and subscripted.
+    /// `v5 = &v0->run` was declared `__nts_cfn_int_int` and subscripted.
     FnPointer(std::sync::Arc<FnPointer>),
     /// A view of the same thing that promises no alignment.
     ///
@@ -1468,10 +1468,10 @@ impl Counting {
         }
     }
 
-    /// The guard around `name`: `nts_guarded_g_object_unref`.
+    /// The guard around `name`: `__nts_guarded_g_object_unref`.
     #[must_use]
     pub fn guarded(name: &str) -> String {
-        format!("nts_guarded_{name}")
+        format!("__nts_guarded_{name}")
     }
 }
 
@@ -2063,11 +2063,11 @@ impl Pointee {
     /// The typedef name for this pointee read without alignment.
     ///
     /// A C identifier derived from the spelling: `unsigned int` becomes
-    /// `NtsUnaligned_unsigned_int`, and the substitution is the same one the
+    /// `__nts_unaligned_unsigned_int`, and the substitution is the same one the
     /// function-pointer typedefs use so that one shape is always one name.
     #[must_use]
     pub fn unaligned_typedef(&self) -> String {
-        let mut name = String::from("NtsUnaligned_");
+        let mut name = String::from("__nts_unaligned_");
         for byte in self.c_type().bytes() {
             match byte {
                 b'a'..=b'z' | b'A'..=b'Z' | b'0'..=b'9' => name.push(byte as char),
@@ -2078,7 +2078,7 @@ impl Pointee {
         name
     }
 
-    /// `typedef unsigned int NtsUnaligned_unsigned_int __attribute__((aligned(1)));`
+    /// `typedef unsigned int __nts_unaligned_unsigned_int __attribute__((aligned(1)));`
     ///
     /// Not ISO C. There is no ISO way to say this: reducing a type's alignment
     /// is an extension, which clang and gcc both have, and a program describing
@@ -2221,7 +2221,7 @@ impl Type {
             // word holding an address the program never reads through -- true,
             // and it made the emitted C say things ISO C does not: assigning a
             // function to a `void *`, and passing a `void *` where an
-            // `NtsFn_int_int` is wanted. `-pedantic-errors` reported ten of
+            // `__nts_cfn_int_int` is wanted. `-pedantic-errors` reported ten of
             // those in `native-callback`. POSIX does guarantee the
             // representation, which is why it worked; the declaration was
             // simply less true than it could be.

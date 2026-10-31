@@ -19,6 +19,9 @@ mod constants;
 #[path = "native/bigint_constants.rs"]
 mod bigint_constants;
 
+#[path = "native/witness_labels.rs"]
+mod witness_labels;
+
 #[path = "native/hresult.rs"]
 mod hresult;
 
@@ -34,6 +37,10 @@ mod string_view_lend;
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};
+
+#[path = "../../common/test-support/c_symbols.rs"]
+mod c_symbols;
+use c_symbols::function_symbol;
 
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with_provider(name, source, hir::Memory::NoGc)
@@ -4027,11 +4034,11 @@ export function fired(): void { fire_all(); }
         let (text, outputs) =
             run_on_both_backends("once", source, provider, ASYNC_LIBRARY, &caller);
         assert!(
-            text.contains("NtsBridgeOnce_"),
+            text.contains("__nts_bridgeOnce_"),
             "the bridge does not give the closure back"
         );
         assert!(
-            text.contains("nts_closure_unlend_once(a1)"),
+            text.contains("nts_closure_unlend_once(__nts_a1)"),
             "the once-bridge does not release its context"
         );
         // 1 * 2 * 1 + 10 * 2 * 10, each exactly once: a second `fire_all`
@@ -4135,7 +4142,7 @@ export function held(): number {
         );
         let (text, outputs) = run_on_both_backends("fields", source, provider, library, &caller);
         assert!(
-            text.contains("describe(*v"),
+            text.contains("describe(*__nts_v"),
             "the literal is not passed as the record its storage holds:\n{text}"
         );
         // 5, 1, 2, 3, 4 by field; 9 alone; and y, then x, then origin.x.
@@ -4211,7 +4218,7 @@ export function run(): number {
         let (text, outputs) =
             run_on_both_backends("methods", source, provider, METHODS_LIBRARY, &caller);
         assert!(
-            text.contains("button_set_label(v"),
+            text.contains("button_set_label(__nts_v"),
             "the method is not the C function"
         );
         // 42 from the parent's method, "héllo" read back as 5 units, and two
@@ -6677,7 +6684,7 @@ export function live(): number { return live_objects() as number; }
         &caller,
     );
     let body = c
-        .split("inherited(")
+        .split(&format!("{}(", function_symbol(&c, "inherited")))
         .nth(2)
         .and_then(|rest| rest.split("\n}\n").next())
         .expect("inherited is emitted");

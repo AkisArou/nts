@@ -1,4 +1,4 @@
-// expect: emit-c --napi -> lacks-c &nts_fnval_NtsObj_Closure0
+// expect: emit-c --napi -> lacks-c &__nts_fnval_NtsObj_Closure0
 //
 // FIXED. This is a regression guard, not an open blocker.
 //
@@ -15,7 +15,7 @@
 // invocation. The expectation could not tell those apart, because it named the
 // pointer and not the reachability.
 //
-// So the guard is `lacks-c &nts_fnval_NtsObj_Closure0` -- **the closure's
+// So the guard is `lacks-c &__nts_fnval_NtsObj_Closure0` -- **the closure's
 // address is never taken**. That is the property that matters: a descriptor with
 // a null `methods` slot is harmless while nothing can reach it, and a crash the
 // moment something does.

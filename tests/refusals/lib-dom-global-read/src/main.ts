@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c v0 = nts_dom_document();
+// expect: emit-c --rc -> emits-c __nts_v0 = nts_dom_document();
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a read of a lib.dom.d.ts global the overlay binds (`declare var document`) lowers as the bound nts:dom function (`document()`), and its lib.dom type is the bound handle (`Document`).
 // Filed 2026-10-06 by the Chromium lane with the compiler lane's agreed

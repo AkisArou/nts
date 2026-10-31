@@ -1,4 +1,4 @@
-// expect: emit-c -> emits-c double run(double v0)
+// expect: emit-c -> emits-c double run(double __nts_v0)
 //
 // The control for `class-name-shared-by-two-modules`: the same class with the
 // same fields, declared once. It compiles, which is what makes the other

@@ -227,6 +227,22 @@ function selfTest() {
     "  nts_is_array(v0);",
     "}",
   ].join("\n");
+  // Current C-private names must remain visible to the reader, while only
+  // actual runtime calls contribute to helper counts.
+  const privateText = [
+    "static double __nts_fn_internal_17(double __nts_v0) {",
+    "  double __nts_v1 = nts_unit(__nts_v0);",
+    "  return __nts_v1;",
+    "}",
+    "double work(double __nts_v0) {",
+    "  return __nts_fn_internal_17(__nts_v0);",
+    "}",
+  ].join("\n");
+  const privateFacts = summarise(privateText);
+  if (privateFacts.bodies.get("__nts_fn_internal_#")?.length !== 1 ||
+      privateFacts.bodies.get("work")?.length !== 1 || privateFacts.helpers.size !== 1 ||
+      privateFacts.helpers.get("nts_unit") !== 1)
+    return "private C names hid a body or were counted as runtime calls";
   const base = summarise(prog(12, 3, 7));
   const renumbered = compare(base, summarise(prog(19, 5, 2)));
   if (renumbered.differs) return `a renumbering read as a change: ${renumbered.names.join(", ")}`;

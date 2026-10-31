@@ -19,6 +19,10 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 
 /// The C for `source`, compiled for reference counting.
+#[path = "../../common/test-support/c_symbols.rs"]
+mod c_symbols;
+use c_symbols::function_symbol as private_symbol;
+
 fn counted(name: &str, source: &str) -> String {
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../..")
@@ -62,7 +66,15 @@ fn counted(name: &str, source: &str) -> String {
 /// failed on a compiler that was right. A definition's header line ends with `{`
 /// and a declaration's with `;`, which is the whole of the difference.
 fn body(text: &str, name: &str) -> String {
-    let wanted = format!("{name}(");
+    let spelling = if text
+        .lines()
+        .any(|line| line.contains(&format!("{name}(")) && line.ends_with('{'))
+    {
+        name.to_owned()
+    } else {
+        private_symbol(text, name)
+    };
+    let wanted = format!("{spelling}(");
     let mut lines = text
         .lines()
         .skip_while(|line| !(line.contains(&wanted) && line.ends_with('{')));
@@ -199,7 +211,7 @@ export function reset(app: App): void { app.rows = []; }
     );
     let reset = body(&text, "reset");
     assert!(
-        reset.contains("= v0->rows;") && reset.contains("nts_release"),
+        reset.contains("= __nts_v0->rows;") && reset.contains("nts_release"),
         "`reset` overwrites a field of a parameter its caller filled and must \
          load and release what the field held; its body is:{reset}"
     );

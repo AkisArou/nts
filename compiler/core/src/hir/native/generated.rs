@@ -71,7 +71,7 @@ impl std::fmt::Display for ForeignParent {
 }
 
 /// An explicit GIR operation, supplied by `@ntsIntrinsic`, never by a symbol.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum PropertyOperation {
     Get,
     Set,
@@ -80,7 +80,7 @@ pub enum PropertyOperation {
 
 /// A native function whose implementation lowering requests from the backend.
 /// An authored C declaration cannot acquire this fact through its spelling.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum GObjectThunk {
     Type {
         class: String,

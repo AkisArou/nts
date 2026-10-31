@@ -612,7 +612,7 @@ pub fn bridge_name(
     // is another bridge than one that does not, for the same closure and
     // signature.
     let mut name = format!(
-        "NtsBridge{kind}_{}_{}",
+        "__nts_bridge{kind}_{}_{}",
         c_identifier(target),
         signature.name
     );
@@ -627,8 +627,24 @@ pub fn bridge_name(
     name
 }
 
+#[cfg(test)]
+thread_local! {
+    static IDENTIFIER_RENDERINGS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
+
+#[cfg(test)]
+pub(crate) fn reset_identifier_renderings() {
+    IDENTIFIER_RENDERINGS.set(0);
+}
+#[cfg(test)]
+pub(crate) fn identifier_renderings() -> usize {
+    IDENTIFIER_RENDERINGS.get()
+}
+
 #[must_use]
 pub fn c_identifier(name: &str) -> String {
+    #[cfg(test)]
+    IDENTIFIER_RENDERINGS.update(|count| count + 1);
     let spelled = c_identifier_spelling(name);
     assert!(
         spelled
@@ -641,6 +657,39 @@ pub fn c_identifier(name: &str) -> String {
         "invalid emitted C identifier {spelled:?} from {name:?}"
     );
     spelled
+}
+
+/// A private source spelling used inside an identity-indexed generated name.
+///
+/// Ordinary source spellings retain their readable C form; a spelling inside
+/// nts's reserved namespace is escaped as its complete UTF-8 bytes followed by
+/// its readable C spelling. The escape image starts `__nts_source_`, so every
+/// source name that could impersonate an
+/// escaped name is itself escaped, injectively. Functions and globals combine
+/// this component with their producer role and stable ordinal. Their complete
+/// private image is disjoint from other generated roles, C keywords and all
+/// conforming header identifiers/macros. Diagnostics always retain the HIR name.
+///
+/// Published ABI names never use this function: they are literal contracts and
+/// public `__nts_` spellings are refused, whether a generated name collides now
+/// or not. The ordinary C keyword suffix policy remains [`c_identifier`]'s.
+#[must_use]
+pub fn c_private_source(name: &str) -> String {
+    c_private_source_spelled(name, c_identifier(name))
+}
+
+pub(crate) fn c_private_source_spelled(name: &str, spelled: String) -> String {
+    if !name.starts_with("__nts_") {
+        return spelled;
+    }
+    let mut out = String::from("__nts_source_");
+    for byte in name.as_bytes() {
+        use std::fmt::Write;
+        let _ = write!(out, "{byte:02x}");
+    }
+    out.push_str("__");
+    out.push_str(&spelled);
+    out
 }
 
 fn c_identifier_spelling(name: &str) -> String {
@@ -753,8 +802,19 @@ pub fn c_member(name: &str) -> String {
 /// all three, and this stays the small rule it was.
 #[must_use]
 pub fn c_global<'a>(name: &str, mut functions: impl Iterator<Item = &'a str>) -> String {
-    let spelled = c_identifier(name);
-    if functions.any(|function| c_identifier(function) == spelled) {
+    c_global_spelled(c_identifier(name), |spelled| {
+        functions.any(|function| c_identifier(function) == spelled)
+    })
+}
+
+pub(crate) fn c_global_indexed(name: &str, functions: &rustc_hash::FxHashSet<String>) -> String {
+    c_global_spelled(c_identifier(name), |spelled| functions.contains(spelled))
+}
+
+/// The one public-global suffix policy, shared by the legacy adapter and the
+/// frozen source plan. The caller supplies a lookup, never another spelling rule.
+fn c_global_spelled(spelled: String, occupied: impl FnOnce(&str) -> bool) -> String {
+    if occupied(&spelled) {
         format!("{spelled}_")
     } else {
         spelled
@@ -1153,6 +1213,46 @@ mod jvm_tests {
 
 #[cfg(test)]
 mod emitted_name_guards {
+    #[test]
+    #[expect(
+        clippy::unwrap_used,
+        reason = "test decodes the checked UTF-8 hex escape"
+    )]
+    fn private_reserved_source_escape_is_injective_and_reversible() {
+        let mut image = std::collections::HashSet::new();
+        let alphabet = ["a", "_", "0", "x", "é", "字"];
+        for a in alphabet {
+            for b in alphabet {
+                for prefix in ["__nts_", "__nts_source_"] {
+                    let source = format!("{prefix}{a}{b}");
+                    let encoded = super::c_private_source(&source);
+                    assert!(image.insert(encoded.clone()), "{source}");
+                    let bytes: Vec<u8> = encoded
+                        .strip_prefix("__nts_source_")
+                        .unwrap()
+                        .split_once("__")
+                        .unwrap()
+                        .0
+                        .as_bytes()
+                        .as_chunks::<2>()
+                        .0
+                        .iter()
+                        .map(|byte| {
+                            u8::from_str_radix(std::str::from_utf8(byte).unwrap(), 16).unwrap()
+                        })
+                        .collect();
+                    assert_eq!(String::from_utf8(bytes).unwrap(), source);
+                    assert!(encoded.ends_with(&super::c_identifier(&source)));
+                    assert_ne!(encoded, source);
+                }
+            }
+        }
+        for name in [
+            "readable", "register", "errno", "stdout", "main", "printf", "bool",
+        ] {
+            assert_eq!(super::c_private_source(name), super::c_identifier(name));
+        }
+    }
     #[test]
     fn generated_and_written_dollar_names_are_valid_target_identifiers() {
         // Clang and LLVM accept dollar identifiers. Refused virtual slots use

@@ -1452,7 +1452,7 @@ fn a_handle_at_module_scope_is_a_global() {
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
     let text = emitted.writer.text();
     assert!(
-        text.contains("IJsonValue * value = 0;"),
+        text.contains("IJsonValue * __nts_global_value_0 = 0;"),
         "the handle is not a global starting null:\n{text}"
     );
 
@@ -1656,11 +1656,11 @@ fn a_delegate_is_an_object_whose_invoke_calls_the_closure() {
     let text = emitted.writer.text();
     let adapter = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_invoke_"))
+        .find(|line| line.starts_with("static int32_t __nts_com_invoke_"))
         .unwrap_or_else(|| panic!("no Invoke adapter:\n{text}"));
     assert!(
-        adapter.contains("(void *self, struct Windows_Foundation_IMemoryBufferReference * a0, struct IInspectable * a1)")
-            && adapter.contains("d->bridge)(a0, a1, d->context); return 0;"),
+        adapter.contains("(void *__nts_self, struct Windows_Foundation_IMemoryBufferReference * __nts_a0, struct IInspectable * __nts_a1)")
+            && adapter.contains("__nts_d->bridge)(__nts_a0, __nts_a1, __nts_d->context); return 0;"),
         "{adapter}"
     );
     for (what, wanted) in [

@@ -114,7 +114,7 @@ impl Layouts {
 /// a thrown C message, are that. A `free` of another type would be a second,
 /// conflicting declaration beside `extern void free(void *);`, which C
 /// refuses. So it is the declaration that is compared, not the name; and
-/// `nts_native_malloc` is the compiler's own, which no binding can be.
+/// `__nts_native_malloc` is the compiler's own, which no binding can be.
 fn declares_a_memory_operation_differently(target: &nts_core::hir::native::Function) -> bool {
     use nts_core::hir::native::{Scalar, Type};
     let (parameters, result) = match target.name.as_str() {
@@ -123,7 +123,7 @@ fn declares_a_memory_operation_differently(target: &nts_core::hir::native::Funct
             vec![Type::Scalar(Scalar::Size)],
             Type::Pointer(Pointee::Void),
         ),
-        "nts_native_malloc" => return true,
+        "__nts_native_malloc" => return true,
         _ => return false,
     };
     target.variadic.is_some() || target.parameters != parameters || target.result != result

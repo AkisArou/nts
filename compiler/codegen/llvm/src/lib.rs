@@ -178,6 +178,46 @@ impl Platform {
     }
 }
 
+struct Emission<'a> {
+    source: &'a Program,
+    source_symbols: nts_codegen_common::source_symbols::SourceSymbols<'a>,
+    native_symbols: nts_codegen_common::native_symbols::NativeSymbols<'a>,
+}
+
+impl<'program> Emission<'program> {
+    fn new(source: &'program Program) -> Self {
+        Self {
+            source,
+            source_symbols: nts_codegen_common::source_symbols::SourceSymbols::new(source),
+            native_symbols: nts_codegen_common::native_symbols::NativeSymbols::new(source),
+        }
+    }
+
+    fn source_function(&self, name: &str) -> String {
+        global(&self.source_symbols.function(name))
+    }
+    fn source_global(&self, at: usize) -> String {
+        global(&self.source_symbols.global(at))
+    }
+
+    fn native_name<'a>(&'a self, target: &'a nts_core::hir::native::Function) -> &'a str {
+        self.native_symbols.function(target)
+    }
+    fn class_gtype(&self, class: &str) -> Option<&str> {
+        self.native_symbols.class_gtype(class)
+    }
+    fn gtype_name<'a>(&'a self, gtype: &'a nts_core::hir::native::GType) -> Option<&'a str> {
+        self.native_symbols.gtype(gtype)
+    }
+}
+
+impl std::ops::Deref for Emission<'_> {
+    type Target = Program;
+    fn deref(&self) -> &Program {
+        self.source
+    }
+}
+
 /// Render a whole program as textual LLVM IR.
 ///
 /// A function this cannot render is *absent* and reported, exactly as the C
@@ -210,6 +250,15 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         return Emitted {
             text,
             diagnostics: refusals,
+        };
+    }
+    let emission = Emission::new(program);
+    let program = &emission;
+    let public_errors = program.source_symbols.reserved_public_names();
+    if !public_errors.is_empty() {
+        return Emitted {
+            text,
+            diagnostics: public_errors,
         };
     }
     let native = match native::declarations(program, platform) {
@@ -336,7 +385,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
         let _ = writeln!(
             text,
             "{} = {linkage}global {ty} {zero}",
-            symbol(&global_symbol(program, at))
+            program.source_global(at)
         );
     }
     let templates = nts_core::hir::templates::present(program);
@@ -365,7 +414,7 @@ pub fn emit(program: &Program, platform: Platform) -> Emitted {
                 // the linker, which is where the C backend already puts it: C
                 // emits a prototype for everything and lets `ld` say what is
                 // missing. A refusal should look like a refusal.
-                if let Some(line) = refused_declaration(func, platform) {
+                if let Some(line) = refused_declaration(program, func, platform) {
                     let _ = writeln!(text, "{line}");
                 }
             }
@@ -544,13 +593,13 @@ fn helper_operand(
 /// Types only and no `internal`: LLVM has no such thing as an internal
 /// declaration, and external is what makes the link fail with the function's
 /// name in the message rather than the module fail to parse.
-fn refused_declaration(func: &Func, platform: Platform) -> Option<String> {
+fn refused_declaration(program: &Emission<'_>, func: &Func, platform: Platform) -> Option<String> {
     if let Some(signature) = optional::signature(func, platform).ok()? {
         return Some(format!(
             "declare {}{} {}({}) nounwind",
             platform.extension(&func.return_type),
             signature.returns,
-            symbol(&func.name),
+            program.source_function(&func.name),
             signature.parameters.join(", ")
         ));
     }
@@ -574,7 +623,7 @@ fn refused_declaration(func: &Func, platform: Platform) -> Option<String> {
     Some(format!(
         "declare {}{returns} {}({}) nounwind",
         platform.extension(&func.return_type),
-        symbol(&func.name),
+        program.source_function(&func.name),
         params.join(", ")
     ))
 }
@@ -791,12 +840,12 @@ fn template_data(
         let count = pieces.len();
         let _ = writeln!(
             out,
-            "@nts_template_{site}_items = internal constant [{count} x ptr] [{}]",
+            "@__nts_template_{site}_items = internal constant [{count} x ptr] [{}]",
             pieces.join(", ")
         );
         let _ = writeln!(
             out,
-            "@nts_template_{site} = internal constant {{ %NtsHeader, i32, ptr, [2 x i32] }} {{ %NtsHeader {{ ptr @nts_desc_ref, i64 {}, i32 {}, i32 {count} }}, i32 {count}, ptr @nts_template_{site}_items, [2 x i32] zeroinitializer }}",
+            "@__nts_template_{site} = internal constant {{ %NtsHeader, i32, ptr, [2 x i32] }} {{ %NtsHeader {{ ptr @nts_desc_ref, i64 {}, i32 {}, i32 {count} }}, i32 {count}, ptr @__nts_template_{site}_items, [2 x i32] zeroinitializer }}",
             nts_core::hir::layout::IMMORTAL,
             nts_core::hir::layout::TEMPLATE_IMMUTABLE
         );
@@ -848,12 +897,12 @@ type DescriptorTail<'a> = &'a dyn Fn(Option<&nts_core::hir::ClassIdentity>) -> S
 /// (`Program::printing`), as the descriptor's `to_string` slot. Null where
 /// nothing says, which the runtime refuses by name.
 fn to_string_slot(
-    program: &Program,
+    program: &Emission<'_>,
     layout: &nts_core::hir::Layout,
     class: Option<&nts_core::hir::ClassIdentity>,
 ) -> String {
     match program.printing(layout, class) {
-        Some(Printed::By(function)) => format!("ptr {}", symbol(function)),
+        Some(Printed::By(function)) => format!("ptr {}", program.source_function(function)),
         Some(Printed::Object) => "ptr @nts_object_to_string".to_owned(),
         Some(Printed::Function) => "ptr @nts_function_to_string".to_owned(),
         Some(Printed::BoundFunction) => "ptr @nts_bound_function_to_string".to_owned(),
@@ -938,7 +987,11 @@ fn native_column(
     })
 }
 
-fn descriptors(program: &Program, pool: &LiteralPool, diagnostics: &mut Vec<Diagnostic>) -> String {
+fn descriptors(
+    program: &Emission<'_>,
+    pool: &LiteralPool,
+    diagnostics: &mut Vec<Diagnostic>,
+) -> String {
     let mut out = String::new();
     let _ = writeln!(out, "{DESCRIPTOR_TYPE}");
     let cyclic = program.cyclic_layouts();
@@ -1237,47 +1290,11 @@ fn foreign_slots(
     }
     let _ = writeln!(
         out,
-        "@nts_foreign_{tag} = internal constant [{} x {{ i32, i32, ptr }}] [{}]",
+        "@__nts_foreign_{tag} = internal constant [{} x {{ i32, i32, ptr }}] [{}]",
         slots.len(),
         slots.join(", ")
     );
-    (slots.len(), format!("ptr @nts_foreign_{tag}"))
-}
-
-/// A global's symbol, which is its source name.
-/// A module global's symbol, with the collision rule the C backend already applies.
-///
-/// **In LLVM IR a global and a function share one symbol namespace**, so
-/// `@environment` cannot be both `internal global ptr null` and a `define` -- and
-/// `runtime/node/process` asks for exactly that: `env.ts:22`'s module-scope
-/// `const environment: Record<string, string | undefined> = {}` beside
-/// `internal/color-depth.ts:25`'s `function environment(name)`. The module did not
-/// assemble: "redefinition of function '@environment'". C has no such clash, since
-/// a global there is a file-scope variable rather than a symbol in the same table
-/// as a function -- but the C backend **still** renames it, through
-/// `symbols::c_global`, because a C translation unit has one namespace too.
-///
-/// So the rule existed in the shared crate and this backend was not reading it.
-/// That is the third instance of the shape today, after `Length` not using
-/// `SharedFieldGet`'s erased-pointer sequence and three places building a class
-/// member's name while one of them held the disambiguating map.
-///
-/// `symbol` applies `c_identifier` again on the way out, which is idempotent here:
-/// `c_global` has already returned a C identifier, and the `_` it may append is a
-/// valid character in one.
-///
-/// Found by the conformance lane's `assembles` step, once `87cf3bea7` stopped
-/// `validateArray` masking every other first error in the module.
-fn global_symbol(program: &Program, at: usize) -> String {
-    program.globals.get(at).map_or_else(
-        || format!("nts_global_{at}"),
-        |global| {
-            nts_codegen_common::symbols::c_global(
-                &global.name,
-                program.funcs.iter().map(|func| func.name.as_str()),
-            )
-        },
-    )
+    (slots.len(), format!("ptr @__nts_foreign_{tag}"))
 }
 
 /// The address of an array's element block, and the index into it.
@@ -1388,7 +1405,7 @@ fn element_tag(ty: &HirType) -> String {
 /// a cell was written before it is read.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn suspension(
-    program: &Program,
+    program: &Emission<'_>,
     func: &Func,
     value: ValueId,
     out: &str,
@@ -1470,7 +1487,7 @@ fn suspension(
             format!("{out}.task = alloca %struct.NtsTask, align 8"),
             format!(
                 "store ptr {}, ptr {out}.task{}",
-                symbol(resume),
+                program.source_function(resume),
                 tbaa("ptr")
             ),
             format!("{out}.drop = getelementptr %struct.NtsTask, ptr {out}.task, i32 0, i32 1"),
@@ -1615,7 +1632,7 @@ fn no_methods_row(out: &mut String, program: &Program) {
 /// below that type fills it.
 fn vtable(
     out: &mut String,
-    program: &Program,
+    program: &Emission<'_>,
     layout: &nts_core::hir::Layout,
     tag: &str,
     emitted_rows: &mut std::collections::BTreeSet<String>,
@@ -1629,13 +1646,13 @@ fn vtable(
         .map(|method| {
             method.map_or_else(
                 || "ptr null".to_owned(),
-                |name| format!("ptr {}", symbol(name)),
+                |name| format!("ptr {}", program.source_function(name)),
             )
         })
         .collect();
     let table = program.native_table_index(layout)?.map_or_else(
-        || format!("nts_vtable_{tag}"),
-        |index| format!("nts_vtable_shared_{index}"),
+        || format!("__nts_vtable_{tag}"),
+        |index| format!("__nts_vtable_shared_{index}"),
     );
     if emitted_rows.insert(table.clone()) {
         let _ = writeln!(
@@ -1665,13 +1682,14 @@ fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) ->
 /// What a bridge calls: the compiled function by name, or the one in the
 /// receiver's table at `dispatched`, whose loads go on the end of `body`.
 fn bridge_callee(
+    program: &Emission<'_>,
     compiled: &Func,
     dispatched: Option<u32>,
     receiver: &str,
     body: &mut String,
 ) -> String {
     let Some(slot) = dispatched else {
-        return symbol(&compiled.name);
+        return program.source_function(&compiled.name);
     };
     let mut loads = Vec::new();
     let pointer = method_pointer("%d", receiver, slot, &mut loads);
@@ -1692,7 +1710,7 @@ fn bridge_callee(
 /// The receiver is the static closure's global. Only a closure with no captures
 /// is bridged, so one immortal instance is the whole of its state.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> {
+fn bridges(program: &Emission<'_>, platform: Platform) -> Result<String, Diagnostic> {
     let mut out = String::new();
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut types: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
@@ -1795,6 +1813,7 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
                     (at, signature.parameters[at].abi(platform.abi))
                 });
                 let passed = bridge_argument(
+                    program,
                     compiled,
                     (at, parameter, foreign, from),
                     (bridging.boxed(at), length, counted, bridging.converted(at)),
@@ -1822,7 +1841,13 @@ fn bridges(program: &Program, platform: Platform) -> Result<String, Diagnostic> 
             } else {
                 format!("{releases}  call void @nts_callback_leave()")
             };
-            let callee = bridge_callee(compiled, dispatched, &format!("%a{last}"), &mut body);
+            let callee = bridge_callee(
+                program,
+                compiled,
+                dispatched,
+                &format!("%a{last}"),
+                &mut body,
+            );
             let call = format!(
                 "call {} {callee}({})",
                 return_ty_of(&have, compiled)?,
@@ -1928,6 +1953,7 @@ type Conversions<'a> = (
 );
 
 fn bridge_argument(
+    program: &Emission<'_>,
     compiled: &Func,
     (at, parameter, foreign, from): (usize, usize, &nts_core::hir::native::Type, HirType),
     (boxing, length, counted, converted): Conversions<'_>,
@@ -1948,7 +1974,7 @@ fn bridge_argument(
         let _ = writeln!(
             body,
             "  %q{at} = call {to_ty} {}({from_ty} %a{at})",
-            symbol(&converted.function)
+            program.source_function(&converted.function)
         );
         if counted && matches!(to, HirType::Managed(_)) {
             let _ = writeln!(releases, "  call void @nts_release(ptr %q{at})");
@@ -2041,7 +2067,7 @@ fn bridge_argument(
 /// methods of the Objective-C classes the program declares, which share the
 /// two runtime calls around a callback and declare them once.
 fn entry_points(
-    program: &Program,
+    program: &Emission<'_>,
     platform: Platform,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> String {
@@ -2104,7 +2130,7 @@ fn entry_points(
 /// registering them all, base class first, before `main`. Returns the text
 /// and that constructor's name.
 fn objc_classes(
-    program: &Program,
+    program: &Emission<'_>,
     platform: Platform,
     callbacks_declared: &mut bool,
 ) -> Result<(String, Option<&'static str>), Diagnostic> {
@@ -2138,6 +2164,7 @@ fn objc_classes(
                 };
             };
             rows.push(imp(
+                program,
                 &mut out,
                 (
                     platform,
@@ -2180,10 +2207,10 @@ fn objc_classes(
     }
     let _ = writeln!(
         out,
-        "define internal void @nts_objc_register_classes() {{\n{}\n  ret void\n}}",
+        "define internal void @__nts_objc_register_classes() {{\n{}\n  ret void\n}}",
         registrations.join("\n")
     );
-    Ok((out, Some("nts_objc_register_classes")))
+    Ok((out, Some("__nts_objc_register_classes")))
 }
 
 /// The two runtime calls around a callback, declared once per module.
@@ -2203,12 +2230,13 @@ fn text_constant(out: &mut String, name: &str, value: &str) {
     );
 }
 
-/// One method's entry point, `nts_imp_<Class>_<at>`: the runtime's arguments
+/// One method's entry point, `__nts_imp_<Class>_<at>`: the runtime's arguments
 /// -- `self`, `_cmd`, then the method's, a record by value by the platform's
 /// convention -- converted to the compiled method's, and its result back.
 /// Returns the method table's row for it.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn imp(
+    program: &Emission<'_>,
     out: &mut String,
     (platform, program_counts): (Platform, bool),
     class: &str,
@@ -2343,7 +2371,7 @@ fn imp(
             let _ = writeln!(
                 out,
                 "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()\n  ret void\n}}",
-                symbol(&compiled.name),
+                program.source_function(&compiled.name),
                 call_args("%ret")
             );
         } else {
@@ -2358,7 +2386,7 @@ fn imp(
             let _ = writeln!(
                 out,
                 "  call void @nts_callback_enter()\n  call void {}({})\n  call void @nts_callback_leave()",
-                symbol(&compiled.name),
+                program.source_function(&compiled.name),
                 call_args("%slot")
             );
             let _ = writeln!(
@@ -2382,7 +2410,7 @@ fn imp(
     let call = format!(
         "call {} {}({})",
         ty_of(&have, compiled)?,
-        symbol(&compiled.name),
+        program.source_function(&compiled.name),
         arguments.join(", ")
     );
     if want == HirType::Void {
@@ -2474,7 +2502,7 @@ fn answer(
 /// from the `init` it adds, on whatever stack sent `init`. `Err(None)` for a
 /// program with no function to name a refusal by.
 fn state_maker(
-    program: &Program,
+    program: &Emission<'_>,
     class: &nts_core::hir::ForeignClass,
     out: &mut String,
 ) -> Result<Option<String>, Option<Diagnostic>> {
@@ -2489,7 +2517,7 @@ fn state_maker(
     let _ = writeln!(
         out,
         "define internal ptr @{maker}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
-        symbol(&compiled.name)
+        program.source_function(&compiled.name)
     );
     Ok(Some(maker))
 }
@@ -2519,7 +2547,7 @@ fn closure_layout<'p>(
 /// program compiled by one and linked against a consumer built for the other
 /// would otherwise differ in a symbol nobody looked at.
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
-    format!("nts_fnval_{}", descriptor_name(layout))
+    format!("__nts_fnval_{}", descriptor_name(layout))
 }
 
 /// `x instanceof C`, as one call per class that satisfies it, or'd together.
@@ -2533,7 +2561,7 @@ fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
 /// values with no class before the descriptor is read, and a `select` would
 /// read it either way.
 fn instance_of(
-    program: &Program,
+    program: &Emission<'_>,
     out: &str,
     operand: nts_core::hir::ValueId,
     classes: &[nts_core::hir::ClassId],
@@ -2611,7 +2639,7 @@ fn identity_suffix(
 /// backend does the same thing and `tests/programs/two-classes-one-descriptor` holds
 /// both lanes to it.
 fn descriptor_for(
-    program: &Program,
+    program: &Emission<'_>,
     layout: &nts_core::hir::Layout,
     ty: Option<nts_core::hir::ClassId>,
 ) -> String {
@@ -3261,7 +3289,7 @@ fn global_spelling(name: &str) -> String {
 
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn function(
-    program: &Program,
+    program: &Emission<'_>,
     cycles: &nts_core::hir::Cycles,
     func: &Func,
     platform: Platform,
@@ -3313,7 +3341,7 @@ fn function(
     prologue.extend(native::stack_arguments(func, platform));
     prologue.extend(native_memory::stack_storage(func, platform));
     prologue.extend(indirect::scratch(platform));
-    let public = nts_codegen_common::symbols::is_public(program, func);
+    let public = program.source_symbols.is_public(&func.name);
     if !uses_optional_abi {
         indirect::unexportable(func, platform, public)
             .map_or(Ok(()), |why| Err(refuse(func, why)))?;
@@ -3321,11 +3349,15 @@ fn function(
     let (linkage, defined, entry) = if uses_optional_abi {
         (
             if public { "" } else { "internal " },
-            symbol(&func.name),
+            program.source_function(&func.name),
             false,
         )
     } else {
-        indirect::definition(func, platform, (symbol(&func.name), public))
+        indirect::definition(
+            func,
+            platform,
+            (program.source_function(&func.name), public),
+        )
     };
     // `nounwind` on everything this compiler defines, for the reason above: the
     // language has no exceptions, so no frame here can be unwound through.
@@ -3423,7 +3455,7 @@ fn function(
     }
     let _ = writeln!(out, "}}");
     Ok(if entry {
-        out + &c_entry(func, &returns, platform)?
+        out + &c_entry(program, func, &returns, platform)?
     } else {
         out
     })
@@ -3437,9 +3469,14 @@ fn function(
 /// an `i128` returned in XMM0 as `<2 x i64>`. On arm64 an erased value is
 /// `[2 x i64]` both ways, the tag in the low half of the first word.
 /// Everything else passes through as it is.
-fn c_entry(func: &Func, returns: &str, platform: Platform) -> Result<String, Diagnostic> {
+fn c_entry(
+    program: &Emission<'_>,
+    func: &Func,
+    returns: &str,
+    platform: Platform,
+) -> Result<String, Diagnostic> {
     let win64 = indirect::applies(platform);
-    let exported = symbol(&func.name);
+    let exported = program.source_function(&func.name);
     let body = indirect::body_symbol(&exported);
     let mut params = Vec::new();
     let mut lines = Vec::new();
@@ -3686,7 +3723,7 @@ fn dispatch_constant(
 }
 
 fn operation(
-    program: &Program,
+    program: &Emission<'_>,
     cycles: &nts_core::hir::Cycles,
     func: &Func,
     value: ValueId,
@@ -3754,7 +3791,7 @@ fn operation(
         OpKind::ConstString(text) => string_literal_address(pool, text, &out),
         OpKind::ConstTemplate { site, .. } => {
             pool.template(*site);
-            format!("{out} = getelementptr i8, ptr @nts_template_{site}, i64 0")
+            format!("{out} = getelementptr i8, ptr @__nts_template_{site}, i64 0")
         }
         OpKind::ConstBool(flag) => format!("{out} = add i1 0, {}", u8::from(*flag)),
         OpKind::Erase { .. } | OpKind::Unerase { .. } | OpKind::TagOf { .. } => {
@@ -3938,7 +3975,7 @@ fn representation_change(
 /// analysis is worth having.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn allocation(
-    program: &Program,
+    program: &Emission<'_>,
     cycles: &nts_core::hir::Cycles,
     func: &Func,
     value: ValueId,
@@ -4272,7 +4309,7 @@ fn element_access(func: &Func, value: ValueId, out: &str) -> Result<String, Diag
 /// have inserted them did not run. A global is `internal` unless the program
 /// exports it, for the same reason the C backend makes it `static`.
 fn counting_or_global(
-    program: &Program,
+    program: &Emission<'_>,
     func: &Func,
     value: ValueId,
     out: &str,
@@ -4326,7 +4363,7 @@ fn counting_or_global(
             let ty = ty_of(&op.ty, func)?;
             format!(
                 "{out} = load {ty}, ptr {}{}",
-                symbol(&global_symbol(program, *global as usize)),
+                program.source_global(*global as usize),
                 tbaa(ty)
             )
         }
@@ -4335,7 +4372,7 @@ fn counting_or_global(
             format!(
                 "store {ty} {}, ptr {}{}",
                 name(*value),
-                symbol(&global_symbol(program, *global as usize)),
+                program.source_global(*global as usize),
                 tbaa(ty)
             )
         }
@@ -5018,7 +5055,7 @@ fn declared_result(returns: &str) -> (String, &str) {
 /// `nts_tag_name(uint32_t)` came to be handed a double.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn call(
-    program: &Program,
+    program: &Emission<'_>,
     func: &Func,
     value: ValueId,
     out: &str,
@@ -5037,7 +5074,15 @@ fn call(
         if let Some(send) = &target.send {
             return objc::send(func, target, send, args, &op.ty, out, platform);
         }
-        return native::call(func, target, args, &op.ty, out, platform);
+        return native::call(
+            func,
+            target,
+            args,
+            &op.ty,
+            out,
+            platform,
+            program.native_name(target),
+        );
     }
     let out = out.to_owned();
     Ok(match &op.kind {
@@ -5079,10 +5124,10 @@ fn call(
             // `nts_str_substring_into` is `static inline`, so what this calls
             // is the linkable companion beside it -- the same distinction
             // `nts_to_int32_fn` exists for.
-            let called = if framed.is_some() {
-                into_form(target)
-            } else {
-                linkable(target)
+            let called = match callee {
+                Callee::External(_) if framed.is_some() => into_form(target),
+                Callee::External(_) => linkable(target),
+                _ => target.to_owned(),
             };
             if framed.is_some() && signatures::signature_on(&called, platform).is_none() {
                 return Err(refuse(
@@ -5141,7 +5186,10 @@ fn call(
             // receiver. `args[0]` is the receiver, and its descriptor is where
             // the table lives.
             let callable = match dispatched {
-                None => symbol(&called),
+                None => match callee {
+                    Callee::Direct(name) => program.source_function(name),
+                    _ => global(&called),
+                },
                 Some(slot) => {
                     let default = match callee {
                         Callee::Virtual { slot: selector, .. } => {
@@ -5150,7 +5198,7 @@ fn call(
                         _ => None,
                     };
                     if let Some(default) = default {
-                        let default = symbol(default);
+                        let default = program.source_function(default);
                         family_pointer(&out, &receiver_name(args), (slot, &default), &mut before)
                     } else {
                         method_pointer(&out, &receiver_name(args), slot, &mut before)
@@ -5272,7 +5320,7 @@ fn payload_into(func: &Func, out: &str, bits: &str, want: &HirType) -> Result<St
 /// `nts_core::hir::layout` -- every one of these needs to know where
 /// something sits, and none of the arithmetic does.
 fn memory_operation(
-    program: &Program,
+    program: &Emission<'_>,
     cycles: &nts_core::hir::Cycles,
     func: &Func,
     value: ValueId,
@@ -6364,7 +6412,7 @@ mod native_memory;
 /// emit the same names.
 /// The call an open field access becomes.
 fn open_chain_op(
-    program: &Program,
+    program: &Emission<'_>,
     func: &Func,
     op: &nts_core::hir::Op,
     out: &str,
@@ -6408,7 +6456,7 @@ fn open_chain_op(
 /// missing definition would be a call to an undefined symbol: a link error a
 /// long way from the op, where a refusal names the operation and the function.
 fn open_chain_call(
-    program: &Program,
+    program: &Emission<'_>,
     func: &Func,
     arms: &[nts_core::hir::FieldArm],
     ty: &str,
@@ -6436,7 +6484,7 @@ fn open_chain_call(
     Ok(())
 }
 
-fn open_chains(program: &Program, platform: Platform) -> String {
+fn open_chains(program: &Emission<'_>, platform: Platform) -> String {
     let mut seen: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
     let mut text = String::new();
     for func in program.native_funcs() {
@@ -6486,7 +6534,7 @@ fn open_chain_name(arms: &[nts_core::hir::FieldArm], ty: &str, stored: bool) -> 
 /// here is a call to an undefined symbol only if that refusal is skipped --
 /// which is why both ask rather than one trusting the other.
 fn open_chain_body(
-    program: &Program,
+    program: &Emission<'_>,
     symbol: &str,
     arms: &[nts_core::hir::FieldArm],
     ty: &str,

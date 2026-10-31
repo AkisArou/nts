@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c nts_sequence_NtsDomMutationRecordSequence_as_NtsDomMutationRecord(
+// expect: emit-c --rc -> emits-c __nts_fn_nts_sequence_NtsDomMutationRecordSequence_as_NtsDomMutationRecord_3(__nts_a0)
 //
 // **FIXED 2026-10-07, kept as a guard** (MainClaude): the bridge makes the
 // array, by a function lowering makes for the pair -- an array of the

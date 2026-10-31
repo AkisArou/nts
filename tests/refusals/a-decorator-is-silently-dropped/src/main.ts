@@ -1,4 +1,4 @@
-// expect: emits-c v1 = 5;
+// expect: emits-c __nts_v1 = 5;
 //
 // The assertion is the **body of the undecorated method**, because that is the
 // defect: `Thing__value` computes 5 where the decorator makes it 10. Pinned to

@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c Closure0__call((NtsObj_Closure0 *)a1, (struct NtsDomMouseEvent *)a0)
+// expect: emit-c --rc -> emits-c __nts_fn_Closure0__call_2((NtsObj_Closure0 *)__nts_a1, (struct NtsDomMouseEvent *)__nts_a0)
 //
 // lib.dom.d.ts bound by delegation (runtime/chromium/docs/lib-dom.md): a listener typed by lib.dom.d.ts's event map (`(event: MouseEvent)`) passed where the binding's closure takes an `Event` is a trusted downcast of the same handle.
 // Filed 2026-10-06 by the Chromium lane with the compiler lane's agreed

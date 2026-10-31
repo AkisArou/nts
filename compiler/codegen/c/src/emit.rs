@@ -390,9 +390,9 @@ pub fn main_for(shape: MainShape) -> String {
     // header declares them. They are the calls clang's `@autoreleasepool` makes.
     let (pool_declare, push, pop) = if autorelease_pool {
         (
-            "void *objc_autoreleasePoolPush(void);\nvoid objc_autoreleasePoolPop(void *pool);\n\n",
-            "    void *nts_autorelease_pool = objc_autoreleasePoolPush();\n",
-            "    objc_autoreleasePoolPop(nts_autorelease_pool);\n",
+            "void *objc_autoreleasePoolPush(void);\nvoid objc_autoreleasePoolPop(void *__nts_pool);\n\n",
+            "    void *__nts_autorelease_pool = objc_autoreleasePoolPush();\n",
+            "    objc_autoreleasePoolPop(__nts_autorelease_pool);\n",
         )
     } else {
         ("", "", "")
@@ -475,6 +475,100 @@ fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
     read
 }
 
+#[derive(Clone, Copy)]
+enum HelperName {
+    Object,
+    Receiver,
+    Visitor,
+    Slot,
+    Bytes,
+    Minimum,
+    Argument,
+    Out,
+}
+
+/// File-scope names, allocated once in stable HIR order. Public entry points
+/// keep their published ABI; private names retain source text for perf/gdb.
+///
+/// The private image is injective: its final decimal ordinal identifies the
+/// source owner, even if two readable source spellings coincide. Function and
+/// global prefixes are distinct from each other and every other generated
+/// family. Their implementation-reserved prefix is disjoint from C keywords
+/// and conforming included-header/libc names, including macros. Source text
+/// cannot impersonate that identity by spelling a reserved prefix itself.
+///
+/// Published ABI spellings are deliberately outside that private image. They
+/// remain the author's boundary contract; a conflicting native declaration is
+/// refused rather than silently merged with the published definition. Every
+/// public `__nts_` spelling is refused independently of today's generated names.
+/// Reserved-looking private source names use `c_private_source`'s reversible
+/// escape; HIR/diagnostics retain their original source names.
+pub(super) struct Emission<'a> {
+    source: &'a Program,
+    source_symbols: nts_codegen_common::source_symbols::SourceSymbols<'a>,
+    helper_names: [String; 8],
+    native_symbols: nts_codegen_common::native_symbols::NativeSymbols<'a>,
+}
+
+impl<'a> Emission<'a> {
+    fn new(source: &'a Program) -> Self {
+        let source_symbols = nts_codegen_common::source_symbols::SourceSymbols::new(source);
+        let helper_names = [
+            "object", "self", "visit", "slot", "bytes", "minimum", "a", "out",
+        ]
+        .map(|label| format!("__nts_{label}"));
+        let native_symbols = nts_codegen_common::native_symbols::NativeSymbols::new(source);
+        Self {
+            source,
+            source_symbols,
+            helper_names,
+            native_symbols,
+        }
+    }
+
+    fn native_name<'b>(&'b self, target: &'b nts_core::hir::native::Function) -> &'b str {
+        self.native_symbols.function(target)
+    }
+
+    fn class_gtype(&self, class: &str) -> Option<&str> {
+        self.native_symbols.class_gtype(class)
+    }
+
+    fn gtype_name<'b>(&'b self, gtype: &'b nts_core::hir::native::GType) -> Option<&'b str> {
+        self.native_symbols.gtype(gtype)
+    }
+
+    /// One ordered table per helper scope. A declaration and its uses capture
+    /// the same entry; neither reconstructs a parameter's C spelling.
+    fn helper_scope<const N: usize>(&self, labels: [HelperName; N]) -> [&str; N] {
+        labels.map(|label| self.helper_names[label as usize].as_str())
+    }
+
+    fn argument_names(&self, length: usize) -> Vec<String> {
+        let [prefix] = self.helper_scope([HelperName::Argument]);
+        (0..length).map(|at| format!("{prefix}{at}")).collect()
+    }
+
+    fn reserved_public_names(&self) -> Vec<Diagnostic> {
+        self.source_symbols.reserved_public_names()
+    }
+
+    fn declaration(&self, callee: &Callee) -> Option<&Func> {
+        self.source_symbols.declaration(callee)
+    }
+
+    fn function(&self, name: &str) -> String {
+        self.source_symbols.function(name)
+    }
+}
+
+impl std::ops::Deref for Emission<'_> {
+    type Target = Program;
+    fn deref(&self) -> &Program {
+        self.source
+    }
+}
+
 /// What an emitter needs beyond the function it is emitting.
 ///
 /// Layouts come from the program because a field's name and position are a
@@ -482,7 +576,7 @@ fn values_read(func: &Func) -> rustc_hash::FxHashSet<ValueId> {
 /// the program because two functions naming the same string must reach the same
 /// static.
 struct Context<'a> {
-    program: &'a Program,
+    program: &'a Emission<'a>,
     /// Object aliases have one physical C struct, independent of contracts.
     layouts: &'a nts_core::hir::fields::LayoutIndex,
     /// Which arrays of references can be in a cycle, decided once for the
@@ -511,6 +605,15 @@ struct Context<'a> {
 }
 
 impl Context<'_> {
+    /// Record only an external helper after its call is known writable.
+    fn record_unicode_call(&self, callee: &Callee) {
+        if let Callee::External(name) = callee {
+            let mut needs = self.unicode_needs.get();
+            needs.record(name);
+            self.unicode_needs.set(needs);
+        }
+    }
+
     /// Exact C object-type equality, without granting an assignability edge.
     fn same_object_type(&self, left: &HirType, right: &HirType) -> bool {
         self.layouts
@@ -762,7 +865,7 @@ impl Emitted {
 /// counted 92 times, and it was the Node lane bracketing two pinned compilers
 /// that found it -- from their end it is a module that fails every test.
 fn drop_orphaned_bodies(
-    program: &Program,
+    program: &Emission<'_>,
     bodies: &mut Vec<(String, CodeWriter, &Func, UnicodeNeeds)>,
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
@@ -806,7 +909,7 @@ fn drop_orphaned_bodies(
                     // through a null table at whatever eventually called it.
                     //
                     // The React lane found it and it cost them days: `main_`
-                    // stores `&nts_fnval_NtsObj_Closure3117` into React's jsx
+                    // stores `&__nts_fnval_NtsObj_Closure3117` into React's jsx
                     // slot, `Closure3117#call` was refused for a reason inside
                     // `useState`, `main` was **not** refused, the program built,
                     // and `callComponent` called `descriptor->methods[35]` on a
@@ -902,17 +1005,13 @@ impl Emitted {
 /// value export's is its global; a **class has neither**, and a version script
 /// built from `public_api` named `Counter` for one -- a symbol nothing answers
 /// to, which the linker then used to mark the real ones local.
-fn published_symbols(program: &Program) -> (Vec<String>, Vec<String>) {
+fn published_symbols(program: &Emission<'_>) -> (Vec<String>, Vec<String>) {
     let mut symbols = Vec::new();
     let mut without = Vec::new();
     for (emitted, published) in &program.public_api {
         if program.native_funcs().any(|func| func.name == *emitted) {
-            symbols.push(c_identifier(emitted));
-        } else if program
-            .globals
-            .iter()
-            .any(|global| global.exported && global.name == *emitted)
-        {
+            symbols.push(program.function(emitted));
+        } else if program.globals.iter().any(|global| global.name == *emitted) {
             symbols.push(c_global(
                 emitted,
                 program.funcs.iter().map(|func| func.name.as_str()),
@@ -932,7 +1031,7 @@ fn published_symbols(program: &Program) -> (Vec<String>, Vec<String>) {
 /// everything about it compiled. Folding them together would report every
 /// refusal twice under a sentence about layouts, and would leave nothing that
 /// means what `published_without_a_symbol` is for.
-fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
+fn refused_by_lowering(program: &Emission<'_>, emitted: &str) -> bool {
     program
         .uncompiled
         .iter()
@@ -960,9 +1059,11 @@ fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
 /// host's answer by omission.
 #[must_use]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
-pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
+pub fn emit(input: &Program, abi: NativeAbi) -> Emitted {
+    let emission = Emission::new(input);
+    let program = &emission;
     let mut writer = CodeWriter::new();
-    let mut diagnostics = Vec::new();
+    let mut diagnostics = program.reserved_public_names();
 
     let mut refused = Vec::new();
     let Some(first) = program.funcs.first() else {
@@ -978,7 +1079,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // error far from its cause, so it is caught here where the cause is known.
     let mut claimed: rustc_hash::FxHashMap<String, String> = rustc_hash::FxHashMap::default();
     for func in program.native_funcs() {
-        let c_name = c_identifier(&func.name);
+        let c_name = program.function(&func.name);
         if let Some(previous) = claimed.insert(c_name.clone(), func.name.clone())
             && previous != func.name
         {
@@ -1037,7 +1138,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // above, and a dispatch table built from it names them.
     let defined: rustc_hash::FxHashSet<String> = bodies
         .iter()
-        .map(|(_, _, func, _)| c_identifier(&func.name))
+        .map(|(_, _, func, _)| program.function(&func.name))
         .collect();
 
     let mut object_types = CodeWriter::new();
@@ -1182,7 +1283,7 @@ type Prototypes = Result<Vec<String>, (Vec<String>, Vec<Diagnostic>)>;
 fn emit_bridges(
     writer: &mut CodeWriter,
     origin: &Origin,
-    program: &Program,
+    program: &Emission<'_>,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     match native_memory::bridges(writer, origin, program) {
@@ -1215,7 +1316,7 @@ fn emit_bridges(
 /// written, because an empty witness reads as "checked" and has checked
 /// nothing.
 fn witness_file(
-    program: &Program,
+    program: &Emission<'_>,
     abi: NativeAbi,
     origin: &Origin,
     diagnostics: &mut Vec<Diagnostic>,
@@ -1313,7 +1414,7 @@ fn witness_file(
 /// is produced once for both, which is the point of sharing this function.
 #[derive(Clone, Copy)]
 pub(crate) enum Spelling {
-    /// `NtsFn_int_int`, defined in `program.h`.
+    /// `__nts_fn_int_int`, defined in `program.h`.
     Typedef,
     /// `int (*)(int)`, which needs nothing defined anywhere.
     Expanded,
@@ -1334,7 +1435,7 @@ impl Spelling {
 /// macros there rather than defining them; here they are defined, because this
 /// is a file whose first line we own -- the only place a feature-test macro can
 /// still decide anything.
-fn native_preamble(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+fn native_preamble(writer: &mut CodeWriter, origin: &Origin, program: &Emission<'_>) {
     if !native_memory::needs_headers(program) {
         return;
     }
@@ -1363,12 +1464,17 @@ fn native_preamble(writer: &mut CodeWriter, origin: &Origin, program: &Program) 
     // It does not touch a collision with a real *declaration*: a program
     // exporting `read` while binding <unistd.h>'s still has two incompatible
     // declarations of one symbol, which is a true conflict and is reported.
-    for name in program.funcs.iter().map(|f| c_identifier(&f.name)).chain(
-        program
-            .globals
-            .iter()
-            .map(|g| c_global(&g.name, program.funcs.iter().map(|f| f.name.as_str()))),
-    ) {
+    for name in program
+        .funcs
+        .iter()
+        .map(|f| program.function(&f.name))
+        .chain(
+            program
+                .globals
+                .iter()
+                .map(|g| c_global(&g.name, program.funcs.iter().map(|f| f.name.as_str()))),
+        )
+    {
         writer.line(origin, format!("#undef {name}"));
     }
 }
@@ -1474,7 +1580,7 @@ fn data_model_assertion(abi: NativeAbi) -> String {
     )
 }
 
-fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
+fn external_prototypes(program: &Emission<'_>, abi: NativeAbi) -> Prototypes {
     let mut seen: rustc_hash::FxHashMap<&str, (&nts_core::hir::native::Function, String)> =
         rustc_hash::FxHashMap::default();
     let mut prototypes = Vec::new();
@@ -1511,11 +1617,11 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
                 }
                 _ => continue,
             };
-            let name = target.name.as_str();
+            let name = program.native_name(target);
             if (runtime_declares(name) && target.convention == nts_core::hir::native::Convention::C)
                 || program
                     .native_funcs()
-                    .any(|f| c_identifier(&f.name) == name)
+                    .any(|f| program.function(&f.name) == name)
             {
                 refusals.push(Diagnostic::error(
                     "NTS2007",
@@ -1643,7 +1749,7 @@ fn declares_the_name(header: &str, name: &str) -> bool {
 
 /// The C name of a string literal's static data.
 fn literal_name(literals: &Literals, text: &JsText) -> String {
-    format!("nts_str_{}", literals.string(text))
+    format!("__nts_str_{}", literals.string(text))
 }
 
 /// Whether a runtime helper takes a managed reference of any class here.
@@ -1679,7 +1785,7 @@ fn literal_name(literals: &Literals, text: &JsText) -> String {
 /// it is what the file needs before any function can be written, below it is
 /// what the file does with the functions it got.
 fn emit_bodies<'a>(
-    program: &'a Program,
+    program: &'a Emission<'a>,
     abi: NativeAbi,
     cycles: &nts_core::hir::Cycles,
     literals: &Literals,
@@ -1787,8 +1893,8 @@ const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_value_of_reference", 0),
 ];
 
-fn erases_class(callee: &str, at: usize) -> bool {
-    ERASES_CLASS.binary_search(&(callee, at)).is_ok()
+fn erases_class(callee: &Callee, at: usize) -> bool {
+    matches!(callee, Callee::External(name) if ERASES_CLASS.binary_search(&(name.as_str(), at)).is_ok())
 }
 
 /// Whether a runtime helper *returns* a managed reference of any class.
@@ -1803,8 +1909,8 @@ fn erases_class(callee: &str, at: usize) -> bool {
 /// `NtsString *` from a `NtsHeader *` is the typedef and C allows it. An array
 /// payload is the first one C objects to, which is a warning about how narrow
 /// the accident of a passing test can be.
-fn erases_result(callee: &str) -> bool {
-    matches!(callee, "nts_promise_reference" | "nts_environment_platform")
+fn erases_result(callee: &Callee) -> bool {
+    matches!(callee, Callee::External(name) if matches!(name.as_str(), "nts_promise_reference" | "nts_environment_platform"))
 }
 
 fn callee_name(callee: &Callee) -> &str {
@@ -1824,7 +1930,7 @@ fn callee_name(callee: &Callee) -> &str {
 /// An interface field's selector falls back to its family's default where the
 /// receiver's class has no row: see `nts_family_row`.
 fn dispatched_entry(
-    program: &Program,
+    program: &Emission<'_>,
     slot: u32,
     receiver: &str,
     origin: &Origin,
@@ -1836,7 +1942,7 @@ fn dispatched_entry(
         |default| {
             format!(
                 "nts_family_row({receiver}->header.descriptor, {column}u, (void *){})",
-                c_identifier(default)
+                program.function(default)
             )
         },
     ))
@@ -1870,49 +1976,12 @@ fn call_text(
     // Only an *up*cast is reachable here: TypeScript checked assignability
     // before any of this ran, so an argument that is not the parameter's type is
     // a subtype of it.
-    let declared = context
-        .program
-        .funcs
-        .iter()
-        .find(|func| func.name == target);
-    let arguments: Vec<String> = args
-        .iter()
-        .enumerate()
-        .map(|(at, argument)| {
-            if let Callee::Native(native) = callee
-                && let Some(nts_core::hir::native::Type::Managed(_)) = native.parameters.get(at)
-            {
-                return format!(
-                    "({}){}",
-                    native.parameters[at].c_type(),
-                    value_name(*argument)
-                );
-            }
-            // A runtime helper that takes a managed reference of *any* class
-            // is declared in the header as `NtsHeader *`, and the emitter has
-            // no signature for it -- `declared` only covers functions the
-            // program itself defines. A string is already an `NtsHeader`, so
-            // this went unnoticed until an object payload reached one.
-            if erases_class(target, at) {
-                return format!("(NtsHeader *){}", value_name(*argument));
-            }
-            let wanted = declared.and_then(|func| func.params.get(at)).map(|p| &p.ty);
-            let actual = &func.values[argument.0 as usize].ty;
-            match wanted {
-                Some(wanted)
-                    if wanted != actual
-                        && wanted.is_managed()
-                        && !context.same_object_type(wanted, actual) =>
-                {
-                    match c_type_of(context.program, wanted, origin) {
-                        Ok(ty) => format!("({ty}){}", value_name(*argument)),
-                        Err(_) => value_name(*argument),
-                    }
-                }
-                _ => value_name(*argument),
-            }
-        })
-        .collect();
+    let declared = context.program.declaration(callee);
+    let arguments = call_arguments(func, callee, args, context, origin, declared);
+    let call_name = match callee {
+        Callee::Direct(target) => context.program.function(target),
+        _ => target.to_owned(),
+    };
 
     let call = if let Callee::Closure { slot } = callee {
         let signature = closure_signature(func, value, args, context.program, origin)?;
@@ -1943,30 +2012,28 @@ fn call_text(
             &func.values[value.0 as usize].ty,
             origin,
         )?
-    } else if matches!(
-        func.values[value.0 as usize].kind,
-        OpKind::Call { frame: Some(_), .. }
-    ) {
+    } else if matches!(callee, Callee::External(_))
+        && matches!(
+            func.values[value.0 as usize].kind,
+            OpKind::Call { frame: Some(_), .. }
+        )
+    {
         // The `_into` form of the same helper, handed the storage declared
         // above. The frame is where the result lives; everything else about the
         // call is unchanged, which is the point of doing it this way rather than
         // with a second operation.
         format!(
             "{}_into(&{name}_frame.header, {})",
-            c_identifier(target),
+            call_name,
             arguments.join(", ")
         )
-    } else if erases_result(target) {
+    } else if erases_result(callee) {
         // The runtime header returns a header pointer; the expression carries
         // the concrete managed type supplied by lowering.
         let wanted = c_type_of(context.program, &func.values[value.0 as usize].ty, origin)?;
-        format!(
-            "({wanted}){}({})",
-            c_identifier(target),
-            arguments.join(", ")
-        )
+        format!("({wanted}){}({})", call_name, arguments.join(", "))
     } else {
-        format!("{}({})", c_identifier(target), arguments.join(", "))
+        format!("{}({})", call_name, arguments.join(", "))
     };
 
     let wanted = &func.values[value.0 as usize].ty;
@@ -1978,11 +2045,7 @@ fn call_text(
     // last thing that can refuse), and only for an external callee -- a
     // program function that happens to share a helper's name is spelled
     // through its own mangled C name, not the helper's.
-    if matches!(callee, Callee::External(_)) {
-        let mut needs = context.unicode_needs.get();
-        needs.record(target);
-        context.unicode_needs.set(needs);
-    }
+    context.record_unicode_call(callee);
 
     Ok(if context.read.contains(&value) {
         match cast {
@@ -1993,6 +2056,53 @@ fn call_text(
         // The call still happens; only its result is unwanted.
         format!("{call};")
     })
+}
+
+fn call_arguments(
+    func: &Func,
+    callee: &Callee,
+    args: &[ValueId],
+    context: &Context<'_>,
+    origin: &Origin,
+    declared: Option<&Func>,
+) -> Vec<String> {
+    args.iter()
+        .enumerate()
+        .map(|(at, argument)| {
+            if let Callee::Native(native) = callee
+                && let Some(nts_core::hir::native::Type::Managed(_)) = native.parameters.get(at)
+            {
+                return format!(
+                    "({}){}",
+                    native.parameters[at].c_type(),
+                    value_name(*argument)
+                );
+            }
+            // A runtime helper that takes a managed reference of *any* class
+            // is declared in the header as `NtsHeader *`, and the emitter has
+            // no signature for it -- `declared` only covers functions the
+            // program itself defines. A string is already an `NtsHeader`, so
+            // this went unnoticed until an object payload reached one.
+            if erases_class(callee, at) {
+                return format!("(NtsHeader *){}", value_name(*argument));
+            }
+            let wanted = declared.and_then(|func| func.params.get(at)).map(|p| &p.ty);
+            let actual = &func.values[argument.0 as usize].ty;
+            match wanted {
+                Some(wanted)
+                    if wanted != actual
+                        && wanted.is_managed()
+                        && !context.same_object_type(wanted, actual) =>
+                {
+                    match c_type_of(context.program, wanted, origin) {
+                        Ok(ty) => format!("({ty}){}", value_name(*argument)),
+                        Err(_) => value_name(*argument),
+                    }
+                }
+                _ => value_name(*argument),
+            }
+        })
+        .collect()
 }
 
 /// A result used at a different C object type than the callee declares.
@@ -2019,7 +2129,7 @@ fn call_result_cast(
 fn native_call_expression(
     target: &nts_core::hir::native::Function,
     arguments: &[String],
-    program: &Program,
+    program: &Emission<'_>,
     result: &HirType,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
@@ -2031,16 +2141,20 @@ fn native_call_expression(
     // the whole of it.
     let call = if target.convention == nts_core::hir::native::Convention::Variable {
         // A constant: the variable itself, read where the value is used.
-        target.name.clone()
+        program.native_name(target).to_owned()
     } else if let Some(send) = &target.send {
         objc::send_expression(target, send, arguments)
     } else if let Some(vtable) = &target.vtable {
         com::vtable_expression(target, vtable, arguments)
     } else if matches!(target.result, nts_core::hir::native::Type::Managed(_)) {
         let wanted = c_type_of(program, result, origin)?;
-        format!("({wanted}){}({})", target.name, arguments.join(", "))
+        format!(
+            "({wanted}){}({})",
+            program.native_name(target),
+            arguments.join(", ")
+        )
     } else {
-        format!("{}({})", target.name, arguments.join(", "))
+        format!("{}({})", program.native_name(target), arguments.join(", "))
     };
     Ok(match destination {
         Some(destination) => format!("*{destination} = {call}"),
@@ -2083,7 +2197,7 @@ fn by_value_arguments(
 /// What is added is one narrow, deliberate hole per published class: a factory
 /// that allocates and returns the header, so the wrapper can construct without
 /// being handed a layout it could then misread.
-fn published_class_layouts(program: &Program) -> rustc_hash::FxHashSet<usize> {
+fn published_class_layouts(program: &Emission<'_>) -> rustc_hash::FxHashSet<usize> {
     program
         .published_classes()
         .filter_map(|class| {
@@ -2119,7 +2233,7 @@ pub fn class_instance_name(
 /// Layouts allocated, published for construction, or named by a descriptor test.
 /// A closed field chain tests every arm even when this program allocates none
 /// of that arm's type, just as `instanceof` names unallocated classes.
-fn layouts_needing_descriptors(program: &Program) -> rustc_hash::FxHashSet<usize> {
+fn layouts_needing_descriptors(program: &Emission<'_>) -> rustc_hash::FxHashSet<usize> {
     let mut found: rustc_hash::FxHashSet<usize> = published_class_layouts(program);
     let want = |found: &mut rustc_hash::FxHashSet<usize>, ty: &nts_core::hir::ClassId| {
         if let Some(at) = program
@@ -2832,7 +2946,7 @@ fn closure_signature(
     func: &Func,
     value: ValueId,
     args: &[ValueId],
-    program: &Program,
+    program: &Emission<'_>,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
     let mut params = Vec::new();
@@ -2852,7 +2966,7 @@ fn closure_signature(
 
 /// A function-pointer type for calling one implementation of a virtual method.
 pub(super) fn virtual_signature(
-    program: &Program,
+    program: &Emission<'_>,
     target: &str,
     origin: &Origin,
 ) -> Result<String, Diagnostic> {
@@ -2879,10 +2993,10 @@ pub(super) fn virtual_signature(
 }
 
 /// The C name of a module-scope variable.
-fn global_name(program: &Program, global: u32) -> String {
+fn global_name(program: &Emission<'_>, global: u32) -> String {
     program.globals.get(global as usize).map_or_else(
-        || format!("nts_global_{global}"),
-        |g| c_global(&g.name, program.funcs.iter().map(|func| func.name.as_str())),
+        || format!("__nts_global_missing_{global}"),
+        |_| program.source_symbols.global(global as usize),
     )
 }
 
@@ -2911,7 +3025,11 @@ fn global_name(program: &Program, global: u32) -> String {
 /// three that matter dereference a null.
 ///
 /// Each actual native reader checks the column independently of the planner.
-fn native_column(program: &Program, selector: u32, origin: &Origin) -> Result<u32, Diagnostic> {
+fn native_column(
+    program: &Emission<'_>,
+    selector: u32,
+    origin: &Origin,
+) -> Result<u32, Diagnostic> {
     program.native_column(selector).ok_or_else(|| {
         Diagnostic::error(
             "NTS2006",
@@ -2927,7 +3045,7 @@ fn native_column(program: &Program, selector: u32, origin: &Origin) -> Result<u3
 fn emit_closure_call_slot(
     writer: &mut CodeWriter,
     origin: &Origin,
-    program: &Program,
+    program: &Emission<'_>,
 ) -> Result<(), Diagnostic> {
     let slot = native_column(program, nts_core::hir::closure_call_slot(program), origin)?;
     writer.line(
@@ -2956,19 +3074,17 @@ fn emit_closure_call_slot(
 ///
 /// Asked of the IR rather than tracked alongside it, because the answer changes
 /// with reachability and a flag set during lowering would be stale by now.
-fn global_is_observed(program: &Program, at: u32) -> bool {
-    program
-        .globals
-        .get(at as usize)
-        .is_some_and(|global| global.exported)
-        || program.native_funcs().any(|func| {
-            func.values
-                .iter()
-                .any(|op| matches!(op.kind, OpKind::GlobalGet(global) if global == at))
-        })
+fn global_is_observed(program: &Emission<'_>, at: u32) -> bool {
+    program.globals.get(at as usize).is_some_and(|global| {
+        global.exported || program.source_symbols.is_public(global.name.as_str())
+    }) || program.native_funcs().any(|func| {
+        func.values
+            .iter()
+            .any(|op| matches!(op.kind, OpKind::GlobalGet(global) if global == at))
+    })
 }
 
-fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagnostic> {
+fn emit_globals(writer: &mut CodeWriter, program: &Emission<'_>) -> Result<(), Diagnostic> {
     for (at, global) in program.globals.iter().enumerate() {
         // Not `continue`-ing on an exported one: external linkage *is* a
         // reader, and the whole point of publishing a constant is that
@@ -2979,12 +3095,17 @@ fn emit_globals(writer: &mut CodeWriter, program: &Program) -> Result<(), Diagno
         // `c_type_of` rather than `c_type`: an object type is named per
         // program, so a global holding one cannot be spelled without it.
         let ty = c_type_of(program, &global.ty, &global.origin)?;
-        let visibility = if global.exported { "" } else { "static " };
+        let visibility =
+            if global.exported || program.source_symbols.is_public(global.name.as_str()) {
+                ""
+            } else {
+                "static "
+            };
         writer.line(
             &global.origin,
             format!(
                 "{visibility}{ty} {} = {};",
-                c_global(&global.name, program.funcs.iter().map(|f| f.name.as_str())),
+                program.source_symbols.global(at),
                 match global.ty {
                     HirType::Bool => (global.initial != 0.0).to_string(),
                     // A global's `initial` is one `f64`, which cannot spell a
@@ -3056,7 +3177,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[(usize, J
     );
     for (index, text) in literals {
         let units: Vec<u16> = text.encode_utf16().collect();
-        let name = format!("nts_str_{index}");
+        let name = format!("__nts_str_{index}");
         // One byte per code unit whenever every one fits, which for ordinary
         // program text is always. The trailing zero is what makes a one-byte
         // string usable as a C string without copying.
@@ -3075,7 +3196,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[(usize, J
         writer.line(
             origin,
             format!(
-                "static const struct {{ NtsHeader header; uint32_t hash; {element} data[{}]; }} \
+                "static const struct {{ NtsHeader __nts_header; uint32_t __nts_hash; {element} __nts_data[{}]; }} \
                  {name} = {{ {{ &{descriptor}, NTS_IMMORTAL, {flags}, {} }}, {hash}u, {{ {} }} }};",
                 data.len(),
                 units.len(),
@@ -3092,7 +3213,7 @@ fn emit_literals(writer: &mut CodeWriter, origin: &Origin, literals: &[(usize, J
 /// than their contents; ordinary arrays retain their existing storage and ABI.
 fn emit_templates(
     writer: &mut CodeWriter,
-    program: &Program,
+    program: &Emission<'_>,
     literals: &Literals,
     needed: &std::collections::BTreeSet<u32>,
 ) {
@@ -3109,12 +3230,12 @@ fn emit_templates(
         writer.line(
             object.origin,
             format!(
-                "static NtsString *const nts_template_{site}_items[] = {{ {} }};",
+                "static NtsString *const __nts_template_{site}_items[] = {{ {} }};",
                 pieces.join(", ")
             ),
         );
         writer.line(object.origin, format!(
-            "static const NtsArray nts_template_{site} = {{ {{ &nts_desc_ref, NTS_IMMORTAL, NTS_ARRAY_IMMUTABLE, {} }}, {}, (void *)nts_template_{site}_items, {{ 0, 0 }} }};",
+            "static const NtsArray __nts_template_{site} = {{ {{ &nts_desc_ref, NTS_IMMORTAL, NTS_ARRAY_IMMUTABLE, {} }}, {}, (void *)__nts_template_{site}_items, {{ 0, 0 }} }};",
             pieces.len(), pieces.len()));
     }
 }
@@ -3182,7 +3303,7 @@ fn bridge_text(
 }
 
 fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
-    format!("nts_fnval_{}", object_type_name(layout))
+    format!("__nts_fnval_{}", object_type_name(layout))
 }
 
 /// A C struct per object type, and its descriptor.
@@ -3193,13 +3314,13 @@ fn static_closure_name(layout: &nts_core::hir::Layout) -> String {
 fn emit_object_types(
     writer: &mut CodeWriter,
     origin: &Origin,
-    program: &Program,
+    program: &Emission<'_>,
     abi: NativeAbi,
     diagnostics: &mut Vec<Diagnostic>,
 ) {
     // Typedefs first: a record may hold a function pointer, and its own
     // definition then names the typedef. Emitted after, `struct ops { int
-    // code; NtsFn_int_int run; };` referred to a name no line had declared yet.
+    // code; __nts_fn_int_int run; };` referred to a name no line had declared yet.
     native_memory::function_pointer_types(writer, origin, program);
     if let Err(diagnostic) = native_memory::types(writer, origin, program, abi) {
         diagnostics.push(diagnostic);
@@ -3429,14 +3550,14 @@ fn emit_object_types(
 /// Through an `Erase` on the way, because a closure crossing into a native
 /// binding is usually erased first.
 fn escapes_uncalled(
-    program: &Program,
+    program: &Emission<'_>,
     defined: &rustc_hash::FxHashSet<String>,
     layout: &nts_core::hir::Layout,
 ) -> bool {
     program
         .funcs
         .iter()
-        .filter(|func| defined.contains(&c_identifier(&func.name)))
+        .filter(|func| defined.contains(&program.function(&func.name)))
         .any(|func| {
             let live: Vec<ValueId> = func
                 .blocks
@@ -3490,7 +3611,7 @@ fn escapes_uncalled(
 /// band rather than by the name. A name test on `Ctor_` refused twelve examples
 /// for holding a `RangeError`, which is spelled exactly as a user class is.
 fn a_closure_with_nothing_to_call(
-    program: &Program,
+    program: &Emission<'_>,
     defined: &rustc_hash::FxHashSet<String>,
     layout: &nts_core::hir::Layout,
     origin: &Origin,
@@ -3507,7 +3628,7 @@ fn a_closure_with_nothing_to_call(
         .methods
         .iter()
         .flatten()
-        .any(|name| defined.contains(&c_identifier(name)));
+        .any(|name| defined.contains(&program.function(name)));
     if !is_a_closure || callable {
         return None;
     }
@@ -3535,7 +3656,7 @@ fn a_closure_with_nothing_to_call(
 fn emit_object_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
-    program: &Program,
+    program: &Emission<'_>,
     cycles: &nts_core::hir::Cycles,
     defined: &rustc_hash::FxHashSet<String>,
     literals: &Literals,
@@ -3595,7 +3716,7 @@ fn emit_object_descriptors(
         };
         let entry = |method: Option<&str>| {
             method
-                .map(c_identifier)
+                .map(|name| program.function(name))
                 .filter(|symbol| defined.contains(symbol))
                 .map_or_else(|| "0".to_owned(), |symbol| format!("(void *){symbol}"))
         };
@@ -3604,8 +3725,8 @@ fn emit_object_descriptors(
         } else {
             let entries: Vec<String> = projected.iter().copied().map(entry).collect();
             let table = match program.native_table_index(layout) {
-                Ok(Some(index)) => format!("nts_vtable_shared_{index}"),
-                Ok(None) => format!("nts_vtable_{name}"),
+                Ok(Some(index)) => format!("__nts_vtable_shared_{index}"),
+                Ok(None) => format!("__nts_vtable_{name}"),
                 Err(why) => {
                     diagnostics.push(Diagnostic::error("NTS2006", why, origin.location));
                     continue;
@@ -3640,11 +3761,11 @@ fn emit_object_descriptors(
             writer.line(
                 origin,
                 format!(
-                    "static const uint32_t nts_refs_{name}[] = {{ {} }};",
+                    "static const uint32_t __nts_refs_{name}[] = {{ {} }};",
                     entries.join(", ")
                 ),
             );
-            format!("nts_refs_{name}")
+            format!("__nts_refs_{name}")
         };
         // Slots holding an erased value, which is a reference only when its tag
         // says so. Emitted the same way and for the same reason as the
@@ -3661,11 +3782,11 @@ fn emit_object_descriptors(
             writer.line(
                 origin,
                 format!(
-                    "static const uint32_t nts_erased_{name}[] = {{ {} }};",
+                    "static const uint32_t __nts_erased_{name}[] = {{ {} }};",
                     entries.join(", ")
                 ),
             );
-            format!("nts_erased_{name}")
+            format!("__nts_erased_{name}")
         };
         // Whether an object of this type could be in a reference cycle. The
         // collector reads it to stay away from the programs that have none,
@@ -3684,10 +3805,25 @@ fn emit_object_descriptors(
             references.len()
         );
         let (foreign, foreign_slots) = foreign_slot_table(writer, origin, layout, &name);
-        let release_fields =
-            emit_reference_fields(writer, origin, layout, &name, &release, Action::Release);
+        let release_fields = emit_reference_fields(
+            writer,
+            origin,
+            program,
+            layout,
+            &name,
+            &release,
+            Action::Release,
+        );
         let trace_fields = if program.provider == nts_core::hir::Memory::ReferenceCounting {
-            emit_reference_fields(writer, origin, layout, &name, &release, Action::Trace)
+            emit_reference_fields(
+                writer,
+                origin,
+                program,
+                layout,
+                &name,
+                &release,
+                Action::Trace,
+            )
         } else {
             "NULL".to_owned()
         };
@@ -3697,7 +3833,7 @@ fn emit_object_descriptors(
         // and null is a refusal by name.
         let to_string =
             |class: Option<&nts_core::hir::ClassIdentity>| match program.printing(layout, class) {
-                Some(Printed::By(function)) => Some(c_identifier(function))
+                Some(Printed::By(function)) => Some(program.function(function))
                     .filter(|symbol| defined.contains(symbol))
                     .map_or_else(
                         || "NULL".to_owned(),
@@ -3756,7 +3892,7 @@ fn emit_object_descriptors(
             writer.line(
                 origin,
                 format!(
-                    "static {name} {} = {{{{&nts_desc_{name}, NTS_IMMORTAL, 0, 0}}}};",
+                    "static {name} {} = {{{{&__nts_desc_{name}, NTS_IMMORTAL, 0, 0}}}};",
                     static_closure_name(layout)
                 ),
             );
@@ -3782,6 +3918,7 @@ fn construction_hole(name: &str, descriptor: &str) -> String {
 fn emit_reference_fields(
     writer: &mut CodeWriter,
     origin: &Origin,
+    program: &Emission<'_>,
     layout: &nts_core::hir::Layout,
     name: &str,
     fields: &nts_codegen_common::release::Fields,
@@ -3791,33 +3928,42 @@ fn emit_reference_fields(
         return "NULL".to_owned();
     }
     let callback = format!("{}_{name}", action.symbol_prefix());
+    let [object, receiver, visitor, slot_prefix] = program.helper_scope([
+        HelperName::Object,
+        HelperName::Receiver,
+        HelperName::Visitor,
+        HelperName::Slot,
+    ]);
     let (parameters, visit) = match action {
-        nts_codegen_common::release::Action::Release => ("NtsHeader *object", "nts_release"),
-        nts_codegen_common::release::Action::Trace => {
-            ("NtsHeader *object, void (*visit)(NtsHeader *)", "visit")
-        }
+        Action::Release => (format!("NtsHeader *{object}"), "nts_release"),
+        Action::Trace => (
+            format!("NtsHeader *{object}, void (*{visitor})(NtsHeader *)"),
+            visitor,
+        ),
     };
     writer.line(origin, format!("static void {callback}({parameters}) {{"));
-    writer.line(origin, format!("    {name} *self = ({name} *)object;"));
+    writer.line(
+        origin,
+        format!("    {name} *{receiver} = ({name} *){object};"),
+    );
     for at in &fields.managed {
         let field = c_member_at(layout, *at);
         writer.line(
             origin,
-            format!("    if (self->{field}) {visit}((NtsHeader *)self->{field});"),
+            format!("    if ({receiver}->{field}) {visit}((NtsHeader *){receiver}->{field});"),
         );
     }
     for at in &fields.erased {
         let field = c_member_at(layout, *at);
-        writer.line(origin, format!("    NtsValue slot_{at} = self->{field};"));
+        let slot = format!("{slot_prefix}_{at}");
         writer.line(
             origin,
-            format!(
-                "    if (NTS_TAG_IS_MANAGED(nts_value_tag(slot_{at})) && nts_value_reference(slot_{at})) {{"
-            ),
+            format!("    NtsValue {slot} = {receiver}->{field};"),
         );
+        writer.line(origin, format!("    if (NTS_TAG_IS_MANAGED(nts_value_tag({slot})) && nts_value_reference({slot})) {{"));
         writer.line(
             origin,
-            format!("        {visit}(nts_value_reference(slot_{at}));"),
+            format!("        {visit}(nts_value_reference({slot}));"),
         );
         writer.line(origin, "    }");
     }
@@ -3857,18 +4003,18 @@ fn foreign_slot_table(
     writer.line(
         origin,
         format!(
-            "static const NtsForeignSlot nts_foreign_{name}[] = {{ {} }};",
+            "static const NtsForeignSlot __nts_foreign_{name}[] = {{ {} }};",
             slots.join(", ")
         ),
     );
-    (slots.len(), format!("nts_foreign_{name}"))
+    (slots.len(), format!("__nts_foreign_{name}"))
 }
 
 /// Whether anything in the program refers to this layout's single instance.
 ///
 /// Asked of the IR rather than tracked alongside it: `ClosureStatic` is the
 /// only thing that reads one, so the ops that read it are the whole answer.
-fn wants_a_static_instance(program: &Program, layout: &nts_core::hir::Layout) -> bool {
+fn wants_a_static_instance(program: &Emission<'_>, layout: &nts_core::hir::Layout) -> bool {
     program.native_funcs().any(|func| {
         func.values.iter().any(|op| {
             matches!(op.kind, OpKind::ClosureStatic)
@@ -3946,7 +4092,7 @@ fn descriptors_reached(bodies: &[(String, CodeWriter, &Func, UnicodeNeeds)]) -> 
 }
 
 /// The C spelling of a type, including the object types this program declares.
-fn c_type_of(program: &Program, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+fn c_type_of(program: &Emission<'_>, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
     if let HirType::NativePointer(name) = ty {
         return Ok(name.pointer_type());
     }
@@ -3972,7 +4118,11 @@ fn c_type_of(program: &Program, ty: &HirType, origin: &Origin) -> Result<String,
 /// clang delete the code after a call -- which is code this backend has already
 /// decided is unreachable, so the attribute buys nothing and would be a second
 /// place that has to stay right about it.
-fn return_c_type(program: &Program, ty: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+fn return_c_type(
+    program: &Emission<'_>,
+    ty: &HirType,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
     if matches!(ty, HirType::Never) {
         return Ok("void".to_owned());
     }
@@ -3981,7 +4131,7 @@ fn return_c_type(program: &Program, ty: &HirType, origin: &Origin) -> Result<Str
 
 /// The layout an object-typed value refers to.
 fn layout_of<'a>(
-    program: &'a Program,
+    program: &'a Emission<'a>,
     ty: &HirType,
     origin: &Origin,
 ) -> Result<&'a nts_core::hir::Layout, Diagnostic> {
@@ -4078,7 +4228,7 @@ type DescriptorTail<'a> = &'a dyn Fn(Option<&nts_core::hir::ClassIdentity>) -> S
 fn emit_layout_descriptors(
     writer: &mut CodeWriter,
     origin: &Origin,
-    program: &Program,
+    program: &Emission<'_>,
     layout: &nts_core::hir::Layout,
     shape: &str,
     body: (&str, DescriptorTail<'_>),
@@ -4091,7 +4241,7 @@ fn emit_layout_descriptors(
         writer.line(
             origin,
             format!(
-                "static const NtsDescriptor nts_desc_{shape} = {{ {shared}, \"{}\", {} }};",
+                "static const NtsDescriptor __nts_desc_{shape} = {{ {shared}, \"{}\", {} }};",
                 layout.name,
                 tail(None)
             ),
@@ -4106,7 +4256,7 @@ fn emit_layout_descriptors(
         writer.line(
             origin,
             format!(
-                "static const NtsDescriptor nts_desc_{shape}__{} = {{ {shared}, \"{}\", {} }};",
+                "static const NtsDescriptor __nts_desc_{shape}__{} = {{ {shared}, \"{}\", {} }};",
                 identity_suffix(&sharing, class),
                 class.name,
                 tail(Some(class)),
@@ -4179,24 +4329,24 @@ fn identity_suffix(
 /// `new B() instanceof A` compared one descriptor with itself and answered
 /// `true`.
 fn descriptor_for(
-    program: &Program,
+    program: &Emission<'_>,
     layout: &nts_core::hir::Layout,
     ty: Option<nts_core::hir::ClassId>,
 ) -> String {
     let shape = object_type_name(layout);
     let sharing = program.distinct_identities(layout);
     if sharing.is_empty() {
-        return format!("nts_desc_{shape}");
+        return format!("__nts_desc_{shape}");
     }
     let Some(ty) = ty else {
-        return format!("nts_desc_{shape}");
+        return format!("__nts_desc_{shape}");
     };
     match sharing.iter().find(|class| class.types.contains(&ty)) {
-        Some(class) => format!("nts_desc_{shape}__{}", identity_suffix(&sharing, class)),
+        Some(class) => format!("__nts_desc_{shape}__{}", identity_suffix(&sharing, class)),
         // A type in a shared layout that is not one of the classes -- an
         // interface or a literal's anonymous type. It has no identity of its
         // own and the shape's descriptor is the honest answer.
-        None => format!("nts_desc_{shape}"),
+        None => format!("__nts_desc_{shape}"),
     }
 }
 
@@ -4280,7 +4430,11 @@ fn element_declared(array: &HirType) -> Option<HirType> {
     }
 }
 
-fn element_type(program: &Program, array: &HirType, origin: &Origin) -> Result<String, Diagnostic> {
+fn element_type(
+    program: &Emission<'_>,
+    array: &HirType,
+    origin: &Origin,
+) -> Result<String, Diagnostic> {
     let element = element_declared(array).ok_or_else(|| {
         Diagnostic::error(
             "NTS2005",
@@ -4350,7 +4504,7 @@ fn array_element_kind(element: &str) -> &'static str {
 }
 
 fn descriptor_name(element: &str) -> String {
-    format!("nts_desc_{}", element.replace(' ', "_"))
+    format!("__nts_desc_{}", element.replace(' ', "_"))
 }
 
 /// The subscript for an element access, with or without a bounds test.
@@ -4792,15 +4946,20 @@ fn c_type(ty: &HirType, origin: &Origin) -> Result<&'static str, Diagnostic> {
 /// external linkage looked like the reason. It is not -- `tooling/bench` builds
 /// with `-flto`, where clang internalizes what nothing outside needs, so this
 /// was already happening. Measured before and after: 1.81us and 1.82us.
-fn signature(program: &Program, func: &Func) -> Result<String, Diagnostic> {
+fn signature(program: &Emission<'_>, func: &Func) -> Result<String, Diagnostic> {
     let returns = return_c_type(program, &func.return_type, &func.origin)?;
-    let public = nts_codegen_common::symbols::is_public(program, func);
+    let public = program.source_symbols.is_public(func.name.as_str());
     let mut params = Vec::new();
     for (index, (param, value)) in func.params.iter().zip(parameter_values(func)?).enumerate() {
         let ty = c_type_of(program, &param.ty, &param.origin)?;
         params.push(format!("{ty} {}", parameter_name(index, value)));
     }
-    Ok(format_signature(&func.name, &returns, &params, public))
+    Ok(format_signature(
+        &program.function(&func.name),
+        &returns,
+        &params,
+        public,
+    ))
 }
 
 /// Argument positions locate actual parameter definitions, not arena indices.
@@ -4819,7 +4978,7 @@ fn parameter_values(func: &Func) -> Result<Vec<Option<ValueId>>, Diagnostic> {
 /// A parameter's C name: its definition's, or -- for one nothing reads, which
 /// has no `Param` op -- a name of its own that no value can take.
 fn parameter_name(index: usize, value: Option<ValueId>) -> String {
-    value.map_or_else(|| format!("unread{index}"), value_name)
+    value.map_or_else(|| format!("__nts_unread{index}"), value_name)
 }
 
 fn format_signature(name: &str, returns: &str, params: &[String], public: bool) -> String {
@@ -4829,7 +4988,7 @@ fn format_signature(name: &str, returns: &str, params: &[String], public: bool) 
     } else {
         params.join(", ")
     };
-    format!("{visibility}{returns} {}({params})", c_identifier(name))
+    format!("{visibility}{returns} {name}({params})")
 }
 
 /// The C name of a value.
@@ -4837,11 +4996,11 @@ fn format_signature(name: &str, returns: &str, params: &[String], public: bool) 
 /// A parameter definition is the C parameter itself. Its name uses its actual
 /// arena index, just like every other value; argument position is independent.
 fn value_name(value: ValueId) -> String {
-    format!("v{}", value.0)
+    format!("__nts_v{}", value.0)
 }
 
 fn block_label(block: BlockId) -> String {
-    format!("b{}", block.0)
+    format!("__nts_b{}", block.0)
 }
 
 /// Emit one function, returning its signature so a declaration can be written.
@@ -4982,7 +5141,7 @@ fn emit_body(
             writer.line(
                 &op.origin,
                 format!(
-                    "struct nts_block {}_block;",
+                    "struct __nts_block {}_block;",
                     value_name(ValueId(u32::try_from(index).unwrap_or(0)))
                 ),
             );
@@ -5410,7 +5569,7 @@ fn wrapping_arithmetic(
         // Unsigned arithmetic supplies the modulo bits. Copying those bits
         // avoids C's implementation-defined unsigned-to-signed conversion.
         return Some(format!(
-            "{{ uint32_t wrapped = (uint32_t){} {operator} (uint32_t){}; memcpy(&{name}, &wrapped, sizeof({name})); }}",
+            "{{ uint32_t __nts_wrapped = (uint32_t){} {operator} (uint32_t){}; memcpy(&{name}, &__nts_wrapped, sizeof({name})); }}",
             value_name(lhs),
             value_name(rhs)
         ));
@@ -5641,7 +5800,7 @@ fn start_frame_object(
 /// `Await` never reaches here: the pass rewrites every one away, so arriving
 /// with one means an `async` function was transformed by nobody, and there is
 /// no C for "stop here and come back later".
-fn suspension(op: &nts_core::hir::Op) -> Result<String, Diagnostic> {
+fn suspension(op: &nts_core::hir::Op, program: &Emission<'_>) -> Result<String, Diagnostic> {
     match &op.kind {
         // `drop` is null: the frame is released by the resumption that runs it,
         // and a task the queue discards instead is one the runtime never had --
@@ -5654,7 +5813,7 @@ fn suspension(op: &nts_core::hir::Op) -> Result<String, Diagnostic> {
         } => Ok(format!(
             "nts_promise_subscribe({}, (NtsTask){{ (void (*)(void *))&{}, 0, {} }});",
             value_name(*promise),
-            crate::c_identifier(resume),
+            program.function(resume),
             value_name(*frame)
         )),
         _ => Err(Diagnostic::error(
@@ -5750,7 +5909,9 @@ fn memory_op(
             field,
             value: stored,
         } => field_store(func, op, *object, *field, *stored, context)?,
-        OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. } => suspension(op)?,
+        OpKind::Await { .. } | OpKind::Yield { .. } | OpKind::Suspend { .. } => {
+            suspension(op, context.program)?
+        }
         OpKind::ArrayNew { length, fill } => {
             // Two entry points rather than a flag argument, so the branch is
             // taken here rather than once per allocation at run time.
@@ -5827,7 +5988,7 @@ fn memory_op(
             // where nothing moved, and a rule that applies only sometimes is one
             // that will be got wrong when the next helper is added.
             format!(
-                "{{ uint32_t nts_slot = {slot}; {items}({}, {element})[nts_slot] = {cast}{}; }}",
+                "{{ uint32_t __nts_store_slot = {slot}; {items}({}, {element})[__nts_store_slot] = {cast}{}; }}",
                 value_name(*array),
                 value_name(*stored)
             )
@@ -6065,7 +6226,7 @@ fn emit_op(
         }
         OpKind::ConstTemplate { site, .. } => {
             context.literals.template(*site);
-            format!("{name} = (NtsArray *)(void *)&nts_template_{site};")
+            format!("{name} = (NtsArray *)(void *)&__nts_template_{site};")
         }
         OpKind::Binary { op: bin, lhs, rhs } => binary_text(
             func,
@@ -6243,7 +6404,7 @@ fn scratch_name(temp: u32, ty: &str) -> String {
             }
         })
         .collect();
-    format!("t{temp}_{spelled}")
+    format!("__nts_t{temp}_{spelled}")
 }
 
 fn emit_terminator(
@@ -6348,6 +6509,58 @@ fn emit_terminator(
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn runtime_casts_require_external_callee_identity() {
+        use nts_core::hir::{Callee, native};
+        let native = |name: &str| {
+            Callee::Native(std::sync::Arc::new(native::Function {
+                name: name.to_owned(),
+                thunk: None,
+                convention: native::Convention::C,
+                parameters: Vec::new(),
+                result: native::Type::Void,
+                retention: Vec::new(),
+                variadic: None,
+                declared_at: None,
+                roles: Vec::new(),
+                returns_string: None,
+                returns_array: None,
+                returns_dictionary: None,
+                returns_set: None,
+                send: None,
+                returns_owned: false,
+                consumes: Vec::new(),
+                frameworks: Vec::new(),
+                libraries: Vec::new(),
+                defaults: Vec::new(),
+                result_as: None,
+                result_as_number: false,
+                vtable: None,
+                hresult: false,
+            }))
+        };
+        for &(name, at) in super::ERASES_CLASS {
+            assert!(super::erases_class(&Callee::External(name.into()), at));
+            for callee in [
+                Callee::Direct(name.into()),
+                Callee::Virtual {
+                    declared: name.into(),
+                    slot: 0,
+                },
+                native(name),
+                Callee::Closure { slot: 0 },
+            ] {
+                assert!(!super::erases_class(&callee, at));
+            }
+        }
+        for name in ["nts_promise_reference", "nts_environment_platform"] {
+            assert!(super::erases_result(&Callee::External(name.into())));
+            for callee in [Callee::Direct(name.into()), native(name)] {
+                assert!(!super::erases_result(&callee));
+            }
+        }
+    }
+
     /// `erasable` and `erased_tag` are one decision written twice, and they
     /// have disagreed six times.
     ///
@@ -6519,7 +6732,7 @@ mod tests {
             let line = writer
                 .text()
                 .lines()
-                .find(|line| line.contains(&format!("nts_str_{index} =")))
+                .find(|line| line.contains(&format!("__nts_str_{index} =")))
                 .expect("literal emitted");
             assert!(
                 line.contains(&format!("NTS_IMMORTAL, {flags}, {}", units.len())),
@@ -6808,7 +7021,7 @@ mod tests {
             assert_eq!(
                 text,
                 format!(
-                    "{{ uint32_t wrapped = (uint32_t)v0 {operator} (uint32_t)v1; memcpy(&out, &wrapped, sizeof(out)); }}"
+                    "{{ uint32_t __nts_wrapped = (uint32_t)__nts_v0 {operator} (uint32_t)__nts_v1; memcpy(&out, &__nts_wrapped, sizeof(out)); }}"
                 ),
                 "`{operator}` on two int32 must wrap rather than invite the optimizer",
             );
@@ -7109,7 +7322,8 @@ mod tests {
         };
         program.funcs = vec![holder(handed_over)];
         assert!(
-            a_closure_with_nothing_to_call(&program, &defined, &layout, &origin).is_some(),
+            a_closure_with_nothing_to_call(&Emission::new(&program), &defined, &layout, &origin)
+                .is_some(),
             "a closure with no body passed to a native binding must be refused"
         );
 
@@ -7121,7 +7335,8 @@ mod tests {
         };
         program.funcs = vec![holder(stored)];
         assert!(
-            a_closure_with_nothing_to_call(&program, &defined, &layout, &origin).is_none(),
+            a_closure_with_nothing_to_call(&Emission::new(&program), &defined, &layout, &origin)
+                .is_none(),
             "a store is not a call, and refusing one refuses programs that are right"
         );
 
@@ -7136,7 +7351,8 @@ mod tests {
             frame: None,
         })];
         assert!(
-            a_closure_with_nothing_to_call(&program, &present, &layout, &origin).is_none(),
+            a_closure_with_nothing_to_call(&Emission::new(&program), &present, &layout, &origin)
+                .is_none(),
             "a closure whose body was emitted has something to dispatch to"
         );
     }
@@ -7247,7 +7463,7 @@ mod optional;
 /// The foreign counting pairs the program calls, declared -- and for a pair
 /// that does not take NULL quietly, the guard every count goes through
 /// (`Counting::called`).
-fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Program) {
+fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Emission<'_>) {
     let held = nts_codegen_common::counting::held(program);
     let arrays = nts_codegen_common::counting::array_families(program);
     for counting in nts_codegen_common::counting::foreign(program) {
@@ -7256,24 +7472,24 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
         // not its header is included (unlike a binding's own prototype, which
         // the header replaces), and glib-object.h defines `g_object_ref_sink`
         // as a macro, so a program including it for a header struct's layout
-        // read `extern void *g_object_ref_sink(void *object);` as the macro's
+        // read `extern void *g_object_ref_sink(void *__nts_object);` as the macro's
         // expansion. `(name)` declares the same function, and the guarded
         // call below may still expand the macro, which is what the header
         // meant. The native witness spells its declarations the same way.
         writer.line(
             origin,
-            format!("extern void *({})(void *object);", counting.retain),
+            format!("extern void *({})(void *__nts_object);", counting.retain),
         );
         writer.line(
             origin,
-            format!("extern void ({})(void *object);", counting.release),
+            format!("extern void ({})(void *__nts_object);", counting.release),
         );
         // A pair that does not take NULL quietly, guarded once here.
         if !counting.null_safe {
             writer.line(
                 origin,
                 format!(
-                    "static inline void *{}(void *object) {{ return object ? {}(object) : object; }}",
+                    "static inline void *{}(void *__nts_object) {{ return __nts_object ? {}(__nts_object) : __nts_object; }}",
                     nts_core::hir::native::Counting::guarded(counting.retain),
                     counting.retain
                 ),
@@ -7281,7 +7497,7 @@ fn counting_declarations(writer: &mut CodeWriter, origin: &Origin, program: &Pro
             writer.line(
                 origin,
                 format!(
-                    "static inline void {}(void *object) {{ if (object) {}(object); }}",
+                    "static inline void {}(void *__nts_object) {{ if (__nts_object) {}(__nts_object); }}",
                     nts_core::hir::native::Counting::guarded(counting.release),
                     counting.release
                 ),

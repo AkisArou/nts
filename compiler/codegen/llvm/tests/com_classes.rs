@@ -66,6 +66,10 @@ const BINDING: &str = r#"declare module "winrt:Test.Xaml" {
 }
 "#;
 
+#[path = "../../common/test-support/c_symbols.rs"]
+mod c_symbols;
+use c_symbols::function_symbol;
+
 fn prepare(name: &str, source: &str) -> (ScratchDir, hir::Prepared) {
     prepare_with(name, BINDING, source)
 }
@@ -134,26 +138,27 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
     let text = c.writer.text();
     let adapter = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_App_2("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_App_2("))
         .unwrap_or_else(|| panic!("no adapter for Second:\n{text}"));
     assert!(
-        adapter.contains("nts_com_outer_instance(a0)") && adapter.contains("nts_callback_enter();"),
+        adapter.contains("nts_com_outer_instance(__nts_a0)")
+            && adapter.contains("nts_callback_enter();"),
         "{adapter}"
     );
     // `OnLaunched()` takes none of the slot's parameters: the adapter is
     // still called with them, and passes on only the instance.
     let launched = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_App_0("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_App_0("))
         .unwrap();
     assert!(
-        launched.contains("(void * a0, void * a1)")
-            && launched.contains("nts_com_outer_instance(a0)); nts_callback_leave();"),
+        launched.contains("(void * __nts_a0, void * __nts_a1)")
+            && launched.contains("nts_com_outer_instance(__nts_a0)); nts_callback_leave();"),
         "{launched}"
     );
     let tables: Vec<&str> = text
         .lines()
-        .filter(|line| line.starts_with("static const void *const nts_com_table_App_"))
+        .filter(|line| line.starts_with("static const void *const __nts_com_table_App_"))
         .collect();
     assert_eq!(
         tables.len(),
@@ -161,22 +166,22 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
         "one table per overridable interface:\n{text}"
     );
     assert!(
-        tables[1].contains("(const void *)nts_com_outer_trust, (const void *)nts_com_adapter_App_1, (const void *)nts_com_adapter_App_2 }"),
+        tables[1].contains("(const void *)nts_com_outer_trust, (const void *)__nts_com_adapter_App_1, (const void *)__nts_com_adapter_App_2 }"),
         "the second interface's slots 6 and 7 are not First and Second:\n{}",
         tables[1]
     );
     assert!(
         text.contains(
-            "static NtsComClass nts_com_class_App = { \"App\", \"Test.Xaml.Application\", "
+            "static NtsComClass __nts_com_class_App = { \"App\", \"Test.Xaml.Application\", "
         ),
         "{text}"
     );
     assert!(
-        text.contains(", 6u, nts_com_interfaces_App, 2u, true, 0, 0 };"),
+        text.contains(", 6u, __nts_com_interfaces_App, 2u, true, 0, 0 };"),
         "the slot, the interfaces, the xaml flag or the maker:\n{text}"
     );
     assert!(
-        text.contains("nts_com_register(&nts_com_class_App);"),
+        text.contains("nts_com_register(&__nts_com_class_App);"),
         "{text}"
     );
     assert!(
@@ -189,7 +194,9 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     let ir = &llvm.text;
     assert!(
-        ir.contains("define internal i32 @nts_com_adapter_App_2(ptr %a0, i32 %a1, i1 zeroext %a2)"),
+        ir.contains(
+            "define internal i32 @__nts_com_adapter_App_2(ptr %a0, i32 %a1, i1 zeroext %a2)"
+        ),
         "{ir}"
     );
     assert!(
@@ -199,11 +206,11 @@ fn a_class_over_a_composable_class_is_composed_by_the_runtime() {
     // The `int32` converted to the `number` the compiled method takes.
     assert!(ir.contains("%p1 = sitofp i32 %a1 to double"), "{ir}");
     assert!(
-        ir.contains("i32 6, ptr @nts_com_interfaces_App, i32 2, i8 1, ptr null, ptr null }"),
+        ir.contains("i32 6, ptr @__nts_com_interfaces_App, i32 2, i8 1, ptr null, ptr null }"),
         "{ir}"
     );
     assert_eq!(ir.matches("@llvm.global_ctors").count(), 1, "{ir}");
-    assert!(ir.contains("ptr @nts_com_register_classes"), "{ir}");
+    assert!(ir.contains("ptr @__nts_com_register_classes"), "{ir}");
     std::fs::write(dir.join("program.ll"), ir).unwrap();
     let compiled = Command::new("clang")
         .current_dir(&dir)
@@ -344,18 +351,20 @@ fn a_forwarded_record_is_passed_as_win64_passes_it() {
     let text = c.writer.text();
     assert!(
         text.contains(
-            "static int32_t nts_com_forward_Panel_0(void * a0, struct Test_Size a1, void * a2)"
+            "static int32_t __nts_com_forward_Panel_0(void * __nts_a0, struct Test_Size __nts_a1, void * __nts_a2)"
         ),
         "{text}"
     );
     assert!(
-        text.contains("static int32_t nts_com_forward_Panel_1(void * a0, struct Test_Rect a1)"),
+        text.contains(
+            "static int32_t __nts_com_forward_Panel_1(void * __nts_a0, struct Test_Rect __nts_a1)"
+        ),
         "{text}"
     );
     // A string is its `HSTRING` handle, and the `boolean` result its pointer.
     assert!(
         text.contains(
-            "static int32_t nts_com_forward_Panel_2(void * a0, void * a1, bool a2, void * a3)"
+            "static int32_t __nts_com_forward_Panel_2(void * __nts_a0, void * __nts_a1, bool __nts_a2, void * __nts_a3)"
         ),
         "{text}"
     );
@@ -364,13 +373,13 @@ fn a_forwarded_record_is_passed_as_win64_passes_it() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(
         llvm.text
-            .contains("@nts_com_forward_Panel_0(ptr %a0, i64 %a1, ptr %a2)"),
+            .contains("@__nts_com_forward_Panel_0(ptr %a0, i64 %a1, ptr %a2)"),
         "{}",
         llvm.text
     );
     assert!(
         llvm.text
-            .contains("@nts_com_forward_Panel_1(ptr %a0, ptr %a1)"),
+            .contains("@__nts_com_forward_Panel_1(ptr %a0, ptr %a1)"),
         "{}",
         llvm.text
     );
@@ -415,20 +424,22 @@ fn an_override_answers_through_the_result_pointer() {
     let text = c.writer.text();
     let measure = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_Panel_0("))
         .unwrap_or_else(|| panic!("{text}"));
     assert!(
-        measure.contains("(void * a0, struct Test_Size a1, struct Test_Size *out)")
-            && measure.contains("&a1")
-            && measure.contains(")out);"),
+        measure
+            .contains("(void * __nts_a0, struct Test_Size __nts_a1, struct Test_Size *__nts_out)")
+            && measure.contains("&__nts_a1")
+            && measure.contains(")__nts_out);"),
         "{measure}"
     );
     let allowed = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_Panel_1("))
         .unwrap_or_else(|| panic!("{text}"));
     assert!(
-        allowed.contains("(void * a0, int32_t a1, bool *out)") && allowed.contains("*out = (bool)"),
+        allowed.contains("(void * __nts_a0, int32_t __nts_a1, bool *__nts_out)")
+            && allowed.contains("*__nts_out = (bool)"),
         "{allowed}"
     );
     windows_syntax(&dir, &c);
@@ -436,7 +447,7 @@ fn an_override_answers_through_the_result_pointer() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(
         llvm.text
-            .contains("@nts_com_adapter_Panel_0(ptr %a0, i64 %a1, ptr %out)"),
+            .contains("@__nts_com_adapter_Panel_0(ptr %a0, i64 %a1, ptr %out)"),
         "{}",
         llvm.text
     );
@@ -485,11 +496,11 @@ fn a_composed_class_keeps_its_fields_in_its_outer_object() {
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
-        text.contains("static void *nts_com_state_App(void) { nts_callback_enter();"),
+        text.contains("static void *__nts_com_state_App(void) { nts_callback_enter();"),
         "no maker entry:\n{text}"
     );
     assert!(
-        text.contains(", 0, nts_com_state_App };"),
+        text.contains(", 0, __nts_com_state_App };"),
         "the descriptor does not name the maker:\n{text}"
     );
     assert!(
@@ -500,7 +511,7 @@ fn a_composed_class_keeps_its_fields_in_its_outer_object() {
     let llvm = nts_codegen_llvm::emit(&prepared.program, nts_codegen_llvm::Platform::WIN64_X86_64);
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(
-        llvm.text.contains("ptr null, ptr @nts_com_state_App }"),
+        llvm.text.contains("ptr null, ptr @__nts_com_state_App }"),
         "{}",
         llvm.text
     );
@@ -543,10 +554,10 @@ fn a_string_argument_is_the_text_of_the_lent_hstring() {
     let text = c.writer.text();
     let adapter = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_Panel_0("))
         .unwrap_or_else(|| panic!("{text}"));
     assert!(
-        adapter.contains("(void * a0, void * a1, bool a2, bool *out)"),
+        adapter.contains("(void * __nts_a0, void * __nts_a1, bool __nts_a2, bool *__nts_out)"),
         "{adapter}"
     );
     assert!(
@@ -598,7 +609,10 @@ fn a_composed_class_constructor_runs_after_its_composition() {
     let text = c.writer.text();
     let start = text
         .lines()
-        .position(|line| line.contains(" App__new(") && line.ends_with('{'))
+        .position(|line| {
+            line.contains(&format!(" {}(", function_symbol(text, "App__new")))
+                && line.ends_with('{')
+        })
         .unwrap_or_else(|| panic!("no App#new:\n{text}"));
     let body = text
         .lines()
@@ -615,7 +629,7 @@ fn a_composed_class_constructor_runs_after_its_composition() {
         "the body does not write a field:\n{body}"
     );
     assert!(
-        text.contains("App__new("),
+        text.contains(&format!("{}(", function_symbol(text, "App__new"))),
         "`new App(...)` does not call the constructor:\n{text}"
     );
     windows_syntax(&dir, &c);
@@ -660,11 +674,11 @@ fn an_override_answers_an_object_the_caller_owns() {
     let text = c.writer.text();
     let adapter = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_1("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_Panel_1("))
         .unwrap_or_else(|| panic!("{text}"));
     assert!(
-        adapter.contains("(void * a0, void **out)")
-            && adapter.contains("*out = nts_com_answer((void *)"),
+        adapter.contains("(void * __nts_a0, void **__nts_out)")
+            && adapter.contains("*__nts_out = nts_com_answer((void *)"),
         "{adapter}"
     );
     windows_syntax(&dir, &c);
@@ -715,11 +729,11 @@ fn an_override_answers_a_string_as_an_hstring_of_its_own() {
     let text = c.writer.text();
     let adapter = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_adapter_Panel_0("))
+        .find(|line| line.starts_with("static int32_t __nts_com_adapter_Panel_0("))
         .unwrap_or_else(|| panic!("{text}"));
     assert!(
-        adapter.contains("(void * a0, void **out)")
-            && adapter.contains("*out = nts_com_answer_string((NtsString *)"),
+        adapter.contains("(void * __nts_a0, void **__nts_out)")
+            && adapter.contains("*__nts_out = nts_com_answer_string((NtsString *)"),
         "{adapter}"
     );
     windows_syntax(&dir, &c);
@@ -768,7 +782,9 @@ fn a_composed_class_has_methods_of_its_own() {
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     assert!(
-        text.matches("App__bump(").count() >= 3,
+        text.matches(&format!("{}(", function_symbol(text, "App__bump")))
+            .count()
+            >= 3,
         "the method is not defined and called twice:\n{text}"
     );
     windows_syntax(&dir, &c);
@@ -821,6 +837,7 @@ fn a_surface_member_is_called_through_its_interface() {
     assert!(c.is_complete(), "{:?}", c.diagnostics);
     let text = c.writer.text();
     let body = |name: &str| {
+        let name = function_symbol(text, name);
         let start = text
             .lines()
             .position(|line| line.contains(&format!(" {name}(")) && line.ends_with('{'))
@@ -942,7 +959,10 @@ fn super_in_an_override_calls_the_base_through_its_slot() {
     let text = c.writer.text();
     let start = text
         .lines()
-        .position(|line| line.contains(" App__OnLaunched(") && line.ends_with('{'))
+        .position(|line| {
+            line.contains(&format!(" {}(", function_symbol(text, "App__OnLaunched")))
+                && line.ends_with('{')
+        })
         .unwrap_or_else(|| panic!("no definition:\n{text}"));
     let body = text
         .lines()
@@ -960,7 +980,7 @@ fn super_in_an_override_calls_the_base_through_its_slot() {
         "the HRESULT is not checked:\n{body}"
     );
     assert!(
-        !body.contains("App__OnLaunched("),
+        !body.contains(&format!("{}(", function_symbol(text, "App__OnLaunched"))),
         "the override calls itself:\n{body}"
     );
     windows_syntax(&dir, &c);
@@ -1060,21 +1080,21 @@ fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
     let text = c.writer.text();
     let forward = text
         .lines()
-        .find(|line| line.starts_with("static int32_t nts_com_forward_App_0("))
+        .find(|line| line.starts_with("static int32_t __nts_com_forward_App_0("))
         .unwrap_or_else(|| panic!("no forwarder:\n{text}"));
     assert!(
-        forward.contains("(void * a0, int32_t a1, bool a2)")
-            && forward.contains("nts_com_outer_base(a0)")
-            && forward.contains("[7])(base, a1, a2);"),
+        forward.contains("(void * __nts_a0, int32_t __nts_a1, bool __nts_a2)")
+            && forward.contains("nts_com_outer_base(__nts_a0)")
+            && forward.contains("[7])(__nts_base, __nts_a1, __nts_a2);"),
         "{forward}"
     );
     let table = text
         .lines()
-        .find(|line| line.starts_with("static const void *const nts_com_table_App_0[]"))
+        .find(|line| line.starts_with("static const void *const __nts_com_table_App_0[]"))
         .unwrap();
     assert!(
         table.ends_with(
-            "(const void *)nts_com_adapter_App_0, (const void *)nts_com_forward_App_0 };"
+            "(const void *)__nts_com_adapter_App_0, (const void *)__nts_com_forward_App_0 };"
         ),
         "{table}"
     );
@@ -1084,7 +1104,7 @@ fn a_slot_the_class_leaves_is_forwarded_to_its_base() {
     assert!(llvm.diagnostics.is_empty(), "{:?}", llvm.diagnostics);
     assert!(
         llvm.text.contains(
-            "define internal i32 @nts_com_forward_App_0(ptr %a0, i32 %a1, i1 zeroext %a2)"
+            "define internal i32 @__nts_com_forward_App_0(ptr %a0, i32 %a1, i1 zeroext %a2)"
         ),
         "{}",
         llvm.text

@@ -21,17 +21,17 @@ pub fn delegate_signatures(program: &Program) -> Vec<&FnPointer> {
     found
 }
 
-/// A signature's carried `Invoke`, `nts_com_hop_NtsFn_void_ptr_ptr`: the
+/// A signature's carried `Invoke`, `__nts_com_hop_NtsFn_void_ptr_ptr`: the
 /// arguments' type and the `run` that unpacks them on the owning thread.
 #[must_use]
 pub fn delegate_hop_symbol(signature: &FnPointer) -> String {
-    format!("nts_com_hop_{}", signature.name)
+    format!("__nts_com_hop_{}", signature.name)
 }
 
-/// A signature's `Invoke` adapter, `nts_com_invoke_NtsFn_void_ptr_ptr`.
+/// A signature's `Invoke` adapter, `__nts_com_invoke_NtsFn_void_ptr_ptr`.
 #[must_use]
 pub fn delegate_invoke_symbol(signature: &FnPointer) -> String {
-    format!("nts_com_invoke_{}", signature.name)
+    format!("__nts_com_invoke_{}", signature.name)
 }
 
 /// The classes the program writes over composable Windows Runtime classes
@@ -103,37 +103,37 @@ pub fn interfaces(class: &nts_core::hir::ForeignClass) -> Vec<Interface> {
     found
 }
 
-/// A forwarded slot's adapter, `nts_com_forward_App_0`: the base's
+/// A forwarded slot's adapter, `__nts_com_forward_App_0`: the base's
 /// implementation called with the same arguments.
 #[must_use]
 pub fn forward_symbol(class: &str, at: usize) -> String {
-    format!("nts_com_forward_{class}_{at}")
+    format!("__nts_com_forward_{class}_{at}")
 }
 
-/// An override's adapter, `nts_com_adapter_App_0`: what the interface's
+/// An override's adapter, `__nts_com_adapter_App_0`: what the interface's
 /// table calls.
 #[must_use]
 pub fn adapter_symbol(class: &str, at: usize) -> String {
-    format!("nts_com_adapter_{class}_{at}")
+    format!("__nts_com_adapter_{class}_{at}")
 }
 
-/// An interface's table, `nts_com_table_App_0`.
+/// An interface's table, `__nts_com_table_App_0`.
 #[must_use]
 pub fn table_symbol(class: &str, interface: usize) -> String {
-    format!("nts_com_table_{class}_{interface}")
+    format!("__nts_com_table_{class}_{interface}")
 }
 
-/// A class's interfaces, `nts_com_interfaces_App`.
+/// A class's interfaces, `__nts_com_interfaces_App`.
 #[must_use]
 pub fn interfaces_symbol(class: &str) -> String {
-    format!("nts_com_interfaces_{class}")
+    format!("__nts_com_interfaces_{class}")
 }
 
-/// A class's descriptor, `nts_com_class_App`, which the runtime composes it
+/// A class's descriptor, `__nts_com_class_App`, which the runtime composes it
 /// from.
 #[must_use]
 pub fn class_symbol(class: &str) -> String {
-    format!("nts_com_class_{class}")
+    format!("__nts_com_class_{class}")
 }
 
 /// Slots 0 to 5 of every table: `IUnknown`'s and `IInspectable`'s, the

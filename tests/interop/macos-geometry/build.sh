@@ -111,7 +111,7 @@ echo "macos-x86_64 (LLVM): the same, from the LLVM backend"
 c_out="$out/geometry/macos-13-x86_64"
 control="$out/control"
 mkdir -p "$control"
-sed 's/^#define NTS_OBJC_SEND_FOR(size) ((size) > 16 ? objc_msgSend_stret : objc_msgSend)$/#define NTS_OBJC_SEND_FOR(size) objc_msgSend/' \
+sed 's/^#define __nts_objc_send_for(__nts_size) ((__nts_size) > 16 ? objc_msgSend_stret : objc_msgSend)$/#define __nts_objc_send_for(__nts_size) objc_msgSend/' \
   "$c_out/program.c" >"$control/program.c"
 if cmp -s "$c_out/program.c" "$control/program.c"; then
   echo "macos-geometry: the control changed nothing; the entry point is chosen elsewhere now" >&2

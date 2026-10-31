@@ -1,4 +1,4 @@
-// expect: emit-c --rc -> emits-c Closure0__call(
+// expect: emit-c --rc -> emits-c static void __nts_fn_Closure0__call_1(NtsObj_Closure0 * __nts_v0, NtsString * __nts_v1, NtsString * __nts_v2) {
 //
 // **FIXED 2026-10-07, kept as a guard** (MainClaude; reported and reduced by
 // the Chromium lane): the second shape of a-captured-let-read-after-a-bound-

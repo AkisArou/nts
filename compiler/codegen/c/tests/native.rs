@@ -1221,7 +1221,7 @@ export function sameType(): boolean { const e = node_at(0 as c_int); return node
 /// compile error naming the argument; proven, it arrives exactly. There is no
 /// conversion in between -- it was JavaScript's `ToInt32`, which wrapped
 /// `2^32 + 5` to 5 and sent C a value the program never computed, and before
-/// that `(int32_t)v0`, which C leaves undefined out of range.
+/// that `(int32_t)__nts_v0`, which C leaves undefined out of range.
 #[test]
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn a_number_reaches_a_c_integer_only_where_it_is_proven_to_fit() {
@@ -1272,9 +1272,9 @@ declare function seen_u16(v: Uint16): Float64;
     // to prove anything (`written_roots`). A `number` stays a `double`.
     let text = emitted.writer.text();
     for prototype in [
-        "double i32(int32_t v0)",
-        "double u16(double v0)",
-        "void store(int * v0, int32_t v1)",
+        "double i32(int32_t __nts_v0)",
+        "double u16(double __nts_v0)",
+        "void store(int * __nts_v0, int32_t __nts_v1)",
     ] {
         assert!(text.contains(prototype), "no `{prototype}` in:\n{text}");
     }

@@ -3,17 +3,18 @@
 
 use std::fmt::Write as _;
 
+use super::Emission as Program;
 use nts_codegen_common::com::{
     Answer, OUTER_SLOTS, adapter_symbol, class_symbol, delegate_hop_symbol, delegate_invoke_symbol,
     delegate_signatures, forward_symbol, interfaces, interfaces_symbol, table_symbol,
 };
 use nts_codegen_common::objc::{Carried, hop_arguments};
 use nts_core::hir::native::{FnPointer, Type};
-use nts_core::hir::{ForeignMethod, Func, HirType, Program};
+use nts_core::hir::{ForeignMethod, Func, HirType};
 use nts_diagnostics::Diagnostic;
 
 use super::objc::{abi_parameter, bare};
-use super::{Platform, conversion, is_not_zero, refuse, symbol, text_constant, ty_of};
+use super::{Platform, conversion, is_not_zero, refuse, text_constant, ty_of};
 
 /// One `Invoke` adapter per delegate signature: `i32 (ptr %self, A...)`, the
 /// bridge and the context out of the object (`NtsComDelegate`: the table, the
@@ -226,6 +227,7 @@ pub(super) fn classes(
                     )
                 })?;
             adapter(
+                program,
                 &mut out,
                 platform,
                 &adapter_symbol(&class.name, at),
@@ -310,11 +312,11 @@ pub(super) fn classes(
                             "a class whose fields' maker this program does not define",
                         )
                     })?;
-                let maker = format!("nts_com_state_{}", class.name);
+                let maker = format!("__nts_com_state_{}", class.name);
                 let _ = writeln!(
                     out,
                     "define internal ptr @{maker}() nounwind {{\n  call void @nts_callback_enter()\n  %made = call ptr {}()\n  call void @nts_callback_leave()\n  ret ptr %made\n}}",
-                    symbol(&compiled.name)
+                    program.source_function(&compiled.name)
                 );
                 format!("ptr @{maker}")
             }
@@ -333,16 +335,17 @@ pub(super) fn classes(
     }
     let _ = writeln!(
         out,
-        "define internal void @nts_com_register_classes() {{\n{}\n  ret void\n}}",
+        "define internal void @__nts_com_register_classes() {{\n{}\n  ret void\n}}",
         registrations.join("\n")
     );
-    Ok((out, Some("nts_com_register_classes")))
+    Ok((out, Some("__nts_com_register_classes")))
 }
 
 /// One override's adapter, `i32 (ptr face, A...)`: the compiled method
 /// called with the instance and its arguments, and `S_OK`.
 #[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 fn adapter(
+    program: &Program,
     out: &mut String,
     platform: Platform,
     name: &str,
@@ -431,7 +434,7 @@ fn adapter(
     let have_ty = ty_of(&have, compiled)?;
     let call = format!(
         "call {have_ty} {}({})",
-        symbol(&compiled.name),
+        program.source_function(&compiled.name),
         arguments.join(", ")
     );
     if matches!(result, Type::Void | Type::Record(_)) {
