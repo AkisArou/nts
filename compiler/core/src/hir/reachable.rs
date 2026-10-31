@@ -57,6 +57,7 @@ use rustc_hash::{FxHashMap, FxHashSet};
 use super::{Callee, Func, OpKind, Program};
 
 mod dispatch;
+mod surface;
 
 /// Where a walk over the call graph starts.
 #[derive(Debug, Clone, Copy)]
@@ -556,60 +557,6 @@ pub fn root_names<'p>(program: &'p Program, roots: Roots<'_>) -> Vec<&'p str> {
     names
 }
 
-/// The function types a root's parameters or result carry anywhere within
-/// them: directly, as an array's element, or as a field of a record they carry,
-/// each layout walked once. A signature with an erased face, or a closure class
-/// itself.
-fn surface_functions(program: &Program, roots: &[&str]) -> FxHashSet<super::TypeId> {
-    fn walk(
-        program: &Program,
-        ty: &super::HirType,
-        seen: &mut FxHashSet<super::TypeId>,
-        found: &mut FxHashSet<super::TypeId>,
-    ) {
-        match ty {
-            super::HirType::Managed(super::ManagedType::Array(element)) => {
-                walk(program, element, seen, found);
-            }
-            super::HirType::Managed(super::ManagedType::Object(id)) => {
-                if program.signature_faces.contains_key(id) || super::has_a_closure_body(*id) {
-                    found.insert(*id);
-                    return;
-                }
-                if !seen.insert(*id) {
-                    return;
-                }
-                for field in program
-                    .layouts
-                    .iter()
-                    .filter(|layout| layout.types.contains(id))
-                    .flat_map(|layout| layout.fields.iter())
-                {
-                    walk(program, &field.ty, seen, found);
-                }
-            }
-            _ => {}
-        }
-    }
-    let mut seen = FxHashSet::default();
-    let mut found = FxHashSet::default();
-    for func in program
-        .funcs
-        .iter()
-        .filter(|func| roots.contains(&func.name.as_str()))
-    {
-        for ty in func
-            .params
-            .iter()
-            .map(|param| &param.ty)
-            .chain(std::iter::once(&func.return_type))
-        {
-            walk(program, ty, &mut seen, &mut found);
-        }
-    }
-    found
-}
-
 /// The written `#call` and uniform entry of every closure a caller outside the
 /// program can be handed through one of `surface`'s function types -- one that
 /// was admitted into it (its `base`), or that is one -- where the entry exists:
@@ -686,7 +633,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
     // whatever they call reachable too, and with it refusals nothing could
     // reach before. An executable has no outside.
     if !matches!(roots, Roots::Entry(_)) {
-        let surface = surface_functions(program, &pending);
+        let surface = surface::functions(program, &pending, roots);
         if !surface.is_empty() {
             pending.extend(closure_entries_from_outside(program, &surface, &by_name));
         }
