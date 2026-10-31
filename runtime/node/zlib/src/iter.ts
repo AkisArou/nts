@@ -31,7 +31,6 @@ import { optionalByteView, type BinaryInput } from "./options.ts";
 const DEFAULT_OUTPUT_SIZE = 65_536;
 const NO_PLEDGED_SOURCE_SIZE = -1;
 const BATCH_HWM = DEFAULT_OUTPUT_SIZE;
-const MAXIMUM_SYNC_OUTPUT = 0xffff_ffff;
 const kMaxBrotliParam = Math.max(
   ...Object.entries(C).map(([key, value]) => key.startsWith("BROTLI_PARAM_") ? value as number : 0),
 );
@@ -376,18 +375,6 @@ async function nativeWrite(
 
 const emptyNativeInput = new Uint8Array(0);
 
-function syncInput(handle: number, input: Uint8Array, flush: number): Uint8Array {
-  const output = nts_zlib_write_sync(handle, flush, input, MAXIMUM_SYNC_OUTPUT);
-  const status = nts_zlib_status(handle);
-  if (status !== 0) {
-    throw new IteratorZlibError(
-      nts_zlib_error_message(handle),
-      status,
-      nts_zlib_error_code(handle) || zlibCodeForStatus(status),
-    );
-  }
-  return Buffer.from(output);
-}
 
 interface AsyncCompressionTransform {
   readonly [kValidatedTransform]: true;
@@ -535,18 +522,63 @@ function makeSyncCompressionTransform(mode: number, engineOptions: IteratorEngin
       const handle = openEngine(configuration);
       let pending: ByteBatch = [];
       let pendingBytes = 0;
+      const writeState = new Uint32Array(2);
+      let outBuf = Buffer.allocUnsafe(configuration.chunkSize);
       let outOffset = 0;
 
+      function writeSync(
+        input: Uint8Array, flush: number, inOff: number,
+        availIn: number, availOutBefore: number,
+      ): void {
+        nts_zlib_write_into_sync(
+          handle, flush, input, inOff, availIn,
+          outBuf, outOffset, availOutBefore, writeState,
+        );
+        const status = nts_zlib_status(handle);
+        if (status !== 0) {
+          throw new IteratorZlibError(
+            nts_zlib_error_message(handle), status,
+            nts_zlib_error_code(handle) || zlibCodeForStatus(status),
+          );
+        }
+      }
+
+      // Node v26.13.0 internal/streams/iter/transform.js:607-667.
       function processSyncInput(input: Uint8Array, flush: number): void {
-        const output = syncInput(handle, input, flush);
-        let offset = 0;
-        while (offset < output.byteLength) {
-          const have = Math.min(configuration.chunkSize - outOffset, output.byteLength - offset);
-          pending.push(output.subarray(offset, offset + have));
-          pendingBytes += have;
-          offset += have;
-          outOffset += have;
-          if (outOffset >= configuration.chunkSize) outOffset = 0;
+        let inOff = 0;
+        let availIn = input.byteLength;
+        let availOutBefore = configuration.chunkSize - outOffset;
+        writeSync(input, flush, inOff, availIn, availOutBefore);
+        while (true) {
+          const availOut = writeState[0]!;
+          const availInAfter = writeState[1]!;
+          const have = availOutBefore - availOut;
+          const bufferExhausted = availOut === 0 ||
+            outOffset + have >= configuration.chunkSize;
+          if (have > 0) {
+            if (bufferExhausted && outOffset === 0) {
+              pending.push(outBuf);
+            } else if (bufferExhausted) {
+              pending.push(outBuf.subarray(outOffset, outOffset + have));
+            } else {
+              pending.push(Uint8Array.prototype.slice.call(outBuf, outOffset, outOffset + have));
+            }
+            pendingBytes += have;
+            outOffset += have;
+          }
+          if (bufferExhausted) {
+            outBuf = Buffer.allocUnsafe(configuration.chunkSize);
+            outOffset = 0;
+          }
+          if (availOut === 0) {
+            const consumed = availIn - availInAfter;
+            inOff += consumed;
+            availIn = availInAfter;
+            availOutBefore = configuration.chunkSize - outOffset;
+            writeSync(input, flush, inOff, availIn, availOutBefore);
+            continue;
+          }
+          break;
         }
       }
 

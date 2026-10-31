@@ -26,6 +26,10 @@ double nts_zlib_create_params(double mode, NtsArray *keys, NtsArray *values,
 
 NtsPromise *nts_zlib_write(double handle, double flush, NtsView *input,
                            double output_limit);
+void nts_zlib_write_into_sync(double handle, double flush, NtsView *input,
+                              double input_offset, double input_length,
+                              NtsView *output, double output_offset,
+                              double output_length, NtsView *write_state);
 NtsView *nts_zlib_write_sync(double handle, double flush, NtsView *input,
                              double maximum_output);
 

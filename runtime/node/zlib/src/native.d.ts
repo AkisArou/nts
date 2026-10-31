@@ -35,6 +35,13 @@ declare function nts_zlib_write(
 ): Promise<Uint8Array>;
 
 /** @ntsAbi managed */
+declare function nts_zlib_write_into_sync(
+  handle: number, flush: number, input: Uint8Array,
+  inputOffset: number, inputLength: number, output: Uint8Array,
+  outputOffset: number, outputLength: number, writeState: Uint32Array,
+): void;
+
+/** @ntsAbi managed */
 declare function nts_zlib_write_sync(
   handle: number,
   flush: number,

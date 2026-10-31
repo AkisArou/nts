@@ -237,6 +237,20 @@ globalThis.nts_zlib_write = (handle, flush, input, outputLimit) => new Promise((
   settleRead(engine);
 });
 
+globalThis.nts_zlib_write_into_sync = (
+  handle, flush, input, inputOffset, inputLength,
+  output, outputOffset, outputLength, writeState,
+) => {
+  const engine = engines.get(handle);
+  if (!engine || engine.error) return;
+  engine.stream._handle.writeSync(
+    flush, input, inputOffset, inputLength, output, outputOffset, outputLength,
+  );
+  writeState[0] = engine.stream._writeState[0];
+  writeState[1] = engine.stream._writeState[1];
+  engine.stream.bytesWritten += inputLength - writeState[1];
+};
+
 globalThis.nts_zlib_write_sync = (handle, flush, input, maximumOutput) => {
   const engine = engines.get(handle);
   if (!engine) return Buffer.alloc(0);

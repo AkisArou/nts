@@ -79,6 +79,7 @@ struct NtsZlibEngine {
   size_t brotli_parameter_count;
 
   uint8_t *operation_input;
+  bool operation_owns_input;
   size_t operation_length;
   size_t operation_offset;
   int operation_flush;
@@ -556,8 +557,10 @@ static bool nts_zlib_initialize_zstd(NtsZlibEngine *engine,
 }
 
 static void nts_zlib_end_operation(NtsZlibEngine *engine) {
-  free(engine->operation_input);
+  if (engine->operation_owns_input)
+    free(engine->operation_input);
   engine->operation_input = NULL;
+  engine->operation_owns_input = false;
   engine->operation_length = 0;
   engine->operation_offset = 0;
   engine->operation_pending = false;
@@ -637,6 +640,7 @@ static bool nts_zlib_begin_operation(NtsZlibEngine *engine, int flush,
       nts_zlib_set_error(engine, Z_MEM_ERROR, "Out of memory", "Z_MEM_ERROR");
       return false;
     }
+    engine->operation_owns_input = true;
     memcpy(engine->operation_input, bytes, length);
     nts_zlib_sniff_unzip(engine, bytes, length);
   }
@@ -1233,6 +1237,84 @@ NtsView *nts_zlib_write_sync(double handle, double flush, NtsView *input,
     return nts_zlib_bytes(NULL, 0);
   return nts_zlib_run_sync(engine, (int)flush, input,
                            nts_zlib_maximum(maximum_output));
+}
+
+/* Node v26.13.0 src/node_zlib.cc's writeSync boundary: fill the caller's
+ * view, publish avail_out/avail_in, and keep codec state for the next call.
+ * Input is borrowed for this synchronous call; no frame allocation or copy
+ * stands between the library and the TypeScript-owned output buffer. */
+void nts_zlib_write_into_sync(double handle, double flush, NtsView *input,
+                              double input_offset, double input_length,
+                              NtsView *output, double output_offset,
+                              double output_length, NtsView *write_state) {
+  NtsZlibEngine *engine = nts_zlib_find(handle);
+  if (engine == NULL)
+    return;
+  if (input == NULL || output == NULL || write_state == NULL ||
+      !(input_offset >= 0 && input_offset <= UINT32_MAX) ||
+      !(input_length >= 0 && input_length <= UINT32_MAX) ||
+      !(output_offset >= 0 && output_offset <= UINT32_MAX) ||
+      !(output_length > 0 && output_length <= UINT32_MAX) ||
+      input_offset != (double)(uint32_t)input_offset ||
+      input_length != (double)(uint32_t)input_length ||
+      output_offset != (double)(uint32_t)output_offset ||
+      output_length != (double)(uint32_t)output_length ||
+      input_offset + input_length > nts_view_byte_length(input) ||
+      output_offset + output_length > nts_view_byte_length(output) ||
+      nts_view_byte_length(write_state) < 2 * sizeof(uint32_t)) {
+    nts_zlib_set_error(engine, Z_STREAM_ERROR,
+                       "Invalid compression write range", "Z_STREAM_ERROR");
+    return;
+  }
+  uint32_t *state = (uint32_t *)nts_view_bytes(write_state);
+  state[0] = (uint32_t)output_length;
+  state[1] = (uint32_t)input_length;
+  if (engine->busy || engine->operation_pending) {
+    nts_zlib_set_error(engine, Z_STREAM_ERROR,
+                       "A compression write is already in progress",
+                       "Z_STREAM_ERROR");
+    return;
+  }
+  const bool decoder = nts_zlib_is_zlib_decoder(engine->mode) ||
+                       engine->family == NTS_ZLIB_FAMILY_BROTLI_DECODER ||
+                       engine->family == NTS_ZLIB_FAMILY_ZSTD_DECOMPRESSOR;
+  if (engine->status != 0 ||
+      (input_length == 0 &&
+       (engine->stream_ended || (decoder && engine->frame_complete))))
+    return;
+
+  uint8_t *input_bytes = nts_view_bytes(input);
+  engine->operation_input =
+      input_length == 0 ? NULL : input_bytes + (size_t)input_offset;
+  engine->operation_owns_input = false;
+  engine->operation_length = (size_t)input_length;
+  engine->operation_offset = 0;
+  engine->operation_flush = (int)flush;
+  engine->operation_pending = true;
+  if (input_length != 0)
+    nts_zlib_sniff_unzip(engine, engine->operation_input, (size_t)input_length);
+
+  const uint64_t before = engine->bytes_written;
+  uint8_t *target = nts_view_bytes(output) + (size_t)output_offset;
+  size_t produced = 0;
+  while (engine->operation_pending && engine->status == 0 &&
+         produced < (size_t)output_length) {
+    size_t have = 0;
+    const uint64_t consumed_before = engine->bytes_written;
+    nts_zlib_step(engine, target + produced, (size_t)output_length - produced,
+                  &have);
+    produced += have;
+    if (have == 0 && engine->bytes_written == consumed_before)
+      break;
+  }
+  const uint64_t consumed = engine->bytes_written - before;
+  state[0] = (uint32_t)((size_t)output_length - produced);
+  state[1] = consumed <= (uint64_t)input_length
+                 ? (uint32_t)((uint64_t)input_length - consumed)
+                 : 0;
+  /* No borrowed pointer survives the call. The caller supplies the remaining
+   * input again when avail_out is zero, as Node's JS write loop does. */
+  nts_zlib_end_operation(engine);
 }
 
 static void nts_zlib_work_run(uv_work_t *request) {
