@@ -1,37 +1,9 @@
-// Every name node's `zlib` has, and the constants table behind them.
-//
-// `zlib` has two local tests, the fewest of any module in the profile, and it
-// is one of the twelve that a single compiler fix is expected to move from
-// "does not compile" to "compiles". When that happens the interesting question
-// is not whether its tests pass -- it is whether the addon published enough for
-// them to mean anything. `buffer` compiles today and publishes 3 of its 15
-// exports; its 55 failures read as fifty-five broken assertions and are one
-// fact.
-//
-// So this is written now, before the module compiles, to be waiting when it
-// does.
-//
-// Node's names come from a **subprocess**, and that detail is the whole test.
-//
-// The obvious spelling is `require("node:zlib")` for node's and `require("zlib")`
-// for ours. It does not work here: the harness substitutes the module under test
-// for *both* specifiers, so the two are the same object --
-//
-//     same=true  ourKeys=47  nodeKeys=47  sameFn=true
-//
-// -- and every comparison below would be an object against itself, passing
-// whatever the module did. `events/test/prototype-surface-static.js` was written
-// that way and was hollow for exactly this reason; its comment said it "tracks
-// the running node" and it was reading ours.
-//
-// A child `node -p` has no harness hooks in it, so what it prints is node's.
-//
-// **Missing-only, deliberately**, following `events/test/prototype-surface-static.js`.
-// An equality assertion would pin node's internals -- names beginning `_` and
-// anything added in a later node -- and fail for reasons that are not about this
-// profile. A name we publish that node does not is a real divergence and belongs
-// in the export diff, which `audit.mjs --exports` already does from the other
-// side.
+// Source: pinned Node v26.13.0 lib/zlib.js module.exports and the
+// DefineZlibConstants table in src/node_zlib.cc. A clean subprocess observes
+// upstream independently of the harness's substituted require. Missing ZIP
+// exports must remain visible until that second pilot part is implemented.
+// Check names, types, constants and one compression round trip; an empty
+// expected surface must never make this test pass without measuring anything.
 
 "use strict";
 

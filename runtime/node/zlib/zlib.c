@@ -1,4 +1,5 @@
-/* Compression engines for node:zlib.
+/* Compression engines for node:zlib, transcribed from Node v26.13.0
+ * src/node_zlib.cc (Zlib, Brotli and Zstd contexts).
  *
  * Node delegates these algorithms to zlib, Brotli and Zstandard as well. The
  * important work here is preserving their incremental state while returning
@@ -45,6 +46,11 @@ typedef enum NtsZlibFamily {
 
 typedef struct NtsZlibEngine NtsZlibEngine;
 
+typedef struct NtsBrotliParameter {
+  int key;
+  uint32_t value;
+} NtsBrotliParameter;
+
 struct NtsZlibEngine {
   uint64_t identifier;
   int mode;
@@ -52,6 +58,11 @@ struct NtsZlibEngine {
   bool reject_garbage_after_end;
   bool stream_ended;
   bool frame_complete;
+  bool output_emitted;
+  bool decoding_frame_after_complete;
+  bool ignoring_trailing_input;
+  size_t frame_prefix_size;
+  uint8_t possible_frame_types;
   bool busy;
   bool closing;
   int status;
@@ -62,6 +73,10 @@ struct NtsZlibEngine {
   uint8_t *dictionary;
   size_t dictionary_length;
   uint64_t pledged_source_size;
+  uint64_t consumed_source_size;
+  bool consumed_source_size_active;
+  NtsBrotliParameter *brotli_parameters;
+  size_t brotli_parameter_count;
 
   uint8_t *operation_input;
   size_t operation_length;
@@ -304,11 +319,59 @@ static bool nts_zlib_initialize_zlib(NtsZlibEngine *engine, int level,
     return false;
   }
   engine->zstream_initialized = true;
+  engine->frame_complete = nts_zlib_is_zlib_encoder(engine->mode);
+  engine->output_emitted = false;
   status = nts_zlib_set_zlib_dictionary(engine);
   if (status != Z_OK) {
     nts_zlib_set_error(engine, status, "Failed to set dictionary",
                        nts_zlib_code(status));
     return false;
+  }
+  return true;
+}
+
+static bool nts_zlib_record_brotli_parameter(NtsZlibEngine *engine, int key,
+                                             uint32_t value) {
+  for (size_t i = 0; i < engine->brotli_parameter_count; i++) {
+    if (engine->brotli_parameters[i].key == key) {
+      engine->brotli_parameters[i].value = value;
+      return true;
+    }
+  }
+  size_t count = engine->brotli_parameter_count + 1;
+  NtsBrotliParameter *parameters =
+      realloc(engine->brotli_parameters, count * sizeof(*parameters));
+  if (parameters == NULL) {
+    nts_zlib_set_error(engine, Z_MEM_ERROR, "Out of memory", "Z_MEM_ERROR");
+    return false;
+  }
+  parameters[count - 1] = (NtsBrotliParameter){key, value};
+  engine->brotli_parameters = parameters;
+  engine->brotli_parameter_count = count;
+  return true;
+}
+
+static bool nts_zlib_set_brotli_parameter(NtsZlibEngine *engine, int key,
+                                          uint32_t value) {
+  bool success =
+      engine->family == NTS_ZLIB_FAMILY_BROTLI_ENCODER
+          ? BrotliEncoderSetParameter(engine->brotli_encoder,
+                                      (BrotliEncoderParameter)key, value)
+          : BrotliDecoderSetParameter(engine->brotli_decoder,
+                                      (BrotliDecoderParameter)key, value);
+  if (!success) {
+    nts_zlib_set_error(engine, -1, "Setting Brotli parameter failed",
+                       "ERR_BROTLI_PARAM_SET_FAILED");
+  }
+  return success;
+}
+
+static bool nts_zlib_replay_brotli_parameters(NtsZlibEngine *engine) {
+  for (size_t i = 0; i < engine->brotli_parameter_count; i++) {
+    const NtsBrotliParameter *parameter = &engine->brotli_parameters[i];
+    if (!nts_zlib_set_brotli_parameter(engine, parameter->key,
+                                       parameter->value))
+      return false;
   }
   return true;
 }
@@ -436,6 +499,11 @@ static bool nts_zlib_initialize_zstd(NtsZlibEngine *engine,
   nts_zlib_destroy_zstd(engine);
   size_t result;
   if (engine->family == NTS_ZLIB_FAMILY_ZSTD_COMPRESSOR) {
+    engine->frame_complete = true;
+    engine->output_emitted = false;
+    engine->consumed_source_size_active =
+        engine->pledged_source_size != ZSTD_CONTENTSIZE_UNKNOWN;
+    engine->consumed_source_size = 0;
     engine->zstd_compressor = ZSTD_createCCtx();
     if (engine->zstd_compressor == NULL) {
       nts_zlib_set_error(engine, -1, "Could not initialize zstd instance",
@@ -463,6 +531,11 @@ static bool nts_zlib_initialize_zstd(NtsZlibEngine *engine,
     return true;
   }
 
+  engine->frame_complete = false;
+  engine->decoding_frame_after_complete = false;
+  engine->ignoring_trailing_input = false;
+  engine->frame_prefix_size = 0;
+  engine->possible_frame_types = 0;
   engine->zstd_decompressor = ZSTD_createDCtx();
   if (engine->zstd_decompressor == NULL) {
     nts_zlib_set_error(engine, -1, "Could not initialize zstd instance",
@@ -504,6 +577,7 @@ static void nts_zlib_free_engine(NtsZlibEngine *engine) {
   nts_zlib_destroy_brotli(engine);
   nts_zlib_destroy_zstd(engine);
   free(engine->dictionary);
+  free(engine->brotli_parameters);
   free(engine);
 }
 
@@ -596,6 +670,14 @@ static void nts_zlib_zlib_step(NtsZlibEngine *engine, uint8_t *output,
   int result;
   if (nts_zlib_is_zlib_encoder(engine->mode)) {
     result = deflate(&engine->zstream, engine->operation_flush);
+    if (writable > engine->zstream.avail_out)
+      engine->output_emitted = true;
+    if (result == Z_STREAM_END) {
+      engine->frame_complete = true;
+      engine->output_emitted = false;
+    } else if (result == Z_OK || result == Z_BUF_ERROR) {
+      engine->frame_complete = false;
+    }
   } else {
     if (engine->frame_complete && nts_zlib_is_gzip_decoder(engine)) {
       int reset_status = inflateReset(&engine->zstream);
@@ -650,7 +732,8 @@ static void nts_zlib_zlib_step(NtsZlibEngine *engine, uint8_t *output,
                        nts_zlib_code(result));
   }
 
-  engine->frame_complete = result == Z_STREAM_END;
+  if (nts_zlib_is_zlib_decoder(engine->mode))
+    engine->frame_complete = result == Z_STREAM_END;
   bool continue_gzip =
       engine->status == 0 && input_left && engine->frame_complete &&
       nts_zlib_is_gzip_decoder(engine) && engine->zstream.next_in[0] != 0x00;
@@ -752,6 +835,69 @@ static void nts_zlib_brotli_step(NtsZlibEngine *engine, uint8_t *output,
   }
 }
 
+static void nts_zlib_zstd_decompress(NtsZlibEngine *engine,
+                                     ZSTD_inBuffer *input,
+                                     ZSTD_outBuffer *output) {
+  if (engine->ignoring_trailing_input)
+    return;
+  /* An empty retry after a full output buffer does not begin a new frame. */
+  if (engine->frame_complete && input->pos == input->size)
+    return;
+
+  do {
+    if (engine->frame_complete) {
+      engine->decoding_frame_after_complete = true;
+      engine->frame_prefix_size = 0;
+      engine->possible_frame_types = 0x03;
+    }
+
+    if (engine->decoding_frame_after_complete &&
+        engine->frame_prefix_size < 4) {
+      static const uint8_t zstd_magic[] = {0x28, 0xb5, 0x2f, 0xfd};
+      static const uint8_t skippable_magic[] = {0x50, 0x2a, 0x4d, 0x18};
+      const uint8_t *data = input->src;
+      size_t input_prefix_offset = 0;
+      while (engine->frame_prefix_size < 4 &&
+             input->pos + input_prefix_offset < input->size) {
+        size_t index = engine->frame_prefix_size;
+        uint8_t byte = data[input->pos + input_prefix_offset];
+        if (byte != zstd_magic[index])
+          engine->possible_frame_types &= ~0x01u;
+        if ((index == 0 && (byte & 0xf0) != skippable_magic[0]) ||
+            (index != 0 && byte != skippable_magic[index]))
+          engine->possible_frame_types &= ~0x02u;
+        engine->frame_prefix_size++;
+        input_prefix_offset++;
+      }
+      if (engine->possible_frame_types == 0) {
+        engine->frame_complete = true;
+        engine->decoding_frame_after_complete = false;
+        if (engine->reject_garbage_after_end) {
+          nts_zlib_set_error(
+              engine, ZSTD_error_GENERIC,
+              "Trailing junk found after the end of the compressed stream",
+              "ERR_TRAILING_JUNK_AFTER_STREAM_END");
+        } else {
+          engine->ignoring_trailing_input = true;
+        }
+        return;
+      }
+    }
+
+    size_t result =
+        ZSTD_decompressStream(engine->zstd_decompressor, output, input);
+    if (ZSTD_isError(result)) {
+      engine->frame_complete = false;
+      nts_zlib_set_zstd_error(engine, result, NULL, NULL);
+      return;
+    }
+    engine->frame_complete = result == 0;
+    if (engine->frame_complete)
+      engine->decoding_frame_after_complete = false;
+  } while (engine->frame_complete && input->pos < input->size &&
+           output->pos < output->size);
+}
+
 static void nts_zlib_zstd_step(NtsZlibEngine *engine, uint8_t *output,
                                size_t output_limit, size_t *output_length) {
   ZSTD_inBuffer input = {
@@ -765,21 +911,33 @@ static void nts_zlib_zstd_step(NtsZlibEngine *engine, uint8_t *output,
   size_t result = 0;
 
   if (engine->family == NTS_ZLIB_FAMILY_ZSTD_COMPRESSOR) {
+    size_t input_position = input.pos;
     result = ZSTD_compressStream2(engine->zstd_compressor, &out, &input,
                                   (ZSTD_EndDirective)engine->operation_flush);
-    if (ZSTD_isError(result)) {
-      nts_zlib_set_zstd_error(engine, result, NULL, NULL);
-    }
-    engine->frame_complete = !ZSTD_isError(result) && result == 0 &&
-                             engine->operation_flush == ZSTD_e_end;
-  } else if (!(engine->frame_complete && input.size == 0)) {
-    result = ZSTD_decompressStream(engine->zstd_decompressor, &out, &input);
+    if (engine->consumed_source_size_active)
+      engine->consumed_source_size += input.pos - input_position;
+    if (out.pos > 0)
+      engine->output_emitted = true;
     if (ZSTD_isError(result)) {
       nts_zlib_set_zstd_error(engine, result, NULL, NULL);
       engine->frame_complete = false;
+    } else if (result == 0 && engine->operation_flush == ZSTD_e_end) {
+      engine->frame_complete = true;
+      engine->output_emitted = false;
+      if (engine->consumed_source_size_active) {
+        uint64_t consumed = engine->consumed_source_size;
+        engine->consumed_source_size_active = false;
+        if (consumed != engine->pledged_source_size) {
+          nts_zlib_set_error(engine, ZSTD_error_srcSize_wrong,
+                             ZSTD_getErrorString(ZSTD_error_srcSize_wrong),
+                             "ZSTD_error_srcSize_wrong");
+        }
+      }
     } else {
-      engine->frame_complete = result == 0;
+      engine->frame_complete = false;
     }
+  } else {
+    nts_zlib_zstd_decompress(engine, &input, &out);
   }
 
   engine->operation_offset += input.pos;
@@ -790,15 +948,20 @@ static void nts_zlib_zstd_step(NtsZlibEngine *engine, uint8_t *output,
 
   if (engine->status == 0 && !output_full &&
       engine->family == NTS_ZLIB_FAMILY_ZSTD_DECOMPRESSOR &&
-      engine->frame_complete && input_left &&
-      engine->reject_garbage_after_end) {
-    nts_zlib_trailing_error(engine);
-  } else if (engine->status == 0 && !output_full &&
-             engine->family == NTS_ZLIB_FAMILY_ZSTD_DECOMPRESSOR &&
-             engine->operation_flush == ZSTD_e_end && !engine->frame_complete &&
-             !input_left) {
-    nts_zlib_set_error(engine, Z_BUF_ERROR, "unexpected end of file",
-                       "Z_BUF_ERROR");
+      engine->operation_flush == ZSTD_e_end && !engine->frame_complete &&
+      !input_left) {
+    if (engine->decoding_frame_after_complete &&
+        engine->frame_prefix_size < 4) {
+      if (engine->reject_garbage_after_end) {
+        nts_zlib_set_error(
+            engine, -1,
+            "Trailing junk found after the end of the compressed stream",
+            "ERR_TRAILING_JUNK_AFTER_STREAM_END");
+      }
+    } else {
+      nts_zlib_set_error(engine, Z_BUF_ERROR, "unexpected end of file",
+                         "Z_BUF_ERROR");
+    }
   }
 
   bool pending = engine->status == 0 && output_full &&
@@ -863,12 +1026,12 @@ static bool nts_zlib_apply_parameters(NtsZlibEngine *engine,
     int key = (int)key_items[index];
     uint32_t value = nts_zlib_to_uint32(value_items[index]);
     bool success;
-    if (engine->family == NTS_ZLIB_FAMILY_BROTLI_ENCODER) {
-      success = BrotliEncoderSetParameter(engine->brotli_encoder,
-                                          (BrotliEncoderParameter)key, value);
-    } else if (engine->family == NTS_ZLIB_FAMILY_BROTLI_DECODER) {
-      success = BrotliDecoderSetParameter(engine->brotli_decoder,
-                                          (BrotliDecoderParameter)key, value);
+    if (engine->family == NTS_ZLIB_FAMILY_BROTLI_ENCODER ||
+        engine->family == NTS_ZLIB_FAMILY_BROTLI_DECODER) {
+      if (!nts_zlib_set_brotli_parameter(engine, key, value) ||
+          !nts_zlib_record_brotli_parameter(engine, key, value))
+        return false;
+      success = true;
     } else if (engine->family == NTS_ZLIB_FAMILY_ZSTD_COMPRESSOR) {
       size_t result = ZSTD_CCtx_setParameter(
           engine->zstd_compressor, (ZSTD_cParameter)key, (int32_t)value);
@@ -1064,7 +1227,7 @@ static NtsView *nts_zlib_run_sync(NtsZlibEngine *engine, int flush,
 }
 
 NtsView *nts_zlib_write_sync(double handle, double flush, NtsView *input,
-                              double maximum_output) {
+                             double maximum_output) {
   NtsZlibEngine *engine = nts_zlib_find(handle);
   if (engine == NULL)
     return nts_zlib_bytes(NULL, 0);
@@ -1150,8 +1313,8 @@ NtsPromise *nts_zlib_write(double handle, double flush, NtsView *input,
   work->output = output;
   work->output_limit = limit;
   engine->busy = true;
-  int queued = uv_queue_work(nts_node_loop(), &work->request,
-                             nts_zlib_work_run, nts_zlib_work_after);
+  int queued = uv_queue_work(nts_node_loop(), &work->request, nts_zlib_work_run,
+                             nts_zlib_work_after);
   if (queued != 0) {
     engine->busy = false;
     nts_zlib_set_error(engine, Z_ERRNO, uv_strerror(queued), "Z_ERRNO");
@@ -1210,28 +1373,85 @@ static void nts_zlib_reset_zlib(NtsZlibEngine *engine) {
   }
 }
 
+bool nts_zlib_is_busy(double handle) {
+  NtsZlibEngine *engine = nts_zlib_find(handle);
+  return engine != NULL && engine->busy;
+}
+
+void nts_zlib_mark_promise_handled(NtsPromise *promise) {
+  promise->handled = true;
+}
+
 void nts_zlib_reset(double handle) {
   NtsZlibEngine *engine = nts_zlib_find(handle);
   if (engine == NULL)
     return;
-  if (engine->busy || engine->operation_pending) {
+  if (engine->busy) {
     nts_zlib_set_error(engine, Z_STREAM_ERROR,
                        "Cannot reset zlib stream while a write is in progress",
                        "Z_STREAM_ERROR");
     return;
   }
   nts_zlib_clear_error(engine);
-  engine->stream_ended = false;
-  engine->frame_complete = false;
-  engine->bytes_written = 0;
-  engine->unzip_prefix_length = 0;
+  if (engine->mode == NTS_GZIP && !engine->frame_complete &&
+      engine->output_emitted) {
+    nts_zlib_set_error(
+        engine, Z_STREAM_ERROR,
+        "Cannot reset a gzip stream with an incomplete member; end the stream "
+        "or start a new gzip compressor",
+        "ERR_ZLIB_INCOMPLETE_FRAME");
+    return;
+  }
   if (engine->family == NTS_ZLIB_FAMILY_ZLIB) {
     nts_zlib_reset_zlib(engine);
+    if (engine->status == 0) {
+      engine->frame_complete = nts_zlib_is_zlib_encoder(engine->mode);
+      engine->output_emitted = false;
+    }
   } else if (engine->family == NTS_ZLIB_FAMILY_BROTLI_ENCODER ||
              engine->family == NTS_ZLIB_FAMILY_BROTLI_DECODER) {
-    nts_zlib_initialize_brotli(engine, false);
+    if (nts_zlib_initialize_brotli(engine, true))
+      nts_zlib_replay_brotli_parameters(engine);
+    engine->frame_complete = false;
+  } else if (engine->family == NTS_ZLIB_FAMILY_ZSTD_COMPRESSOR) {
+    if (!engine->frame_complete && engine->output_emitted) {
+      nts_zlib_set_error(
+          engine, ZSTD_error_stage_wrong,
+          "Cannot reset a zstd stream with an incomplete frame; end the frame "
+          "or discard the output produced so far",
+          "ERR_ZLIB_INCOMPLETE_FRAME");
+      return;
+    }
+    size_t result =
+        ZSTD_CCtx_reset(engine->zstd_compressor, ZSTD_reset_session_only);
+    if (!ZSTD_isError(result))
+      result = ZSTD_CCtx_setPledgedSrcSize(engine->zstd_compressor,
+                                           engine->pledged_source_size);
+    if (ZSTD_isError(result)) {
+      nts_zlib_set_zstd_error(engine, result, NULL, NULL);
+      return;
+    }
+    engine->consumed_source_size_active =
+        engine->pledged_source_size != ZSTD_CONTENTSIZE_UNKNOWN;
+    engine->consumed_source_size = 0;
+    engine->frame_complete = true;
+    engine->output_emitted = false;
   } else {
-    nts_zlib_initialize_zstd(engine, false);
+    size_t result =
+        ZSTD_DCtx_reset(engine->zstd_decompressor, ZSTD_reset_session_only);
+    if (ZSTD_isError(result)) {
+      nts_zlib_set_zstd_error(engine, result, NULL, NULL);
+      return;
+    }
+    engine->frame_complete = false;
+    engine->decoding_frame_after_complete = false;
+    engine->ignoring_trailing_input = false;
+    engine->frame_prefix_size = 0;
+    engine->possible_frame_types = 0;
+  }
+  if (engine->status == 0) {
+    engine->stream_ended = false;
+    engine->unzip_prefix_length = 0;
   }
 }
 
@@ -1280,7 +1500,7 @@ NtsView *nts_zlib_oneshot(double mode, double level, double window_bits,
   if (engine == NULL)
     return nts_zlib_bytes(NULL, 0);
   NtsView *output = nts_zlib_run_sync(engine, (int)finish_flush, input,
-                                       nts_zlib_maximum(maximum_output));
+                                      nts_zlib_maximum(maximum_output));
   nts_zlib_publish_error(engine);
   nts_zlib_free_engine(engine);
   return output;
@@ -1299,7 +1519,7 @@ NtsView *nts_zlib_oneshot_params(double mode, NtsArray *keys, NtsArray *values,
   if (engine == NULL)
     return nts_zlib_bytes(NULL, 0);
   NtsView *output = nts_zlib_run_sync(engine, (int)finish_flush, input,
-                                       nts_zlib_maximum(maximum_output));
+                                      nts_zlib_maximum(maximum_output));
   nts_zlib_publish_error(engine);
   nts_zlib_free_engine(engine);
   return output;
@@ -1326,12 +1546,13 @@ NtsString *nts_zlib_last_error_code(void) {
  * would object never got this far.
  *
  * Found by `tooling/conformance/binding-probe.sh`, which builds an addon around
- * a few of a module's bindings without compiling the module. `crc32` is the only
- * binding in the profile declared to take a `Uint8Array`, and no C binding
+ * a few of a module's bindings without compiling the module. `crc32` is the
+ * only binding in the profile declared to take a `Uint8Array`, and no C binding
  * anywhere took an `NtsView *` before this one. */
 double nts_crc32(NtsView *input, double initial) {
   uint32_t value = nts_zlib_to_uint32(initial);
-  if (input == NULL || input->buffer == NULL) return (double)value;
+  if (input == NULL || input->buffer == NULL)
+    return (double)value;
   size_t remaining = (size_t)nts_view_byte_length(input);
   const uint8_t *bytes =
       (const uint8_t *)input->buffer->bytes + input->byte_offset;

@@ -1,4 +1,4 @@
-// `node:zlib/iter`, from Node v24.20.0
+// `node:zlib/iter`, from Node v26.13.0
 // `lib/internal/streams/iter/transform.js`.
 //
 // These descriptors drive the compression engine directly. They deliberately
@@ -6,27 +6,45 @@
 // provide ordering and backpressure, so an EventEmitter layer would only add
 // allocations and callbacks around the same native operation.
 
-import { AbortError, ERR_INVALID_ARG_TYPE, ERR_OUT_OF_RANGE } from "../../internal/errors.ts";
-import { validateInteger, validateObject } from "../../internal/validators.ts";
+import {
+  ERR_BROTLI_INVALID_PARAM,
+  ERR_INVALID_ARG_TYPE,
+  ERR_OUT_OF_RANGE,
+  ERR_ZSTD_INVALID_PARAM,
+} from "../../internal/errors.ts";
+import {
+  kValidateObjectAllowArray,
+  validateInteger,
+  validateObject,
+} from "../../internal/validators.ts";
 import type { TransformOptions } from "../../stream/src/iter/pull.ts";
 import { kValidatedTransform } from "../../stream/src/iter/types.ts";
 import {
-  type AsyncByteStream,
   type ByteBatch,
   type StreamAbortSignal,
-  throwIfAborted,
 } from "../../stream/src/iter/utils.ts";
 import { Buffer } from "../../buffer/src/main.ts";
 import * as C from "./constants.ts";
 import { zlibCodeForStatus } from "./error-code.ts";
-import { optionalByteView, parameterArrays, type BinaryInput } from "./options.ts";
+import { optionalByteView, type BinaryInput } from "./options.ts";
 
 const DEFAULT_OUTPUT_SIZE = 65_536;
 const NO_PLEDGED_SOURCE_SIZE = -1;
-const MAXIMUM_ONE_SHOT_OUTPUT = 0xffff_ffff;
+const BATCH_HWM = DEFAULT_OUTPUT_SIZE;
+const MAXIMUM_SYNC_OUTPUT = 0xffff_ffff;
+const kMaxBrotliParam = Math.max(
+  ...Object.entries(C).map(([key, value]) => key.startsWith("BROTLI_PARAM_") ? value as number : 0),
+);
+const kMaxZstdCParam = Math.max(
+  ...Object.entries(C).map(([key, value]) => key.startsWith("ZSTD_c_") ? value as number : 0),
+);
+const kMaxZstdDParam = Math.max(
+  ...Object.entries(C).map(([key, value]) => key.startsWith("ZSTD_d_") ? value as number : 0),
+);
 
 type EngineFamily = "zlib" | "brotli" | "zstd";
 type SyncTransformSource = Iterable<ByteBatch | null>;
+type AsyncTransformSource = AsyncIterable<ByteBatch | null>;
 
 /** Options common to every iterable compression engine. */
 export interface IteratorCompressionOptions {
@@ -123,30 +141,84 @@ function outputSize(options: IteratorEngineOptions): number {
   return value;
 }
 
-function brotliParameters(mode: number, options: IteratorEngineOptions): [number[], number[]] {
-  const [userKeys, userValues] = parameterArrays(options.params, C.BROTLI_PARAM_NDIRECT, "brotli");
-  if (mode !== C.BROTLI_ENCODE) return [userKeys, userValues];
+interface IteratorParameters {
+  readonly [name: string]: unknown;
+}
 
-  // Defaults precede user values so a repeated key has Node's last-write-wins
-  // semantics when the native parameter table is initialized.
-  const keys = new Array<number>(userKeys.length + 2);
-  const values = new Array<number>(userValues.length + 2);
-  keys[0] = C.BROTLI_PARAM_QUALITY;
-  values[0] = 6;
-  keys[1] = C.BROTLI_PARAM_LGWIN;
-  values[1] = 20;
-  for (let i = 0; i < userKeys.length; i++) {
-    keys[i + 2] = userKeys[i] ?? 0;
-    values[i + 2] = userValues[i] ?? 0;
+type InvalidParameterConstructor = new (name: string) => Error;
+
+// Node v26.13.0 transform.js:111-127. Keep the constructor argument and the
+// upstream validation order, including arrays and numeric-key coercion.
+function validateParams(
+  params: IteratorParameters | undefined,
+  maximum: number,
+  ErrorClass: InvalidParameterConstructor,
+): void {
+  if (params === undefined) return;
+  validateObject(params, "options.params", kValidateObjectAllowArray);
+  const keys = Object.keys(params);
+  for (let i = 0; i < keys.length; i++) {
+    const originalKey = keys[i]!;
+    const key = +originalKey;
+    if (Number.isNaN(key) || key < 0 || key > maximum) {
+      throw new ErrorClass(originalKey);
+    }
+    const value = params[originalKey];
+    if (typeof value !== "number" && typeof value !== "boolean") {
+      throw new ERR_INVALID_ARG_TYPE("options.params[key]", "number", value);
+    }
+  }
+}
+
+function iteratorParameters(
+  params: IteratorParameters | undefined,
+  maximum: number,
+  ErrorClass: InvalidParameterConstructor,
+  brotliEncoderDefaults: boolean,
+): [number[], number[]] {
+  validateParams(params, maximum, ErrorClass);
+  const init = new Uint32Array(maximum + 1);
+  init.fill(-1);
+  if (brotliEncoderDefaults) {
+    init[C.BROTLI_PARAM_QUALITY] = 6;
+    init[C.BROTLI_PARAM_LGWIN] = 20;
+  }
+  if (params) {
+    const keys = Object.keys(params);
+    for (let i = 0; i < keys.length; i++) {
+      const key = keys[i]!;
+      init[+key] = params[key] as number;
+    }
+  }
+  // The declared native operation receives the initialized slots. The typed
+  // table above preserves upstream's coercion, sentinel and last-write rules.
+  const keys: number[] = [];
+  const values: number[] = [];
+  for (let key = 0; key < init.length; key++) {
+    const value = init[key]!;
+    if (value !== 0xffff_ffff) {
+      keys.push(key);
+      values.push(value);
+    }
   }
   return [keys, values];
 }
 
-function zstdParameters(mode: number, options: IteratorEngineOptions): [number[], number[]] {
-  return parameterArrays(
+function brotliParameters(mode: number, options: IteratorEngineOptions): [number[], number[]] {
+  return iteratorParameters(
     options.params,
-    mode === C.ZSTD_COMPRESS ? 402 : C.ZSTD_d_windowLogMax,
-    "zstd",
+    kMaxBrotliParam,
+    ERR_BROTLI_INVALID_PARAM,
+    mode === C.BROTLI_ENCODE,
+  );
+}
+
+function zstdParameters(mode: number, options: IteratorEngineOptions): [number[], number[]] {
+  return iteratorParameters(
+    options.params,
+    mode === C.ZSTD_COMPRESS ? kMaxZstdCParam : kMaxZstdDParam,
+    ERR_ZSTD_INVALID_PARAM,
+    false,
   );
 }
 
@@ -279,10 +351,10 @@ async function nativeWrite(
   outputLimit: number,
   signal: StreamAbortSignal,
 ): Promise<Uint8Array> {
-  throwIfAborted(signal);
+  signal.throwIfAborted!();
   const operation = nts_zlib_write(handle, flush, bytes, outputLimit);
   const aborted = Promise.withResolvers<never>();
-  const onAbort = (): void => aborted.reject(signal.reason ?? new AbortError());
+  const onAbort = (): void => aborted.reject(signal.reason);
   signal.addEventListener("abort", onAbort, { once: true });
   if (signal.aborted) onAbort();
 
@@ -302,171 +374,231 @@ async function nativeWrite(
   }
 }
 
-async function* nativeOutput(
-  handle: number,
-  flush: number,
-  bytes: Uint8Array,
-  chunkSize: number,
-  signal: StreamAbortSignal,
-): AsyncGenerator<ByteBatch> {
-  let input = bytes;
-  do {
-    const output = await nativeWrite(handle, flush, input, chunkSize, signal);
-    if (output.byteLength > 0) yield [output];
-    input = emptyNativeInput;
-  } while (nts_zlib_operation_pending(handle));
-}
-
 const emptyNativeInput = new Uint8Array(0);
 
-function* outputBatches(output: Uint8Array, chunkSize: number): Generator<ByteBatch> {
-  for (let offset = 0; offset < output.byteLength; offset += chunkSize) {
-    yield [output.subarray(offset, Math.min(offset + chunkSize, output.byteLength))];
-  }
-}
-
-class CollectedChunk {
-  readonly bytes: Uint8Array;
-  next: CollectedChunk | null = null;
-
-  constructor(bytes: Uint8Array) {
-    this.bytes = bytes;
-  }
-}
-
-function concatenateSource(source: SyncTransformSource): Uint8Array {
-  let first: CollectedChunk | null = null;
-  let last: CollectedChunk | null = null;
-  let totalBytes = 0;
-  for (const batch of source) {
-    if (batch === null) continue;
-    for (let i = 0; i < batch.length; i++) {
-      const chunk = batch[i];
-      if (chunk === undefined) continue;
-      const collected = new CollectedChunk(chunk);
-      if (last === null) first = collected;
-      else last.next = collected;
-      last = collected;
-      totalBytes += chunk.byteLength;
-    }
-  }
-  const result = new Uint8Array(totalBytes);
-  let offset = 0;
-  let collected = first;
-  while (collected !== null) {
-    result.set(collected.bytes, offset);
-    offset += collected.bytes.byteLength;
-    collected = collected.next;
-  }
-  return result;
-}
-
-function oneShot(configuration: TransformConfiguration, input: Uint8Array): Uint8Array {
-  const output =
-    configuration.family === "zlib"
-      ? nts_zlib_oneshot(
-          configuration.mode,
-          configuration.level,
-          configuration.windowBits,
-          configuration.memLevel,
-          configuration.strategy,
-          configuration.dictionary,
-          configuration.finishFlag,
-          MAXIMUM_ONE_SHOT_OUTPUT,
-          input,
-          false,
-        )
-      : nts_zlib_oneshot_params(
-          configuration.mode,
-          configuration.parameterKeys,
-          configuration.parameterValues,
-          configuration.dictionary,
-          configuration.pledgedSourceSize,
-          configuration.finishFlag,
-          MAXIMUM_ONE_SHOT_OUTPUT,
-          input,
-          false,
-        );
-  const status = nts_zlib_last_status();
+function syncInput(handle: number, input: Uint8Array, flush: number): Uint8Array {
+  const output = nts_zlib_write_sync(handle, flush, input, MAXIMUM_SYNC_OUTPUT);
+  const status = nts_zlib_status(handle);
   if (status !== 0) {
     throw new IteratorZlibError(
-      nts_zlib_last_error_message(),
+      nts_zlib_error_message(handle),
       status,
-      nts_zlib_last_error_code() || zlibCodeForStatus(status),
+      nts_zlib_error_code(handle) || zlibCodeForStatus(status),
     );
   }
   return Buffer.from(output);
 }
 
-class AsyncCompressionTransform {
-  readonly [kValidatedTransform] = true;
-  readonly #mode: number;
-  readonly #options: IteratorEngineOptions;
-
-  constructor(mode: number, options: IteratorEngineOptions) {
-    this.#mode = mode;
-    this.#options = options;
-  }
-
-  async *transform(source: AsyncByteStream, options: TransformOptions): AsyncGenerator<ByteBatch> {
-    const signal = options.signal;
-    throwIfAborted(signal);
-    const configuration = parseConfiguration(this.#mode, this.#options);
-    const handle = openEngine(configuration);
-    try {
-      for await (const batch of source) {
-        throwIfAborted(signal);
-        for (let i = 0; i < batch.length; i++) {
-          const chunk = batch[i];
-          if (chunk === undefined) continue;
-          yield* nativeOutput(
-            handle,
-            configuration.processFlag,
-            chunk,
-            configuration.chunkSize,
-            signal,
-          );
-        }
-      }
-      yield* nativeOutput(
-        handle,
-        configuration.finishFlag,
-        emptyNativeInput,
-        configuration.chunkSize,
-        signal,
-      );
-    } finally {
-      nts_zlib_close(handle);
-    }
-  }
+interface AsyncCompressionTransform {
+  readonly [kValidatedTransform]: true;
+  transform(source: AsyncTransformSource, options: TransformOptions): AsyncGenerator<ByteBatch>;
 }
 
-class SyncCompressionTransform {
-  readonly #mode: number;
-  readonly #options: IteratorEngineOptions;
+function makeAsyncCompressionTransform(mode: number, engineOptions: IteratorEngineOptions): AsyncCompressionTransform {
+  const descriptor = {
+    __proto__: null,
+    [kValidatedTransform]: true as const,
+    transform: async function*(source: AsyncTransformSource, options: TransformOptions): AsyncGenerator<ByteBatch> {
+      const signal = options.signal;
+      signal?.throwIfAborted!();
+      const configuration = parseConfiguration(mode, engineOptions);
+      const handle = openEngine(configuration);
+      const chunkSize = configuration.chunkSize;
+      let outOffset = 0;
+      let pending: ByteBatch = [];
+      let pendingBytes = 0;
+      let writeFlush = configuration.processFlag;
+      let iter: AsyncIterator<ByteBatch | null> | undefined;
+      let returnMethod: AsyncIterator<ByteBatch | null>["return"];
 
-  constructor(mode: number, options: IteratorEngineOptions) {
-    this.#mode = mode;
-    this.#options = options;
-  }
+      // nts_zlib_write owns pending native input between bounded writes. The
+      // loop and false/true completion signal match onWriteComplete upstream.
+      async function continueInputAsync(input: Uint8Array = emptyNativeInput): Promise<boolean> {
+        while (true) {
+          const output = await nativeWrite(handle, writeFlush, input, chunkSize - outOffset, signal);
+          if (output.byteLength > 0) {
+            pending.push(output);
+            pendingBytes += output.byteLength;
+            outOffset += output.byteLength;
+          }
+          if (outOffset >= chunkSize) outOffset = 0;
+          if (!nts_zlib_operation_pending(handle)) return true;
+          if (pendingBytes >= BATCH_HWM) return false;
+          input = emptyNativeInput;
+        }
+      }
 
-  *transform(source: SyncTransformSource): Generator<ByteBatch> {
-    const configuration = parseConfiguration(this.#mode, this.#options);
-    yield* outputBatches(
-      oneShot(configuration, concatenateSource(source)),
-      configuration.chunkSize,
-    );
-  }
+      function processInputAsync(input: Uint8Array, flush: number): Promise<boolean> {
+        writeFlush = flush;
+        return continueInputAsync(input);
+      }
+
+      function drainBatch(): ByteBatch {
+        if (pendingBytes <= BATCH_HWM) {
+          const batch = pending;
+          pending = [];
+          pendingBytes = 0;
+          return batch;
+        }
+        const batch: ByteBatch = [];
+        let batchBytes = 0;
+        while (pending.length > 0 && batchBytes < BATCH_HWM) {
+          const buffer = pending.shift()!;
+          batch.push(buffer);
+          batchBytes += buffer.byteLength;
+          pendingBytes -= buffer.byteLength;
+        }
+        return batch;
+      }
+
+      async function* processInputBatches(input: Uint8Array, flush: number): AsyncGenerator<ByteBatch> {
+        let complete = await processInputAsync(input, flush);
+        while (!complete) {
+          while (pendingBytes >= BATCH_HWM) yield drainBatch();
+          signal?.throwIfAborted!();
+          complete = await continueInputAsync();
+        }
+      }
+
+      let finalized = false;
+      // The numeric native handle is owned even if iterator method lookup fails.
+      try {
+        iter = source[Symbol.asyncIterator]();
+        const sourceIterator = iter;
+        const nextMethod = iter.next;
+        try { returnMethod = iter.return; } catch { /* Ignore cleanup lookup failures. */ }
+
+        function readNext(): Promise<IteratorResult<ByteBatch | null>> {
+          const result = Promise.resolve(nextMethod.call(sourceIterator)).then(undefined, undefined);
+          nts_zlib_mark_promise_handled(result);
+          return result;
+        }
+
+        let nextResult = readNext();
+        while (true) {
+          const { value: chunks, done } = await nextResult;
+          if (done) break;
+          signal?.throwIfAborted!();
+          if (chunks === null) {
+            if (!finalized) {
+              finalized = true;
+              for await (const batch of processInputBatches(emptyNativeInput, configuration.finishFlag)) {
+                yield batch;
+              }
+              while (pending.length > 0) yield drainBatch();
+            }
+            nextResult = readNext();
+            continue;
+          }
+          nextResult = readNext();
+          for (let i = 0; i < chunks.length; i++) {
+            for await (const batch of processInputBatches(chunks[i]!, configuration.processFlag)) {
+              yield batch;
+            }
+          }
+          if (pendingBytes >= BATCH_HWM) {
+            while (pending.length > 0 && pendingBytes >= BATCH_HWM) yield drainBatch();
+          }
+          if (pending.length > 0) yield drainBatch();
+        }
+        if (!finalized && !signal.aborted) {
+          finalized = true;
+          for await (const batch of processInputBatches(emptyNativeInput, configuration.finishFlag)) {
+            yield batch;
+          }
+          while (pending.length > 0) yield drainBatch();
+        }
+      } finally {
+        nts_zlib_close(handle);
+        // return() can be queued behind a next() that never resolves.
+        if (typeof returnMethod === "function") {
+          try {
+            const cleanup = Promise.resolve(returnMethod.call(iter)).then(undefined, undefined);
+            nts_zlib_mark_promise_handled(cleanup);
+          } catch { /* Cleanup cannot replace completion. */ }
+        }
+      }
+    },
+  };
+  return descriptor;
+}
+
+interface SyncCompressionTransform {
+  transform(source: SyncTransformSource): Generator<ByteBatch>;
+}
+
+function makeSyncCompressionTransform(mode: number, engineOptions: IteratorEngineOptions): SyncCompressionTransform {
+  const descriptor = {
+    __proto__: null,
+    transform: function*(source: SyncTransformSource): Generator<ByteBatch> {
+      const configuration = parseConfiguration(mode, engineOptions);
+      const handle = openEngine(configuration);
+      let pending: ByteBatch = [];
+      let pendingBytes = 0;
+      let outOffset = 0;
+
+      function processSyncInput(input: Uint8Array, flush: number): void {
+        const output = syncInput(handle, input, flush);
+        let offset = 0;
+        while (offset < output.byteLength) {
+          const have = Math.min(configuration.chunkSize - outOffset, output.byteLength - offset);
+          pending.push(output.subarray(offset, offset + have));
+          pendingBytes += have;
+          offset += have;
+          outOffset += have;
+          if (outOffset >= configuration.chunkSize) outOffset = 0;
+        }
+      }
+
+      function drainBatch(): ByteBatch {
+        if (pendingBytes <= BATCH_HWM) {
+          const batch = pending;
+          pending = [];
+          pendingBytes = 0;
+          return batch;
+        }
+        const batch: ByteBatch = [];
+        let batchBytes = 0;
+        while (pending.length > 0 && batchBytes < BATCH_HWM) {
+          const buffer = pending.shift()!;
+          batch.push(buffer);
+          batchBytes += buffer.byteLength;
+          pendingBytes -= buffer.byteLength;
+        }
+        return batch;
+      }
+
+      try {
+        for (const batch of source) {
+          if (batch === null) {
+            processSyncInput(emptyNativeInput, configuration.finishFlag);
+            while (pending.length > 0) yield drainBatch();
+            continue;
+          }
+          for (let i = 0; i < batch.length; i++) {
+            processSyncInput(batch[i]!, configuration.processFlag);
+          }
+          if (pendingBytes >= BATCH_HWM) {
+            while (pending.length > 0 && pendingBytes >= BATCH_HWM) yield drainBatch();
+          }
+          if (pending.length > 0) yield drainBatch();
+        }
+      } finally {
+        nts_zlib_close(handle);
+      }
+    },
+  };
+  return descriptor;
 }
 
 function asyncTransform(mode: number, options: IteratorEngineOptions): AsyncCompressionTransform {
   validateObject(options, "options");
-  return new AsyncCompressionTransform(mode, options);
+  return makeAsyncCompressionTransform(mode, options);
 }
 
 function syncTransform(mode: number, options: IteratorEngineOptions): SyncCompressionTransform {
   validateObject(options, "options");
-  return new SyncCompressionTransform(mode, options);
+  return makeSyncCompressionTransform(mode, options);
 }
 
 export function compressGzip(options: IteratorZlibOptions = {}): AsyncCompressionTransform {

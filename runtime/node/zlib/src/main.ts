@@ -1,4 +1,5 @@
-// `node:zlib`, from node v24.20.0 `lib/zlib.js`.
+// `node:zlib` compression surface, from node v26.13.0 `lib/zlib.js`.
+// The new ZIP archive surface is the second, separately reported pilot part.
 //
 // Compression is a C library — zlib, brotli, zstd — and what is here is
 // everything around it: the option validation, the flush semantics, the stream
@@ -196,13 +197,26 @@ function finalFlush(current: number, finishing: number, family: FlushFamily): nu
  */
 class ZlibNativeHandle {
   readonly identifier: number;
+  readonly #onError: (error: Error) => void;
 
-  constructor(identifier: number) {
+  constructor(identifier: number, onError: (error: Error) => void) {
     this.identifier = identifier;
+    this.#onError = onError;
   }
 
   reset(): void {
+    if (nts_zlib_is_busy(this.identifier)) {
+      throw new Error("Cannot reset zlib stream while a write is in progress");
+    }
     nts_zlib_reset(this.identifier);
+    const status = nts_zlib_status(this.identifier);
+    if (status !== 0) {
+      this.#onError(new ZlibError(
+        nts_zlib_error_message(this.identifier),
+        status,
+        nts_zlib_error_code(this.identifier),
+      ));
+    }
   }
 
   setParameters(level: number, strategy: number): void {
@@ -221,21 +235,6 @@ interface PausedNativeWrite {
 }
 
 const emptyNativeInput = new Uint8Array(0);
-
-/**
- * Pinned Node ignores an invalid Zstandard dictionary instead of rejecting it.
- * Brotli and zlib deliberately keep their stricter public validation.
- */
-function zstdDictionary(value: unknown): Uint8Array {
-  if (
-    value instanceof ArrayBuffer ||
-    value instanceof SharedArrayBuffer ||
-    ArrayBuffer.isView(value)
-  ) {
-    return byteView(value, "options.dictionary");
-  }
-  return emptyNativeInput;
-}
 
 /**
  * The stream every compressor and decompressor is.
@@ -282,23 +281,20 @@ export class ZlibBase extends Transform {
       C.Z_DEFAULT_CHUNK,
     );
 
-    // Built rather than spread: only the stream's own options cross over, so
-    // zlib's numeric `flush` cannot be mistaken for the stream's hook of the
-    // same name. A compressor's output is bytes and only bytes, so the
-    // object-mode and encoding options are dropped -- node clears them rather
-    // than refusing them, because they are usually inherited from a wider
-    // options object the caller passed to several things.
+    // Node forwards stream options, including defaultEncoding. Compression's
+    // numeric flush is native-only; Transform ignores it as a non-function.
+    // Keep that distinction explicit at this typed constructor boundary.
     super({
-      autoDestroy: options?.autoDestroy ?? true,
-      emitClose: options?.emitClose,
-      highWaterMark: options?.highWaterMark,
-      signal: options?.signal,
+      autoDestroy: true,
+      ...options,
+      flush: undefined,
       encoding: undefined,
       objectMode: false,
       writableObjectMode: false,
+      decodeStrings: true,
     });
 
-    this._handle = new ZlibNativeHandle(handle);
+    this._handle = new ZlibNativeHandle(handle, (error) => this.destroy(error));
     this._chunkSize = chunkSize;
     this._defaultFlushFlag = inRangeOrDefault(
       options?.flush,
@@ -791,7 +787,7 @@ const zstdDefaults = {
 export class Zstd extends ZlibBase {
   constructor(options: ZstdOptions | undefined, mode: number) {
     const [keys, values] = parameterTable(options, mode);
-    const dictionary = zstdDictionary(options?.dictionary);
+    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
     const handle = nts_zlib_create_params(
       mode,
       keys,
@@ -939,9 +935,7 @@ function oneShotSync(mode: number, input: InputType, options?: EngineOptions): O
 
   if (mode >= C.BROTLI_DECODE) {
     const [keys, values] = parameterTable(options, mode);
-    const dictionary = mode === C.ZSTD_COMPRESS || mode === C.ZSTD_DECOMPRESS
-      ? zstdDictionary(options?.dictionary)
-      : optionalByteView(options?.dictionary, "options.dictionary");
+    const dictionary = optionalByteView(options?.dictionary, "options.dictionary");
     const sourceSize = mode === C.ZSTD_COMPRESS ? pledgedSourceSize(options) : -1;
     const finishFlush = finishFlushForMode(mode, options);
     const rejectTrailingGarbage = rejectGarbageAfterEnd(options);
@@ -1069,6 +1063,9 @@ function oneShot(
   } else {
     compressionOptions = options;
   }
+  if (mode === C.ZSTD_COMPRESS) {
+    compressionOptions = withPledgedSrcSize(input, compressionOptions);
+  }
   // Pinned Node constructs the engine before validating the callback. Besides
   // preserving that error order, this makes option errors synchronous while
   // compression errors still arrive through the callback.
@@ -1080,6 +1077,24 @@ function oneShot(
     throw error;
   }
   collectOneShot(engine, input, completion);
+}
+
+// Node v26.13.0 lib/zlib.js:847-869. An asynchronous convenience call writes
+// and ends separately, so pledge the known size unless the caller supplied it
+// or a non-UTF-8 string encoding makes its UTF-8 byte length inappropriate.
+function withPledgedSrcSize(input: InputType, options?: EngineOptions): EngineOptions | undefined {
+  if (options?.pledgedSrcSize !== undefined) return options;
+  let sourceSize: number;
+  if (typeof input === "string") {
+    const encoding = options?.defaultEncoding;
+    if (encoding != null && encoding !== "utf8" && encoding !== "utf-8") return options;
+    sourceSize = Buffer.byteLength(input);
+  } else if (ArrayBuffer.isView(input) || input instanceof ArrayBuffer || input instanceof SharedArrayBuffer) {
+    sourceSize = input.byteLength;
+  } else {
+    return options;
+  }
+  return { ...options, pledgedSrcSize: sourceSize };
 }
 
 export function deflate(

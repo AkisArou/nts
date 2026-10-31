@@ -55,6 +55,10 @@ declare function nts_zlib_bytes_written(handle: number): number;
 /** @ntsAbi managed */
 declare function nts_zlib_operation_pending(handle: number): boolean;
 /** @ntsAbi managed */
+declare function nts_zlib_is_busy(handle: number): boolean;
+/** @ntsAbi managed */
+declare function nts_zlib_mark_promise_handled(promise: Promise<unknown>): void;
+/** @ntsAbi managed */
 declare function nts_zlib_reset(handle: number): void;
 /** @ntsAbi managed */
 declare function nts_zlib_params(handle: number, level: number, strategy: number): number;

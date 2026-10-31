@@ -1,4 +1,4 @@
-# Node v24.20.0 tests outside the statically typed runtime profile.
+# Node v26.13.0 tests outside the statically typed runtime profile.
 test-zlib-deflate-raw-inherits.js: language non-goal (typescript.md section 13); implements inheritance by calling a class as a function and mutating both constructor and instance prototype chains
 test-zlib-invalid-input.js: language non-goal (typescript.md section 13); irreducibly uses accessor descriptors to spoof typed-array length and byteLength; applicable invalid compressed-stream behavior is retained in local/invalid-input-static.js
 test-zlib-kmaxlength-rangeerror.js: language non-goal (typescript.md section 13); mutates a CommonJS module export before loading zlib so zlib captures the temporary property value; explicit maxOutputLength behavior remains covered by test-zlib-maxOutputLength.js

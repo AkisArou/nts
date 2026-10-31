@@ -159,6 +159,14 @@ function makeEngine(stream, family, mode, options) {
     operationDone: false,
     request: null,
   };
+  // The native callback precedes the host stream's deferred error event.
+  // Synchronous reset/write callers need its status immediately, as in C.
+  const onNativeError = stream._handle.onerror;
+  stream._handle.onerror = function(message, errno, code) {
+    engine.error = Object.assign(new Error(message), { errno, code });
+    engine.status = errno;
+    return onNativeError.call(this, message, errno, code);
+  };
   stream.on("readable", () => settleRead(engine));
   stream.on("error", (error) => {
     engine.error = error;
@@ -231,20 +239,37 @@ globalThis.nts_zlib_write = (handle, flush, input, outputLimit) => new Promise((
 globalThis.nts_zlib_write_sync = (handle, flush, input, maximumOutput) => {
   const engine = engines.get(handle);
   if (!engine) return Buffer.alloc(0);
-  const options = {
-    ...engine.options,
-    finishFlush: flush,
-    maxOutputLength: maximumOutput,
-  };
-  try {
-    const output = oneShotSync[engine.mode](input, options);
-    engine.status = 0;
-    return output;
-  } catch (error) {
-    engine.error = error;
-    engine.status = error.errno ?? -3;
-    throw error;
+  if (engine.error) return Buffer.alloc(0);
+  let inputOffset = 0;
+  let availableInput = input.byteLength;
+  const buffers = [];
+  let length = 0;
+  while (true) {
+    const output = Buffer.allocUnsafe(Math.min(65536, maximumOutput - length + 1));
+    engine.stream._handle.writeSync(
+      flush, input, inputOffset, availableInput, output, 0, output.length,
+    );
+    if (engine.error) return Buffer.alloc(0);
+    const availableOutput = engine.stream._writeState[0];
+    const inputAfter = engine.stream._writeState[1];
+    const produced = output.length - availableOutput;
+    engine.stream.bytesWritten += availableInput - inputAfter;
+    inputOffset += availableInput - inputAfter;
+    availableInput = inputAfter;
+    if (produced > 0) {
+      buffers.push(output.subarray(0, produced));
+      length += produced;
+    }
+    if (length > maximumOutput) {
+      engine.error = Object.assign(new RangeError(
+        "Cannot create a Buffer larger than maxOutputLength bytes",
+      ), { errno: -4, code: "ERR_BUFFER_TOO_LARGE" });
+      engine.status = -4;
+      return Buffer.alloc(0);
+    }
+    if (availableOutput !== 0) break;
   }
+  return Buffer.concat(buffers, length);
 };
 
 globalThis.nts_zlib_status = (handle) => engines.get(handle)?.status ?? -2;
@@ -263,6 +288,15 @@ globalThis.nts_zlib_bytes_written = (handle) =>
 
 globalThis.nts_zlib_operation_pending = (handle) =>
   engines.get(handle)?.active ?? false;
+
+globalThis.nts_zlib_is_busy = (handle) =>
+  engines.get(handle)?.writing ?? false;
+
+globalThis.nts_zlib_mark_promise_handled = (promise) => {
+  // Node's internal markPromiseAsHandled does not alter the promise's result.
+  // Installing a rejection observer gives this host stand-in the same effect.
+  Promise.prototype.then.call(promise, undefined, () => {});
+};
 
 globalThis.nts_zlib_reset = (handle) => {
   const engine = engines.get(handle);
