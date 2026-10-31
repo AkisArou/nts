@@ -6,6 +6,8 @@
 // we use it, so a disagreement here is a disagreement about assembly rather
 // than about the syscall.
 import "../internal/bindings.node.mjs";
+// The typed dependency closure initializes Buffer's allocation pool.
+import "../buffer/bindings.node.mjs";
 import os from "node:os";
 import process from "node:process";
 

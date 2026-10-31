@@ -8,6 +8,8 @@
 // for what the compiled runtime will do with libuv, so the module above can be
 // tested as itself rather than as a plan.
 import "../internal/bindings.node.mjs";
+// The typed dependency closure initializes Buffer's allocation pool.
+import "../buffer/bindings.node.mjs";
 import dgram from "node:dgram";
 import dns from "node:dns";
 

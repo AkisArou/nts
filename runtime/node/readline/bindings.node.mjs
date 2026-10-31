@@ -6,4 +6,6 @@
 // the modules underneath it -- `string_decoder`, `timers`, `events` -- have
 // native halves of their own.
 import "../internal/bindings.node.mjs";
+// The typed dependency closure initializes Buffer's allocation pool.
+import "../buffer/bindings.node.mjs";
 import "../timers/bindings.node.mjs";

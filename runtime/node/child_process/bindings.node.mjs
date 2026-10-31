@@ -24,6 +24,8 @@
 // `nts_uv_err_name is not defined`, one import away from anything this file names.
 import { Buffer as HostBuffer } from "node:buffer";
 import "../internal/bindings.node.mjs";
+// The typed dependency closure initializes Buffer's allocation pool.
+import "../buffer/bindings.node.mjs";
 // `collect` arms a timeout through the timers module, the way `net` does.
 import "../timers/bindings.node.mjs";
 import { spawnSync } from "node:child_process";

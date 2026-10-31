@@ -3,3 +3,5 @@
 // Nothing of its own: the platform and the warning sink are shared, and the
 // IDNA step is TypeScript.
 import "../internal/bindings.node.mjs";
+// The typed dependency closure initializes Buffer's allocation pool.
+import "../buffer/bindings.node.mjs";
