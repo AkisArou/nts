@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":2,"backend":"llvm","commit":"0814cc837f3bda76a8bd3505f1f847f79326dc71","compiler":"498e919364e3dea6","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":2,"backend":"llvm","commit":"80007ec8e273f6e5c1b8848a02f99db10f1cfbed","compiler":"d288718894ce9c94","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/ambient/declare-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
@@ -294,6 +294,34 @@ tests/typescript/iteration/labelled-loops.ts	{"kind":"pass"}
 tests/typescript/iteration/map-and-set-iteration.ts	{"kind":"pass"}
 tests/typescript/iteration/string-iteration.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/iteration/yield-delegation.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/frame-alias-destructured-child.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-alias-spread-field.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-await-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/frame-await-local-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/frame-callback-higher-order-retains.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-callback-map-retains.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-closure-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-closure-two-readers.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-container-array-elements.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-container-map-values.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-container-outer-fields.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-container-set-members.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/frame-global-module-object.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-global-static-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-hook-getter-retains.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/frame-hook-setter-retains.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-hook-sort-comparator-retains.ts	{"kind":"pass"}
+tests/typescript/lifetimes/frame-hook-to-string-retains.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-iterator-next-result.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-iterator-spread-bounded-strings.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/frame-re-entry-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-re-entry-object-activations.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-return-chain-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-return-chain-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-throw-carried-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/frame-throw-finally-retains.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/frame-yield-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/frame-yield-local-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/literal-types/as-const-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/literal-types/boolean-literal-overload.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/literal-types/combination-literal-router.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
