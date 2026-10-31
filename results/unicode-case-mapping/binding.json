@@ -1,0 +1,75 @@
+{
+  "schemaVersion": 1,
+  "source": "26b4bea1f369e23491f52934990cfdfd646a19a6",
+  "base": "fb20438eb6818523504fc64374f8f42b6521234e",
+  "authoredHead": "08982cb5133862c9aa71a8e87893c077a8eb08f6",
+  "compiler": {
+    "sha": "fb20438eb6818523504fc64374f8f42b6521234e",
+    "subject": "tests: pin const capture in module-scope destructuring loops",
+    "clean": true,
+    "applied": null,
+    "built_at": "2026-10-31T04:50:52.382Z",
+    "binary_sha256": "b5582fd0ea85ee654d131c93db718864c6e3a86292eff350596145c8f8bc90b5"
+  },
+  "priorCompilerQualification": "3240675850fa0d897cb87edca17b2d11c398a08c",
+  "priorAndCurrentPinBinaryHashIdentical": true,
+  "caseBodiesChanged": false,
+  "authoredFilesByteExact": 208,
+  "qualifiedRunsPerBackend": 2,
+  "familyCounts": {
+    "c": {
+      "refused": 207,
+      "executed": 0
+    },
+    "llvm": {
+      "refused": 207,
+      "executed": 0
+    },
+    "jvm": {
+      "refused": 207,
+      "executed": 0
+    }
+  },
+  "fullCounts": {
+    "c": {
+      "refused": 1182,
+      "pass": 514,
+      "invalid-hir": 17,
+      "wrong": 207,
+      "runtime-abort": 57
+    },
+    "llvm": {
+      "refused": 1182,
+      "pass": 514,
+      "invalid-hir": 17,
+      "wrong": 207,
+      "runtime-abort": 57
+    },
+    "jvm": {
+      "refused": 1195,
+      "pass": 514,
+      "invalid-hir": 17,
+      "wrong": 105,
+      "runtime-abort": 146
+    }
+  },
+  "records": {
+    "c": {
+      "path": "results/typescript/c/cases.tsv",
+      "sha256": "554fa760d3a8bba0d6d5f3d829549efd3b2d8d993a763c4892182d159e05bdb5"
+    },
+    "llvm": {
+      "path": "results/typescript/llvm/cases.tsv",
+      "sha256": "d58b72d31721642c2f9ff35e9a652f7c30911ccd6cb6f05f53340e963a8b3fdc"
+    },
+    "jvm": {
+      "path": "results/typescript/jvm/cases.tsv",
+      "sha256": "166f748913a8bae9439728e71bea9be3ef81a9b6aca12433836d0e5ce5f83e02"
+    }
+  },
+  "rawArchive": {
+    "sha256": "28676806ebe0d6a12833c42c4c0df35b538ef0a711bf54dda805f744838bb110",
+    "uncompressedSha256": "65bf49bb3160090bbd6757d39fc75f5cf6c7c4bc1e8b21b84fcb70029eb87176",
+    "roundTripVerified": true
+  }
+}

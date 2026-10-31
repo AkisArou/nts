@@ -1,0 +1,55 @@
+{
+  "complete": true,
+  "base": "fb20438eb6818523504fc64374f8f42b6521234e",
+  "compiler": {
+    "sha": "fb20438eb6818523504fc64374f8f42b6521234e",
+    "subject": "tests: pin const capture in module-scope destructuring loops",
+    "clean": true,
+    "applied": null,
+    "built_at": "2026-10-31T04:50:52.382Z",
+    "binary_sha256": "b5582fd0ea85ee654d131c93db718864c6e3a86292eff350596145c8f8bc90b5"
+  },
+  "source": "26b4bea1f369e23491f52934990cfdfd646a19a6",
+  "authoredHead": "08982cb5133862c9aa71a8e87893c077a8eb08f6",
+  "backends": {
+    "c": {
+      "oldExact": 1770,
+      "newFamilyExact": 207,
+      "total": 1977,
+      "compiler": {
+        "version": 2,
+        "backend": "c",
+        "commit": "fb20438eb6818523504fc64374f8f42b6521234e",
+        "compiler": "b5582fd0ea85ee65",
+        "harness": "548840731a98c13d",
+        "under": "tests/typescript"
+      }
+    },
+    "llvm": {
+      "oldExact": 1770,
+      "newFamilyExact": 207,
+      "total": 1977,
+      "compiler": {
+        "version": 2,
+        "backend": "llvm",
+        "commit": "fb20438eb6818523504fc64374f8f42b6521234e",
+        "compiler": "b5582fd0ea85ee65",
+        "harness": "548840731a98c13d",
+        "under": "tests/typescript"
+      }
+    },
+    "jvm": {
+      "oldExact": 1770,
+      "newFamilyExact": 207,
+      "total": 1977,
+      "compiler": {
+        "version": 2,
+        "backend": "jvm",
+        "commit": "fb20438eb6818523504fc64374f8f42b6521234e",
+        "compiler": "b5582fd0ea85ee65",
+        "harness": "548840731a98c13d",
+        "under": "tests/typescript"
+      }
+    }
+  }
+}

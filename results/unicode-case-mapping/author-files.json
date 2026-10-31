@@ -1,0 +1,840 @@
+{
+  "provisionalBase": "fb20438eb6818523504fc64374f8f42b6521234e",
+  "source": "26b4bea1f369e23491f52934990cfdfd646a19a6",
+  "authoredHead": "08982cb5133862c9aa71a8e87893c077a8eb08f6",
+  "allAuthoredFilesExact": true,
+  "files": [
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-01.ts",
+      "sha256": "e555e09e0bc46dd608e887fa4c56a90d0ddb8caf9c6f71af020ddc9b1954ace2"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-02.ts",
+      "sha256": "dc77b118c3597556a215de00b59c4c46b5c018ed3bde8954f5ef4a70eeca9f62"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-03.ts",
+      "sha256": "b8aa28b10ed53a2987e0c06f0e2f8f7a84dbd920765d200b27e5de7faa398372"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-04.ts",
+      "sha256": "cfb1979e0082f0f8ac0adf6f037eb1a20ca55838ad550b817c1f32a160ea871c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-05.ts",
+      "sha256": "513898c2c728654e293f9ad897cee106b976f6491a8cc16c67a18ac965f14bc7"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-06.ts",
+      "sha256": "f1e6c1281343172b2372a1bf1e1b450deb90994f7384939ac38258509e639a5c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-07.ts",
+      "sha256": "6e3157be99c09d90967d1119bc51fcef990e76ab60d3ea0c7f6aa34451beb097"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-08.ts",
+      "sha256": "d6719598f00bbb12a638993b50d6af66d66bae86df5e6eb5a0da4dea774cc48a"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-09.ts",
+      "sha256": "35b49fcc79066470d0ac6f559bb297b9de3ba41038476db3ee55cb542b6b1e6e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-10.ts",
+      "sha256": "4ecf2aab7ef2c1a3b42faf2d14143cb72635ad8f206270d63caa80f8c6e5dbff"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-11.ts",
+      "sha256": "aa7076cbc57b81aa898854660beb56b9c8599fc572171598b9bf0ce0d26108fd"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-12.ts",
+      "sha256": "0682f6a8bb572887391b7cda5243a77e939ae65143b6310f116ff1f577e5e602"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-13.ts",
+      "sha256": "35a63a1b9ca4927e0664c62c47eaa39b5da1ffabdae1a2a073fef571ed616b18"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-14.ts",
+      "sha256": "2d5f0bc493223bbc83cfeebce4afe5d3084f6c14978434cd3838509f0d293a39"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-15.ts",
+      "sha256": "cce4d82900a9e61822fced982a52ba1085160bc6c2b32a848329d89a09c32ca0"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-16.ts",
+      "sha256": "967927d1c820e112d587a064d1673805dc5d0961afd39feca1af78dba9380bcf"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-16-0-part-17.ts",
+      "sha256": "6b247d42f1dd6e47f99d2c499fb2653b45dd016a06dd520cff62e94ecfb241f1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-01.ts",
+      "sha256": "8fb9ca3ca1aaa66cb5e3e704f17876f3c22281eed9998156d7d5c8f94af73d89"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-02.ts",
+      "sha256": "de38ed1aa41e90b7ac624d173360c54471b28c112ef99279ef2cf913df49525e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-03.ts",
+      "sha256": "f6096844ea8bea38527c7e70e751ed5ee9781d2b53cb12f34f6ec6ed62c0d177"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-04.ts",
+      "sha256": "0ddc90732c988a4517b5adc3c3607d733dcec6c5b86e4c67d7f5f3f8f3439065"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-05.ts",
+      "sha256": "1775bf30716fa6067d9b14f9fb04b00bd82b714b7ac761796abbc548bdea7751"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-06.ts",
+      "sha256": "2545b503727aa9f3b759e676fac8fa6151b253b36f8c4c59252f0fb105c135a4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-07.ts",
+      "sha256": "b42bfb5db8d6436bcf2e2198edd6f8fd64e85b57a2a6d20e3a35fa2934c2f48f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-08.ts",
+      "sha256": "2f4c4f3aa036d610e5535eeaf7c92c890284bdf8fe721c24b7191347936351e0"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-09.ts",
+      "sha256": "99287a1433a423d7ae756333352b518022faddd534d5433fc6de5c8f6904dc7e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-10.ts",
+      "sha256": "97af8b2aa03635ffb21af259c7808ef69be73d5fa17d114405360fcb54fb643e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-11.ts",
+      "sha256": "9e4fa02267becabc2a0fc4e0c97931f2542f152941c5164e85266e21e3e874d9"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-12.ts",
+      "sha256": "922afef338ede458d17de50b75cc8892e638b8a244c1c2033af91641c140b961"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-13.ts",
+      "sha256": "36427c62c27283004177b7f4e266df9507331bbb67b28a62755bfb13c68a3eaf"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-14.ts",
+      "sha256": "dd4f0d40a2919feb51cba4044a19c6a281b2c5c6eee220b37066563e16f913f5"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-15.ts",
+      "sha256": "04d110b161a6c111c33cdb3e4fc39bae89227626591792fb4b086a6dcf1389f4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-16.ts",
+      "sha256": "001731ca18e3ff21844f6614e17ce0221220468fdad66465b25089315cceb1f6"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-17.ts",
+      "sha256": "32fbb6900315c574e50cac925121136925a8e81adc21a8c20a4fc0aead94286b"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-18.ts",
+      "sha256": "00404212766f7ca694a252464beaed0536779f848c46523c9cad0536e9081773"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-age-17-0-part-19.ts",
+      "sha256": "69ed10578357f0b2410b18563d9a8b9c7ed9c689174689724ec003601496476d"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-00df.ts",
+      "sha256": "643142f7af30c787369ee755e4a6aafa352f0c7c649a731448da919b75f5dd33"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-0130.ts",
+      "sha256": "19825a6459727021dd4302c9fbef9760c6ec265e2f460f45f10242726804e8ae"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-0149.ts",
+      "sha256": "4d69e4287175c3411c11b78a339fd9583d96736532b76d4bef8c2dc5bbe105d5"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-01f0.ts",
+      "sha256": "86f26d632b876f7e01b93580f5bc30692eb975ea80310fa7e7795ab0a5c1c4e3"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-0390.ts",
+      "sha256": "8bec2cc83d09b5f8ec10e45c7ff9a975e5e752035f051c79fe5200adaf33e69e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-03b0.ts",
+      "sha256": "46086511b10d3c38d89a234f36fd46767a124d7fdc07b0ab03ad20bcdf70b021"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-0587.ts",
+      "sha256": "c51d1775f0e42746d03a6c52fe575fe780cdb2825f6a87f90e754823858a36a7"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1e96.ts",
+      "sha256": "14bb9cb048669604820ae4435b184da42b10eb8789dd6981ffa054d938e6de66"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1e97.ts",
+      "sha256": "f165b14983d812dc7d123e452cec5812c5d49833d65d07837aeabd6f4bbcf5bb"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1e98.ts",
+      "sha256": "114eb835a609e54d5ed72031fc36a552e321f316896fae0f6ff92a4e4a096dc4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1e99.ts",
+      "sha256": "3c68925d7841895aca11f93194c277a0e1f95b6efe9d9d629706b1c5315af88b"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1e9a.ts",
+      "sha256": "d7d600cfa220c251b64cbb0358452739da18856c2bba9bf3d95c666117562b32"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f50.ts",
+      "sha256": "d54b686e9d85b8cef66596f8338933e9ba793f464afddf50950f8a0023e73dc2"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f52.ts",
+      "sha256": "49ef79c7d33198f8c8f5c5139b9a4faf83f95fa733d7f21dc7952f941552b8df"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f54.ts",
+      "sha256": "2111c917bd1d84862d98591695b0e504fcadb6f69a2fc47058c5d308f27869f8"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f56.ts",
+      "sha256": "68624b061d899cb0641fb52bc3afc67be10d56b9d94d0d7dec85799df914172c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f80.ts",
+      "sha256": "3e7a2b3b98a5f484956c87b8ae7d3726d305219c9ee7093b130b93fe6800be3a"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f81.ts",
+      "sha256": "43a57cfcf952170199ab8a226562c399218195f6800e111869f5494dd189447f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f82.ts",
+      "sha256": "5cd78d98ec66a036e24fced8a0d6e1307292451462e68ef5adf776c2f0c09997"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f83.ts",
+      "sha256": "36c249f4ba934660f2d7e04effdfc340785d3e0249b3282bf76a774b3a9fcca8"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f84.ts",
+      "sha256": "3b17b7d499266754c6b300250c6b324839b55712298531f3eceb4c2257bfc1bb"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f85.ts",
+      "sha256": "8fde47212b82e3927cbc7c946420af4b0046a0c0418a87006d86f6ca5b849a96"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f86.ts",
+      "sha256": "13b6274ab034409cce7c3808e7ce672cd50c81d1c26ad3e8fb9b5ddfdf423142"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f87.ts",
+      "sha256": "65c1693686877e09a1d75ebe66e22284745a2e381d439137acd215dbaea387d8"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f88.ts",
+      "sha256": "e2a57f14f51326ba7f44971d13d9af72d6bd29bd8c43c30889df3bcf7120684c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f89.ts",
+      "sha256": "12a7e1190475b34c4b0f1354a454ff0390df61bd922974480bca7a900511d6f9"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f8a.ts",
+      "sha256": "105d7eba3c3293d0848be0b007900975cb6a2d59dd5a0b02a9066ba1ce7a8252"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f8b.ts",
+      "sha256": "2dd92b911fdc659a1664839fa2bc9db2aae19dfee62308324c76f1c40abecb65"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f8c.ts",
+      "sha256": "cef00bce5d325a9e31ee70335b94f2ee9eb40cc3e066dba3c63ebd2a039e0986"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f8d.ts",
+      "sha256": "c209f1a201d5547a5d9da933817f00b638534ebe4f5d12bff636d124d11947de"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f8e.ts",
+      "sha256": "47116dfb747d5bbbfb92ed982f2b0a55df2fde054d5a5b2613364b6ce85ca65b"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f8f.ts",
+      "sha256": "1985b31127d4ce6746e924a05f4aa15314a6eb415382e5218198a78551103e7d"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f90.ts",
+      "sha256": "25f44e2f18dec7c9f31beb5e51f48e5e855ba2204e786fe5aa2bdeae4006513d"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f91.ts",
+      "sha256": "ab5d294b27100754575596f8571b9a37104112b6b93e984035cd1b5d0ddadae4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f92.ts",
+      "sha256": "17f5f3988cda963f7e7063e41c8dde58c9e50520cff91716c735267dd7dcd5f7"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f93.ts",
+      "sha256": "9ffbbaa8776145eb1645c703976c3fc2bb9c668417bf7f6afadfea9dbd88180f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f94.ts",
+      "sha256": "396e3bb602fd7c7dcbf1f3b62d098d0528038fe68c6ec9d2f8e5a4593da1b8b3"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f95.ts",
+      "sha256": "7d262eba00a9328e94f49241da79a4d0db8a6c03cb809bfbef1510cfd514bd58"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f96.ts",
+      "sha256": "ecafbef86f4067c9893eea7b75d9932915512f822c7063031674f567cb3ce1db"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f97.ts",
+      "sha256": "ed6c69b528bc07d27e739334d71587092213c6056426731c0d22c23e325cbc82"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f98.ts",
+      "sha256": "c69e19e5957ce79a9df5d67c5e9609b348cc7039da93490e6813e753a894dd77"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f99.ts",
+      "sha256": "ec452120a35a3fe220539ea84b821416b6f6b6acabfc6875f3b7c125abc81754"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f9a.ts",
+      "sha256": "01dd7c1006e7ca5e9466fffa8f8ce46951e86725ed8190919297973c8de0712c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f9b.ts",
+      "sha256": "8a15b9b99b909582558fdb0c385efbfdbb5b3b0b590311dfaaaddef5bc3569da"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f9c.ts",
+      "sha256": "96e93b9c8ef0012912c4f0b928c7989895f775ef8ee9276d49ecd4feeed11fdc"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f9d.ts",
+      "sha256": "eb337879458e41461bfbda68f5efdb82715eea664ff7f56deb092bd69be3e717"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f9e.ts",
+      "sha256": "7f1511cad3e15df60342433a105a31142d8c87c3194a6b82eb9d0647693519bd"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1f9f.ts",
+      "sha256": "c39ad7eb484798800d8d99b8f86b6762af19cec0636c5c9a0449593a79297116"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa0.ts",
+      "sha256": "fd24a30bbf76a5751978c909270e8b169732685de955d8cc9a820c002002c0e7"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa1.ts",
+      "sha256": "1a38bfec7c47130a95fbd25ef7592f5d5d6774504545ea6d5c730d6a71e42b53"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa2.ts",
+      "sha256": "c02f0383af6bddd181ec0358c107394b8535b3481406202a78ac5a2289adb506"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa3.ts",
+      "sha256": "b9ab5ea0ec3c982d896dfac2360ebab82e553b9dd54b75ec5b3c047606c00fcd"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa4.ts",
+      "sha256": "d9bdd6cf144a30583acd92b71250082b3cd7dd6a3cca23e4de43728feed7c190"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa5.ts",
+      "sha256": "93b7be0b807bf46d738ac26d83fa822ea00f5902cf961f487777cf905fc86150"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa6.ts",
+      "sha256": "e6aa5fb3f7881ddc66534e4b816eb912d2c27f0978a833568b718d8f19771fcf"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa7.ts",
+      "sha256": "3e59b3d6054ec245e43566fed03b993d85a8005ed525733d5d3688f0a34df9ed"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa8.ts",
+      "sha256": "654f33b19c0b35cf679b698d97dfdec2b798dd987fac0f32525884988c82be66"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fa9.ts",
+      "sha256": "4b7e63efab001b1636db896ba28608f5c69f69c72a1ddeb53099aca2d4e00769"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1faa.ts",
+      "sha256": "16a4ac29a771489d387ce59e68ff8387f043662e806ff0d1460fc4fab74b61e0"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fab.ts",
+      "sha256": "47254bcf42f3d5277b1bb23d58f0a06fdb9616cb135483e350173be9629da9c8"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fac.ts",
+      "sha256": "55dcae876e49a271a1798b35bbea66d37c80ab73b192588080b73999e4610364"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fad.ts",
+      "sha256": "a08c70524dadf2302379976326fe9471f25d7a1eece6a0d58edbd6bc6ef4fc4e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fae.ts",
+      "sha256": "8c7403823cf3ff513139b00ba16e7a5bb6d2795421396d573af5c6e88c8f6572"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1faf.ts",
+      "sha256": "7c2e33e1ab84412c240783492c680038b21609c48ed64ee08347e59594ce7061"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fb2.ts",
+      "sha256": "dac5fa1b02e621f1b794a36274fb9e8bdb7be3845e64508bfaf42bdfd17dd8cd"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fb3.ts",
+      "sha256": "ac26fd4f09de268172f1bd850715d0c2142831ad916580cd322b523ee7f9e740"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fb4.ts",
+      "sha256": "0270e4a73bedeea768cdf28e896fe789cf255ceb0608e8cb91c2828a319c626f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fb6.ts",
+      "sha256": "859b3cc25858ac038c490d6a6397dc137e2353c5e809a354517b58ee353b9a43"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fb7.ts",
+      "sha256": "4ba24dd030b3b5287794da5b4ac24cf70baea36fb89fc18978f7f1141f937902"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fbc.ts",
+      "sha256": "6aa6846f95736775d2623682b1fe59268901de5de6abd55b6833b36720e928a6"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fc2.ts",
+      "sha256": "dd1f12817bd1a5277e877ff85f22c958c100c2dedbb63aa00d2083615d9105ab"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fc3.ts",
+      "sha256": "2ba36f14a09b4cdca0c09024f5edea3fe3b7f3bd2aeaa03cfae23f7312e4c745"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fc4.ts",
+      "sha256": "7753a46dce8714e156538e554b986faf83eb0d9a6481138d2edcd605b3d6c5e1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fc6.ts",
+      "sha256": "6e2c42ab39a6e015dd448a9d63431968188b09bcc2acae4c9270dac2c8915742"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fc7.ts",
+      "sha256": "98aca4949abf596a87ed87523b3a9865c1e16c21bdda2d725056b739ce6247e7"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fcc.ts",
+      "sha256": "7b4aeb30fb6c475cd8626c65eac14390686bed0e06bb40aa66f32885277eb254"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fd2.ts",
+      "sha256": "eb1baba77eca44daefdbe08f7f562436340de9731f91ed158b567a12ec3c7657"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fd3.ts",
+      "sha256": "1cdfbb13759a65d46274be324e407d62a10642aa942b9ceb0d476f44c7631c86"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fd6.ts",
+      "sha256": "4619911cec013c6c740008dc14ef6aaa808474873f796c0abe680e85f033ec44"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fd7.ts",
+      "sha256": "2244988aed2205bdd7bc94a1f7769e83fd7f3e6e79f9fb469b188e23aff179ae"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fe2.ts",
+      "sha256": "08d9da0d061c82525375abf2129d1c817a3529aa770708889bbe810803b98f8e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fe3.ts",
+      "sha256": "d980f7d125d33cf61d5505d461e653e414f50dcad0c2deec95cb83af32934dbb"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fe4.ts",
+      "sha256": "caad335584957f0793a26e87c1e4b49ca1d584e1821222ab08ef0ba9916d1834"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fe6.ts",
+      "sha256": "078317c18f77910599c3a4370b6756397c5b88e1200be9e75f52d6a67b3b6332"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1fe7.ts",
+      "sha256": "95beeea76b7da786f613e9bbcfa6ae1a10041775e61c81369a7536b407cf4a29"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1ff2.ts",
+      "sha256": "a35b87bd289f94d9ceb20192d8a01fa90d8e0f2008ebd41a54aba040aac55b24"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1ff3.ts",
+      "sha256": "2479ce695bca19375268802bfc7ae9f39587917a76ec9cbeb4896c24c109b91e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1ff4.ts",
+      "sha256": "52e05cc2b0f1fdbb6ebec6acc51e271fb61333c4ee499304fc64e720dd86e0bc"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1ff6.ts",
+      "sha256": "82deac4e5292eb7baeb677b13958771c7bd9a6abc9dffbf8d86bdb040cc6b134"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1ff7.ts",
+      "sha256": "57d724c29b41d1b745b283dae7e2fe165d045f7a5b1a18d0fec446879cf51d16"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-1ffc.ts",
+      "sha256": "361c4fbbf7b57c179da6160015b3d2591e4e46063b51decb86ca05d17cda7afc"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb00.ts",
+      "sha256": "66e463e89b911ec22218d8a484eb9eaadb273d966a2a553fa16f039e2f852d39"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb01.ts",
+      "sha256": "c3e1c4a481c695f013e844766519f0a1f74ff474b899d25099129d2d96b079b5"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb02.ts",
+      "sha256": "4118f0ed62f307f662167c5df5c5c1289148eab8402dbf218b4728963268be6c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb03.ts",
+      "sha256": "7f984d7631cb620d09429fb2962f319a012601e67075051318228c991a2b4d01"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb04.ts",
+      "sha256": "077f646a0550da31f26c2df56205617f9cb283d0aacdc5cda866a89b14f7855b"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb05.ts",
+      "sha256": "5ee5d5deae5b1a405e732fb91e2d0aeb7d706899edb3e277e54c1c96542b61d3"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb06.ts",
+      "sha256": "0a6396e75674e7c5f8368e86921dc9a592f2600e8c5ae9bad39427f2bc87e077"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb13.ts",
+      "sha256": "5ee89a273cd44ea0d4227fd72dcbdfbee4c428013b933a9d0ea171d1047b854f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb14.ts",
+      "sha256": "342445b419b9a2c70e2cbab432751ef7a1078f8f70f58bbc60fa2ed92defe472"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb15.ts",
+      "sha256": "cec78f36e63b2319206e9911bc7173e04bab058a8214fb4ef4b4c2bdd4706e2d"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb16.ts",
+      "sha256": "bc6d2cc28eb6a0263085cf82a9fa7336777c95ffdec75883835b9fb735a67c4a"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-expansion-fb17.ts",
+      "sha256": "045e6fb9a0b195aa158ce267776087ef707e050dff166f5d65b73093dee78857"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-combining-after-boundary.ts",
+      "sha256": "38305f7469e56c0642632d111d2243df429899872a7d9801160d4d7507789e2f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-combining-before-cased.ts",
+      "sha256": "f08dc5419b4be088b7a9f435c18c0c7949cad481ef18bd3730752f9c33d02c26"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-combining-both-sides.ts",
+      "sha256": "7d199583c443f9cf01d67ebe7ecc9e9e87fe818fcd556604086a79fcaa6656ff"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-combining-prefix.ts",
+      "sha256": "fe76de627fafed88eb4187dc6d8e02694fcc76c0ed7591a64ff01b41a6ffd375"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-combining-suffix.ts",
+      "sha256": "10f535188ea6a78a9dfd2ec011587bcbc46556b4092b94e0563f8499c27e62c3"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-enclosing-mark.ts",
+      "sha256": "41e50b96dd46f6939055145450f135d78c0b21220d315c154bbaa0a3f65a5614"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-following-boundary.ts",
+      "sha256": "4399e8269a824158c78b913d4337a37ae5957e9921c51778cf983b7607603d85"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-following-cased.ts",
+      "sha256": "4d1f28820579feeefec9b0978f131b103397483af89ea620caf96bf1437ca57f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-format-character.ts",
+      "sha256": "de196c97978c9d0864def59980597f51c8924407b266ac6f0e1aa457b3845e18"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-lone-surrogate-boundary.ts",
+      "sha256": "3167653350e8ed045edee978ed8e79e5d7743992bb4cbf29f1a9b00a477f7018"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-modifier-letter.ts",
+      "sha256": "616e4c22a31eab7b559eab46d1a26d1d78cf300640a7ca1478e217e9bd3c6b8d"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-modifier-symbol.ts",
+      "sha256": "aa5056be0ec4976ecd999bee3d991bd3b3b74a92b8e9d933e6a822f0a431e26a"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-no-cased-predecessor.ts",
+      "sha256": "9c6ad447718276c8657a5345a1549eada6ec9445f14c51fe0fa432e0d4fb4dc4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-original-context.ts",
+      "sha256": "e02f544827f9ab6f41a1c73152a9421c81ae7c676c42ffac9a2a7876b3698b00"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-preceding-boundary.ts",
+      "sha256": "c5320b76b11aaf392849435df0e8dec238c6e89754a9467365367373f8d4337f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-supplementary-cased-prefix.ts",
+      "sha256": "ba050f750d3831198e57cfe88f353c09d3e8d694b5bc965e72a0be2db5d9ab32"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-supplementary-cased-suffix.ts",
+      "sha256": "05497be648e8ebaf6e57335ef1567f04f0c62f52618650ccb62004ee2d53cb15"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-supplementary-mark-prefix.ts",
+      "sha256": "c3055e70d609336f86df2b1a342122014e618e7c01f4b94eb2785f64e427b6b4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-supplementary-mark-suffix.ts",
+      "sha256": "907779da5839a9be0143fd2dacbeafb182134f395ab2b3dc6ffa65011b65ed2d"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-word-break-punctuation.ts",
+      "sha256": "d8aa1e31bd3c28c636d89ee80003fbbc65b61195182f9abf00a84e8e5316f882"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-word-end.ts",
+      "sha256": "8df9390dd2e43336600793a5d085ddfaa619efb4175b586c13da20c74d63d4d9"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-ypogegrammeni-alone.ts",
+      "sha256": "a86f25f232079c3f5698dfd4fbd0c51a17fc592ed7462c31e0e88e168ffaa98e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-ypogegrammeni-before-cased.ts",
+      "sha256": "a4bfea0c8911e0f704285192453fcf8d0d9be20436a5b55ff81e19e1982568c6"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-ypogegrammeni-prefix.ts",
+      "sha256": "f4a216fe900dd66cd8ba91b069aec3d6c73d76756202983ba464280904ea35c1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-final-sigma-ypogegrammeni-suffix.ts",
+      "sha256": "1f9cbba61d49dcfdce16b76cb0d069cef55ee9cab67eba26c216361ab178e06b"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-latin1-micro-sign.ts",
+      "sha256": "3e3cf1a0804d9dc3402fe458e66a2b342b63dc456500242b292b0c1a5bf0e21e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-latin1-sharp-s.ts",
+      "sha256": "48a3b41f15f8f7e2eb025212a4c0ed150b585ea5a3bc6fdc661c80df1d2389b4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-latin1-y-diaeresis.ts",
+      "sha256": "fdbfd736788b823edf90be978affef715ac2033f875ed87ff115078b01b2cac0"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lone-surrogates.ts",
+      "sha256": "f75333982051e1a8a7834a0f95f90c037b47d92a614810c8258c04f1118a06b1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-length-dotted-i.ts",
+      "sha256": "e0bae214f19dda063e93e8b7b877249f1a58147bca2b1dcf3e3ac15b6f9b0a5a"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-00.ts",
+      "sha256": "4c3355f6294ecea9da9c9316a66a15188a5a68cc8b38127e91ca2879ca851032"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-01.ts",
+      "sha256": "b307de36746b7a67789292a8df868595446553f91a3cbc0f9eec090a1ee44f87"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-02.ts",
+      "sha256": "1bc96e2a304fb3f8e9f7ed10250509ca0a07fdac02b3e30cce1472eac561fed2"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-03.ts",
+      "sha256": "27eed9fb3e070576f9aaa968a51ca132688b18d2d6ce40ad8cb2e3e1b7b7e030"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-04.ts",
+      "sha256": "7bac235024ad2cacf8e7c9e2d1897d645534f9075bb769b1102a9b3445e39fca"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-05.ts",
+      "sha256": "adf4a5ffef7453cb3291c5235a954ef6e2e372284263f218888a915d580411ee"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-06.ts",
+      "sha256": "ddc43993d295207eb43cd7c13ac9f04d6d660a08a38ff43ff14ef1c35fdbfd0e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-07.ts",
+      "sha256": "85b6fce6e1d6f723ee64686e087ee198a96f431a9790adde51dcea35aabb3513"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-08.ts",
+      "sha256": "1fbf66bd9d7c6f58d46e3bd169c7bb864d3631d552a8b687379e6b8e11b64946"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-09.ts",
+      "sha256": "8f12805f7071782d882748cdfb66a6970ac8522b6f86b40c9f672af5d25db22e"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-0a.ts",
+      "sha256": "ac71cd81f018950d32e9f47f16c09f32920a8a521a5bcdb7ad372fe605974ed1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-0b.ts",
+      "sha256": "c6c17f89ccb85d3506dfe65d5c7ebf5d5259ab0be91a40a5d5b2ca90d56d82df"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-0c.ts",
+      "sha256": "81ecb201866a350dc18edfeb4d583342a136652617c2702be7ec3dce2482d82b"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-0d.ts",
+      "sha256": "37e45f5894d7e4dea2b97ad2c99929d8b82dbbdba468adbfd6827436aefafe31"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-0e.ts",
+      "sha256": "9ac466c097555a1dd96f80dc1eb9679d70f9fa053ed3dfc4cd9693288d1acbf8"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-0f.ts",
+      "sha256": "63cf477972f3c122b3db21086230147ef728bf9a3d5031a7bd90f60a9b00d1bd"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-lower-plane-10.ts",
+      "sha256": "62b8dc387b1b6fd4384def093359cc4597a69535307d425bddb2a911e2a18a44"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-pairs-adlam.ts",
+      "sha256": "d95f0bbdb2e1852165982ff2dd5bd780460c40bfefe1b4619b51bbc8d25452d8"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-pairs-deseret.ts",
+      "sha256": "ecaf1b16574894a15f025bc006edfc0c1fdba8a8ec6d96451a0d545b05a277d2"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-pairs-osage.ts",
+      "sha256": "fa05b5e168702bd0eaeca8f6265d7a83e2dd5b1b2a531aad0ba2bf6dc32e801c"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-unchanged-text.ts",
+      "sha256": "2cf3ee491b99197d57d800865e6a9f4107c77ea8fb17617bad93a40a2071b66f"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-00.ts",
+      "sha256": "f4e9df50fc43d4a4dee7288d80a2aa192a94ec85526341de83a4925b4b1c8df4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-01.ts",
+      "sha256": "1e41111f6b4c80343bc54c83f3cc5ad71073bd82f8539b729573b68ea6ea7915"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-02.ts",
+      "sha256": "ee5de7454d5ac1add7ab2dda7b2a989d8971cc9e5946bf39755f7937f2b91f61"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-03.ts",
+      "sha256": "a0d67efe840abb3a8348f5e9b918edfc1a8a8fa33220a9dc41f309459a5f13c1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-04.ts",
+      "sha256": "b14a36bf36f77d2fe776ea37cf134b2548ca6f82b37fdf5f77919c8c8b354608"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-05.ts",
+      "sha256": "33843a01dcaed055c69e9001803ee18439e4ca330b22fd5b9680fc57bc77f0be"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-06.ts",
+      "sha256": "d9185a48e38f19d201a243ffa64c2597c5a36629f458aa22eacf95eb591f26a0"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-07.ts",
+      "sha256": "1e67df4ba71eb45aee6c8c1cf18d467253230f4ee4a58fae2ab51c5d19aad02a"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-08.ts",
+      "sha256": "f77141a44b1b073ab61064cb0683ce946c8c95911a91233dbcd504e9d5ca2a98"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-09.ts",
+      "sha256": "45616f9159a3685f46e935134bd6145b776e8618147c4c7f2de41ae870923602"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-0a.ts",
+      "sha256": "6b300fe63fd2401dc2989030ac274117a72eeed55ef01b42be63fb5f80c2efd1"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-0b.ts",
+      "sha256": "e7c8f10c031472d9d8b7a0858b3aca0364cbc1e93541726bacda624cf3557954"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-0c.ts",
+      "sha256": "5173043fd0aa95ec8b51d395e1b1c4818480c80c3f2a8271320d247aac59b950"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-0d.ts",
+      "sha256": "2b8c0bb07eb40a92070e6be178eccc17ef926994ec53280f955d92dff9e775e3"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-0e.ts",
+      "sha256": "9ce29e55bad6cd8eee0169e0404d52e2d66c5d3cbf4f73dddd4b12d31f5a4945"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-0f.ts",
+      "sha256": "7feb371a938e72875563a0d4f6cc1e3e595e9fc6c6bee64eabe3925a333b28c4"
+    },
+    {
+      "path": "tests/typescript/unicode/case-mapping-upper-plane-10.ts",
+      "sha256": "80e96cfd7fdb895d18b8a0f5bacd6fcb95068a198f8a53e97962902cc066015d"
+    },
+    {
+      "path": "tooling/unicode-cases/case-mapping.ts",
+      "sha256": "7cb055714d8d69b5b0c6d9a5d8ffa82a36fba283dc5cefcc9f0bc8af9b96b250"
+    }
+  ]
+}

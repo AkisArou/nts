@@ -1,0 +1,129 @@
+  log: /home/akisarou/.cache/nts-tmp/nts-gate-tooling.YAcCGv
+  ✖ concurrent range preflights have distinct endpoint registry names and collect only their own trees (586.089963ms)
+  ⚠ frontend identifier tables are at the pinned node's Unicode version (38.838773ms) # the native checker knows identifiers by Unicode 15.1, so a name starting with a newer letter such as U+A7CB is TS1127 here where node accepts it (docs/foundations/unicode.md). The identifier tables are upstream's, so this is reported upstream, not edited here.
+  ⚠ JVM case tables are at the pinned node's Unicode version (396.438913ms) # JDK 21's tables are Unicode 15.0 and node's are 17.0; the JVM answers through the JDK until stage 1 generates its tables from compiler/unicode (docs/foundations/unicode.md). Signature letters reproduce in tests/outcomes/a-unicode-16-letter-lowercased-on-the-jvm and a-unicode-17-letter-lowercased-on-the-jvm.
+  ✖ the CLI holds every recorded outcome and fails closed before recorded selection (456.423303ms)
+  ℹ tests 726
+  ℹ suites 0
+  ℹ pass 722
+  ℹ fail 2
+  ℹ cancelled 0
+  ℹ skipped 0
+  ℹ todo 2
+  ℹ duration_ms 204091.799156
+  ✖ failing tests:
+  
+  test at tooling/gate/owed-range.test.ts:65:1
+  ✖ concurrent range preflights have distinct endpoint registry names and collect only their own trees (586.089963ms)
+    AssertionError [ERR_ASSERTION]: file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:122
+      if (errors.length) throw new AggregateError(errors, `range selection failed; no owed scope was granted: ${errors.map(String).join("; ")}`);
+                               ^
+    
+    AggregateError: range selection failed; no owed scope was granted: Error: selector git worktree: Error: Command failed: git worktree remove --force /home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/home/.cache/nts-owed-range/range-5HtCvS/range-5HtCvS-1
+    fatal: Invalid path '/home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/repo/.git/worktrees/range-SFFVBm-0': No such file or directory
+    
+        at selectRange (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:122:28)
+        at file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/[eval1]:1:157 {
+      [errors]: [
+        SelectionInfrastructureError: selector git worktree: Error: Command failed: git worktree remove --force /home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/home/.cache/nts-owed-range/range-5HtCvS/range-5HtCvS-1
+        fatal: Invalid path '/home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/repo/.git/worktrees/range-SFFVBm-0': No such file or directory
+        
+            at infrastructure (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:32:40)
+            at git (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:36:10)
+            at selectRange (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:117:13)
+            at file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/[eval1]:1:157 {
+          code: 'NTS_SELECTION_INFRASTRUCTURE',
+          [cause]: Error: Command failed: git worktree remove --force /home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/home/.cache/nts-owed-range/range-5HtCvS/range-5HtCvS-1
+          fatal: Invalid path '/home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/repo/.git/worktrees/range-SFFVBm-0': No such file or directory
+          
+              at genericNodeError (node:internal/errors:986:15)
+              at wrappedFn (node:internal/errors:540:14)
+              at checkExecSyncError (node:child_process:942:11)
+              at execFileSync (node:child_process:978:15)
+              at file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:36:55
+              at infrastructure (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:32:14)
+              at git (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:36:10)
+              at selectRange (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.ts:117:13)
+              at file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/[eval1]:1:157 {
+            status: 128,
+            signal: null,
+            output: [
+              null,
+              '',
+              "fatal: Invalid path '/home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/repo/.git/worktrees/range-SFFVBm-0': No such file or directory\n"
+            ],
+            pid: 2949109,
+            stdout: '',
+            stderr: "fatal: Invalid path '/home/akisarou/.cache/nts-tmp/owed-concurrent-CWzPoq/repo/.git/worktrees/range-SFFVBm-0': No such file or directory\n"
+          }
+        }
+      ]
+    }
+    
+    Node.js v24.20.0
+    
+    
+    1 !== 0
+    
+        at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/owed-range.test.ts:122:39)
+        at async Test.run (node:internal/test_runner/test:1404:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 1,
+      expected: 0,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+  
+  test at tooling/gate/unicode-version.test.ts:86:1
+  ⚠ frontend identifier tables are at the pinned node's Unicode version (38.838773ms) # the native checker knows identifiers by Unicode 15.1, so a name starting with a newer letter such as U+A7CB is TS1127 here where node accepts it (docs/foundations/unicode.md). The identifier tables are upstream's, so this is reported upstream, not edited here.
+    AssertionError [ERR_ASSERTION]: frontend identifier tables lag node's Unicode version
+        at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/unicode-version.test.ts:91:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async Test.run (node:internal/test_runner/test:1404:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+  
+  test at tooling/gate/unicode-version.test.ts:95:1
+  ⚠ JVM case tables are at the pinned node's Unicode version (396.438913ms) # JDK 21's tables are Unicode 15.0 and node's are 17.0; the JVM answers through the JDK until stage 1 generates its tables from compiler/unicode (docs/foundations/unicode.md). Signature letters reproduce in tests/outcomes/a-unicode-16-letter-lowercased-on-the-jvm and a-unicode-17-letter-lowercased-on-the-jvm.
+    AssertionError [ERR_ASSERTION]: JVM case mappings lag node's Unicode version
+        at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/gate/unicode-version.test.ts:100:12)
+        at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+        at async Test.run (node:internal/test_runner/test:1404:7)
+        at async Test.processPendingSubtests (node:internal/test_runner/test:969:7) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: false,
+      expected: true,
+      operator: '==',
+      diff: 'simple'
+    }
+  
+  test at tooling/census/typescript-record-cli.test.ts:35:1
+  ✖ the CLI holds every recorded outcome and fails closed before recorded selection (456.423303ms)
+    AssertionError [ERR_ASSERTION]:   INSTRUMENT FAILURE: /home/akisarou/.cache/nts/typescript-record-cli-tests/t-kE9WU6/expected.tsv: new case has no record: tests/typescript/unicode/case-mapping-age-16-0-part-01.ts
+      A run cannot report cleanly about programs it could not build.
+    
+    
+    2 !== 1
+    
+        at TestContext.<anonymous> (file:///home/akisarou/Projects/nts-lanes/helper2-unicode-family-143-final/tooling/census/typescript-record-cli.test.ts:66:12)
+        at Test.runInAsyncScope (node:async_hooks:227:14)
+        at Test.run (node:internal/test_runner/test:1397:25)
+        at Test.start (node:internal/test_runner/test:1257:17)
+        at startSubtestAfterBootstrap (node:internal/test_runner/harness:387:17) {
+      generatedMessage: false,
+      code: 'ERR_ASSERTION',
+      actual: 2,
+      expected: 1,
+      operator: 'strictEqual',
+      diff: 'simple'
+    }
+  self-test: each change selects its arms; every gate step says what it asks; lowering owes answers, counts and the emitted-C diff; a .ts tool is an instrument and a blockers fixture owes integrity

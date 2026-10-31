@@ -1,0 +1,24 @@
+{
+  "complete": true,
+  "priorCases": 1770,
+  "addedCases": 207,
+  "total": 1977,
+  "allAddedCountsExact": true,
+  "baselineDiscrepanciesUnchanged": [
+    {
+      "tag": "ts-assertion-functions",
+      "document": 91,
+      "actual": 101
+    },
+    {
+      "tag": "ts-type-aliases",
+      "document": 4,
+      "actual": 14
+    },
+    {
+      "tag": "ts-unknown",
+      "document": 249,
+      "actual": 259
+    }
+  ]
+}
