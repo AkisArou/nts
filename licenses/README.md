@@ -25,11 +25,11 @@ Data files the compiler carries derived tables from, declared in
 | Input | Licence file | Full text |
 | --- | --- | --- |
 | Unicode Character Database 17.0.0 | compiler/unicode/data/LICENSE | [compiler/unicode/data/LICENSE](texts/e7a93b009565cfce55919a381437ac4db883e9da2126fa28b91d12732bc53d96.txt) |
-| Node 24.20.0 bundled brotli sources | build/node-deps/recipes.json#notice/brotli | [build/node-deps/recipes.json#notice/brotli](texts/3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94.txt) |
-| Node 24.20.0 bundled openssl sources | build/node-deps/recipes.json#notice/openssl | [build/node-deps/recipes.json#notice/openssl](texts/7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a.txt) |
-| Node 24.20.0 bundled uv sources | build/node-deps/recipes.json#notice/uv | [build/node-deps/recipes.json#notice/uv](texts/e1b5bf88a1345ad15d6b2cc171d6fe1dace8c8a5dfc24d5a0a29e49eb68e1131.txt) |
-| Node 24.20.0 bundled zlib sources | build/node-deps/recipes.json#notice/zlib | [build/node-deps/recipes.json#notice/zlib](texts/00ec84eb8f9afac7c30aa1b8a7d3869fbe07b96a0c04ef9a86fcec38d4c50c1e.txt) |
-| Node 24.20.0 bundled zstd sources | build/node-deps/recipes.json#notice/zstd | [build/node-deps/recipes.json#notice/zstd](texts/253ea8e54e3fcda3d6a1c26abbd7d172f27f523f452e5e706a41ff8a39eadf72.txt) |
+| Node 26.13.0 bundled brotli sources | build/node-deps/recipes.json#notice/brotli | [build/node-deps/recipes.json#notice/brotli](texts/3d180008e36922a4e8daec11c34c7af264fed5962d07924aea928c38e8663c94.txt) |
+| Node 26.13.0 bundled openssl sources | build/node-deps/recipes.json#notice/openssl | [build/node-deps/recipes.json#notice/openssl](texts/7d5450cb2d142651b8afa315b5f238efc805dad827d91ba367d8516bc9d49e7a.txt) |
+| Node 26.13.0 bundled uv sources | build/node-deps/recipes.json#notice/uv | [build/node-deps/recipes.json#notice/uv](texts/e1b5bf88a1345ad15d6b2cc171d6fe1dace8c8a5dfc24d5a0a29e49eb68e1131.txt) |
+| Node 26.13.0 bundled zlib sources | build/node-deps/recipes.json#notice/zlib | [build/node-deps/recipes.json#notice/zlib](texts/29c61618047e7d60e8335f706ca36a9daeef5b9a738bd8e380042d9c1159214a.txt) |
+| Node 26.13.0 bundled zstd sources | build/node-deps/recipes.json#notice/zstd | [build/node-deps/recipes.json#notice/zstd](texts/253ea8e54e3fcda3d6a1c26abbd7d172f27f523f452e5e706a41ff8a39eadf72.txt) |
 
 ## Embedded C components
 

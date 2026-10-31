@@ -10,7 +10,7 @@
     ]
   },
   {
-    "name": "Node 24.20.0 bundled brotli sources",
+    "name": "Node 26.13.0 bundled brotli sources",
     "license": "build/node-deps/recipes.json#notice/brotli",
     "texts": [
       {
@@ -20,7 +20,7 @@
     ]
   },
   {
-    "name": "Node 24.20.0 bundled openssl sources",
+    "name": "Node 26.13.0 bundled openssl sources",
     "license": "build/node-deps/recipes.json#notice/openssl",
     "texts": [
       {
@@ -30,7 +30,7 @@
     ]
   },
   {
-    "name": "Node 24.20.0 bundled uv sources",
+    "name": "Node 26.13.0 bundled uv sources",
     "license": "build/node-deps/recipes.json#notice/uv",
     "texts": [
       {
@@ -40,17 +40,17 @@
     ]
   },
   {
-    "name": "Node 24.20.0 bundled zlib sources",
+    "name": "Node 26.13.0 bundled zlib sources",
     "license": "build/node-deps/recipes.json#notice/zlib",
     "texts": [
       {
         "upstream": "build/node-deps/recipes.json#notice/zlib",
-        "sha256": "00ec84eb8f9afac7c30aa1b8a7d3869fbe07b96a0c04ef9a86fcec38d4c50c1e"
+        "sha256": "29c61618047e7d60e8335f706ca36a9daeef5b9a738bd8e380042d9c1159214a"
       }
     ]
   },
   {
-    "name": "Node 24.20.0 bundled zstd sources",
+    "name": "Node 26.13.0 bundled zstd sources",
     "license": "build/node-deps/recipes.json#notice/zstd",
     "texts": [
       {
