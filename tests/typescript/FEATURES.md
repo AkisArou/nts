@@ -85,6 +85,8 @@ flows through it.
 | `expressions/` | assertions, `satisfies`, non-null, tagged templates and operators, all erased or evaluated as written |
 | `functions/` | parameters, overloads, closures, `this` parameters, `length` and names |
 | `generics/` | a matrix of six positions by eight kinds of type argument, then the facets of type parameters |
+| `implicit-calls/` | implicit calls through interfaces, constrained generics, unions and declared class shapes, with exact call logs, state and results |
+| `implicit-calls-controls/` | explicit-call counterparts for implicit-call cases, preserving their instrumentation and observations |
 | `interfaces/` | dispatch through interfaces over classes and literals of different layouts, and the interface forms |
 | `iteration/` | the iteration protocols, generators, iterator helpers |
 | `lifetimes/` | lifetime facts followed by a retention or observation route, allocation churn and exact checks, with node as the oracle |
