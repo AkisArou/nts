@@ -1,0 +1,238 @@
+{
+  "suite": "JetStream 3.0",
+  "name": "UniPoker",
+  "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sources": [
+    {
+      "path": "RexBench/UniPoker/poker.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/RexBench/UniPoker/poker.js",
+      "bytes": 13163,
+      "sha256": "fc83bea3d610877569501ec4f6c33ba3b93c2baf7e43f9e012e2f7964bd19029",
+      "gitBlob": "96df0be65064e5bf8f75744d77e449bc5c441244"
+    },
+    {
+      "path": "RexBench/UniPoker/expected.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/RexBench/UniPoker/expected.js",
+      "bytes": 3376,
+      "sha256": "30cfc0333a223e4cbcbbe37f25861624c5d4de3677505ab164dbed664b13f86f",
+      "gitBlob": "c99330d2eaed6cd6552acc3e85b69ec03a077606"
+    },
+    {
+      "path": "RexBench/UniPoker/benchmark.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/RexBench/UniPoker/benchmark.js",
+      "bytes": 2200,
+      "sha256": "db2f4914a54257bf3c49ff9c2f9b42148714dffa26e9d826525f6eba02063ed4",
+      "gitBlob": "9116674ef828bdbe155e5ae0c31a37809689fb7f"
+    },
+    {
+      "path": "JetStreamDriver.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/JetStreamDriver.js",
+      "bytes": 109689,
+      "sha256": "05d3e59df671e03bdb81c6896d3784d15db993447de2acb07207a1733dd8a5cd",
+      "gitBlob": "ee50fe3ee43f095acda2e14213d3af9cbb15023b"
+    }
+  ],
+  "originalPlayers": 4,
+  "originalDeckCards": 52,
+  "originalHandsPerIteration": 2000,
+  "originalDefaultIterationCount": 120,
+  "originalRandomSeed": 49734321,
+  "originalRngDrawsPerIteration": 104000,
+  "licenses": [
+    {
+      "spdx": "BSD-2-Clause",
+      "copyright": "2017 Apple Inc.",
+      "scope": "Complete poker implementation, original Unicode deck/regular expressions, expectation tables and benchmark",
+      "sources": [
+        "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/RexBench/UniPoker/poker.js",
+        "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/RexBench/UniPoker/expected.js",
+        "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/RexBench/UniPoker/benchmark.js"
+      ],
+      "noticesRetained": true
+    },
+    {
+      "spdx": "BSD-2-Clause",
+      "copyright": "2018-2024 Apple Inc.",
+      "scope": "Original driver deterministic RNG",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/JetStreamDriver.js",
+      "noticeRetained": true
+    }
+  ],
+  "adaptations": [
+    "Add erased declare fields, typed method signatures, local exports/imports; preserve all original instance field assignments and static data assignments at their original positions.",
+    "Bind only Math.random to the exact local driver generator, reset once before each original iteration. Preserve all 52 shuffle draws per hand.",
+    "Keep dealOneCard returning string|undefined and Hand cards storing the same union; a checked card receiver preserves the original undefined TypeError instead of asserting success or inventing a card.",
+    "Use ?? 0 only at original numeric bitwise uses of codePointAt/cardName results, preserving undefined-to-zero coercion.",
+    "Wrap the original full-house threeOfAKindCardRank < 12 boolean in Number at its original bitwise use; do not replace the comparison with an intended shift.",
+    "Each work call constructs the original Benchmark and four Players once, then runs all requested complete iterations with cumulative original statistics. This user-authorized independent trial includes setup in work, while the release driver constructed Benchmark outside its iteration timer.",
+    "Retain original validate and expectation scaling for every positive trial. work(0) returns zero without invoking validate(0); the exported original validate(0) still throws Invalid iterations.",
+    "Mix each iteration\u2019s complete player ranks, accumulated wins, ten hand-type counts and five Unicode card code points into an unsigned multiply-by-31 checksum. Keep only the latest original Benchmark for output inspection."
+  ],
+  "structuralAudit": {
+    "originalClasses": 5,
+    "originalMethodsAndAccessors": 24,
+    "allOriginalClassBodiesEqualAfterErasureAndDocumentedCoercions": true,
+    "allOriginalFreeFunctionBodiesEqual": true,
+    "originalStaticDataAssignments": 15,
+    "completeUnicodeDeckRegexesAndExpectationLiteralsRetained": true,
+    "staticAssignmentOrderRetained": true,
+    "allDeclaredFieldsErased": true,
+    "originalRngAstEqualAfterLocalRename": true,
+    "originalFullHouseLessThanExpressionPreserved": true
+  },
+  "validation": {
+    "node": "v24.20.0",
+    "unchangedUpstreamFullIterationAndValidationPassed": true,
+    "players": 4,
+    "handsPerIteration": 2000,
+    "shuffledDecksCompared": 2000,
+    "scoredHandsCompared": 8000,
+    "rngDrawsPerIteration": 104000,
+    "allDeckOrdersHandRanksAndPlayerStateEqual": true,
+    "deckTraceSha256": "181d20a66b53423508143dbae134627819e8719d992755f2abea0a672292199a",
+    "handTraceSha256": "ee21a1632dd143043832532dfa7a554bb97e7997faff8e21fe6f5ba02b28f6d4",
+    "finalPlayers": [
+      {
+        "name": "Player 1",
+        "cards": [
+          "\ud83c\udccb",
+          "\ud83c\udcd9",
+          "\ud83c\udca8",
+          "\ud83c\udcd6",
+          "\ud83c\udcb3"
+        ],
+        "rank": 759907,
+        "wins": 501,
+        "handTypeCounts": [
+          1005,
+          850,
+          84,
+          42,
+          12,
+          3,
+          4,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "Player 2",
+        "cards": [
+          "\ud83c\udcb1",
+          "\ud83c\udcdd",
+          "\ud83c\udcc8",
+          "\ud83c\udcc6",
+          "\ud83c\udcd3"
+        ],
+        "rank": 1038435,
+        "wins": 504,
+        "handTypeCounts": [
+          1003,
+          830,
+          98,
+          51,
+          10,
+          3,
+          4,
+          1,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "Player 3",
+        "cards": [
+          "\ud83c\udcde",
+          "\ud83c\udcaa",
+          "\ud83c\udca6",
+          "\ud83c\udca5",
+          "\ud83c\udcc2"
+        ],
+        "rank": 960082,
+        "wins": 512,
+        "handTypeCounts": [
+          1010,
+          831,
+          92,
+          51,
+          9,
+          4,
+          3,
+          0,
+          0,
+          0
+        ]
+      },
+      {
+        "name": "Player 4",
+        "cards": [
+          "\ud83c\udcbd",
+          "\ud83c\udccd",
+          "\ud83c\udcc9",
+          "\ud83c\udcb8",
+          "\ud83c\udca4"
+        ],
+        "rank": 1956228,
+        "wins": 483,
+        "handTypeCounts": [
+          1011,
+          837,
+          92,
+          48,
+          7,
+          4,
+          1,
+          0,
+          0,
+          0
+        ]
+      }
+    ],
+    "checksums": {
+      "work0": 0,
+      "work1": 2585762842,
+      "work2": 4242378396
+    },
+    "edgeCasesAndFieldOrderEqual": true,
+    "trialBoundary": "Each work call creates the original Benchmark and four Players before its complete iterations; setup is included in work, unlike the original driver timer.",
+    "timingPerformed": false,
+    "strictTypeScript": true,
+    "strictCheckerExitCode": 0
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 7.7796899231,
+    "processes": [
+      {
+        "nsPerOp": 7994677.25,
+        "bits": "41e343f383400000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 8061963.8333,
+        "bits": "41e343f383400000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 9235382.0909,
+        "bits": "41e343f383400000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 7779689.9231,
+        "bits": "41e343f383400000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 8800936.4444,
+        "bits": "41e343f383400000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "1ae3ba2660a898f7927587cbef12b39111802839eb243c94143c9159acc2f26e",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": false
+  }
+}
