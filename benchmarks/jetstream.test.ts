@@ -100,6 +100,47 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN TYPESCRIPT OCTANE.
+{
+  const name = "jetstream-typescript-octane";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isCase(module));
+    assert.ok("inspect" in module && typeof module.inspect === "function");
+    const inspect = module.inspect;
+    checked.add(name);
+
+    test(`${name}: complete source input, emitted output and diagnostics match upstream`, () => {
+      const source = readFileSync(new URL(`${name}/input.ts`, root), "utf8");
+      const declaration = "export const compiler_input: string = ";
+      const start = source.indexOf(declaration);
+      assert.ok(start >= 0);
+      // Restore only the original untyped binding. Every byte of its source
+      // string literal, including the trailing newlines, is unchanged.
+      const originalInputFile = "var compiler_input = " + source.slice(start + declaration.length);
+      assert.equal(Buffer.byteLength(originalInputFile), 1275283);
+      assert.equal(sha256(originalInputFile), "e23d2fe7b3df9dc069c720ab3fb112006c235d0eb416556ecde7c3a2766a0396");
+      const result: unknown = inspect();
+      assert.ok(isRecord(result));
+      assert.equal(typeof result.output, "string");
+      assert.ok(typeof result.output === "string");
+      assert.equal(result.output.length, 1189939);
+      assert.equal(sha256(result.output), "e74fd3bd69a5723ddaf5cb2c7b7e67ee7cabc89f8feeff8535574f1820edb95c");
+      assert.ok(Array.isArray(result.errors));
+      assert.equal(result.errors.length, 192);
+      assert.equal(sha256(JSON.stringify(result.errors)), "0c73751da13d0608ed561f6cb631f7610b8f2651e79f8dbb5d1b2232d11efbec");
+    });
+
+    test(`${name}: opaque count repeats complete compile operations with original checks`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 192);
+      assert.equal(module.work(2), 6144);
+    });
+  }
+}
+// END TYPESCRIPT OCTANE.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
