@@ -290,6 +290,14 @@ or a current compiler refusal remains a finding; it does not change the
 program or its node answer. Backend results belong in the maintainers'
 records, not in the case or the feature tags.
 
+Strict TypeScript 7.0.2 rejects object-valued numeric binary `+`, `-`
+and `*` operands, and object-valued computed/indexed property keys.
+Those literal forms cannot satisfy this family's no-casts/no-`any`
+admission rule. The conversion cases cover accepted numeric coercion
+with unary operators and `Number`, string `+`, all relational operators
+on compatible typed operands, and key coercion by `Object.fromEntries`.
+These are distinct routes, not claims to cover the rejected syntax.
+
 ### Proof contracts
 
 | source | concepts |
