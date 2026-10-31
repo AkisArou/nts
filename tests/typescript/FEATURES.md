@@ -325,6 +325,11 @@ one; add a row here in the same commit as the first case that uses it.
     [Typed-array route contracts](#typed-array-route-contracts) name the sources;
     `ts-typed-array-route-*` identifies each area and its plain-array controls.
 
+63. **Unicode data and context, held to the pinned node**: case mappings,
+   RegExp properties and folding, normalization, URL hosts, locale case
+   and grapheme boundaries. [Unicode contracts](#unicode-contracts)
+   name the sources; `ts-unicode-*` identifies the area and test layer.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -1757,6 +1762,16 @@ array, ArrayBuffer or Math.fround. Strict checking includes the libraries,
 checks unflagged cases as scripts and module-flagged cases as modules, and
 keeps the harness a script. Node uses the unchanged suite oracle; maintainers
 compile and record backend outcomes.
+
+The `unicode/` family uses `<area>-<detail>.ts` instead of combination
+cases. Exhaustive cases include lone surrogates and assert a separate
+32-bit FNV-1a hash over UTF-16 code units for each 4,096-code-point
+block. Sequence and conformance cases use escaped input and expected
+strings, with exact assertions and source-row diagnostics. Standalone
+TypeScript generators under `tooling/unicode-cases/` produce expected
+values with the node in `.tool-versions`; they reject a mismatched
+Node, Unicode or ICU version. They are not part of nts builds or runs.
+A compiler refusal remains a finding and does not alter the case.
 
 ## Coverage, source by source
 
@@ -3282,6 +3297,21 @@ aliases use only one-byte element kinds.
 | `iteration` | 24 | 24 | live values and entries, relative keys, joining, reductions with initial-value distinctions, early stopping and complete callback argument histories |
 | **Total** | **120** | **120** | exact inputs and assertion expectations retained in every pair |
 
+### Unicode contracts
+
+| source | concepts |
+| --- | --- |
+| [Unicode, The design](../../docs/foundations/unicode.md#the-design) | one Unicode version across case conversion, RegExp data, normalization, URL hosts and grapheme breaking; locale case and ICU services |
+| [Unicode, Staying identical to node](../../docs/foundations/unicode.md#staying-identical-to-node) | exhaustive code-point comparisons, exact contextual sequences, official conformance inputs and observable locale-list behaviour |
+| [Unicode, Build order](../../docs/foundations/unicode.md#build-order) | cases retained for each stage even before nts supports the corresponding API |
+| [Unicode Character Database](https://www.unicode.org/ucd/), UAX #15, UAX #29 and UTS #46 | versioned case data and the NormalizationTest, GraphemeBreakTest and IdnaTestV2 inputs; each generator records its exact source versions and hashes |
+
+The expected values come from the pinned node, including its ICU and
+URL implementation. The generators retain source provenance and
+copyright notices, check input hashes, and provide `--check` for
+byte-for-byte regeneration. They keep areas independent so each can
+land without another open Unicode pull request.
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3744,6 +3774,7 @@ aliases use only one-byte element kinds.
 | `ts-typeof-type` | `typeof x` in a type position | conformance/types/typeQueries; ts-eslint TSTypeQuery | 175 | 0 |
 | `ts-unicode-case-mapping` | default lower/uppercase mappings, expansions, Final_Sigma, surrogate handling and newly assigned letters | Unicode contracts; UCD SpecialCasing, DerivedAge and UnicodeData | 207 | 0 |
 | `ts-unicode-exhaustive` | every code point, including lone surrogates, checked by a Node-generated FNV-1a UTF-16 hash per 4096-point block | Unicode contracts: Staying identical to node, exhaustive layer | 34 | 0 |
+| `ts-unicode-regexp` | Unicode property membership, Unicode and legacy case folding, backreferences, sets and identifier names | Unicode contracts; ECMAScript RegExp Unicode property tables and canonicalization | 454 | 0 |
 | `ts-unicode-sequences` | exact contextual strings or API observations that a per-code-point sweep cannot establish | Unicode contracts: Staying identical to node, sequence and behaviour layers | 231 | 0 |
 | `ts-union-route-narrowing` | typed guards, discriminants, equality, arrays and predicates select the correct member across returns, closures and assignments | TypeScript Narrowing; control-flow analysis | 20 | 0 |
 | `ts-union-route-objects` | object and class unions retain their layouts, shared fields, optional member presence and reference writes | TypeScript Union Types; discriminated unions; in narrowing | 10 | 0 |
