@@ -1151,3 +1151,15 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
     name JVM options;
   - what a different Java does with it, verified rather than assumed;
   - whether the archive is reproducible byte for byte.
+
+## Native export names (10-31)
+
+- **The decision.** An export's derived C spelling is the published contract:
+  literal and never escaped, with the existing keyword suffix (`bool_`) as the
+  only change. Any public spelling in nts's reserved `__nts_` namespace is
+  refused with NTS2007, whether or not it collides with a generated name
+  today. Private names that only look reserved get a reversible escape that
+  never reaches a header. The coordinator decided this under the user's
+  delegation; runtime3 built it, and it landed in 4dcd0a422.
+- **Documented.** The user approved the page line on 10-31, apart from the
+  C-interop docs still being worked out.

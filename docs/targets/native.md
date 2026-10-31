@@ -129,7 +129,10 @@ The C emission writes `program.h` beside `program.c`. It declares the entry
 module's exported functions under their exact C symbols (a name C reserves
 gets a suffix: `bool` is `bool_`), a stable alias for each object type a
 signature names (`<export>_<parameter>_t`, `<export>_return_t`) with its
-checked layout, and the module initializer where there is one.
+checked layout, and the module initializer where there is one. An export
+whose C name would start with `__nts_`, the prefix nts reserves for its own
+generated names, is refused (NTS2007): rename it, or give it an explicit C
+name outside that prefix.
 
 | TypeScript   | C                                                    |
 | ------------ | ---------------------------------------------------- |
@@ -223,6 +226,9 @@ int main(void) {
   (D-1, [foundations](../foundations/README.md#decisions)); today's host
   builds still link the system's libuv and libcrypto (contradictions 3 and 4
   in [open questions](../open-questions.md#contradictions)).
+- An export's derived C name is its published contract and is never escaped;
+  one in nts's reserved `__nts_` prefix is refused (NTS2007) (10-31,
+  [log](../records/notebooks/decisions-log.md#native-export-names-10-31)).
 
 From the open-questions audit (10-28):
 
