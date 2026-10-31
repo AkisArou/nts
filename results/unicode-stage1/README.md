@@ -13,6 +13,14 @@ shared `results/benchmarks/runs/` store. The newest complete run in `full.md`
 remains the previous complete sitting; its own-best columns are regenerated from
 the new compatible partial runs.
 
+The subsequent Main-directed offline-generator selection rule is recorded in
+`review-and-replay.json` and `generator-selection/`. It changes tooling policy
+and its controls only; all 23 other reviewed binding entries remain exact.
+Compiler2 cleared native source bounds/ownership/notices, and tsrs cleared the
+additive policy separately. All 61 selector controls pass; the old rule fails
+the same intended assertion and the new rule passes. The change and census
+remain in the same landing, with results commits last.
+
 ## Measurements
 
 `both-brackets.md` gives every row of both A0/B/A1 brackets, five launches per

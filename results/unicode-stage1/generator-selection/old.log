@@ -1,0 +1,15 @@
+node:internal/modules/run_main:107
+    triggerUncaughtException(
+    ^
+
+AssertionError [ERR_ASSERTION]: offline Unicode generator must not force a full gate
+    at file:///home/akisarou/.cache/nts-tmp/helper2-unicode-generator-rule/before-after.mts:4:8 {
+  generatedMessage: false,
+  code: 'ERR_ASSERTION',
+  actual: false,
+  expected: true,
+  operator: '==',
+  diff: 'simple'
+}
+
+Node.js v24.20.0

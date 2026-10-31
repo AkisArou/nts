@@ -1,5 +1,5 @@
 {
-  "README.md": "2f29c363b85d07a4751883ea9cefa66f42650b8330301e3e5f99b013c9b5620b",
+  "README.md": "fdecb7ce47420eecd5044233cf562ff3d9d918dbaa3c418bf2c6da80727bb34c",
   "binding.json": "b019bd8fdcfc0bfc31103a25fc2e66c7d1dac28271902517e9666c8a2b652fe6",
   "both-brackets.md": "bf0bcdecf317c634ed2f3904d2227be86b55164392fcf2b0be7dd5eb6c630a94",
   "bracket-bindings.json": "63407c2230b11ad8fe52f23a959af47e1f247c6076e55874683ae08fe24c1818",
@@ -20,6 +20,12 @@
   "counters/measurements.json": "36b6673102fa6d3e9b9e7aac93f4593f8f048e08060abe283458b02b9c533786",
   "counters/timed-identities.json": "26e275d45f7442d66e055417d9e19b59d4cec421df0ffbf713ecc07a541132b0",
   "expected-checksums.json": "c88954db5b0edca391de913c36bd9e0f1e1d74880c12cf39921a64bf4c312017",
+  "generator-selection/before-after.json": "5ab4acd4a9c351f1877d5e6104f1300c4e6accf968fa741cada3ac5f1a269191",
+  "generator-selection/before-after.mts": "25d12f2a52f122975c0b7b0cbbba9eccaef5564e13cdac0f95fb8fc9d1f0c626",
+  "generator-selection/new.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "generator-selection/old.log": "4f4c0bd08323b69d3a50ba84e1b6983267170fa8124a5595744d0b5b2f337c8a",
+  "generator-selection/result.json": "c6f8f499460302a371bbfe70db283356616e1c89e617fcf03ec177327a34060b",
+  "generator-selection/test.log": "221c465afc703eba6d5fc6147b696d186dfac5edb6c2c530480a4977b017682a",
   "measurement-history.bundle": "8e6737034df9ad54089e99202432f65342b765978f1a7d7708c154b21249c2f8",
   "qualification/build-dev.log": "ad01065c19cef5eb57d32992979528b71b2911e47cbf030e41a03a9bd2811290",
   "qualification/census-mutation.log": "86526baa4fc4b08d2a15f219284f10ef2d032a71d8726e788af22fa5906f84a5",
@@ -52,6 +58,7 @@
   "release/release.log": "1ff852f2466e7cfc8d23fa2f11a9eebfc548cc6511a5817a016d14ed60777fb1",
   "release/run.py": "0cab366c044c6e4e52a35abaeeafabefe18ace2c79bddafd739bbec98db4e346",
   "release/stages.json": "8a299ba2ffc7a0e6b0ebdfc5b711167673adf9f74e1d4128b276b2631f5757b9",
+  "review-and-replay.json": "04e40c1a3b7e6aed57fb111d257d44d840e2b8f1b2af75fd88956a813ce20d14",
   "selection.json": "5f6225f508576bd7b25a6a2bfbd3b4f8c29286466f6f71a7471ab826deb69acd",
   "selection.log": "be37c430013210bdeb230a6e7a24fa75b90fd0bafa2be93205a36050a9bb28df"
 }

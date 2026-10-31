@@ -1,0 +1,30 @@
+{
+  "source": "be1467641c36fb14c9977ecec742c819850db535",
+  "base": "fb20438eb6818523504fc64374f8f42b6521234e",
+  "compilerSourceReview": {
+    "id": "0b1f5bbb-7c3b-4ea7-b544-8dda42fd4dcf",
+    "source": "9a343f8c799ed8b25fcec92fe59e22cae6a38b9f",
+    "points": [
+      "reached-direction emission and orphan removal",
+      "table layout and every index/expansion/SIMD bound",
+      "unchanged exactly-once retention and zero allocation",
+      "sizing before one final allocation",
+      "Final_Sigma original UTF-16 context",
+      "Unicode data/algorithm notices"
+    ]
+  },
+  "unchangedReviewedBindingEntries": 23,
+  "toolingChangesOnly": "offline generator rule and its selection controls, source-cleared separately",
+  "generatorSourceReview": {
+    "id": "8fa7083e-a5f5-445a-9583-153ddfa61dcb",
+    "originalCommit": "d452728c3",
+    "reorderedCommit": "a4083e7b6"
+  },
+  "canonicalSelectorTests": {
+    "passed": 61,
+    "failed": 0
+  },
+  "oldAssertion": 1,
+  "newAssertion": 0,
+  "reorderingTreeDeltaEmpty": true
+}

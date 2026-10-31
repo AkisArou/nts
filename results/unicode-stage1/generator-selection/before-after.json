@@ -1,0 +1,10 @@
+[
+  {
+    "arm": "old",
+    "status": 1
+  },
+  {
+    "arm": "new",
+    "status": 0
+  }
+]
