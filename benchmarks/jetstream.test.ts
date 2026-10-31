@@ -100,6 +100,38 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN BIGINT BIGDENARY: complete original workload checks.
+{
+  const name = "jetstream-bigint-bigdenary";
+  if (modules.has(name)) {
+    checked.add(name);
+    const port = await import("./cases/jetstream-bigint-bigdenary/case.ts");
+    const expected = ["11446154699171994769652135.7781913134896535429075844", "6484182272073017610239072.4688223107799632897294588", "-8965168485622506189945604.1235068121348084163185216", "1", "22242459414977784277756671231780478707994020113321.23150840471075112427918006080333207646587562555648", "3.6135503037706326689001125"];
+    assert.equal(port.seed, 1);
+    assert.equal(port.work(0), 0);
+    assert.equal(port.work(1), 789035237);
+    assert.deepEqual(port.observation(), {operations: 6, results: expected, checksum: 789035237, valid: true});
+    assert.equal(port.work(2), 3645266058);
+    assert.deepEqual(port.render(1), expected);
+    assert.throws(() => new port.BigDenary(1n), {name: 'TypeError', message: 'Cannot convert undefined to a BigInt'});
+  }
+}
+// END BIGINT BIGDENARY.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+

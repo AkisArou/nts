@@ -1,0 +1,148 @@
+{
+  "suite": "JetStream 3.0",
+  "name": "bigint-bigdenary",
+  "revision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
+  "sources": [
+    {
+      "path": "bigint/bigdenary-bundle.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/bigdenary-bundle.js",
+      "bytes": 11051,
+      "sha256": "57208615c3b0723ebafeb5939997090d750284f9b3c6c9ebe8eac3ac499d1ea5",
+      "gitBlob": "1b3dcabb1c2a985b406569346e2a746bc034bba8"
+    },
+    {
+      "path": "bigint/bigdenary-benchmark.js",
+      "url": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/bigdenary-benchmark.js",
+      "bytes": 2583,
+      "sha256": "3c77ec3c8b52fef2eff43f8b9af16a5544db7575ffd419b2ceea7275a66d64b4",
+      "gitBlob": "930dbd7298dd91e14ac9b325931bec5f99e37fdd"
+    }
+  ],
+  "operations": [
+    "plus",
+    "minus",
+    "negated",
+    "comparedTo",
+    "multipliedBy",
+    "dividedBy"
+  ],
+  "originalCallsPerOperation": 10001,
+  "originalTotalCallsPerIteration": 60006,
+  "fullInputs": [
+    "8965168485622506189945604.1235068121348084163185216",
+    "2480986213549488579706531.6546845013548451265890628"
+  ],
+  "licenses": [
+    {
+      "spdx": "MIT",
+      "copyright": "2020 U-Zyn Chua <chua@uzyn.com>",
+      "scope": "Complete BigDenary library",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/bigdenary-bundle.js",
+      "noticeRetained": true
+    },
+    {
+      "spdx": "BSD-2-Clause",
+      "copyright": "2022 Apple Inc.",
+      "scope": "Benchmark and original decimal inputs",
+      "source": "https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/bigdenary-benchmark.js",
+      "noticeRetained": true
+    }
+  ],
+  "adaptations": [
+    "Remove only the fixed globalThis export and outer IIFE; retain all original library helpers, class methods, aliases and static BDCompare assignment.",
+    "Add erased types and declare fields so original constructor assignment order remains unchanged. Successful instances have initialized base/decimals; the original bigint-input path still reads the absent _decimals before assignment and throws.",
+    "Write isNaN(Number(n)) for number|string inputs, explicitly expressing the original global isNaN primitive numeric coercion.",
+    "Use a checked BigDenary receiver in the default comparator so its type can coexist with the original number-result Object.is comparison. Unsupported default numeric receivers still throw TypeError.",
+    "After each original first/last comparison, observe the last result as a decimal string and mix its code units plus length into an unsigned multiply-by-31 checksum. Retain at most six strings; every full iteration contributes.",
+    "Keep original full inputs and a single stateless-valid Benchmark outside work. Run the original validate after the requested complete iterations. No RNG, native numeric shortcut, changed precision or reduced repeat count."
+  ],
+  "originalSourceAudit": {
+    "completeOriginalBigDenaryClassAstEqual": true,
+    "retainedMethods": 33,
+    "originalHelpers": [
+      "bigIntAbs",
+      "getDecimals",
+      "extractExp",
+      "countTrailingZeros",
+      "_splitString",
+      "_strOfZeros"
+    ],
+    "helperBodiesIdenticalExceptExplicitPrimitiveIsNaNCoercion": true,
+    "completeOriginalBenchmarkAstEqual": true,
+    "originalFullInputDeclarationsAstEqual": true,
+    "firstAndLastLoopAstEqualAfterObservationRemoval": true,
+    "declaredClassFieldsErased": true,
+    "globalInstallAndOuterIifeRemoved": true
+  },
+  "validation": {
+    "node": "v24.20.0",
+    "unchangedUpstreamFullIterationPassed": true,
+    "originalCallsPerOperation": 10001,
+    "originalOperationsPerIteration": 6,
+    "originalTotalCallsPerIteration": 60006,
+    "fullResults": [
+      "11446154699171994769652135.7781913134896535429075844",
+      "6484182272073017610239072.4688223107799632897294588",
+      "-8965168485622506189945604.1235068121348084163185216",
+      "1",
+      "22242459414977784277756671231780478707994020113321.23150840471075112427918006080333207646587562555648",
+      "3.6135503037706326689001125"
+    ],
+    "checksums": {
+      "work0": 0,
+      "work1": 789035237,
+      "work2": 3645266058
+    },
+    "constructorAndOperationComparisons": 373,
+    "traceSha256": "a84dbb96347e200e6960229516aff8cd2590ed449d1e29bcb3f06bdcdc3517bc",
+    "originalDormantFailuresPreserved": {
+      "bigintConstructor": {
+        "name": "TypeError",
+        "message": "Cannot convert undefined to a BigInt"
+      },
+      "invalidRaw": {
+        "name": "Error",
+        "message": "InvalidBigDenaryRaw"
+      },
+      "negativeHalfScaleToZero": "Original -0.5 scaled to zero decimal places yields +1; not corrected."
+    },
+    "timingPerformed": false,
+    "strictTypeScript": true,
+    "strictCheckerExitCode": 0
+  },
+  "timing": {
+    "node": "24.20.0",
+    "seed": 1,
+    "bestMilliseconds": 15.7895682,
+    "processes": [
+      {
+        "nsPerOp": 16995201.0,
+        "bits": "41c783dc72800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 16985266.8,
+        "bits": "41c783dc72800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 19059644.0,
+        "bits": "41c783dc72800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 15789568.2,
+        "bits": "41c783dc72800000",
+        "stderr": ""
+      },
+      {
+        "nsPerOp": 16253158.8,
+        "bits": "41c783dc72800000",
+        "stderr": ""
+      }
+    ],
+    "sourceSha256": "f0fd4c52e409a0365a3b39b0208943a7807d80b7c0686fd71e76e4dc2e1ecd78",
+    "protocol": "Unmodified benchmarks/common/bench.mjs; 5 sequential fresh processes, best of 5 calibrated trials in each process.",
+    "acceptedTimingException": true
+  }
+}
