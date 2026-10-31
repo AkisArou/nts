@@ -651,6 +651,17 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does node, the oracle, pass a new case first", run: "node tooling/census/conformance262.ts --suite typescript --under tests/typescript/<family>" }],
   },
   {
+    // Offline Node generators write committed tests/typescript/unicode cases.
+    // Neither the gate nor the product executes them; their fixture outputs
+    // owe the conformance suite through their own paths. A future gate reader
+    // still adds its step through stepInputs below, as for standalone drivers.
+    name: "the standalone Unicode fixture generators",
+    when: (p) => p.startsWith("tooling/unicode-cases/"),
+    settled: true,
+    steps: [],
+    arms: [],
+  },
+  {
     name: "the JVM class writer",
     when: (p) => /^compiler\/jvm-emitter\//.test(p),
     steps: ["jvm", "dex", "jvm-verifies", "bench-agree", "on-device", "test262-jvm"],

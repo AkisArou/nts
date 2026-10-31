@@ -39,6 +39,22 @@ const superset = (got, want, what) => {
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
 
+test("offline Unicode generators leave conformance obligations with their fixture outputs", () => {
+  for (const added of [false, true]) {
+    const generator = owed([{ path: "tooling/unicode-cases/case-mapping.ts", added }]);
+    assert.ok(!generator.some(rule => rule.full), "an offline generator is not an unplaced instrument");
+    assert.ok(generator.some(rule => rule.name === "the standalone Unicode fixture generators"));
+    assert.ok(!gateSteps(generator).includes("typescript-cases"), "no gate step executes the generator");
+    for (const path of ["tests/typescript/unicode/case-mapping-final-sigma.ts", "results/typescript/c/cases.tsv"]) {
+      const rules = owed([{ path, added }]);
+      assert.ok(!rules.some(rule => rule.full), path);
+      superset(gateSteps(rules), ["typescript-cases"], path);
+      superset(changeOwes([{ path: "tooling/unicode-cases/case-mapping.ts", added }, { path, added }]), ["typescript-cases"], "the generator does not suppress its output");
+    }
+  }
+  assert.ok(owed([{ path: "tooling/unclassified-generator.ts", added: true }]).some(rule => rule.full), "unrelated tooling keeps its unknown-reach obligation");
+});
+
 test("bundled native dependencies owe their executed ELF and algorithm guards", () => {
   for (const path of ["build/node-deps/recipes.json", "tooling/bootstrap/node.ts", "tooling/bootstrap/node_recipe.py", "runtime/node/crypto/dh.c", "tooling/conformance/c-tests.sh"]) {
     const rules = owed([{path,added:true}]);
