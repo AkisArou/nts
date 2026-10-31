@@ -5,7 +5,7 @@ import { validateBoolean, validateInteger, validateObject, validateString } from
 import { isUint8Array } from "../../../util/src/types.ts";
 import { Buffer } from "../../../buffer/src/main.ts";
 import { Readable } from "../../../stream/src/main.ts";
-import * as fs from "../../../fs/src/main.ts";
+import fs from "../../../fs/src/main.ts";
 import { EMPTY_BUFFER, SENTINEL16, kFinalize } from "./constants.ts";
 import { buildArchiveTrailer } from "./header-builders.ts";
 import { fsStatAsync, fsLstatAsync, fsReadlinkAsync } from "./fs-util.ts";

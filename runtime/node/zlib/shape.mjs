@@ -443,3 +443,15 @@ export function shape(exports) {
 export function subpaths(exports) {
   return { "zlib/iter": exports.iter };
 }
+
+// Node v26.13.0 test/parallel/test-zlib-zip-internals.js reaches these guards
+// directly. Read the actual exports for both lanes; absent compiled helpers
+// stay absent, so the assertion fails rather than falling back to host Node.
+export function internals(exports) {
+  return {
+    "internal/zip/binary": { readSafeUint64: exports._zipReadSafeUint64 },
+    "internal/zip/extra-fields": { parseZip64Extra: exports._zipParseZip64Extra },
+    "internal/zip/headers": { LocalFileHeader: exports._ZipLocalFileHeader },
+    "internal/zip/compression": { decodeMemberSync: exports._zipDecodeMemberSync },
+  };
+}

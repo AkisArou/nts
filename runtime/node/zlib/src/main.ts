@@ -1325,3 +1325,9 @@ export {
   getMaxZipContentSize,
   setMaxZipContentSize,
 } from "./zip/index.ts";
+// Private Node ZIP utilities exposed only to shape.internals for the upstream
+// --expose-internals tests; shape() keeps them outside the public namespace.
+export { readSafeUint64 as _zipReadSafeUint64 } from "./zip/binary.ts";
+export { parseZip64Extra as _zipParseZip64Extra } from "./zip/extra-fields.ts";
+export { LocalFileHeader as _ZipLocalFileHeader } from "./zip/headers.ts";
+export { decodeMemberSync as _zipDecodeMemberSync } from "./zip/compression.ts";

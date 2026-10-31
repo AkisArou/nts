@@ -4,7 +4,7 @@ import { ERR_INVALID_ARG_TYPE, ERR_INVALID_STATE, ERR_ZIP_ARCHIVE_TOO_LARGE, ERR
 import { validateBoolean, validateFunction, validateString } from "../../../internal/validators.ts";
 import { Buffer, kMaxLength } from "../../../buffer/src/main.ts";
 import { Readable } from "../../../stream/src/main.ts";
-import * as fs from "../../../fs/src/main.ts";
+import fs from "../../../fs/src/main.ts";
 import { SIG_LOCAL_FILE_HEADER, TAIL_LENGTH, kFinalize, kPromote } from "./constants.ts";
 import { buildArchiveTrailer } from "./header-builders.ts";
 import { CentralFileHeader, LocalFileHeader, findArchiveEnd, readCentralDirectory } from "./headers.ts";

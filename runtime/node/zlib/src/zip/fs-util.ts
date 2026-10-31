@@ -2,7 +2,7 @@ import type { Stats } from "../../../fs/src/stats.ts";
 import type { Buffer } from "../../../buffer/src/main.ts";
 // From Node v26.13.0 lib/internal/zip/fs-util.js.
 import { ERR_INVALID_STATE, ERR_ZIP_INVALID_ARCHIVE } from "../../../internal/errors.ts";
-import * as fs from "../../../fs/src/main.ts";
+import fs from "../../../fs/src/main.ts";
 
 
 // Promise wrappers over the callback `fs` primitives (`ZipFile` works on a

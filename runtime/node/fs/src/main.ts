@@ -141,20 +141,29 @@ export type { OpenAsBlobOptions } from "./blob.ts";
 
 // The callback surface, which shares this module's argument handling and its
 // errors: the work is the same system call and only the route back differs.
-export {
+import {
   access, appendFile, chmod, chown, close, copyFile, cp, exists, fdatasync, fstat, glob,
   fsync, ftruncate, lchown, link, lstat, mkdir, mkdtemp, open, read, readFile, readdir,
   readlink, realpath, rename, rm, rmdir, stat, symlink, truncate, unlink,
   utimes, lutimes, write, writeFile, writev, readv, fchmod, fchown, futimes,
   statfs, _realpathNative,
 } from "./async.ts";
+export {
+  access, appendFile, chmod, chown, close, copyFile, cp, exists, fdatasync, fstat, glob,
+  fsync, ftruncate, lchown, link, lstat, mkdir, mkdtemp, open, read, readFile, readdir,
+  readlink, realpath, rename, rm, rmdir, stat, symlink, truncate, unlink,
+  utimes, lutimes, write, writeFile, writev, readv, fchmod, fchown, futimes,
+  statfs, _realpathNative,
+};
 
 // `fs.promises` and `node:fs/promises` are the same object.
-export * as promises from "./promises.ts";
+import * as promises from "./promises.ts";
+export { promises };
 export type { CopyOptions, CopySyncOptions } from "./cp-common.ts";
 export type { GlobExclude, GlobOptions, GlobPatternInput } from "./glob.ts";
 
-export { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
+import { ReadStream, WriteStream, createReadStream, createWriteStream } from "./streams.ts";
+export { ReadStream, WriteStream, createReadStream, createWriteStream };
 export { Utf8Stream } from "./utf8-stream.ts";
 export type { Utf8StreamOptions } from "./utf8-stream.ts";
 export { watch, watchFile, unwatchFile } from "./watchers.ts";
@@ -1993,3 +2002,15 @@ function rmSyncValidated(validatedPath: string, options: NormalizedRmOptions): v
   }
   check(nts_fs_rmdir(validatedPath), "rmdir", validatedPath);
 }
+
+// The mutable CommonJS module view. The host shape adds public object metadata
+// and the remaining exports to this same object, so a module-object import and
+// require('fs') observe the same method replacement. Named ESM imports retain
+// their ordinary static bindings. These are the contracts used by ZIP today.
+const commonFileSystem = {
+  open, openSync, close, closeSync, fstat, fstatSync, ftruncate, ftruncateSync,
+  stat, lstat, readlink, read, readSync, write, writeSync, createReadStream,
+  constants,
+  promises: { open: promises.open },
+};
+export default commonFileSystem;

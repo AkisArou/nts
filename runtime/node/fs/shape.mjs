@@ -3,6 +3,8 @@
 // `lib/fs.js` populates a CommonJS object in this order. The typed build is an
 // ESM namespace, whose keys are sorted, so a spread has the right values but
 // the wrong public enumeration order.
+const shapedModules = new WeakSet();
+
 const publicExportNames = [
   "appendFile",
   "appendFileSync",
@@ -147,6 +149,8 @@ const promiseExportNames = [
 ];
 
 export function shape(exports) {
+  const common = exports.default;
+  if (common !== undefined && shapedModules.has(common)) return common;
   const module = { ...exports };
   const promiseNamespace = { ...exports.promises };
   // FileHandle is the public result type of promises.open(), not a runtime
@@ -242,8 +246,12 @@ export function shape(exports) {
   delete module._validateRmOptionsSync;
   delete module.flagsOf;
 
-  const ordered = {};
+  // Preserve the one module-object identity. Reinsert the typed core's keys
+  // in Node's public order while the representation is first being shaped.
+  const ordered = common ?? {};
+  for (const name of Object.keys(ordered)) delete ordered[name];
   for (const name of publicExportNames) ordered[name] = module[name];
+  if (common !== undefined) shapedModules.add(common);
   return ordered;
 }
 

@@ -58,10 +58,10 @@ export interface ZipMemberInfo {
 }
 
 export interface Zip64Want {
-  uncompressedSize: boolean;
-  compressedSize: boolean;
-  localFileHeaderOffset: boolean;
-  diskNumber: boolean;
+  uncompressedSize?: boolean;
+  compressedSize?: boolean;
+  localFileHeaderOffset?: boolean;
+  diskNumber?: boolean;
 }
 export interface Zip64Extra {
   uncompressedSize?: number;
