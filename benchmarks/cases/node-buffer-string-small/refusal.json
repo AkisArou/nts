@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "case": "node-buffer-string-small",
+  "sourceSha256": "1b5d7aa6dbe8fa6fb72508f03af9bfb136d73b871d8906d46e50dc1f2cd232c5",
+  "compiler": {
+    "commit": "9b3d5d65810fb3eb670fe0a73c5b49c7542104d1",
+    "sha256": "aef2f4ff4e59be45a045a8be7ab0ea54c05bef9e83adafb6ef239947e54eeeaf"
+  },
+  "backend": "c",
+  "emitStatus": 0,
+  "refusal": "/home/akisarou/.cache/nts-node26/zip-pilot/buffer-pool/public-string-row/src/main.ts:5:19: NTS1100 `Buffer.from` is not provided by this compiler",
+  "workMeasured": false,
+  "dependency": "builtins stage 9: node:buffer for native programs",
+  "performanceEvidence": "Owed when the public provider makes this row measurable; no addon or interpreted substitute.",
+  "oracleRecord": "Complete Node 26.13.0 program-emit runs are recorded in results/oracle-counts/benchmarks/cases/node-buffer-string-small.json. This records the seeded Node population, not compiled performance."
+}

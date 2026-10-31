@@ -1,0 +1,11 @@
+{
+  "extends": "../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "types": [
+      "node"
+    ]
+  },
+  "files": [
+    "case.ts"
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/node-buffer-string-small",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/node-buffer-string-small/case.ts",
+      "signature": "73cd8f9b162e94692dac7e6b69d42bacf460661f2c0e0745faf4f1eb7203779d",
+      "keys": {
+        "c": "e145c76c9e460ee2e5cab00e560a4083",
+        "jvm": "043afd4bea94bb6ad70d924528255ca2",
+        "llvm": "7d9f5767248536533240bbdcb362969b"
+      },
+      "cases_sha256": "21cff2508ca1d2eafeb26ae7dab696284e00e8b5ed577fa895b4868d489213b1",
+      "driver_sha256": "8738c3cee9669c01a62d4b6475281c9f608049e536cb3b817a2abc454c6c7d20",
+      "input_domain": {
+        "identity": "3677d9019b550d6c81440508048ebf6b",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "iterations": {
+                "reason": "case.ts declares benchmark seed = 1: one work(1) batch performs 64 allocations from the fixed UTF-8 literal 'a small UTF-8 allocation'. Include work(0) as the empty-loop control; the benchmark does not select any other batch size.",
+                "min": 0,
+                "max": 1,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 3,
+          "cases_sha256": "21cff2508ca1d2eafeb26ae7dab696284e00e8b5ed577fa895b4868d489213b1"
+        }
+      },
+      "complete": true,
+      "count": 3
+    }
+  ]
+}

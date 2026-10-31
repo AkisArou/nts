@@ -129,3 +129,8 @@ function legacyConstructor(exports) {
   }
   return Buffer;
 }
+
+/** Native address observation used by Node's unmodified allocation tests. */
+export function testBindings(exports) {
+  return { buffer: { arrayBufferAlignedOffset: exports.arrayBufferAlignedOffset } };
+}

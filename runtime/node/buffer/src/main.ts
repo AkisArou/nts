@@ -1,3 +1,4 @@
+/// <reference path="./pool-native.d.ts" />
 // `node:buffer`, from node v24.20.0 `lib/buffer.js`.
 //
 // `Buffer` is a `Uint8Array` with an encoding-aware API on top, and that is
@@ -211,7 +212,7 @@ function objectToBuffer(value: object): Buffer<ArrayBuffer> | undefined {
 function fromArrayLike(source: UnknownArrayLike): Buffer<ArrayBuffer> {
   if (typeof source.length !== "number") return createBuffer(0);
   const size = source.length;
-  const buf = createBuffer(size >= 0 ? size : 0);
+  const buf = allocate(size >= 0 ? size : 0);
   for (let i = 0; i < buf.length; i++) {
     // The compiled language has no Symbol.toPrimitive/valueOf hook. Keep the
     // JavaScript boundary on the same primitive-only conversion path as fill.
@@ -1262,35 +1263,13 @@ export class FastBuffer<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> 
   }
 }
 
-/** Allocation dispatch used by the public legacy constructor facade. */
+/** Node v26.13.0 lib/buffer.js:320-330 legacy allocation dispatch. */
 export function createLegacyBuffer(value: unknown, encodingOrOffset?: unknown, length?: unknown): Buffer {
   if (typeof value === "number") {
     if (typeof encodingOrOffset === "string") {
       throw new ERR_INVALID_ARG_TYPE("string", "string", value);
     }
-    return Buffer.allocUnsafe(value);
-  }
-  if (typeof value === "string") {
-    const encoding = checkEncoding(encodingOrOffset);
-    const size = byteLengthIn(value, encoding);
-    const buffer = createBuffer(size);
-    writeIn(buffer, value, 0, size, encoding);
-    return buffer;
-  }
-  if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
-    if (typeof encodingOrOffset === "string") {
-      throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
-    }
-    if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "number") {
-      throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
-    }
-    if (length !== undefined && typeof length !== "number") {
-      throw new ERR_INVALID_ARG_TYPE("length", "number", length);
-    }
-    return new FastBuffer(value, encodingOrOffset, length);
-  }
-  if (value !== null && typeof value === "object" && hasArrayLikeShape(value)) {
-    return fromArrayLike(value);
+    return Buffer.alloc(value);
   }
   return Buffer.from(value, encodingOrOffset, length);
 }
@@ -1316,20 +1295,19 @@ class BufferFactories {
     return buf;
   }
 
-  /**
-   * Unsafe allocation remains fresh in this architecture-only change.
-   *
-   * Node hands back memory from a pool without clearing it, so the contents are
-   * whatever was there. A `Uint8Array` is always zeroed, so ours is safe where
-   * node's is not — the name is kept because the API is the contract, and code
-   * that reads before writing is wrong either way.
-   */
-  static allocUnsafe(size: number): Buffer<ArrayBuffer> {
-    return createBuffer(checkSize(size));
+  // Node v26.13.0 lib/buffer.js:473-507. Alignment is validated after size.
+  static allocUnsafe(size: number, alignment?: number): Buffer<ArrayBuffer> {
+    checkSize(size);
+    if (alignment === undefined) return allocate(size);
+    validateAlignment(size, alignment);
+    return allocateAligned(size, alignment);
   }
 
-  static allocUnsafeSlow(size: number): Buffer<ArrayBuffer> {
-    return createBuffer(checkSize(size));
+  static allocUnsafeSlow(size: number, alignment?: number): Buffer<ArrayBuffer> {
+    checkSize(size);
+    if (alignment === undefined) return createUnsafeBuffer(size);
+    validateAlignment(size, alignment);
+    return createUnsafeAlignedBuffer(size, alignment);
   }
 
   static from<TArrayBuffer extends ArrayBufferLike>(
@@ -1354,13 +1332,7 @@ class BufferFactories {
         throw new ERR_INVALID_ARG_TYPE("encoding", "string", encodingOrOffset);
       }
       const encoding = checkEncoding(encodingOrOffset);
-      const size = byteLengthIn(value, encoding);
-      const buf = createBuffer(size);
-      const written = writeIn(buf, value, 0, size, encoding);
-      // Hex and base64 accept forgiving input. Their length calculation is an
-      // allocation bound; invalid characters or early padding may make the
-      // decoded value shorter than that bound.
-      return written === size ? buf : buf.subarray(0, written);
+      return fromString(value, encoding);
     }
 
     if (value !== null && typeof value === "object") {
@@ -1456,7 +1428,8 @@ class BufferFactories {
       out.set(item.subarray(0, take), at);
       at += take;
     }
-    // A `totalLength` larger than the input leaves the tail zeroed.
+    // Node v26.13.0 lib/buffer.js:695-729 zeroes an unused concat tail.
+    if (at < total) out.fill(0, at, total);
     return out;
   }
 
@@ -1498,6 +1471,118 @@ class BufferFactories {
 }
 
 export const Buffer = BufferFactories;
+
+// Node v26.13.0 lib/buffer.js:195-228,518-595,627-640 and
+// lib/internal/buffer.js:1108-1138. The pool size moves in its own commit.
+const kPoolAlignment = 64;
+const kMaxAlignment = 2 ** 30;
+let poolSize: number;
+let poolOffset: number;
+let poolBase: number;
+let allocPool: ArrayBuffer;
+let allocBuffer: Buffer<ArrayBuffer>;
+
+function createPool(): void {
+  poolSize = Buffer.poolSize;
+  allocBuffer = createUnsafeAlignedBuffer(poolSize, kPoolAlignment);
+  allocPool = allocBuffer.buffer;
+  poolBase = allocBuffer.byteOffset;
+  nts_buffer_mark_as_untransferable(allocPool);
+  poolOffset = 0;
+}
+
+function alignPool(): void {
+  if (poolOffset & 0x7) {
+    poolOffset |= 0x7;
+    poolOffset++;
+  }
+}
+
+function alignmentPadding(alignment: number): number {
+  return Math.max(alignment, 8);
+}
+
+function validateAlignment(size: number, alignment: number): void {
+  validateInteger(alignment, "alignment", 1, kMaxAlignment);
+  if ((alignment & (alignment - 1)) !== 0) {
+    throw new ERR_INVALID_ARG_VALUE("alignment", alignment, "must be a power of two");
+  }
+  const padding = alignmentPadding(alignment);
+  if (size > kMaxLength - padding) {
+    throw new ERR_OUT_OF_RANGE("size", `<= ${kMaxLength - padding}`, size);
+  }
+}
+
+function createUnsafeBuffer(size: number): Buffer<ArrayBuffer> {
+  if (size <= 64) return createBuffer(size);
+  return new FastBuffer(nts_buffer_create_unsafe_array_buffer(size));
+}
+
+function createUnsafeAlignedBuffer(size: number, alignment: number): Buffer<ArrayBuffer> {
+  if (size === 0) return createBuffer(0);
+  const buffer = nts_buffer_create_unsafe_array_buffer(size + alignmentPadding(alignment));
+  return new FastBuffer(buffer, nts_buffer_array_buffer_aligned_offset(buffer, alignment), size);
+}
+
+function allocate(size: number): Buffer<ArrayBuffer> {
+  if (size <= 0) return createBuffer(0);
+  if (size < (Buffer.poolSize >>> 1)) {
+    if (size > (poolSize - poolOffset)) createPool();
+    const buffer = new FastBuffer(allocPool, poolBase + poolOffset, size);
+    poolOffset += size;
+    alignPool();
+    return buffer;
+  }
+  return createUnsafeBuffer(size);
+}
+
+function allocateAligned(size: number, alignment: number): Buffer<ArrayBuffer> {
+  if (size <= 0) return createBuffer(0);
+  if (alignment > kPoolAlignment || size >= (Buffer.poolSize >>> 1)) {
+    return createUnsafeAlignedBuffer(size, alignment);
+  }
+  poolOffset = (poolOffset + alignment - 1) & ~(alignment - 1);
+  if (size > (poolSize - poolOffset)) createPool();
+  const buffer = new FastBuffer(allocPool, poolBase + poolOffset, size);
+  poolOffset += size;
+  alignPool();
+  return buffer;
+}
+
+function fromStringFast(string: string, encoding: Encoding): Buffer<ArrayBuffer> {
+  const maxLength = Buffer.poolSize >>> 1;
+  let length = string.length;
+  if (length >= maxLength) return createFromString(string, encoding);
+  length *= 4;
+  if (length >= maxLength) length = byteLengthIn(string, encoding);
+  if (length >= maxLength) return createFromString(string, encoding, length);
+  if (length > (poolSize - poolOffset)) createPool();
+  const actual = writeIn(allocBuffer, string, poolOffset, length, encoding);
+  const buffer = new FastBuffer(allocPool, poolBase + poolOffset, actual);
+  poolOffset += actual;
+  alignPool();
+  return buffer;
+}
+
+function createFromString(
+  string: string, encoding: Encoding, length = byteLengthIn(string, encoding),
+): Buffer<ArrayBuffer> {
+  const buffer = Buffer.allocUnsafeSlow(length);
+  const actual = writeIn(buffer, string, 0, length, encoding);
+  return actual < length ? new FastBuffer(buffer.buffer, 0, actual) : buffer;
+}
+
+function fromString(string: string, encoding: Encoding): Buffer<ArrayBuffer> {
+  return string.length === 0 ? createBuffer(0) : fromStringFast(string, encoding);
+}
+
+// Test-only native observation, hidden from the public buffer namespace.
+export function arrayBufferAlignedOffset(buffer: ArrayBuffer, alignment: number): number {
+  validateAlignment(0, alignment);
+  return nts_buffer_array_buffer_aligned_offset(buffer, alignment);
+}
+
+createPool();
 
 
 const scratchFloat = new Float32Array(1);

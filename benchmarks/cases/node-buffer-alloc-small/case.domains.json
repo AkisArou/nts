@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "iterations": {
+        "min": 0,
+        "max": 1,
+        "integer": true,
+        "reason": "case.ts declares benchmark seed = 1: one work(1) batch performs 64 allocations of 32 bytes. Include work(0) as the empty-loop control; the benchmark does not select any other batch size."
+      }
+    }
+  }
+}
