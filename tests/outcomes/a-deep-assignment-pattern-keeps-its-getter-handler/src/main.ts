@@ -1,3 +1,5 @@
+// Regression guard: complete assignment-pattern ancestry retains getter effects.
+// Fix: dab3fab88c0517792ad05495369ef39c1364666b.
 // run: check
 // A throwing interface getter read by an assignment pattern deeper than 32
 // must remain in the effect graph. The shallow read licenses the same getter

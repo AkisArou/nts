@@ -1,3 +1,5 @@
+// Regression guard: complete base-constructor search; landed in c5549ea5ac3d.
+// Fix: 3e450957a09730e3631a72a0f5994b2ece9752eb.
 // run: check
 // The two derived classes differ only in their number of unused methods.
 // Looking past 64 AST children must still find the base constructor and its throw.

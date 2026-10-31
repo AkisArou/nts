@@ -1,5 +1,6 @@
-// FIXED by the native lossless-constant path. Kept beside the old measured
-// record until the landing is re-recorded on main. The executable control is
+// Regression guard: native capture preserves lossless JavaScript string constants.
+// Fix: 15ab64f598932739dbefb7537ca41dc28a1e606c.
+// The executable control is
 // tests/programs/a-string-literal-keeps-a-lone-code-unit: written constants
 // against fromCharCode, including tagged cooked and raw spelling.
 //

@@ -1,8 +1,33 @@
 {
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "agrees",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 58,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "checked 38 of 58 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 17 case(s) disagree between the compiled program and node",
+  "category": "agrees",
+  "nts": "agrees: 58 compared, 58 expected, 0 disagreements",
   "node": null,
-  "measured_with": "eb971f3223d27d0d",
+  "measured_with": "fd93b5ab01c26b4c",
   "source": "measured"
 }

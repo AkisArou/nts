@@ -1,8 +1,8 @@
 {
   "run": "build",
-  "category": "wrong-answer",
-  "nts": "exit 1; nts: uncaught Observed: claimed=65;control=1;claimed=65;control=3;claimed=65;control=65;claimed=65;control=66;claimed=65;control=2147483649;claimed=65;control=4294967297;claimed=65;control=9007199254740992;",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;",
   "node": "exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;",
-  "measured_with": "b1bd09048753072f",
+  "measured_with": "fd93b5ab01c26b4c",
   "source": "measured"
 }

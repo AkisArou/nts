@@ -1,3 +1,5 @@
+// Regression guard: discard flow authority after an incomplete fixpoint.
+// Fix: b1e2d851748d1b06112c0bc95462d483545125cd.
 // run: check
 // Subject and control differ in the number of nested joins: seventy versus eight.
 function deep(mask: string): number {

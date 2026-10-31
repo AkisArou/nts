@@ -1,3 +1,5 @@
+// Regression guard: native capture preserves lossless JavaScript string constants.
+// Fix: 15ab64f598932739dbefb7537ca41dc28a1e606c.
 // `for...of` over a string yields code points, and a lone surrogate is one
 // of them: "a\ud801b\ud801" yields four strings of length 1, the
 // surrogates as 0xd801 (55297). nts yields eight, each surrogate as three

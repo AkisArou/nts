@@ -1,3 +1,5 @@
+// Regression guard: native capture preserves lossless JavaScript string constants.
+// Fix: 15ab64f598932739dbefb7537ca41dc28a1e606c.
 // A wrong answer: `"\uDC00" > "\uD800"` is true -- strings compare by code
 // unit (IsLessThan compares the sequences of code units), and 0xDC00 >
 // 0xD800. The control, a-comparison-of-letters, compares ordinary code units

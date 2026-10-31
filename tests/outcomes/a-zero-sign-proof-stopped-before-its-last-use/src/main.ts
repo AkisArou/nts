@@ -1,3 +1,5 @@
+// Regression guard: complete negative-zero observation graph.
+// Fix: 2138bcf45e54096d692c018396b5559681e6d578.
 // run: check
 // Keep this as an SSA chain: a loop would close the backward propagation in a few steps.
 // The paired control changes only the first multiplier to a nonnegative value.

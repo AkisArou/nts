@@ -1,3 +1,5 @@
+// Regression guard: complete constructorless-ancestor initialization; landed in c5549ea5ac3d.
+// Fix: 8319bcdd9b6cb5c432ad442c77c7feee7836384d.
 // run: check
 // A super call must run every constructorless ancestor's field initializer.
 // The mutable seed prevents constant-field folding from hiding a skipped store.

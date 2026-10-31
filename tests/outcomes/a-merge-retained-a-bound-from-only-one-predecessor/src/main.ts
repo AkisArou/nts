@@ -1,3 +1,5 @@
+// Regression guard: join absent predecessor refinements with the global fact.
+// Fix: 120cb245238de14e37477becbd9b8abd1ba1527c.
 // run: check
 // The sole subject/control difference swaps the equivalent if arms.
 // A code-unit read makes the stale range observable as a lost NaN.

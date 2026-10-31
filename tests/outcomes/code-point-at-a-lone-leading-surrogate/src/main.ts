@@ -1,3 +1,5 @@
+// Regression guard: native capture preserves lossless JavaScript string constants.
+// Fix: 15ab64f598932739dbefb7537ca41dc28a1e606c.
 // A wrong answer: `"\uD800\uDBFF".codePointAt(0)` is 0xD800 -- a leading
 // surrogate not followed by a trailing one is its own code point
 // (CodePointAt: "If first is a leading surrogate and second is not a
