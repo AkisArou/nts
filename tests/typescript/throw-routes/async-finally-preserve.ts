@@ -1,0 +1,42 @@
+/*---
+description: A typed finally callback preserves the original producer rejection and fulfilled value.
+features: [ts-throw-route-async, ts-async, ts-errors, ts-unknown, ts-function-types, ts-this-parameter]
+flags: [async]
+---*/
+// Route: typed producer through a promise finally callback; node preserves the original fault identity in the awaiting caller catch and follows the logged cleanup order.
+async function main(): Promise<void> {
+  for (const n of [-2, 0, 3]) {
+    const log: string[] = []; let state = 0;
+    const fault = new RangeError("original fault");
+    async function producerBody(input: number): Promise<number> {
+      state++; log.push(`produce:${input}:${arguments.length}:${state}`);
+      try {
+        await Promise.resolve();
+        if (input < 0) { log.push(`throw:${state}`); throw fault; }
+        log.push(`return:${state}`); return input * 2;
+      } finally { state += 10; log.push(`producer-finally:${state}`); }
+    }
+    function cleanupBody(this: void): number {
+      assert.sameValue(this, undefined); state += 100; log.push(`cleanup:${arguments.length}:${state}`);
+      try { log.push(`cleanup-return:${state}`); return 99; }
+      finally { state += 1000; log.push(`cleanup-finally:${state}`); }
+    }
+    const producer: (input: number) => Promise<number> = producerBody, cleanup: (this: void) => number = cleanupBody;
+    let result: number | undefined; let caught = false;
+    try {
+      try { log.push("route:0"); result = await producer(n).finally(cleanup); log.push(`after:${state}`); }
+      finally { state += 10000; log.push(`caller-finally:${state}`); }
+    } catch (error: unknown) {
+      assert.sameValue(error, fault); assert.sameValue(error instanceof RangeError, true);
+      if (error instanceof RangeError) { assert.sameValue(error.constructor, RangeError); assert.sameValue(error.message, "original fault"); }
+      caught = true; log.push(`catch:${state}`);
+    } finally { state += 100000; log.push(`outer-finally:${state}`); }
+    assert.sameValue(result, n < 0 ? undefined : n * 2); assert.sameValue(caught, n < 0);
+    assert.sameValue(state, 111111);
+    const expected = ["route:0", `produce:${n}:1:1`, n < 0 ? "throw:1" : "return:1", "producer-finally:11", "cleanup:0:111", "cleanup-return:111", "cleanup-finally:1111"];
+    if (n >= 0) expected.push("after:1111");
+    expected.push("caller-finally:11111"); if (n < 0) expected.push("catch:11111");
+    expected.push("outer-finally:111111"); assert.compareArray(log, expected);
+  }
+}
+main().then(() => $DONE(), (error: unknown) => $DONE(error));
