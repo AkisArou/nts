@@ -220,6 +220,7 @@ A compiler refusal remains a finding and does not alter the case.
 | --- | --- | ---: | ---: | --- |
 | accessors | `accessor-*` | 69 | 69 | Class and literal getters/setters across interface, generic and union views; reads, writes, assignments, updates, destructuring, optional reads and own-getter spread |
 | conversions | `conversion-*` | 57 | 57 | valueOf, toString, all Symbol.toPrimitive hints, fallbacks, comparisons, string/number conversion, join, default sort and Object.fromEntries keys across three typed views |
+| iteration | `iteration-*` | 30 | 30 | Acquisition, next and return through interface, generic and union views; seven consumers, exhaustion, break, body throw and early destructuring |
 
 Implicit-call controls preserve each case's instrumentation and exact
 node answer. A current nts refusal remains a finding; it does not
@@ -393,7 +394,7 @@ land without another open Unicode pull request.
 | `ts-accessors` | `get`/`set` accessors on a class or an object literal | conformance/classes/propertyMemberDeclarations; typed paths | 230 | 4 |
 | `ts-ambient` | an ambient declaration (`declare var/function/class/namespace/global`), which emits nothing | conformance/ambient; ts-eslint TSDeclareFunction, `declare` modifiers | 6 | 1 |
 | `ts-any` | an explicitly `any`-typed value, the dynamic escape hatch | conformance/types/any; ts-eslint TSAnyKeyword | 4 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 1101 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 1161 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 155 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 101 | 0 |
@@ -419,14 +420,14 @@ land without another open Unicode pull request.
 | `ts-decorators` | standard (TC39) decorators on classes, methods, fields, accessors; context, addInitializer, metadata | conformance/esDecorators; ts-eslint Decorator | 0 | 12 |
 | `ts-default-parameters` | a parameter with a default value | conformance/es6/defaultParameters | 15 | 0 |
 | `ts-definite-assignment` | a definite assignment assertion (`x!: T`, `let x!: T`) | conformance/controlFlow/definiteAssignmentAssertions; ts-eslint PropertyDefinition.definite | 2 | 0 |
-| `ts-destructuring` | a typed destructuring declaration, parameter or assignment | conformance/es6/destructuring | 164 | 0 |
+| `ts-destructuring` | a typed destructuring declaration, parameter or assignment | conformance/es6/destructuring | 176 | 0 |
 | `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 54 | 0 |
 | `ts-dynamic-import` | a dynamic `import()` of a typed module | conformance/dynamicImport | 0 | 1 |
 | `ts-enum-computed` | an enum member whose initialiser is an expression, constant or not | conformance/enums | 6 | 0 |
 | `ts-enum-reverse-mapping` | a numeric enum member's value mapped back to its name | conformance/enums | 5 | 0 |
 | `ts-enum-string` | a string-valued enum member | conformance/enums | 6 | 0 |
 | `ts-enum` | an `enum` declaration and its object | conformance/enums; ts-eslint TSEnumDeclaration | 32 | 3 |
-| `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 109 | 0 |
+| `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 115 | 0 |
 | `ts-expando` | properties assigned to a function declaration (an expando) | conformance/functions (expando assignments, TypeScript 3.1) | 1 | 0 |
 | `ts-exponent` | the `**` operator and `**=` | conformance/es7/exponentiationOperator | 2 | 0 |
 | `ts-export-equals` | `export =` | conformance/externalModules; ts-eslint TSExportAssignment | 0 | 4 |
@@ -434,12 +435,13 @@ land without another open Unicode pull request.
 | `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 64 | 0 |
 | `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 121 | 0 |
 | `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 1374 | 4 |
-| `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 69 | 0 |
-| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 99 | 0 |
+| `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 75 | 0 |
+| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 119 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 9 | 0 |
-| `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 294 | 0 |
+| `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 314 | 0 |
 | `ts-implicit-accessor` | implicit getter and setter calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 138 | 0 |
 | `ts-implicit-conversion` | implicit valueOf, toString and Symbol.toPrimitive calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 114 | 0 |
+| `ts-implicit-iteration` | implicit iterator acquisition, stepping and closing through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 60 | 0 |
 | `ts-import-alias` | `import X = N.Y`, an alias for a namespace or a value it exports (`export import` too) | conformance/internalModules/importDeclarations; ts-eslint TSImportEqualsDeclaration | 3 | 0 |
 | `ts-import-require` | `import x = require("...")` | conformance/externalModules; ts-eslint TSImportEqualsDeclaration, TSExternalModuleReference | 0 | 5 |
 | `ts-import-type` | `import type` and TypeScript's elision of imports used only as types | conformance/externalModules/typeOnly; ts-eslint ImportDeclaration.importKind | 0 | 2 |
@@ -451,9 +453,9 @@ land without another open Unicode pull request.
 | `ts-instanceof` | `instanceof`, and narrowing by it | conformance/expressions/typeGuards/typeGuardsWithInstanceOf | 23 | 0 |
 | `ts-instantiation-expression` | an instantiation expression (`f<number>`), erased | conformance/types/typeParameters/typeArgumentLists/instantiationExpressions; ts-eslint TSInstantiationExpression | 1 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 4 | 0 |
-| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 326 | 0 |
+| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 386 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 2 | 0 |
-| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 1320 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 1380 | 0 |
 | `ts-jsx` | JSX in a `.tsx` file, compiled to factory calls | conformance/jsx; ts-eslint JSX nodes | 0 | 6 |
 | `ts-keyof` | `keyof T`, and values of that type | conformance/types/keyof; ts-eslint TSTypeOperator | 9 | 0 |
 | `ts-legacy-decorators` | `experimentalDecorators`: class, method, property, accessor and parameter decorators | conformance/decorators | 0 | 8 |
@@ -466,7 +468,7 @@ land without another open Unicode pull request.
 | `ts-lifetime-scalar` | an object initially used through fields gains an observable identity or shared mutation | lifetime contracts: Memory, Where nts stands; The ladder of homes | 20 | 0 |
 | `ts-lifetime-slot` | successive loop allocations remain distinct when their live instances overlap | lifetime contracts: Memory, Where nts stands; The one memory analysis | 18 | 0 |
 | `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 21 | 0 |
-| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 304 | 0 |
+| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 316 | 0 |
 | `ts-mapped-types` | a mapped type (`{ [K in keyof T]: U }`), with modifiers and `as` remapping | conformance/types/mapped; ts-eslint TSMappedType | 6 | 0 |
 | `ts-mixins` | a function returning a subclass of the class it is given | conformance/classes/mixinClassesAndInterfaces | 4 | 0 |
 | `ts-modules` | an ES module (the `module` flag): module scope, strictness, top-level await | conformance/externalModules; conformance/es6/modules | 22 | 10 |
@@ -478,7 +480,7 @@ land without another open Unicode pull request.
 | `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 216 | 0 |
 | `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 431 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 1 | 0 |
-| `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 646 | 0 |
+| `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 706 | 0 |
 | `ts-optional-chaining` | `?.` on properties, calls and elements, in typed code | conformance/expressions/optionalChaining | 20 | 0 |
 | `ts-optional-parameters` | a parameter marked `?` | conformance/functions; conformance/types/members | 7 | 0 |
 | `ts-optional-properties` | a property marked `?` in a type, a class or an interface | conformance/types/members; conformance/types/objectTypeLiteral | 18 | 0 |
@@ -519,11 +521,11 @@ land without another open Unicode pull request.
 | `ts-route-throw` | a thrown value or finally block carries a reference past unwinding | lifetime contracts: Memory, The one memory analysis | 16 | 0 |
 | `ts-route-yield` | a suspended generator keeps a local reference until resumption | lifetime contracts: Memory, The one memory analysis | 12 | 0 |
 | `ts-satisfies` | the `satisfies` operator, which leaves its value and the value's type alone | conformance/expressions/typeSatisfaction; ts-eslint TSSatisfiesExpression | 3 | 0 |
-| `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 97 | 1 |
+| `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 115 | 1 |
 | `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 60 | 4 |
 | `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 377 | 0 |
 | `ts-structural-typing` | a value accepted for its shape, not its declared name: literals and classes that never say `implements` | conformance/types/typeRelationships; typed paths | 44 | 0 |
-| `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 50 | 2 |
+| `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 110 | 2 |
 | `ts-tagged-templates` | a tagged template with a typed tag function | conformance/es6/templates | 1 | 0 |
 | `ts-template-literal-types` | a template literal type, and the intrinsic string types (Uppercase, Capitalize, ...) | conformance/types/literal/templateLiteralTypes; ts-eslint TSTemplateLiteralType | 8 | 0 |
 | `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 86 | 0 |
@@ -535,7 +537,7 @@ land without another open Unicode pull request.
 | `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 2 | 0 |
 | `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 2 | 0 |
 | `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 2 | 0 |
-| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 363 | 0 |
+| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 369 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 14 | 0 |
 | `ts-type-assertions` | a type assertion (`x as T`, `<T>x`), erased, never a conversion | conformance/expressions/asOperator; conformance/expressions/typeAssertions; ts-eslint TSAsExpression, TSTypeAssertion | 5 | 0 |
 | `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 96 | 0 |
@@ -545,9 +547,9 @@ land without another open Unicode pull request.
 | `ts-unicode-case-mapping` | default lower/uppercase mappings, expansions, Final_Sigma, surrogate handling and newly assigned letters | Unicode contracts; UCD SpecialCasing, DerivedAge and UnicodeData | 207 | 0 |
 | `ts-unicode-exhaustive` | every code point, including lone surrogates, checked by a Node-generated FNV-1a UTF-16 hash per 4096-point block | Unicode contracts: Staying identical to node, exhaustive layer | 34 | 0 |
 | `ts-unicode-sequences` | exact contextual strings or API observations that a per-code-point sweep cannot establish | Unicode contracts: Staying identical to node, sequence and behaviour layers | 173 | 0 |
-| `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 234 | 0 |
+| `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 254 | 0 |
 | `ts-unique-symbol` | a `unique symbol` constant as a member key | conformance/types/uniqueSymbol | 1 | 0 |
-| `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 272 | 0 |
+| `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 278 | 0 |
 | `ts-unsound-arity` | a shorter function signature hides an optional parameter from a wider caller | conformance/types/typeRelationships; typed paths | 3 | 0 |
 | `ts-unsound-assertion` | an assertion function claims a type without establishing it at runtime | conformance/controlFlow/assertionTypePredicates; typed paths | 89 | 0 |
 | `ts-unsound-bivariance` | method parameter bivariance permits a wider writer to violate a narrow value type | conformance/types/typeRelationships; typed paths | 151 | 0 |
