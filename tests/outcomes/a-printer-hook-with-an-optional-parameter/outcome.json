@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "SIGABRT; nts: refused: String() of `Child`, whose type says nothing about how it prints",
+  "node": "exit 1; nts: uncaught Observed: printed=child;",
+  "measured_with": "58ea87c81e2b5f12",
+  "source": "measured"
+}
