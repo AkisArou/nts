@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import test from "node:test";
 import { spawnTest } from "./test-wait.ts";
+import { TOOLING_COLLECTOR_COMMAND } from "./tooling-runner.ts";
 
 const shell = readFileSync(process.env.NTS_TOOLING_LOG_SHELL ?? new URL("./all.sh", import.meta.url), "utf8");
 const wrapper = /^tooling_tests\(\) \{\n[\s\S]*?^\}/m.exec(shell)?.[0];
@@ -12,7 +13,7 @@ assert.ok(wrapper, "the test exercises all.sh's actual tooling wrapper");
 const scratch = join(homedir(), ".cache/nts-scratch/tooling-log");
 mkdirSync(scratch, { recursive: true });
 
-function run(t: { after(fn: () => void): void }, failure: boolean, runDirectory: boolean, color: boolean) {
+function run(t: { after(fn: () => void): void }, failure: boolean, runDirectory: boolean, color: boolean, command: readonly string[] = TOOLING_COLLECTOR_COMMAND) {
   const root = mkdtempSync(join(scratch, "report-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const dir of ["bin", "run", "tmp"]) mkdirSync(join(root, dir));
@@ -28,11 +29,14 @@ ${failure ? "test('real failure beyond the TODOs', () => assert.fail(Array.from(
   // owed self-test. No nested gate runner or shared source tree is executed.
   writeFileSync(join(root, "bin/node"), `#!${process.execPath}
 const {spawnSync}=require('node:child_process');
-if(process.argv[2]==='--test'||process.argv[2]==='tooling/gate/tooling-runner.ts'){
+const expected=JSON.parse(process.env.TEST_TOOLING_COMMAND),actual=process.argv.slice(2);
+if(JSON.stringify(actual)===JSON.stringify(expected)){
  const code="import {runScopedTooling} from "+JSON.stringify(process.env.TEST_RUNNER)+";process.exitCode=(await runScopedTooling([process.env.TEST_FIXTURE],{fixture:true})).status";
  const result=spawnSync(process.execPath,['--input-type=module','-e',code],{stdio:'inherit'});
  process.exitCode=result.status??1;
-}else if(!process.argv.includes('tooling/gate/owed.mjs'))process.exitCode=99;
+}else if(!actual.includes('tooling/gate/owed.mjs')){
+ console.error('tooling collector contract mismatch: '+JSON.stringify({expected,actual}));process.exitCode=99;
+}
 `, { mode: 0o755 });
   const script = join(root, "wrapper.sh");
   writeFileSync(script, wrapper + "\ntooling_tests\n");
@@ -40,6 +44,7 @@ if(process.argv[2]==='--test'||process.argv[2]==='tooling/gate/tooling-runner.ts
     ...process.env, PATH: `${join(root, "bin")}:${process.env.PATH}`, TMPDIR: join(root, "tmp"),
     NTS_GATE_RUN_DIR: runDirectory ? join(root, "run") : "", TEST_FIXTURE: fixture,
     TEST_RUNNER: new URL("./tooling-runner.ts", import.meta.url).href,
+    TEST_TOOLING_COMMAND: JSON.stringify(command),
     FORCE_COLOR: color ? "1" : "0",
   };
   // This is an independent reporter fixture, not a worker of this test file.
@@ -79,4 +84,10 @@ for (const color of [false, true]) test(`TODOs and skips preserve exit 0 and the
     assert.ok(raw.includes(name), name);
   }
   for (const count of ["tests 3", "pass 1", "fail 0", "cancelled 0", "skipped 1", "todo 1"]) assert.ok(printed.includes(count), count);
+});
+
+test("a fake that disagrees with the exported collector command refuses by name", t => {
+  const { result, raw } = run(t, false, true, false, [...TOOLING_COLLECTOR_COMMAND, "--disagree"]);
+  assert.equal(result.status, 99);
+  assert.match(raw, /tooling collector contract mismatch/);
 });

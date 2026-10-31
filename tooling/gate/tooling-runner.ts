@@ -13,6 +13,9 @@ import {publishHung,publishToolingFailure,ToolingInstrumentError} from "./step-r
 import {newToolingSlice,stopToolingSlice,toolingSlice} from "./tooling-slice.ts";
 import {gateCommand} from "./affinity.ts";
 
+/** Shell entry and reporter fixtures share this exact collector command. */
+export const TOOLING_COLLECTOR_COMMAND=Object.freeze(["tooling/gate/tooling-runner.ts","--collect"] as const);
+
 export const TOOLING_IDLE_GUARD_MS=5*60_000;
 /** Cancellation/abortion is unfinished work; only completed test or hook errors
  * supply definite failures, including reports delivered after a guard fires. */
@@ -170,6 +173,13 @@ if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.u
       const result=await runTooling(request.files,{idleMs:request.idleMs,execArgv:request.execArgv,resultEnv});
       const pending=`${request.complete}.${process.pid}`;writeFileSync(pending,JSON.stringify({version:2,nonce:request.nonce,...result})+"\n");renameSync(pending,request.complete);
       process.exitCode=result.status;
+    } else if(args[0]===TOOLING_COLLECTOR_COMMAND[1]) {
+      if(args.length!==1)throw new ToolingInstrumentError("tooling-setup","the tooling collector takes no file arguments");
+      const {discoverToolingTests}=await import("./tooling-discovery.ts");
+      const root=resolve(fileURLToPath(new URL("../..",import.meta.url))),selection=discoverToolingTests(root);
+      process.stdout.write(`tooling tests: ${selection.files.length} collected, ${selection.exclusions.length} explicitly assigned to another step, ${selection.inventoryCount} inventoried\n`);
+      for(const row of selection.exclusions)process.stdout.write(`  ${row.path}: ${row.step} (${row.reason})\n`);
+      process.exitCode=(await runScopedTooling(selection.files.map(file=>resolve(root,file)))).status;
     } else {
       if(!args.length)throw new ToolingInstrumentError("tooling-setup","tooling runner needs explicit test files");
       process.exitCode=(await runScopedTooling(args)).status;

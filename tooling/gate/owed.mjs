@@ -78,6 +78,7 @@ import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
 import { selectRange, SelectionInfrastructureError, selectionInfrastructure } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
+import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
 /**
@@ -96,6 +97,7 @@ const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 export const SELECTOR_POLICY_DATA = [
   "tooling/lanes/lanes.json", "tooling/config/src/target.ts",
   "tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/comment-tokens.rs",
+  TOOLING_TEST_EXCLUSIONS,
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 ];
 
@@ -237,6 +239,8 @@ const COMPARE = [
  * than dropped.
  */
 export const RULES = [
+  { name: "tooling test collection policy", when: p => p === TOOLING_TEST_EXCLUSIONS, full: true, wide: true, steps: [], arms: [] },
+  { name: "tooling test discovery", when: p => p === "tooling/gate/tooling-discovery.ts", settled: true, steps: ["tooling"], arms: [] },
   { name: "shared ignored-input policy", when: p => p === ".gitignore", full: true, steps: [], arms: [] },
   {
     name: "the bundled Node native dependencies",
@@ -462,12 +466,12 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "do the JSON host tests and the compiled web suite still pass", run: "sh tooling/conformance/web-platform/check.sh" }],
   },
   {
-    // all.sh discovers tooling .test.ts files dynamically. The static script
-    // input scanner cannot expand that discovery, so name this reader exactly.
+    // Recursive test collection supplies tooling through the generic test
+    // rule. This guard also checks provider identities consumed by types.
     name: "the provider family identity guard",
     when: (p) => p === "tooling/conformance/provider-family-paths.test.ts",
     settled: true,
-    steps: ["tooling", "types"],
+    steps: ["types"],
     arms: [],
   },
   {
@@ -1098,6 +1102,7 @@ export function corpusInputs() {
  */
 export function stepInputs() {
   return once("stepInputs", () => {
+    const toolingTests=discoverToolingTests(TREE);
     const text = readFileSync(join(TREE, "tooling/gate/all.sh"), "utf8");
     const bodies = new Map();
     // A function's body runs to the next definition or step line: some are
@@ -1142,7 +1147,11 @@ export function stepInputs() {
     for (const m of text.matchAll(/^step "([a-z0-9-]+)"\s+(.+)$/gm)) {
       const step = m[1];
       const command = m[2].trim();
-      const queue = [];
+      // Dynamic collection is an execution input just like a literal script
+      // argument. Start from those exact entries so their imports/readers keep
+      // their step reach after all.sh stops naming fixed folder globs.
+      const queue = step === "tooling" ? [...toolingTests.files]
+        : toolingTests.exclusions.filter(row=>row.step===step).map(row=>row.path);
       // The step's function, and every all.sh function it calls (llvm calls
       // backend_examples, which runs agree.mjs).
       const fns = [command.split(/\s+/)[0]];
@@ -1176,12 +1185,12 @@ export function stepInputs() {
         // exists in the script's directory.
         const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
-        // These tooling controls supply private fixture roots to the archive
-        // and record validator. They read fixture evidence, not this tree's
-        // benchmark data. The records step runs that same validator against
-        // the real tree. Imports/beside-file dependencies stay additive.
+        // These tooling controls supply private fixture roots to the archive,
+        // record validator and session bridge. They read fixture evidence,
+        // not this tree's benchmark data. Production readers keep their reach
+        // in their own steps. Imports/beside-file dependencies stay additive.
         const fixtureBenchmarks = input === "tooling/lanes/branches.test.ts" ||
-          step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-record(?:\.test)?\.ts$/.test(input));
+          step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input));
         const referenced = named(body).filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
         queue.push(...referenced, ...imports(input, body), ...beside);
       }
@@ -1286,7 +1295,15 @@ export function owed(changes) {
     return r;
   };
   const full = [];
-  const rulesFor = (path, added) => RULES.filter((rule) => rule.when(path, added));
+  const rulesFor = (path, added) => {
+    const rules=RULES.filter((rule)=>rule.when(path,added));
+    if(isToolingTest(path)){
+      const exclusions=once("tooling-test-exclusions",()=>readToolingTestExclusions(TREE,allSteps()));
+      const step=toolingTestStep(path,exclusions);
+      rules.push({name:"a tooling test entry",steps:[step],settled:true,wide:step!=="tooling",arms:[]});
+    }
+    return rules;
+  };
   const all = crates();
 
   let ordinary = false;

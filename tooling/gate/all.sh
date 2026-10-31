@@ -2545,20 +2545,16 @@ step "integrity" integrity
 step "definitions" definitions
 step "compile-time" compile_time
 step "compile-time-rc" compile_time_rc
-# The gate's own tools: the tokens (tokens.test.mjs), what owed.mjs maps a
-# path to (owed.test.mjs, and its --self-test), land.ts's train
-# (land.test.ts), and the test262 runner's case roots and population
-# (tooling/census/project.test.ts, which no step ran until the population
-# guard the backend steps rely on was added there), Apple's simulator
-# readiness/failure contracts, and the memory admission both runners share
-# (tooling/gate/admission.test.ts). Seconds.
+# Every tooling/**/*.test.{ts,mjs}, except exact entries assigned to another
+# step in tooling-test-exclusions.json. Discovery checks its coverage against
+# an independent inventory before the existing scoped test runner starts.
 tooling_tests() {
   if [ -n "${NTS_GATE_RUN_DIR:-}" ]; then
     tooling_log="$NTS_GATE_RUN_DIR/tooling-tests.raw.log"
   else
     tooling_log=$(mktemp "${TMPDIR:-/tmp}/nts-gate-tooling.XXXXXX")
   fi
-  node tooling/gate/tooling-runner.ts tooling/gate/*.test.mjs tooling/gate/*.test.ts tooling/lanes/*.test.ts tooling/census/*.test.ts tooling/apple/*.test.ts > "$tooling_log" 2>&1
+  node tooling/gate/tooling-runner.ts --collect > "$tooling_log" 2>&1
   status=$?
   echo "  log: $tooling_log"
   # Node also puts expected TODO failures under this heading on exit 0.

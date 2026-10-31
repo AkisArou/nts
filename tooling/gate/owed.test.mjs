@@ -12,7 +12,7 @@ import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync 
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, targetFiles, WIDE } from "./owed.mjs";
+import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -38,6 +38,21 @@ const superset = (got, want, what) => {
   for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
+
+test("every nested tooling test owes its recursive collector without an unknown-path full gate",()=>{
+  for(const path of ["tooling/new/deep/a.test.ts","tooling/bench/run-session.test.ts","tooling/bootstrap/typescript.test.ts","tooling/conformance/web-platform/host-tests.test.ts"]){
+    const rules=owed([{path,added:true}]);
+    assert.ok(!rules.some(rule=>rule.full),path);
+    assert.ok(rules.some(rule=>rule.name==="a tooling test entry"&&rule.steps.includes("tooling")),path);
+  }
+  assert.ok(owed([{path:"tooling/gate/tooling-test-exclusions.json",added:false}]).some(rule=>rule.full&&rule.wide));
+  assert.ok(owed([{path:"tooling/conformance/unplaced-tool.ts",added:true}]).some(rule=>rule.full));
+});
+
+test("discovered entries seed the derived map with their real helper imports",()=>{
+  for(const path of ["tooling/census/worker-memory.ts","tooling/bench/run-session.ts","tooling/bootstrap/typescript.ts"])
+    assert.ok(stepInputs().get(path)?.has("tooling"),path);
+});
 
 test("offline Unicode generators leave conformance obligations with their fixture outputs", () => {
   for (const added of [false, true]) {
@@ -180,7 +195,7 @@ test("benchmark run data owes only format and records without narrowing producer
   for (const path of ["results/benchmarks/runs/notes.md", "results/benchmarks/runs/nested/run.json", "results/benchmarks/cells.tsv"]) {
     assert.ok(stepsFor(path).includes("audit"), path);
   }
-  for (const source of ["tooling/bench/run-record.ts", "tooling/bench/src/main.rs", "benchmarks/cases/awfy-towers/case.ts"]) {
+  for (const source of ["tooling/bench/run-record.ts", "tooling/bench/run-session.ts", "tooling/bench/src/main.rs", "benchmarks/cases/awfy-towers/case.ts"]) {
     const alone = stepsFor(source);
     assert.ok(alone.some(step => !["format", "records"].includes(step)), source);
     assert.deepEqual(stepsFor(run, table, source).sort(), [...new Set(["format", "records", ...alone])].sort(), source);
