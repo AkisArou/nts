@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-node26-bigint-negative-exponent-message",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-node26-bigint-negative-exponent-message/src/main.ts",
+      "signature": "6886964592033a0f9585fcb6a7ff2381b87cee658a5466e2189865143524842a",
+      "keys": {
+        "c": "0bc15c7c81ee76b76fc21bc6ec232306",
+        "jvm": "bc7d989dbbb1381a5a8cf4f3a20c4a1a",
+        "llvm": "8f66b77bbdeca4559a4b0f33e9a915ec"
+      },
+      "cases_sha256": "b357bad97e4ef4be854939d6349a19f5a377830251cb4925ef93b076467b7c24",
+      "driver_sha256": "f7392ada5692d43429c83705aa0501e98ebd0662d552cea410fbd4cd80b4536e",
+      "populations": {
+        "negativeExponentMessage": {
+          "count": 1,
+          "cases_sha256": "419828343a2410c4ab3a99eb171151380a62b777175722960ccd24c5282b0dbf"
+        },
+        "positiveExponentControl": {
+          "count": 1,
+          "cases_sha256": "17671d23fc1ddf4bd5d4b2e199d6aa6e97d273e1c16e981ae82cb0b885456d5f"
+        }
+      },
+      "complete": true,
+      "count": 2
+    }
+  ]
+}

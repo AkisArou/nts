@@ -80331,9 +80331,9 @@ impl<'a> FuncBuilder<'a> {
                     HirType::Bool,
                     origin.clone(),
                 );
-                // Node v24.20.0/V8's observed text; this is oracle wording rather
+                // Node v26.13.0/V8's observed text; this is oracle wording rather
                 // than the specification's sentence about negative exponents.
-                self.bigint_range_error_if(id, negative, "undefined must be positive")?;
+                self.bigint_range_error_if(id, negative, "Exponent must be positive")?;
             }
             return Ok(self.runtime_call("nts_bigint_pow", vec![base, exponent], ty, origin));
         }
