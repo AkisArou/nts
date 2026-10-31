@@ -151,12 +151,12 @@ export function directOriginalViewLoop(n: number): string {
  const narrow = new Map<string, unknown>();
  const wide: Map<string, unknown> = narrow;
  wide.set("key", "copied:" + String(n));
- let result = ""; for (const value of narrow.values()) result += String(value); return result;
+ let result = ""; for (const value of narrow.values()) result += String(value); return result === "copied:" + String(n) ? "match" : "mismatch";
 }
 
 export function directOriginalViewCopy(n: number): string {
  const narrow = new Map<string, unknown>();
  const wide: Map<string, unknown> = narrow;
  wide.set("key", "copied:" + String(n));
- const held = Array.from(narrow.values()); wide.clear(); return String(held[0]);
+ const held = Array.from(narrow.values()); wide.clear(); return String(held[0]) === "copied:" + String(n) ? "match" : "mismatch";
 }
