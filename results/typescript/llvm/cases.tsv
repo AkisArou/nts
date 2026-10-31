@@ -377,6 +377,7 @@ tests/typescript/proofs-controls/bounds-loop-fixed-view-resize-back-edge-control
 tests/typescript/proofs-controls/bounds-loop-replaced-class-iterable-body-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/bounds-loop-replaced-for-update-destructure-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/bounds-loop-replaced-generator-resume-spread-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/bounds-suspension-view-tracking-float64-offset-shrink-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-alias-static-this-field-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-call-static-this-returned-constructor-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/call-target-loop-apply-dynamic-arity-control.ts	{"kind":"pass"}
@@ -388,6 +389,13 @@ tests/typescript/proofs-controls/capture-suspension-await-rejected-promise-write
 tests/typescript/proofs-controls/capture-suspension-await-rejected-promise-writer-no-rejection-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/element-kind-call-static-this-compound-assignment-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/element-kind-call-static-this-destructuring-default-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/element-kind-conversion-map-template-no-write-explicit-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/element-kind-conversion-map-template-wide-integer-control.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs-controls/element-kind-conversion-map-template-wide-integer-explicit-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/element-kind-suspension-map-await-real-promise-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs-controls/element-kind-suspension-map-await-route-removed-control.ts	{"kind":"pass"}
+tests/typescript/proofs-controls/element-kind-suspension-map-await-thenable-integer-control.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs-controls/element-kind-suspension-map-await-thenable-undefined-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs-controls/length-conversion-to-string-splice-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/negative-zero-conversion-string-to-string-writes-sign-control.ts	{"kind":"pass"}
 tests/typescript/proofs-controls/negative-zero-conversion-template-to-string-writes-sign-control.ts	{"kind":"pass"}
@@ -403,6 +411,12 @@ tests/typescript/proofs/bounds-accessor-setter-dataview-transfer.ts	{"kind":"ref
 tests/typescript/proofs/bounds-accessor-setter-shrink-before-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-accessor-setter-string-index.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/bounds-accessor-spread-literal-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-view-fixed-float64-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-view-fixed-int32-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-view-tracking-uint16-regrow-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-view-tracking-uint8-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-view-transfer-float64-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-accessor-view-transfer-int32-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-alias-closure-capture-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-alias-field-shift.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-alias-map-value-splice.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
@@ -411,6 +425,12 @@ tests/typescript/proofs/bounds-alias-parameter-alias-shrink.ts	{"kind":"runtime-
 tests/typescript/proofs/bounds-alias-typed-array-buffer-transfer.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-typed-array-resize-write.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-variable-length.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-alias-view-fixed-uint16-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-alias-view-fixed-uint8-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-alias-view-tracking-float64-regrow-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-alias-view-tracking-int32-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-alias-view-transfer-uint16-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-alias-view-transfer-uint8-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-call-closure-length-zero.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-call-dataview-resize-range-error.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-direct-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
@@ -428,6 +448,12 @@ tests/typescript/proofs/bounds-call-static-this-destructuring-default.ts	{"kind"
 tests/typescript/proofs/bounds-call-static-this-generator-resume.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-call-string-index-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-typed-array-transfer-write.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-call-view-fixed-float64-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-view-fixed-uint8-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-view-tracking-int32-regrow-rewrite.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-view-tracking-uint16-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-call-view-transfer-float64-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-call-view-transfer-uint8-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-callback-array-from-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-callback-filter-shift.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-callback-find-length-zero.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
@@ -438,12 +464,24 @@ tests/typescript/proofs/bounds-callback-reduce-splice-then-append.ts	{"kind":"pa
 tests/typescript/proofs/bounds-callback-sort-comparator-pops.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-callback-string-index-map.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-callback-typed-array-for-each-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-callback-view-fixed-int32-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-callback-view-fixed-uint16-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-callback-view-tracking-float64-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-callback-view-tracking-uint8-regrow-rewrite.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-callback-view-transfer-int32-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-callback-view-transfer-uint16-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-chain-assignments-24-array-before-write.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-chain-assignments-24-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-chain-field-links-16-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-chain-loop-carried-24-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-chain-string-loop-carried-24-index.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-chain-typed-array-loop-carried-24-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
+tests/typescript/proofs/bounds-chain-view-fixed-float64-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-chain-view-fixed-int32-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-chain-view-tracking-uint16-regrow-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-chain-view-tracking-uint8-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-chain-view-transfer-float64-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-chain-view-transfer-int32-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-conversion-computed-key-to-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-conversion-number-fallback-to-string-splice.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-conversion-number-resizes-buffer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -452,6 +490,12 @@ tests/typescript/proofs/bounds-conversion-string-template-index-change.ts	{"kind
 tests/typescript/proofs/bounds-conversion-template-interpolation-order.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-conversion-to-string-shift.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/bounds-conversion-value-of-pop-before-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-view-fixed-float64-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-view-fixed-uint8-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-view-tracking-int32-regrow-rewrite.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-view-tracking-uint16-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-view-transfer-float64-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-conversion-view-transfer-uint8-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-exception-await-then-async-generator-yield.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-exception-await-then-compound-assignment.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 2 is outside [0, 2)"}}
 tests/typescript/proofs/bounds-exception-await-then-destructuring-default.ts	{"kind":"pass"}
@@ -460,6 +504,12 @@ tests/typescript/proofs/bounds-exception-finally-after-splice.ts	{"kind":"runtim
 tests/typescript/proofs/bounds-exception-getter-throws-after-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-exception-throw-after-index-change.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-exception-throw-after-pop-before-write.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-exception-view-fixed-uint16-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-exception-view-fixed-uint8-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-exception-view-tracking-float64-regrow-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-exception-view-tracking-int32-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-exception-view-transfer-uint16-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-exception-view-transfer-uint8-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-loop-back-edge-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-loop-continue-shifts.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-loop-do-while-shrink-before-write.ts	{"kind":"pass"}
@@ -472,6 +522,12 @@ tests/typescript/proofs/bounds-loop-replaced-generator-resume-spread.ts	{"kind":
 tests/typescript/proofs/bounds-loop-string-char-at-continue.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-loop-string-char-code-back-edge.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-loop-typed-array-detach-do-while.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-loop-view-fixed-uint16-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-loop-view-fixed-uint8-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-loop-view-tracking-float64-regrow-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-loop-view-tracking-int32-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-loop-view-transfer-uint16-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-loop-view-transfer-uint8-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-loop-zero-trip-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-merge-array-index-write.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-merge-conditional-array.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 1)"}}
@@ -485,9 +541,21 @@ tests/typescript/proofs/bounds-merge-switch-fallthrough-index.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-merge-try-catch-index.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-merge-typed-array-detach-switch.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-merge-typed-array-resize-branch.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 0)"}}
+tests/typescript/proofs/bounds-merge-view-fixed-int32-surviving-subview.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-merge-view-fixed-uint16-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-merge-view-tracking-float64-offset-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-merge-view-tracking-uint8-regrow-rewrite.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-merge-view-transfer-int32-rebound-destination.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/bounds-merge-view-transfer-uint16-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/bounds-suspension-await-buffer-transfer.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-suspension-await-microtask-index.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-suspension-await-microtask-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 3 is outside [0, 3)"}}
+tests/typescript/proofs/bounds-suspension-view-fixed-int32-surviving-subview.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-suspension-view-fixed-uint16-tail-shrink.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-suspension-view-tracking-float64-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 2 is outside [0, 1)"}}
+tests/typescript/proofs/bounds-suspension-view-tracking-uint8-regrow-rewrite.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/bounds-suspension-view-transfer-int32-rebound-destination.ts	{"kind":"pass"}
+tests/typescript/proofs/bounds-suspension-view-transfer-uint16-detached-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-suspension-yield-caller-pop-before-write.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/bounds-suspension-yield-caller-pop.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/bounds-suspension-yield-star-caller-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -641,10 +709,26 @@ tests/typescript/proofs/element-kind-accessor-destructure-default-class-getter.t
 tests/typescript/proofs/element-kind-accessor-destructure-literal-setter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-accessor-fill-negative-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-accessor-index-store-negative-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-map-compound-setter-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-map-destructure-getter-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-map-getter-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-map-setter-wide-integer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-set-fraction-literal-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-set-mixed-kind-compound-setter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-set-undefined-default-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-accessor-set-wide-integer-class-setter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-accessor-spread-literal-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-alias-fill-nan.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-alias-index-store-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-alias-map-entry-held-alias-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-alias-map-field-alias-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-alias-map-returned-alias-wide-integer.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-alias-map-widened-alias-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-alias-push-int32-overflow.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-alias-set-fraction-variable.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-alias-set-mixed-kind-nested-field.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-alias-set-undefined-destructured-field.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-alias-set-wide-integer-map-value.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-alias-splice-negative-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-call-compound-add-safe-integer.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-call-divide-uint32.ts	{"kind":"pass"}
@@ -656,8 +740,16 @@ tests/typescript/proofs/element-kind-call-generic-later-caller-uint32.ts	{"kind"
 tests/typescript/proofs/element-kind-call-generic-nan.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-call-generic-safe-integer.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-call-index-store-nan.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-call-map-default-parameter-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-call-map-nested-call-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-call-map-recursive-wide-integer.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-call-map-returned-writer-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-call-push-fraction.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-call-push-positive-infinity.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-call-set-fraction-direct-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-call-set-mixed-kind-generic-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-call-set-undefined-nested-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-call-set-wide-integer-recursive-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-call-splice-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-call-splice-int32-minimum.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-call-static-this-compound-assignment.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
@@ -674,29 +766,85 @@ tests/typescript/proofs/element-kind-callback-index-fraction.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-callback-index-int32-overflow.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-callback-index-nan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-callback-index-negative-zero.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-callback-map-for-each-live-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-callback-map-for-each-live-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-callback-map-for-each-live-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-callback-map-for-each-live-wide-integer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-callback-map-result-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-callback-set-fraction-for-each-delete.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-callback-set-mixed-kind-for-each-clear.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-callback-set-undefined-for-each-deduplicate.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-callback-set-wide-integer-for-each-append.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-callback-splice-nan.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-chain-compound-add-int32-overflow.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-chain-generic-negative-zero.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-chain-index-store-uint32-overflow.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-chain-map-eight-slot-writer-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-chain-map-sixteen-field-wide-integer.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-chain-map-twelve-slot-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-chain-map-writer-relay-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-chain-set-fraction-delayed-alias-24.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-chain-set-mixed-kind-delayed-alias-24.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-chain-set-undefined-delayed-alias-24.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-chain-set-wide-integer-delayed-alias-24.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-conversion-computed-key-to-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-conversion-divide-negative-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-map-computed-key-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-map-relational-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-map-template-wide-integer.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/element-kind-conversion-map-value-of-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-conversion-relational-value-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-set-fraction-value-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-set-mixed-kind-template-order.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-set-undefined-unary-plus.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-conversion-set-wide-integer-computed-key.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-conversion-template-interpolation-order.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-exception-await-then-async-generator-yield.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-exception-await-then-compound-assignment.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-exception-await-then-destructuring-default.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-exception-fill-safe-integer.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-exception-map-catch-write-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-exception-map-finally-return-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-exception-map-finally-wide-integer.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-exception-map-throw-after-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-exception-set-fraction-write-then-throw.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-exception-set-mixed-kind-catch-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-exception-set-undefined-return-finally.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-exception-set-wide-integer-finally-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-loop-compound-add-fraction.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-loop-divide-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-loop-map-back-edge-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-loop-map-do-while-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-loop-map-for-of-wide-integer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-loop-map-labelled-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-loop-push-negative-zero.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-loop-replaced-class-iterable-body.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/element-kind-loop-replaced-for-update-destructure.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/element-kind-loop-replaced-generator-resume-spread.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/element-kind-loop-set-fraction-live-for-of.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-loop-set-mixed-kind-live-delete-add.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-loop-set-undefined-second-iteration.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-loop-set-wide-integer-back-edge.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-merge-compound-add-nan.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-merge-map-if-else-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-merge-map-logical-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-merge-map-nullish-undefined.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-merge-map-switch-wide-integer.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-merge-push-nan.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-merge-set-fraction-conditional-store.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-merge-set-mixed-kind-if-else.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/element-kind-merge-set-undefined-logical-and.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-merge-set-wide-integer-switch-join.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/proofs/element-kind-merge-splice-int32-overflow.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/element-kind-suspension-await-push-fraction.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-suspension-map-async-generator-mixed-kind.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-suspension-map-await-microtask-wide-integer.ts	{"kind":"pass"}
+tests/typescript/proofs/element-kind-suspension-map-await-thenable-undefined.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/element-kind-suspension-map-yield-caller-fraction.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/proofs/element-kind-suspension-set-fraction-yield-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-suspension-set-mixed-kind-yield-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-suspension-set-undefined-await-writer.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/proofs/element-kind-suspension-set-wide-integer-await-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/element-kind-suspension-yield-index-negative-zero.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/proofs/length-accessor-compound-class-setter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/length-accessor-destructure-default-class-getter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
