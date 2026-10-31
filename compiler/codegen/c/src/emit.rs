@@ -26,6 +26,7 @@ use nts_semantic_schema::{JsText, Origin};
 mod header;
 use nts_codegen_common::literals::Pool as Literals;
 mod notices;
+mod unicode_tables;
 
 /// The C runtime, as source.
 ///
@@ -214,29 +215,22 @@ impl LoopHost {
     }
 }
 
-/// quickjs-ng's `cutils.h`, which `quickjs/libunicode.c` includes, shipped in
-/// a `quickjs/` subdirectory so that include resolves the same from
-/// `runtime/c` and from a directory this emitted. Only beside the case tables:
-/// the runtime itself no longer includes anything from `quickjs/`.
-pub const CUTILS_HEADER_NAME: &str = "quickjs/cutils.h";
-pub const CUTILS_HEADER: &str = include_str!("../../../../runtime/c/quickjs/cutils.h");
-
 /// Unicode case conversion, which is a table rather than an algorithm.
 ///
 /// # Why it is not part of the runtime
 ///
-/// These are 63 KB of tables that most programs never read, and linking them
-/// takes `tests/programs/hello` from 81 KB to 162 KB -- so they are emitted only
+/// The tables are data most programs never read, and linking them takes
+/// `tests/programs/hello` from 81 KB to 162 KB -- so they are emitted only
 /// for a program that calls one of the methods, the same way the libuv host is
-/// written only when a loop is asked for. `needs_unicode` says which.
+/// written only when a loop is asked for. [`UnicodeNeeds`] says which.
+///
+/// The tables themselves are generated at emission from the compiler's
+/// Unicode model ([`unicode_tables::header`]): UCD 17.0 data, about 28 KB of
+/// linked tables for both directions where quickjs-ng shipped about 8 KB of
+/// 15.0 -- more data, bought with direct indexing instead of a search. The
+/// algorithm is `nts_unicode.c`, beside them.
 pub const UNICODE_HEADER_NAME: &str = "nts_unicode.h";
 pub const UNICODE_HEADER: &str = include_str!("../../../../runtime/c/nts_unicode.h");
-pub const LIBUNICODE_HEADER_NAME: &str = "quickjs/libunicode.h";
-pub const LIBUNICODE_HEADER: &str = include_str!("../../../../runtime/c/quickjs/libunicode.h");
-pub const LIBUNICODE_TABLE_NAME: &str = "quickjs/libunicode-table.h";
-pub const LIBUNICODE_TABLE: &str = include_str!("../../../../runtime/c/quickjs/libunicode-table.h");
-pub const LIBUNICODE_SOURCE_NAME: &str = "quickjs/libunicode.c";
-pub const LIBUNICODE_SOURCE: &str = include_str!("../../../../runtime/c/quickjs/libunicode.c");
 pub const UNICODE_SOURCE_NAME: &str = "nts_unicode.c";
 pub const UNICODE_SOURCE: &str = include_str!("../../../../runtime/c/nts_unicode.c");
 
@@ -305,8 +299,8 @@ const WINRT_HELPERS: [&str; 18] = [
 /// Sources and full notices for exactly the runtime components this program links.
 /// Unicode sources and their notices are selected together when it converts case.
 #[must_use]
-pub fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
-    notices::support_files(needs_unicode)
+pub fn support_files(needs: UnicodeNeeds) -> Vec<Support<'static>> {
+    notices::support_files(needs)
 }
 
 /// The `main` of a standalone program.
@@ -507,6 +501,13 @@ struct Context<'a> {
     /// generated file is compiled with. `c.advance();` as a statement is
     /// exactly that.
     read: rustc_hash::FxHashSet<ValueId>,
+    /// Case-conversion directions the calls this body has actually written
+    /// name, recorded in `call_text` as each call is spelled. Carried out
+    /// per body and unioned over surviving bodies only, so a dropped
+    /// function's calls select nothing -- and recorded at the writing, so
+    /// a string literal that happens to contain a helper's name is data,
+    /// not a call, and selects nothing either.
+    unicode_needs: std::cell::Cell<UnicodeNeeds>,
 }
 
 impl Context<'_> {
@@ -518,6 +519,54 @@ impl Context<'_> {
     }
 }
 
+/// Which directions of case conversion a program reaches, recorded as
+/// emission writes each call ([`call_text`]) and unioned over the bodies
+/// emission kept.
+///
+/// Typed rather than one boolean because the two directions are separate
+/// data: a program that only lowercases ships the lowercase tables, and the
+/// uppercase half -- the larger one, with the expansions -- is compiled out
+/// of the runtime with it. Carried on [`Emitted`] so every consumer (the C
+/// link, the LLVM link through the same support list, the bench) answers
+/// from the one recording.
+#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
+pub struct UnicodeNeeds {
+    pub lower: bool,
+    pub upper: bool,
+}
+
+impl UnicodeNeeds {
+    pub const NONE: Self = Self {
+        lower: false,
+        upper: false,
+    };
+    pub const ALL: Self = Self {
+        lower: true,
+        upper: true,
+    };
+
+    #[must_use]
+    pub const fn any(self) -> bool {
+        self.lower || self.upper
+    }
+
+    fn union(self, other: Self) -> Self {
+        Self {
+            lower: self.lower || other.lower,
+            upper: self.upper || other.upper,
+        }
+    }
+
+    /// Note one helper name a written call names.
+    fn record(&mut self, name: &str) {
+        match name {
+            "nts_str_to_lower_case" => self.lower = true,
+            "nts_str_to_upper_case" => self.upper = true,
+            _ => {}
+        }
+    }
+}
+
 /// C for one program, and what could not be emitted.
 #[derive(Debug)]
 pub struct Emitted {
@@ -525,12 +574,10 @@ pub struct Emitted {
     /// C declarations and stable object aliases for the entry modules' exports.
     pub header: String,
     pub diagnostics: Vec<Diagnostic>,
-    /// Whether the program calls something `nts_unicode.h` declares.
-    ///
-    /// Decided from the HIR because the `#include` has to be written before the
-    /// body exists, and kept beside the text scan below rather than replacing
-    /// it -- see [`Emitted::needs_unicode`].
-    pub(crate) unicode: bool,
+    /// Which case-conversion directions the emitted bodies call, recorded as
+    /// their calls were written: decides the `#include` and which generated
+    /// tables ship.
+    pub(crate) unicode_needs: UnicodeNeeds,
     /// The functions whose bodies this backend declined to emit.
     ///
     /// A *name* list rather than the diagnostics, because the consumer is the
@@ -582,31 +629,19 @@ impl Emitted {
         self.diagnostics.is_empty()
     }
 
-    /// Whether this program needs the Unicode tables beside it.
-    ///
-    /// Two answers, and both are kept. The text scan is the original and its
-    /// reason still holds: the text is what gets compiled, so a helper the
-    /// lowering emits by some route nobody enumerated still appears here, and
-    /// the failure mode of missing one is a link error rather than a wrong
-    /// answer.
-    ///
-    /// What it cannot do is decide the `#include`, which is written before
-    /// there is any text to scan. So the HIR is asked as well -- does any call
-    /// name something the header declares -- and the two are or'd. The scan
-    /// catching something the walk missed writes the files without the include,
-    /// which is the state this had before and still links.
+    /// Which case-conversion directions this program's emitted bodies call,
+    /// as recorded at emission. One answer, from the recording: the bodies
+    /// exist before the translation unit is assembled, so there is no second
+    /// text scan to disagree with it.
     #[must_use]
-    pub fn needs_unicode(&self) -> bool {
-        let source = self.writer.text();
-        self.unicode
-            || source.contains("nts_str_to_lower_case")
-            || source.contains("nts_str_to_upper_case")
+    pub fn unicode_needs(&self) -> UnicodeNeeds {
+        self.unicode_needs
     }
 
     /// The files to write beside `program.c`, this program's set.
     #[must_use]
     pub fn support_files(&self) -> Vec<Support<'_>> {
-        let mut files = support_files(self.needs_unicode());
+        let mut files = support_files(self.unicode_needs);
         // The header wherever a binding names it, which the witness then
         // includes; the source only where a signal is connected, since that is
         // what brings libgobject into the link.
@@ -728,14 +763,14 @@ impl Emitted {
 /// that found it -- from their end it is a module that fails every test.
 fn drop_orphaned_bodies(
     program: &Program,
-    bodies: &mut Vec<(String, CodeWriter, &Func)>,
+    bodies: &mut Vec<(String, CodeWriter, &Func, UnicodeNeeds)>,
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
 ) {
     loop {
         let defined: rustc_hash::FxHashSet<&str> = bodies
             .iter()
-            .map(|(_, _, func)| func.name.as_str())
+            .map(|(_, _, func, _)| func.name.as_str())
             .collect();
         // The ops each block still *holds*, not every value the function ever
         // made. A `ValueId` is an index -- so is a field and so is a block --
@@ -748,7 +783,7 @@ fn drop_orphaned_bodies(
         // `excise_from_initializer` had removed exactly the call it names --
         // which the addon still calls, so the module linked and died at
         // `dlopen` with an undefined symbol.
-        let orphan = bodies.iter().enumerate().find_map(|(at, (_, _, func))| {
+        let orphan = bodies.iter().enumerate().find_map(|(at, (_, _, func, _))| {
             func.blocks
                 .iter()
                 .flat_map(|block| block.ops.iter())
@@ -847,17 +882,12 @@ fn drop_orphaned_bodies(
 impl Emitted {
     /// A program with no functions at all: nothing to emit and nothing to
     /// export, but still a well-formed answer rather than an error.
-    fn empty(
-        writer: CodeWriter,
-        diagnostics: Vec<Diagnostic>,
-        unicode: bool,
-        refused: Vec<String>,
-    ) -> Self {
+    fn empty(writer: CodeWriter, diagnostics: Vec<Diagnostic>, refused: Vec<String>) -> Self {
         Self {
             writer,
             header: header::empty(),
             diagnostics,
-            unicode,
+            unicode_needs: UnicodeNeeds::NONE,
             refused,
             exported_symbols: Vec::new(),
             published_without_a_symbol: Vec::new(),
@@ -933,11 +963,10 @@ fn refused_by_lowering(program: &Program, emitted: &str) -> bool {
 pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     let mut writer = CodeWriter::new();
     let mut diagnostics = Vec::new();
-    let unicode = uses_unicode(program);
 
     let mut refused = Vec::new();
     let Some(first) = program.funcs.first() else {
-        return Emitted::empty(writer, diagnostics, unicode, refused);
+        return Emitted::empty(writer, diagnostics, refused);
     };
     let origin = first.origin.clone();
 
@@ -998,13 +1027,17 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
         &mut refused,
     );
     drop_orphaned_bodies(program, &mut bodies, &mut diagnostics, &mut refused);
+    // Recorded now, from the bodies that survived, and so before the
+    // translation unit below is assembled: the `#include` and the shipped
+    // tables both read this one recording.
+    let unicode_needs = recorded_unicode_needs(&bodies);
     // The C names of the functions this translation unit will actually define,
     // after the backend's own refusals have taken their callers with them.
     // `program.funcs` is the wrong list: it still holds the bodies dropped just
     // above, and a dispatch table built from it names them.
     let defined: rustc_hash::FxHashSet<String> = bodies
         .iter()
-        .map(|(_, _, func)| c_identifier(&func.name))
+        .map(|(_, _, func, _)| c_identifier(&func.name))
         .collect();
 
     let mut object_types = CodeWriter::new();
@@ -1044,7 +1077,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // headers it needs, and every caller of `emit-c` gets the same answer
     // without a flag. `runtime/node/build.sh` had to revert exactly that flag
     // because of the conflict, and now needs no flag at all.
-    if unicode {
+    if unicode_needs.any() {
         writer.line(&origin, format!("#include \"{UNICODE_HEADER_NAME}\""));
     }
     writer.append(object_types);
@@ -1061,7 +1094,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
     // only for functions that actually have a definition. Before the
     // descriptors, because a dispatch table takes the address of a function and
     // C wants that declared.
-    for (signature, _, _) in &bodies {
+    for (signature, _, _, _) in &bodies {
         writer.line(&origin, format!("{signature};"));
     }
     // And for the functions it calls and does *not* define. A
@@ -1090,7 +1123,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
 
     let kept = bodies
         .iter()
-        .map(|(_, _, func)| func.name.as_str())
+        .map(|(_, _, func, _)| func.name.as_str())
         .collect();
     let mut data = CodeWriter::new();
     emit_object_descriptors(
@@ -1115,7 +1148,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
 
     emit_bridges(&mut writer, &origin, program, &mut diagnostics);
 
-    for (_, body, _) in bodies {
+    for (_, body, _, _) in bodies {
         writer.append(body);
     }
 
@@ -1126,7 +1159,7 @@ pub fn emit(program: &Program, abi: NativeAbi) -> Emitted {
         writer,
         header,
         diagnostics,
-        unicode,
+        unicode_needs,
         refused,
         exported_symbols,
         published_without_a_symbol,
@@ -1547,18 +1580,16 @@ fn external_prototypes(program: &Program, abi: NativeAbi) -> Prototypes {
     }
 }
 
-/// Whether the program calls anything `nts_unicode.h` declares.
-///
-/// Over the HIR rather than the emitted text, because this decides the
-/// `#include` and that line is written first. `Emitted::needs_unicode` keeps
-/// the text scan beside it for what this cannot see.
-fn uses_unicode(program: &Program) -> bool {
-    program.native_funcs().any(|func| {
-        func.values.iter().any(|op| {
-            matches!(&op.kind, OpKind::Call { callee: Callee::External(name), .. }
-                if declares_the_name(UNICODE_HEADER, name))
+/// The union of the directions surviving bodies recorded as their calls
+/// were written. Bodies emission dropped -- refused, and callers dropped
+/// with them -- are gone before this runs, so their recorded needs go with
+/// them.
+fn recorded_unicode_needs(bodies: &[(String, CodeWriter, &Func, UnicodeNeeds)]) -> UnicodeNeeds {
+    bodies
+        .iter()
+        .fold(UnicodeNeeds::NONE, |needs, (_, _, _, body_needs)| {
+            needs.union(*body_needs)
         })
-    })
 }
 
 fn runtime_declares(name: &str) -> bool {
@@ -1654,7 +1685,7 @@ fn emit_bodies<'a>(
     literals: &Literals,
     diagnostics: &mut Vec<Diagnostic>,
     refused: &mut Vec<String>,
-) -> Vec<(String, CodeWriter, &'a Func)> {
+) -> Vec<(String, CodeWriter, &'a Func, UnicodeNeeds)> {
     let mut bodies = Vec::new();
     let templates = nts_core::hir::templates::present(program);
     let layouts = nts_core::hir::fields::LayoutIndex::build(program);
@@ -1679,9 +1710,10 @@ fn emit_bodies<'a>(
             literals: &body_literals,
             templates,
             read: values_read(func),
+            unicode_needs: std::cell::Cell::new(UnicodeNeeds::NONE),
         };
         match emit_func(&mut body, func, &context) {
-            Ok(signature) => bodies.push((signature, body, func)),
+            Ok(signature) => bodies.push((signature, body, func, context.unicode_needs.get())),
             Err(diagnostic) => {
                 diagnostics.push(diagnostic);
                 refused.push(func.name.clone());
@@ -1939,6 +1971,18 @@ fn call_text(
 
     let wanted = &func.values[value.0 as usize].ty;
     let cast = call_result_cast(declared, wanted, context, origin)?;
+
+    // The recording this type exists for, at the one place a named call is
+    // actually spelled: every later step just writes the returned text.
+    // Recorded only once the call is known writable (the cast above is the
+    // last thing that can refuse), and only for an external callee -- a
+    // program function that happens to share a helper's name is spelled
+    // through its own mangled C name, not the helper's.
+    if matches!(callee, Callee::External(_)) {
+        let mut needs = context.unicode_needs.get();
+        needs.record(target);
+        context.unicode_needs.set(needs);
+    }
 
     Ok(if context.read.contains(&value) {
         match cast {
@@ -3872,9 +3916,9 @@ fn emit_descriptors(writer: &mut CodeWriter, origin: &Origin, descriptors: &[&'s
 ///
 /// One descriptor per element type rather than per array: a descriptor is
 /// immutable and describes the shape, not any particular array's contents.
-fn descriptors_reached(bodies: &[(String, CodeWriter, &Func)]) -> Vec<&'static str> {
+fn descriptors_reached(bodies: &[(String, CodeWriter, &Func, UnicodeNeeds)]) -> Vec<&'static str> {
     let mut found: Vec<&'static str> = Vec::new();
-    for func in bodies.iter().map(|(_, _, func)| *func) {
+    for func in bodies.iter().map(|(_, _, func, _)| *func) {
         for op in &func.values {
             if !matches!(op.kind, OpKind::ArrayNew { .. }) {
                 continue;
@@ -6872,6 +6916,114 @@ mod tests {
             codes,
             ["NTS2002", "NTS2009", "NTS2009"],
             "one refusal and one report per caller it orphaned",
+        );
+    }
+
+    /// A dropped body's case-conversion calls select no tables.
+    ///
+    /// Recording happens as each call is written, per body, and the union
+    /// runs over the bodies that survive: `gone` below spells the lowercase
+    /// helper in full before its call to a refused function orphans it, so
+    /// a recorded direction must leave with the body that recorded it.
+    #[test]
+    fn a_dropped_bodys_case_calls_select_no_tables() {
+        use nts_core::hir::{Block, ManagedType, Op, Terminator};
+        use nts_diagnostics::{Location, SourceId, Span};
+        use nts_semantic_schema::Origin;
+
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let func = |name: &str, values: Vec<Op>| Func {
+            name: name.to_owned(),
+            params: Vec::new(),
+            return_type: HirType::Void,
+            blocks: vec![Block {
+                params: Vec::new(),
+                ops: (0..values.len())
+                    .map(|at| ValueId(u32::try_from(at).unwrap_or(0)))
+                    .collect(),
+                terminator: Terminator::Return(None),
+            }],
+            values,
+            origin: origin.clone(),
+            exported: true,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+            obligations: Vec::new(),
+            exact: nts_core::hir::ExactArithmetic::default(),
+            validation: None,
+            written_return: None,
+            result_absent: nts_core::hir::Absent::Impossible,
+            written_return_elements: Vec::new(),
+        };
+        let call = |callee: Callee, ty: HirType| Op {
+            kind: OpKind::Call {
+                callee,
+                args: Vec::new(),
+                frame: None,
+            },
+            ty,
+            origin: origin.clone(),
+        };
+        let lowering = call(
+            Callee::External("nts_str_to_lower_case".to_owned()),
+            HirType::Managed(ManagedType::String),
+        );
+        let never = Op {
+            kind: OpKind::ConstFloat(0.0),
+            ty: HirType::Never,
+            origin: origin.clone(),
+        };
+
+        let program = Program {
+            funcs: vec![
+                func("refused", vec![never]),
+                func(
+                    "gone",
+                    vec![
+                        lowering,
+                        call(Callee::Direct("refused".to_owned()), HirType::Void),
+                    ],
+                ),
+                func("kept", vec![]),
+            ],
+            public_api: ["refused", "gone", "kept"]
+                .into_iter()
+                .map(|name| (name.to_owned(), name.to_owned()))
+                .collect(),
+            ..Program::default()
+        };
+        let emitted = emit(&program, NativeAbi::LP64);
+        assert_eq!(emitted.unicode_needs(), UnicodeNeeds::NONE);
+        let text = emitted.writer.text();
+        assert!(!text.contains("nts_unicode_tables.h"), "{text}");
+
+        // The control: the same lowering call in a surviving body records
+        // the direction.
+        let program = Program {
+            funcs: vec![func(
+                "kept_lowercase",
+                vec![call(
+                    Callee::External("nts_str_to_lower_case".to_owned()),
+                    HirType::Managed(ManagedType::String),
+                )],
+            )],
+            public_api: [("kept_lowercase".to_owned(), "kept_lowercase".to_owned())]
+                .into_iter()
+                .collect(),
+            ..Program::default()
+        };
+        let emitted = emit(&program, NativeAbi::LP64);
+        assert_eq!(
+            emitted.unicode_needs(),
+            UnicodeNeeds {
+                lower: true,
+                upper: false
+            }
         );
     }
 

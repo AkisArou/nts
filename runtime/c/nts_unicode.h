@@ -1,10 +1,11 @@
 /* Unicode case conversion, which is a table rather than an algorithm.
  *
  * Declared apart from `nts_runtime.h` because the implementation is apart:
- * `nts_unicode.c` carries quickjs-ng's `libunicode` and its tables, and is
- * emitted only for a program that calls one of these. Linking it
- * unconditionally takes `examples/hello` from 81 KB to 162 KB, which is a
- * doubling to carry tables the program never reads.
+ * `nts_unicode.c` reads the generated `nts_unicode_tables.h` (the compiler's
+ * UCD 17.0 model, printed at emission), and both are emitted only for a
+ * program that calls one of these. Linking them unconditionally takes
+ * `examples/hello` from 81 KB to 162 KB, which is a doubling to carry tables
+ * the program never reads.
  *
  * `toLowerCase` and `toUpperCase` are the whole surface for now. The locale
  * forms are deliberately absent rather than aliased: `toLocaleLowerCase` in

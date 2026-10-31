@@ -81,7 +81,7 @@ fn integer_rounding_agrees_with_explicit_conversion_and_c() {
             &root.join("target/rounding-width-tests"),
             if signed { "signed" } else { "unsigned" },
         );
-        for file in nts_codegen_c::support_files(true) {
+        for file in nts_codegen_c::support_files(nts_codegen_c::UnicodeNeeds::ALL) {
             file.write(dir.as_std_path()).unwrap();
         }
         let (input, values, expected) = if signed {

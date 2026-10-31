@@ -3,11 +3,9 @@
 //
 // No word here ends in sigma, in either case, on either conversion.
 // Final_Sigma -- "ΑΣ" lowercasing its last letter to ς -- is a context
-// rule nts does not implement yet and `nts check` would catch it, so a
-// row containing it could not agree until stage 1
-// ([unicode](../../docs/foundations/unicode.md)); its wrong answer is
-// on the record in `tests/outcomes/a-final-sigma-lowercased`. What this
-// row isolates is the unconditional Greek mapping's cost.
+// rule, guarded in `tests/programs/a-final-sigma-lowercased`; keeping it
+// out of the text is what lets this row isolate the unconditional Greek
+// mapping's cost.
 //
 // No C++ column: as `case-convert` says, the honest C++ program here is
 // ICU, not a reference. Java's case conversion agrees with

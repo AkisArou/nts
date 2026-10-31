@@ -12,6 +12,7 @@ nts-core.workspace = true
 nts-codegen-common.workspace = true
 rustc-hash.workspace = true
 nts-semantic-schema.workspace = true
+nts-unicode.workspace = true
 
 [lints]
 workspace = true

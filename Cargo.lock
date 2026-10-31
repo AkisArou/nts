@@ -402,6 +402,7 @@ dependencies = [
  "nts-diagnostics",
  "nts-frontend-ts",
  "nts-semantic-schema",
+ "nts-unicode",
  "rustc-hash",
 ]
 

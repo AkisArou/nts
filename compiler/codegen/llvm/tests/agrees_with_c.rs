@@ -86,7 +86,7 @@ fn both_backends_with(
     // translation unit as well. Every place that builds a program shares this
     // list precisely so none of them falls behind one that changes.
     let mut runtime_sources: Vec<std::path::PathBuf> = Vec::new();
-    for file in nts_codegen_c::support_files(c.needs_unicode()) {
+    for file in nts_codegen_c::support_files(c.unicode_needs()) {
         let written = file.write(&dir).expect("write a support file");
         if file.compiled {
             runtime_sources.push(written);

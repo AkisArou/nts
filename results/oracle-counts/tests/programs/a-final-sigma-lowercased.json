@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-final-sigma-lowercased",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-final-sigma-lowercased/src/main.ts",
+      "signature": "50c1d3670e9579a83ccafd0017611ac53d93ca90d4fb1bff5003e6673528a9ba",
+      "keys": {
+        "c": "62189a6c901a0fdfc08d7e07b53a109e",
+        "jvm": "0d70da7863605e24a7d5d198960e005d",
+        "llvm": "e82f2a6157289f00977888d3bd0e1645"
+      },
+      "cases_sha256": "f88ebc638de4efa406de7b03549f1029982738ae4571bd8c1a003bcbd24266a2",
+      "driver_sha256": "8a619dd300c98943a4572a2403354354aa65beeebfe2e48e6f45c45c00c17106",
+      "populations": {
+        "final": {
+          "count": 29,
+          "cases_sha256": "66b30a935b6a4ff701053ba4d71a33f11ab05ab238bdaef3009eced486406036"
+        },
+        "ignorable": {
+          "count": 29,
+          "cases_sha256": "c450f7ca9885ab14a71d6e76df3502d2578b1d6b3ad26b507c02bc3362f1fa4c"
+        },
+        "medial": {
+          "count": 29,
+          "cases_sha256": "7b3a0846903153c22bf9657dc2284640e1932352325a39ea1b23e11fcf785f6e"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

@@ -352,7 +352,7 @@ fn main() -> Result<()> {
         bail!("{warning}");
     }
 
-    for file in nts_codegen_c::support_files(true) {
+    for file in nts_codegen_c::support_files(nts_codegen_c::UnicodeNeeds::ALL) {
         file.write(out.as_std_path())
             .with_context(|| format!("writing {}", file.name))?;
     }
@@ -560,7 +560,8 @@ fn runtime_sources(out: &Utf8Path, needs_unicode: bool) -> Vec<Utf8PathBuf> {
 /// Whether a case's program reaches the Unicode tables.
 ///
 /// Asked of the emitted text rather than of the HIR, because the text is what
-/// gets compiled -- the same reason `Emitted::needs_unicode` asks it there.
+/// gets compiled; the compiler's own recordings live on `Emitted`, which a
+/// rendered case here does not carry.
 fn reaches_unicode(source: &str) -> bool {
     source.contains("nts_str_to_lower_case") || source.contains("nts_str_to_upper_case")
 }

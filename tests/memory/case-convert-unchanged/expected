@@ -1,0 +1,30 @@
+ideal 36
+allocated 1
+because one concatenation makes the source, seventeen conversions of text
+because already in its lowercase form allocate nothing, and thirty-six
+because operations to account for the references that do move.
+because
+because Allocations first. `"already lower text " + n` is a heap string:
+because one. Every `toLowerCase` of it finds nothing to change and answers
+because the input retained, so the seventeen conversions allocate none --
+because where `case-convert`, whose text does change, pays one per
+because conversion. The `Box` never leaves `work` and is a frame object.
+because
+because Operations: seventeen retains, seventeen releases, one field walk
+because and one final release. The retain is inside the conversion -- the
+because answer is owned, and when it is the input itself the count is how
+because it says so. Each `box.text = ...` then overwrites a slot holding
+because the previous answer (the source, under the retained answer), so
+because each store gives that reference back, the walk a frame object's
+because fields get gives back the last one, and the source local's own
+because reference is given back after its read past the loop. Neither half
+because is elidable in general: whether the answer is the input is a
+because property of the text at run time, so a compiler cannot pair the
+because retain off against the store.
+because
+because The retain is not decoration. Without it the second store frees the
+because source while the loop still reads it, and the read after the loop
+because reads freed storage: this case is the check that fails if the
+because retained-input path loses its retain, which is why the source is a
+because concatenation and not an immortal literal a missing retain could
+because not hurt.

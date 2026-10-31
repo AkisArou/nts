@@ -17,6 +17,11 @@
 /// otherwise.
 pub const UNICODE_VERSION: (u32, u32, u32) = (17, 0, 0);
 
+/// The license the vendored data ships under (Unicode License V3), for the
+/// notices an emitted program carries. Vendored beside the data so the text
+/// cannot drift from the files it licenses.
+pub const LICENSE: &str = include_str!("../data/LICENSE");
+
 #[allow(unreachable_pub)]
 mod generated {
     include!(concat!(env!("OUT_DIR"), "/case_tables.rs"));
@@ -314,6 +319,12 @@ mod tests {
             convert_case(Lower, &lone_after),
             vec![0x03B1, 0x03C2, 0xD800]
         );
+    }
+
+    #[test]
+    fn the_license_travels_with_the_data() {
+        assert!(super::LICENSE.starts_with("UNICODE LICENSE V3\n"));
+        assert!(super::LICENSE.contains("Unicode, Inc."));
     }
 
     #[test]

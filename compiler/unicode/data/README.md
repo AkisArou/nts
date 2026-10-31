@@ -5,7 +5,8 @@ files are used verbatim as downloaded. They are large; the alternative is a
 network fetch at build time. `LICENSE` beside the release directories is
 the Unicode License V3 text the data ships under (unicode.org's
 `license.txt`); compiler attributions include it through the declared
-vendored-data list in `tooling/licenses/licenses.ts`.
+vendored-data list in `tooling/licenses/licenses.ts`, and emitted programs
+carry it as a notice.
 
 | file | what the generator reads |
 |---|---|

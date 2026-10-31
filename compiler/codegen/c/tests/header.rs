@@ -540,23 +540,42 @@ int main(void) {
 #[test]
 fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
     require_clang();
-    for (name, source, unicode) in [
+    for (name, source, needs) in [
         (
             "notices-number",
             "export function value(): number { return 1; }",
-            false,
+            nts_codegen_c::UnicodeNeeds::NONE,
         ),
         (
             "notices-unicode",
             "export function value(s: string): string { return s.toLowerCase(); }",
-            true,
+            nts_codegen_c::UnicodeNeeds {
+                lower: true,
+                upper: false,
+            },
+        ),
+        (
+            // A string literal that reads like a helper's name is data, not
+            // a call: it must not select any tables.
+            "notices-literal",
+            "export function value(): string { return \"nts_str_to_lower_case\"; }",
+            nts_codegen_c::UnicodeNeeds::NONE,
+        ),
+        (
+            "notices-unicode-upper",
+            "export function value(s: string): string { return s.toUpperCase(); }",
+            nts_codegen_c::UnicodeNeeds {
+                lower: false,
+                upper: true,
+            },
         ),
     ] {
+        let unicode = needs.any();
         let (dir, emitted) = emit(name, source);
-        assert_eq!(emitted.needs_unicode(), unicode);
+        assert_eq!(emitted.unicode_needs(), needs);
         let mut expected = vec!["notices/zmij/LICENSE"];
         if unicode {
-            expected.extend(["notices/quickjs/LICENSE", "notices/unicode-data/LICENSE"]);
+            expected.push("notices/unicode-data/LICENSE");
         }
         expected.sort_unstable();
         let mut actual: Vec<_> = emitted
@@ -573,13 +592,16 @@ fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
         for notice in actual {
             assert!(dir.join(notice).is_file(), "missing {notice}");
         }
-        for notice in ["quickjs/LICENSE", "unicode-data/LICENSE"] {
-            assert_eq!(
-                dir.join("notices").join(notice).is_file(),
-                unicode,
-                "{notice}"
-            );
-        }
+        assert_eq!(
+            dir.join("notices").join("unicode-data/LICENSE").is_file(),
+            unicode,
+            "unicode-data/LICENSE"
+        );
+        // No quickjs code is linked any more, so its license never ships.
+        assert!(
+            !dir.join("notices").join("quickjs/LICENSE").exists(),
+            "quickjs/LICENSE"
+        );
         assert!(
             emitted
                 .support_files()
@@ -592,6 +614,13 @@ fn emitted_programs_ship_only_the_notices_for_their_linked_components() {
             assert!(text.starts_with("UNICODE LICENSE V3\n"));
             assert!(text.contains("Copyright © 1991-2026 Unicode, Inc."));
             assert!(text.ends_with("authorization of the copyright holder.\n"));
+            // Only the called direction's tables ship; the other direction
+            // is compiled out of the runtime with them.
+            let tables = std::fs::read_to_string(dir.join("nts_unicode_tables.h")).unwrap();
+            assert_eq!(tables.contains("__nts_case_lower_tables"), needs.lower);
+            assert_eq!(tables.contains("__nts_case_upper_tables"), needs.upper);
+        } else {
+            assert!(!dir.join("nts_unicode_tables.h").exists());
         }
     }
 }

@@ -1,7 +1,7 @@
 //! Components carry their sources and full notices through one selection.
 //! Replacing an optional component replaces the whole group, including notices.
 
-use super::Support;
+use super::{Support, UnicodeNeeds};
 
 struct Component {
     sources: Vec<Support<'static>>,
@@ -16,7 +16,7 @@ fn file(name: &'static str, contents: &'static str, compiled: bool) -> Support<'
     }
 }
 
-pub(super) fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
+pub(super) fn support_files(needs: UnicodeNeeds) -> Vec<Support<'static>> {
     let mut components = vec![
         Component {
             sources: vec![
@@ -52,32 +52,22 @@ pub(super) fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
             notices: Vec::new(),
         },
     ];
-    if needs_unicode {
+    if needs.any() {
         components.push(Component {
             sources: vec![
                 file(super::UNICODE_HEADER_NAME, super::UNICODE_HEADER, false),
-                file(super::CUTILS_HEADER_NAME, super::CUTILS_HEADER, false),
                 file(
-                    super::LIBUNICODE_HEADER_NAME,
-                    super::LIBUNICODE_HEADER,
-                    false,
-                ),
-                file(super::LIBUNICODE_TABLE_NAME, super::LIBUNICODE_TABLE, false),
-                file(
-                    super::LIBUNICODE_SOURCE_NAME,
-                    super::LIBUNICODE_SOURCE,
+                    super::unicode_tables::HEADER_NAME,
+                    super::unicode_tables::header(needs),
                     false,
                 ),
                 file(super::UNICODE_SOURCE_NAME, super::UNICODE_SOURCE, true),
             ],
-            notices: vec![
-                file(
-                    "notices/quickjs/LICENSE",
-                    include_str!("../../../../../runtime/c/quickjs/LICENSE"),
-                    false,
-                ),
-                file("notices/unicode-data/LICENSE", unicode_license(), false),
-            ],
+            notices: vec![file(
+                "notices/unicode-data/LICENSE",
+                nts_unicode::LICENSE,
+                false,
+            )],
         });
     }
     components
@@ -86,35 +76,15 @@ pub(super) fn support_files(needs_unicode: bool) -> Vec<Support<'static>> {
         .collect()
 }
 
-// Borrow the complete upstream notice from the data it licenses. No copied
-// table or hand-maintained license text can diverge from the linked data.
-fn unicode_license() -> &'static str {
-    let (_, notice) = super::LIBUNICODE_TABLE
-        .split_once("/*\n")
-        .expect("upstream Unicode data license comment");
-    let (notice, _) = notice
-        .split_once("*/")
-        .expect("upstream Unicode license end");
-    assert!(
-        notice.starts_with("UNICODE LICENSE V3\n"),
-        "upstream Unicode license changed"
-    );
-    notice
-}
-
 #[cfg(test)]
 mod tests {
     #[test]
     fn program_notices_cover_exactly_the_third_party_components() {
         for (unicode, expected) in [
-            (false, vec!["notices/zmij/LICENSE"]),
+            (super::UnicodeNeeds::NONE, vec!["notices/zmij/LICENSE"]),
             (
-                true,
-                vec![
-                    "notices/quickjs/LICENSE",
-                    "notices/unicode-data/LICENSE",
-                    "notices/zmij/LICENSE",
-                ],
+                super::UnicodeNeeds::ALL,
+                vec!["notices/unicode-data/LICENSE", "notices/zmij/LICENSE"],
             ),
         ] {
             let files = super::support_files(unicode);
