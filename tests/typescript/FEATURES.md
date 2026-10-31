@@ -102,8 +102,9 @@ cases. Exhaustive cases include lone surrogates and assert a separate
 block. Sequence and conformance cases use escaped input and expected
 strings, with exact assertions and source-row diagnostics. Standalone
 TypeScript generators under `tooling/unicode-cases/` produce expected
-values with the node in `.tool-versions`; they reject a mismatched
-Node, Unicode or ICU version. They are not part of nts builds or runs.
+values with the node in `.tool-versions`; they require that exact Node
+version and fixed Unicode/ICU data versions (also Ada for URL hosts).
+They are not part of nts builds or runs.
 A compiler refusal remains a finding and does not alter the case.
 
 ## Coverage, source by source
