@@ -34,6 +34,14 @@ function isRenderCase(value: unknown): value is RenderCase {
   return isCase(value) && "render" in value && typeof value.render === "function";
 }
 
+interface TypeScriptLibCase extends JetStreamCase {
+  inspect(): { diagnostics: string[]; resultFilesCount: number };
+}
+
+function isTypeScriptLibCase(value: unknown): value is TypeScriptLibCase {
+  return isCase(value) && "inspect" in value && typeof value.inspect === "function";
+}
+
 function sha256(text: string): string {
   return createHash("sha256").update(text).digest("hex");
 }
@@ -99,6 +107,62 @@ for (const name of names) {
   }
 }
 // END JSON STRINGIFY.
+
+// BEGIN TYPESCRIPT LIB.
+{
+  const name = "jetstream-typescript-lib";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isTypeScriptLibCase(module));
+    checked.add(name);
+
+    test(`${name}: all 118 original files and the complete diagnostic output are preserved`, async () => {
+      const input: unknown = await import(new URL(`${name}/input.ts`, root).href);
+      const config: unknown = await import(new URL(`${name}/config.ts`, root).href);
+      assert.ok(isRecord(input) && isRecord(input.sourceFiles));
+      assert.ok(isRecord(config) && isRecord(config.configuration));
+      assert.equal(Object.keys(input.sourceFiles).length, 118);
+      assert.equal(Object.keys(input.sourceFiles).filter(file => file.startsWith("src/")).length, 16);
+      assert.ok(Object.values(input.sourceFiles).every(source => typeof source === "string"));
+      const inputSource = readFileSync(new URL(`${name}/input.ts`, root), "utf8");
+      const inputDeclaration = "export const sourceFiles: SourceFiles = ";
+      const inputStart = inputSource.indexOf(inputDeclaration);
+      assert.ok(inputStart >= 0 && inputSource.endsWith(";\n"));
+      const inputJSON = inputSource.slice(inputStart + inputDeclaration.length, -2);
+      assert.equal(Buffer.byteLength(inputJSON), 3884943);
+      assert.equal(sha256(inputJSON), "226f42cad886f188fafb4f070c37c34d50f19b766f5576330beec03b5e7f9e0f");
+      const originalInput: unknown = JSON.parse(inputJSON);
+      assert.deepEqual(input.sourceFiles, originalInput);
+      const configSource = readFileSync(new URL(`${name}/config.ts`, root), "utf8");
+      const configDeclaration = "export const configuration: TypeScriptConfiguration = ";
+      const configStart = configSource.indexOf(configDeclaration);
+      assert.ok(configStart >= 0 && configSource.endsWith(";\n"));
+      const configJSON = configSource.slice(configStart + configDeclaration.length, -2);
+      assert.equal(Buffer.byteLength(configJSON), 456);
+      assert.equal(sha256(configJSON), "b60bfd39b19f6cd444a7a0f4e8933dacd9fb86b0fffebdcdac8a4270cc7a6af7");
+      const originalConfig: unknown = JSON.parse(configJSON);
+      assert.deepEqual(config.configuration, originalConfig);
+
+      // The original case-sensitive mock host produces these 54 diagnostics.
+      // Their full ordered text, including original missing-file diagnostics,
+      // is the oracle; the benchmark's unchanged noEmit option produces no files.
+      const result = module.inspect();
+      assert.equal(result.diagnostics.length, 54);
+      assert.equal(result.resultFilesCount, 0);
+      const resultJSON = JSON.stringify(result);
+      assert.equal(Buffer.byteLength(resultJSON), 17247);
+      assert.equal(sha256(resultJSON), "9be28762d730a63e90608ece97056c497b1c4255f13a9bec5f79b14d6495b089");
+    });
+
+    test(`${name}: opaque count repeats complete original compilations`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 1068476791);
+      assert.equal(module.work(2), 4126486240);
+    });
+  }
+}
+// END TYPESCRIPT LIB.
 
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
