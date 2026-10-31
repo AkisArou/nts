@@ -63,14 +63,18 @@
 // only as sharp as the module's real passes (see compiled-axis.floor).
 //
 // Exit 0: measured, and under `--axis` no test file lost a real pass. Exit 1:
-// a module not measured, or a lost pass. Exit 2: the tool could not start.
+// an observed artifact failure or a lost pass. An unmeasured axis holds with
+// exit 124; a definite failure before a stall still fails. Exit 2: no start.
 
 import { spawn, spawnSync } from "node:child_process";
+import { nodeEnvironment } from "./node-environment.ts";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readAxis } from "./compiled-axis-rows.mjs";
+import { readAxis, axisFailure } from "./compiled-axis-rows.mjs";
+import { ToolingInstrumentError } from "../gate/step-result.ts";
+import { reportCheckFailure, checkFailurePolicy } from "../differential/check-report.ts";
 import { armLines, oneChange } from "./pin.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -335,7 +339,7 @@ const run = (cmd, args, env) =>
 /** One module under one arm, emitted the way build.sh emits an addon. */
 async function emit(arm, project) {
   const out = join(arm.dir, "out", project.replace(/\//g, "_"));
-  const env = { ...process.env, NTS_CHECKERS: "1" };
+  const env = nodeEnvironment(process.env, { TMPDIR: join(arm.dir, "tmp") });
   const r = await run(arm.nts, ["emit-c", join(project, "tsconfig.json"), "--out", out, "--napi", ...(RC ? ["--rc"] : [])], env);
   const program = join(out, "program.c");
   // "Wrote nothing" is also what a run that never happened looks like, so a
@@ -435,27 +439,31 @@ function axis(arm, modules) {
   const tmp = join(arm.dir, "tmp");
   mkdirSync(addons, { recursive: true });
   mkdirSync(tmp, { recursive: true });
+  const axisEnv = nodeEnvironment(process.env, { NTS_BIN: arm.nts, NTS_ADDON_OUT: addons, TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) });
   const r = spawnSync("bash", [join(HERE, "compiled-axis.sh"), ...modules], {
     cwd: ROOT,
     encoding: "utf8",
     maxBuffer: 1 << 26,
-    env: { ...process.env, NTS_CHECKERS: "1", NTS_BIN: arm.nts, NTS_ADDON_OUT: addons, TMPDIR: tmp, ...(RC ? { NTS_CONFORMANCE_RC: "1" } : {}) },
+    env: axisEnv,
   });
   const text = `${r.stdout ?? ""}${r.stderr ?? ""}`;
-  const rows = readAxis(text);
   const passes = new Map();
-  const lines = (f) => (existsSync(f) ? readFileSync(f, "utf8").split("\n").filter(Boolean) : null);
+  let rows;
+  try { rows = readAxis(text); }
+  catch (error) {
+    for (const m of modules) passes.set(m, { unmeasured: error.message, cause: new ToolingInstrumentError("tooling-setup", `invalid axis records: ${error.message}`), completedFailures: 0 });
+    return passes;
+  }
   for (const m of modules) {
     const row = rows.get(m);
-    const intact = lines(join(addons, `${m}.intact.txt`));
-    const empty = lines(join(addons, `${m}.empty.txt`));
-    if (!row || row.unmeasured || !intact || !empty) {
-      const said = text.split("\n").find((l) => l.startsWith(`${m} `))?.replace(/^\S+\s+/, "") ?? "no row";
-      passes.set(m, { unmeasured: row?.unmeasured ?? said });
-      continue;
+    if (row?.failed) {
+      passes.set(m, { failed: row.failed });
+    } else if (!row || row.unmeasured || r.error || r.signal || r.status === null) {
+      const cause = row?.unmeasured ? axisFailure(row) : new ToolingInstrumentError("tooling-setup", `axis did not complete for ${m}: ${r.error?.message ?? r.signal ?? "no structured module row"}`);
+      passes.set(m, { unmeasured: cause.message, cause, completedFailures: row?.completedFailures ?? 0 });
+    } else {
+      passes.set(m, { real: new Set(row.realFiles) });
     }
-    const hollow = new Set(empty);
-    passes.set(m, { real: new Set(intact.filter((t) => !hollow.has(t))) });
   }
   return passes;
 }
@@ -469,11 +477,22 @@ const [axisBefore, axisAfter] = arms.map((arm) => {
 });
 let lost = 0;
 let axisUnmeasured = 0;
+let axisFailed = 0;
+const axisIncomplete = [];
+let axisCompletedFailures = 0;
 for (const m of axisModules) {
   const a = axisBefore.get(m);
   const b = axisAfter.get(m);
+  if (a.failed || b.failed) {
+    axisFailed += 1;
+    console.log(`  FAIL ${m}: ${a.failed ? `before: ${a.failed} ` : ""}${b.failed ? `after: ${b.failed}` : ""}`.trimEnd());
+    continue;
+  }
   if (a.unmeasured || b.unmeasured) {
     axisUnmeasured += 1;
+    for (const row of [a, b].filter(row => row.unmeasured)) {
+      axisIncomplete.push(row.cause); axisCompletedFailures += row.completedFailures;
+    }
     console.log(`  NOT MEASURED  ${m}: ${a.unmeasured ? `before: ${a.unmeasured} ` : ""}${b.unmeasured ? `after: ${b.unmeasured}` : ""}`.trimEnd());
     continue;
   }
@@ -484,5 +503,10 @@ for (const m of axisModules) {
   for (const t of gone) console.log(`    LOST    ${t}`);
   for (const t of gained) console.log(`    gained  ${t}   (read it: an unsound change gains too)`);
 }
-console.log(lost === 0 && axisUnmeasured === 0 ? `  no test file lost a real pass${notMeasured}` : `  ${lost} real pass(es) lost, ${axisUnmeasured} module(s) not measured${notMeasured}`);
-process.exit(lost === 0 && axisUnmeasured === 0 && unmeasured.length === 0 ? 0 : 1);
+console.log(lost === 0 && axisUnmeasured === 0 && axisFailed === 0 ? `  no test file lost a real pass${notMeasured}` : `  ${lost} real pass(es) lost, ${axisFailed} artifact failure(s), ${axisUnmeasured} module(s) not measured${notMeasured}`);
+if (axisIncomplete.length) {
+  axisCompletedFailures += lost + axisFailed;
+  const failure = axisIncomplete.find(error => checkFailurePolicy(error, axisCompletedFailures).disposition === "operator-hold") ?? axisIncomplete.find(error => checkFailurePolicy(error, axisCompletedFailures).disposition !== "verdict") ?? axisIncomplete[0];
+  process.exit(reportCheckFailure(failure, process.env, axisCompletedFailures));
+}
+process.exit(lost === 0 && axisUnmeasured === 0 && axisFailed === 0 && unmeasured.length === 0 ? 0 : 1);

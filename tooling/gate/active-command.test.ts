@@ -95,12 +95,14 @@ test("CPU runaway budgets hold a busy loop without manufacturing a verdict",asyn
   assert.equal(frame?.verdict,"NOT RUN");assert.equal(frame?.kind,"runaway");
 });
 
-test("a grandchild outliving its parent is stopped with the owned group",async t=>{
+test("leader exit stops its grandchild even when inherited pipes postpone close",async t=>{
   const {root,env}=fixture(t),ready=join(root,"grandchild");
-  const grandchild=`require('node:fs').writeFileSync(process.argv[1],String(process.pid));Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);`;
-  const parent=`require('node:child_process').spawn(process.execPath,['-e',${JSON.stringify(grandchild)},process.argv[1]],{stdio:['ignore','inherit','inherit']}).once('spawn',()=>process.exit(0));`;
-  const result=await activeCommand(process.execPath,["-e",parent,ready],{cwd:root,env,idleMs:2000,pollMs:50});
-  assert.ok(result.hung);assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control")?.verdict,"NOT RUN");
+  const helper=join(root,"helper.cjs");
+  writeFileSync(helper,"require('node:fs').writeFileSync(process.argv[2],String(process.pid));process.send('ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);\n");
+  const parent="require('node:child_process').fork(process.argv[1],[process.argv[2]],{stdio:['ignore','inherit','inherit','ipc']}).once('message',()=>process.exit(0));";
+  const result=await activeCommand(process.execPath,["-e",parent,helper,ready],{cwd:root,env,idleMs:2000,pollMs:50});
+  assert.equal(result.status,0);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
+  assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
   assert.ok(existsSync(ready));const pid=Number(readFileSync(ready,"utf8"));
   await waitFor("the directly recorded grandchild to leave its group",()=>{
     try{return /^\d+ \(.+\) Z /.test(readFileSync(`/proc/${pid}/stat`,"utf8"));}catch(error){if(error.code==="ENOENT")return true;throw error;}
@@ -119,4 +121,41 @@ test("close reaps a helper whose redirected stdio does not keep the leader open"
   await waitFor("the helper with redirected stdio to leave its directly owned group",()=>{
     try{return /^\d+ \(.+\) Z /.test(readFileSync(`/proc/${pid}/stat`,"utf8"));}catch(error){if(error.code==="ENOENT")return true;throw error;}
   });
+});
+
+test("nested supervisors forward observed busy/output progress while idle children hold",async t=>{
+  const {root,env}=fixture(t);
+  const helper=join(root,"nested.ts");
+  const supervisor=new URL("./active-command.ts",import.meta.url).href;
+  writeFileSync(helper,`import {activeCommand} from ${JSON.stringify(supervisor)};
+const mode=process.argv[2],env={...process.env};delete env.NTS_GATE_STEP_RESULT;
+const body=mode==='busy'?'const start=process.cpuUsage();while(process.cpuUsage(start).user+process.cpuUsage(start).system<1200000){}':mode==='output'?'import os,time\\nfor _ in range(16): os.write(1,b".");time.sleep(0.12)':'Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)';
+const result=await activeCommand(mode==='output'?'python3':process.execPath,mode==='output'?['-c',body]:['-e',body],{
+cwd:process.cwd(),env,idleMs:500,pollMs:mode==='output'?5000:50,
+onActivity:event=>process.stdout.write(JSON.stringify({cpu:event.cpu})+'\\n')});
+process.stdout.write(JSON.stringify({result})+'\\n');process.exitCode=result.hung?124:result.status??1;
+`);
+  for(const mode of ["busy","output","idle"]){
+    const result=await activeCommand(process.execPath,[helper,mode],{cwd:root,env,idleMs:1000,pollMs:50});
+    const frames=result.stdout.trim().split("\n").map(line=>JSON.parse(line));
+    const inner=frames.pop().result;
+    assert.equal(result.hung,undefined);
+    if(mode==='idle'){
+      assert.equal(result.status,124);assert.ok(inner.hung);
+    }else{
+      assert.equal(result.status,0,result.out);assert.equal(inner.hung,undefined);
+      assert.ok(result.elapsedMs>1000);assert.ok(frames.length>0);
+      if(mode==='output')assert.equal(new Set(frames.map(frame=>frame.cpu)).size,1,"output progress requires no CPU-counter change");
+    }
+  }
+});
+
+test("an escaped helper retaining pipes still holds instead of disabling supervision",async t=>{
+  const {root,env}=fixture(t),helper=join(root,"escaped.cjs");
+  writeFileSync(helper,"process.send('ready');Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0);\n");
+  const parent="require('node:child_process').fork(process.argv[1],[],{detached:true,stdio:['ignore','inherit','inherit','ipc']}).once('message',()=>process.exit(0));";
+  const result=await activeCommand(process.execPath,["-e",parent,helper],{cwd:root,env,idleMs:500,pollMs:50});
+  assert.ok(result.hung);assert.equal(readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control")?.verdict,"NOT RUN");
+  // The suite's named unit owns the helper that intentionally escaped its
+  // parent's group, and removes it when this run ends.
 });

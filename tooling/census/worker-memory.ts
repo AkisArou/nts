@@ -59,6 +59,8 @@ const events = (group: string, local = false) => {
   };
   return { oom: field("oom"), kills: field("oom_kill") };
 };
+// Standalone command owners observe the same kernel counters as workers.
+export const memoryEvents = events;
 
 export type MemoryCounters = { oom: number; kills: number };
 export type MemoryCause = "own-limit" | "aggregate-pressure" | "system-pressure";

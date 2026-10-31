@@ -30,6 +30,10 @@
 import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
+import { activeCommand, CommandNotMeasuredError, processActivity } from "../gate/active-command.ts";
+import { ToolingInstrumentError } from "../gate/step-result.ts";
+import { checkFailurePolicy, reportCheckFailure } from "../differential/check-report.ts";
+import { nodeEnvironment } from "./node-environment.ts";
 import process from "node:process";
 import { leftBy, removeTestTmpDir, sweepOrphaned, testTmpDir, testTmpId, testTmpRoot } from "./tmpdir.mjs";
 
@@ -54,35 +58,9 @@ const PARALLEL_SUITE = join(NODE_ROOT, "test/parallel");
 // entry was corrected on the strength of it before the cause was found. **A
 // contaminant present in both arms is not controlled by comparing them.**
 //
-// So a run refuses rather than warns: a warning in a 2,300-line log is exactly
-// what gets missed. `NTS_ALLOW_OUTPUT_ENV=1` overrides, which makes carrying one
-// in a deliberate act rather than an inherited default.
-// Two lists, because refusing on everything refuses on everything. This box
-// exports `NODE_OPTIONS=--max-old-space-size=8192 --disable-warning=ExperimentalWarning`
-// as a standing setting, and it was present for the 1,859 baseline -- a guard
-// blocking it would block every run in the profile's history, which is a worse
-// answer than the problem.
-//
-// So: refuse the two that demonstrably suppress what a test reads, and *print*
-// the rest, so a log records the environment it was taken in and a later reader
-// can tell one run from another.
-const REFUSE = ["NODE_NO_WARNINGS", "NODE_DEBUG"];
-const REPORT = ["NODE_OPTIONS", "NO_COLOR", "FORCE_COLOR"];
-if (process.env.NTS_ALLOW_OUTPUT_ENV === undefined) {
-  const carried = REFUSE.filter((name) => process.env[name] !== undefined);
-  if (carried.length > 0) {
-    console.error(`refusing to run: ${carried.join(", ")} changes what the tests read.`);
-    console.error("Node's own tests assert on warnings and on stderr. Filter the log after");
-    console.error("the run instead, where the filtering is visible in the command, or set");
-    console.error("NTS_ALLOW_OUTPUT_ENV=1 if you mean it.");
-    process.exit(2);
-  }
-}
-for (const name of REPORT) {
-  if (process.env[name] !== undefined) {
-    console.log(`  inherited ${name}=${process.env[name]}`);
-  }
-}
+// Build every child from the shared canonical contract, rather than retaining
+// a contaminant in both arms or letting a shell and a unit choose differently.
+const environment = nodeEnvironment(process.env);
 const argv = process.argv;
 const arg = (name, fallback = null) => {
   const at = argv.indexOf(name);
@@ -388,31 +366,72 @@ if (!existsSync(nodePackageJson)) {
 // named tests take the wrapped path. `script` is util-linux and is not everywhere, so
 // its absence is a **skip with a reason** rather than a failure -- a missing harness
 // tool is not the profile's defect.
-// **Reap what a previous run orphaned, before starting another one.** A test that is
-// waiting rather than failing does not stop when the runner gives up on it:
-// `execFileSync`'s timeout signals the direct child, and everything that child had
-// spawned is reparented to init and keeps its memory. Idle, so no core burns and nothing
-// draws attention. 459 of them were found on 2026-09-13, about 25 hours old, holding 34 GB
-// of resident memory; clearing them returned available memory to 21 GB and dropped load
-// from 7.65 to 3.00.
-//
-// `NTS_CONFORMANCE_TIMEOUT_MS` above reduces how many get made. This reduces how long the
-// ones already made survive, and the two are different problems -- at PPID 1 an orphan
-// outlives every session that could have reaped it.
-//
-// Selecting on PPID 1 is the whole of the safety argument: three sessions run these same
-// files concurrently, so a name match would kill a peer's live test, while a live runner's
-// children always have a live parent. Failure to reap is never failure to run.
-try {
-  const reaped = execFileSync("bash", [join(HERE, "reap-orphans.sh")], { encoding: "utf8" });
-  if (!reaped.startsWith("no orphaned")) process.stderr.write(reaped);
-} catch (error) {
-  process.stderr.write(`note: could not reap orphans: ${error.message}\n`);
+// Every suite runs in a named systemd unit (AGENTS.md). The unit contains
+// children that create a new session or process group; stopping it cleans up
+// those detached descendants too. Never reap processes selected from ps.
+// Each file owns a process group so an ordinary exit or timeout also cleans
+// up its children immediately, before the next file starts.
+async function runTestProcess(executable, args, options) {
+  const { idleMs, ...commandOptions } = options;
+  // Only the final module owner publishes its disposition: a definite file
+  // failure outranks a later loss of progress, while a broken observer holds.
+  const env = { ...commandOptions.env };
+  delete env.NTS_GATE_STEP_RESULT;
+  const result = await activeCommand(executable, args, {
+    cwd: commandOptions.cwd, env, idleMs,
+    cpuBudgetSeconds: idleMs / 1000,
+    pollMs: Math.min(5000, idleMs / 4), maxBuffer: 1024 * 1024,
+    onActivity: event => process.stderr.write(`node:${moduleName} test activity: ${event.cpu} CPU ticks\n`),
+  });
+  if (result.error) {
+    throw new ToolingInstrumentError("tooling-setup", `could not start test: ${result.error.message}`);
+  }
+  if (result.hung || result.runaway || result.status !== 0) {
+    const failure = result.hung || result.runaway
+      ? new CommandNotMeasuredError(result)
+      : new Error(result.stderr || `test exited ${result.status ?? result.signal}`);
+    throw Object.assign(failure, { stdout: result.stdout, stderr: result.stderr,
+      status: result.status, signal: result.signal });
+  }
+  return result.stdout;
+}
+
+// Observation only: setsid children leave a file's session but remain in its
+// named unit. Record them without changing verdicts or managing processes.
+function processesAfterFile() {
+  const group = /^0::(.+)$/m.exec(readFileSync("/proc/self/cgroup", "utf8"))?.[1];
+  if (!group || group === "/") throw new Error("no run unit to observe");
+  const owners = new Set();
+  for (let pid = process.pid; pid > 0 && !owners.has(pid);) {
+    owners.add(pid);
+    pid = Number(/^PPid:\s+(\d+)$/m.exec(readFileSync(`/proc/${pid}/status`, "utf8"))?.[1] ?? 0);
+  }
+  const remaining = [];
+  const members = new Set();
+  function collect(path) {
+    for (const value of readFileSync(`${path}/cgroup.procs`, "utf8").trim().split(/\s+/)) members.add(Number(value));
+    for (const entry of readdirSync(path, { withFileTypes: true })) if (entry.isDirectory()) collect(`${path}/${entry.name}`);
+  }
+  collect(`/sys/fs/cgroup${group}`);
+  for (const pid of members) {
+    if (!pid || owners.has(pid)) continue;
+    try {
+      const memberGroup = readFileSync(`/proc/${pid}/cgroup`, "utf8").trim().replace(/^0::/, "");
+      if (memberGroup !== group && !memberGroup.startsWith(`${group}/`)) continue;
+      const status = readFileSync(`/proc/${pid}/status`, "utf8");
+      remaining.push({ pid, ...processActivity(readFileSync(`/proc/${pid}/stat`, "utf8")),
+        state: /^State:\s+(\S+)/m.exec(status)?.[1],
+        command: readFileSync(`/proc/${pid}/cmdline`, "utf8").split("\0").filter(Boolean) });
+    } catch (error) {
+      if (error.code !== "ENOENT" && error.code !== "ESRCH") throw error;
+    }
+  }
+  return remaining;
 }
 
 // **Each test's scratch directory is this runner's to remove** (`tmpdir.mjs` says
 // why). Swept here for runners that never reached their own cleanup.
-const tmpRoot = testTmpRoot();
+const tmpRoot = testTmpRoot(environment);
 mkdirSync(tmpRoot, { recursive: true });
 sweepOrphaned(tmpRoot);
 const keepTemp = process.env.NTS_KEEP_TEMP !== undefined;
@@ -431,7 +450,7 @@ let ptyAvailable = null;
 const haveScript = () => {
   if (ptyAvailable === null) {
     try {
-      execFileSync("script", ["--version"], { stdio: "ignore" });
+      execFileSync("script", ["--version"], { stdio: "ignore", env: environment });
       ptyAvailable = true;
     } catch {
       ptyAvailable = false;
@@ -472,7 +491,7 @@ if (addon !== null && !sabotage && !emptyExports
     published = execFileSync(
       process.execPath,
       [join(HERE, "shaped-surface.mjs"), dirname(resolvePath(addon)), moduleName],
-      { encoding: "utf8" },
+      { encoding: "utf8", env: environment },
     );
   } catch (error) {
     // A non-zero exit is this check's way of saying "something publishes nothing",
@@ -483,6 +502,15 @@ if (addon !== null && !sabotage && !emptyExports
 }
 
 const rows = [];
+const incomplete = [];
+const processObservations = [];
+const childEnvironment = {
+  ...environment,
+  NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "",
+  NTS_CONFORMANCE_EMPTY_EXPORTS: emptyExports ? "1" : "",
+  NTS_CONFORMANCE_ADDON_MUTATE: mutateSilent ? "silent" : mutateAddon ? "1" : "",
+  NODE_TEST_DIR: tmpRoot,
+};
 if (publishesNothing) {
   for (const test of tests) {
     rows.push({
@@ -516,33 +544,29 @@ for (const test of publishesNothing ? [] : tests) {
     const quoted = [process.execPath, ...argv]
       .map((part) => `'${String(part).replaceAll("'", "'\\''")}'`)
       .join(" ");
-    const out = execFileSync(
+    const out = await runTestProcess(
       ...(wantsPty
         ? ["script", ["-qec", quoted, "/dev/null"]]
         : [process.execPath, argv]),
       {
         encoding: "utf8",
-        // **A per-test ceiling, overridable, because a control can need a cheap one.**
+        // **A per-test idle guard, overridable for controls.**
         // Breaking a handshake on purpose does not make its tests fail -- it makes them
         // *wait*, and 86 files at 60s each is 80 minutes for a number that is decided in
-        // the first few seconds. Worse, each timeout leaks its driver: 26 `run-one.mjs`
-        // processes were alive at once, with the forked workers behind them.
+        // the first few seconds.
         //
         // A shortened ceiling is only sound if it is not itself the variable, so the
         // intact arm must be re-run at the same value and reproduce its own count before
         // the broken arm's count means anything.
-        timeout: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000),
+        // The legacy variable names an idle window, never a wall deadline.
+        idleMs: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000),
         stdio: ["ignore", "pipe", "pipe"],
         // Node's own runner starts each test from the checkout root. A few
         // upstream tests intentionally resolve `./test/...`; launching them
         // from the NTS root turns those into unrelated ENOENT failures.
         cwd: NODE_ROOT,
         env: {
-          ...process.env,
-          NTS_CONFORMANCE_SABOTAGE: sabotage ? "1" : "",
-          NTS_CONFORMANCE_EMPTY_EXPORTS: emptyExports ? "1" : "",
-          NTS_CONFORMANCE_ADDON_MUTATE: mutateSilent ? "silent" : mutateAddon ? "1" : "",
-          NODE_TEST_DIR: tmpRoot,
+          ...childEnvironment,
           NTS_TEST_TMPDIR_ID: tmpId,
         },
       },
@@ -575,8 +599,17 @@ for (const test of publishesNothing ? [] : tests) {
       .split("\n")
       .filter((candidate) => candidate.startsWith(RESULT_PREFIX))
       .pop();
+    const stopped = e instanceof CommandNotMeasuredError || e instanceof ToolingInstrumentError;
+    const reportedBeforeStop = printed ? JSON.parse(printed.slice(RESULT_PREFIX.length)) : null;
+    if (stopped) incomplete.push({ name, error: e });
+    if (stopped && (!(e instanceof CommandNotMeasuredError) || reportedBeforeStop?.kind !== "fail")) {
+      rows.push({ name, kind: "not-measured", why: e.message,
+        reason: e.kind === "runaway" ? "cpu" : e.kind === "hung" ? "idle" : e.kind,
+        ...(e.stdout || e.stderr ? { detail: `${e.stdout ?? ""}\n${e.stderr ?? ""}`.trim() } : {}) });
+      continue;
+    }
     if (printed) {
-      const reported = JSON.parse(printed.slice(RESULT_PREFIX.length));
+      const reported = reportedBeforeStop;
       const escaped = (e.stderr ?? "")
         .split("\n")
         .find((l) => l.includes("Error") || l.includes("Assertion"));
@@ -626,6 +659,8 @@ for (const test of publishesNothing ? [] : tests) {
     result = { kind: "fail", why: why.trim().slice(0, 120) };
   } finally {
     if (!keepTemp) removeTestTmpDir(testTmpDir(tmpRoot, tmpId));
+    try { processObservations.push({ after: name, remaining: processesAfterFile() }); }
+    catch (error) { processObservations.push({ after: name, error: error.message }); }
   }
   rows.push({ name, ...result });
 }
@@ -639,16 +674,19 @@ if (keepTemp) {
   process.stderr.write(`LEAKED ${left.length} test directories under ${tmpRoot}: ${left.slice(0, 3).join(" ")}\n`);
 }
 
-const tally = { pass: 0, fail: 0, skip: 0, "n/a": 0 };
+const tally = { pass: 0, fail: 0, skip: 0, "n/a": 0, "not-measured": 0 };
 for (const r of rows) tally[r.kind]++;
 
 if (asJson) {
-  console.log(JSON.stringify({ module: moduleName, addon: addon ?? null, rows, tally }, null, 2));
+  console.log(JSON.stringify({ version: 1, module: moduleName, addon: addon ?? null, expected: tests.length, rows, tally, environment: childEnvironment,
+    budget: { idleMs: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000), cpuSeconds: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000) / 1000,
+      scope: "owned session: user/sys and reaped-child CPU, including child groups and worker threads" },
+    supervision: incomplete.map(({ name, error }) => ({ name, kind: error.kind, reason: error.message })), processObservations }, null, 2));
 } else {
   const label = addon ? addon.replace(`${ROOT}/`, "") : "TypeScript on node";
   console.log(`node:${moduleName} against node's own tests — ${label}\n`);
   for (const row of rows) {
-    const mark = { pass: "pass", fail: "FAIL", skip: "skip", "n/a": " n/a" }[row.kind];
+    const mark = { pass: "pass", fail: "FAIL", skip: "skip", "n/a": " n/a", "not-measured": "NOT MEASURED" }[row.kind];
     console.log(`  ${mark}  ${row.name}${row.why ? `\n          ${row.why}` : ""}`);
     if (verbose && row.detail) {
       console.log(
@@ -661,7 +699,7 @@ if (asJson) {
   }
   console.log(
     `\n  ${tests.length} file(s): ${tally.pass} passed, ${tally.fail} failed, ` +
-      `${tally.skip} skipped, ${tally["n/a"]} not applicable`,
+      `${tally.skip} skipped, ${tally["n/a"]} not applicable, ${tally["not-measured"]} not measured`,
   );
 }
 // A sabotage run where *nothing* failed is almost never the finding it looks
@@ -675,7 +713,10 @@ if (asJson) {
 // regex did not match, scored as a passing test, reporting a survivor against an
 // unmodified tree. A mutation harness has to check that the mutation *happened*,
 // not only that something ran afterwards.
-if (sabotage && tally.pass > 0 && tally.fail === 0) {
+if (incomplete.length > 0) {
+  const failure = incomplete.find(({ error }) => checkFailurePolicy(error, tally.fail).disposition === "operator-hold") ?? incomplete[0];
+  process.exitCode = reportCheckFailure(failure.error, process.env, tally.fail);
+} else if (sabotage && tally.pass > 0 && tally.fail === 0) {
   console.log(
     "\n  SABOTAGE DID NOT APPLY: every file passed with the module blanked, which" +
       "\n  means it was probably not blanked. Check that NTS_CONFORMANCE_SABOTAGE" +

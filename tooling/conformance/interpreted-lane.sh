@@ -46,19 +46,19 @@ if [ ${#modules[@]} -eq 0 ]; then
   )
 fi
 
-printf '  %-22s %s\n' module 'files: passed / failed / skipped / n-a'
+printf '  %-22s %s\n' module 'files: passed / failed / skipped / n-a / not measured'
 failing=0
 for module in "${modules[@]}"; do
   line=$(timeout 1800 node tooling/conformance/run.mjs --module "$module" 2>&1 | tail -1)
   printf '  %-22s %s\n' "$module" "$line"
   case "$line" in
-    *", 0 failed,"*) ;;
+    *", 0 failed,"*", 0 not measured") ;;
     *) failing=$((failing + 1)) ;;
   esac
 done
 
-printf '\n  %d module(s) with a failing file.\n' "$failing"
-echo "  A failure here is this profile's own. Zero means the implementation"
+printf '\n  %d module(s) not passing.\n' "$failing"
+echo "  A failure or unmeasured file prevents a module from passing. Zero means the implementation"
 echo "  passes everything it runs, and the not-applicable column is where the"
 echo "  remaining judgement is written down."
 [ "$failing" -eq 0 ]

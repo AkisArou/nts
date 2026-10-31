@@ -42,57 +42,68 @@
 //   timers       PUBLISHES NOTHING -- 2 real pass(es), ...     2
 //   process      WILL NOT LOAD -- ...                          not measured
 
-import { spawnSync } from "node:child_process";
+import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
+import { ToolingInstrumentError } from "../gate/step-result.ts";
+import { reportCheckFailure, checkFailurePolicy } from "../differential/check-report.ts";
 import { copyFileSync, chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readAxis } from "./compiled-axis-rows.mjs";
+import { readAxis, AXIS_PREFIX, axisFailure } from "./compiled-axis-rows.mjs";
+import { nodeEnvironment } from "./node-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const TABLE = join(HERE, "compiled-axis.floor");
 const argv = process.argv.slice(2);
 const recording = argv.includes("--record");
+let runScratch = null;
 const from = argv.includes("--from") ? argv[argv.indexOf("--from") + 1] : null;
 
 // **Seen to read every shape before it is trusted**, on the lines the script prints.
 function selfTest() {
-  const sample = [
-    "stream                 271 file(s): 1 passed, 251 failed, 4 skipped, 15 not applicable",
-    "fs                   3 real, 1 hollow, 347 failed",
-    "timers               PUBLISHES NOTHING -- 2 real pass(es), 0 that survive emptying",
-    "process              WILL NOT LOAD -- undefined symbol: module__init",
-    "",
-    "TOTAL                48 passed, 1717 failed, 4 hollow (not counted)",
-  ].join("\n");
-  const r = readAxis(sample);
-  if (r.get("stream")?.real !== 1 || r.get("fs")?.real !== 3 || r.get("timers")?.real !== 2) return `a row was misread: ${JSON.stringify([...r])}`;
-  if (!r.get("process")?.unmeasured) return "a module that will not load was read as measured";
-  if (r.has("TOTAL")) return "the total was read as a module";
-  return null;
+  const report = (verdicts, supervision = []) => ({ version: 1, module: "control", expected: verdicts.length,
+    rows: verdicts.map((kind, i) => ({ name: `file-${i}`, kind })),
+    tally: Object.fromEntries(["pass", "fail", "skip", "n/a", "not-measured"].map(kind => [kind, verdicts.filter(k => k === kind).length])), supervision });
+  const record = (intact, empty) => AXIS_PREFIX + JSON.stringify({ version: 1, module: "control", kind: "files", intact, empty });
+  const measured = readAxis(record(report(["pass", "pass"]), report(["fail", "pass"])));
+  if (measured.get("control")?.real !== 1 || measured.get("control")?.hollow !== 1) return "per-file pass intersection was misread";
+  for (const verdicts of [["not-measured"], ["fail", "not-measured"]]) {
+    const stop = { name: `file-${verdicts.length - 1}`, kind: "hung", reason: "control stalled" };
+    const row = readAxis(record(report(verdicts, [stop]), report(verdicts.map(() => "fail")))).get("control");
+    if (row?.real !== undefined || !row?.unmeasured) return "an incomplete arm was counted";
+    if (checkFailurePolicy(axisFailure(row), row.completedFailures).disposition !== (verdicts.length === 1 ? "operator-hold" : "verdict")) return "failure/hang precedence changed";
+  }
+  if (readAxis("control 200 real, 0 hollow, 0 failed").size) return "prose authorized a measurement";
+  for (const phase of ["build", "load"]) {
+    const row = readAxis(AXIS_PREFIX + JSON.stringify({ version: 1, module: "control", kind: "artifact-failure", phase, status: 7, signal: null, reason: `${phase} failed` })).get("control");
+    if (!row?.failed || row?.unmeasured || row?.real !== undefined) return "completed artifact failure was held or counted";
+  }
+  return undefined;
 }
+
 const broken = selfTest();
 if (broken) {
   console.log(`  NOT MEASURED: self-test failed -- ${broken}`);
   process.exit(2);
 }
 if (argv.includes("--self-test")) {
-  console.log("  self-test: all four row shapes read, a module that will not load not measured, the total not a module");
+  console.log("  self-test: structured pass intersection, incomplete-arm hold, failure-before-hang, prose rejected");
   process.exit(0);
 }
 
 /** Run compiled-axis.sh pinned and isolated, returning its output. */
-function runAxis() {
+async function runAxis() {
   const source = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
   if (!existsSync(source)) {
     console.log(`  NOT MEASURED: no compiler at ${source}; set NTS_BIN`);
-    process.exit(2);
+    process.exit(reportCheckFailure(new ToolingInstrumentError("tooling-setup", `no compiler at ${source}`)));
   }
   const base = join(homedir(), ".cache/nts-compiled-axis");
   mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "run-"));
-  process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
+  runScratch = scratch;
+  console.log(`  per-file axis artifacts: ${scratch}`);
   // Pinned: a peer relinking target/release/nts mid-run rebuilds half the
   // modules with another compiler. Every cache and temporary file private:
   // the default snapshot cache is shared by every lane on the box.
@@ -101,33 +112,40 @@ function runAxis() {
   chmodSync(nts, 0o755);
   for (const d of ["addons", "tmp"]) mkdirSync(join(scratch, d));
   console.log(`  running compiled-axis.sh against ${source} (pinned); about 16 minutes`);
-  const run = spawnSync("bash", [join(HERE, "compiled-axis.sh")], {
+  const env = nodeEnvironment(process.env, { NTS_BIN: nts, NTS_ADDON_OUT: join(scratch, "addons"), TMPDIR: join(scratch, "tmp") });
+  writeFileSync(join(scratch, "environment.json"), JSON.stringify(env, null, 2) + "\n");
+  const run = await activeCommand("bash", [join(HERE, "compiled-axis.sh")], {
     cwd: ROOT,
-    encoding: "utf8",
     maxBuffer: 1 << 26,
-    env: {
-      ...process.env,
-      NTS_BIN: nts,
-      NTS_CHECKERS: "1",
-      NTS_ADDON_OUT: join(scratch, "addons"),
-      TMPDIR: join(scratch, "tmp"),
-    },
+    env,
   });
-  return `${run.stdout ?? ""}${run.stderr ?? ""}`;
+  if (run.hung || run.runaway) throw new CommandNotMeasuredError(run);
+  if (run.error || run.signal || run.status === null) throw new ToolingInstrumentError("tooling-setup", `axis did not complete: ${run.error?.message ?? run.signal}`);
+  return run.stdout;
 }
 
-const text = from ? readFileSync(from, "utf8") : runAxis();
-const axis = readAxis(text);
+let axis;
+try {
+  const text = from ? readFileSync(from, "utf8") : await runAxis();
+  axis = readAxis(text);
+} catch (error) {
+  console.log(`  NOT MEASURED: ${error.message}`);
+  process.exit(reportCheckFailure(error));
+}
 if (axis.size === 0) {
   console.log("  NOT MEASURED: the run printed no module rows");
-  process.exit(1);
+  process.exit(reportCheckFailure(new ToolingInstrumentError("tooling-setup", "axis printed no structured module records")));
 }
 
 if (recording) {
+  if ([...axis.values()].some(row => row.failed)) {
+    console.log("  not recorded: a module failed to build or load"); process.exit(1);
+  }
   const unmeasured = [...axis].filter(([, r]) => r.unmeasured);
   if (unmeasured.length > 0) {
     console.log(`  not recorded: ${unmeasured.map(([m]) => m).join(", ")} did not load`);
-    process.exit(1);
+    const failure = axisFailure(unmeasured[0][1]);
+    process.exit(reportCheckFailure(failure, process.env, unmeasured.reduce((sum, [, row]) => sum + row.completedFailures, 0)));
   }
   const header = existsSync(TABLE) ? readFileSync(TABLE, "utf8").split("\n").filter((l) => l.startsWith("#")) : [
     "# Real passes of node's own tests per runtime/node module as a compiled addon,",
@@ -138,12 +156,13 @@ if (recording) {
   const rows = [...axis].sort(([a], [b]) => a.localeCompare(b)).map(([m, r]) => `${m} ${r.real}`);
   writeFileSync(TABLE, `${[...header, ...rows].join("\n")}\n`);
   console.log(`  recorded ${rows.length} module(s) to tooling/conformance/compiled-axis.floor`);
+  if (runScratch) rmSync(runScratch, { recursive: true, force: true });
   process.exit(0);
 }
 
 if (!existsSync(TABLE)) {
   console.log("  NOT MEASURED: no tooling/conformance/compiled-axis.floor; run with --record first");
-  process.exit(1);
+  process.exit(reportCheckFailure(new ToolingInstrumentError("tooling-setup", "missing compiled axis floor")));
 }
 const table = new Map(
   readFileSync(TABLE, "utf8").split("\n").filter((l) => l.trim() !== "" && !l.startsWith("#"))
@@ -151,11 +170,17 @@ const table = new Map(
 );
 const failures = [];
 const notes = [];
+const incomplete = [];
+let completedFailures = 0;
 for (const [module, was] of table) {
   const now = axis.get(module);
-  if (!now) failures.push(`${module}: in the table, not in the run`);
-  else if (now.unmeasured) failures.push(`${module}: ${now.unmeasured}`);
-  else if (now.real < was) failures.push(`${module}: ${was} -> ${now.real} real pass(es), ${now.real - was}${now.publishesNothing ? " -- and it publishes nothing" : ""}`);
+  if (!now) incomplete.push(new ToolingInstrumentError("tooling-setup", `${module}: in the table, not in the run`));
+  else if (now.unmeasured) {
+    incomplete.push(axisFailure(now)); completedFailures += now.completedFailures;
+    console.log(`  NOT MEASURED ${module}: ${now.unmeasured}`);
+  }
+  else if (now.failed) failures.push(`${module}: ${now.failed}`);
+  else if (now.real < was) failures.push(`${module}: ${was} -> ${now.real} real pass(es), ${now.real - was}`);
   else if (now.real > was) notes.push(`${module}: ${was} -> ${now.real}, +${now.real - was} -- newly passing; raise the row once each is known to belong`);
 }
 for (const [module] of axis) if (!table.has(module)) failures.push(`${module}: in the run, no row in the table -- add one`);
@@ -163,5 +188,13 @@ const total = [...axis.values()].reduce((a, r) => a + (r.real ?? 0), 0);
 console.log(`  ${axis.size} module(s), ${total} real pass(es)`);
 for (const n of notes) console.log(`  up        ${n}`);
 for (const f of failures) console.log(`  DOWN      ${f}`);
-console.log(failures.length === 0 ? "  no module passes fewer of node's tests than its row" : `  ${failures.length} failure(s)`);
+console.log(incomplete.length ? `  ${incomplete.length} module(s) not measured` : failures.length === 0 ? "  no module passes fewer of node's tests than its row" : `  ${failures.length} failure(s)`);
+if (incomplete.length) {
+  if (runScratch) console.log(`  kept axis artifacts: ${runScratch}`);
+  completedFailures += failures.length;
+  const failure = incomplete.find(error => checkFailurePolicy(error, completedFailures).disposition === "operator-hold") ?? incomplete.find(error => checkFailurePolicy(error, completedFailures).disposition !== "verdict") ?? incomplete[0];
+  process.exit(reportCheckFailure(failure, process.env, completedFailures));
+}
+if (failures.length === 0 && runScratch) rmSync(runScratch, { recursive: true, force: true });
+else if (runScratch) console.log(`  kept axis artifacts: ${runScratch}`);
 process.exit(failures.length === 0 ? 0 : 1);

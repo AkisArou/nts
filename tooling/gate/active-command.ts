@@ -133,21 +133,26 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
         const text=(standard?stdoutDecoder:stderrDecoder).write(part);
         if(standard)stdout+=text;else stderr+=text;
         out+=text;
+        if(part.length)options.onActivity?.({cpu,elapsedMs:last-began,pid:child.pid!});
       }catch(error){broken(error);}
     };
     child.stdout.on("data",part=>output(part,true));
     child.stderr.on("data",part=>output(part,false));
     child.on("error",caught=>{error=caught;});
-    child.on("close",(status,signal)=>{
-      cancelActivity();
-      const stdoutTail=stdoutDecoder.end(),stderrTail=stderrDecoder.end();
-      stdout+=stdoutTail;stderr+=stderrTail;out+=stdoutTail+stderrTail;
-      // A helper can detach its stdio and outlive the leader without delaying
-      // close. The directly owned group must finish with its command.
+    const finishGroup=()=>{
       try{stop();}catch(cause){
         instrument=new ToolingInstrumentError("tooling-cleanup",`cannot finish command group for ${command}: ${String(cause)}`);
         publishToolingFailure(instrument,options.env);
       }
+    };
+    // Inherited pipes can keep close pending after the leader exits. Finish
+    // its owned group on exit, then retain close for draining captured output.
+    child.on("exit",finishGroup);
+    child.on("close",(status,signal)=>{
+      cancelActivity();
+      finishGroup();
+      const stdoutTail=stdoutDecoder.end(),stderrTail=stderrDecoder.end();
+      stdout+=stdoutTail;stderr+=stderrTail;out+=stdoutTail+stderrTail;
       if(instrument)reject(instrument);
       else resolve({status,signal,out,stdout,stderr,error,hung,runaway,elapsedMs:performance.now()-began});
     });
