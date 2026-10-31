@@ -1790,6 +1790,50 @@ export class ERR_TRAILING_JUNK_AFTER_STREAM_END extends NodeTypeError {
   }
 }
 
+// Node v26.13.0 lib/internal/errors.js:2015-2021. ZIP uses the shared Node
+// error constructors; its parser and serializers do not define local copies.
+export class ERR_ZIP_ARCHIVE_TOO_LARGE extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_ZIP_ARCHIVE_TOO_LARGE";
+  constructor(detail: string) { super(`ZIP archive structure exceeds the allowed size: ${detail}`); }
+}
+
+export class ERR_ZIP_ENTRY_CORRUPT extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_ZIP_ENTRY_CORRUPT";
+  constructor(detail: string) { super(`ZIP entry is corrupt: ${detail}`); }
+}
+
+export class ERR_ZIP_ENTRY_NOT_FOUND extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_ZIP_ENTRY_NOT_FOUND";
+  constructor(name: string) { super(`no such entry ${JSON.stringify(name)} in the archive`); }
+}
+
+export class ERR_ZIP_ENTRY_TOO_LARGE extends NodeRangeError {
+  override get ["constructor"](): unknown { return RangeError; }
+  override readonly code = "ERR_ZIP_ENTRY_TOO_LARGE";
+  constructor(detail: string) { super(`ZIP entry exceeds the allowed size: ${detail}`); }
+}
+
+export class ERR_ZIP_INVALID_ARCHIVE extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_ZIP_INVALID_ARCHIVE";
+  constructor(detail: string) { super(`invalid ZIP archive: ${detail}`); }
+}
+
+export class ERR_ZIP_NOT_WRITABLE extends NodeTypeError {
+  override get ["constructor"](): unknown { return TypeError; }
+  override readonly code = "ERR_ZIP_NOT_WRITABLE";
+  constructor() { super("this archive was not opened for writing"); }
+}
+
+export class ERR_ZIP_UNSUPPORTED_FEATURE extends NodeError {
+  override get ["constructor"](): unknown { return Error; }
+  override readonly code = "ERR_ZIP_UNSUPPORTED_FEATURE";
+  constructor(detail: string) { super(`unsupported ZIP feature: ${detail}`); }
+}
+
 /**
  * `hook.init must be a function` -- a bad callback given to `createHook`.
  *

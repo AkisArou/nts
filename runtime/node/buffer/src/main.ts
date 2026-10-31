@@ -382,9 +382,9 @@ export class Buffer extends Uint8Array {
   constructor(size: number);
   constructor(value: string, encoding?: string);
   constructor(array: ArrayLike<number>);
-  constructor(buffer: ArrayBuffer, byteOffset?: number, length?: number);
+  constructor(buffer: ArrayBuffer | SharedArrayBuffer, byteOffset?: number, length?: number);
   constructor(
-    value: number | string | ArrayBuffer | ArrayLike<number>,
+    value: number | string | ArrayBuffer | SharedArrayBuffer | ArrayLike<number>,
     encodingOrOffset?: string | number,
     length?: number,
   ) {
@@ -402,10 +402,15 @@ export class Buffer extends Uint8Array {
       writeIn(this, value, 0, size, encoding);
       return;
     }
-    if (value instanceof ArrayBuffer) {
+    if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
       if (typeof encodingOrOffset === "string") {
         throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
       }
+      // The inherited TS lib constructor fixes this subclass's store to
+      // ArrayBuffer, while Node's constructor also accepts a shared store.
+      // Keep that runtime value unchanged. The SharedArrayBuffer guard above
+      // remains refused and gated by an-instanceof-shared-array-buffer.
+      // @ts-expect-error inherited typed-array signature omits SharedArrayBuffer
       super(value, encodingOrOffset, length);
       return;
     }
@@ -464,7 +469,7 @@ export class Buffer extends Uint8Array {
     ignoredThirdArgument?: unknown,
   ): Buffer;
   static override from(
-    value: string | ArrayBuffer | ArrayLike<number> | Iterable<number> | Buffer,
+    value: string | ArrayBuffer | SharedArrayBuffer | ArrayLike<number> | Iterable<number> | Buffer,
     encodingOrOffset?: string | number,
     length?: number,
   ): Buffer;
@@ -488,7 +493,8 @@ export class Buffer extends Uint8Array {
     }
 
     if (value !== null && typeof value === "object") {
-      if (value instanceof ArrayBuffer) {
+      // Node v26.13.0 lib/buffer.js:355-357 accepts either backing-store kind.
+      if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
         // A view onto the same memory, not a copy: upstream shares the buffer
         // so that a `Buffer` over one sees later writes to it.
         const backing = value;

@@ -281,6 +281,73 @@ const codeNames = [
 ];
 
 let instantiationWarningEmitted = false;
+let zipExperimentalWarningEmitted = false;
+
+// Node v26.13.0 lib/zlib.js:1051-1110,1190-1198. The public facade warns on
+// use, preserves names/instanceof, and leaves the internal ZIP classes plain.
+function emitZipExperimentalWarning() {
+  if (zipExperimentalWarningEmitted) return;
+  zipExperimentalWarningEmitted = true;
+  process.emitWarning(
+    "The zlib ZIP archive API is an experimental feature and might change at any time",
+    "ExperimentalWarning",
+  );
+}
+
+function experimentalZipFunction(fn, thisArg) {
+  // Missing compiled exports stay missing, as for the legacy constructors.
+  if (fn === undefined) return undefined;
+  return function(...args) {
+    emitZipExperimentalWarning();
+    return Reflect.apply(fn, thisArg, args);
+  };
+}
+
+function experimentalZipProperty(value) {
+  return { __proto__: null, configurable: true, enumerable: true, value };
+}
+
+function zipProperties(exports) {
+  const RawEntry = exports.ZipEntry;
+  const RawFile = exports.ZipFile;
+  const RawBuffer = exports.ZipBuffer;
+  const Entry = RawEntry === undefined ? undefined : class ExperimentalZipEntry extends RawEntry {
+    static [Symbol.hasInstance](instance) { return instance instanceof RawEntry; }
+  };
+  const File = RawFile === undefined ? undefined : class ExperimentalZipFile extends RawFile {
+    static [Symbol.hasInstance](instance) { return instance instanceof RawFile; }
+  };
+  const Buffer = RawBuffer === undefined ? undefined : class ExperimentalZipBuffer extends RawBuffer {
+    static [Symbol.hasInstance](instance) { return instance instanceof RawBuffer; }
+    constructor(buffer) { emitZipExperimentalWarning(); super(buffer); }
+  };
+  for (const [Wrapper, Raw, factories] of [
+    [Entry, RawEntry, ["read", "create", "createSync", "createStream", "createSymlink"]],
+    [File, RawFile, ["open", "openSync"]],
+    [Buffer, RawBuffer, []],
+  ]) {
+    if (Wrapper === undefined) continue;
+    for (const name of factories) {
+      Object.defineProperty(Wrapper, name, {
+        __proto__: null,
+        configurable: true,
+        writable: true,
+        value: experimentalZipFunction(Raw[name], Raw),
+      });
+    }
+    Object.defineProperty(Wrapper, "name", { __proto__: null, value: Raw.name });
+  }
+  return {
+    ZipEntry: experimentalZipProperty(Entry),
+    ZipFile: experimentalZipProperty(File),
+    ZipBuffer: experimentalZipProperty(Buffer),
+    createZipArchive: experimentalZipProperty(experimentalZipFunction(exports.createZipArchive)),
+    createZipArchiveSync: experimentalZipProperty(experimentalZipFunction(exports.createZipArchiveSync)),
+    zipFiles: experimentalZipProperty(experimentalZipFunction(exports.zipFiles)),
+    getMaxZipContentSize: experimentalZipProperty(experimentalZipFunction(exports.getMaxZipContentSize)),
+    setMaxZipContentSize: experimentalZipProperty(experimentalZipFunction(exports.setMaxZipContentSize)),
+  };
+}
 
 function callableConstructor(Implementation, name) {
   // A compiled module may not publish this yet. Reaching through an absent
@@ -365,6 +432,7 @@ export function shape(exports) {
       configurable: false,
     });
   }
+  Object.defineProperties(zlib, zipProperties(exports));
   for (const [name, value] of Object.entries(constants)) {
     if (name.startsWith("BROTLI")) continue;
     Object.defineProperty(zlib, name, { value });

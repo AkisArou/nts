@@ -1,5 +1,6 @@
 // `node:zlib` compression surface, from node v26.13.0 `lib/zlib.js`.
-// The new ZIP archive surface is the second, separately reported pilot part.
+// ZIP's internal bodies are transcribed separately in ./zip/; shape.mjs owns
+// the public warning/constructor veneer alongside the legacy constructors.
 //
 // Compression is a C library — zlib, brotli, zstd — and what is here is
 // everything around it: the option validation, the flush semantics, the stream
@@ -1313,3 +1314,14 @@ export function crc32(input: ChecksumInput, initial = 0): number {
   initial += 0;
   return nts_crc32(asBytes(input, "data"), initial);
 }
+
+export {
+  ZipEntry,
+  ZipFile,
+  ZipBuffer,
+  createZipArchive,
+  createZipArchiveSync,
+  zipFiles,
+  getMaxZipContentSize,
+  setMaxZipContentSize,
+} from "./zip/index.ts";

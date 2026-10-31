@@ -13,6 +13,7 @@
 // takes a callback anyway.
 import "../internal/bindings.node.mjs";
 import "../stream/bindings.node.mjs";
+import "../fs/bindings.node.mjs";
 import zlib from "node:zlib";
 import { Buffer } from "node:buffer";
 

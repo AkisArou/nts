@@ -251,7 +251,7 @@ interface PreparedWriteStream {
 }
 
 function prepareDescriptor(
-  path: string | null,
+  path: string | null | undefined,
   suppliedDescriptor: number | StreamFileHandle | null | undefined,
   operations: StreamFSImplementation | undefined,
 ): {
@@ -284,7 +284,7 @@ function prepareDescriptor(
 }
 
 function prepareReadStream(
-  path: string | null,
+  path: string | null | undefined,
   options: FileStreamOptions,
 ): PreparedReadStream {
   if (options.signal !== undefined) {
@@ -373,7 +373,7 @@ export class ReadStream extends Readable {
   #operations: StreamFSImplementation | undefined;
   #pendingDestroy: PendingDestroy | undefined;
 
-  constructor(path: string | null, options?: FileStreamOptionsInput) {
+  constructor(path: string | null | undefined, options?: FileStreamOptionsInput) {
     const normalized = normalizeStreamOptions(options);
     const prepared = prepareReadStream(path, normalized);
     super({
@@ -953,7 +953,7 @@ function closeFileDescriptor(
   stream.fd = null;
 }
 
-export function createReadStream(path: string | null, options?: FileStreamOptionsInput): ReadStream {
+export function createReadStream(path: string | null | undefined, options?: FileStreamOptionsInput): ReadStream {
   return new ReadStream(path, options);
 }
 
