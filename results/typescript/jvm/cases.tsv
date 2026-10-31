@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":2,"backend":"jvm","commit":"fb20438eb6818523504fc64374f8f42b6521234e","compiler":"b5582fd0ea85ee65","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":2,"backend":"jvm","commit":"c69dfaaaead89c6e7498da4effa7720277778b49","compiler":"fd93b5ab01c26b4c","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/ambient/declare-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
@@ -347,6 +347,30 @@ tests/typescript/lifetimes/frame-throw-carried-object.ts	{"kind":"refused","diag
 tests/typescript/lifetimes/frame-throw-finally-retains.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"}]}
 tests/typescript/lifetimes/frame-yield-bounded-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/lifetimes/frame-yield-local-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-alias-assign-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-alias-destructured-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-await-array-continuation.ts	{"kind":"pass"}
+tests/typescript/lifetimes/in-place-await-string-continuation.ts	{"kind":"pass"}
+tests/typescript/lifetimes/in-place-callback-for-each-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-callback-map-observes-source.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-closure-array-reader.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-closure-string-reader.ts	{"kind":"pass"}
+tests/typescript/lifetimes/in-place-container-array-field.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-container-map-string.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-global-static-object.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-global-string-slot.ts	{"kind":"pass"}
+tests/typescript/lifetimes/in-place-hook-spread-getter-capture.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/in-place-hook-to-string-capture.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/in-place-iterator-object-successive-results.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-iterator-string-next-result.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/in-place-re-entry-nested-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/in-place-re-entry-string-conversion.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/lifetimes/in-place-return-chain-array-33-calls.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-return-chain-string-33-calls.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-throw-partial-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-throw-string-payload.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/lifetimes/in-place-yield-object-frame.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/lifetimes/in-place-yield-string-frame.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/lifetimes/move-alias-default-parameters.ts	{"kind":"pass"}
 tests/typescript/lifetimes/move-alias-destructured-before-consume.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/lifetimes/move-await-locals-after-consume.ts	{"kind":"pass"}
