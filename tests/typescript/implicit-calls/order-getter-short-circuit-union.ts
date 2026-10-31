@@ -13,14 +13,14 @@ class Gate implements GateView {
   readText(): string { state++; log.push(`get:${this.stored}:${state}`); return this.stored; }
   get text(): string { return this.readText(); }
 }
-class Text implements TextHook {
+class OrderTextValue implements TextHook {
   value: string;
   constructor(value: string) { this.value = value; }
   toString(): string { state += 10; log.push(`toString:${this.value}:${state}`); return `converted:${this.value}`; }
 }
 function render(gate: GateView, value: string | TextHook): string { return gate.text && String(value); }
 for (const text of ["", "a", "xy"]) {
-  const values: (string | TextHook)[] = [`converted:${text}`, new Text(text)];
+  const values: (string | TextHook)[] = [`converted:${text}`, new OrderTextValue(text)];
   for (const value of values) {
     log.length = 0; state = 0;
     const result = render(new Gate(text), value);

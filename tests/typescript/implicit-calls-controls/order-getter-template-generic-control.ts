@@ -7,14 +7,14 @@ interface TextHook { toString(): string; }
 interface Source { readonly item: TextHook; readItem(): TextHook; }
 const log: string[] = [];
 let state = 0;
-class Text implements TextHook {
+class OrderTextValue implements TextHook {
   value: number;
   constructor(value: number) { this.value = value; }
   toString(): string { state += 10; log.push(`toString:${this.value}:${state}`); return `v=${this.value}`; }
 }
 class Holder implements Source {
   value: number; stored: TextHook;
-  constructor(value: number) { this.value = value; this.stored = new Text(value); }
+  constructor(value: number) { this.value = value; this.stored = new OrderTextValue(value); }
   readItem(): TextHook { state++; log.push(`get:${this.value}:${state}`); return this.stored; }
   get item(): TextHook { return this.readItem(); }
 }
