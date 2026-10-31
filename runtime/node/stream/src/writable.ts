@@ -20,7 +20,7 @@
 // semantics are identical; every predicate in `utils.ts` reads the same
 // property names either way.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { normalizeEncodingSpelling, type Encoding } from "../../buffer/src/encodings.ts";
 import {
   AbortError,
@@ -599,7 +599,7 @@ export function writeToWritable(
         chunk = Buffer.from(chunk, encoding);
         encoding = "buffer";
       }
-    } else if (chunk instanceof Buffer) {
+    } else if (chunk instanceof FastBuffer) {
       encoding = "buffer";
     } else if (ArrayBuffer.isView(chunk)) {
       // Wrapped rather than copied: a view already is the bytes, and writing

@@ -18,7 +18,7 @@
 // length disagrees with its body desynchronises the connection: the next
 // response begins where the reader is still expecting bytes.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { captureRejectionSymbol } from "../../events/src/main.ts";
 import { Stream } from "../../stream/src/legacy.ts";
 import { Socket } from "../../net/src/main.ts";
@@ -1003,7 +1003,7 @@ export class OutgoingMessage<
     }
 
     const data =
-      typeof chunk === "string" ? chunk : chunk instanceof Buffer ? chunk : Buffer.from(chunk);
+      typeof chunk === "string" ? chunk : chunk instanceof FastBuffer ? chunk : Buffer.from(chunk);
     const buffer = typeof data === "string" ? Buffer.from(data, encodingName ?? "utf8") : data;
 
     if (buffer.length === 0) {

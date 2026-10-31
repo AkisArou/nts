@@ -18,7 +18,7 @@
 // The state is plain named fields rather than node's packed bitfield, for the
 // reason set out at the top of `writable.ts`.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import type { Encoding } from "../../buffer/src/encodings.ts";
 import { StringDecoder } from "../../string_decoder/src/main.ts";
 import { validateAbortSignal, validateObject } from "../../internal/validators.ts";
@@ -88,6 +88,14 @@ declare const process: {
 
 type ByteChunk = string | Buffer;
 
+// The two slice contracts have different receivers: Buffer preserves its
+// backing store while string returns text. Prove the receiver before calling
+// the honest Buffer overload, keeping the queue's slice operation unchanged.
+function sliceByteChunk(chunk: ByteChunk, start: number, end?: number): ByteChunk {
+  if (typeof chunk === "string") return chunk.slice(start, end);
+  return chunk.slice(start, end);
+}
+
 function byteChunkLength(chunk: unknown): number {
   if (typeof chunk === "string" || chunk instanceof Uint8Array) {
     return chunk.length;
@@ -97,7 +105,7 @@ function byteChunkLength(chunk: unknown): number {
 
 function byteChunkAt(chunks: readonly unknown[], index: number): ByteChunk {
   const chunk = chunks[index];
-  if (typeof chunk === "string" || chunk instanceof Buffer) return chunk;
+  if (typeof chunk === "string" || chunk instanceof FastBuffer) return chunk;
   throw new Error("readable byte buffer contains an invalid chunk");
 }
 
@@ -107,13 +115,13 @@ function stringChunkAt(chunks: readonly unknown[], index: number): string {
   // `unshift()` may put bytes in front of already-decoded strings. Node's
   // buffer-list concatenation stringifies that one byte chunk when it is
   // consumed; spelling it out keeps the mixed representation typed.
-  if (chunk instanceof Buffer) return chunk.toString();
+  if (chunk instanceof FastBuffer) return chunk.toString();
   throw new Error("decoded readable buffer contains a non-string chunk");
 }
 
 function bufferChunkAt(chunks: readonly unknown[], index: number): Buffer {
   const chunk = chunks[index];
-  if (chunk instanceof Buffer) return chunk;
+  if (chunk instanceof FastBuffer) return chunk;
   throw new Error("binary readable buffer contains a non-buffer chunk");
 }
 
@@ -1297,7 +1305,7 @@ function addChunkUnshiftByteMode(
       return false;
     }
     chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
-  } else if (chunk !== undefined && !(chunk instanceof Buffer)) {
+  } else if (chunk !== undefined && !(chunk instanceof FastBuffer)) {
     errorOrDestroy(
       stream,
       new ERR_INVALID_ARG_TYPE("chunk", ["string", "Buffer", "TypedArray", "DataView"], chunk),
@@ -1354,7 +1362,7 @@ function addChunkPushByteMode(
       chunk = Buffer.from(chunk, encoding);
       encoding = "";
     }
-  } else if (chunk instanceof Buffer) {
+  } else if (chunk instanceof FastBuffer) {
     encoding = "";
   } else if (ArrayBuffer.isView(chunk)) {
     if (!(chunk.buffer instanceof ArrayBuffer)) {
@@ -1605,8 +1613,8 @@ function fromList(n: number, state: ReadableState): unknown {
     const firstLength = first.length;
     if (n < firstLength) {
       // `slice` means the same thing for a Buffer and a string here.
-      ret = first.slice(0, n);
-      buf[idx] = first.slice(n);
+      ret = sliceByteChunk(first, 0, n);
+      buf[idx] = sliceByteChunk(first, n);
     } else if (n === firstLength) {
       ret = first;
       buf[idx++] = null;

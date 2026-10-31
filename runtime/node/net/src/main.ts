@@ -12,7 +12,7 @@
 // the stream integration, the timeouts, the address handling, the connection
 // events — is here.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { channel, tracingChannel } from "../../diagnostics_channel/src/main.ts";
 import { Duplex } from "../../stream/src/duplex.ts";
 import type { BufferedWrite } from "../../stream/src/writable.ts";
@@ -1568,7 +1568,7 @@ export class Socket extends Duplex {
 
   override _write(chunk: unknown, encoding: string, callback: (error?: unknown) => void): void {
     let buffer: Buffer;
-    if (chunk instanceof Buffer) {
+    if (chunk instanceof FastBuffer) {
       buffer = chunk;
     } else if (typeof chunk === "string") {
       buffer = Buffer.from(chunk, encoding);
@@ -1632,7 +1632,7 @@ export class Socket extends Duplex {
     let totalLength = 0;
     for (const entry of chunks) {
       let buffer: Buffer;
-      if (entry.chunk instanceof Buffer) {
+      if (entry.chunk instanceof FastBuffer) {
         buffer = entry.chunk;
       } else if (typeof entry.chunk === "string") {
         buffer = Buffer.from(entry.chunk, entry.encoding);

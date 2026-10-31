@@ -11,7 +11,7 @@
 // is which; here those decisions are the functions below `createPrivateKey`,
 // and `keys.c` does only what OpenSSL must.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import {
   ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS,
   ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING,
@@ -465,12 +465,12 @@ function exportRaw(key: AsymmetricKeyObject, privateKey: boolean, compressed: bo
     if (type === "ec" && privateKey) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to export EC private key");
     throw new ERR_CRYPTO_OPERATION_FAILED(privateKey ? "Failed to get raw private key" : "Failed to get raw public key");
   }
-  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+  return new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
 }
 
 /** PEM is text and DER is bytes, as node's `ToV8Value` returns them. */
 function encoded(bytes: Uint8Array, format: number): Buffer | string {
-  const buffer = new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+  const buffer = new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
   return format === KeyFormat.PEM ? buffer.toString("utf8") : buffer;
 }
 
@@ -543,7 +543,7 @@ function exportSeed(key: AsymmetricKeyObject): Buffer {
   if (!hasSeed(asymmetricKeyTypeOfKey(key) ?? "")) throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS_BINDING();
   const bytes = nts_crypto_key_export_seed(handleOf(key).native);
   if (bytes === null) throw new ERR_CRYPTO_OPERATION_FAILED("Failed to get raw seed");
-  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+  return new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
 }
 
 /**

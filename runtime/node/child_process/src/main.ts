@@ -40,7 +40,7 @@ import {
   ERR_OUT_OF_RANGE,
   ERR_UNKNOWN_SIGNAL,
 } from "../../internal/errors.ts";
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { clearTimeout, setTimeout } from "../../timers/src/main.ts";
 import type { Timeout } from "../../timers/src/main.ts";
 import { addTrackedAbortListener, EventEmitter } from "../../events/src/main.ts";
@@ -1224,7 +1224,7 @@ function ownBuffers(value: unknown, seen = new Map<object, unknown>()): unknown 
   const object = value as object;
   if (seen.has(object)) return seen.get(object);
   if (value instanceof Uint8Array) {
-    if (value instanceof Buffer) return value;
+    if (value instanceof FastBuffer) return value;
     if (value.constructor?.name !== "Buffer") return value;
     const copy = Buffer.from(value);
     seen.set(object, copy);

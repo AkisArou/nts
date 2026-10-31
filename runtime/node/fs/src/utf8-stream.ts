@@ -265,7 +265,7 @@ export class Utf8Stream extends EventEmitter {
   #bufferBatches: Buffer[][] = [];
   #bufferBatchLengths: number[] = [];
   #writingUtf8 = "";
-  #writingBuffer = EMPTY_BUFFER;
+  #writingBuffer: Buffer = EMPTY_BUFFER;
   #writing = false;
   #ending = false;
   #reopening = false;
@@ -722,7 +722,7 @@ export class Utf8Stream extends EventEmitter {
       this.#writingBuffer = EMPTY_BUFFER;
     }
 
-    let buffer = EMPTY_BUFFER;
+    let buffer: Buffer = EMPTY_BUFFER;
     while (this.#bufferBatches.length > 0 || buffer.length > 0) {
       if (buffer.length === 0) {
         buffer = mergeBufferBatch(

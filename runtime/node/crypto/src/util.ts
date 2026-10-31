@@ -3,7 +3,7 @@
 // `lib/internal/crypto/util.js`, and the C++ each piece stands in for.
 
 import { byteLengthIn, decodeIn, writeIn } from "../../buffer/src/encodings.ts";
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { normalizeEncodingName } from "../../buffer/src/encodings.ts";
 import type { Encoding } from "../../buffer/src/encodings.ts";
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from "../../internal/errors.ts";
@@ -31,7 +31,7 @@ export function bytesOf(source: ByteSource): Uint8Array {
 
 /** Bytes as a `Buffer` without copying: `Buffer.from(arrayBuffer)` in node. */
 export function asBuffer(bytes: Uint8Array): Buffer {
-  return new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+  return new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
 }
 
 /** Bytes as an `ArrayBuffer` of their own, copied only when they are a part of a larger one. */
@@ -129,7 +129,7 @@ export function parseEncoding(encoding: unknown, fallback: OutputEncoding): Outp
 
 /** Bytes as a caller asked for them: the bytes, or text in an encoding. */
 export function encodeOutput(bytes: Uint8Array, encoding: OutputEncoding): Buffer | string {
-  const buffer = new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
+  const buffer = new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength);
   return encoding === "buffer" ? buffer : buffer.toString(encoding);
 }
 

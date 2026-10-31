@@ -14,7 +14,7 @@
 // changes to one that awaits. Merging them would put an `await` in the hot
 // path, which turns every value into a microtask.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { FastBuffer } from "../../buffer/src/main.ts";
 import {
   aggregateTwoErrors,
   ERR_INVALID_ARG_TYPE,
@@ -78,7 +78,7 @@ export function from<T extends Readable>(
   // A string or a buffer is iterable, but iterating it would produce one
   // stream chunk per character or per byte, which is never what the caller
   // meant. It becomes a stream of exactly one chunk.
-  if (typeof iterable === "string" || iterable instanceof Buffer) {
+  if (typeof iterable === "string" || iterable instanceof FastBuffer) {
     return new Ctor({
       objectMode: true,
       ...opts,

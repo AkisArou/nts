@@ -17,7 +17,7 @@
 // to be usable incrementally — a live log, a protocol — has to ask, and
 // getting this wrong looks like a stream that never delivers.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { Transform } from "../../stream/src/main.ts";
 import { finished } from "../../stream/src/main.ts";
 import type { TransformOptions } from "../../stream/src/transform.ts";
@@ -1306,7 +1306,7 @@ export const createZstdDecompress = (o?: ZstdOptions) => new ZstdDecompress(o);
  * for anything adversarial.
  */
 export function crc32(input: ChecksumInput, initial = 0): number {
-  if (typeof input !== "string" && !(input instanceof Buffer) && !ArrayBuffer.isView(input)) {
+  if (typeof input !== "string" && !(input instanceof FastBuffer) && !ArrayBuffer.isView(input)) {
     throw new ERR_INVALID_ARG_TYPE("data", ["string", "Buffer", "TypedArray", "DataView"], input);
   }
   validateUint32(initial, "value");

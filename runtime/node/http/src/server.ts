@@ -11,7 +11,7 @@
 // body nobody read leaves bytes in the socket, and those bytes would be parsed
 // as the start of the next request.
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { Server as NetServer, Socket } from "../../net/src/main.ts";
 import type { ServerOptions as NetServerOptions, SocketOptions } from "../../net/src/main.ts";
 import type { EventName } from "../../events/src/main.ts";
@@ -801,7 +801,7 @@ export class Server extends NetServer {
 
     const onSocketData = (chunk: unknown): void => {
       let bytes: Buffer;
-      if (chunk instanceof Buffer) {
+      if (chunk instanceof FastBuffer) {
         bytes = chunk;
       } else if (typeof chunk === "string" || chunk instanceof Uint8Array) {
         bytes = Buffer.from(chunk);

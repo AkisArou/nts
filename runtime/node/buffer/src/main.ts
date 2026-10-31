@@ -189,10 +189,10 @@ function hasArrayLikeShape(value: object): value is UnknownArrayLike {
   return "length" in value;
 }
 
-function objectToBuffer(value: object): Buffer | undefined {
+function objectToBuffer(value: object): Buffer<ArrayBuffer> | undefined {
   if (ArrayBuffer.isView(value)) {
-    if (value instanceof DataView) return new Buffer(0);
-    if (!hasArrayLikeShape(value)) return new Buffer(0);
+    if (value instanceof DataView) return createBuffer(0);
+    if (!hasArrayLikeShape(value)) return createBuffer(0);
     return fromArrayLike(value);
   }
   if (hasArrayLikeShape(value)) {
@@ -208,10 +208,10 @@ function objectToBuffer(value: object): Buffer | undefined {
 }
 
 /** One byte per element, truncating each. Not the memory a view sits on. */
-function fromArrayLike(source: UnknownArrayLike): Buffer {
-  if (typeof source.length !== "number") return new Buffer(0);
+function fromArrayLike(source: UnknownArrayLike): Buffer<ArrayBuffer> {
+  if (typeof source.length !== "number") return createBuffer(0);
   const size = source.length;
-  const buf = new Buffer(size >= 0 ? size : 0);
+  const buf = createBuffer(size >= 0 ? size : 0);
   for (let i = 0; i < buf.length; i++) {
     // The compiled language has no Symbol.toPrimitive/valueOf hook. Keep the
     // JavaScript boundary on the same primitive-only conversion path as fill.
@@ -376,251 +376,25 @@ function sliceBounds(target: Buffer, start: unknown, end: unknown): { from: numb
   return { from, to };
 }
 
-export class Buffer extends Uint8Array {
-  static poolSize = 8192;
+export type Buffer<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> = FastBuffer<TArrayBuffer>;
 
-  constructor(size: number);
-  constructor(value: string, encoding?: string);
-  constructor(array: ArrayLike<number>);
-  constructor(buffer: ArrayBuffer | SharedArrayBuffer, byteOffset?: number, length?: number);
-  constructor(
-    value: number | string | ArrayBuffer | SharedArrayBuffer | ArrayLike<number>,
-    encodingOrOffset?: string | number,
-    length?: number,
-  ) {
-    if (typeof value === "number") {
-      if (typeof encodingOrOffset === "string") {
-        throw new ERR_INVALID_ARG_TYPE("string", "string", value);
-      }
-      super(checkSize(value));
-      return;
-    }
-    if (typeof value === "string") {
-      const encoding = checkEncoding(encodingOrOffset);
-      const size = byteLengthIn(value, encoding);
-      super(size);
-      writeIn(this, value, 0, size, encoding);
-      return;
-    }
-    if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
-      if (typeof encodingOrOffset === "string") {
-        throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
-      }
-      // The inherited TS lib constructor fixes this subclass's store to
-      // ArrayBuffer, while Node's constructor also accepts a shared store.
-      // Keep that runtime value unchanged. The SharedArrayBuffer guard above
-      // remains refused and gated by an-instanceof-shared-array-buffer.
-      // @ts-expect-error inherited typed-array signature omits SharedArrayBuffer
-      super(value, encodingOrOffset, length);
-      return;
-    }
-    super(value);
+// Node v26.13.0 lib/internal/buffer.js:962, with an explicit backing-only
+// constructor. Allocating and copying factories choose ArrayBuffer themselves.
+export class FastBuffer<TArrayBuffer extends ArrayBufferLike = ArrayBufferLike> extends Uint8Array<TArrayBuffer> {
+  constructor(buffer: TArrayBuffer, byteOffset?: number, length?: number) {
+    super(buffer, byteOffset, length);
   }
 
   /** Legacy spelling retained by Node as an alias for `buffer`. */
   get parent(): ArrayBufferLike | undefined {
-    if (!(this instanceof Buffer)) return undefined;
+    if (!(this instanceof FastBuffer)) return undefined;
     return this.buffer;
   }
 
   /** Legacy spelling retained by Node as an alias for `byteOffset`. */
   get offset(): number | undefined {
-    if (!(this instanceof Buffer)) return undefined;
+    if (!(this instanceof FastBuffer)) return undefined;
     return this.byteOffset;
-  }
-
-  // ------------------------------------------------------------- allocation
-
-  /** Zero-filled. Upstream `lib/buffer.js`. */
-  static alloc(size: number, fill?: string | number | Uint8Array, encoding?: string): Buffer {
-    const buf = new Buffer(checkSize(size));
-    if (fill !== undefined && size > 0) {
-      buf.fill(fill, 0, size, encoding);
-    }
-    return buf;
-  }
-
-  /**
-   * Not zero-filled.
-   *
-   * Node hands back memory from a pool without clearing it, so the contents are
-   * whatever was there. A `Uint8Array` is always zeroed, so ours is safe where
-   * node's is not — the name is kept because the API is the contract, and code
-   * that reads before writing is wrong either way.
-   */
-  static allocUnsafe(size: number): Buffer {
-    return new Buffer(checkSize(size));
-  }
-
-  static allocUnsafeSlow(size: number): Buffer {
-    return new Buffer(checkSize(size));
-  }
-
-  /**
-   * Static-side compatibility required by `extends Uint8Array`.
-   *
-   * Node ignores the extra arguments for array-like inputs; unlike
-   * `Uint8Array.from`, `Buffer.from` does not run a mapping callback. The
-   * parameters are therefore `unknown`, not a falsely advertised callback.
-   */
-  static override from<T>(
-    value: ArrayLike<T> | Iterable<T>,
-    ignoredForStaticCompatibility?: unknown,
-    ignoredThirdArgument?: unknown,
-  ): Buffer;
-  static override from(
-    value: string | ArrayBuffer | SharedArrayBuffer | ArrayLike<number> | Iterable<number> | Buffer,
-    encodingOrOffset?: string | number,
-    length?: number,
-  ): Buffer;
-  static override from(
-    value: unknown,
-    encodingOrOffset?: unknown,
-    length?: unknown,
-  ): Buffer {
-    if (typeof value === "string") {
-      if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "string") {
-        throw new ERR_INVALID_ARG_TYPE("encoding", "string", encodingOrOffset);
-      }
-      const encoding = checkEncoding(encodingOrOffset);
-      const size = byteLengthIn(value, encoding);
-      const buf = new Buffer(size);
-      const written = writeIn(buf, value, 0, size, encoding);
-      // Hex and base64 accept forgiving input. Their length calculation is an
-      // allocation bound; invalid characters or early padding may make the
-      // decoded value shorter than that bound.
-      return written === size ? buf : buf.subarray(0, written);
-    }
-
-    if (value !== null && typeof value === "object") {
-      // Node v26.13.0 lib/buffer.js:355-357 accepts either backing-store kind.
-      if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
-        // A view onto the same memory, not a copy: upstream shares the buffer
-        // so that a `Buffer` over one sees later writes to it.
-        const backing = value;
-        if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "number") {
-          throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
-        }
-        if (length !== undefined && typeof length !== "number") {
-          throw new ERR_INVALID_ARG_TYPE("length", "number", length);
-        }
-        const offset = encodingOrOffset ?? 0;
-        const count = length ?? backing.byteLength - offset;
-        if (offset > backing.byteLength) {
-          throw new ERR_BUFFER_OUT_OF_BOUNDS("offset");
-        }
-        if (count > backing.byteLength - offset) {
-          throw new ERR_BUFFER_OUT_OF_BOUNDS("length");
-        }
-        return new Buffer(backing, offset, count);
-      }
-
-      const fromObject = objectToBuffer(value);
-      if (fromObject !== undefined) {
-        return fromObject;
-      }
-    }
-
-    throw new ERR_INVALID_ARG_TYPE(
-      "first argument",
-      ["string", "Buffer", "ArrayBuffer", "Array", "Array-like Object"],
-      value,
-    );
-  }
-
-  static override of(...items: number[]): Buffer {
-    return Buffer.from(items);
-  }
-
-  /** Copy the raw bytes occupied by a typed-array element range. */
-  static copyBytesFrom(view: TypedArrayView, offset?: number, length?: number): Buffer;
-  static copyBytesFrom(view: unknown, offset?: unknown, length?: unknown): Buffer {
-    if (!isTypedArrayView(view)) {
-      throw new ERR_INVALID_ARG_TYPE("view", "TypedArray", view);
-    }
-    if (view.length === 0) return new Buffer(0);
-
-    let start = 0;
-    if (offset !== undefined) {
-      validateInteger(offset, "offset", 0);
-      if (offset >= view.length) return new Buffer(0);
-      start = offset;
-    }
-
-    let end = view.length;
-    if (length !== undefined) {
-      validateInteger(length, "length", 0);
-      end = Math.min(start + length, view.length);
-    }
-    if (end <= start) return new Buffer(0);
-
-    const byteOffset = view.byteOffset + start * view.BYTES_PER_ELEMENT;
-    const byteLength = (end - start) * view.BYTES_PER_ELEMENT;
-    return fromArrayLike(new Uint8Array(view.buffer, byteOffset, byteLength));
-  }
-
-  static concat(list: readonly Uint8Array[], totalLength?: number): Buffer;
-  static concat(list: unknown, totalLength?: unknown): Buffer {
-    checkBufferList(list);
-    if (totalLength !== undefined) {
-      validateInteger(totalLength, "length", 0, kMaxLength);
-    }
-    if (list.length === 0) {
-      return new Buffer(0);
-    }
-    let total = totalLength;
-    if (total === undefined) {
-      total = 0;
-      for (const item of list) {
-        total += item.length;
-      }
-    }
-    const out = Buffer.allocUnsafe(total);
-    let at = 0;
-    for (const item of list) {
-      if (at >= total) break;
-      // A list longer than `totalLength` is truncated, not an error: upstream
-      // treats the length as the size of the result.
-      const take = Math.min(item.length, total - at);
-      out.set(item.subarray(0, take), at);
-      at += take;
-    }
-    // A `totalLength` larger than the input leaves the tail zeroed.
-    return out;
-  }
-
-  /** Whether `toString` and `write` would accept this name. */
-  static isEncoding(encoding: string): encoding is Encoding;
-  static isEncoding(encoding: unknown): boolean {
-    return isEncodingName(encoding);
-  }
-
-  static isBuffer(value: unknown): value is Buffer {
-    return value instanceof Buffer;
-  }
-
-  static byteLength(value: unknown, encoding?: string): number {
-    if (typeof value === "string") {
-      return byteLengthIn(value, byteLengthEncoding(encoding));
-    }
-    if (ArrayBuffer.isView(value)) {
-      if (!(value.buffer instanceof ArrayBuffer)) {
-        throw new ERR_INVALID_ARG_TYPE("string", ["string", "Buffer", "ArrayBuffer"], value);
-      }
-      return value.byteLength;
-    }
-    if (value instanceof ArrayBuffer) {
-      return value.byteLength;
-    }
-    // Node names the parameter `string` even when the value is a buffer,
-    // because that is the argument's name in the signature.
-    throw new ERR_INVALID_ARG_TYPE("string", ["string", "Buffer", "ArrayBuffer"], value);
-  }
-
-  static compare(a: Uint8Array, b: Uint8Array): number {
-    checkBytes(a, "buf1");
-    checkBytes(b, "buf2");
-    return compareBytes(a, 0, a.length, b, 0, b.length);
   }
 
   // ---------------------------------------------------------------- reading
@@ -824,16 +598,18 @@ export class Buffer extends Uint8Array {
     return n;
   }
 
-  override subarray(start?: number, end?: number): Buffer {
+  override subarray(start?: number, end?: number): Buffer<TArrayBuffer> {
     // A view, not a copy — which is what `slice` means on a `Buffer` too, and
     // the difference from `Array.prototype.slice` that surprises people.
     const view = super.subarray(start, end);
-    return new Buffer(view.buffer, view.byteOffset, view.byteLength);
+    return new FastBuffer(view.buffer, view.byteOffset, view.byteLength);
   }
 
+  override slice(this: Buffer<ArrayBuffer>, start?: number, end?: number): Buffer<ArrayBuffer>;
+  override slice(start?: number, end?: number): Buffer<TArrayBuffer>;
   override slice(start?: number, end?: number): Buffer {
     const view = super.subarray(start, end);
-    return new Buffer(view.buffer, view.byteOffset, view.byteLength);
+    return new FastBuffer(view.buffer, view.byteOffset, view.byteLength);
   }
 
   override fill(
@@ -1485,6 +1261,244 @@ export class Buffer extends Uint8Array {
     return at + 8;
   }
 }
+
+/** Allocation dispatch used by the public legacy constructor facade. */
+export function createLegacyBuffer(value: unknown, encodingOrOffset?: unknown, length?: unknown): Buffer {
+  if (typeof value === "number") {
+    if (typeof encodingOrOffset === "string") {
+      throw new ERR_INVALID_ARG_TYPE("string", "string", value);
+    }
+    return Buffer.allocUnsafe(value);
+  }
+  if (typeof value === "string") {
+    const encoding = checkEncoding(encodingOrOffset);
+    const size = byteLengthIn(value, encoding);
+    const buffer = createBuffer(size);
+    writeIn(buffer, value, 0, size, encoding);
+    return buffer;
+  }
+  if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
+    if (typeof encodingOrOffset === "string") {
+      throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
+    }
+    if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "number") {
+      throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
+    }
+    if (length !== undefined && typeof length !== "number") {
+      throw new ERR_INVALID_ARG_TYPE("length", "number", length);
+    }
+    return new FastBuffer(value, encodingOrOffset, length);
+  }
+  if (value !== null && typeof value === "object" && hasArrayLikeShape(value)) {
+    return fromArrayLike(value);
+  }
+  return Buffer.from(value, encodingOrOffset, length);
+}
+
+/** Fresh zero-filled storage, as before the factory split. */
+function createBuffer(size: number): Buffer<ArrayBuffer> {
+  return new FastBuffer(new ArrayBuffer(size));
+}
+
+// ------------------------------------------------------------- allocation
+
+// Factories have the same nonconstructible method objects as before the split.
+// They own allocation; FastBuffer owns only an already-selected backing view.
+class BufferFactories {
+  static poolSize = 8192;
+
+  /** Zero-filled. Upstream `lib/buffer.js`. */
+  static alloc(size: number, fill?: string | number | Uint8Array, encoding?: string): Buffer<ArrayBuffer> {
+    const buf = createBuffer(checkSize(size));
+    if (fill !== undefined && size > 0) {
+      buf.fill(fill, 0, size, encoding);
+    }
+    return buf;
+  }
+
+  /**
+   * Unsafe allocation remains fresh in this architecture-only change.
+   *
+   * Node hands back memory from a pool without clearing it, so the contents are
+   * whatever was there. A `Uint8Array` is always zeroed, so ours is safe where
+   * node's is not — the name is kept because the API is the contract, and code
+   * that reads before writing is wrong either way.
+   */
+  static allocUnsafe(size: number): Buffer<ArrayBuffer> {
+    return createBuffer(checkSize(size));
+  }
+
+  static allocUnsafeSlow(size: number): Buffer<ArrayBuffer> {
+    return createBuffer(checkSize(size));
+  }
+
+  static from<TArrayBuffer extends ArrayBufferLike>(
+    value: TArrayBuffer, byteOffset?: number, length?: number,
+  ): Buffer<TArrayBuffer>;
+  static from(
+    value: string | ArrayLike<number> | Iterable<number>, encoding?: string,
+  ): Buffer<ArrayBuffer>;
+  static from(
+    value: string | ArrayBuffer | SharedArrayBuffer | ArrayLike<number> | Iterable<number> | Buffer,
+    encodingOrOffset?: string | number,
+    length?: number,
+  ): Buffer;
+  static from(value: unknown, encodingOrOffset?: unknown, length?: unknown): Buffer;
+  static from(
+    value: unknown,
+    encodingOrOffset?: unknown,
+    length?: unknown,
+  ): Buffer {
+    if (typeof value === "string") {
+      if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "string") {
+        throw new ERR_INVALID_ARG_TYPE("encoding", "string", encodingOrOffset);
+      }
+      const encoding = checkEncoding(encodingOrOffset);
+      const size = byteLengthIn(value, encoding);
+      const buf = createBuffer(size);
+      const written = writeIn(buf, value, 0, size, encoding);
+      // Hex and base64 accept forgiving input. Their length calculation is an
+      // allocation bound; invalid characters or early padding may make the
+      // decoded value shorter than that bound.
+      return written === size ? buf : buf.subarray(0, written);
+    }
+
+    if (value !== null && typeof value === "object") {
+      // Node v26.13.0 lib/buffer.js:355-357 accepts either backing-store kind.
+      if (value instanceof ArrayBuffer || value instanceof SharedArrayBuffer) {
+        // A view onto the same memory, not a copy: upstream shares the buffer
+        // so that a `Buffer` over one sees later writes to it.
+        const backing = value;
+        if (encodingOrOffset !== undefined && typeof encodingOrOffset !== "number") {
+          throw new ERR_INVALID_ARG_TYPE("offset", "number", encodingOrOffset);
+        }
+        if (length !== undefined && typeof length !== "number") {
+          throw new ERR_INVALID_ARG_TYPE("length", "number", length);
+        }
+        const offset = encodingOrOffset ?? 0;
+        const count = length ?? backing.byteLength - offset;
+        if (offset > backing.byteLength) {
+          throw new ERR_BUFFER_OUT_OF_BOUNDS("offset");
+        }
+        if (count > backing.byteLength - offset) {
+          throw new ERR_BUFFER_OUT_OF_BOUNDS("length");
+        }
+        return new FastBuffer(backing, offset, count);
+      }
+
+      const fromObject = objectToBuffer(value);
+      if (fromObject !== undefined) {
+        return fromObject;
+      }
+    }
+
+    throw new ERR_INVALID_ARG_TYPE(
+      "first argument",
+      ["string", "Buffer", "ArrayBuffer", "Array", "Array-like Object"],
+      value,
+    );
+  }
+
+  static of(...items: number[]): Buffer<ArrayBuffer> {
+    return Buffer.from(items);
+  }
+
+  /** Copy the raw bytes occupied by a typed-array element range. */
+  static copyBytesFrom(view: TypedArrayView, offset?: number, length?: number): Buffer<ArrayBuffer>;
+  static copyBytesFrom(view: unknown, offset?: unknown, length?: unknown): Buffer<ArrayBuffer> {
+    if (!isTypedArrayView(view)) {
+      throw new ERR_INVALID_ARG_TYPE("view", "TypedArray", view);
+    }
+    if (view.length === 0) return createBuffer(0);
+
+    let start = 0;
+    if (offset !== undefined) {
+      validateInteger(offset, "offset", 0);
+      if (offset >= view.length) return createBuffer(0);
+      start = offset;
+    }
+
+    let end = view.length;
+    if (length !== undefined) {
+      validateInteger(length, "length", 0);
+      end = Math.min(start + length, view.length);
+    }
+    if (end <= start) return createBuffer(0);
+
+    const byteOffset = view.byteOffset + start * view.BYTES_PER_ELEMENT;
+    const byteLength = (end - start) * view.BYTES_PER_ELEMENT;
+    return fromArrayLike(new Uint8Array(view.buffer, byteOffset, byteLength));
+  }
+
+  static concat(list: readonly Uint8Array[], totalLength?: number): Buffer<ArrayBuffer>;
+  static concat(list: unknown, totalLength?: unknown): Buffer<ArrayBuffer> {
+    checkBufferList(list);
+    if (totalLength !== undefined) {
+      validateInteger(totalLength, "length", 0, kMaxLength);
+    }
+    if (list.length === 0) {
+      return createBuffer(0);
+    }
+    let total = totalLength;
+    if (total === undefined) {
+      total = 0;
+      for (const item of list) {
+        total += item.length;
+      }
+    }
+    const out = Buffer.allocUnsafe(total);
+    let at = 0;
+    for (const item of list) {
+      if (at >= total) break;
+      // A list longer than `totalLength` is truncated, not an error: upstream
+      // treats the length as the size of the result.
+      const take = Math.min(item.length, total - at);
+      out.set(item.subarray(0, take), at);
+      at += take;
+    }
+    // A `totalLength` larger than the input leaves the tail zeroed.
+    return out;
+  }
+
+  /** Whether `toString` and `write` would accept this name. */
+  static isEncoding(encoding: string): encoding is Encoding;
+  static isEncoding(encoding: unknown): boolean {
+    return isEncodingName(encoding);
+  }
+
+  static isBuffer(value: unknown): value is Buffer {
+    return value instanceof FastBuffer;
+  }
+
+  static byteLength(value: unknown, encoding?: string): number {
+    if (typeof value === "string") {
+      return byteLengthIn(value, byteLengthEncoding(encoding));
+    }
+    if (ArrayBuffer.isView(value)) {
+      if (!(value.buffer instanceof ArrayBuffer)) {
+        throw new ERR_INVALID_ARG_TYPE("string", ["string", "Buffer", "ArrayBuffer"], value);
+      }
+      return value.byteLength;
+    }
+    if (value instanceof ArrayBuffer) {
+      return value.byteLength;
+    }
+    // Node names the parameter `string` even when the value is a buffer,
+    // because that is the argument's name in the signature.
+    throw new ERR_INVALID_ARG_TYPE("string", ["string", "Buffer", "ArrayBuffer"], value);
+  }
+
+  static compare(a: Uint8Array, b: Uint8Array): number {
+    checkBytes(a, "buf1");
+    checkBytes(b, "buf2");
+    return compareBytes(a, 0, a.length, b, 0, b.length);
+  }
+
+
+}
+
+export const Buffer = BufferFactories;
+
 
 const scratchFloat = new Float32Array(1);
 const scratchBytes = new Uint8Array(scratchFloat.buffer);

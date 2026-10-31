@@ -8,7 +8,7 @@ export function shape(exports) {
   // this insertion order, so spell out the public surface instead of leaking
   // the namespace object's unrelated ordering into `Object.keys(buffer)`.
   const mod = {
-    Buffer: exports.Buffer,
+    Buffer: legacyConstructor(exports),
     SlowBuffer: exports.SlowBuffer,
     transcode: exports.transcode,
     isUtf8: exports.isUtf8,
@@ -84,4 +84,48 @@ export function installGlobals(underTest) {
   globalThis.File = underTest.File;
   globalThis.atob = underTest.atob;
   globalThis.btoa = underTest.btoa;
+}
+
+/** Preserve the legacy constructor's host object shape over typed factories. */
+function legacyConstructor(exports) {
+  const factories = exports.Buffer;
+  if (factories === undefined) return undefined;
+  function Buffer(value, encodingOrOffset, length) {
+    // Calling the previous class without new threw. Pooling and the public
+    // legacy callable API are separate conformance work from this refactor.
+    if (new.target === undefined) {
+      throw new TypeError("Class constructor Buffer cannot be invoked without 'new'");
+    }
+    if (exports.createLegacyBuffer === undefined) {
+      throw new Error("the legacy Buffer constructor was not compiled");
+    }
+    const result = exports.createLegacyBuffer(value, encodingOrOffset, length);
+    // Retain the existing typed class inheritance behavior in the pure split.
+    if (new.target !== Buffer) Object.setPrototypeOf(result, new.target.prototype);
+    return result;
+  }
+  Object.setPrototypeOf(Buffer, Uint8Array);
+  if (exports.FastBuffer !== undefined) {
+    Buffer.prototype = exports.FastBuffer.prototype;
+    exports.FastBuffer.prototype.constructor = Buffer;
+    Object.defineProperty(Buffer, Symbol.species, {
+      get() { return this === Buffer ? exports.FastBuffer : this; },
+      configurable: true,
+    });
+  }
+  for (const name of Object.getOwnPropertyNames(factories)) {
+    if (name === "name" || name === "length" || name === "prototype") continue;
+    const descriptor = Object.getOwnPropertyDescriptor(factories, name);
+    if (typeof descriptor.value === "function") {
+      Object.defineProperty(Buffer, name, { ...descriptor, enumerable: true });
+    } else {
+      Object.defineProperty(Buffer, name, {
+        get: () => factories[name],
+        set: (value) => { factories[name] = value; },
+        enumerable: true,
+        configurable: true,
+      });
+    }
+  }
+  return Buffer;
 }

@@ -25,7 +25,7 @@ import {
   normalizeEncoding,
   type Encoding,
 } from "../../buffer/src/encodings.ts";
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import { fileURLToPath } from "../../url/src/fileurl.ts";
 import { URL } from "../../url/src/url.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
@@ -327,9 +327,9 @@ export function getReadFileBuffer(
   }
   if (view === undefined) return undefined;
 
-  const buffer = view instanceof Buffer
+  const buffer = view instanceof FastBuffer
     ? view
-    : new Buffer(view.buffer, view.byteOffset, view.byteLength);
+    : new FastBuffer(view.buffer, view.byteOffset, view.byteLength);
   if (size > buffer.byteLength) {
     throw new ERR_INVALID_ARG_VALUE(
       readFileBufferByteLengthName(options),

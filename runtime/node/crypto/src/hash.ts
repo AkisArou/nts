@@ -16,7 +16,7 @@
 // before either keeps its context until the process exits: this runtime has
 // no collection hook to free it from (`nts_crypto.h` says so at length).
 
-import { Buffer } from "../../buffer/src/main.ts";
+import { Buffer, FastBuffer } from "../../buffer/src/main.ts";
 import {
   ERR_CRYPTO_HASH_FINALIZED,
   ERR_CRYPTO_HASH_UPDATE_FAILED,
@@ -191,7 +191,7 @@ export class Hash extends Transform {
 
   override _flush(callback: TransformCallback): void {
     const bytes = this.#read();
-    this.push(new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength));
+    this.push(new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength));
     callback();
   }
 
@@ -274,7 +274,7 @@ export class Hmac extends Transform {
 
   override _flush(callback: TransformCallback): void {
     const bytes = this.#read();
-    this.push(new Buffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength));
+    this.push(new FastBuffer(bytes.buffer as ArrayBuffer, bytes.byteOffset, bytes.byteLength));
     callback();
   }
 
