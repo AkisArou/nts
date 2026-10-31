@@ -34,6 +34,8 @@
 //                     virtual-address cap: in build mode with
 //                     detect_stack_use_after_return, in check mode (C only) as
 //                     `NTS_SANITIZE=address`, a report stopping it by kind.
+//                     `// sanitizer: function` checks C function type compatibility
+//                     in build mode; only its stable defect kind is recorded.
 //     outcome.json    what it did, written by --record, compared by default
 //
 // **`// backend:` is for a defect only one backend has.** `build` is `emit-c`
@@ -210,12 +212,14 @@ function runBuild(dir, options = { rc: false, address: false }) {
 function buildAndRun(emit, out, options) {
   const printed = linkCommand(emit.stdout ?? "");
   if (!printed) return { category: "not-measured", nts: "no link command in the emit output" };
-  const tools = options.address ? { ...TOOLS, cc: "clang" } : TOOLS;
+  const tools = options.address || options.function ? { ...TOOLS, cc: "clang" } : TOOLS;
   // These flags enter the runtime-object cache key as well as the program
   // build: an unsanitized cached runtime cannot stand in for the ASan arm.
   const flags = options.address
     ? [...printed.filter((arg) => !/^-O/.test(arg)), "-O1", "-g", "-fsanitize=address", "-fno-inline", "-fno-omit-frame-pointer"]
-    : printed;
+    : options.function
+      ? [...printed.filter((arg) => !/^-O/.test(arg)), "-O1", "-g", "-fsanitize=function", "-fno-sanitize-recover=function", "-fno-inline"]
+      : printed;
   let args;
   try {
     ({ args } = withCachedObjects(flags, out, tools));
@@ -241,6 +245,9 @@ function buildAndRun(emit, out, options) {
   if (ran.error?.code === "ETIMEDOUT" || ran.signal === "SIGTERM") return { category: "not-measured", nts: "the program timed out" };
   const addressError = /ERROR: AddressSanitizer: ([a-z-]+)/.exec(ran.stderr ?? "");
   if (options.address && addressError) return { category: "aborted", nts: `AddressSanitizer: ${addressError[1]}` };
+  if (options.function && /runtime error: call to function .* through pointer to incorrect function type /.test(ran.stderr ?? "")) {
+    return { category: "aborted", nts: "FunctionSanitizer: incorrect-function-type" };
+  }
   const last = (ran.stderr ?? "").split("\n").filter((l) => l.startsWith("nts: "));
   const uncaught = last.find((l) => l.startsWith("nts: uncaught "));
   if (ran.signal || (ran.status !== 0 && !uncaught)) {
@@ -353,12 +360,24 @@ async function runCheck(dir, backend, options) {
   return checkOutcome(format, result.status, result.stdout, result.stderr);
 }
 
-function memoryOptions(name) {
-  const source = readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8");
+function fixtureOptions(source) {
+  const sanitizers = new Set([...source.matchAll(/^\/\/\s*sanitizer:\s*(address|function)\s*$/gm)].map((match) => match[1]));
   return {
     rc: /^\/\/\s*provider:\s*rc\s*$/m.test(source),
-    address: /^\/\/\s*sanitizer:\s*address\s*$/m.test(source),
+    address: sanitizers.size === 1 && sanitizers.has("address"),
+    function: sanitizers.size === 1 && sanitizers.has("function"),
+    sanitizerConflict: sanitizers.size > 1,
   };
+}
+
+function memoryOptions(name) {
+  return fixtureOptions(readFileSync(join(FIXTURES, name, "src/main.ts"), "utf8"));
+}
+
+function sanitizerHold(mode, options) {
+  if (options.sanitizerConflict) return { run: mode, category: "not-measured", nts: "conflicting fixture sanitizer directives", node: null };
+  if (mode === "check" && options.function) return { run: mode, category: "not-measured", nts: "the fixture-local function sanitizer uses build mode", node: null };
+  return null;
 }
 
 async function measure(name) {
@@ -368,6 +387,8 @@ async function measure(name) {
   // caller of the exported function exercises -- so it takes the sanitizer
   // too; on the C backend, where the check links a native program.
   if (mode === "check" && options.address && backendOf(name) !== null) return { run: mode, category: "not-measured", nts: "the address sanitizer checks the C backend only", node: null };
+  const sanitizerProblem = sanitizerHold(mode, options);
+  if (sanitizerProblem) return sanitizerProblem;
   const dir = materialise(name, join(FIXTURES, name, "src"), mode);
   if (mode === "check") return { run: "check", ...await runCheck(dir, backendOf(name), options), node: null };
   const nts = runBuild(dir, options);
@@ -401,6 +422,12 @@ function selfCheck() {
   ]) {
     if (backendIn(text) !== want) return `\`// backend:\` in ${JSON.stringify(text)} read as ${backendIn(text)}, not ${want}`;
   }
+  for (const tag of ["address", "function"]) {
+    const options = fixtureOptions(`// sanitizer: ${tag}\n`);
+    if (!options[tag] || options.sanitizerConflict || sanitizerHold("build", options)) return `single sanitizer ${tag} was not selected`;
+  }
+  const combined = fixtureOptions("// sanitizer: address\n// sanitizer: function\n");
+  if (combined.address || combined.function || sanitizerHold("build", combined)?.category !== "not-measured") return "conflicting sanitizers were allowed to measure";
   const dir = join(SCRATCH, "self");
   const probe = (text, compilerOptions) => {
     rmSync(dir, { recursive: true, force: true });
@@ -424,6 +451,18 @@ function selfCheck() {
     if (safe.category !== "completed" || safe.nts !== "exit 0") return `ASan control: ${JSON.stringify(safe)}`;
     const fault = asan("__attribute__((noinline)) static volatile int *returned(void) { volatile int value = 7; return &value; }\nint main(void) { return *returned(); }\n");
     if (fault.category !== "aborted" || fault.nts !== "AddressSanitizer: stack-use-after-return") return `ASan fault: ${JSON.stringify(fault)}`;
+  }
+  if (chosen.some((name) => memoryOptions(name).function)) {
+    const out = join(SCRATCH, "self-function");
+    mkdirSync(out, { recursive: true });
+    const instrument = (source) => {
+      writeFileSync(join(out, "program.c"), source);
+      return buildAndRun({ stdout: "cc -std=c11 program.c -o program\n" }, out, { rc: false, address: false, function: true });
+    };
+    const safe = instrument("static int answer(void *p) { (void)p; return 7; }\nint main(void) { int (*volatile call)(void *) = answer; return call(0) == 7 ? 0 : 1; }\n");
+    if (safe.category !== "completed" || safe.nts !== "exit 0") return `function sanitizer control: ${JSON.stringify(safe)}`;
+    const fault = instrument("static int answer(int *p) { (void)p; return 7; }\nint main(void) { int (*volatile call)(void *) = (int (*)(void *))answer; return call(0) == 7 ? 0 : 1; }\n");
+    if (fault.category !== "aborted" || fault.nts !== "FunctionSanitizer: incorrect-function-type") return `function sanitizer fault: ${JSON.stringify(fault)}`;
   }
   const control = probe('observe("sum", String(1 + 2));\ndone();\n');
   if (control.nts.category !== "completed" || control.nts.nts !== control.node || !/Observed: sum=3;/.test(control.node)) {
