@@ -64,7 +64,7 @@ node_modules
 # Node.js, cloned sparsely for the Node compatibility profile. Not vendored,
 # for the same reason as the others: it is somebody else's repository, and what
 # we want from it is `lib/`, which is 15MB of the 1.5GB.
-#   git clone --depth 1 --filter=blob:none --sparse --branch v24.20.0 \
+#   git clone --depth 1 --filter=blob:none --sparse --branch v26.13.0 \
 #     https://github.com/nodejs/node.git third_party/node
 #   cd third_party/node && git sparse-checkout set lib
 /third_party/node
