@@ -100,6 +100,54 @@ for (const name of names) {
 }
 // END JSON STRINGIFY.
 
+// BEGIN FLIGHT PLANNER.
+{
+  const name = "jetstream-flight-planner";
+  const module = modules.get(name);
+  if (module !== undefined) {
+    assert.ok(isRenderCase(module));
+    checked.add(name);
+
+    test(`${name}: complete FAA tables and all 100 original expectations are preserved`, () => {
+      for (const [file, binding, originalBinding, expected] of [
+        ["airways.ts", "export const _faaAirways: Record<string, Airway> =", "var _faaAirways =", "ff760ec8136153a3ccd752e877c6daeb3410ab81c90bc4e26153af3c3635540c"],
+        ["waypoints.ts", "export const _faaWaypoints: Record<string, WaypointData> =", "var _faaWaypoints =", "1f6f498992ff133d3401fd007ef79fbaf32160b161a7bc6039c06f1eadf0a92e"],
+        ["expectations.ts", "export const expectedFlightPlans: ExpectedFlightPlan[] =", "let expectedFlightPlans =", "aef02aa2021a8bb524fba6c73c9be87e4c77a1659154f947214c3a573fa37a4c"],
+      ]) {
+        const source = readFileSync(new URL(`${name}/${file}`, root), "utf8");
+        assert.ok(source.includes(binding));
+        const original = source.slice(source.indexOf("/*")).replace(binding, originalBinding);
+        assert.equal(sha256(original), expected);
+      }
+    });
+
+    test(`${name}: original validation and every calculated route and double match upstream`, async () => {
+      const result = module.render(1);
+      assert.ok(typeof result === "string");
+      assert.equal(result.length, 103018);
+      assert.equal(sha256(result), "19c05cce1a65de02b526b0ff2f25c1e211886b83ce2ab9361dc3c4c55e4d9179");
+      assert.equal(module.render(2), result);
+      const exports: unknown = await import(new URL(`${name}/case.ts`, root).href);
+      assert.ok(isRecord(exports));
+      assert.ok(typeof exports.details === "function");
+      const details: unknown = exports.details(1);
+      assert.ok(typeof details === "string");
+      assert.equal(details.length, 735677);
+      assert.equal(sha256(details), "64b56ceaa99c3b9cafce632dfe91593ad91eb44b5bc2a2661760ac34b66c3c11");
+      assert.deepEqual(exports.diagnostics, []);
+    });
+
+    test(`${name}: opaque count repeats all five passes over the original routes`, () => {
+      assert.equal(module.seed, 1);
+      assert.equal(module.render(0), "");
+      assert.equal(module.work(0), 0);
+      assert.equal(module.work(1), 4156792939);
+      assert.equal(module.work(2), 4168355168);
+    });
+  }
+}
+// END FLIGHT PLANNER.
+
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
