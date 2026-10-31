@@ -192,3 +192,8 @@ decided ([JVM and Wasm](../foundations/jvm-and-wasm.md#where-they-stand)).
   fallback (X-4; 10-28,
   [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
   Not built.
+- A program ships with a class archive that `nts build` writes from the
+  classes it emitted, without running the program. The program uses it on the
+  Java that built it and runs the same without it on any other (10-31,
+  [log](../records/notebooks/decisions-log.md#jvm-class-archive-10-31)).
+  Not built.

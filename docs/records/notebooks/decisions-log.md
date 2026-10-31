@@ -1133,3 +1133,21 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   - Each tree links the node inputs its own `.tool-versions` names, from
     directories keyed by version, so trees on both versions coexist during
     the move.
+
+## JVM class archive (10-31)
+
+- **The decision.** The user approved shipping a JVM program with a class
+  archive, on the coordinator's recommendation. `nts build` writes the archive
+  from the classes it emitted, without running the program. The program uses
+  it on the Java that built it and runs the same without it on any other.
+- **Why.** A runnable jar's first call pays to load and parse its classes. In
+  a probe on the four case-conversion rows, an archive cut nts's first-call
+  CPU time 5–6× on every row. That was enough to beat Java's own first call on
+  the `œ`, Greek and CJK rows; ASCII, Latin-1 and unchanged text still lost.
+- **How it lands.** As its own change with startup rows, after D4's
+  corrections; helper2 builds it and runtime3 reviews it as the JVM's owner.
+  The design note first settles three things:
+  - how the archive reaches the JVM, since a runnable jar's manifest cannot
+    name JVM options;
+  - what a different Java does with it, verified rather than assumed;
+  - whether the archive is reproducible byte for byte.
