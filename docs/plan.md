@@ -39,6 +39,17 @@ one page that changes as work goes; the designs it builds are in
   The JVM is maintained while its new work waits for phase 4; the Wasm backend
   is being rebuilt on Binaryen IR. Calling C is built in parallel with phase
   2's other work, by runtime, runtime2, tsrs and helper2 (phase 2, item 9).
+- **Node 26:** the node lane moves the node reference from Node 24.20.0 to
+  26.13.0, the LTS line, on one branch:
+  - one mechanical commit: the pin, node's sources, and the bundled
+    libraries' recipe and licence records;
+  - then `runtime/node`, module by module, each against node's own changes
+    between the two versions, checked by node 26's tests on both lanes;
+    `zlib` first, as the pilot that settles the procedure;
+  - no gate or benchmarks until the branch lands, through one gate. Each tree
+    links the node inputs its own `.tool-versions` names, so trees on both
+    versions coexist during the move
+    ([log](records/notebooks/decisions-log.md#node-26-10-31)).
 - **The machine:** one shared 32 GB box. At most two heavy jobs run at once,
   CPUs 4–5 are kept for measurement, and every build checks the disk floor
   first ([`../AGENTS.md`](../AGENTS.md)).
@@ -279,8 +290,7 @@ The designs and their build orders are in [`foundations/`](foundations).
    the first bound this way. TypeScript's `using` and `DisposableStack`, which
    C handles can use, follow from the compiler lane after its soundness
    classes. `node:ffi` is kept in mind for later, not scheduled
-   ([calling C](targets/calling-c.md#later-nodeffi)), and so is moving the
-   node reference to Node 26: it stays on Node 24 until then.
+   ([calling C](targets/calling-c.md#later-nodeffi)).
 
 ## Phase 3: conformance-driven development
 

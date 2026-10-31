@@ -1109,3 +1109,27 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   - nts's own binary embeds the same library files through the vendored
     checker, so their MDN attribution is owed in the top-level `NOTICE`
     before nts is distributed.
+
+## Node 26 (10-31)
+
+- **The move.** The user: "nodejs 26.13.0 is no[w] the LTS version. I think
+  it is time to 'migrate' to it." This ends the 10-30 deferral
+  ([Calling C](#calling-c-10-30)); `node:ffi` stays for later.
+- **The approach.** The user: "I think we should just mechanically 'update'
+  third_party deps and .tool-versions node version and do no check. I think
+  there is no point to gate or benchmark anything yet. I think there is
+  higher value to see how we are gonna update/migrate/enhance our
+  runtime/node code. The procedure and the 'migration' would be interesting.
+  Then we [can] only run the nodejs test suite."
+  - The node lane resumes for it, on one branch
+    ([plan](../../plan.md#now)). A mechanical commit moves the pin, node's
+    sources, and the bundled libraries' recipe and licence records.
+  - `runtime/node` then moves module by module, each against node's own
+    changes between the two versions. Node 26's tests on both lanes check
+    it.
+  - `zlib` is the pilot that settles the procedure, and the procedure is
+    reported to the user before the other modules follow.
+  - The branch lands once, through one gate, and the benchmarks run after.
+  - Each tree links the node inputs its own `.tool-versions` names, from
+    directories keyed by version, so trees on both versions coexist during
+    the move.
