@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-read-of-a-var-before-its-initializer-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-read-of-a-var-before-its-initializer-control/src/main.ts",
+      "signature": "8174e6505040e80ba111d01c7b1bad0bc5f186a84fa6bada48345fd17eaea457",
+      "keys": {
+        "c": "cda21187c9f6f0f2b3e54ac4b6461f14",
+        "jvm": "de73ffb77a44851c75d00292ded7af51",
+        "llvm": "0b459ecd509ffac9d04774761a0b72eb"
+      },
+      "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47",
+      "driver_sha256": "d0cd5134727fb9dac66f1ef389e6931936e1555333990848d57c9e5f6ac1e937",
+      "populations": {
+        "probe": {
+          "count": 29,
+          "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

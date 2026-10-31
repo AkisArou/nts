@@ -1,0 +1,9 @@
+{
+  "extends": "../../../tsconfig.fixtures.json",
+  "compilerOptions": {
+    "rootDir": "src"
+  },
+  "include": [
+    "src/main.ts"
+  ]
+}

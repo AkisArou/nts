@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-substr-call-on-a-string-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-substr-call-on-a-string-control/src/main.ts",
+      "signature": "6801ec384ee8ab612ab5563e66c17dfd5b6b9dbef04b7646962bbe10ea6daee5",
+      "keys": {
+        "c": "e9f5cca92167eb1987ce3f6e9e628d88",
+        "jvm": "646d7a59503ed8ac1768d273fed984d0",
+        "llvm": "370b6fbbec44a97559be0b5af4713eac"
+      },
+      "cases_sha256": "c5c74e8280f57a65910426e031e10409d49b8a1e5fb96fa88c95988d04ac7657",
+      "driver_sha256": "a608d39c2286cd12959d44c5ee7d9be3794c4f79fdb39f2677d7c21c5d619e39",
+      "populations": {
+        "probe": {
+          "count": 5,
+          "cases_sha256": "c5c74e8280f57a65910426e031e10409d49b8a1e5fb96fa88c95988d04ac7657"
+        }
+      },
+      "complete": true,
+      "count": 5
+    }
+  ]
+}

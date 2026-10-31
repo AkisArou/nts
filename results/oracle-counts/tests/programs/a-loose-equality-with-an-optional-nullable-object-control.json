@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-loose-equality-with-an-optional-nullable-object-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-loose-equality-with-an-optional-nullable-object-control/src/main.ts",
+      "signature": "8174e6505040e80ba111d01c7b1bad0bc5f186a84fa6bada48345fd17eaea457",
+      "keys": {
+        "c": "cda21187c9f6f0f2b3e54ac4b6461f14",
+        "jvm": "de73ffb77a44851c75d00292ded7af51",
+        "llvm": "0b459ecd509ffac9d04774761a0b72eb"
+      },
+      "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47",
+      "driver_sha256": "6dc15bca9d1507ff9264f364e29055fdd560a4a40034b96962d50af35ae08713",
+      "populations": {
+        "probe": {
+          "count": 29,
+          "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

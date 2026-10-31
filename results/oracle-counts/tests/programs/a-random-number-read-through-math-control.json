@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-random-number-read-through-math-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-random-number-read-through-math-control/src/main.ts",
+      "signature": "287d31017fec4fde1e0aa26c96a02ac2dfdcdf26d69f51d90edd00011437c415",
+      "keys": {
+        "c": "b5edf6bf06dc21b7fdcb37865dbee0f4",
+        "jvm": "5692fabaac60ad518fd62cc9a20f8ade",
+        "llvm": "edea36300a5b5adef7f0d264d2cc9edc"
+      },
+      "cases_sha256": "82bfdd793dfcbaccea370738fb45dd03287d57d4aac5fda212b941a4b0ca3150",
+      "driver_sha256": "ec99eb7a8c0b3c09e7b9305b63b7bddb9a51bd8725856361c0c93cf46cef0517",
+      "populations": {
+        "probe": {
+          "count": 1,
+          "cases_sha256": "82bfdd793dfcbaccea370738fb45dd03287d57d4aac5fda212b941a4b0ca3150"
+        }
+      },
+      "complete": true,
+      "count": 1
+    }
+  ]
+}

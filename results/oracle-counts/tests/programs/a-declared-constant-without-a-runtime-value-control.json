@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-declared-constant-without-a-runtime-value-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-declared-constant-without-a-runtime-value-control/src/main.ts",
+      "signature": "784d2a1fe1a7e8464a8bc432015b0b7f56618a4e4c20c845d1fcc7d810a6a017",
+      "keys": {
+        "c": "9554d8297236f5978a34509590cc4591",
+        "jvm": "6757149f34e2398ae640a264f5d1acaf",
+        "llvm": "2f6aacfea88cd7c27d39795834c1170c"
+      },
+      "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47",
+      "driver_sha256": "2fa5004c5817d7835e45598734dcfe642f8e1a3d04a4effab811fa1b909a7ba8",
+      "populations": {
+        "probe": {
+          "count": 29,
+          "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}
