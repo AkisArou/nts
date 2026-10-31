@@ -1,0 +1,71 @@
+[
+  {
+    "repeat": 0,
+    "command": [
+      "node",
+      "tooling/conformance/outcomes-check.ts",
+      "--record",
+      "a-base-constructor-after-the-declaration-search-cap",
+      "a-comparison-of-lone-surrogates",
+      "a-deep-assignment-pattern-keeps-its-getter-handler",
+      "a-flow-fixpoint-stopped-before-its-last-arrival",
+      "a-merge-retained-a-bound-from-only-one-predecessor",
+      "a-root-initializer-beyond-64-constructorless-bases",
+      "a-zero-sign-proof-stopped-before-its-last-use",
+      "an-unchecked-numeric-literal-parameter",
+      "code-point-at-a-lone-leading-surrogate",
+      "for-of-over-a-lone-surrogate",
+      "lone-surrogates-compare-as-one-character"
+    ],
+    "status": 0,
+    "seconds": 4.909816265106201,
+    "pin": "/home/akisarou/.cache/nts-pins/c69dfaaaead8/nts",
+    "sha256": "fd93b5ab01c26b4c220423bc993933a4ddf9e22f2e16436d3d46b919034f256a"
+  },
+  {
+    "repeat": 1,
+    "command": [
+      "node",
+      "tooling/conformance/outcomes-check.ts",
+      "--record",
+      "a-base-constructor-after-the-declaration-search-cap",
+      "a-comparison-of-lone-surrogates",
+      "a-deep-assignment-pattern-keeps-its-getter-handler",
+      "a-flow-fixpoint-stopped-before-its-last-arrival",
+      "a-merge-retained-a-bound-from-only-one-predecessor",
+      "a-root-initializer-beyond-64-constructorless-bases",
+      "a-zero-sign-proof-stopped-before-its-last-use",
+      "an-unchecked-numeric-literal-parameter",
+      "code-point-at-a-lone-leading-surrogate",
+      "for-of-over-a-lone-surrogate",
+      "lone-surrogates-compare-as-one-character"
+    ],
+    "status": 0,
+    "seconds": 4.505764961242676,
+    "pin": "/home/akisarou/.cache/nts-pins/c69dfaaaead8/nts",
+    "sha256": "fd93b5ab01c26b4c220423bc993933a4ddf9e22f2e16436d3d46b919034f256a"
+  },
+  {
+    "repeat": 2,
+    "command": [
+      "node",
+      "tooling/conformance/outcomes-check.ts",
+      "--record",
+      "a-base-constructor-after-the-declaration-search-cap",
+      "a-comparison-of-lone-surrogates",
+      "a-deep-assignment-pattern-keeps-its-getter-handler",
+      "a-flow-fixpoint-stopped-before-its-last-arrival",
+      "a-merge-retained-a-bound-from-only-one-predecessor",
+      "a-root-initializer-beyond-64-constructorless-bases",
+      "a-zero-sign-proof-stopped-before-its-last-use",
+      "an-unchecked-numeric-literal-parameter",
+      "code-point-at-a-lone-leading-surrogate",
+      "for-of-over-a-lone-surrogate",
+      "lone-surrogates-compare-as-one-character"
+    ],
+    "status": 0,
+    "seconds": 4.398522853851318,
+    "pin": "/home/akisarou/.cache/nts-pins/c69dfaaaead8/nts",
+    "sha256": "fd93b5ab01c26b4c220423bc993933a4ddf9e22f2e16436d3d46b919034f256a"
+  }
+]

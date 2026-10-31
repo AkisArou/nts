@@ -1,0 +1,16 @@
+  compiler /home/akisarou/.cache/nts-pins/c69dfaaaead8/nts (sha256:fd93b5ab01c26b4c)
+  self-checks: control agrees with node, refusal arm refused and its artefact run, a fixture's options reach the compiler
+  recorded      a-base-constructor-after-the-declaration-search-cap: agrees -- agrees: 58 compared, 58 expected, 0 disagreements
+  recorded      a-comparison-of-lone-surrogates: agrees -- exit 1; nts: uncaught Observed: \uDC00 > \uD800=true;  (node: exit 1; nts: uncaught Observed: \uDC00 > \uD800=true;)
+  recorded      a-deep-assignment-pattern-keeps-its-getter-handler: agrees -- agrees: 29 compared, 29 expected, 0 disagreements
+  recorded      a-flow-fixpoint-stopped-before-its-last-arrival: agrees -- agrees: 4 compared, 4 expected, 0 disagreements
+  recorded      a-merge-retained-a-bound-from-only-one-predecessor: agrees -- agrees: 66 compared, 66 expected, 0 disagreements
+  recorded      a-root-initializer-beyond-64-constructorless-bases: agrees -- agrees: 58 compared, 58 expected, 0 disagreements
+  recorded      a-zero-sign-proof-stopped-before-its-last-use: agrees -- agrees: 29 compared, 29 expected, 0 disagreements
+  recorded      an-unchecked-numeric-literal-parameter: agrees -- exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;  (node: exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;)
+  recorded      code-point-at-a-lone-leading-surrogate: agrees -- exit 1; nts: uncaught Observed: codePointAt=55296;  (node: exit 1; nts: uncaught Observed: codePointAt=55296;)
+  recorded      for-of-over-a-lone-surrogate: agrees -- exit 1; nts: uncaught Observed: lone=1:97,1:55297,1:98,1:55297;paired=1:97,2:55297,1:98,2:55297;  (node: exit 1; nts: uncaught Observed: lone=1:97,1:55297,1:98,1:55297;paired=1:97,2:55297,1:98,2:55297;)
+  recorded      lone-surrogates-compare-as-one-character: agrees -- exit 1; nts: uncaught Observed: equal=false;less=true;length=1;unit=55296;  (node: exit 1; nts: uncaught Observed: equal=false;less=true;length=1;unit=55296;)
+  integrity: clean over the recorded fixture(s)
+
+  11 fixture(s) recorded

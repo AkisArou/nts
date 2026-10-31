@@ -1,0 +1,562 @@
+{
+  "base": "7019d580143a6324ed34372878b519ccd960ebc0",
+  "pinSource": "c69dfaaaead89c6e7498da4effa7720277778b49",
+  "compilerInputsEqualToBase": true,
+  "threeByteExactRuns": {
+    "status": 0,
+    "runs": 3,
+    "guards": 11,
+    "allRecordsByteIdentical": true,
+    "officialStdoutByteIdentical": true,
+    "officialStderrByteIdentical": true,
+    "pinProvenance": {
+      "sha": "c69dfaaaead89c6e7498da4effa7720277778b49",
+      "subject": "results: retain native source clearance and generator-selection controls",
+      "clean": true,
+      "applied": null,
+      "built_at": "2026-10-31T07:16:28.238Z",
+      "binary_sha256": "fd93b5ab01c26b4c220423bc993933a4ddf9e22f2e16436d3d46b919034f256a"
+    },
+    "records": {
+      "a-base-constructor-after-the-declaration-search-cap": "a211ed0602291b5bfbf878a1b497f01164922c8fa7b0188b5bb69f187a1c1f21",
+      "a-comparison-of-lone-surrogates": "01876a276604573215f092afe5d9e82cfd5ac55cc33285626f3bdba030459e3f",
+      "a-deep-assignment-pattern-keeps-its-getter-handler": "24e69ad376de2a2a41689e4eee7759b3610b995718818a1635b9de47c8dd4979",
+      "a-flow-fixpoint-stopped-before-its-last-arrival": "8ca96ab7fc5ef119827c8438729a8f4b73cbc86f9b7b3d6cfefc7a801659078d",
+      "a-merge-retained-a-bound-from-only-one-predecessor": "c49f06f6b39a7dc2cba8b0ebe41dc4b0c8475f01cc367e26c1a2079044e34e81",
+      "a-root-initializer-beyond-64-constructorless-bases": "a211ed0602291b5bfbf878a1b497f01164922c8fa7b0188b5bb69f187a1c1f21",
+      "a-zero-sign-proof-stopped-before-its-last-use": "24e69ad376de2a2a41689e4eee7759b3610b995718818a1635b9de47c8dd4979",
+      "an-unchecked-numeric-literal-parameter": "c4833b62ceec827d82209207dc0a4c8eb9d1440cad3483a20381977f6f071a13",
+      "code-point-at-a-lone-leading-surrogate": "fe43e44abc062603953884a30d73bf59469ddf0933b8309292656a84883a2e82",
+      "for-of-over-a-lone-surrogate": "ec6fe53d88d4cc62a1dd3e49f7e1e2ccc73a3630f76483f8cbb14301ecf53c64",
+      "lone-surrogates-compare-as-one-character": "bd6325cc1b1671011f3c79e4d0f9a25bb3b74978a2afc4526d6407fc641c5b49"
+    }
+  },
+  "guards": [
+    {
+      "name": "a-base-constructor-after-the-declaration-search-cap",
+      "fix": "3e450957a09730e3631a72a0f5994b2ece9752eb",
+      "reason": "complete base-constructor search; landed in c5549ea5ac3d",
+      "originalRecord": {
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "checked 38 of 58 cases; the rest were not reached (a pool value in a loop bound will do that) | Error: 17 case(s) disagree between the compiled program and node",
+        "node": null,
+        "measured_with": "eb971f3223d27d0d",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "agrees",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "agrees",
+        "nts": "agrees: 58 compared, 58 expected, 0 disagreements",
+        "node": null,
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "c3d547ed7be2a8bab6e0d01719c0bdf871a51edf8859db520887bc48ff7afcee",
+      "originalRecordSha256": "b913d14e4594f18f3d49b66ca736813deaf08092d1b44ba6e8e4cd96d4dbd492"
+    },
+    {
+      "name": "a-comparison-of-lone-surrogates",
+      "fix": "15ab64f598932739dbefb7537ca41dc28a1e606c",
+      "reason": "native capture preserves lossless JavaScript string constants",
+      "originalRecord": {
+        "run": "build",
+        "category": "wrong-answer",
+        "nts": "exit 1; nts: uncaught Observed: \\uDC00 > \\uD800=false;",
+        "node": "exit 1; nts: uncaught Observed: \\uDC00 > \\uD800=true;",
+        "measured_with": "6aa52e0cc112812d",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "run": "build",
+        "category": "agrees",
+        "nts": "exit 1; nts: uncaught Observed: \\uDC00 > \\uD800=true;",
+        "node": "exit 1; nts: uncaught Observed: \\uDC00 > \\uD800=true;",
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "dea023f08e5afa216f591b3ee80ebbbde14c17927948fce76e42daa0fd63dc3b",
+      "originalRecordSha256": "6c9851ced92293bf30067bfd3e6aa6260454fa5f8087349a15686436247cc797"
+    },
+    {
+      "name": "a-deep-assignment-pattern-keeps-its-getter-handler",
+      "fix": "dab3fab88c0517792ad05495369ef39c1364666b",
+      "reason": "complete assignment-pattern ancestry retains getter effects",
+      "originalRecord": {
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "checked 29 cases across 1 function(s) | Error: 6 case(s) disagree between the compiled program and node",
+        "node": null,
+        "measured_with": "f23a30c1ca790cd2",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "agrees",
+        "nts": "agrees: 29 compared, 29 expected, 0 disagreements",
+        "node": null,
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "dabac5b22b9cab969b4e91721dccf0665efbe2df1175b6fe8ec7899def4aa73f",
+      "originalRecordSha256": "ded1771730de9900ef178d3c0e70b4b3c7ed5fb2950742c98c6f269604cc0c9e"
+    },
+    {
+      "name": "a-flow-fixpoint-stopped-before-its-last-arrival",
+      "fix": "b1e2d851748d1b06112c0bc95462d483545125cd",
+      "reason": "discard flow authority after an incomplete fixpoint",
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "disagrees",
+          "counts": {
+            "functions": 2,
+            "expected": 4,
+            "compared": 4,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 1,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 4,
+            "received": 4,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [
+            {
+              "compiled": "subject 1 4031000000000000",
+              "node": "subject 1 4032000000000000"
+            }
+          ],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "disagrees: 4 compared, 4 expected, 1 disagreements",
+        "node": null,
+        "measured_with": "6d9a82e23aa5420b",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "agrees",
+          "counts": {
+            "functions": 2,
+            "expected": 4,
+            "compared": 4,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 4,
+            "received": 4,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "agrees",
+        "nts": "agrees: 4 compared, 4 expected, 0 disagreements",
+        "node": null,
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "b48c0dfc55055d5d886db4b21622dfdc04800c2cfc5ad712d2fb0a63cc855899",
+      "originalRecordSha256": "93a8c5ca2ff671318d0a03c223faa3099ae64bad925366840421fdf928dfd507"
+    },
+    {
+      "name": "a-merge-retained-a-bound-from-only-one-predecessor",
+      "fix": "120cb245238de14e37477becbd9b8abd1ba1527c",
+      "reason": "join absent predecessor refinements with the global fact",
+      "originalRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "disagrees",
+          "counts": {
+            "functions": 2,
+            "expected": 66,
+            "compared": 66,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 1,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 66,
+            "received": 66,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [
+            {
+              "compiled": "subject 0 3ff0000000000000",
+              "node": "subject 0 nan"
+            }
+          ],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "disagrees: 66 compared, 66 expected, 1 disagreements",
+        "node": null,
+        "measured_with": "6d9a82e23aa5420b",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "agrees",
+          "counts": {
+            "functions": 2,
+            "expected": 66,
+            "compared": 66,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 66,
+            "received": 66,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "agrees",
+        "nts": "agrees: 66 compared, 66 expected, 0 disagreements",
+        "node": null,
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "62a7e51d653de9dded539856b2a1e9433291a988f90813f1a765f5080c7a76a1",
+      "originalRecordSha256": "22da083e55b8a810916d12bf8d8de624a46e29c20afe87535baab9b703af7ea2"
+    },
+    {
+      "name": "a-root-initializer-beyond-64-constructorless-bases",
+      "fix": "8319bcdd9b6cb5c432ad442c77c7feee7836384d",
+      "reason": "complete constructorless-ancestor initialization; landed in c5549ea5ac3d",
+      "originalRecord": {
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "checked 58 cases across 2 function(s) | Error: 28 case(s) disagree between the compiled program and node",
+        "node": null,
+        "measured_with": "292e0e7f372ff559",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "agrees",
+          "counts": {
+            "functions": 2,
+            "expected": 58,
+            "compared": 58,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 58,
+            "received": 58,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "agrees",
+        "nts": "agrees: 58 compared, 58 expected, 0 disagreements",
+        "node": null,
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "15f6a593bc5317a712c0222a618784e9bd7f6faa48713548fea93920225acd8f",
+      "originalRecordSha256": "42d7828f101a14fb28f5e98f7be0417d0c62a2dded07d536a415a39c985010b6"
+    },
+    {
+      "name": "a-zero-sign-proof-stopped-before-its-last-use",
+      "fix": "2138bcf45e54096d692c018396b5559681e6d578",
+      "reason": "complete negative-zero observation graph",
+      "originalRecord": {
+        "run": "check",
+        "category": "wrong-answer",
+        "nts": "checked 29 cases across 1 function(s) | Error: 7 case(s) disagree between the compiled program and node",
+        "node": null,
+        "measured_with": "4b6e7e9d86953848",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "version": 1,
+        "check": {
+          "version": 1,
+          "status": "agrees",
+          "counts": {
+            "functions": 1,
+            "expected": 29,
+            "compared": 29,
+            "unavailable": 0,
+            "runtime_declined": 0,
+            "timeouts": 0,
+            "approximated": 0,
+            "disagreements": 0,
+            "aborts": 0
+          },
+          "oracle": {
+            "expected": 29,
+            "received": 29,
+            "complete": true
+          },
+          "refusals": [],
+          "disagreements": [],
+          "aborts": [],
+          "error": null
+        },
+        "run": "check",
+        "category": "agrees",
+        "nts": "agrees: 29 compared, 29 expected, 0 disagreements",
+        "node": null,
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "26aaf82d349fdc6ddd5d63a5208d6e346913fb101f6a9efe18567d752d062192",
+      "originalRecordSha256": "1d9a046fc9961ebd1a629d9ceb5beb45e955ff19973f3b924b8f51ba351648b2"
+    },
+    {
+      "name": "an-unchecked-numeric-literal-parameter",
+      "fix": "c2bd26f8a9ed3568eb0cd5d3766ccfad53fe6534",
+      "reason": "derive values from proved arrivals, never literal annotations",
+      "originalRecord": {
+        "run": "build",
+        "category": "wrong-answer",
+        "nts": "exit 1; nts: uncaught Observed: claimed=65;control=1;claimed=65;control=3;claimed=65;control=65;claimed=65;control=66;claimed=65;control=2147483649;claimed=65;control=4294967297;claimed=65;control=9007199254740992;",
+        "node": "exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;",
+        "measured_with": "b1bd09048753072f",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "run": "build",
+        "category": "agrees",
+        "nts": "exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;",
+        "node": "exit 1; nts: uncaught Observed: claimed=1;control=1;claimed=3;control=3;claimed=65;control=65;claimed=66;control=66;claimed=2147483649;control=2147483649;claimed=4294967297;control=4294967297;claimed=9007199254740992;control=9007199254740992;",
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "b2470d197b77891b3f2b42faf67c2971f6ac8f7c8d96c6050cb49872c0a5eb1d",
+      "originalRecordSha256": "e0a14c66d83c4dfc573ba54db8b4e7aafeb5e0e1e06df8503cc02ef1c2b25cd9"
+    },
+    {
+      "name": "code-point-at-a-lone-leading-surrogate",
+      "fix": "15ab64f598932739dbefb7537ca41dc28a1e606c",
+      "reason": "native capture preserves lossless JavaScript string constants",
+      "originalRecord": {
+        "run": "build",
+        "category": "wrong-answer",
+        "nts": "exit 1; nts: uncaught Observed: codePointAt=65533;",
+        "node": "exit 1; nts: uncaught Observed: codePointAt=55296;",
+        "measured_with": "6aa52e0cc112812d",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "run": "build",
+        "category": "agrees",
+        "nts": "exit 1; nts: uncaught Observed: codePointAt=55296;",
+        "node": "exit 1; nts: uncaught Observed: codePointAt=55296;",
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "88c5f89a598982c335f93aba2948c4d71ef05cdcfd528617d234f1523136a0db",
+      "originalRecordSha256": "58a41610df16241fa81a39d4bd5fd639c0429b57f5115c903b871445db6bc129"
+    },
+    {
+      "name": "for-of-over-a-lone-surrogate",
+      "fix": "15ab64f598932739dbefb7537ca41dc28a1e606c",
+      "reason": "native capture preserves lossless JavaScript string constants",
+      "originalRecord": {
+        "run": "build",
+        "category": "wrong-answer",
+        "nts": "exit 1; nts: uncaught Observed: lone=1:97,1:65533,1:65533,1:65533,1:98,1:65533,1:65533,1:65533;paired=1:97,2:55297,1:98,2:55297;",
+        "node": "exit 1; nts: uncaught Observed: lone=1:97,1:55297,1:98,1:55297;paired=1:97,2:55297,1:98,2:55297;",
+        "measured_with": "db59442100b1632d",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "run": "build",
+        "category": "agrees",
+        "nts": "exit 1; nts: uncaught Observed: lone=1:97,1:55297,1:98,1:55297;paired=1:97,2:55297,1:98,2:55297;",
+        "node": "exit 1; nts: uncaught Observed: lone=1:97,1:55297,1:98,1:55297;paired=1:97,2:55297,1:98,2:55297;",
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "e2ad6151225f5026318d2ad70f6d5c5b8e26dbf54c81890a0db15e5af5cf6367",
+      "originalRecordSha256": "dc334730c3f1279ffe20c39fb0c7742675d2a7769986b1f010f663714ac7aea0"
+    },
+    {
+      "name": "lone-surrogates-compare-as-one-character",
+      "fix": "15ab64f598932739dbefb7537ca41dc28a1e606c",
+      "reason": "native capture preserves lossless JavaScript string constants",
+      "originalRecord": {
+        "run": "build",
+        "category": "wrong-answer",
+        "nts": "exit 1; nts: uncaught Observed: equal=true;less=false;length=3;unit=65533;",
+        "node": "exit 1; nts: uncaught Observed: equal=false;less=true;length=1;unit=55296;",
+        "measured_with": "7fe3bce3c6193951",
+        "source": "measured"
+      },
+      "afterRecord": {
+        "run": "build",
+        "category": "agrees",
+        "nts": "exit 1; nts: uncaught Observed: equal=false;less=true;length=1;unit=55296;",
+        "node": "exit 1; nts: uncaught Observed: equal=false;less=true;length=1;unit=55296;",
+        "measured_with": "fd93b5ab01c26b4c",
+        "source": "measured"
+      },
+      "sourceSha256": "291cf2951b08005c67ec82ececdc219b6dbb386a9bb468e5fa7b138640d3a898",
+      "originalRecordSha256": "f7744c871185db3112ad60da78d24227740df5ae938639da58182aee7e1ed96f"
+    }
+  ],
+  "sourceCommit": "898ac52c0ad7a1091e9f26fa1d066d70a0a25877",
+  "sourceProof": [
+    {
+      "name": "a-base-constructor-after-the-declaration-search-cap",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "a-comparison-of-lone-surrogates",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "a-deep-assignment-pattern-keeps-its-getter-handler",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "a-flow-fixpoint-stopped-before-its-last-arrival",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "a-merge-retained-a-bound-from-only-one-predecessor",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "a-root-initializer-beyond-64-constructorless-bases",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "a-zero-sign-proof-stopped-before-its-last-use",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "an-unchecked-numeric-literal-parameter",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "code-point-at-a-lone-leading-surrogate",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "for-of-over-a-lone-surrogate",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    },
+    {
+      "name": "lone-surrogates-compare-as-one-character",
+      "originalRecordMatchesExplicitBase": true,
+      "executableSourceUnchanged": true
+    }
+  ],
+  "pinToBasePaths": [
+    "docs/foundations/README.md",
+    "docs/foundations/unicode.md",
+    "docs/plan.md"
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "status": 0,
+  "runs": 3,
+  "guards": 11,
+  "allRecordsByteIdentical": true,
+  "officialStdoutByteIdentical": true,
+  "officialStderrByteIdentical": true,
+  "pinProvenance": {
+    "sha": "c69dfaaaead89c6e7498da4effa7720277778b49",
+    "subject": "results: retain native source clearance and generator-selection controls",
+    "clean": true,
+    "applied": null,
+    "built_at": "2026-10-31T07:16:28.238Z",
+    "binary_sha256": "fd93b5ab01c26b4c220423bc993933a4ddf9e22f2e16436d3d46b919034f256a"
+  },
+  "records": {
+    "a-base-constructor-after-the-declaration-search-cap": "a211ed0602291b5bfbf878a1b497f01164922c8fa7b0188b5bb69f187a1c1f21",
+    "a-comparison-of-lone-surrogates": "01876a276604573215f092afe5d9e82cfd5ac55cc33285626f3bdba030459e3f",
+    "a-deep-assignment-pattern-keeps-its-getter-handler": "24e69ad376de2a2a41689e4eee7759b3610b995718818a1635b9de47c8dd4979",
+    "a-flow-fixpoint-stopped-before-its-last-arrival": "8ca96ab7fc5ef119827c8438729a8f4b73cbc86f9b7b3d6cfefc7a801659078d",
+    "a-merge-retained-a-bound-from-only-one-predecessor": "c49f06f6b39a7dc2cba8b0ebe41dc4b0c8475f01cc367e26c1a2079044e34e81",
+    "a-root-initializer-beyond-64-constructorless-bases": "a211ed0602291b5bfbf878a1b497f01164922c8fa7b0188b5bb69f187a1c1f21",
+    "a-zero-sign-proof-stopped-before-its-last-use": "24e69ad376de2a2a41689e4eee7759b3610b995718818a1635b9de47c8dd4979",
+    "an-unchecked-numeric-literal-parameter": "c4833b62ceec827d82209207dc0a4c8eb9d1440cad3483a20381977f6f071a13",
+    "code-point-at-a-lone-leading-surrogate": "fe43e44abc062603953884a30d73bf59469ddf0933b8309292656a84883a2e82",
+    "for-of-over-a-lone-surrogate": "ec6fe53d88d4cc62a1dd3e49f7e1e2ccc73a3630f76483f8cbb14301ecf53c64",
+    "lone-surrogates-compare-as-one-character": "bd6325cc1b1671011f3c79e4d0f9a25bb3b74978a2afc4526d6407fc641c5b49"
+  }
+}
