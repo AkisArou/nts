@@ -3,9 +3,14 @@ import { createHash } from "node:crypto";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { isAbsolute, join } from "node:path";
 import { durableRecord } from "./durable-record.ts";
+import type {GateRetry} from "./gate-retry.ts";
 
 export type HeldEntry = { id: string; sha: string; [key: string]: unknown };
-export type HeldBatch = { version: 1; id: string; tip: string; generation: string; run: string; reason: string; entries: HeldEntry[] };
+export type HeldBatch = { version: 1; id: string; tip: string; generation: string; run: string; reason: string; entries: HeldEntry[]; retry?:GateRetry };
+function validRetry(retry:GateRetry|undefined,tip:string):boolean {
+  return retry===undefined||!!retry&&sha(retry.base)&&retry.tip===tip&&typeof retry.run==="string"&&isAbsolute(retry.run)
+    &&Array.isArray(retry.steps)&&retry.steps.length>0&&retry.steps.every(step=>typeof step==="string"&&/^[a-z0-9-]+$/.test(step))&&new Set(retry.steps).size===retry.steps.length;
+}
 export type HeldResolution = { version: 1; hold: string; entry: string; action: "retry" | "refuse"; note: string; phase: "prepared" | "applied" };
 export type HeldLanding = { batch: HeldBatch; entry: HeldEntry };
 const safe = (id: string) => /^[a-zA-Z0-9][a-zA-Z0-9._-]*$/.test(id);
@@ -20,7 +25,7 @@ function readBatch(path: string): HeldBatch {
   if (row.version !== 1 || typeof row.id !== "string" || !safe(row.id) || !sha(row.tip) || typeof row.generation!=="string" || !safe(row.generation)
       || typeof row.run !== "string" || !isAbsolute(row.run) || typeof row.reason !== "string" || !row.reason.trim()
       || !Array.isArray(row.entries) || !row.entries.length || row.entries.some(entry => !entry || typeof entry.id !== "string" || !safe(entry.id) || !sha(entry.sha))
-      || new Set(row.entries.map(entry => entry.id)).size !== row.entries.length) throw new Error(`invalid held batch: ${path}`);
+      || new Set(row.entries.map(entry => entry.id)).size !== row.entries.length||!validRetry(row.retry,row.tip)) throw new Error(`invalid held batch: ${path}`);
   return row;
 }
 function resolutionFile(state: string, hold: string, entry: string): string {
@@ -39,7 +44,7 @@ function readResolution(path: string): HeldResolution {
 export function holdLandings(state: string, input: Omit<HeldBatch, "version" | "id">): HeldBatch {
   if (!sha(input.tip) || !safe(input.generation) || !isAbsolute(input.run) || !input.reason.trim() || !input.entries.length
       || input.entries.some(entry => !safe(entry.id) || !sha(entry.sha))
-      || new Set(input.entries.map(entry => entry.id)).size !== input.entries.length) throw new Error("invalid held batch input");
+      || new Set(input.entries.map(entry => entry.id)).size !== input.entries.length||!validRetry(input.retry,input.tip)) throw new Error("invalid held batch input");
   const id = `${input.tip}-${createHash("sha256").update(input.run).digest("hex").slice(0, 16)}`;
   const row: HeldBatch = { version: 1, id, ...input };
   const path = join(batches(state), `${id}.json`);

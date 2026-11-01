@@ -5,6 +5,8 @@ import {durableRecord} from "./durable-record.ts";
 import {abandonFrozen} from "./train-abandon.ts";
 import {ensureTrain,markTrainRunning,retireTrainOwner,refreshController,trainOwner,withTrainLaunchLock} from "./train-service.ts";
 import { needsOperatorHold, retryInstruments } from "./instrument-retry.ts";
+import {gateComparisons,resourceOnly,pairedResources,type GateComparisons} from "./resource-comparison.ts";
+import {mergeGateRetry,type GateRetry} from "./gate-retry.ts";
 import { heldBatches, heldForEntry, heldActions, heldLandings, holdLandings, wasHeldGeneration, prepareHeldResolution, pendingHeldResolutions, appliedHeldResolution } from "./held-landings.ts";
 import { Admission } from "../gate/admission.ts";
 import {pruneRunTemporaries} from "../gate/run-temporary.ts";
@@ -446,7 +448,7 @@ function replayOnto(root: string, base: string, onto: string, sha: string, ownFr
 }
 
 /** A landing waiting for the lock: one file in QUEUE, named by its id. */
-type Entry = { durable?: true; unit?: string; id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks; author?: Author };
+type Entry = { durable?: true; unit?: string; id: string; sha: string; tree: string; pid: number; at: number; required?: RequiredChecks; author?: Author; gateRetry?:GateRetry };
 /** What became of a landing, written by whichever process gated it. */
 type Result = { state: "landed" | "red" | "conflict" | "unrun" | "regular" | "withdrawn" | "abandoned"; trainUnit?: string; trace?: string; message: string; landing?: string; main?: string; run?: string };
 
@@ -577,7 +579,7 @@ function recoverHeldDecisions():void {
     else if(withdrawRequested(entry))answer(entry,{state:"withdrawn",run:batch.run,message:`${entry.sha.slice(0,12)} withdrawn while held; ${batch.reason}`});
     else if(resolution.action==="retry") {
       if(typeof entry.tree!=="string"||!Number.isInteger(entry.pid)||!Number.isFinite(entry.at))throw new Error("held entry lost its complete queue snapshot");
-      durableRecord(join(QUEUE,`${entry.id}.json`),{...entry,durable:true});
+      durableRecord(join(QUEUE,`${entry.id}.json`),{...entry,durable:true,...(batch.retry?{gateRetry:batch.retry}:{})});
       rmSync(join(LEGACY_QUEUE,`${entry.id}.json`),{force:true});
       say(`operator requeued held ${entry.sha.slice(0,12)} (${entry.id}): ${resolution.note}`);
     } else answer(entry,{state:"abandoned",run:batch.run,message:`operator refused held ${entry.sha.slice(0,12)} (${entry.id}): ${resolution.note}; original measurement: ${batch.reason}`});
@@ -740,7 +742,7 @@ function status(fields: Record<string, unknown>): void {
 }
 
 /** How a gate of one commit ended: green, or why not. */
-type Gated = { ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun" | "held"; message: string; required?: RequiredChecks };
+type Gated = ({ ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun" | "held"; message: string; required?: RequiredChecks }) & {comparisons?:GateComparisons};
 
 /**
  * tests.mjs prunes obsolete test executables after PASS. Keep its current set:
@@ -778,7 +780,7 @@ function checkGateTarget(root: string, context: {commit:string;base:string;train
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
-function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed, shadow = false): Gated {
+function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed, shadow = false, retained?:GateRetry): Gated {
   const short = landing.slice(0, 12);
   const resource=GateResource.inherited(`${GATE_TREE}.lock`);
   checkGateTarget(root,{commit:landing,base,train:members,shadow});
@@ -837,12 +839,20 @@ function gate(root: string, base: string, landing: string, members: string[], re
       try{summary=JSON.parse(readFileSync(summaryPath,"utf8"));}catch(error){summaryError=String(error);}
       return { ...processResult, run: attemptRun, summary, summaryError };
     };
-    const first = invoke(run);
+    let first = invoke(run,retained?.steps);
     if (!first.summary || !Array.isArray(first.summary.steps)) return { ok: false, run, state: "held", message: `gate measurement has no complete readable summary (exit ${first.status}): ${first.summaryError??"missing step results"}; see ${join(run, "gate.log")}` };
     const observedCommit=String(first.summary.identities?.commit??"");
     if(observedCommit.length<7||!landing.startsWith(observedCommit))return {ok:false,run,state:"held",message:`gate measurement names ${observedCommit||"no commit"}, not frozen ${short}`};
     if (first.summary && !first.summary.requested) first.summary.requested = owed.steps === "all" ? first.summary.steps.map(row => row.name) : owed.steps;
     if (first.summary.environment?.canonical !== true) return {ok:false,run,state:"red",message:"non-canonical or unrecorded environment is not landing evidence"};
+    if(retained) {
+      try {
+        const previous=JSON.parse(readFileSync(join(retained.run,"summary.json"),"utf8"));
+        if(retained.base!==base||retained.tip!==landing||previous.identities?.commit!==landing)throw new Error("retained gate belongs to another frozen composition");
+        first=mergeGateRetry({run:retained.run,summary:previous,status:1},first,retained.steps);
+        say(`retained ${previous.steps.length-retained.steps.length} completed step(s) from ${retained.run}; freshly measured ${retained.steps.join(" ")}`);
+      } catch(error) {return {ok:false,run,state:"held",message:`held-step retry not measured: ${String(error)}`};}
+    }
     const retried = retryInstruments(first, (retry, attempt) => invoke(join(run, `attempt-${attempt}`), retry), rows => {
       const reason = rows.map(row => `${row.name}: ${row.reason ?? "instrument failure"}`).join("; ");
       const admission = new Admission({ report: say });
@@ -865,6 +875,8 @@ function gate(root: string, base: string, landing: string, members: string[], re
     }
     const held=(summary.steps??[]).filter(needsOperatorHold);
     if(held.length)return {ok:false,run,state:"held",message:held.map(row=>`${row.name}: ${row.reason??"measurement did not complete"}`).join("; ")};
+    let comparisons:GateComparisons;
+    try{comparisons=gateComparisons(run,summary);}catch(error){return {ok:false,run,state:"held",message:`record comparison not measured: ${String(error)}`};}
     const byName = new Map<string, string>((summary.steps ?? []).map((s: { name: string; verdict: string }) => [s.name, s.verdict]));
     const acceptedSkips = new Set<string>((summary.steps ?? [])
       .filter((s: { accepted?: boolean }) => s.accepted === true)
@@ -882,7 +894,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     if (gated.status !== 0 || gated.signal || gated.error || summary.verdict !== "green" || wrong.length > 0) {
       const failed = wrong.length ? wrong : steps;
       return {
-        ok: false, run, state: "red",
+        ok: false, run, state: "red",comparisons,
         message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || `process ${gated.status ?? gated.signal ?? gated.error?.message}; summary ${summary.verdict}`}; see ${run}`,
         required: { steps: failed, interop: failed.includes("interop") ? owed.interop : null },
       };
@@ -903,7 +915,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
     const accepted = acceptUnrun.length > 0 ? `; accepted unrun: ${acceptUnrun.join(", ")} -- ${because}` : "";
     const byPolicy = [...new Set(platformLines.map(line => line.slice(0, line.indexOf(":"))).filter(name => policyUnrun.includes(name)))];
     const policyNote = byPolicy.length ? `; unrun accepted by ${laneConfig.platforms_unrun_ok_policy ?? "lanes.json policy"}: ${byPolicy.join(", ")}` : "";
-    return { ok: true, run, checks: owed, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}${policyNote}` };
+    return { ok: true, run, checks: owed, comparisons, note: `gate ${summary.verdict} ${summary.started} ${Math.round(summary.wall_s)}s steps: ${steps.join(" ")}${accepted}${policyNote}` };
   } finally {
     if (existsSync(MARKER) && readFileSync(MARKER, "utf8").startsWith(`land ${short} `)) rmSync(MARKER);
   }
@@ -989,14 +1001,16 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
   }
   const started = Date.now();
   const required = members.reduce((checks, { entry }) => unionRequired(checks, entry.required ?? { steps: [], interop: null }), { steps: [], interop: null } as RequiredChecks);
-  const gated = gate(root, base, tip, shas, required);
+  const retained=members[0].entry.gateRetry;
+  const reuse=retained?.base===base&&retained.tip===tip&&members.every(member=>JSON.stringify(member.entry.gateRetry)===JSON.stringify(retained))?retained:undefined;
+  const gated = gate(root, base, tip, shas, required,undefined,false,reuse);
   const record = (verdict: string) => {
     mkdirSync(STATE, { recursive: true });
     appendFileSync(join(STATE, "trains.tsv"), `${new Date(started).toISOString()}\t${members.length}\t${verdict}\t${Math.round((Date.now() - started) / 1000)}\t${tip.slice(0, 12)}\t${shas.join(",")}\n`);
   };
-  const holdBatch=(measurement:{run:string;message:string}):TrainCycle=>{
+  const holdBatch=(measurement:{run:string;message:string},retry?:GateRetry):TrainCycle=>{
     admitted("held-batch journal",()=>{
-      try{return {value:holdLandings(STATE,{tip,generation:frozen.generation,run:measurement.run,reason:measurement.message,entries:members.map(member=>member.entry)})};}
+      try{return {value:holdLandings(STATE,{tip,generation:frozen.generation,run:measurement.run,reason:measurement.message,entries:members.map(member=>member.entry),...(retry?{retry}:{})})};}
       catch(error){return {hold:String(error)};}
     },held=>{status(held);say(`held-batch journal held ${held.age_s} s: ${held.reason}`);});
     status({state:"held",commit:tip,base,run:measurement.run,train:shas,reason:measurement.message});
@@ -1024,8 +1038,26 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
         steps: [...new Set(gateCapabilities(GATE_TREE, "all").map(site => site.step))],
         interop: null,
       };
-      say(`checking failed steps on main (${base.slice(0, 12)}): ${suspect.steps.join(" ")}`);
-      const baseline = gate(root, base, base, [], { steps: [], interop: null }, suspect);
+      let baseline:Gated;
+      if(gated.comparisons&&resourceOnly(gated.comparisons,suspect.steps)) {
+        const retry={base,tip,run:gated.run,steps:suspect.steps};
+        say(`resource-only regressions: paired candidate/main recheck of ${suspect.steps.join(" ")}`);
+        const candidate=gate(root,base,tip,shas,{steps:[],interop:null},suspect);
+        baseline=gate(root,base,base,[],{steps:[],interop:null},suspect);
+        const evidence={version:1,original:gated.run,candidate:candidate.run,main:baseline.run,steps:suspect.steps};
+        try {
+          if(!candidate.ok&&candidate.state!=="red"||!baseline.ok&&baseline.state!=="red"||!candidate.comparisons||!baseline.comparisons)throw new Error("paired recheck did not produce two complete measured verdicts");
+          const decision=pairedResources(candidate.comparisons,baseline.comparisons,suspect.steps);
+          durableRecord(join(gated.run,"resource-recheck.json"),{...evidence,decision});
+          if(decision.unreproduced.length)return holdBatch({run:gated.run,message:`resource regression did not reproduce on either arm: ${decision.unreproduced.join(" ")}; paired runs ${candidate.run} and ${baseline.run}`},retry);
+        } catch(error) {
+          durableRecord(join(gated.run,"resource-recheck.json"),{...evidence,hold:String(error)});
+          return holdBatch({run:gated.run,message:`paired resource recheck held: ${String(error)}; candidate ${candidate.run}; main ${baseline.run}`},retry);
+        }
+      } else {
+        say(`checking failed steps on main (${base.slice(0, 12)}): ${suspect.steps.join(" ")}`);
+        baseline=gate(root,base,base,[],{steps:[],interop:null},suspect);
+      }
       if(!baseline.ok&&baseline.state==="held")return holdBatch({...baseline,message:`baseline not measured: ${baseline.message}`});
       redOnMain = baseline.ok ? [] : baseline.required?.steps ?? suspect.steps;
       inherited = {

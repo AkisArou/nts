@@ -790,6 +790,71 @@ JS
   run(s, s.root, ["commit", "-q", "-m", "a memory check selected only by another landing"]);
 }
 
+function resourceGate(s:Scratch,mode:"candidate-red"|"both-red"|"both-pass"|"mixed"|"mismatch"):void {
+  const completed=Array.from({length:39},(_,i)=>`done-${i}`),names=[...completed,"resource-c","resource-llvm"];
+  writeFileSync(join(s.root,"tooling/gate/run.mjs"),`process.stdout.write(JSON.stringify(${JSON.stringify(Object.fromEntries(names.map(name=>[name,[]])))}));\n`);
+  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),selectorFixture({steps:JSON.stringify(names),projects:"null"}));
+  writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE.slice(0,STAND_IN_GATE.indexOf("verdict=green step=PASS"))+`
+node --input-type=module - "$sha" <<'RESOURCE'
+import {appendFileSync,existsSync,writeFileSync} from 'node:fs';
+import {join} from 'node:path';
+import {beginComparison,digest,resourceStop} from ${JSON.stringify(new URL("./resource-comparison.ts",import.meta.url).href)};
+const requested=process.env.NTS_GATE_STEPS.split(/\\s+/),candidate=existsSync(join(process.env.NTS_GATE_TREE,'CANDIDATE'));
+const full=requested.length===41,mode=${JSON.stringify(mode)},compiler=digest(process.argv[2]);
+const steps=requested.map(name=>{
+ const resource=name.startsWith('resource-');
+ const fail=resource&&(candidate?(full||mode==='candidate-red'||mode==='both-red'||mode==='mixed'||mode==='mismatch'):mode==='both-red');
+ if(resource){
+   const report=beginComparison({...process.env,NTS_GATE_STEP:name,NTS_GATE_STEP_ATTEMPT:process.env.NTS_GATE_RUN_DIR,NTS_GATE_STEP_RESULT:join(process.env.NTS_GATE_RUN_DIR,name+'.instrument.json')});
+   const stop=resourceStop('case.js',{bucket:name==='resource-c'?'memory-cap':'timeout',why:'emit'});
+   report.complete({suite:'test262',under:'test/staging',backend:name,compiler,record:digest('record'),selection:digest('population'),policy:digest(mode==='mismatch'&&!candidate?'changed budget':'budget')},fail?(mode==='mixed'?2:1):0,fail?[stop]:[]);
+ }
+ return {name,verdict:fail?'FAIL':'PASS'};
+});
+appendFileSync(process.env.LAND_TEST_GATES+'.scopes',JSON.stringify({requested,candidate})+'\\n');
+writeFileSync(join(process.env.NTS_GATE_RUN_DIR,'summary.json'),JSON.stringify({requested,steps,verdict:steps.some(row=>row.verdict==='FAIL')?'red':'green',started:'t',wall_s:1,identities:{commit:process.argv[2],nts:{sha256:compiler}},environment:JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).report}));
+RESOURCE
+`));
+  run(s,s.root,["add","tooling/gate"]);run(s,s.root,["commit","-qm","typed resource gate"]);
+}
+
+for(const mode of ["candidate-red","both-red","mixed"] as const)test(`resource comparison actual train: ${mode}`,async()=>{
+  const s=scratch();resourceGate(s,mode);
+  const tree=lane(s,`tsrs/${mode}`,{CANDIDATE:"candidate\n"}),result=await land(s,tree).done;
+  assert.equal(result.status,1,result.out);
+  const scopes=readFileSync(s.gates+".scopes","utf8").trim().split("\n").map(line=>JSON.parse(line));
+  assert.equal(scopes.length,mode==="mixed"?2:3,"definite failures retain the baseline-only path");
+  assert.equal(scopes[0].requested.length,41);
+  assert.deepEqual(scopes.slice(1).map(row=>row.requested),Array(scopes.length-1).fill(["resource-c","resource-llvm"]));
+  if(mode==="both-red")assert.match(result.out,/red on main/);
+  else assert.equal(onMain(s,"CANDIDATE"),false);
+});
+
+test("resource recheck both-pass holds, then operator retry measures only two steps and carries 39",async()=>{
+  const s=scratch();resourceGate(s,"both-pass");
+  const tree=lane(s,"tsrs/resource-hold",{CANDIDATE:"candidate\n"}),pending=land(s,tree),state=join(s.home,".cache/nts-land");
+  await until("the resource-only hold",()=>heldLandings(state).length===1);
+  const held=heldLandings(state)[0];assert.deepEqual(held.batch.retry?.steps,["resource-c","resource-llvm"]);
+  assert.equal(states(s).length,0,"a passing pair never publishes green");assert.equal(gates(s),3);
+  const retry=spawnTest(process.execPath,[LAND,"--retry-held",`${held.batch.id}:${held.entry.id}`,"--because=paired load cleared"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(retry.status,0,retry.stderr);
+  const result=await pending.done;assert.equal(result.status,0,result.out);
+  const scopes=readFileSync(s.gates+".scopes","utf8").trim().split("\n").map(line=>JSON.parse(line));
+  assert.equal(scopes.length,4);assert.deepEqual(scopes[3].requested,["resource-c","resource-llvm"]);
+  const runs=join(state,"runs"),joined=readdirSync(runs).map(name=>JSON.parse(readFileSync(join(runs,name,"summary.json"),"utf8"))).find(row=>row.verdict==="green"&&row.steps.length===41);
+  assert.ok(joined);assert.equal(joined.attempts.length,2);assert.equal(new Set(joined.steps.slice(0,39).map(row=>row.evidence_run)).size,1);
+  assert.notEqual(joined.steps[0].evidence_run,joined.steps[39].evidence_run);assert.ok(onMain(s,"CANDIDATE"));
+});
+
+test("resource recheck with mismatched budgets holds without attribution",async()=>{
+  const s=scratch();resourceGate(s,"mismatch");const tree=lane(s,"tsrs/resource-mismatch",{CANDIDATE:"candidate\n"});
+  const pending=land(s,tree),state=join(s.home,".cache/nts-land");
+  await until("the unmatched pair hold",()=>heldLandings(state).length===1);
+  const held=heldLandings(state)[0];assert.match(held.batch.reason,/budget/);assert.equal(gates(s),3);assert.equal(states(s).length,0);
+  const refused=spawnTest(process.execPath,[LAND,"--refuse-held",`${held.batch.id}:${held.entry.id}`,"--because=retain mismatch evidence"],{cwd:s.root,env:s.env,encoding:"utf8"});
+  assert.equal(refused.status,0,refused.stderr);assert.equal((await pending.done).status,1);
+});
+
 for (const culpritFirst of [true, false]) test(`halving keeps a red step the culprit does not owe (${culpritFirst ? "first" : "second"} half)`, async () => {
   const s = scratch();
   memoryGate(s);
