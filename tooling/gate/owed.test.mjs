@@ -54,6 +54,18 @@ test("discovered entries seed the derived map with their real helper imports",()
     assert.ok(stepInputs().get(path)?.has("tooling"),path);
 });
 
+test("the offline Node migration inventory owes its discovered tooling tests", () => {
+  for (const added of [false, true]) for (const path of ["tooling/conformance/node-work-list.ts", "tooling/conformance/node-work-list.test.ts"]) {
+    const rules = owed([{path, added}]);
+    assert.ok(rules.some(rule => rule.name === "the node migration work-list inventory"));
+    assert.ok(!rules.some(rule => rule.full), path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "tests", "tooling"], path);
+    for (const step of ["addons", "profile", "integrity", "bench-agree", "interop"])
+      assert.ok(!gateSteps(rules).includes(step), `${path} does not execute ${step}`);
+  }
+  assert.ok(owed([{path:"tooling/conformance/unplaced-inventory.ts",added:true}]).some(rule => rule.full));
+});
+
 test("offline Unicode generators leave conformance obligations with their fixture outputs", () => {
   for (const added of [false, true]) {
     const generator = owed([{ path: "tooling/unicode-cases/case-mapping.ts", added }]);

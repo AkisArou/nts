@@ -773,6 +773,15 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "node tooling/chromium/verify.ts: the bindings current, both backends staged, built and smoked against the V8 oracle, and every example app built and checked" }],
   },
   {
+    // This offline inventory reads pinned source objects; tooling discovers
+    // its test dynamically, so the static shell scanner cannot infer it.
+    name: "the node migration work-list inventory",
+    when: (p) => /^tooling\/conformance\/node-work-list(?:\.test)?\.ts$/.test(p),
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does the inventory preserve exact sources, closure and ownership", run: "node --test tooling/conformance/node-work-list.test.ts" }],
+  },
+  {
     // The node lane's harness: the runner node's own tests go through, its
     // stand-ins for their `test/common`, and the instruments over what the
     // modules publish. These are the lane's `tooling/` paths in
@@ -784,7 +793,7 @@ export const RULES = [
     // floor, and the web platform's own suite.
     name: "the node lane's harness",
     wide: true,
-    when: (p) => nodeHarness(p),
+    when: (p) => nodeHarness(p) && !/^tooling\/conformance\/node-work-list(?:\.test)?\.ts$/.test(p),
     settled: true,
     steps: [],
     arms: [
