@@ -17,6 +17,17 @@
 #include "nts_test_host.h"
 #include <stdio.h>
 
+/* The runtime's public printers also cross this exact descriptor slot, even
+ * when the corresponding descriptor is generated in a different C file. */
+_Static_assert(
+    _Generic(&nts_object_to_string, NtsPrinterEntry: 1, default: 0) &&
+        _Generic(&nts_function_to_string, NtsPrinterEntry: 1, default: 0) &&
+        _Generic(&nts_bound_function_to_string,
+            NtsPrinterEntry: 1,
+            default: 0) &&
+        _Generic(&nts_array_to_string, NtsPrinterEntry: 1, default: 0),
+    "public runtime printers implement NtsPrinterEntry");
+
 typedef struct Item {
   NtsHeader header;
   char name;
