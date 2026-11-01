@@ -24,7 +24,8 @@ log({phase:'allocated',length:buffer.length,backingBytes:buffer.buffer.byteLengt
 log({phase:'before-decode',encoding:'utf8',start:0,end:extent==='full'?buffer.length:1});
 try {
   const value=buffer.toString('utf8',0,extent==='full'?buffer.length:1);
-  log({phase:'result',value});
+  log({phase:'decoded',length:value.length});
+  log({phase:'result',...(extent==='one'?{value}:{length:value.length})});
 } catch(error) {
   log({phase:'result',error:error.code,name:error.name,message:error.message});
 }
