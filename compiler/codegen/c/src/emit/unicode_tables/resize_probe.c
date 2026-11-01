@@ -1,6 +1,11 @@
 /* Exercise the real allocator implementation, with one deterministic moving
  * realloc control. The hook changes only that allocation, never the provider
  * or production source. All other realloc calls use the host implementation. */
+#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
+#if defined(__APPLE__)
+#define _DARWIN_C_SOURCE
+#endif
 #include "nts_runtime.h"
 #include <stdio.h>
 #include <stdlib.h>
