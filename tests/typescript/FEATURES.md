@@ -1412,6 +1412,7 @@ land without another open Unicode pull request.
 | `ts-async-route-rejections` | rejections and cleanup with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 16 | 0 |
 | `ts-async-route-values-thenables` | awaiting values and thenables with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 22 | 0 |
 | `ts-bigint-route-arithmetic` | arithmetic and wrapping with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 26 | 0 |
+| `ts-bigint-route-conversions` | conversions with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
 | `ts-bigint-route-storage` | bigints in storage with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
 | `ts-builtin-subclass` | a class extending a built-in (Array, Error, Map) | conformance/es6/classDeclaration; typed paths | 76 | 0 |
 | `ts-call-route-population` | independent callback targets coexist in one typed registry | typed call routes: Language, Functions; Errors; Async | 12 | 0 |
@@ -1625,7 +1626,7 @@ land without another open Unicode pull request.
 | `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 286 | 2 |
 | `ts-tagged-templates` | a tagged template with a typed tag function | conformance/es6/templates | 1 | 0 |
 | `ts-template-literal-types` | a template literal type, and the intrinsic string types (Uppercase, Capitalize, ...) | conformance/types/literal/templateLiteralTypes; ts-eslint TSTemplateLiteralType | 8 | 0 |
-| `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 94 | 0 |
+| `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 96 | 0 |
 | `ts-this-parameter` | a `this` parameter, which is erased | conformance/types/thisType; conformance/functions | 179 | 0 |
 | `ts-this-type` | the polymorphic `this` type | conformance/types/thisType | 4 | 0 |
 | `ts-this` | `this` in methods, arrow fields and detached calls | conformance/expressions/thisKeyword | 204 | 1 |
