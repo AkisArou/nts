@@ -1,11 +1,18 @@
 //! Check the prepared program which every backend actually receives.
+//!
+//! Except an interface method's declaration, which is checked where lowering
+//! makes it: it exists so that a call through the slot can take its
+//! descriptor from somewhere, and preparation keeps it only while such a call
+//! does. A call whose receivers are all known becomes direct, and the
+//! declaration goes with the last call through it.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, HirType, OpKind};
+use nts_core::hir::{self, Callee, HirType, OpKind};
 use nts_frontend_ts::Frontend;
+use nts_semantic_schema::SemanticSnapshot;
 
-fn prepared(relative: &str) -> hir::Program {
+fn snapshot(relative: &str) -> SemanticSnapshot {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
         .join(relative)
         .join("tsconfig.json")
@@ -19,7 +26,17 @@ fn prepared(relative: &str) -> hir::Program {
         !snapshot.has_errors(),
         "the checker accepts these method relations"
     );
-    hir::prepare(&snapshot).expect("valid prepared HIR").program
+    snapshot
+}
+
+fn prepared(relative: &str) -> hir::Program {
+    hir::prepare(&snapshot(relative))
+        .expect("valid prepared HIR")
+        .program
+}
+
+fn lowered(relative: &str) -> hir::Program {
+    hir::lower::lower(&snapshot(relative)).program
 }
 
 #[test]
@@ -128,15 +145,16 @@ fn a_covariant_return_does_not_hide_the_class_parameters_erasure_mismatch() {
 
 #[test]
 fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() {
-    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
+    let fixture = "../../tests/programs/a-method-adapted-to-a-structural-interface";
+    let lowered = lowered(fixture);
     assert!(
-        program
+        lowered
             .funcs
             .iter()
             .any(|func| func.name == "TaggedSink#take" && func.abstract_declaration),
         "refusals {:?}; tagged layouts {:?}",
-        program.uncompiled,
-        program
+        lowered.uncompiled,
+        lowered
             .layouts
             .iter()
             .filter(|layout| layout.name.contains("Tagged")
@@ -144,6 +162,7 @@ fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() 
                 || layout.name == "OtherBase")
             .collect::<Vec<_>>()
     );
+    let program = prepared(fixture);
     assert!(
         program
             .funcs
@@ -159,6 +178,36 @@ fn an_interface_declaration_can_be_served_by_a_body_in_a_nonimplementing_base() 
     );
 }
 
+/// What a backend needs of a declaration: every call still through a slot
+/// finds the one it names, after the passes that make other calls direct.
+#[test]
+fn every_call_through_a_slot_finds_its_declaration() {
+    let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
+    let mut through = 0;
+    for func in &program.funcs {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| &block.ops)
+            .map(|id| &func.values[id.0 as usize])
+        {
+            if let OpKind::Call {
+                callee: Callee::Virtual { declared, .. },
+                ..
+            } = &op.kind
+            {
+                through += 1;
+                assert!(
+                    program.funcs.iter().any(|func| &func.name == declared),
+                    "`{}` calls through `{declared}`, which the prepared program does not declare",
+                    func.name
+                );
+            }
+        }
+    }
+    assert!(through > 0, "some calls stay virtual");
+}
+
 #[test]
 fn the_interface_declares_its_own_signature_and_the_table_adapts_to_it() {
     let program = prepared("../../tests/programs/a-method-adapted-to-a-structural-interface");
@@ -171,11 +220,14 @@ fn the_interface_declares_its_own_signature_and_the_table_adapts_to_it() {
     assert_eq!(sink.params.len(), 2);
     assert_eq!(sink.params[1].ty, HirType::NUMBER);
     assert_eq!(sink.return_type, HirType::NUMBER);
-    let raising = program
+    // Every `Raising` receiver is known, so no call goes through its slot
+    // once prepared.
+    let raising = lowered("../../tests/programs/a-method-adapted-to-a-structural-interface")
         .funcs
-        .iter()
+        .into_iter()
         .find(|func| func.name == "Raising#invoke@raises")
         .unwrap();
+    assert!(raising.abstract_declaration);
     assert_eq!(raising.params[1].ty, HirType::NUMBER);
     for class in ["Wide", "Drops", "Inherited", "Overridden"] {
         let layout = program

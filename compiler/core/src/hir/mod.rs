@@ -7779,11 +7779,21 @@ fn forward_identities(program: &mut Program, roots: reachable::Roots<'_>) -> (us
 /// which the verifier refuses as `Unreachable`, so the blocks go too -- the
 /// same pair lowering runs, for the same reason (`fold::decided_branches`).
 /// `collect_orphans` takes their values.
-fn simplify_and_decide(program: &mut Program) -> usize {
+///
+/// A ruled-out arm can hold a function's last call, so the call graph is
+/// pruned again, as after every other pass that removes calls. A `throw new
+/// RangeError(...)` behind a check that folds kept that class's `toString`
+/// (the runtime prints an uncaught error by it); with the throw gone nothing
+/// calls it, and a C `static` nothing calls is refused under `-Werror`
+/// (`compiler/core/tests/programs/a-throw-behind-a-check-that-folds`). The
+/// walk reads the blocks as they are after the decision, so a throw that
+/// stays keeps what prints it.
+fn simplify_and_decide(program: &mut Program, roots: reachable::Roots<'_>) -> usize {
     let simplified = simplify_all(program);
     let decided = fold::decided_branches(program);
     if decided > 0 {
         dce::prune_unreachable_blocks(program);
+        reachable::prune(program, roots);
     }
     simplified + decided
 }
@@ -8038,7 +8048,7 @@ fn prepare_lowered(
     // tracking values that are copies of other values.
     let narrowed = narrow_widths(&mut program) + shed_erasure(&mut program) + unions_split;
 
-    let mut simplified = simplify_and_decide(&mut program) + forwarded;
+    let mut simplified = simplify_and_decide(&mut program, options.roots) + forwarded;
 
     // Reconcile *after* the passes that rewrite operands, not before.
     //

@@ -1119,6 +1119,82 @@ int main(void) {{
 }
 
 #[test]
+fn a_throw_behind_a_check_that_folds_leaves_no_uncalled_function() {
+    // `8 !== 8 >>> 0` is decided, and the block throwing the `RangeError` goes
+    // with it. That throw was what kept the class's `toString` -- the runtime
+    // prints an uncaught error by it -- so once it is gone nothing calls the
+    // method, and a C `static` nothing calls is refused under `-Werror`. The
+    // call graph is pruned again after the decision; before that it was
+    // emitted anyway.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double sized(double n);
+int main(void) {{
+    check("sized(1)", sized(1), 9);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let Some(output) =
+            build_and_run_with("a-throw-behind-a-check-that-folds", &harness, provider)
+        else {
+            return;
+        };
+        let printed = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{printed}");
+        assert!(printed.contains("ok sized(1) = 9"), "{printed}");
+    }
+}
+
+#[test]
+fn a_throw_behind_a_check_that_stays_keeps_what_prints_it() {
+    // The control: the count is a parameter, so the check stays, and the
+    // pruning after a decision keeps the throw's `toString`, which is what
+    // prints it. node prints `RangeError: Invalid array length` for
+    // `sized(1, -1)`.
+    let harness = format!(
+        r#"{CHECK}
+double sized(double n, double count);
+int main(void) {{
+    check("sized(1, 8)", sized(1, 8), 9);
+    // A failure here exits cleanly with a FAIL line, so it is not mistaken
+    // for the throw below: the assertions reject both.
+    if (failures) return 0;
+    fflush(stdout);
+    sized(1, -1);
+    printf("FAIL: kept going past the throw\n");
+    return 0;
+}}
+"#
+    );
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let Some(output) = build_and_run_with(
+            "a-throw-behind-a-check-that-folds-control",
+            &harness,
+            provider,
+        ) else {
+            return;
+        };
+        let printed = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !output.status.success(),
+            "the throw must stop the program: {printed}"
+        );
+        assert!(
+            printed.contains("ok sized(1, 8) = 9") && !printed.contains("FAIL"),
+            "{printed}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "nts: uncaught RangeError: Invalid array length\n"
+        );
+    }
+}
+
+#[test]
 fn methods_are_static_calls_with_an_explicit_receiver() {
     // A method lowers to a function whose first parameter is the receiver, and a
     // call site to a direct call. There is no dispatch to arrange: the checker
