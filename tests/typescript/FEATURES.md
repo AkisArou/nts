@@ -175,6 +175,10 @@ one; add a row here in the same commit as the first case that uses it.
    dispatch, stable keys, typed-array numeric order and error state.
    [Sort route contracts](#sort-route-contracts) name their sources;
    `ts-sort-route-*` identifies each area and its insertion-sort controls.
+28. **Regular expressions across typed routes:** nullable match results,
+    shared cursor state, string operations, Unicode matching and runtime
+    construction. [RegExp route contracts](#regexp-route-contracts) name
+    their sources; `ts-regexp-route-*` identifies each area.
 
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
@@ -250,6 +254,8 @@ flows through it.
 | `proofs-controls/` | counterparts that remove one invalidating effect or callback throw from a proofs finding, with node as the oracle |
 | `record-routes/` | exact object values, enumeration and alias writes across laid-out, table, narrowed, mapped and generic views |
 | `record-routes-controls/` | counterparts declared at their final read type from construction, with the same values, operations and assertions |
+| `regexp-routes/` | exact match results, state, string operations, Unicode and construction through typed RegExp routes, held to node |
+| `regexp-routes-controls/` | direct literals with independent starting state, direct constructor errors and matching inputs, logs and assertions |
 | `resource-management/` | `using`, `await using`, DisposableStack |
 | `scope-routes/` | exact values, identities, read/write logs and initialization order across typed routes to module bindings, held to node |
 | `scope-routes-controls/` | explicit state parameters and initialization flags with the same inputs, calls, logs and assertions |
@@ -303,6 +309,23 @@ integrity controls spell out the allowed writes and TypeError exits.
 Strict checking treats each unflagged file as an independent script and
 includes library diagnostics. Node uses the unchanged suite oracle;
 maintainers measure and record backend outcomes.
+The `regexp-routes/` matrix uses `<area>-<route>.ts` in place of
+combination cases. Each case names the family, one `ts-regexp-route-*`
+area and existing syntax tags. Several strings cross the same typed
+consumer; each valid pattern runs as a literal and as
+`new RegExp(literal.source, literal.flags)`. Construction cases also
+observe their typed source and flag inputs beside valid witnesses.
+Complete logs and Object.is/typeof checks retain every result, capture,
+named group, callback argument and relevant lastIndex transition.
+Controls append `-control` and remove the selected typed carrier.
+Matching operations use fresh direct literals and independent planned
+starting positions; invalid constructors use direct source and flag
+arguments because an invalid literal cannot execute. Inputs, outputs
+and assertions stay aligned across the pair.
+Strict checking treats each unflagged file as an independent script
+and retains library diagnostics. Node uses the unchanged suite oracle;
+maintainers measure and record backend outcomes. Existing Unicode data
+sweeps remain separate from these typed state and result routes.
 
 The `call-routes/` matrix uses `<area>-<route>.ts` in place of combination
 cases. Each case has one `ts-call-route-*` tag and existing syntax and
@@ -1440,6 +1463,20 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | `statics` | 10 | 10 | Assignment setters, entry construction, frozen writes and accessors, shallow integrity, sealed keys and own nonenumerable names |
 | `presence` | 8 | 8 | Optional absence versus undefined, own and inherited membership, deletion effects, strict failures and post-delete narrowing |
 | `views` | 8 | 8 | Shared state and ordered shape through interface, class, index-signature, readonly, generic and structural accessor views |
+### RegExp route contracts
+
+| source | concepts |
+| --- | --- |
+| [TypeScript Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) and [Generics](https://www.typescriptlang.org/docs/handbook/2/generics.html) | nullable match results, declared result containers, constrained calls and shared typed carriers |
+| [ECMAScript RegExpBuiltinExec](https://tc39.es/ecma262/multipage/text-processing.html#sec-regexpbuiltinexec) and [AdvanceStringIndex](https://tc39.es/ecma262/multipage/text-processing.html#sec-advancestringindex) | captures, named groups, match indices, lastIndex, global and sticky state, empty matches and UTF-16 advancement |
+| [ECMAScript RegExp patterns](https://tc39.es/ecma262/multipage/text-processing.html#sec-patterns) | Unicode modes, case folding, property escapes, UnicodeSets operations, captures and lookaround |
+| [ECMAScript String prototype methods](https://tc39.es/ecma262/multipage/text-processing.html#sec-properties-of-the-string-prototype-object) and [GetSubstitution](https://tc39.es/ecma262/multipage/text-processing.html#sec-getsubstitution) | match, matchAll, replace, replaceAll, search, split, callbacks, replacement tokens and capture insertion |
+| [ECMAScript RegExp prototype methods](https://tc39.es/ecma262/multipage/text-processing.html#sec-properties-of-the-regexp-prototype-object) | exec and test, matching protocol state, cloned matchAll iterators and split behavior |
+| [ECMAScript RegExp constructor](https://tc39.es/ecma262/multipage/text-processing.html#sec-regexp-constructor) and [RegExpInitialize](https://tc39.es/ecma262/multipage/text-processing.html#sec-regexpinitialize) | runtime source and flags, independent expression copies, canonical metadata and invalid-pattern SyntaxErrors |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `match-results` | 9 | 9 | Nullable results, numbered and named captures, retained arrays and fields, boolean results and capture-index spans |
 
 ### Record route contracts
 
@@ -1659,6 +1696,8 @@ land without another open Unicode pull request.
 | `ts-array-writes` | writes and array construction through widened routes preserve values, length, order and holes | Objects, Arrays; ECMAScript, Array prototype methods | 40 | 0 |
 | `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3735 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 633 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3123 | 0 |
+| `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 507 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
@@ -1760,6 +1799,13 @@ land without another open Unicode pull request.
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 236 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
 | `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 687 | 0 |
+| `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 206 | 0 |
+| `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 723 | 0 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 3906 | 4 |
+| `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 133 | 0 |
+| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 204 | 0 |
+| `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
+| `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 630 | 0 |
 | `ts-implicit-accessor` | implicit getter and setter calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 138 | 0 |
 | `ts-implicit-conversion` | implicit valueOf, toString and Symbol.toPrimitive calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 114 | 0 |
 | `ts-implicit-iteration` | implicit iterator acquisition, stepping and closing through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 60 | 0 |
@@ -1778,6 +1824,8 @@ land without another open Unicode pull request.
 | `ts-imports` | import declarations between modules: named, default, namespace, side-effect, cycles | conformance/externalModules; conformance/es6/modules | 0 | 9 |
 | `ts-index-signatures` | an index signature (`[key: string]: T`) on a type, interface or class | conformance/classes/indexMemberDeclarations; ts-eslint TSIndexSignature | 147 | 0 |
 | `ts-indexed-access` | an indexed access type (`T[K]`) | conformance/types/keyof; ts-eslint TSIndexedAccessType | 10 | 0 |
+| `ts-index-signatures` | an index signature (`[key: string]: T`) on a type, interface or class | conformance/classes/indexMemberDeclarations; ts-eslint TSIndexSignature | 112 | 0 |
+| `ts-indexed-access` | an indexed access type (`T[K]`) | conformance/types/keyof; ts-eslint TSIndexedAccessType | 9 | 0 |
 | `ts-infer` | `infer` in a conditional type | conformance/types/conditional; ts-eslint TSInferType | 1 | 0 |
 | `ts-inheritance` | `extends` between classes: super calls, super property access, the prototype chain | conformance/classes/classDeclarations/classHeritageSpecification; conformance/expressions/superCalls | 415 | 3 |
 | `ts-instanceof` | `instanceof`, and narrowing by it | conformance/expressions/typeGuards/typeGuardsWithInstanceOf | 411 | 0 |
@@ -1791,6 +1839,9 @@ land without another open Unicode pull request.
 | `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1278 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 16 | 0 |
 | `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 4046 | 0 |
+| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1145 | 0 |
+| `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 14 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 3476 | 0 |
 | `ts-json-replacers` | typed replacers, toJSON methods and space arguments preserve callback observations, selected keys and exact formatting | JSON.stringify; SerializeJSONProperty; SerializeJSONObject; SerializeJSONArray | 20 | 0 |
 | `ts-json-revivers` | declared reviver function routes preserve complete ordered key, value and holder observations through deletion and replacement | JSON.parse; InternalizeJSONProperty | 16 | 0 |
 | `ts-json-routes` | JSON values preserve exact parsed contents, serialization and callback observations across typed routes | JSON route contracts; typed paths | 110 | 0 |
@@ -1826,6 +1877,8 @@ land without another open Unicode pull request.
 | `ts-lifetime-slot` | successive loop allocations remain distinct when their live instances overlap | lifetime contracts: Memory, Where nts stands; The one memory analysis | 18 | 0 |
 | `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 120 | 0 |
 | `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 783 | 0 |
+| `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 27 | 0 |
+| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 739 | 0 |
 | `ts-map-set-contents` | Map and Set contents keep their values, runtime kinds and order across typed writes and reads | Map and Set contents contracts; typed paths | 200 | 0 |
 | `ts-mapped-types` | a mapped type (`{ [K in keyof T]: U }`), with modifiers and `as` remapping | conformance/types/mapped; ts-eslint TSMappedType | 24 | 0 |
 | `ts-mixins` | a function returning a subclass of the class it is given | conformance/classes/mixinClassesAndInterfaces | 14 | 0 |
@@ -1837,6 +1890,12 @@ land without another open Unicode pull request.
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
 | `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 1318 | 0 |
 | `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 2838 | 0 |
+| `ts-narrowing` | control-flow narrowing of a union or `unknown` | conformance/controlFlow; conformance/expressions/typeGuards | 572 | 0 |
+| `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 10 | 0 |
+| `ts-new-target` | `new.target` | conformance/es6/newTarget | 83 | 0 |
+| `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 930 | 0 |
+| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 2221 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 20 | 0 |
 | `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 2316 | 0 |
 | `ts-object-route-key-order` | typed object enumeration preserves numeric ordering, string insertion histories, getter effects and symbol omission | Object route contracts; typed paths | 14 | 0 |
@@ -1869,6 +1928,11 @@ land without another open Unicode pull request.
 | `ts-readonly` | `readonly` properties, arrays and tuples, which are not frozen | conformance/types/tuple/readonlyArraysAndTuples; ts-eslint TSReadonlyKeyword | 228 | 0 |
 | `ts-record` | `Record<K, V>` | conformance/types/mapped; lib | 166 | 0 |
 | `ts-rest-parameters` | a rest parameter, typed as an array or a tuple | conformance/es6/restParameters | 52 | 0 |
+| `ts-readonly` | `readonly` properties, arrays and tuples, which are not frozen | conformance/types/tuple/readonlyArraysAndTuples; ts-eslint TSReadonlyKeyword | 208 | 0 |
+| `ts-record` | `Record<K, V>` | conformance/types/mapped; lib | 128 | 0 |
+| `ts-regexp-route-match-results` | typed nullable match results preserve exact captures, named groups, indices, metadata and retained values | RegExp route contracts; typed paths | 18 | 0 |
+| `ts-regexp-routes` | typed RegExp operations preserve exact results, state, string effects, Unicode behavior and construction beside direct controls | RegExp route contracts; typed paths | 18 | 0 |
+| `ts-rest-parameters` | a rest parameter, typed as an array or a tuple | conformance/es6/restParameters | 50 | 0 |
 | `ts-record-copies` | spread, assign, entry construction and cloning preserve values, ordering and specified copy or alias relationships across views | CopyDataProperties; Object.assign; Object.fromEntries; HTML structured cloning | 16 | 0 |
 | `ts-record-mapped` | utility types and generic keyof routes preserve actual field presence, values, ordering and alias mutation | TypeScript utility types; Objects, Interfaces; typed paths | 14 | 0 |
 | `ts-record-mutations` | deletion, additions, reinsertion and object integrity preserve exact shapes and values through Record views | OrdinaryDelete; OrdinaryOwnPropertyKeys; Object.freeze; Object.seal | 20 | 0 |
@@ -1904,6 +1968,9 @@ land without another open Unicode pull request.
 | `ts-sort-route-edges` | typed sort routes preserve exception identity, unchanged sources on comparator throws, aliases, frozen write failures and readonly copies | Sort route contracts; typed paths | 10 | 0 |
 | `ts-sort-route-stability` | typed records, tuples and class instances preserve original positions for equal keys and across successive key sorts | Sort route contracts; typed paths | 8 | 0 |
 | `ts-sort-route-typed-arrays` | typed-array sorts preserve numeric defaults, signed zero, NaN, stable custom keys, independent copies and shared subarray writes | Sort route contracts; typed paths | 44 | 0 |
+| `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 299 | 1 |
+| `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 184 | 4 |
+| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 1551 | 0 |
 | `ts-scope-route-bindings` | reads and writes by binding kind with exact values, identities and read/write order | Scope route contracts; typed paths | 24 | 0 |
 | `ts-scope-route-control-flow` | top-level control flow with exact values, identities and read/write order | Scope route contracts; typed paths | 16 | 0 |
 | `ts-scope-route-initialization` | initialization order with exact values, identities and read/write order | Scope route contracts; typed paths | 16 | 0 |
@@ -1930,10 +1997,16 @@ land without another open Unicode pull request.
 | `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 12 | 0 |
 | `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 954 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 724 | 0 |
+| `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 10 | 0 |
+| `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 12 | 0 |
+| `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 8 | 0 |
+| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 856 | 0 |
+| `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 494 | 0 |
 | `ts-type-assertions` | a type assertion (`x as T`, `<T>x`), erased, never a conversion | conformance/expressions/asOperator; conformance/expressions/typeAssertions; ts-eslint TSAsExpression, TSTypeAssertion | 81 | 0 |
 | `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 146 | 0 |
 | `ts-type-operators` | values flowing through type-level operators: keyof, typeof, indexed access, mapped and conditional types | conformance/types (keyof, typeQueries, mapped, conditional) | 35 | 0 |
 | `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 1938 | 0 |
+| `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 1600 | 0 |
 | `ts-tuple-route-calls` | tuple parameters, results, argument lists, destructuring and variadic instantiations preserve every argument and returned slot | TypeScript Tuple Types; Variadic Tuple Types; rest arguments | 16 | 0 |
 | `ts-tuple-route-conversion` | tuple iteration, copying, spreads and serialization preserve slot order, reference identity, independent copies and exact JSON | TypeScript Tuple Types; Array prototype methods; SerializeJSONArray | 20 | 0 |
 | `ts-tuple-route-elements` | optional, rest and labeled tuples retain every slot, exact count, presence and inner identity through six storage routes | TypeScript Tuple Types; Labeled Tuple Elements | 36 | 0 |
@@ -1953,6 +2026,9 @@ land without another open Unicode pull request.
 | `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 1771 | 0 |
 | `ts-unique-symbol` | a `unique symbol` constant as a member key | conformance/types/uniqueSymbol | 3 | 0 |
 | `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 1644 | 0 |
+| `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 1392 | 0 |
+| `ts-unique-symbol` | a `unique symbol` constant as a member key | conformance/types/uniqueSymbol | 1 | 0 |
+| `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 1388 | 0 |
 | `ts-union-route-narrowing` | typed guards, discriminants, equality, arrays and predicates select the correct member across returns, closures and assignments | TypeScript Narrowing; control-flow analysis | 20 | 0 |
 | `ts-union-route-objects` | object and class unions retain their layouts, shared fields, optional member presence and reference writes | TypeScript Union Types; discriminated unions; in narrowing | 10 | 0 |
 | `ts-union-route-storage` | five primitive unions cross fields, arrays, Maps, Sets, tuple slots and closures with exact read and printed-value histories | TypeScript Union Types; typed paths; Set semantics | 60 | 0 |
