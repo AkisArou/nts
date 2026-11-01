@@ -69,25 +69,17 @@ impl Printed {
         let stdout = self.stdout.len();
         let stderr = self.stderr.len();
         self.stdout.extend_from_slice(&run.stdout);
-        self.stderr.extend_from_slice(if stopped {
-            before_terminal_diagnostic(&run.stderr)
-        } else {
-            &run.stderr
-        });
-        let source_throw = stopped
-            .then(|| {
-                String::from_utf8_lossy(&run.stderr)
-                    .lines()
-                    .rev()
-                    .find(|line| {
-                        line.starts_with(super::REFUSED)
-                            || line.starts_with(super::EXHAUSTED)
-                            || line.starts_with(super::UNCAUGHT)
-                    })
-                    .filter(|line| line.starts_with(super::UNCAUGHT))
-                    .map(str::to_owned)
-            })
-            .flatten();
+        let terminal = stopped.then(|| terminal_diagnostic(&run.stderr)).flatten();
+        self.stderr.extend_from_slice(
+            terminal.map_or(run.stderr.as_slice(), |(end, _)| &run.stderr[..end]),
+        );
+        let source_throw = terminal
+            .filter(|(_, line)| line.starts_with(super::UNCAUGHT.as_bytes()))
+            .map(|(_, line)| {
+                String::from_utf8_lossy(line)
+                    .trim_end_matches(['\r', '\n'])
+                    .to_owned()
+            });
         segments.push(Segment {
             cases,
             stdout: stdout..self.stdout.len(),
@@ -106,7 +98,7 @@ pub(super) struct Segment {
 }
 
 /// The final runtime diagnostic is metadata; earlier lookalike lines are not.
-pub(super) fn before_terminal_diagnostic(stderr: &[u8]) -> &[u8] {
+fn terminal_diagnostic(stderr: &[u8]) -> Option<(usize, &[u8])> {
     let mut boundary = None;
     let mut at = 0;
     for line in stderr.split_inclusive(|byte| *byte == b'\n') {
@@ -119,11 +111,16 @@ pub(super) fn before_terminal_diagnostic(stderr: &[u8]) -> &[u8] {
             || line.starts_with(b"nts.rt.NtsRefusal")
             || line.starts_with(b"Exception in thread ")
         {
-            boundary = Some(at);
+            boundary = Some((at, line));
         }
         at += line.len();
     }
-    boundary.map_or(stderr, |end| &stderr[..end])
+    boundary
+}
+
+#[cfg(test)]
+fn before_terminal_diagnostic(stderr: &[u8]) -> &[u8] {
+    terminal_diagnostic(stderr).map_or(stderr, |(end, _)| &stderr[..end])
 }
 
 #[derive(Default)]
