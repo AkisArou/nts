@@ -184,6 +184,8 @@ flows through it.
 | `class-value-routes/` | exact construction, static observations, class identity and ancestry across typed constructor-value routes, held to node |
 | `class-value-routes-controls/` | plain factory records, ordered object literals and class tags with the same inputs, logs and assertions |
 | `classes/` | fields under define semantics, parameter properties, inheritance, abstract, private, static, accessors |
+| `control-flow-routes/` | exact branch, loop-exit, cleanup and evaluation histories through typed values, held to node |
+| `control-flow-routes-controls/` | explicit if chains, exit flags, per-path cleanup, ordered temporaries and concrete kind records with matching observations |
 | `conversions/` | ToPrimitive under each operator, number and string conversions |
 | `destructuring-routes/` | array, object, parameter, assignment and failing patterns across declared types with exact bound values, rest contents and observable effect/protocol order |
 | `destructuring-routes-controls/` | pattern-free explicit reads, undefined tests, copy loops and iterator calls preserving the same inputs, logs and assertions |
@@ -249,6 +251,19 @@ invalidation route per case, tagged with one `ts-proof-*`, one `ts-route-*`
 and the existing container and syntax tags. A literal allocation, range or
 guard establishes the fact before the route acts; several inputs exercise
 the same code, and an exact assertion observes the result after the route.
+
+The `control-flow-routes/` matrix uses `<area>-<route>.ts`, with `short-*`
+for the short-circuit area, in place of combination cases. One
+`ts-control-flow-route-*` tag names the area beside the family and existing
+syntax tags. Every pair repeats a typed route over several inputs, asserts
+the complete ordered log, and checks final values with Object.is and typeof.
+Controls append `-control` to the same name and expand the tested structure:
+switches to if chains with explicit fallthrough state, labels to flags
+tested by surrounding loops, finally to cleanup on each exit, expressions
+to ordered temporaries and ifs, and narrowing to kind records with separate
+concrete fields. Strict checking uses independent scripts with library
+diagnostics included; node uses the unchanged suite oracle. Backend
+outcomes are measured and recorded by maintainers.
 
 The `call-routes/` matrix uses `<area>-<route>.ts` in place of combination
 cases. Each case has one `ts-call-route-*` tag and existing syntax and
@@ -1316,6 +1331,19 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | `bounds` | 10 | 10 | Array and typed-array indices and at, string indexing/charAt/codePointAt/at, optional tuples and holes created by length growth |
 | `chains` | 8 | 8 | Skipped property/index/call effects, optional method receivers, nullish versus truthy selection and all three logical assignments |
 | `lookups` | 6 | 6 | Map get/has reports, find/findLast/indexOf/findIndex results and callback order, and deletion against stored undefined |
+
+### Control-flow route contracts
+
+| source | concepts |
+| --- | --- |
+| [TypeScript Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) | control-flow analysis, assignments, guards, discriminants, assertion functions and never exhaustiveness |
+| [TypeScript Enums](https://www.typescriptlang.org/docs/handbook/enums.html) and [TypeScript 5.3 switch true narrowing](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-5-3.html#switch-true-narrowing) | numeric and string enum selection, literal unions and narrowing cases |
+| [ECMAScript Statements](https://tc39.es/ecma262/multipage/ecmascript-language-statements-and-declarations.html) | switch case evaluation, labeled break and continue, iteration and try/finally completion precedence |
+| [ECMAScript Expressions](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html) | short-circuit operators, logical assignment, optional chains and left-to-right operand, argument and key evaluation |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `switch` | 7 | 7 | Literal and enum dispatch, fallthrough, middle-default search, cached discriminants, ordered narrowing guards and exhaustive returns |
 
 ### Union route contracts
 
