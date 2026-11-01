@@ -2047,6 +2047,7 @@ static SIGNATURES: &[Declared] = &[
     ),
     ("nts_str_replace", None, None, Raising::NoRaise),
     ("nts_str_replace_all", None, None, Raising::NoRaise),
+    ("nts_str_resize_owned", None, None, Raising::NoRaise),
     (
         "nts_str_slice",
         Some(&[

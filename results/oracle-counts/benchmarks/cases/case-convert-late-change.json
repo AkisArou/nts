@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/case-convert-late-change",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/case-convert-late-change/case.ts",
+      "signature": "133ca860adb49d3f384daa46f4db9d5c8b771b06b3c792dbcb136332dcf5892c",
+      "keys": {
+        "c": "115d09a118e3214da27af89adc99aec7",
+        "jvm": "fe98524594279d0f3e0230c87c322612",
+        "llvm": "42a01b0f505542985ed00ada937efe06"
+      },
+      "cases_sha256": "5acaa82f147c8c410a2ab5107df37d3979fafc94de7f0d3ff94d4160104e7e0a",
+      "driver_sha256": "3387be7532e3d64dbbf597d67eb912956fb26002114b6d729959221edfc7594d",
+      "populations": {
+        "convert": {
+          "count": 29,
+          "cases_sha256": "5acaa82f147c8c410a2ab5107df37d3979fafc94de7f0d3ff94d4160104e7e0a"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

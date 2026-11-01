@@ -3952,6 +3952,109 @@ static inline void nts_str_retire(NtsString *a) {
  * existing one, and a copy that knows its own width has nothing to inspect and
  * nowhere to stage. `nts_str_alloc` is what remains: the case where the units
  * arrive as `uint16_t` and the width is still a question. */
+/* Resize one unpublished string allocation without making another logical
+ * object. A region/bump allocation can move only at its latest frontier;
+ * otherwise its old storage remains owned by that provider until reset.
+ * Heap RC owns a normal malloc block, including its two-word prefix, and
+ * realloc decides whether the storage itself must move. No root can name it. */
+static void *nts_resize_private_string(void *buffer, size_t old_bytes,
+                                       size_t new_bytes, size_t preserved) {
+  old_bytes = (old_bytes + 15u) & ~(size_t)15u;
+  new_bytes = (new_bytes + 15u) & ~(size_t)15u;
+#ifdef NTS_PROVIDER_RC
+  if (nts_env->region) {
+    NtsRegion *region = nts_env->region;
+    if ((unsigned char *)buffer + old_bytes == region->top &&
+        new_bytes <= (size_t)(region->end - (unsigned char *)buffer)) {
+      region->top = (unsigned char *)buffer + new_bytes;
+      nts_env->bytes_held = nts_env->bytes_held - old_bytes + new_bytes;
+      return buffer;
+    }
+    if (new_bytes <= old_bytes) {
+      return buffer;
+    }
+  } else {
+    assert(nts_root_index(buffer) == NTS_ROOT_NONE);
+    size_t *block = (size_t *)((unsigned char *)buffer - 16u);
+    assert(*block == old_bytes);
+    if (old_bytes != new_bytes) {
+      block = (size_t *)realloc(block, new_bytes + 16u);
+      if (!block) {
+        fprintf(stderr, "nts: out of memory\n");
+        abort();
+      }
+      *block = new_bytes;
+      nts_env->bytes_held = nts_env->bytes_held - old_bytes + new_bytes;
+    }
+    return (unsigned char *)block + 16u;
+  }
+#else
+  if ((unsigned char *)buffer + old_bytes == nts_env->bump &&
+      new_bytes <= old_bytes + nts_env->bump_left) {
+    nts_env->bump = (unsigned char *)buffer + new_bytes;
+    nts_env->bump_left = nts_env->bump_left + old_bytes - new_bytes;
+    nts_env->bytes_held = nts_env->bytes_held - old_bytes + new_bytes;
+    return buffer;
+  }
+  if (new_bytes <= old_bytes) {
+    return buffer;
+  }
+#endif
+  void *moved = nts_alloc(new_bytes);
+  memcpy(moved, buffer, preserved);
+  return moved;
+}
+
+NtsString *nts_str_resize_owned(NtsString *buffer, uint32_t initialized,
+                                uint32_t length, int wide) {
+  assert(initialized <= buffer->length && initialized <= length);
+  assert((buffer->flags & (NTS_GROWN | NTS_HASHED)) == 0);
+#ifdef NTS_PROVIDER_RC
+  assert(nts_env->region ? buffer->reserved == NTS_IMMORTAL
+                         : buffer->reserved == 1u);
+#else
+  assert(buffer->reserved == 1u);
+#endif
+  const size_t old_width = (buffer->flags & NTS_TWO_BYTE) ? 2u : 1u;
+  const size_t width = wide ? 2u : 1u;
+  const uint64_t required = NTS_STRING_UNITS + ((uint64_t)length + 1u) * width;
+  if (length > (uint32_t)NTS_MAX_LENGTH || required > SIZE_MAX - 31u) {
+    fprintf(stderr, NTS_REFUSED "a case-converted string is too long\n");
+    abort();
+  }
+  /* Narrow before shrinking: the old wide prefix may extend beyond the new
+   * allocation. Widen after growing, backwards so unread bytes survive. */
+  if (old_width == 2u && width == 1u) {
+    for (uint32_t at = 0; at < initialized; at++) {
+      const uint16_t unit = NTS_ELEMENTS(buffer, uint16_t)[at];
+      assert(unit <= 255u);
+      NTS_ELEMENTS(buffer, uint8_t)[at] = (uint8_t)unit;
+    }
+  }
+  const size_t old_bytes =
+      NTS_STRING_UNITS + ((size_t)buffer->length + 1u) * old_width;
+  const size_t preserved =
+      NTS_STRING_UNITS +
+      (size_t)initialized * (width < old_width ? width : old_width);
+  NtsString *out = (NtsString *)nts_resize_private_string(
+      buffer, old_bytes, (size_t)required, preserved);
+  if (old_width == 1u && width == 2u) {
+    for (uint32_t at = initialized; at > 0; at--) {
+      NTS_ELEMENTS(out, uint16_t)
+      [at - 1u] = NTS_ELEMENTS(out, uint8_t)[at - 1u];
+    }
+  }
+  out->descriptor = wide ? &nts_desc_string2 : &nts_desc_string1;
+  out->flags = wide ? NTS_TWO_BYTE : 0u;
+  out->length = length;
+  if (wide) {
+    NTS_ELEMENTS(out, uint16_t)[length] = 0;
+  } else {
+    NTS_ELEMENTS(out, uint8_t)[length] = 0;
+  }
+  return out;
+}
+
 NtsString *nts_str_raw(uint32_t length, int wide) {
   /* The same 2^31 - 1 bound `nts_array_allocate` enforces, and for the same
    * reason: `hir::flow` gives `OpKind::Length` an `int32` fact, and that

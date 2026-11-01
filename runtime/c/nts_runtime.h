@@ -2277,6 +2277,13 @@ NtsString *nts_str_concat_json_quoted(const NtsString *a, const NtsString *s);
  *
  * Public for the same reason `nts_str_alloc` is -- see below. */
 NtsString *nts_str_raw(uint32_t length, int wide);
+/* Consumes a private, unpublished result buffer. Only `initialized` units
+ * contain values, and every one fits the requested width. Preserve those
+ * units while resizing to exactly `length`; aliases and hashed/grown strings
+ * are excluded. The allocator may return the same address or move the block.
+ * This is runtime construction machinery, not a borrowed-string operation. */
+NtsString *nts_str_resize_owned(NtsString *buffer, uint32_t initialized,
+                                uint32_t length, int wide);
 
 /* Build a string from UTF-16 code units, choosing one-byte or two-byte storage
  * by what the units actually need.

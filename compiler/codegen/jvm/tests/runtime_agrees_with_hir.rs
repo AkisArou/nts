@@ -434,4 +434,5 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// 141 with stdout/stderr's per-descriptor isTTY queries. This runtime targets
 /// Java 8 and Android; System.console cannot answer either descriptor's state,
 /// and the native FFM route requires Java 22. Keep both calls refused by name.
-const REFUSED_FLOOR: usize = 141;
+// Native-only private result construction; no JVM string helper is emitted.
+const REFUSED_FLOOR: usize = 142;

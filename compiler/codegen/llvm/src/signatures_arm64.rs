@@ -2347,6 +2347,12 @@ pub const SIGNATURES_ARM64: &[Signature] = &[
         attributes: &[],
     },
     Signature {
+        name: "nts_str_resize_owned",
+        returns: "ptr",
+        params: &["ptr", "i32", "i32", "i32"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_str_slice",
         returns: "ptr",
         params: &["ptr", "double", "double"],

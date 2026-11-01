@@ -13,7 +13,7 @@
  * leaves one byte. A two-byte string holding only ASCII narrows to one byte.
  * Everything else takes the general path: the two-level tables, with astral
  * characters in constant-delta ranges and the expansions (ß to SS, İ to
- * i + combining dot) in an exception list the table marks with a sentinel.
+ * i + combining dot) in an exception pool directly indexed by the table.
  *
  * # Unchanged text keeps its string
  *
@@ -25,12 +25,12 @@
  * region clone calls this only on text it made or immortal text, because the
  * retain is a count a count-free clone has no release for.
  *
- * Two passes rather than one, in the general case. Case conversion is not
- * length-preserving -- one code point can become three -- so the output
- * length is not known until it has been computed. Running the lookup twice
- * is cheaper than allocating three times the input and copying it down. The
- * first pass is also where "nothing would change" is answered. It records
- * the output width too, so the second pass writes the final allocation.
+ * Scan without writing until the first change. If there is one, allocate at
+ * the input width and length, copy the unchanged prefix, then map forward.
+ * Only a width change or expansion stops the write: count the unconsumed
+ * suffix, resize the private result exactly once, and finish that suffix.
+ * Nothing rescans the converted prefix; the original input stays available
+ * for context, and an unchanged string never allocates a result buffer.
  *
  * No context but one. The default (locale-insensitive) conversion is
  * per-character except `Final_Sigma`: a capital sigma lowercases to the
@@ -464,14 +464,14 @@ static uint32_t nts_case_identity_span(const uint16_t *source, uint32_t at,
  * work is independent of how often code points change pages. The single stop
  * test leaves context, expansions, surrogates and whole identity-page scans
  * out of the scalar mapping loop. */
-#define NTS_CASE_COUNT(NAME, TABLE, LOWER, SOURCE, TWO_BYTE)                   \
-  static NtsCaseCount NAME(const NtsString *s) {                               \
+#define NTS_CASE_COUNT_FROM(NAME, TABLE, LOWER, SOURCE, TWO_BYTE)              \
+  static NtsCaseCount NAME(const NtsString *s, uint32_t begin) {               \
     const SOURCE *restrict source = NTS_ELEMENTS(s, SOURCE);                   \
     const uint32_t length = s->length;                                         \
     const uint8_t *restrict index = (TABLE).index;                             \
     const uint32_t *restrict blocks = (TABLE).blocks;                          \
     NtsCaseCount counted = {0, 0, 0};                                          \
-    uint32_t at = 0;                                                           \
+    uint32_t at = begin;                                                       \
     while (at < length) {                                                      \
       const uint32_t start = at;                                               \
       uint32_t facts = 0;                                                      \
@@ -505,15 +505,16 @@ static uint32_t nts_case_identity_span(const uint16_t *source, uint32_t at,
     return counted;                                                            \
   }
 
-#define NTS_CASE_WRITE(NAME, TABLE, LOWER, SOURCE, TWO_BYTE, OUTPUT)           \
-  static void NAME(const NtsString *s, NtsString *out) {                       \
+#define NTS_CASE_WRITE_FROM(NAME, TABLE, LOWER, SOURCE, TWO_BYTE, OUTPUT)      \
+  static void NAME(const NtsString *s, NtsString *out, uint32_t begin,         \
+                   uint32_t prefix) {                                          \
     const SOURCE *restrict source = NTS_ELEMENTS(s, SOURCE);                   \
     OUTPUT *restrict output = NTS_ELEMENTS(out, OUTPUT);                       \
     const uint32_t length = s->length;                                         \
     const uint8_t *restrict index = (TABLE).index;                             \
     const uint32_t *restrict blocks = (TABLE).blocks;                          \
-    uint32_t at = 0;                                                           \
-    uint32_t written = 0;                                                      \
+    uint32_t at = begin;                                                       \
+    uint32_t written = prefix;                                                 \
     while (at < length) {                                                      \
       const uint32_t start = at;                                               \
       uint32_t entry = 0;                                                      \
@@ -551,35 +552,134 @@ static uint32_t nts_case_identity_span(const uint16_t *source, uint32_t at,
     }                                                                          \
   }
 
-#define NTS_CASE_ROUTE(NAME, COUNT, WRITE8, WRITE16)                           \
-  __attribute__((noinline)) static NtsString *NAME(const NtsString *s) {       \
-    const NtsCaseCount counted = COUNT(s);                                     \
-    if (!counted.changed) {                                                    \
+/* Finish only the suffix that has not been written. Prefix and context are
+ * always read from distinct original-source and speculative-output objects. */
+#define NTS_CASE_FINISH(NAME, TABLE, LOWER, SOURCE, TWO_BYTE, COUNT, WRITE8,   \
+                        WRITE16)                                               \
+  static NtsString *NAME(const NtsString *s, NtsString *prefix, uint32_t at,   \
+                         uint32_t facts) {                                     \
+    NtsCaseCount tail = COUNT(s, at);                                          \
+    tail.units += at;                                                          \
+    tail.changed |= (facts & 0xffffu) != 0;                                    \
+    tail.wide |= facts & __nts_CASE_WIDE;                                      \
+    if (!tail.changed) {                                                       \
+      nts_release(prefix);                                                     \
       return nts_case_unchanged(s);                                            \
     }                                                                          \
-    if (counted.units > (uint64_t)NTS_MAX_LENGTH) {                            \
+    if (tail.units > (uint64_t)NTS_MAX_LENGTH) {                               \
       fprintf(stderr, NTS_REFUSED "a case-converted string is too long\n");    \
       abort();                                                                 \
     }                                                                          \
-    NtsString *out =                                                           \
-        nts_str_raw((uint32_t)counted.units, counted.wide > 255u);             \
-    if (counted.wide > 255u) {                                                 \
-      WRITE16(s, out);                                                         \
+    NtsString *out = nts_str_resize_owned(prefix, at, (uint32_t)tail.units,    \
+                                          tail.wide > 255u);                   \
+    if (tail.wide > 255u) {                                                    \
+      WRITE16(s, out, at, at);                                                 \
     } else {                                                                   \
-      WRITE8(s, out);                                                          \
+      WRITE8(s, out, at, at);                                                  \
     }                                                                          \
     return out;                                                                \
   }
 
+#define NTS_CASE_ROUTE(NAME, TABLE, LOWER, SOURCE, TWO_BYTE, FINISH)           \
+  __attribute__((noinline)) static NtsString *NAME(const NtsString *s) {       \
+    const SOURCE *restrict source = NTS_ELEMENTS(s, SOURCE);                   \
+    const uint8_t *restrict index = (TABLE).index;                             \
+    const uint32_t *restrict blocks = (TABLE).blocks;                          \
+    const uint32_t length = s->length;                                         \
+    uint32_t at = 0, facts = 0;                                                \
+    while (at < length) {                                                      \
+      uint32_t cp = source[at];                                                \
+      uint32_t entry = blocks[((uint32_t)index[cp >> 8] << 8) | (cp & 255u)];  \
+      if ((entry & __nts_CASE_WRITE_STOP) == 0) {                              \
+        if ((entry & 0xffffu) != 0)                                            \
+          break;                                                               \
+        facts |= entry;                                                        \
+        at++;                                                                  \
+        continue;                                                              \
+      }                                                                        \
+      if ((TWO_BYTE) && (entry & __nts_CASE_IDENTITY)) {                       \
+        const __nts_case_identity run = (TABLE).identity[cp >> 8];             \
+        at = nts_case_identity_span((const uint16_t *)source, at, length,      \
+                                    run.lo, run.hi, LOWER);                    \
+        facts |= __nts_CASE_WIDE;                                              \
+        continue;                                                              \
+      }                                                                        \
+      const NtsCaseMapping mapped = nts_case_cold(s, at, &(TABLE), LOWER);     \
+      if (mapped.count != 1 || mapped.values[0] != mapped.point)               \
+        break;                                                                 \
+      if (mapped.point > 255u)                                                 \
+        facts |= __nts_CASE_WIDE;                                              \
+      at += mapped.width;                                                      \
+    }                                                                          \
+    if (at == length)                                                          \
+      return nts_case_unchanged(s);                                            \
+    NtsString *out = nts_str_raw(length, TWO_BYTE);                            \
+    SOURCE *restrict output = NTS_ELEMENTS(out, SOURCE);                       \
+    if (at != 0)                                                               \
+      memcpy(output, source, (size_t)at * sizeof(SOURCE));                     \
+    while (at < length) {                                                      \
+      uint32_t cp = source[at];                                                \
+      uint32_t entry = blocks[((uint32_t)index[cp >> 8] << 8) | (cp & 255u)];  \
+      if (entry & __nts_CASE_WRITE_STOP) {                                     \
+        if ((TWO_BYTE) && (entry & __nts_CASE_IDENTITY)) {                     \
+          const __nts_case_identity run = (TABLE).identity[cp >> 8];           \
+          uint32_t end = nts_case_identity_span(                               \
+              (const uint16_t *)source, at, length, run.lo, run.hi, LOWER);    \
+          memcpy(output + at, source + at,                                     \
+                 (size_t)(end - at) * sizeof(SOURCE));                         \
+          facts |= __nts_CASE_WIDE;                                            \
+          at = end;                                                            \
+          continue;                                                            \
+        }                                                                      \
+        const NtsCaseMapping mapped = nts_case_cold(s, at, &(TABLE), LOWER);   \
+        if (mapped.count != 1 ||                                               \
+            (mapped.values[0] > 0xffffu ? 2u : 1u) != mapped.width ||          \
+            (!(TWO_BYTE) && mapped.values[0] > 255u))                          \
+          return FINISH(s, out, at, facts);                                    \
+        facts |= (uint32_t)(mapped.values[0] != mapped.point);                 \
+        if (mapped.values[0] > 255u)                                           \
+          facts |= __nts_CASE_WIDE;                                            \
+        if (mapped.width == 2u) {                                              \
+          uint32_t written = at;                                               \
+          nts_case_write_cold(s, at, &(TABLE), LOWER, out, &written);          \
+        } else                                                                 \
+          output[at] = (SOURCE)mapped.values[0];                               \
+        at += mapped.width;                                                    \
+        continue;                                                              \
+      }                                                                        \
+      if (!(TWO_BYTE) && (entry & __nts_CASE_WIDE))                            \
+        return FINISH(s, out, at, facts);                                      \
+      output[at] = (SOURCE)(cp ^ entry);                                       \
+      facts |= entry;                                                          \
+      at++;                                                                    \
+    }                                                                          \
+    if ((facts & 0xffffu) == 0) {                                              \
+      nts_release(out);                                                        \
+      return nts_case_unchanged(s);                                            \
+    }                                                                          \
+    if ((TWO_BYTE) && !(facts & __nts_CASE_WIDE))                              \
+      return FINISH(s, out, length, facts);                                    \
+    return out;                                                                \
+  }
+
 #define NTS_CASE_SHAPES(NAME, TABLE, LOWER)                                    \
-  NTS_CASE_COUNT(NAME##_count8, TABLE, LOWER, uint8_t, 0)                      \
-  NTS_CASE_COUNT(NAME##_count16, TABLE, LOWER, uint16_t, 1)                    \
-  NTS_CASE_WRITE(NAME##_write8_8, TABLE, LOWER, uint8_t, 0, uint8_t)           \
-  NTS_CASE_WRITE(NAME##_write8_16, TABLE, LOWER, uint8_t, 0, uint16_t)         \
-  NTS_CASE_WRITE(NAME##_write16_8, TABLE, LOWER, uint16_t, 1, uint8_t)         \
-  NTS_CASE_WRITE(NAME##_write16_16, TABLE, LOWER, uint16_t, 1, uint16_t)       \
-  NTS_CASE_ROUTE(NAME##8, NAME##_count8, NAME##_write8_8, NAME##_write8_16)    \
-  NTS_CASE_ROUTE(NAME##16, NAME##_count16, NAME##_write16_8, NAME##_write16_16)
+  NTS_CASE_COUNT_FROM(NAME##_tail_count8, TABLE, LOWER, uint8_t, 0)            \
+  NTS_CASE_COUNT_FROM(NAME##_tail_count16, TABLE, LOWER, uint16_t, 1)          \
+  NTS_CASE_WRITE_FROM(NAME##_tail_write8_8, TABLE, LOWER, uint8_t, 0, uint8_t) \
+  NTS_CASE_WRITE_FROM(NAME##_tail_write8_16, TABLE, LOWER, uint8_t, 0,         \
+                      uint16_t)                                                \
+  NTS_CASE_WRITE_FROM(NAME##_tail_write16_8, TABLE, LOWER, uint16_t, 1,        \
+                      uint8_t)                                                 \
+  NTS_CASE_WRITE_FROM(NAME##_tail_write16_16, TABLE, LOWER, uint16_t, 1,       \
+                      uint16_t)                                                \
+  NTS_CASE_FINISH(NAME##_finish8, TABLE, LOWER, uint8_t, 0,                    \
+                  NAME##_tail_count8, NAME##_tail_write8_8,                    \
+                  NAME##_tail_write8_16)                                       \
+  NTS_CASE_FINISH(NAME##_finish16, TABLE, LOWER, uint16_t, 1,                  \
+                  NAME##_tail_count16, NAME##_tail_write16_8,                  \
+                  NAME##_tail_write16_16)                                      \
+  NTS_CASE_ROUTE(NAME##8, TABLE, LOWER, uint8_t, 0, NAME##_finish8)            \
+  NTS_CASE_ROUTE(NAME##16, TABLE, LOWER, uint16_t, 1, NAME##_finish16)
 
 #ifdef __nts_UNICODE_LOWER
 NTS_CASE_SHAPES(nts_case_lower, __nts_case_lower_tables, 1)
@@ -590,8 +690,9 @@ NTS_CASE_SHAPES(nts_case_upper, __nts_case_upper_tables, 0)
 
 #undef NTS_CASE_SHAPES
 #undef NTS_CASE_ROUTE
-#undef NTS_CASE_WRITE
-#undef NTS_CASE_COUNT
+#undef NTS_CASE_FINISH
+#undef NTS_CASE_WRITE_FROM
+#undef NTS_CASE_COUNT_FROM
 
 /* Aligned, which is not a style choice. This function's predecessor compiled
  * to byte-identical code on two backends and ran 28% slower on one of them
