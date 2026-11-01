@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-deep-module-binding-keeps-its-storage-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-deep-module-binding-keeps-its-storage-control/src/main.ts",
+      "signature": "2f89e1d39a344966a814cadacfd1a2e8e8236e5156ccd7151e069fd855ee99b3",
+      "keys": {
+        "c": "87f6fff0fd6023090e878ea37abee639",
+        "jvm": "f6dcb88a08a79a36fb5e51546f1d9eac",
+        "llvm": "190ad96edcd34cf3eda67440b639a930"
+      },
+      "cases_sha256": "b5f63b6a4060453183fa4465180bdf32eaf98ce4d9cdc33c2e61b75f135032fa",
+      "driver_sha256": "0a01f93737f226c8ed167eeda8ff432fd17749d74bda8aeb9605c20e422a52ea",
+      "populations": {
+        "read1": {
+          "count": 29,
+          "cases_sha256": "18365576f179229f2983756bd6e8367ab0460a0fe937396e62d1ef66a3fce1a6"
+        },
+        "read63": {
+          "count": 29,
+          "cases_sha256": "915f61d6507ff3e981c2d9d137e481c0272f5a4e6e592e5b0021c46524bcd27b"
+        },
+        "read64": {
+          "count": 29,
+          "cases_sha256": "f37237146a6cef03d8f75ba01654a13cc23b348938829b9ca5ac05bd990f1522"
+        },
+        "read65": {
+          "count": 29,
+          "cases_sha256": "feabf657289bf4da239d2e4ed273743445cb9a1a42cd6ed30611aa7e4b16c3cb"
+        },
+        "read70": {
+          "count": 29,
+          "cases_sha256": "89a068da0687290a786850780360211efbc1c3bcbea8b4e4a92c9da96cd7fd03"
+        }
+      },
+      "complete": true,
+      "count": 145
+    }
+  ]
+}
