@@ -1230,3 +1230,27 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   constructor run. ClaudeHelper builds the rest on it: the failing fixtures
   first, then the runtime kind, descriptors and creation, species, the JVM
   classes, and the records last.
+
+## Team and priorities (11-01)
+
+- **Foundations and correctness in parallel.** The ChatGPT families
+  recorded 264 silent wrong answers in the TypeScript suite on C, and under
+  "silent wrong answers first" both compiler agents had moved to them, so
+  the memory analysis, bounds-check placement, regions and the builtins
+  mechanism's stage 3 stood still for four days. The user: "we should work
+  parallely on correctness and foundations. the tests that the chatgpt
+  agents bring are nice yes, but I started chatgpts so we can leverage them
+  to write 'boilerplate' tests lets say. not try to pass every test. this
+  is like running test262. We should focus more on getting the foundations
+  close to our planned result/performance! Of course there will be bugs and
+  we should fix them." So the foundations are the main line; bugs are fixed
+  beside them, a silent wrong answer before a refusal and both by how much
+  real code they affect; and the families' failures are recorded, as
+  test262's are, without setting the order of work.
+- **compiler3 returns to the foundations track** once its module-scope loop
+  fix (#164) lands (memory stage 2, then bounds-check placement, then
+  memory stage 3) and stays there. compiler4 and ClaudeHelper fix bugs;
+  compiler4 takes the typed containers' remaining wrong answers (#158) after
+  #159, since they are the foundation's own.
+- **Stage 3 of the builtins mechanism** has had no owner since runtime2
+  left. It goes to the runtime agent once its compile-time fix (#168) lands.

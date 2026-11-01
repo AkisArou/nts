@@ -7,9 +7,15 @@ one page that changes as work goes; the designs it builds are in
 
 ## Priorities
 
-- **Silent wrong answers first, wherever they are found.** A program that
-  compiles and computes a wrong result comes before any refusal, which is
-  safe; refusals follow in the order of how much real code they block.
+- **Foundations and correctness in parallel.** The foundations (the memory
+  analysis, bounds-check placement, typed containers, strings, numbers, the
+  builtins mechanism) are the main line, until each reaches its designed
+  performance. Bugs are fixed beside them by their own agents: a silent
+  wrong answer before a refusal, which is safe, and both in the order of how
+  much real code they affect. The TypeScript suite's families are measured
+  as test262 is: their failures are recorded and flip as fixes land, and
+  they do not set the order of work
+  ([log](records/notebooks/decisions-log.md#team-and-priorities-11-01)).
 - **Primitives before test262.** The test262 records keep gating, but no new
   test262 family starts until the foundations are solid.
 - **Native (C and LLVM) first.** The JVM and Wasm are kept in mind and designed
@@ -26,12 +32,13 @@ one page that changes as work goes; the designs it builds are in
 
 - **The team:** the coordinator decides, designs and reviews. Agents implement
   and measure:
-  - **compiler2:** silent wrong answers in the core and lowering, and review
-    of every compiler change;
-  - **compiler3:** the foundations track: the one memory analysis, then
-    bounds-check placement;
-  - **runtime:** `runtime/c`, allocation and benchmarks;
-  - **runtime3:** calling C, and the JVM;
+  - **compiler4** and **ClaudeHelper:** silent wrong answers in the core and
+    lowering; compiler4 also reviews every compiler change;
+  - **compiler3:** the foundations track, kept on it while wrong answers
+    remain: the one memory analysis, then bounds-check placement;
+  - **runtime:** `runtime/c`, compile-time blow-ups, then stage 3 of the
+    builtins mechanism;
+  - **runtime3:** calling C, the C calling convention, Node-API, and the JVM;
   - **tsrs:** the frontend and the gate tooling;
   - **helper2** and **helper4:** landing the cloud agents' pull requests,
     fixtures, Unicode, the TypeScript runtimes and the Are We Fast Yet ports;
@@ -66,8 +73,8 @@ one page that changes as work goes; the designs it builds are in
 
 | phase | what | state |
 |---|---|---|
-| 1 | Settle `main` | finishing |
-| 2 | Foundations, native first | next; memory and Unicode designs decided |
+| 1 | Settle `main` | finishing; what remains runs beside phase 2 |
+| 2 | Foundations, native first | the main line; memory and Unicode designs decided |
 | 3 | Conformance-driven development | paused; its records keep gating |
 | 4 | The JVM and Wasm on the same foundations | after phase 2 |
 
