@@ -1,0 +1,37 @@
+/*---
+description: Control for generator-forof-break-finally; the same protocol steps are explicit.
+features: [ts-iterator-route-generators, ts-iteration, ts-generators, ts-interfaces, ts-unions, ts-arrays, ts-class, ts-symbols, ts-errors]
+---*/
+// Control: explicit protocol calls keep the same values, arguments, event order and final state.
+type RouteValue = number | string | undefined | { id: number };
+const identity = { id: 17 };
+const inputs: RouteValue[] = [-0, NaN, 0.5, 2147483648, "", "\u00e9\u4e2d", undefined, identity];
+interface GeneratorState { last: RouteValue; resumed: number; closed: number; }
+class GeneratorProbe implements IterableIterator<RouteValue, RouteValue, RouteValue> {
+  inner: Generator<RouteValue, RouteValue, RouteValue>; log: unknown[];
+  constructor(inner: Generator<RouteValue, RouteValue, RouteValue>, log: unknown[]) { this.inner = inner; this.log = log; }
+  [Symbol.iterator](): GeneratorProbe { this.log.push("iterator"); return this; }
+  next(value?: RouteValue): IteratorResult<RouteValue, RouteValue> { this.log.push("next", arguments.length, value); return this.inner.next(value); }
+  return(value?: RouteValue): IteratorResult<RouteValue, RouteValue> { this.log.push("return", arguments.length, value); return this.inner.return(value); }
+  throw(error?: unknown): IteratorResult<RouteValue, RouteValue> { this.log.push("throw", arguments.length, error); return this.inner.throw(error); }
+}
+function same(actual: unknown, expected: unknown): void { assert.sameValue(Object.is(actual, expected), true); assert.sameValue(typeof actual, typeof expected); }
+function* produce(values: RouteValue[], state: GeneratorState, log: unknown[]): Generator<RouteValue, RouteValue, RouteValue> {
+  try { for (const value of values) { state.last = value; log.push("yield", value); state.last = yield value; state.resumed++; log.push("sent", state.last); } return state.last; }
+  finally { state.closed++; log.push("finally", state.last); }
+}
+interface ClosingIterable { iterable: GeneratorProbe; }
+for (const input of inputs) for (const count of [0, 1, 3]) for (const limit of [1, 2, 9]) {
+  const values: RouteValue[] = []; for (let i = 0; i < count; i++) values.push(i === 1 ? undefined : input);
+  const state: GeneratorState = { last: "seed", resumed: 0, closed: 0 }, log: unknown[] = [];
+  const source = new GeneratorProbe(produce(values, state, log), log), holder: ClosingIterable = { iterable: source }, out: RouteValue[] = [];
+  const iterator = holder.iterable[Symbol.iterator](); let step = iterator.next();
+  while (!step.done) { out.push(step.value); log.push("take", step.value); if (out.length === limit) { iterator.return(); break; } step = iterator.next(); }
+  const taken = Math.min(count, limit), closedEarly = count >= limit, expected: unknown[] = ["iterator"];
+  for (let i = 0; i < taken; i++) { expected.push("next", 0, undefined); if (i > 0) expected.push("sent", undefined); expected.push("yield", values[i], "take", values[i]); }
+  if (closedEarly) expected.push("return", 0, undefined); else { expected.push("next", 0, undefined); if (taken > 0) expected.push("sent", undefined); }
+  const held = closedEarly ? values[taken - 1] : count === 0 ? "seed" : undefined;
+  expected.push("finally", held);
+  assert.compareArray(out, values.slice(0, taken)); assert.compareArray(log, expected); same(state.last, held);
+  assert.sameValue(state.resumed, closedEarly ? taken - 1 : count); assert.sameValue(state.closed, 1);
+}
