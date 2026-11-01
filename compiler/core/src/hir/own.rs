@@ -4837,6 +4837,10 @@ mod tests {
             "the growth step every append shares: takes the string's reference and hands it, or its grown copy, back",
         ),
         (
+            "nts_resize_private_string",
+            "consumes unique unpublished storage, returning it or replacing its storage without borrowing an argument",
+        ),
+        (
             "nts_array_same",
             "the helper the listed array ones return through",
         ),
