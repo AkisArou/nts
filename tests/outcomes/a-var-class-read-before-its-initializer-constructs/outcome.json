@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 28,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "probe 0 4053400000000000",
+        "node": "probe 0 c008000000000000"
+      },
+      {
+        "compiled": "probe 1 4053400000000000",
+        "node": "probe 1 c008000000000000"
+      },
+      {
+        "compiled": "probe 2 4053800000000000",
+        "node": "probe 2 c000000000000000"
+      },
+      {
+        "compiled": "probe 3 4053000000000000",
+        "node": "probe 3 c010000000000000"
+      },
+      {
+        "compiled": "probe 4 4053c00000000000",
+        "node": "probe 4 bff0000000000000"
+      },
+      {
+        "compiled": "probe 5 4054000000000000",
+        "node": "probe 5 0000000000000000"
+      },
+      {
+        "compiled": "probe 6 4053600000000000",
+        "node": "probe 6 c004000000000000"
+      },
+      {
+        "compiled": "probe 7 4053200000000000",
+        "node": "probe 7 c00c000000000000"
+      },
+      {
+        "compiled": "probe 8 4053a00000000000",
+        "node": "probe 8 bff8000000000000"
+      },
+      {
+        "compiled": "probe 9 4052e00000000000",
+        "node": "probe 9 c012000000000000"
+      },
+      {
+        "compiled": "probe 10 40542ccccccccccd",
+        "node": "probe 10 3fe6666666666668"
+      },
+      {
+        "compiled": "probe 11 4052533333333333",
+        "node": "probe 11 c01acccccccccccd"
+      },
+      {
+        "compiled": "probe 12 4055000000000000",
+        "node": "probe 12 4010000000000000"
+      },
+      {
+        "compiled": "probe 13 405a000000000000",
+        "node": "probe 13 4038000000000000"
+      },
+      {
+        "compiled": "probe 14 4066200000000000",
+        "node": "probe 14 4058400000000000"
+      },
+      {
+        "compiled": "probe 15 4074c00000000000",
+        "node": "probe 15 406f800000000000"
+      },
+      {
+        "compiled": "probe 16 4074d00000000000",
+        "node": "probe 16 406fa00000000000"
+      },
+      {
+        "compiled": "probe 17 4090d40000000000",
+        "node": "probe 17 408f280000000000"
+      },
+      {
+        "compiled": "probe 18 40b04d0000000000",
+        "node": "probe 18 40affa0000000000"
+      },
+      {
+        "compiled": "probe 19 40f004c000000000",
+        "node": "probe 19 40efff8000000000"
+      },
+      {
+        "compiled": "probe 20 41e0000009800000",
+        "node": "probe 20 41dfffffff000000"
+      },
+      {
+        "compiled": "probe 21 c1dfffffecc00000",
+        "node": "probe 21 c1e0000000600000"
+      },
+      {
+        "compiled": "probe 22 41e0000009a00000",
+        "node": "probe 22 41dfffffff400000"
+      },
+      {
+        "compiled": "probe 23 41f0000004c00000",
+        "node": "probe 23 41efffffff800000"
+      },
+      {
+        "compiled": "probe 24 4340000000000026",
+        "node": "probe 24 433ffffffffffffc"
+      },
+      {
+        "compiled": "probe 25 c33fffffffffffb2",
+        "node": "probe 25 c340000000000001"
+      },
+      {
+        "compiled": "probe 26 40534000000abcc7",
+        "node": "probe 26 c007fffffea86712"
+      },
+      {
+        "compiled": "probe 27 40c8430000000000",
+        "node": "probe 27 40c81b0000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 28 disagreements",
+  "node": null,
+  "measured_with": "09997fca5eb9efeb",
+  "source": "measured"
+}
