@@ -9,6 +9,8 @@
 use std::fmt::Write as _;
 use std::sync::LazyLock;
 
+use rustc_hash::FxHashMap;
+
 use nts_unicode::Direction;
 
 use super::UnicodeNeeds;
@@ -16,6 +18,20 @@ use super::UnicodeNeeds;
 #[cfg(all(test, unix))]
 #[path = "unicode_tables/runtime_tests.rs"]
 mod runtime_tests;
+
+// The low sixteen bits are an XOR delta, or a direct exception-record index.
+// Count ignores WRITE_STOP for Sigma, whose count facts are model-licensed.
+const WRITE_STOP: u32 = 1 << 31;
+const COUNT_STOP: u32 = 1 << 30;
+const WIDE: u32 = 1 << 29;
+const IDENTITY: u32 = 1 << 28;
+const FULL_EXCEPTION: u32 = 1 << 27;
+
+#[derive(Debug)]
+struct PackedTables {
+    index: [u8; 256],
+    blocks: Vec<[u32; 256]>,
+}
 
 /// The name the generated tables ship under, beside `nts_unicode.c`.
 pub(super) const HEADER_NAME: &str = "nts_unicode_tables.h";
@@ -47,6 +63,9 @@ pub(super) fn header(needs: UnicodeNeeds) -> &'static str {
 }
 
 fn generate(needs: UnicodeNeeds) -> String {
+    if needs.lower {
+        sigma_count_contract();
+    }
     let (major, minor, patch) = nts_unicode::UNICODE_VERSION;
     let mut out = String::new();
     let _ = writeln!(
@@ -68,7 +87,7 @@ fn generate(needs: UnicodeNeeds) -> String {
     );
     let _ = writeln!(
         out,
-        "typedef struct __nts_case_exception {{ uint32_t code_point; uint32_t offset; uint32_t length; }} __nts_case_exception;"
+        "typedef struct __nts_case_exception {{ uint32_t offset; uint32_t length; }} __nts_case_exception;"
     );
     let _ = writeln!(
         out,
@@ -81,15 +100,22 @@ fn generate(needs: UnicodeNeeds) -> String {
     let _ = writeln!(out, "typedef struct __nts_case_tables {{");
     let _ = writeln!(out, "  const uint8_t *latin1;");
     let _ = writeln!(out, "  const uint8_t *index;");
-    let _ = writeln!(out, "  const uint16_t *blocks;");
+    let _ = writeln!(out, "  const uint32_t *blocks;");
     let _ = writeln!(out, "  const __nts_case_identity *identity;");
-    let _ = writeln!(out, "  uint16_t zero_block;");
     let _ = writeln!(out, "  const __nts_case_range *ranges;");
     let _ = writeln!(out, "  uint32_t range_count;");
     let _ = writeln!(out, "  const __nts_case_exception *exceptions;");
-    let _ = writeln!(out, "  uint32_t exception_count;");
     let _ = writeln!(out, "  const uint32_t *exception_pool;");
     let _ = writeln!(out, "}} __nts_case_tables;");
+    for (name, value) in [
+        ("WRITE_STOP", WRITE_STOP),
+        ("COUNT_STOP", COUNT_STOP),
+        ("WIDE", WIDE),
+        ("IDENTITY", IDENTITY),
+        ("FULL_EXCEPTION", FULL_EXCEPTION),
+    ] {
+        let _ = writeln!(out, "#define __nts_CASE_{name} {value:#010x}u");
+    }
     let _ = writeln!(out);
     let _ = writeln!(
         out,
@@ -163,6 +189,119 @@ fn emit_identity(out: &mut String, name: &str, ranges: &[(u16, u16)]) {
     let _ = writeln!(out, "}};");
 }
 
+// The count pass does not need Sigma context: both possible answers have
+// the same length, width and changedness. Refuse a changed model rather than
+// silently carrying this licence across a data update.
+fn sigma_count_contract() {
+    use nts_unicode::{CaseMapping, Direction, convert_case, map_case};
+    assert_eq!(
+        map_case(Direction::Lower, 0x03a3),
+        CaseMapping::Single(0x03c3)
+    );
+    for (input, expected) in [
+        ([0x41, 0x03a3, 0x20], 0x03c2),
+        ([0x41, 0x03a3, 0x41], 0x03c3),
+    ] {
+        let mapped = convert_case(Direction::Lower, &input);
+        assert_eq!(mapped.len(), input.len());
+        assert_eq!(mapped[1], expected);
+        assert!(mapped[1] > 255 && mapped[1] != input[1]);
+    }
+}
+
+fn packed_entry(
+    tables: &nts_unicode::CaseTables,
+    cp: u32,
+    delta: u16,
+    identity: bool,
+    lower: bool,
+) -> u32 {
+    if (0xd800..=0xdfff).contains(&cp) {
+        assert_eq!(delta, 0, "a surrogate is unchanged");
+        return WRITE_STOP | COUNT_STOP | WIDE;
+    }
+    if delta == nts_unicode::EXCEPTION_SENTINEL {
+        let (index, (_, values)) = tables
+            .exceptions
+            .iter()
+            .enumerate()
+            .find(|(_, (point, _))| *point == cp)
+            .expect("exception sentinel record");
+        let payload = u32::from(u16::try_from(index).expect("exception index fits payload"));
+        let wide = if values.iter().any(|&value| value > 255) {
+            WIDE
+        } else {
+            0
+        };
+        return WRITE_STOP | COUNT_STOP | FULL_EXCEPTION | wide | payload;
+    }
+    let mut entry = u32::from(delta);
+    if (cp ^ u32::from(delta)) > 255 {
+        entry |= WIDE;
+    }
+    if lower && cp == 0x03a3 {
+        entry |= WRITE_STOP;
+    }
+    if identity {
+        entry |= WRITE_STOP | COUNT_STOP | IDENTITY;
+    }
+    entry
+}
+
+fn packed_tables(tables: &nts_unicode::CaseTables, lower: bool) -> PackedTables {
+    let mut data = PackedTables {
+        index: [0; 256],
+        blocks: Vec::new(),
+    };
+    let mut indices = FxHashMap::default();
+    for page in 0..256 {
+        let canonical = &tables.blocks[usize::from(tables.index[page])];
+        let identity = !(0xd8..=0xdf).contains(&page) && canonical.iter().all(|&v| v == 0);
+        let mut block = [0u32; 256];
+        for (low, entry) in block.iter_mut().enumerate() {
+            let cp = u32::try_from(page * 256 + low).expect("BMP code point");
+            *entry = packed_entry(tables, cp, canonical[low], identity, lower);
+        }
+        let index = *indices.entry(block).or_insert_with(|| {
+            let index = u8::try_from(data.blocks.len()).expect("at most 256 BMP pages");
+            data.blocks.push(block);
+            index
+        });
+        data.index[page] = index;
+    }
+    data
+}
+
+fn emit_packed(out: &mut String, name: &str, data: &PackedTables) {
+    let _ = writeln!(
+        out,
+        "static const uint8_t __nts_case_{name}_index[256] = {{"
+    );
+    for chunk in data.index.chunks(16) {
+        let _ = write!(out, "  ");
+        for value in chunk {
+            let _ = write!(out, "{value}, ");
+        }
+        let _ = writeln!(out);
+    }
+    let _ = writeln!(out, "}};");
+    let _ = writeln!(
+        out,
+        "static const uint32_t __nts_case_{name}_blocks[{}] = {{",
+        data.blocks.len() * 256
+    );
+    for block in &data.blocks {
+        for chunk in block.chunks(8) {
+            let _ = write!(out, "    ");
+            for value in chunk {
+                let _ = write!(out, "{value:#010x}u, ");
+            }
+            let _ = writeln!(out);
+        }
+    }
+    let _ = writeln!(out, "}};");
+}
+
 fn direction(out: &mut String, name: &str, direction: Direction) {
     let tables = nts_unicode::case_tables(direction);
     let identity = identity_ranges(tables.index, tables.blocks);
@@ -170,18 +309,8 @@ fn direction(out: &mut String, name: &str, direction: Direction) {
     let _ = writeln!(out);
     // The runtime compiles a direction in only under its define.
     let _ = writeln!(out, "#define __nts_UNICODE_{} 1", name.to_uppercase());
-    let _ = writeln!(
-        out,
-        "static const uint8_t __nts_case_{name}_index[256] = {{"
-    );
-    for chunk in tables.index.chunks(16) {
-        let _ = write!(out, "  ");
-        for v in chunk {
-            let _ = write!(out, "{v}, ");
-        }
-        let _ = writeln!(out);
-    }
-    let _ = writeln!(out, "}};");
+    let packed = packed_tables(&tables, matches!(direction, Direction::Lower));
+    emit_packed(out, name, &packed);
     let _ = writeln!(
         out,
         "static const uint8_t __nts_case_{name}_latin1[256] = {{"
@@ -203,21 +332,6 @@ fn direction(out: &mut String, name: &str, direction: Direction) {
         let _ = writeln!(out);
     }
     let _ = writeln!(out, "}};");
-    let _ = writeln!(
-        out,
-        "static const uint16_t __nts_case_{name}_blocks[{}] = {{",
-        tables.blocks.len() * 256
-    );
-    for block in tables.blocks {
-        for chunk in block.chunks(8) {
-            let _ = write!(out, "    ");
-            for v in chunk {
-                let _ = write!(out, "{v:#06x}, ");
-            }
-            let _ = writeln!(out);
-        }
-    }
-    let _ = writeln!(out, "}};");
     assert!(!tables.ranges.is_empty(), "{name}: no astral ranges");
     let _ = writeln!(
         out,
@@ -235,8 +349,8 @@ fn direction(out: &mut String, name: &str, direction: Direction) {
         "static const __nts_case_exception __nts_case_{name}_exceptions[{}] = {{",
         tables.exceptions.len()
     );
-    for (cp, mapped) in tables.exceptions {
-        let _ = writeln!(out, "  {{{cp:#x}u, {}u, {}u}},", pool.len(), mapped.len());
+    for (_, mapped) in tables.exceptions {
+        let _ = writeln!(out, "  {{{}u, {}u}},", pool.len(), mapped.len());
         pool.extend_from_slice(mapped);
     }
     let _ = writeln!(out, "}};");
@@ -265,16 +379,9 @@ fn descriptor(out: &mut String, name: &str, tables: &nts_unicode::CaseTables) {
     let _ = writeln!(out, "  .index = __nts_case_{name}_index,");
     let _ = writeln!(out, "  .blocks = __nts_case_{name}_blocks,");
     let _ = writeln!(out, "  .identity = __nts_case_{name}_identity,");
-    let zero = tables
-        .blocks
-        .iter()
-        .position(|block| block.iter().all(|&delta| delta == 0))
-        .unwrap_or(256);
-    let _ = writeln!(out, "  .zero_block = {zero}u,");
     let _ = writeln!(out, "  .ranges = __nts_case_{name}_ranges,");
     let _ = writeln!(out, "  .range_count = {}u,", tables.ranges.len());
     let _ = writeln!(out, "  .exceptions = __nts_case_{name}_exceptions,");
-    let _ = writeln!(out, "  .exception_count = {}u,", tables.exceptions.len());
     let _ = writeln!(out, "  .exception_pool = __nts_case_{name}_exception_pool,");
     let _ = writeln!(out, "}};");
 }
@@ -376,5 +483,44 @@ mod tests {
         assert_eq!(ranges[0x4d].1, 0x4dff);
         assert_eq!(ranges[0x4f].0, 0x4f00);
         assert!(ranges[0xd8].0 > ranges[0xd8].1);
+    }
+    #[test]
+    fn every_packed_entry_decodes_to_the_model_and_exact_stop_domains() {
+        super::sigma_count_contract();
+        for direction in [nts_unicode::Direction::Lower, nts_unicode::Direction::Upper] {
+            let tables = nts_unicode::case_tables(direction);
+            let lower = matches!(direction, nts_unicode::Direction::Lower);
+            let packed = super::packed_tables(&tables, lower);
+            for cp in 0..=u16::MAX {
+                let page = usize::from(cp >> 8);
+                let canonical = &tables.blocks[usize::from(tables.index[page])];
+                let delta = canonical[usize::from(cp & 255)];
+                let entry = packed.blocks[usize::from(packed.index[page])][usize::from(cp & 255)];
+                let surrogate = (0xd800..=0xdfff).contains(&cp);
+                let identity = !surrogate && canonical.iter().all(|&v| v == 0);
+                let full = delta == nts_unicode::EXCEPTION_SENTINEL;
+                assert_eq!(entry & super::IDENTITY != 0, identity);
+                assert_eq!(entry & super::FULL_EXCEPTION != 0, full);
+                assert_eq!(
+                    entry & super::COUNT_STOP != 0,
+                    surrogate || identity || full
+                );
+                assert_eq!(
+                    entry & super::WRITE_STOP != 0,
+                    surrogate || identity || full || (lower && cp == 0x03a3)
+                );
+                let payload = u16::try_from(entry & 0xffff).expect("masked payload");
+                let wide = if full {
+                    let (point, values) = tables.exceptions[usize::from(payload)];
+                    assert_eq!(point, u32::from(cp));
+                    assert!(!values.is_empty() && values.len() <= 3);
+                    values.iter().any(|&value| value > 255)
+                } else {
+                    assert_eq!(payload, delta);
+                    (cp ^ payload) > 255
+                };
+                assert_eq!(entry & super::WIDE != 0, wide);
+            }
+        }
     }
 }
