@@ -103,8 +103,14 @@ impl FuncBuilder<'_> {
         let mut seen = FxHashSet::default();
         let mut tags = 0;
         while let Some(ty) = pending.pop() {
-            let ty = self.after_substitution(ty);
             if !seen.insert(ty) {
+                continue;
+            }
+            // Source substitutions preserve union members. The representation
+            // helper `after_substitution` can collapse a nullable reference to
+            // its object shape, which would discard the admitted absence.
+            if let Some(source) = self.sources.get(&ty).filter(|source| **source != ty) {
+                pending.push(*source);
                 continue;
             }
             let record = self.snapshot.types.get(ty.0 as usize)?;
