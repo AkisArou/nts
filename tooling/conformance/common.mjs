@@ -22,9 +22,25 @@
 import assert from "node:assert";
 import { inspect } from "node:util";
 import { fstatSync, openSync } from "node:fs";
+import * as fs from "node:fs";
 import { createRequire } from "node:module";
 import { networkInterfaces } from "node:os";
 import hostProcess from "node:process";
+
+// Node v26.13.0 test/common/index.js:190-203, complete helper body.
+function isPi() {
+  try {
+    // Normal Raspberry Pi detection is to find the `Raspberry Pi` string in
+    // the contents of `/sys/firmware/devicetree/base/model` but that doesn't
+    // work inside a container. Match the chipset model number instead.
+    const cpuinfo = fs.readFileSync('/proc/cpuinfo', { encoding: 'utf8' });
+    const ok = /^Hardware\s*:\s*(.*)$/im.exec(cpuinfo)?.[1] === 'BCM2835';
+    /^/.test('');  // Clear RegExp.$_, some tests expect it to be empty.
+    return ok;
+  } catch {
+    return false;
+  }
+}
 
 /** Raised by `skip`, so the runner can tell "not applicable" from "failed". */
 export class Skip extends Error {
@@ -259,6 +275,7 @@ export function makeCommon(pipePath, nodeCommonDirectory = "", spawn) {
     },
     isWindows: false,
     isLinux: hostProcess.platform === "linux",
+    isPi,
     isMainThread: true,
     isInsideDirWithUnusualChars:
       nodeCommonDirectory.includes("%") ||
