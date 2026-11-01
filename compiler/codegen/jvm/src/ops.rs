@@ -1862,7 +1862,7 @@ impl Emitter<'_> {
             } => self.chain_field_set(code, pool, value, *object, arms, *stored)?,
             OpKind::ObjectNew { .. } => self.object_new(code, pool, &op.ty, &origin)?,
             OpKind::FieldGet { .. } | OpKind::FieldSet { .. } => {
-                match self.field_op(code, pool, &op.kind, &origin)? {
+                match self.field_op(code, pool, value, &op.kind, &origin)? {
                     Some(placed) => placed,
                     None => return Ok(()),
                 }
@@ -2927,10 +2927,33 @@ impl Emitter<'_> {
         let done = code.label();
         for arm in arms {
             let next = code.label();
-            let (owner, name, descriptor, _) = self.field_ref_of(arm.ty, arm.field)?;
+            let (owner, name, descriptor, declared) = self.field_ref_of(arm.ty, arm.field)?;
+            let defined = if crate::optional::split(&declared) {
+                if self.ty(value) != &declared {
+                    return Err(refuse(
+                        self.func,
+                        "an optional field arm discarding its defined component",
+                    ));
+                }
+                Some(self.field_defined_of(arm.ty, arm.field)?.ok_or_else(|| {
+                    refuse(
+                        self.func,
+                        "an optional field arm without definedness storage",
+                    )
+                })?)
+            } else {
+                None
+            };
             self.arm_test(code, pool, &chain, arm.ty, &owner, next)?;
+            if defined.is_some() {
+                code.dup(origin);
+            }
             code.get_field(origin, pool, &owner, &name, &descriptor);
             code.store(origin, kind, slot);
+            if let Some(defined) = defined {
+                code.get_field(origin, pool, &owner, &defined, "Z");
+                code.store(origin, Kind::Int, self.flag_slot(value)?);
+            }
             code.goto(origin, done);
             code.bind(next);
         }
@@ -2964,10 +2987,33 @@ impl Emitter<'_> {
         let done = code.label();
         for arm in arms {
             let next = code.label();
-            let (owner, name, descriptor, _) = self.field_ref_of(arm.ty, arm.field)?;
+            let (owner, name, descriptor, declared) = self.field_ref_of(arm.ty, arm.field)?;
+            let defined = if crate::optional::split(&declared) {
+                if self.ty(stored) != &declared {
+                    return Err(refuse(
+                        self.func,
+                        "an optional field arm store without its coupled value",
+                    ));
+                }
+                Some(self.field_defined_of(arm.ty, arm.field)?.ok_or_else(|| {
+                    refuse(
+                        self.func,
+                        "an optional field arm without definedness storage",
+                    )
+                })?)
+            } else {
+                None
+            };
             self.arm_test(code, pool, &chain, arm.ty, &owner, next)?;
+            if defined.is_some() {
+                code.dup(origin);
+            }
             self.load(code, pool, stored)?;
             code.put_field(origin, pool, &owner, &name, &descriptor);
+            if let Some(defined) = defined {
+                code.load(origin, Kind::Int, self.flag_slot(stored)?);
+                code.put_field(origin, pool, &owner, &defined, "Z");
+            }
             code.goto(origin, done);
             code.bind(next);
         }
@@ -5495,7 +5541,9 @@ impl Emitter<'_> {
         // redeclare its base's fields, so `getfield nts/gen/Square.x` where `x`
         // came from `Shape` is a `NoSuchFieldError` at link time rather than
         // anything the verifier catches.
-        let owner = crate::hierarchy::declares_field(self.program, layout, field as usize);
+        let resolved = crate::hierarchy::resolved_field(self.program, layout, field as usize)
+            .ok_or_else(|| refuse(self.func, "a field without an indexed declaring owner"))?;
+        let owner = resolved.owner;
         // **Asked of the layout that *declares* the field, not the one the
         // receiver has.** `panel.right` reads a field of `com/example/ui/View`
         // through a `nts/gen/Panel`, and testing the receiver said "ours" -- so
@@ -5542,7 +5590,7 @@ impl Emitter<'_> {
         // A field this backend holds as a `double`; see `widen`. Keyed by the
         // *declaring* class and the field's name, which is the one identity the
         // declaration in `object_class` and this access can both compute.
-        let member = crate::hierarchy::field_name(self.program, owner, field as usize);
+        let member = resolved.name.to_owned();
         let held = if self
             .widened_fields
             .contains(&(types::class_name(self.shape.package, owner), member.clone()))
@@ -5551,7 +5599,12 @@ impl Emitter<'_> {
         } else {
             entry.ty.clone()
         };
-        let Some(descriptor) = types::descriptor(self.shape, &held) else {
+        let Some(storage) = crate::field_storage::plan(
+            self.program,
+            self.shape.package,
+            resolved,
+            held != entry.ty,
+        ) else {
             return Err(refuse(
                 self.func,
                 &format!(
@@ -5563,9 +5616,25 @@ impl Emitter<'_> {
         Ok((
             types::class_name(self.shape.package, owner),
             member,
-            descriptor,
+            storage.descriptor,
             held,
         ))
+    }
+
+    fn field_defined_of(
+        &self,
+        id: nts_semantic_schema::TypeId,
+        field: u32,
+    ) -> Result<Option<String>, Diagnostic> {
+        let layout = self
+            .program
+            .layout(id)
+            .ok_or_else(|| refuse(self.func, "an optional field without a layout"))?;
+        let owner = crate::hierarchy::declares_field(self.program, layout, field as usize);
+        Ok(self
+            .program
+            .field_defined_name(owner, field as usize)
+            .map(str::to_owned))
     }
 
     /// The binary operations whose operands are references, which is every one
@@ -6929,12 +6998,25 @@ impl Emitter<'_> {
         &mut self,
         code: &mut Code,
         pool: &mut Pool,
+        id: ValueId,
         kind: &OpKind,
         origin: &nts_semantic_schema::Origin,
     ) -> Result<Option<Placed>, Diagnostic> {
         Ok(match kind {
             OpKind::FieldGet { object, field } => {
                 let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+                if crate::optional::split(&declared) {
+                    return self
+                        .optional_field_get(
+                            code,
+                            pool,
+                            id,
+                            *object,
+                            *field,
+                            (class, name, descriptor, declared),
+                        )
+                        .map(Some);
+                }
                 self.load(code, pool, *object)?;
                 // Through a split face, the field's accessor: the object may
                 // be any holder, and each holds the field in a class of its
@@ -6959,6 +7041,17 @@ impl Emitter<'_> {
                 value: stored,
             } => {
                 let (class, name, descriptor, declared) = self.field_ref(*object, *field)?;
+                if crate::optional::split(&declared) {
+                    self.optional_field_set(
+                        code,
+                        pool,
+                        id,
+                        *object,
+                        *field,
+                        (class, name, descriptor, declared),
+                    )?;
+                    return Ok(None);
+                }
                 // **A store into a field is an assignment to its declared type,
                 // and this was the last of the three that did not check.**
                 // `Return` checks, and the global store checks; a `putfield`
@@ -7003,6 +7096,114 @@ impl Emitter<'_> {
             }
             _ => return Err(refuse(self.func, "a field operation that is neither")),
         })
+    }
+
+    fn optional_field_get(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        id: ValueId,
+        object: ValueId,
+        field: u32,
+        resolved: (String, String, String, HirType),
+    ) -> Result<Placed, Diagnostic> {
+        let origin = &self.func.value(id).origin.clone();
+        let (class, name, descriptor, declared) = resolved;
+        if self.ty(id) != &declared {
+            return Err(refuse(
+                self.func,
+                "an optional field load discarding its defined component",
+            ));
+        }
+        self.load(code, pool, object)?;
+        if let Some(face) = self.split_receiver(object) {
+            if let Some(element) = crate::optional::scratch_element(&declared) {
+                self.load_optional_scratch(code, element, origin)?;
+            }
+            let signature = crate::field_storage::accessor_descriptor(self.shape, &declared, false)
+                .ok_or_else(|| refuse(self.func, "an optional field getter without a transport"))?;
+            code.invoke_interface(
+                origin,
+                pool,
+                &crate::split_faces::interface_name(self.shape.package, face),
+                &crate::split_faces::accessor(field),
+                &signature,
+            );
+            let HirType::PossiblyUndefined(payload) = &declared else {
+                unreachable!()
+            };
+            return self.optional_call_result(code, pool, id, payload, origin);
+        }
+        let HirType::Managed(nts_core::hir::ManagedType::Object(object_ty)) = self.ty(object)
+        else {
+            return Err(refuse(self.func, "an optional field without an object"));
+        };
+        let defined = self
+            .field_defined_of(*object_ty, field)?
+            .ok_or_else(|| refuse(self.func, "an optional field without its definedness field"))?;
+        // Keep the receiver under the payload; the two components
+        // are captured without a call or a second receiver evaluation.
+        code.dup(origin);
+        code.get_field(origin, pool, &class, &name, &descriptor);
+        code.store(
+            origin,
+            self.kind_of(id)?,
+            self.slot(id)
+                .ok_or_else(|| refuse(self.func, "an optional field without result storage"))?,
+        );
+        code.get_field(origin, pool, &class, &defined, "Z");
+        code.store(origin, Kind::Int, self.flag_slot(id)?);
+        Ok(Placed::Stored)
+    }
+
+    fn optional_field_set(
+        &mut self,
+        code: &mut Code,
+        pool: &mut Pool,
+        id: ValueId,
+        object: ValueId,
+        field: u32,
+        resolved: (String, String, String, HirType),
+    ) -> Result<(), Diagnostic> {
+        let origin = &self.func.value(id).origin.clone();
+        let (class, name, descriptor, declared) = resolved;
+        let OpKind::FieldSet { value: stored, .. } = &self.func.value(id).kind else {
+            unreachable!()
+        };
+        if self.ty(*stored) != &declared {
+            return Err(refuse(
+                self.func,
+                "an optional field store without its coupled value",
+            ));
+        }
+        self.load(code, pool, object)?;
+        if let Some(face) = self.split_receiver(object) {
+            self.load(code, pool, *stored)?;
+            code.load(origin, Kind::Int, self.flag_slot(*stored)?);
+            let signature = crate::field_storage::accessor_descriptor(self.shape, &declared, true)
+                .ok_or_else(|| refuse(self.func, "an optional field setter without a transport"))?;
+            code.invoke_interface(
+                origin,
+                pool,
+                &crate::split_faces::interface_name(self.shape.package, face),
+                &crate::split_faces::accessor(field),
+                &signature,
+            );
+        } else {
+            let HirType::Managed(nts_core::hir::ManagedType::Object(object_ty)) = self.ty(object)
+            else {
+                return Err(refuse(self.func, "an optional field without an object"));
+            };
+            let defined = self.field_defined_of(*object_ty, field)?.ok_or_else(|| {
+                refuse(self.func, "an optional field without its definedness field")
+            })?;
+            code.dup(origin);
+            self.load(code, pool, *stored)?;
+            code.put_field(origin, pool, &class, &name, &descriptor);
+            code.load(origin, Kind::Int, self.flag_slot(*stored)?);
+            code.put_field(origin, pool, &class, &defined, "Z");
+        }
+        Ok(())
     }
 
     /// Bring a **bound field** to and from the width the jar declared.

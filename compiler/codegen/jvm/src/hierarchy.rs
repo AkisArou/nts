@@ -18,6 +18,213 @@
 use crate::program::JvmProgram;
 use nts_core::hir::{Field, HirType, Layout, ManagedType};
 use nts_semantic_schema::TypeId;
+use rustc_hash::FxHashSet;
+
+/// Names and declaring owners are facts of the immutable layout graph. Build
+/// them once; a wide record must not rescan a prefix at every field access.
+#[derive(Debug, Default)]
+pub(crate) struct Fields {
+    rows: Vec<FieldRow>,
+}
+
+#[derive(Debug)]
+struct FieldRow {
+    names: Vec<String>,
+    owners: Vec<usize>,
+}
+
+/// One indexed answer, consumed by component storage without resolving the
+/// same owner and name a second time.
+#[derive(Clone, Copy)]
+pub(crate) struct ResolvedField<'a> {
+    pub(crate) owner: &'a Layout,
+    pub(crate) index: usize,
+    pub(crate) name: &'a str,
+    pub(crate) field: &'a Field,
+}
+
+/// The emitted single-parent relation, with parent-first order and subtree
+/// intervals. Ancestry membership never walks a chain for each stored slot.
+#[derive(Debug, Default)]
+pub(crate) struct Bases {
+    parents: Vec<Option<usize>>,
+    order: Vec<usize>,
+    intervals: Vec<Option<(usize, usize)>>,
+}
+
+impl Bases {
+    pub(crate) fn new(program: &JvmProgram<'_>) -> Self {
+        let parents: Vec<_> = program
+            .layouts
+            .iter()
+            .map(|l| resolve_base(program, l))
+            .collect();
+        let mut children = vec![Vec::new(); parents.len()];
+        let mut roots = Vec::new();
+        for (at, parent) in parents.iter().enumerate() {
+            if let Some(parent) = parent {
+                children[*parent].push(at);
+            } else {
+                roots.push(at);
+            }
+        }
+        let mut order = Vec::with_capacity(parents.len());
+        let mut intervals = vec![None; parents.len()];
+        let mut starts = vec![0; parents.len()];
+        let mut stack: Vec<_> = roots.into_iter().rev().map(|at| (at, false)).collect();
+        while let Some((at, exit)) = stack.pop() {
+            if exit {
+                intervals[at] = Some((starts[at], order.len()));
+                continue;
+            }
+            starts[at] = order.len();
+            order.push(at);
+            stack.push((at, true));
+            stack.extend(children[at].iter().rev().map(|&child| (child, false)));
+        }
+        // Core verification rejects cycles. Keep malformed disconnected cycles
+        // bounded here, without certifying their ancestry.
+        order.extend(
+            intervals
+                .iter()
+                .enumerate()
+                .filter_map(|(at, span)| span.is_none().then_some(at)),
+        );
+        Self {
+            parents,
+            order,
+            intervals,
+        }
+    }
+
+    fn contains(&self, ancestor: usize, descendant: usize) -> bool {
+        if ancestor == descendant {
+            return true;
+        }
+        match (self.intervals[ancestor], self.intervals[descendant]) {
+            (Some((a, z)), Some((b, y))) => a <= b && y <= z,
+            _ => false,
+        }
+    }
+}
+
+impl Fields {
+    pub(crate) fn new(program: &JvmProgram<'_>) -> Self {
+        let mut rows: Vec<FieldRow> = (0..program.layouts.len())
+            .map(|_| FieldRow {
+                names: Vec::new(),
+                owners: Vec::new(),
+            })
+            .collect();
+        let mut fallbacks: Vec<Vec<usize>> = vec![Vec::new(); rows.len()];
+        for &layout_at in &program.bases.order {
+            let layout = &program.layouts[layout_at];
+            let parent = program.bases.parents[layout_at];
+            let from = parent.map_or(0, |at| program.layouts[at].fields.len());
+            let mut seen = FxHashSet::default();
+            for (at, field) in layout.fields.iter().enumerate() {
+                #[cfg(test)]
+                field_cost::note(|c| {
+                    c.name_materializations += 1;
+                    c.owner_steps += 1;
+                });
+                let spelled = crate::body::method_name(&field.name.storage_name());
+                // Only the declared slice shares this owner's namespace. An
+                // inherited-position query retains its original raw spelling.
+                let name = if at < from || seen.insert(spelled.clone()) {
+                    spelled
+                } else {
+                    format!("{spelled}_{at}")
+                };
+                // A synthesized field inherits the base-most storage, even
+                // when the parent has a nearer explicit source declaration.
+                let inherited = parent.and_then(|parent| fallbacks[parent].get(at).copied());
+                #[cfg(test)]
+                if inherited.is_some() {
+                    field_cost::note(|c| c.owner_steps += 1);
+                }
+                let fallback = inherited.unwrap_or(layout_at);
+                let owner = field
+                    .declared_by
+                    .and_then(|id| program.layout_index(id))
+                    // Source ownership selects storage only in the emitted
+                    // ancestry, within the contiguous chain holding this slot.
+                    .filter(|&owner| {
+                        program.bases.contains(owner, layout_at)
+                            && program.bases.contains(fallback, owner)
+                    })
+                    .unwrap_or(fallback);
+                fallbacks[layout_at].push(fallback);
+                rows[layout_at].names.push(name);
+                rows[layout_at].owners.push(owner);
+            }
+        }
+        Self { rows }
+    }
+
+    pub(crate) fn name(&self, layout: usize, field: usize) -> Option<&str> {
+        self.rows.get(layout)?.names.get(field).map(String::as_str)
+    }
+
+    pub(crate) fn names(&self, layout: usize) -> Option<&[String]> {
+        Some(&self.rows.get(layout)?.names)
+    }
+
+    pub(crate) fn resolve<'a>(
+        &'a self,
+        program: &'a JvmProgram<'_>,
+        layout: &Layout,
+        at: usize,
+    ) -> Option<ResolvedField<'a>> {
+        let owner_at = *self.rows.get(program.index(layout)?)?.owners.get(at)?;
+        let owner = program.layouts.get(owner_at)?;
+        Some(ResolvedField {
+            owner,
+            index: at,
+            name: self.name(owner_at, at)?,
+            field: owner.fields.get(at)?,
+        })
+    }
+}
+
+pub(crate) fn resolved_field<'a>(
+    program: &'a JvmProgram<'_>,
+    layout: &Layout,
+    at: usize,
+) -> Option<ResolvedField<'a>> {
+    program.resolved_field(layout, at)
+}
+
+#[cfg(test)]
+pub(crate) mod field_cost {
+    use std::cell::Cell;
+    #[derive(Clone, Copy, Debug, Default)]
+    pub(crate) struct Counts {
+        pub(crate) name_requests: usize,
+        pub(crate) name_materializations: usize,
+        pub(crate) prefix_visits: usize,
+        pub(crate) owner_requests: usize,
+        pub(crate) owner_steps: usize,
+        pub(crate) index_visits: usize,
+    }
+    thread_local! { static COUNTS: Cell<Counts> = const { Cell::new(Counts {
+        name_requests: 0, name_materializations: 0, prefix_visits: 0,
+        owner_requests: 0, owner_steps: 0, index_visits: 0,
+    }) }; }
+    pub(crate) fn note(update: impl FnOnce(&mut Counts)) {
+        COUNTS.with(|counts| {
+            let mut value = counts.get();
+            update(&mut value);
+            counts.set(value);
+        });
+    }
+    pub(crate) fn reset() {
+        COUNTS.with(|counts| counts.set(Counts::default()));
+    }
+    pub(crate) fn get() -> Counts {
+        COUNTS.with(Cell::get)
+    }
+}
 
 /// The layout this one's class extends on the JVM: its `Layout.base`, or --
 /// for a record with none -- its declared parent, `Program::record_parents`.
@@ -43,6 +250,13 @@ use nts_semantic_schema::TypeId;
 /// given still stands. Deliberately free of `is_interface`, which asks this.
 #[must_use]
 pub fn jvm_base(program: &JvmProgram<'_>, layout: &Layout) -> Option<usize> {
+    program
+        .index(layout)
+        .and_then(|at| program.bases.parents.get(at).copied())
+        .unwrap_or_else(|| resolve_base(program, layout))
+}
+
+fn resolve_base(program: &JvmProgram<'_>, layout: &Layout) -> Option<usize> {
     if let Some(at) = program.base_layout(layout) {
         return Some(at);
     }
@@ -51,10 +265,7 @@ pub fn jvm_base(program: &JvmProgram<'_>, layout: &Layout) -> Option<usize> {
         let Some(declared) = program.record_parents.get(id) else {
             continue;
         };
-        let at = program
-            .layouts
-            .iter()
-            .position(|candidate| candidate.types.contains(declared))?;
+        let at = program.layout_index(*declared)?;
         if parent.is_some_and(|seen| seen != at) {
             return None;
         }
@@ -134,28 +345,20 @@ pub fn inherited(program: &JvmProgram<'_>, layout: &Layout) -> usize {
 /// from the class the access names.
 #[must_use]
 pub fn field_name(program: &JvmProgram<'_>, owner: &Layout, at: usize) -> String {
-    let Some(field) = owner.fields.get(at) else {
-        return String::new();
-    };
-    let spelled = crate::body::method_name(&field.name.storage_name());
-    let from = inherited(program, owner).min(at);
-    if owner.fields[from..at]
-        .iter()
-        .any(|before| crate::body::method_name(&before.name.storage_name()) == spelled)
-    {
-        format!("{spelled}_{at}")
-    } else {
-        spelled
-    }
+    #[cfg(test)]
+    field_cost::note(|c| c.name_requests += 1);
+    program.field_name(owner, at).unwrap_or_default().to_owned()
 }
 
 /// [`field_name`] for each field a class declares itself, in order.
 #[must_use]
 pub fn declared_names(program: &JvmProgram<'_>, layout: &Layout) -> Vec<String> {
     let from = inherited(program, layout).min(layout.fields.len());
-    (from..layout.fields.len())
-        .map(|at| field_name(program, layout, at))
-        .collect()
+    program
+        .field_names(layout)
+        .and_then(|names| names.get(from..))
+        .unwrap_or_default()
+        .to_vec()
 }
 
 /// The fields a class declares itself.
@@ -196,52 +399,9 @@ pub fn declares_field<'a>(
     layout: &'a Layout,
     field: usize,
 ) -> &'a Layout {
-    let declared_by = layout
-        .fields
-        .get(field)
-        .and_then(|at| at.declared_by)
-        .and_then(|id| program.layout(id));
-    // A record can inherit a source declaration without inheriting its JVM
-    // class. Its fields are then flattened into this class. Source ownership
-    // selects storage only within the ancestry that this backend emits.
-    // **No class declares it, which does not mean this one holds it.** The
-    // fallback used to be `layout`, and that was right for as long as a field
-    // with no `declared_by` was also a field with no base above it -- a tuple's
-    // `_0`, a closure's capture, an anonymous object's member.
-    //
-    // A generator frame is the first layout that is both. `yielded` is
-    // synthesized, so nothing declares it, and it now lives on `Generator{n}`
-    // because a frame has a base. Answering `layout` keyed the widen plan on
-    // the *frame* at every access and on the *base* at the declaration, so the
-    // accesses widened to `D` and the field stayed `I`:
-    //
-    // ```text
-    // java.lang.NoSuchFieldError: Class nts.gen.squares$frame
-    //                             does not have member field 'double yielded'
-    // ```
-    //
-    // So the fallback is the arithmetic answer -- the base-most ancestor whose
-    // fields still reach this index -- which is precisely what `declared`
-    // slices on. The two derivations of "which class owns this slot" were
-    // disagreeing, and the whole reason `declared_by` exists is that arithmetic
-    // alone is wrong when two classes declare one name. Neither rule is
-    // sufficient: `declared_by` where a class claims the field, arithmetic
-    // where none does.
-    let mut owner = layout;
-    for _ in 0..program.layouts.len() {
-        if declared_by.is_some_and(|by| std::ptr::eq(by, owner)) {
-            return owner;
-        }
-        let Some(base) = jvm_base(program, owner).and_then(|id| program.layouts.get(id)) else {
-            break;
-        };
-        if field < base.fields.len() {
-            owner = base;
-        } else {
-            break;
-        }
-    }
-    owner
+    #[cfg(test)]
+    field_cost::note(|c| c.owner_requests += 1);
+    resolved_field(program, layout, field).map_or(layout, |resolved| resolved.owner)
 }
 
 /// The declared classes sharing one layout, when more than one does.

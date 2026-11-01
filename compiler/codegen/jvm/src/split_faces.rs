@@ -388,6 +388,28 @@ pub(crate) fn members<'a>(
         if !program.reached(face, at) {
             continue;
         }
+        if crate::optional::split(&face.fields[at as usize].ty) {
+            for writes in [false, true] {
+                let descriptor = crate::field_storage::accessor_descriptor(
+                    types::Shape::packaged(program, package),
+                    &face.fields[at as usize].ty,
+                    writes,
+                )
+                .ok_or_else(|| {
+                    format!(
+                        "optional field {at} of `{}` has no JVM transport",
+                        face.name
+                    )
+                })?;
+                out.push(Declared {
+                    member: accessor(at),
+                    descriptor,
+                    kind: Member::Field { at, writes },
+                    compatibility: None,
+                });
+            }
+            continue;
+        }
         let Some(held) = field_descriptor(program, package, plan, face, at) else {
             return Err(format!(
                 "field {at} of `{}` has no JVM representation",
@@ -697,6 +719,57 @@ fn slot_body(
 /// there, read or written as the face holds it.
 #[allow(clippy::too_many_arguments)]
 fn field_body(
+    program: &JvmProgram<'_>,
+    package: &str,
+    plan: &widen::Plan,
+    layout: &Layout,
+    face: &Layout,
+    at: u32,
+    writes: bool,
+    descriptor: &str,
+    pool: &mut Pool,
+    origin: &nts_semantic_schema::Origin,
+) -> Result<nts_jvm_emitter::Body, Diagnostic> {
+    let class = types::class_name(package, layout);
+    if face
+        .fields
+        .get(at as usize)
+        .is_some_and(|field| crate::optional::split(&field.ty))
+    {
+        let holds = std::ptr::eq(layout, face) || positional(layout, face, at).is_some();
+        let storage = hierarchy::resolved_field(program, layout, at as usize)
+            .and_then(|field| crate::field_storage::plan(program, package, field, false));
+        if let (true, Some(storage)) = (holds, storage)
+            && storage.ty == face.fields[at as usize].ty
+        {
+            return crate::field_storage::accessor_body(
+                types::Shape::packaged(program, package),
+                &class,
+                &storage,
+                writes,
+                pool,
+                origin,
+            );
+        }
+        return refusing(
+            &class,
+            descriptor,
+            &format!(
+                "`{}` has no coupled storage for `{}`'s optional field {at}",
+                layout.name, face.name
+            ),
+            pool,
+            origin,
+        );
+    }
+    plain_field_body(
+        program, package, plan, layout, face, at, writes, descriptor, pool, origin,
+    )
+}
+
+/// A single-component accessor; optional components use their shared ABI above.
+#[allow(clippy::too_many_arguments)]
+fn plain_field_body(
     program: &JvmProgram<'_>,
     package: &str,
     plan: &widen::Plan,

@@ -21,7 +21,7 @@ pub(crate) fn reference(payload: &HirType) -> bool {
 pub(crate) fn split(ty: &HirType) -> bool {
     matches!(ty, HirType::PossiblyUndefined(payload) if !reference(payload))
 }
-fn transport(payload: &HirType) -> Option<Transport> {
+pub(crate) fn transport(payload: &HirType) -> Option<Transport> {
     let transport = Payload::new(payload.clone()).ok()?.jvm_return_transport();
     (transport != Transport::Unsupported).then_some(transport)
 }
@@ -85,6 +85,88 @@ impl Storage {
 fn singleton(code: &mut Code, pool: &mut Pool, origin: &Origin) {
     code.get_static(origin, pool, UNDEFINED, "INSTANCE", "Ljava/lang/Object;");
 }
+
+/// The one primitive optional return encoding, for functions and field
+/// accessors alike. Both components are already captured in this activation.
+pub(crate) struct PrimitiveReturn<'a> {
+    pub(crate) payload_type: &'a HirType,
+    pub(crate) payload: u16,
+    pub(crate) defined: u16,
+    pub(crate) scratch: Option<u16>,
+}
+
+impl PrimitiveReturn<'_> {
+    pub(crate) fn emit(
+        &self,
+        code: &mut Code,
+        pool: &mut Pool,
+        origin: &Origin,
+    ) -> Result<(), &'static str> {
+        let kind =
+            types::kind(self.payload_type).ok_or("an optional payload without a JVM kind")?;
+        match transport(self.payload_type).ok_or("an optional payload without a JVM transport")? {
+            Transport::CallerScratch => {
+                let scratch = self
+                    .scratch
+                    .ok_or("an optional return without caller scratch")?;
+                code.load(origin, Kind::Int, self.defined);
+                let done = code.label();
+                code.branch_zero(origin, Compare::Eq, done);
+                code.load(origin, Kind::Ref, scratch);
+                code.const_int(origin, pool, 0);
+                code.load(origin, kind, self.payload);
+                code.array_store(origin, if kind == Kind::Double { "D" } else { "J" });
+                code.bind(done);
+                code.load(origin, Kind::Int, self.defined);
+                code.ret(origin, Some(Kind::Int));
+            }
+            Transport::PackedWord { bits } => {
+                let payload_bits = match self.payload_type {
+                    HirType::Bool => 1,
+                    HirType::Int { bits, .. } | HirType::Float { bits } => *bits,
+                    _ => return Err("a packed optional return without primitive payload"),
+                };
+                code.load(origin, kind, self.payload);
+                if matches!(self.payload_type, HirType::Float { bits: 32 }) {
+                    code.invoke_static(
+                        origin,
+                        pool,
+                        "java/lang/Float",
+                        "floatToRawIntBits",
+                        "(F)I",
+                    );
+                }
+                let packed_kind = if bits == 64 {
+                    code.convert(origin, insn::I2L, Kind::Int, Kind::Long);
+                    Kind::Long
+                } else {
+                    Kind::Int
+                };
+                let mask = (1_i64 << payload_bits) - 1;
+                if packed_kind == Kind::Long {
+                    code.const_long(origin, pool, mask);
+                } else {
+                    code.const_int(
+                        origin,
+                        pool,
+                        i32::try_from(mask).map_err(|_| "a packed mask exceeds its JVM word")?,
+                    );
+                }
+                code.bitwise(origin, insn::AND, packed_kind);
+                code.load(origin, Kind::Int, self.defined);
+                if packed_kind == Kind::Long {
+                    code.convert(origin, insn::I2L, Kind::Int, Kind::Long);
+                }
+                code.const_int(origin, pool, i32::from(payload_bits));
+                code.shift(origin, insn::SHL, packed_kind);
+                code.bitwise(origin, insn::OR, packed_kind);
+                code.ret(origin, Some(packed_kind));
+            }
+            _ => return Err("an optional primitive return without a JVM form"),
+        }
+        Ok(())
+    }
+}
 impl Emitter<'_> {
     fn optional_local(&mut self, vtype: VType) -> Result<u16, Diagnostic> {
         let slot = self.max_locals;
@@ -102,7 +184,10 @@ impl Emitter<'_> {
             let block = &self.func.blocks[block.0 as usize];
             for &id in &block.ops {
                 let op = self.func.value(id);
-                if let OpKind::Call { .. } = op.kind {
+                let accessor = matches!(&op.kind, OpKind::FieldGet { object, .. }
+                    if matches!(self.ty(*object), HirType::Managed(nts_core::hir::ManagedType::Object(id))
+                        if self.program.layout(*id).is_some_and(|layout| self.program.is_split(layout))));
+                if matches!(op.kind, OpKind::Call { .. }) || accessor {
                     if let Some(element) = scratch_element(&op.ty) {
                         arrays[usize::from(element == "D")] = true;
                     } else if split(&op.ty) {
@@ -150,7 +235,7 @@ impl Emitter<'_> {
             }
         }
     }
-    fn flag_slot(&self, value: ValueId) -> Result<u16, Diagnostic> {
+    pub(crate) fn flag_slot(&self, value: ValueId) -> Result<u16, Diagnostic> {
         self.optional.flags[value.0 as usize].ok_or_else(|| {
             refuse(
                 self.func,
@@ -293,81 +378,37 @@ impl Emitter<'_> {
             return Ok(false);
         };
         let o = &self.func.value(value).origin;
-        match transport(payload).ok_or_else(|| {
-            refuse(
-                self.func,
-                "an optional native pointer has no JVM representation",
-            )
-        })? {
-            Transport::ReferenceNiche => {
-                self.load(code, pool, value)?;
-                code.ret(o, Some(Kind::Ref));
+        if reference(payload) {
+            self.load(code, pool, value)?;
+            code.ret(o, Some(Kind::Ref));
+        } else {
+            PrimitiveReturn {
+                payload_type: payload,
+                payload: self.slot(value).ok_or_else(|| {
+                    refuse(self.func, "an optional return without payload storage")
+                })?,
+                defined: self.flag_slot(value)?,
+                scratch: self.optional.out,
             }
-            Transport::CallerScratch => {
-                let defined = self.flag_slot(value)?;
-                code.load(o, Kind::Int, defined);
-                let done = code.label();
-                code.branch_zero(o, Compare::Eq, done);
-                code.load(
-                    o,
-                    Kind::Ref,
-                    self.optional.out.ok_or_else(|| {
-                        refuse(self.func, "an optional return without caller scratch")
-                    })?,
-                );
-                code.const_int(o, pool, 0);
-                self.load(code, pool, value)?;
-                code.array_store(
-                    o,
-                    scratch_element(&self.func.return_type).expect("scratch return"),
-                );
-                code.bind(done);
-                code.load(o, Kind::Int, defined);
-                code.ret(o, Some(Kind::Int));
-            }
-            Transport::PackedWord { bits } => {
-                self.load(code, pool, value)?;
-                let payload_bits = if matches!(**payload, HirType::Bool) {
-                    1
-                } else {
-                    match **payload {
-                        HirType::Int { bits, .. } | HirType::Float { bits } => bits,
-                        _ => unreachable!(),
-                    }
-                };
-                if matches!(**payload, HirType::Float { bits: 32 }) {
-                    code.invoke_static(o, pool, "java/lang/Float", "floatToRawIntBits", "(F)I");
-                }
-                let kind = if bits == 64 {
-                    code.convert(o, insn::I2L, Kind::Int, Kind::Long);
-                    Kind::Long
-                } else {
-                    Kind::Int
-                };
-                let mask = (1_i64 << payload_bits) - 1;
-                if kind == Kind::Long {
-                    code.const_long(o, pool, mask);
-                } else {
-                    code.const_int(o, pool, i32::try_from(mask).expect("narrow mask"));
-                }
-                code.bitwise(o, insn::AND, kind);
-                code.load(o, Kind::Int, self.flag_slot(value)?);
-                if kind == Kind::Long {
-                    code.convert(o, insn::I2L, Kind::Int, Kind::Long);
-                }
-                code.const_int(o, pool, i32::from(payload_bits));
-                code.shift(o, insn::SHL, kind);
-                code.bitwise(o, insn::OR, kind);
-                code.ret(o, Some(kind));
-            }
-            _ => {
-                return Err(refuse(
-                    self.func,
-                    "an optional return transport without a JVM form",
-                ));
-            }
+            .emit(code, pool, o)
+            .map_err(|reason| refuse(self.func, reason))?;
         }
         Ok(true)
+    }
+    pub(crate) fn load_optional_scratch(
+        &self,
+        code: &mut Code,
+        element: &'static str,
+        origin: &Origin,
+    ) -> Result<(), Diagnostic> {
+        let slot = self
+            .optional
+            .arrays
+            .get(element)
+            .copied()
+            .ok_or_else(|| refuse(self.func, "an optional accessor without caller scratch"))?;
+        code.load(origin, Kind::Ref, slot);
+        Ok(())
     }
     pub(crate) fn optional_direct_call(
         &self,
@@ -413,7 +454,7 @@ impl Emitter<'_> {
             })
         }
     }
-    fn optional_call_result(
+    pub(crate) fn optional_call_result(
         &self,
         code: &mut Code,
         pool: &mut Pool,

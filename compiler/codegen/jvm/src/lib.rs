@@ -41,6 +41,9 @@ mod builder;
 pub mod closures;
 mod entry;
 mod face;
+#[cfg(test)]
+mod field_cost_tests;
+mod field_storage;
 mod fuse;
 mod guarded_members;
 pub mod hierarchy;
@@ -584,7 +587,11 @@ fn declare_fields(
     // shape can tell apart; the refusals fixture holds both.
     let mut spelled: FxHashMap<String, String> = FxHashMap::default();
     let names = hierarchy::declared_names(program, layout);
-    for (field, name) in hierarchy::declared(program, layout).iter().zip(&names) {
+    for (offset, (field, name)) in hierarchy::declared(program, layout)
+        .iter()
+        .zip(&names)
+        .enumerate()
+    {
         if let Some(other) = spelled.insert(name.clone(), field.name.to_string()) {
             return Err(Diagnostic::error(
                 "NTS4013",
@@ -613,9 +620,19 @@ fn declare_fields(
                 origin.location,
             ));
         }
-        let Some(descriptor) =
-            types::field_descriptor(types::Shape::packaged(program, package), &field.ty)
-        else {
+        let Some(storage) = hierarchy::resolved_field(
+            program,
+            layout,
+            hierarchy::inherited(program, layout) + offset,
+        )
+        .and_then(|field| {
+            field_storage::plan(
+                program,
+                package,
+                field,
+                plan.field(&types::class_name(package, layout), name),
+            )
+        }) else {
             return Err(Diagnostic::error(
                 "NTS4006",
                 format!(
@@ -627,19 +644,10 @@ fn declare_fields(
                 origin.location,
             ));
         };
-        // A field this backend holds as a `double`; see `widen`. The
-        // declaration and every access ask the same plan with the same key, so
-        // they cannot disagree about the descriptor.
-        let descriptor = if plan.field(&types::class_name(package, layout), name) {
-            types::descriptor(
-                types::Shape::packaged(program, package),
-                &nts_core::hir::HirType::Float { bits: 64 },
-            )
-            .unwrap_or(descriptor)
-        } else {
-            descriptor
-        };
-        builder.field(access::PACKAGE, name.clone(), descriptor);
+        builder.field(access::PACKAGE, name.clone(), storage.descriptor);
+        if let Some(defined) = storage.defined {
+            builder.field(access::PACKAGE | access::SYNTHETIC, defined, "Z");
+        }
     }
     Ok(())
 }
@@ -1674,20 +1682,29 @@ fn object_class(
     // builds `{}` and calls `h.fn?.(1)`, and half its iterations reach a field
     // nothing ever wrote. `Func::initializes_receiver` promises the fields are
     // zeroed and this is what keeping that promise costs on this platform.
-    let erased: Vec<_> = hierarchy::declared(program, layout)
+    let initial_fields: Vec<_> = hierarchy::declared(program, layout)
         .iter()
         .zip(hierarchy::declared_names(program, layout))
-        .filter(|(field, _)| matches!(field.ty, nts_core::hir::HirType::Erased))
-        .map(|(_, name)| name)
-        .collect();
-    let initial: Vec<nts_jvm_emitter::FieldFromStatic<'_>> = erased
-        .iter()
-        .map(|field| nts_jvm_emitter::FieldFromStatic {
-            field,
-            from_class: types::VALUE,
-            from_field: "UNDEFINED_VALUE",
-            descriptor: types::VALUE_DESCRIPTOR,
+        .filter_map(|(field, name)| {
+            if matches!(field.ty, nts_core::hir::HirType::Erased) {
+                Some((name, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR))
+            } else if matches!(&field.ty, nts_core::hir::HirType::PossiblyUndefined(payload) if optional::reference(payload)) {
+                Some((name, "nts/rt/NtsUndefinedReference", "INSTANCE", "Ljava/lang/Object;"))
+            } else {
+                None
+            }
         })
+        .collect();
+    let initial: Vec<nts_jvm_emitter::FieldFromStatic<'_>> = initial_fields
+        .iter()
+        .map(
+            |(field, from_class, from_field, descriptor)| nts_jvm_emitter::FieldFromStatic {
+                field,
+                from_class,
+                from_field,
+                descriptor,
+            },
+        )
         .collect();
     // An interface may declare `<clinit>` and nothing else; an `<init>` on one
     // is a `ClassFormatError`. Nothing constructs an interface either -- a

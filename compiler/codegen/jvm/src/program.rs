@@ -19,6 +19,9 @@ use rustc_hash::{FxHashMap, FxHashSet};
 #[derive(Debug)]
 pub struct JvmProgram<'a> {
     program: &'a Program,
+    /// The first physical layout for each semantic type, shared by JVM facts.
+    by_type: FxHashMap<TypeId, usize>,
+    pub(crate) bases: crate::hierarchy::Bases,
     pub(crate) strings: crate::builder::Plan<'a>,
     guarded_members: FxHashMap<usize, crate::guarded_members::Member>,
     /// Every type a split face's layout holds; see [`crate::split_faces`].
@@ -48,6 +51,10 @@ pub struct JvmProgram<'a> {
     /// Per layout, its proved declared interface parents and whether its
     /// whole declared chain is proved; see [`Self::declared_parents`].
     declared: DeclaredAncestry,
+    /// One collision-free definedness name per primitive optional field.
+    field_components: crate::field_storage::Names,
+    /// The hierarchy's indexed field-name and declaring-owner answer.
+    fields: crate::hierarchy::Fields,
 }
 
 /// Declared interface ancestry, from `InterfaceIdentity::parents` alone.
@@ -183,10 +190,12 @@ impl<'a> JvmProgram<'a> {
     #[must_use]
     pub fn new(program: &'a Program) -> Self {
         let mut local_types = FxHashMap::default();
-        for layout in &program.layouts {
+        let mut by_type = FxHashMap::default();
+        for (at, layout) in program.layouts.iter().enumerate() {
             let local = !nts_core::hir::runtime::is_foreign_layout_name(&layout.name);
             for id in &layout.types {
                 local_types.entry(*id).or_insert(local);
+                by_type.entry(*id).or_insert(at);
             }
         }
         let selectors: FxHashMap<_, _> = program
@@ -237,6 +246,8 @@ impl<'a> JvmProgram<'a> {
         }
         let mut facts = Self {
             program,
+            by_type,
+            bases: crate::hierarchy::Bases::default(),
             strings: crate::builder::Plan::new(program),
             guarded_members: FxHashMap::default(),
             split: FxHashSet::default(),
@@ -249,12 +260,52 @@ impl<'a> JvmProgram<'a> {
             global_fields: global_fields(program),
             implementation_names: crate::entry::implementation_names(program),
             declared: DeclaredAncestry::default(),
+            field_components: crate::field_storage::Names::default(),
+            fields: crate::hierarchy::Fields::default(),
         };
+        facts.bases = crate::hierarchy::Bases::new(&facts);
+        facts.fields = crate::hierarchy::Fields::new(&facts);
         facts.positional = facts.positional_accesses();
         facts.declared = facts.declared_ancestry();
         facts.settle_faces();
         facts.guarded_members = crate::guarded_members::plan(&facts);
+        facts.field_components = crate::field_storage::Names::new(&facts);
         facts
+    }
+
+    /// The same first-layout rule as core's lookup, indexed once.
+    #[must_use]
+    pub fn layout(&self, id: TypeId) -> Option<&'a Layout> {
+        self.program.layouts.get(self.layout_index(id)?)
+    }
+
+    pub(crate) fn layout_index(&self, id: TypeId) -> Option<usize> {
+        self.by_type.get(&id).copied()
+    }
+
+    #[must_use]
+    pub fn base_layout(&self, layout: &Layout) -> Option<usize> {
+        self.layout_index(layout.base?)
+    }
+
+    pub(crate) fn field_defined_name(&self, owner: &Layout, at: usize) -> Option<&str> {
+        self.field_components.flag(self, owner, at)
+    }
+
+    pub(crate) fn field_name(&self, owner: &Layout, at: usize) -> Option<&str> {
+        self.fields.name(self.index(owner)?, at)
+    }
+
+    pub(crate) fn field_names(&self, owner: &Layout) -> Option<&[String]> {
+        self.fields.names(self.index(owner)?)
+    }
+
+    pub(crate) fn resolved_field(
+        &self,
+        layout: &Layout,
+        at: usize,
+    ) -> Option<crate::hierarchy::ResolvedField<'_>> {
+        self.fields.resolve(self, layout, at)
     }
 
     /// `func` belongs to this program; every body and overload shares this plan.
@@ -304,7 +355,7 @@ impl<'a> JvmProgram<'a> {
                 else {
                     continue;
                 };
-                if let Some(at) = program.layout(*id).and_then(|layout| self.index(layout)) {
+                if let Some(at) = self.layout_index(*id) {
                     found.insert((at, *field));
                 }
             }
@@ -327,12 +378,6 @@ impl<'a> JvmProgram<'a> {
     fn declared_ancestry(&self) -> DeclaredAncestry {
         let program = self.program;
         let count = program.layouts.len();
-        let mut by_type: FxHashMap<TypeId, usize> = FxHashMap::default();
-        for (at, layout) in program.layouts.iter().enumerate() {
-            for id in &layout.types {
-                by_type.entry(*id).or_insert(at);
-            }
-        }
         let mut identity_of: FxHashMap<TypeId, &nts_core::hir::InterfaceIdentity> =
             FxHashMap::default();
         for identity in &program.interface_identities {
@@ -340,7 +385,7 @@ impl<'a> JvmProgram<'a> {
                 identity_of.entry(*id).or_insert(identity);
             }
         }
-        let (mut parents, local) = declared_edges(program, &by_type, &identity_of);
+        let (mut parents, local) = declared_edges(program, &self.by_type, &identity_of);
         let mut state = vec![0u8; count];
         let mut ancestors: Vec<FxHashSet<usize>> = vec![FxHashSet::default(); count];
         let mut proved = vec![false; count];
@@ -581,6 +626,8 @@ impl<'a> JvmProgram<'a> {
     /// `layout`'s index in the program's layouts, if it is one of them.
     #[must_use]
     pub fn index(&self, layout: &Layout) -> Option<usize> {
+        #[cfg(test)]
+        crate::hierarchy::field_cost::note(|c| c.index_visits += 1);
         let range = self.program.layouts.as_ptr_range();
         let at = std::ptr::from_ref(layout);
         range
