@@ -582,30 +582,15 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     })
     .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
-    let mut output_cases = None;
-    let output_comparison =
-        if !compiled.is_empty() && native.incomplete.is_empty() && aborts.is_empty() {
-            output::compare(&native, &engine, |window| {
-                let cases = output_cases.get_or_insert_with(|| interleaved(&compiled));
-                let selected = cases
-                    .get(window)
-                    .context("invalid output oracle case window")?;
-                let ids = selected
-                    .iter()
-                    .map(|(one, at, tuple)| format!("{} {at} {tuple:?}", one.name))
-                    .collect::<Vec<_>>();
-                let identity = serde_json::to_vec(&(&coverage.key, ids))?;
-                let coverage = oracle_coverage::Coverage {
-                    count: selected.len(),
-                    key: format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&identity)),
-                };
-                run_node_cases(dir, &entry, selected, &snapshot.sources, &coverage)
-                    .map(|run| run.output)
-            })
-            .map_err(|error| annotate(error, FailureKind::OracleExecution))?
-        } else {
-            output::Comparison::default()
-        };
+    let output_comparison = output::Oracle {
+        dir,
+        entry: &entry,
+        compiled: &compiled,
+        sources: &snapshot.sources,
+        coverage: &coverage,
+    }
+    .compare(&native, &engine, &aborts)
+    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
     let mut report = report(&native, &engine, &testable, &refused, &approximate, false);
     report.disagreements.extend(output_comparison.disagreements);
     report.refused -= output_comparison.rejected_declines;
@@ -2263,6 +2248,39 @@ struct Run {
     incomplete: Vec<check_report::Incomplete>,
 }
 
+struct Replies {
+    values: Vec<String>,
+    metadata: String,
+    finished: bool,
+}
+
+fn replies(path: &Utf8Path) -> Replies {
+    let mut values = std::fs::read(path)
+        .map(|bytes| lines(&bytes))
+        .unwrap_or_default();
+    let mut metadata = String::new();
+    values.retain(|line| {
+        if let Some(value) = line.strip_prefix("meta ")
+            && (value.starts_with("nts-live-first ") || value.starts_with("nts-live-end "))
+        {
+            metadata.push_str(value);
+            metadata.push('\n');
+            false
+        } else {
+            true
+        }
+    });
+    let finished = values.last().is_some_and(|last| last.starts_with("done "));
+    if finished {
+        values.pop();
+    }
+    Replies {
+        values,
+        metadata,
+        finished,
+    }
+}
+
 /// Run a case set, restarting past whatever ends it.
 ///
 /// A case can end the process -- an out-of-range index is the program keeping
@@ -2306,32 +2324,12 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         incomplete.extend(finished.incomplete);
         let run = finished.output;
         case_costs::child_result("program.attempt", &run);
-        let mut produced = std::fs::read(&path)
-            .map(|bytes| lines(&bytes))
-            .unwrap_or_default();
-        let mut metadata = String::new();
-        produced.retain(|line| {
-            if let Some(value) = line.strip_prefix("meta ")
-                && (value.starts_with("nts-live-first ") || value.starts_with("nts-live-end "))
-            {
-                metadata.push_str(value);
-                metadata.push('\n');
-                false
-            } else {
-                true
-            }
-        });
-        // The terminal marker. A run that stopped after three cases leaves
-        // three good lines; without `done` it is not a short clean run.
-        let finished = produced
-            .last()
-            .is_some_and(|last| last.starts_with("done "));
-        if finished {
-            produced.pop();
-        }
+        let Replies {
+            values: produced,
+            metadata,
+            finished,
+        } = replies(&path);
         let read = produced.len();
-        let output_start = output.stdout.len();
-        output.stdout.extend_from_slice(&run.stdout);
         // The cases answered: result lines, in the order they were asked for.
         //
         // **They arrive on a channel of their own**, the file named by
@@ -2359,20 +2357,12 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         let stopped_case = reached < total - from;
         let stop = stopped_with(run.status.code(), signal_of(run.status), &complaint);
         let stopped_normally = stopped_case && !supervised && matches!(&stop, Stopped::Declined);
-        let native_decline =
-            stopped_normally && !complaint.lines().any(|line| line.starts_with(UNCAUGHT));
-        let errors_start = output.stderr.len();
-        output.stderr.extend_from_slice(if stopped_normally {
-            output::before_terminal_diagnostic(&run.stderr)
-        } else {
-            &run.stderr
-        });
-        segments.push(output::Segment {
-            cases: from..from + reached + usize::from(stopped_case),
-            stdout: output_start..output.stdout.len(),
-            stderr: errors_start..output.stderr.len(),
-            native_decline,
-        });
+        let source_throw = output.record(
+            &mut segments,
+            from..from + reached + usize::from(stopped_case),
+            &run,
+            stopped_normally,
+        );
         // What the program still held, once and at the end. Only under a
         // provider that frees, and on stderr because stdout is the comparison.
         //
@@ -2422,8 +2412,8 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         } else {
             match stop {
                 Stopped::Declined => {
-                    if let Some(line) = complaint.lines().find(|line| line.starts_with(UNCAUGHT)) {
-                        thrown.push((from + reached, line.to_owned()));
+                    if let Some(line) = source_throw {
+                        thrown.push((from + reached, line));
                     }
                 }
                 Stopped::Defect(what) => aborts.push(what),
@@ -2851,11 +2841,10 @@ fn driver_cases(import: &str, cases: &[DriverCase<'_>], engine: Engine) -> Strin
     // after three cases must not read as a run of three.
     let _ = writeln!(
         driver,
-        "emit(\"done {}\\n\"); closeSync(resultsFd); \
+        "emit(\"done {count}\\n\"); closeSync(resultsFd); \
          await new Promise(resolve => completeTurn(resolve)); \
          await Promise.all([process.stdout, process.stderr].map(stream => \
-           new Promise(resolve => stream.write(\"\", resolve)))); process.exit(0);",
-        count
+           new Promise(resolve => stream.write(\"\", resolve)))); process.exit(0);"
     );
     driver
 }

@@ -3,7 +3,7 @@
 
 use std::ops::Range;
 
-use anyhow::Result;
+use anyhow::{Context as _, Result};
 
 use super::Run;
 
@@ -16,6 +16,85 @@ pub(super) struct Printed {
 impl Printed {
     fn is_empty(&self) -> bool {
         self.stdout.is_empty() && self.stderr.is_empty()
+    }
+}
+
+pub(super) struct Oracle<'a> {
+    pub(super) dir: &'a camino::Utf8Path,
+    pub(super) entry: &'a camino::Utf8Path,
+    pub(super) compiled: &'a [super::Testable],
+    pub(super) sources: &'a [nts_diagnostics::SourceFile],
+    pub(super) coverage: &'a super::oracle_coverage::Coverage,
+}
+
+impl Oracle<'_> {
+    pub(super) fn compare(
+        &self,
+        native: &Run,
+        node: &Run,
+        aborts: &[String],
+    ) -> Result<Comparison> {
+        if self.compiled.is_empty() || !native.incomplete.is_empty() || !aborts.is_empty() {
+            return Ok(Comparison::default());
+        }
+        let mut cases = None;
+        compare(native, node, |window| {
+            let cases = cases.get_or_insert_with(|| super::interleaved(self.compiled));
+            let selected = cases
+                .get(window)
+                .context("invalid output oracle case window")?;
+            let ids = selected
+                .iter()
+                .map(|(one, at, tuple)| format!("{} {at} {tuple:?}", one.name))
+                .collect::<Vec<_>>();
+            let identity = serde_json::to_vec(&(&self.coverage.key, ids))?;
+            let coverage = super::oracle_coverage::Coverage {
+                count: selected.len(),
+                key: format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&identity)),
+            };
+            super::run_node_cases(self.dir, self.entry, selected, self.sources, &coverage)
+                .map(|run| run.output)
+        })
+    }
+}
+
+impl Printed {
+    pub(super) fn record(
+        &mut self,
+        segments: &mut Vec<Segment>,
+        cases: Range<usize>,
+        run: &std::process::Output,
+        stopped: bool,
+    ) -> Option<String> {
+        let stdout = self.stdout.len();
+        let stderr = self.stderr.len();
+        self.stdout.extend_from_slice(&run.stdout);
+        self.stderr.extend_from_slice(if stopped {
+            before_terminal_diagnostic(&run.stderr)
+        } else {
+            &run.stderr
+        });
+        let source_throw = stopped
+            .then(|| {
+                String::from_utf8_lossy(&run.stderr)
+                    .lines()
+                    .rev()
+                    .find(|line| {
+                        line.starts_with(super::REFUSED)
+                            || line.starts_with(super::EXHAUSTED)
+                            || line.starts_with(super::UNCAUGHT)
+                    })
+                    .filter(|line| line.starts_with(super::UNCAUGHT))
+                    .map(str::to_owned)
+            })
+            .flatten();
+        segments.push(Segment {
+            cases,
+            stdout: stdout..self.stdout.len(),
+            stderr: stderr..self.stderr.len(),
+            native_decline: stopped && source_throw.is_none(),
+        });
+        source_throw
     }
 }
 
@@ -34,6 +113,11 @@ pub(super) fn before_terminal_diagnostic(stderr: &[u8]) -> &[u8] {
         if line.starts_with(super::REFUSED.as_bytes())
             || line.starts_with(super::EXHAUSTED.as_bytes())
             || line.starts_with(super::UNCAUGHT.as_bytes())
+            || line.starts_with(b"java.lang.OutOfMemoryError")
+            || line.starts_with(b"java.lang.StackOverflowError")
+            || line.starts_with(b"java.lang.reflect.InvocationTargetException")
+            || line.starts_with(b"nts.rt.NtsRefusal")
+            || line.starts_with(b"Exception in thread ")
         {
             boundary = Some(at);
         }
@@ -207,6 +291,12 @@ mod tests {
         assert_eq!(
             before_terminal_diagnostic(b"nts: refused: source line\nnts: refused: actual stop\n"),
             b"nts: refused: source line\n"
+        );
+        assert_eq!(
+            before_terminal_diagnostic(
+                b"before\njava.lang.StackOverflowError\n\tat program.method(Program.java:1)\n"
+            ),
+            b"before\n"
         );
     }
 
