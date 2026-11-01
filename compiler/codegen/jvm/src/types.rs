@@ -311,6 +311,14 @@ pub fn identity_class_name(
     jvm_class_name(package, &format!("{}__{}", layout.name, class.name))
 }
 
+/// The class written for a class extending a typed array
+/// ([`nts_core::hir::ViewClass`]): a subclass of its element's runtime view,
+/// or of the view class it extends.
+#[must_use]
+pub fn view_class_name(package: &str, view: &nts_core::hir::ViewClass) -> String {
+    jvm_class_name(package, &view.name)
+}
+
 /// A promise: a settled-or-not value and the frames waiting on it.
 pub const PROMISE: &str = "nts/rt/NtsPromise";
 

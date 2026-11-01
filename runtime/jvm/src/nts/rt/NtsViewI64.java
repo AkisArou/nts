@@ -9,8 +9,21 @@ package nts.rt;
  * <p>Little-endian, because a typed array is platform order and every platform
  * this runs on is little-endian. `DataView` is where the choice lives.
  */
-public final class NtsViewI64 extends NtsView {
+public class NtsViewI64 extends NtsView {
     private NtsViewI64(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 3); }
+
+    /** The view {@code fresh}, which nothing has seen yet, made again as a
+     * class extending this typed array -- the compiler's class for
+     * {@code class Bytes extends Uint8Array}, which hands it the view its
+     * construction made. */
+    protected NtsViewI64(NtsViewI64 fresh) { this(fresh.buffer, fresh.offset, fresh.declared); }
+
+    /** The view {@code subarray} and {@code slice} make: of this view's own
+     * class, which a class extending a typed array overrides to make its own
+     * (JavaScript's species). */
+    protected NtsViewI64 like(NtsBuffer buffer, int offset, int declared) {
+        return new NtsViewI64(buffer, offset, declared);
+    }
 
     /** Tracks the buffer's length. */
     public static NtsViewI64 over(NtsBuffer buffer, double byteOffset) {
@@ -84,7 +97,7 @@ public final class NtsViewI64 extends NtsView {
         int n = count(view);
         int from = relative(begin, n);
         int to = relative(end, n);
-        return new NtsViewI64(view.buffer, view.offset + (from << 3), Math.max(0, to - from));
+        return view.like(view.buffer, view.offset + (from << 3), Math.max(0, to - from));
     }
 
     /** A copy, in a buffer of its own. */
@@ -93,7 +106,7 @@ public final class NtsViewI64 extends NtsView {
         int from = relative(begin, n);
         int to = relative(end, n);
         int taken = Math.max(0, to - from);
-        NtsViewI64 out = of(taken);
+        NtsViewI64 out = view.like(NtsBuffer.allocate((double) taken * 8), 0, taken);
         System.arraycopy(view.buffer.bytes, view.offset + (from << 3),
             out.buffer.bytes, 0, taken << 3);
         return out;

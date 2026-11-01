@@ -519,7 +519,7 @@ static NtsString *nts_dataview_to_string(NtsHeader *object) {
   (void)object;
   return NTS_TEXT("[object DataView]");
 }
-static NtsString *nts_view_to_string(NtsHeader *object) {
+NtsString *nts_view_to_string(NtsHeader *object) {
   NtsString *comma = NTS_TEXT(",");
   NtsString *text = nts_view_join((const NtsView *)object, comma);
   nts_release(comma);
@@ -1355,7 +1355,7 @@ static void nts_free(NtsHeader *object) {
   /* These layouts keep all storage in their own block. Other kinds retain
    * their existing backing-store/finalizer dispatch. */
   if (descriptor->kind != NTS_KIND_OBJECT &&
-      descriptor->kind != NTS_KIND_TUPLE) {
+      descriptor->kind != NTS_KIND_TUPLE && descriptor->kind != NTS_KIND_VIEW) {
     nts_free_storage(object);
   }
   nts_free_block(object);
@@ -9760,18 +9760,23 @@ NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
  * One reference each way is enough. The view owns the buffer; the buffer knows
  * nothing about its views, which is why a buffer can be viewed at several
  * widths at once without keeping a list. */
-static const NtsDescriptor nts_desc_view = {
-    .kind = NTS_KIND_OBJECT,
-    .size = (uint32_t)sizeof(NtsView),
-    .references = 1u,
-    .cyclic = 1u,
-    .offsets = /* One reference, at offset zero: the buffer. Cyclic because a
-           view is an ordinary managed object and a program may put one in a
-           cycle. */
-    (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)},
-    .name = "TypedArray",
-    .element = NTS_ARRAY_UNKNOWN,
-    .to_string = nts_view_to_string,
+static const NtsViewDescriptor nts_desc_view = {
+    .descriptor =
+        {
+            .kind = NTS_KIND_VIEW,
+            .size = (uint32_t)sizeof(NtsView),
+            .references = 1u,
+            .cyclic = 1u,
+            /* One reference, at offset zero: the buffer. Cyclic because a view
+             * is an ordinary managed object and a program may put one in a
+             * cycle. */
+            .offsets = (const uint32_t[]){(uint32_t)offsetof(NtsView, buffer)},
+            .name = "TypedArray",
+            .element = NTS_ARRAY_UNKNOWN,
+            .to_string = nts_view_to_string,
+        },
+    /* A builtin typed array's species is its own kind: the same view. */
+    .species = NULL,
 };
 
 /* Beside the descriptor it compares against, rather than with the other
@@ -9781,14 +9786,14 @@ static const NtsDescriptor nts_desc_view = {
  *
  * True for every typed array *and* for a `DataView`, which is the one place
  * those two are one answer -- `instanceof` separates them and this does not.
- * So it is two descriptor comparisons rather than a kind test: `nts_desc_view`
- * covers the nine typed arrays, which share a struct and differ in how their
- * bytes are read, and `nts_desc_dataview` is the tenth thing the predicate is
- * true of.
+ * So it is the descriptor's kind or one comparison: `NTS_KIND_VIEW` covers the
+ * nine typed arrays, which share a struct and differ in how their bytes are
+ * read, and every class extending one, whose descriptor is the program's; and
+ * `nts_desc_dataview` is the tenth thing the predicate is true of.
  *
- * Not `nts_is_view_kind` with a wildcard, because there is no kind that means
- * "any" and inventing one would put a value in the `kind` field that no view
- * has. */
+ * Not `nts_is_view_kind` with a wildcard, because there is no element kind
+ * that means "any" and inventing one would put a value in the view's `kind`
+ * field that no view has. */
 bool nts_value_is_view(NtsValue value) {
   if (!NTS_TAG_IS_MANAGED(nts_value_tag(value))) {
     return false;
@@ -9797,7 +9802,7 @@ bool nts_value_is_view(NtsValue value) {
   if (object == NULL) {
     return false;
   }
-  return object->descriptor == &nts_desc_view ||
+  return object->descriptor->kind == NTS_KIND_VIEW ||
          object->descriptor == &nts_desc_dataview;
 }
 
@@ -9862,7 +9867,7 @@ bool nts_is_view_kind(NtsValue value, double kind) {
     return false;
   }
   const NtsHeader *object = nts_value_reference(value);
-  if (!object || object->descriptor != &nts_desc_view) {
+  if (!object || object->descriptor->kind != NTS_KIND_VIEW) {
     return false;
   }
   return ((const NtsView *)object)->kind == (uint8_t)kind;
@@ -9891,7 +9896,7 @@ static uint8_t nts_element_width(uint8_t kind) {
 NtsView *nts_view_new(NtsBuffer *buffer, double byte_offset, double length,
                       double kind, bool tracking) {
   NtsView *view = (NtsView *)nts_alloc(sizeof(NtsView));
-  view->header.descriptor = &nts_desc_view;
+  view->header.descriptor = &nts_desc_view.descriptor;
   view->header.reserved = nts_fresh_count();
   view->header.flags = 0;
   view->header.length = 0;
@@ -10108,6 +10113,12 @@ unsigned char *nts_view_lend_bytes(const NtsView *view) {
   return bytes;
 }
 
+void nts_view_make_instance(NtsView *view, const NtsDescriptor *descriptor) {
+  if (view) {
+    view->header.descriptor = descriptor;
+  }
+}
+
 NtsView *nts_view_subarray(const NtsView *view, double from, double to) {
   uint32_t length = (uint32_t)nts_view_length(view);
   uint32_t start = nts_str_clamp(from, length, 1);
@@ -10127,9 +10138,16 @@ NtsView *nts_view_subarray(const NtsView *view, double from, double to) {
      is a wrong byte length and a wrong cross-width `set`, and every read looks
      fine. It survived because the only subarray anything took was of a
      `Uint8Array`, where 1 and 1 are the same number. */
-  return nts_view_new(view->buffer,
-                      (double)(view->byte_offset + (size_t)start * view->width),
-                      (double)count, (double)view->kind, false);
+  NtsView *out = nts_view_new(
+      view->buffer, (double)(view->byte_offset + (size_t)start * view->width),
+      (double)count, (double)view->kind, false);
+  /* Of the receiver's class: a class extending a typed array is its own
+     species unless it says otherwise, and one that runs code for it is
+     constructed by `nts_view_subarray_species` instead. */
+  if (out) {
+    out->header.descriptor = view->header.descriptor;
+  }
+  return out;
 }
 
 NtsView *nts_view_slice(const NtsView *view, double from, double to) {
@@ -10150,6 +10168,10 @@ NtsView *nts_view_slice(const NtsView *view, double from, double to) {
       nts_view_new(copy, 0.0, (double)count, (double)view->kind, false);
   /* `nts_view_new` retained it, and this function is the only other owner. */
   nts_release((NtsHeader *)copy);
+  /* Of the receiver's class, as `nts_view_subarray`'s result is. */
+  if (out) {
+    out->header.descriptor = view->header.descriptor;
+  }
   return out;
 }
 

@@ -1198,7 +1198,95 @@ fn descriptors(
         class_descriptors(&mut out, program, layout, &tag, (&head, &tail));
     }
     array_descriptors(&mut out, program);
+    view_class_descriptors(&mut out, program);
     out
+}
+
+/// `NTS_KIND_VIEW`: a typed array's view, whose descriptor is an
+/// `NtsViewDescriptor`.
+const KIND_VIEW: u32 = 9;
+
+/// `sizeof(NtsView)` and `offsetof(NtsView, buffer)` on every target this
+/// backend emits for, each 64-bit: a 24-byte header, then the buffer. The C
+/// backend writes them with `sizeof` and `offsetof`; this one cannot, and
+/// `the_view_constants_are_the_headers` holds the two to the header.
+pub const VIEW_SIZE: u32 = 56;
+pub const VIEW_BUFFER_OFFSET: u32 = 24;
+
+/// One descriptor per class extending a typed array that the program makes or
+/// tests ([`nts_core::hir::ViewClass`]), as the C backend emits: the runtime
+/// view's in everything but its name, and no species of its own.
+fn view_class_descriptors(out: &mut String, program: &Emission<'_>) {
+    let mut wanted = std::collections::BTreeSet::new();
+    for func in program.native_funcs() {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter())
+            .map(|id| func.value(*id))
+        {
+            wanted.extend(nts_core::hir::described_classes(op));
+        }
+    }
+    let views: Vec<_> = program
+        .view_classes
+        .iter()
+        .filter(|view| wanted.contains(&view.class))
+        .collect();
+    if views.is_empty() {
+        return;
+    }
+    let _ = writeln!(
+        out,
+        "@nts_view_refs = internal constant [1 x i32] [i32 {VIEW_BUFFER_OFFSET}]"
+    );
+    for view in views {
+        let tag = format!("view_{}", view_tag(view));
+        name_constant(out, &tag, &view.name);
+        let _ = writeln!(
+            out,
+            "@nts_view_desc_{} = internal constant {{ %NtsDescriptor, ptr }} \
+             {{ %NtsDescriptor {{ i32 {KIND_VIEW}, i32 {VIEW_SIZE}, i32 1, i32 1, \
+             ptr @nts_view_refs, ptr null, ptr @nts_name_{tag}, i32 0, ptr null, i32 0, \
+             i32 0, ptr null, ptr @nts_view_to_string, ptr null, ptr null, ptr null }}, \
+             ptr null }}",
+            view_tag(view)
+        );
+    }
+}
+
+/// A view class's part of its descriptor's name.
+fn view_tag(view: &nts_core::hir::ViewClass) -> String {
+    nts_codegen_common::symbols::c_identifier(&view.name)
+}
+
+/// A view just made, given its class: the runtime writes the class's
+/// descriptor into it unless the allocation failed.
+fn view_of_class(
+    program: &Emission<'_>,
+    func: &Func,
+    view: ValueId,
+    class: nts_core::hir::ClassId,
+) -> Result<String, Diagnostic> {
+    let Some(descriptor) = view_descriptor(program, class) else {
+        return Err(refuse(
+            func,
+            "a view made as a class this program has no descriptor for",
+        ));
+    };
+    Ok(format!(
+        "call void @nts_view_make_instance(ptr {}, ptr {descriptor})",
+        name(view)
+    ))
+}
+
+/// A view class's descriptor, by class, where the program has one.
+fn view_descriptor(program: &Program, class: nts_core::hir::ClassId) -> Option<String> {
+    program
+        .view_classes
+        .iter()
+        .find(|view| view.class == class)
+        .map(|view| format!("@nts_view_desc_{}", view_tag(view)))
 }
 
 /// Render the same managed-edge and tag tests for release and trace actions.
@@ -2697,12 +2785,20 @@ fn instance_of(
     };
     let mut answers: Vec<String> = Vec::new();
     for class in classes {
-        let Some(layout) = program
+        // A layout's descriptor, or a view class's, which has no layout.
+        let descriptor = match program
             .layouts
             .iter()
             .find(|layout| layout.types.contains(class))
-        else {
-            continue;
+        {
+            Some(layout) => format!(
+                "@nts_desc_{}",
+                descriptor_for(program, layout, Some(*class))
+            ),
+            None => match view_descriptor(program, *class) {
+                Some(descriptor) => descriptor,
+                None => continue,
+            },
         };
         let at = format!("{out}.c{}", answers.len());
         let argument = if win64 {
@@ -2711,9 +2807,8 @@ fn instance_of(
             shared.clone()
         };
         lines.push(format!(
-            "{at} = call {}i1 @nts_is_class({argument}, ptr @nts_desc_{})",
+            "{at} = call {}i1 @nts_is_class({argument}, ptr {descriptor})",
             platform.extension(&HirType::Bool),
-            descriptor_for(program, layout, Some(*class))
         ));
         answers.push(at);
     }
@@ -2789,6 +2884,10 @@ pub const ALWAYS_DECLARED: &[&str] = &[
     "nts_function_to_string",
     "nts_bound_function_to_string",
     "nts_array_to_string",
+    "nts_view_to_string",
+    // Gives a view just made its class (`OpKind::ViewOfClass`), named by the
+    // backend rather than by the program.
+    "nts_view_make_instance",
     // The no-match arm of an open field chain. Declared always, because the
     // chain is emitted wherever a slot has several layouts and a call with no
     // declaration is an invalid module rather than a refusal.
@@ -3913,6 +4012,7 @@ fn operation(
             classes,
             ..
         } => return Ok(instance_of(program, &out, *operand, classes, platform)),
+        OpKind::ViewOfClass { view, class } => view_of_class(program, func, *view, *class)?,
         // Before the general binary arm, because it *is* a binary and the
         // general one would match it first -- and an `icmp` on a sixteen-byte
         // aggregate is not an instruction.

@@ -349,6 +349,17 @@ pub enum Invalid {
         slot: u32,
         reaction: HirType,
     },
+    /// An [`OpKind::ViewOfClass`] whose view something reads between its
+    /// making by `nts_view_new` and the operation, or which names no class
+    /// extending a typed array.
+    ///
+    /// Giving a view its class is sound only where nothing saw the view
+    /// before: the JVM makes the class's own object in its place rather than
+    /// writing a descriptor, and anything that had read the view between would
+    /// hold the other object. Only a reader is ruled out -- the release of the
+    /// buffer reference counting puts after the making does not see the view.
+    /// This is the guard that keeps the operation where that holds.
+    MisplacedViewClass { func: String, reason: &'static str },
     /// Two functions in one program share a name.
     ///
     /// The emitted C would define one of them twice, and a call naming it
@@ -407,6 +418,7 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     }
     check_layouts(program, &mut problems);
     check_subscriptions(program, &mut problems);
+    check_view_classes(program, &mut problems);
     check_native_dispatch(program, &mut problems);
     check_typed_signatures(program, &mut problems);
     check_exact(program, &mut problems);
@@ -867,6 +879,61 @@ fn check_subscriptions(program: &Program, problems: &mut Vec<Invalid>) {
                     slot,
                     reaction: held.clone(),
                 });
+            }
+        }
+    }
+}
+
+/// Every [`OpKind::ViewOfClass`] after the `nts_view_new` that made its view, in
+/// the same block with nothing between reading the view, answering nothing,
+/// and naming one of the program's view classes
+/// ([`Invalid::MisplacedViewClass`]).
+fn check_view_classes(program: &Program, problems: &mut Vec<Invalid>) {
+    for func in &program.funcs {
+        for block in &func.blocks {
+            for (position, at) in block.ops.iter().enumerate() {
+                let op = &func.values[at.0 as usize];
+                let OpKind::ViewOfClass { view, class } = op.kind else {
+                    continue;
+                };
+                let made_by_view_new = matches!(
+                    &func.values[view.0 as usize].kind,
+                    OpKind::Call {
+                        callee: super::Callee::External(name),
+                        ..
+                    } if name == "nts_view_new"
+                );
+                let made_at = block.ops[..position]
+                    .iter()
+                    .rposition(|earlier| *earlier == view);
+                let read_between = made_at.is_some_and(|made| {
+                    block.ops[made + 1..position].iter().any(|between| {
+                        operands(&func.values[between.0 as usize].kind).contains(&view)
+                    })
+                });
+                let reason = if !program
+                    .view_classes
+                    .iter()
+                    .any(|known| known.class == class)
+                {
+                    Some("names no class extending a typed array")
+                } else if made_at.is_none() {
+                    Some("is not in the block that made its view")
+                } else if read_between {
+                    Some("follows a read of its view since the view was made")
+                } else if !made_by_view_new {
+                    Some("names a view `nts_view_new` did not make")
+                } else if op.ty != HirType::Void {
+                    Some("answers a value")
+                } else {
+                    None
+                };
+                if let Some(reason) = reason {
+                    problems.push(Invalid::MisplacedViewClass {
+                        func: func.name.clone(),
+                        reason,
+                    });
+                }
             }
         }
     }
@@ -2426,6 +2493,7 @@ pub(crate) fn operands(kind: &OpKind) -> Vec<ValueId> {
         | OpKind::TagOf { value }
         | OpKind::Unerase { value, .. }
         | OpKind::InstanceOf { value, .. }
+        | OpKind::ViewOfClass { view: value, .. }
         | OpKind::SharedFieldGet { value, .. }
         | OpKind::OpenFieldGet { object: value, .. } => {
             vec![*value]
@@ -3234,6 +3302,110 @@ mod tests {
                 }
             )),
             "the read must be reported against the layout: {problems:#?}"
+        );
+    }
+
+    /// A view is given its class only where nothing has read it since its
+    /// making ([`Invalid::MisplacedViewClass`]): the JVM makes the class's own
+    /// object in its place, so a reader between would hold the other one. A
+    /// release of the buffer -- which reference counting puts there -- does not
+    /// read the view and is accepted; a read, a call the view is passed to, and
+    /// a store of it are each rejected.
+    #[test]
+    fn a_view_is_given_its_class_before_anything_reads_it() {
+        use crate::hir::{ManagedType, ViewClass};
+        use nts_semantic_schema::TypeId;
+
+        let view = HirType::Managed(ManagedType::View(Box::new(HirType::NUMBER)));
+        let program = |between: Option<(OpKind, HirType)>| {
+            let mut values = vec![
+                Op {
+                    kind: OpKind::Call {
+                        callee: Callee::External("nts_buffer_new".to_owned()),
+                        args: Vec::new(),
+                        frame: None,
+                    },
+                    ty: HirType::Managed(ManagedType::Buffer),
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::Call {
+                        callee: Callee::External("nts_view_new".to_owned()),
+                        args: vec![ValueId(0)],
+                        frame: None,
+                    },
+                    ty: view.clone(),
+                    origin: origin(),
+                },
+            ];
+            if let Some((kind, ty)) = between {
+                values.push(Op {
+                    kind,
+                    ty,
+                    origin: origin(),
+                });
+            }
+            values.push(Op {
+                kind: OpKind::ViewOfClass {
+                    view: ValueId(1),
+                    class: TypeId(1),
+                },
+                ty: HirType::Void,
+                origin: origin(),
+            });
+            let ops = (0..values.len())
+                .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
+                .collect();
+            let mut program = func(
+                values,
+                vec![block(Vec::new(), ops, Terminator::Return(None))],
+            );
+            program.view_classes = vec![ViewClass {
+                class: TypeId(1),
+                name: "Bytes".to_owned(),
+                element: HirType::NUMBER,
+                base: None,
+                species: None,
+            }];
+            program
+        };
+        let misplaced = |program: &Program| {
+            verify(program)
+                .err()
+                .unwrap_or_default()
+                .iter()
+                .any(|problem| matches!(problem, Invalid::MisplacedViewClass { .. }))
+        };
+        assert!(!misplaced(&program(None)), "the control must verify");
+        assert!(
+            !misplaced(&program(Some((OpKind::Release(ValueId(0)), HirType::Void)))),
+            "releasing the buffer does not read the view"
+        );
+        assert!(
+            misplaced(&program(Some((
+                OpKind::Length(ValueId(1)),
+                HirType::NUMBER
+            )))),
+            "a read of the view before its class"
+        );
+        let passed = OpKind::Call {
+            callee: Callee::Direct("keep".to_owned()),
+            args: vec![ValueId(1)],
+            frame: None,
+        };
+        assert!(
+            misplaced(&program(Some((passed, HirType::Void)))),
+            "the view passed to a call before its class"
+        );
+        assert!(
+            misplaced(&program(Some((
+                OpKind::GlobalSet {
+                    global: 0,
+                    value: ValueId(1)
+                },
+                HirType::Void
+            )))),
+            "the view stored before its class"
         );
     }
 

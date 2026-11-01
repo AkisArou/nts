@@ -156,6 +156,9 @@ pub(super) fn has_effects(op: &Op) -> bool {
         // Asking what class a value is reads one word and compares it. A dead
         // `instanceof` is a dead comparison.
         OpKind::InstanceOf { .. } => false,
+        // Giving a view its class writes the class into the view, and it
+        // answers nothing a use could keep alive, so it stays as a store does.
+        OpKind::ViewOfClass { .. } => true,
         // A field read, and a field read has no effects whichever arm it goes
         // through. The per-arm test a backend may emit for it is a comparison,
         // and the trap on the no-match path is unreachable by the op's own

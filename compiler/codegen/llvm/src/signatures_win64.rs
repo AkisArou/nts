@@ -3112,6 +3112,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
+        name: "nts_view_make_instance",
+        returns: "void",
+        params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_view_new",
         returns: "noalias ptr",
         params: &["ptr", "double", "double", "double", "i1 zeroext"],
@@ -3139,6 +3145,12 @@ pub const SIGNATURES_WIN64: &[Signature] = &[
         name: "nts_view_subarray",
         returns: "noalias ptr",
         params: &["ptr", "double", "double"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_view_to_string",
+        returns: "ptr",
+        params: &["ptr"],
         attributes: &[],
     },
     Signature {

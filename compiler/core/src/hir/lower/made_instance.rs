@@ -116,7 +116,14 @@ impl FuncBuilder<'_> {
                 let target = self
                     .native_constructor_above(*class)
                     .ok_or_else(|| self.unsupported(id, super::construction::NOT_ITS_STORAGE))?;
-                let made = self.construct_native(id, target, self.returns.clone())?;
+                // The class this copy constructs, or its own.
+                let made_as = match self.construct_target {
+                    Some(target) => target,
+                    None => instance_type_of(self.snapshot, *class).ok_or_else(|| {
+                        self.unrepresentable(*class, "the class being constructed")
+                    })?,
+                };
+                let made = self.construct_native(id, target, self.returns.clone(), made_as)?;
                 self.this = Some(made);
                 Ok(made)
             }
@@ -246,12 +253,15 @@ impl FuncBuilder<'_> {
     }
 
     /// Build a native-storage instance at `site` -- a `new` or a `super(...)`
-    /// -- from the arguments written there, as `ty`.
+    /// -- from the arguments written there, as `ty`, an instance of `made_as`:
+    /// the class the `new` names, which is the class whose constructor runs
+    /// only where no subclass inherits it.
     pub(super) fn construct_native(
         &mut self,
         site: NodeId,
         target: NativeConstructor,
         ty: HirType,
+        made_as: TypeId,
     ) -> Result<ValueId, Diagnostic> {
         let (class, constructor) = match target {
             NativeConstructor::Builtin(global) => {
@@ -263,16 +273,31 @@ impl FuncBuilder<'_> {
                 if !builds {
                     return Err(self.unsupported(site, super::construction::NOT_ITS_STORAGE));
                 }
-                return self.lower_builtin_construction(site, &global);
+                self.view_made_as = Some(made_as);
+                let made = self.lower_builtin_construction(site, &global);
+                self.view_made_as = None;
+                return made;
             }
             NativeConstructor::Source { class, constructor } => (class, constructor),
         };
         let owner = self
             .class_name(class)
             .ok_or_else(|| self.unsupported(class, "an anonymous class"))?;
+        // Run for a class that inherits it: its copy keyed on that class,
+        // whose `super(...)` makes that class's instance.
+        let keyed = match instance_type_of(self.snapshot, class) {
+            Some(own) if own == made_as => String::new(),
+            _ => super::target_suffix(made_as),
+        };
+        let member_copy = self.constructed_copy(site);
+        if !keyed.is_empty() && !member_copy.is_empty() {
+            return Err(self.unsupported(
+                site,
+                "a constructor copied over a union member and run for a class that inherits it",
+            ));
+        }
         let callee = Callee::Direct(format!(
-            "{owner}#{CONSTRUCTOR_KEY}{}{}",
-            self.constructed_copy(site),
+            "{owner}#{CONSTRUCTOR_KEY}{member_copy}{keyed}{}",
             self.raising_suffix_of(site)
         ));
         let arguments = self.arguments_of(site);

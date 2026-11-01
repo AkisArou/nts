@@ -1390,6 +1390,77 @@ fn a_count_narrower_than_an_array_is_bounded_before_the_call() {
     }
 }
 
+/// A class extending a typed array is that view to C, as its builtin base is:
+/// its bytes and its count go across exactly as a `Uint8Array`'s do, bounded
+/// by the same check.
+#[test]
+fn a_typed_array_subclass_is_handed_to_c_as_its_bytes() {
+    let source = r#"
+import type { CBytes, Counted } from "c:types";
+import type { Float64, Int32, Uint16 } from "@nts/scalars";
+/** @ntsNoEscape bytes */
+declare function count_of(bytes: Counted<CBytes, Uint16>): Float64;
+class Bytes extends Uint8Array {}
+export function counted(n: Int32): number {
+  try {
+    return count_of(new Bytes(n));
+  } catch (error) {
+    return error instanceof RangeError ? -1 : -2;
+  }
+}
+"#;
+    let native = "#include <stdint.h>\n\
+         static int calls;\n\
+         int count_calls(void) { return calls; }\n\
+         double count_of(const uint8_t *bytes, uint16_t n) { (void)bytes; calls++; return n; }\n";
+    let caller = "#include <stdio.h>\n#include \"program.h\"\n\
+         int count_calls(void);\n\
+         static int failed;\n\
+         static void check(const char *what, double got, double want) {\n\
+           if (got != want) { printf(\"FAIL %s: got %.17g want %.17g\\n\", what, got, want); failed = 1; }\n\
+         }\n\
+         int main(void) {\n\
+           check(\"3\", counted(3), 3);\n\
+           check(\"65535\", counted(65535), 65535);\n\
+           check(\"65536 throws\", counted(65536), -1);\n\
+           check(\"C called twice\", count_calls(), 2);\n\
+           return failed;\n\
+         }\n";
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let (dir, snapshot) =
+            snapshot_with_types(&format!("subclass-count-{provider:?}"), source, false);
+        let prepared = hir::prepare_with(
+            &snapshot,
+            &hir::Options {
+                provider,
+                ..hir::Options::default()
+            },
+        )
+        .expect("valid HIR");
+        assert!(
+            prepared.diagnostics.is_empty(),
+            "{:?}",
+            prepared.diagnostics
+        );
+        let emitted =
+            nts_codegen_c::emit(&prepared.program, nts_core::hir::native::NativeAbi::LP64);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        std::fs::write(dir.join("program.c"), emitted.writer.text()).unwrap();
+        for file in emitted.support_files() {
+            file.write(dir.as_std_path()).unwrap();
+        }
+        std::fs::write(dir.join("native.c"), native).unwrap();
+        std::fs::write(dir.join("caller.c"), caller).unwrap();
+        build_caller(&dir, provider);
+        let ran = Command::new(dir.join("caller")).output().unwrap();
+        assert!(
+            ran.status.success(),
+            "{provider:?}: {}",
+            String::from_utf8_lossy(&ran.stdout)
+        );
+    }
+}
+
 /// `program.c`, the runtime, `native.c` and `caller.c` in `dir`, compiled
 /// and linked as `caller` under `provider`.
 fn build_caller(dir: &Utf8Path, provider: hir::Memory) {

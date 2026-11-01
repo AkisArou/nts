@@ -19,12 +19,12 @@ use super::member_key::{Accessor as MethodAccessor, MemberKey};
 use super::{
     Absent, ArrayFill, BinOp, Block, BlockId, Callee, Field, FieldArm, Func, GeneratorKind,
     HirType, Layout, ManagedType, Op, OpKind, Param, ParamShape, Program, Terminator, UnOp,
-    ValueId,
+    ValueId, ViewClass,
 };
 use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
 use layout_collection::{BuilderLayouts, LayoutCollector};
-use made_instance::{MadeBy, ThisPaths};
+use made_instance::{MadeBy, NativeConstructor, ThisPaths};
 use numeric_arguments::Builtin as NumericBuiltin;
 
 /// A table walk's cursor: `nts_map_next`'s `int32_t`, below `NTS_MAX_LENGTH`
@@ -6709,6 +6709,65 @@ fn const_alias_of(probe: &FuncBuilder, declaration: NodeId) -> Option<u32> {
     Some(probe.denoted_symbol(probe.node(initializer).symbol?).0)
 }
 
+/// The program's view classes ([`ViewClass`]): each class extending a typed
+/// array that a view is made as or an `instanceof` asks about, with the view
+/// class it extends where it extends one rather than the builtin.
+fn collect_view_classes(probe: &FuncBuilder<'_>, program: &Program) -> Vec<ViewClass> {
+    let mut named: Vec<TypeId> = program
+        .funcs
+        .iter()
+        .flat_map(|func| func.values.iter())
+        .flat_map(|op| match &op.kind {
+            OpKind::ViewOfClass { class, .. } => vec![*class],
+            OpKind::InstanceOf { classes, .. } => classes.clone(),
+            _ => Vec::new(),
+        })
+        .collect();
+    named.sort_unstable_by_key(|ty| ty.0);
+    named.dedup();
+    named
+        .into_iter()
+        .filter_map(|class| {
+            let declaration = declared_view_class(probe, class)?;
+            let Some(HirType::Managed(ManagedType::View(element))) = probe.represent(class) else {
+                return None;
+            };
+            let base = probe
+                .snapshot
+                .base_types
+                .get(&class)
+                .and_then(|bases| bases.first().copied())
+                .filter(|base| declared_view_class(probe, *base).is_some());
+            Some(ViewClass {
+                class,
+                name: probe.class_name(declaration)?,
+                element: *element,
+                base,
+                species: None,
+            })
+        })
+        .collect()
+}
+
+/// The declaration of `ty` where it is a class the program declares whose
+/// instances are views: a class extending a typed array, not the builtin.
+fn declared_view_class(probe: &FuncBuilder<'_>, ty: TypeId) -> Option<NodeId> {
+    let symbol = probe.snapshot.types.get(ty.0 as usize)?.symbol?;
+    let declaration = probe
+        .snapshot
+        .symbols
+        .get(symbol.0 as usize)?
+        .declarations
+        .iter()
+        .copied()
+        .find(|at| probe.kind_of(*at).is_some_and(declares_a_class))?;
+    matches!(
+        probe.represent(ty),
+        Some(HirType::Managed(ManagedType::View(_)))
+    )
+    .then_some(declaration)
+}
+
 /// Every `const` alias in the program, as `(alias, named)` symbols: what
 /// [`with_const_aliases`] reads within one body, read over the whole program
 /// for the throw analysis.
@@ -12191,6 +12250,7 @@ fn function_copies(
                     instance: None,
                     declaration: Some(id),
                     raises: false,
+                    constructs: None,
                 })
                 .collect()
         } else if is_generic_function(snapshot, id) {
@@ -12254,6 +12314,9 @@ struct Copy {
     /// A copy whose unhandled `throw` records and returns rather than ending
     /// the program. See [`FuncBuilder::raises`].
     raises: bool,
+    /// The class a constructor copy constructs, where it is run for a class
+    /// that inherits it ([`FuncBuilder::construct_target`]).
+    constructs: Option<TypeId>,
 }
 
 /// Whether a function declaration has type parameters of its own.
@@ -12688,6 +12751,133 @@ fn member_copy(
     }
 }
 
+/// The name a constructor's copy keyed on `target` carries after the
+/// constructor's own ([`FuncBuilder::construct_target`]).
+fn target_suffix(target: TypeId) -> String {
+    format!("@as{}", target.0)
+}
+
+/// The classes each constructor whose base makes the instance is run for
+/// besides its own ([`FuncBuilder::construct_target`]).
+///
+/// For each class extending a typed array that a `new` builds, or that
+/// declares a constructor of its own (whose `super(...)` then runs its base's
+/// for it), every constructor its construction runs that another class
+/// declares, keyed on it. A constructor no subclass inherits has no copy.
+fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId, Vec<TypeId>> {
+    let mut built: Vec<NodeId> = Vec::new();
+    for index in 0..probe.snapshot.nodes.len() {
+        let Ok(at) = u32::try_from(index).map(NodeId) else {
+            continue;
+        };
+        match probe.kind_of(at) {
+            Some(syntax::NEW_EXPRESSION) => {
+                let Some(class) = probe
+                    .children(at)
+                    .first()
+                    .and_then(|callee| probe.referenced_value(*callee))
+                    .and_then(|reference| probe.referenced_declaration(reference.symbol))
+                else {
+                    continue;
+                };
+                built.push(class);
+            }
+            Some(kind)
+                if declares_a_class(kind) && the_constructor_declared_by(probe, at).is_some() =>
+            {
+                built.push(at);
+            }
+            _ => {}
+        }
+    }
+    built.sort_unstable_by_key(|class| class.0);
+    built.dedup();
+    let mut targets: rustc_hash::FxHashMap<NodeId, Vec<TypeId>> = rustc_hash::FxHashMap::default();
+    for class in built {
+        if !probe.kind_of(class).is_some_and(declares_a_class) {
+            continue;
+        }
+        let Some(target) = instance_type_of(probe.snapshot, class) else {
+            continue;
+        };
+        let mut next = probe.native_constructor_of(class);
+        while let Some(NativeConstructor::Source {
+            class: owner,
+            constructor,
+        }) = next
+        {
+            if owner != class {
+                let keyed = targets.entry(constructor).or_default();
+                if !keyed.contains(&target) {
+                    keyed.push(target);
+                }
+            }
+            next = probe.native_constructor_above(owner);
+        }
+    }
+    for keyed in targets.values_mut() {
+        keyed.sort_unstable_by_key(|ty| ty.0);
+    }
+    targets
+}
+
+/// A constructor's copies keyed on the classes that inherit it
+/// ([`Shared::target_copies`]), each beside its raising form where the
+/// constructor raises: named as a `new` or a `super(...)` run for that class
+/// names them, and recorded as constructing it ([`Program::constructed_as`]).
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit layout owner during collection"
+)]
+fn target_constructor_copies(
+    layout_collector: &mut LayoutCollector,
+    snapshot: &LoweringSnapshot<'_>,
+    foreign: &super::runtime::ForeignTable,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    class: NodeId,
+    member: NodeId,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    let Some(targets) = shared.target_copies.get(&member) else {
+        return;
+    };
+    for target in targets {
+        let suffix = target_suffix(*target);
+        for raises in [false, true] {
+            if raises && !shared.naming.raising.contains(&member) {
+                continue;
+            }
+            let copy = Copy {
+                suffix: suffix.clone(),
+                raises,
+                constructs: Some(*target),
+                ..Copy::default()
+            };
+            let mut builder = shared.builder(snapshot, foreign, copy);
+            match builder.lower_method_of(class, member, None) {
+                Ok(mut func) => {
+                    let ordinary = std::mem::take(&mut func.name);
+                    let mode = if raises { RAISING_SUFFIX } else { "" };
+                    func.name = format!("{ordinary}{suffix}{mode}");
+                    builder.rename_arrivals(&ordinary, &func.name);
+                    lowered
+                        .program
+                        .constructed_as
+                        .insert(func.name.clone(), *target);
+                    lowered.program.funcs.push(func);
+                }
+                Err(diagnostic) => {
+                    note_member(&mut builder, lowered, class, member, None, &diagnostic);
+                    lowered.diagnostics.push(diagnostic);
+                }
+            }
+            builder.harvest(wanted, &mut lowered.arrivals);
+            layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+        }
+    }
+}
+
 /// A constructor's copies over the union members its `new` and `super(...)`
 /// sites pass ([`Structural::constructions`]), each beside its raising form
 /// where the constructor raises. Named as a site names them: the copy's
@@ -12982,6 +13172,16 @@ fn lower_class(
                     member,
                     wanted,
                 );
+                target_constructor_copies(
+                    layout_collector,
+                    snapshot,
+                    foreign,
+                    shared,
+                    lowered,
+                    class,
+                    member,
+                    wanted,
+                );
                 builder.harvest(wanted, &mut lowered.arrivals);
                 layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 continue;
@@ -13010,6 +13210,16 @@ fn lower_class(
             );
             if instance.is_none() && builder.kind_of(member) == Some(syntax::CONSTRUCTOR) {
                 constructor_copies(
+                    layout_collector,
+                    snapshot,
+                    foreign,
+                    shared,
+                    lowered,
+                    class,
+                    member,
+                    wanted,
+                );
+                target_constructor_copies(
                     layout_collector,
                     snapshot,
                     foreign,
@@ -14260,6 +14470,9 @@ struct Shared {
     /// Which classes are thenables. Shared for the reason `class_instances`
     /// is: it is read by every builder and written by none.
     thenables: std::rc::Rc<Thenables>,
+    /// Each constructor whose base makes the instance, and the classes it is
+    /// run for besides its own ([`constructor_targets`]).
+    target_copies: rustc_hash::FxHashMap<NodeId, Vec<TypeId>>,
 }
 
 impl Shared {
@@ -14330,6 +14543,7 @@ impl Shared {
             structural,
             class_instances,
             thenables,
+            target_copies: constructor_targets(&probe),
         }
     }
 
@@ -14361,6 +14575,7 @@ impl Shared {
         builder.selected_result = selected_result;
         builder.raises = copy.raises;
         builder.retyped = copy.retyped;
+        builder.construct_target = copy.constructs;
         builder.class_instances = std::rc::Rc::clone(&self.class_instances);
         builder.thenables = std::rc::Rc::clone(&self.thenables);
         builder.generic_calls.clone_from(&self.generics.at_call);
@@ -17329,6 +17544,10 @@ pub fn lower_with(
     );
     lay_out_held_signatures(&mut layout_collector, snapshot, &mut lowered.program);
     lowered.program.layouts = layout_collector.into_layouts();
+    lowered.program.view_classes = collect_view_classes(
+        &shared.builder(snapshot, foreign, Copy::default()),
+        &lowered.program,
+    );
     relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
     declare_uniform_entries(snapshot, &hierarchy, &mut lowered.program, &shared);
 
@@ -17824,10 +18043,12 @@ fn expand_layout_tests(program: &mut Program) {
 /// block, and the ops that produced it keep whatever effects they had; only the
 /// test itself goes.
 fn prune_class_tests(program: &mut Program) {
+    // A class extending a typed array has a descriptor and no layout.
     let laid_out: std::collections::HashSet<TypeId> = program
         .layouts
         .iter()
         .flat_map(|layout| layout.types.iter().copied())
+        .chain(program.view_classes.iter().map(|view| view.class))
         .collect();
     for func in &mut program.funcs {
         for op in &mut func.values {
@@ -21927,12 +22148,22 @@ fn representation_of(
 }
 
 /// A block under construction.
+#[derive(Default)]
 struct PartialBlock {
     params: Vec<ValueId>,
     ops: Vec<ValueId>,
     /// `None` until the block is terminated. A block that reaches its end without
     /// one is still open and will be given a jump or a return.
     terminator: Option<Terminator>,
+}
+
+/// What a typed array class stores: its element's width in bytes, the
+/// runtime's tag for that element, and the view type. Derived once, by
+/// `typed_array_shape`, and handed whole to each way of making the view.
+struct ViewShape {
+    width: f64,
+    kind: f64,
+    ty: HirType,
 }
 
 /// Builds one function.
@@ -22636,6 +22867,16 @@ struct FuncBuilder<'a> {
     /// In a constructor whose base makes the instance: what its `super(...)`
     /// makes `this` with ([`MadeBy`]).
     made_by: Option<MadeBy>,
+    /// The class a typed-array construction makes its view an instance of
+    /// ([`OpKind::ViewOfClass`]): set where a class extending a typed array is
+    /// built, and taken by the construction before it lowers its arguments, so
+    /// a typed array built among them is not given it.
+    view_made_as: Option<TypeId>,
+    /// The class this constructor copy constructs, where it is run for a class
+    /// that inherits it: `new Octets(4)` runs `Counted`'s constructor keyed on
+    /// `Octets`, and its `super(...)` makes the view an `Octets`. `None` in a
+    /// constructor run for its own class. The key `new.target` would read.
+    construct_target: Option<TypeId>,
     /// An override just lowered that answers its out parameters as a tuple:
     /// the slot wrapper the member loop builds for it (`lower_vfunc_slot`).
     vfunc_slot: Option<VfuncSlot>,
@@ -23005,11 +23246,7 @@ impl<'a> FuncBuilder<'a> {
             guarded: std::rc::Rc::default(),
             in_closure: false,
             values: Vec::new(),
-            blocks: vec![PartialBlock {
-                params: Vec::new(),
-                ops: Vec::new(),
-                terminator: None,
-            }],
+            blocks: vec![PartialBlock::default()],
             current: BlockId(0),
             obligations: Vec::new(),
             return_elements: Vec::new(),
@@ -23042,6 +23279,8 @@ impl<'a> FuncBuilder<'a> {
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
             made_by: None,
+            view_made_as: None,
+            construct_target: None,
             vfunc_slot: None,
             chaining_up: None,
             objc_entry: None,
@@ -23242,11 +23481,7 @@ impl<'a> FuncBuilder<'a> {
 
     /// Start a new block and return its id. Does not switch to it.
     fn new_block(&mut self) -> BlockId {
-        self.blocks.push(PartialBlock {
-            params: Vec::new(),
-            ops: Vec::new(),
-            terminator: None,
-        });
+        self.blocks.push(PartialBlock::default());
         BlockId(u32::try_from(self.blocks.len() - 1).unwrap_or(u32::MAX))
     }
 
@@ -59236,7 +59471,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         class: &str,
         element: HirType,
-    ) -> Result<(f64, f64, HirType), Diagnostic> {
+    ) -> Result<ViewShape, Diagnostic> {
         let (Some(width), Some(kind)) = (
             super::builtin::element_width(&element),
             super::builtin::element_kind(&element),
@@ -59246,11 +59481,11 @@ impl<'a> FuncBuilder<'a> {
                 &format!("a `{class}`, whose element this compiler has no storage kind for"),
             ));
         };
-        Ok((
-            f64::from(width),
-            f64::from(kind),
-            HirType::Managed(ManagedType::View(Box::new(element))),
-        ))
+        Ok(ViewShape {
+            width: f64::from(width),
+            kind: f64::from(kind),
+            ty: HirType::Managed(ManagedType::View(Box::new(element))),
+        })
     }
 
     /// `Uint8Array.from(xs)` -- the constructor's array case, under its other
@@ -59273,7 +59508,7 @@ impl<'a> FuncBuilder<'a> {
                 &format!("a `{class}.from` with a mapping function or with no argument"),
             ));
         };
-        let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
+        let shape = self.typed_array_shape(id, class, element)?;
         let wanted = HirType::Managed(ManagedType::Array(Box::new(HirType::NUMBER)));
         let values = if self.kind_of(*source) == Some(syntax::ARRAY_LITERAL_EXPRESSION) {
             self.lower_expecting(*source, &wanted)?
@@ -59292,7 +59527,7 @@ impl<'a> FuncBuilder<'a> {
                 ),
             ));
         }
-        self.view_copied_from_array(id, values, width, kind, &ty)
+        self.view_copied_from_array(id, values, &shape, None)
     }
 
     /// `Uint8Array.of(1, 2, 3)` -- the arguments, as an array, then the same.
@@ -59309,7 +59544,7 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
         let bigint = element == HirType::BigInt;
-        let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
+        let shape = self.typed_array_shape(id, class, element)?;
         let arguments_values =
             self.builtin_arguments(id, NumericBuiltin::TypedOf { bigint }, arguments)?;
         let origin = self.origin(id);
@@ -59350,7 +59585,7 @@ impl<'a> FuncBuilder<'a> {
                 origin.clone(),
             );
         }
-        self.view_copied_from_array(id, values, width, kind, &ty)
+        self.view_copied_from_array(id, values, &shape, None)
     }
 
     fn lower_new_typed_array(
@@ -59362,7 +59597,10 @@ impl<'a> FuncBuilder<'a> {
         // Refused by name rather than defaulted. An element with no kind is a
         // typed array this compiler does not know how to store, and saying so
         // is the difference between a refusal and a silent `f64`.
-        let (width, kind, ty) = self.typed_array_shape(id, class, element)?;
+        // Before any argument is lowered: a typed array built among them is
+        // not the class being made.
+        let made_as = self.view_made_as.take();
+        let shape = self.typed_array_shape(id, class, element)?;
         let origin = self.origin(id);
         let arguments = self.arguments_of(id);
 
@@ -59370,7 +59608,7 @@ impl<'a> FuncBuilder<'a> {
             // `new Uint8Array()` is an empty one, which is a buffer of no
             // bytes rather than a refusal.
             let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-            return self.view_over_fresh_buffer(id, zero, zero, kind, &ty);
+            return self.view_over_fresh_buffer(id, zero, zero, &shape, made_as);
         };
         // **An array literal is lowered at the view's element type.** `new
         // Uint8Array([])` types its literal `never[]` and falls back to the
@@ -59380,7 +59618,7 @@ impl<'a> FuncBuilder<'a> {
         // lowered value, because the value is what the expectation decides.
         let count = match (
             self.kind_of(*first) == Some(syntax::ARRAY_LITERAL_EXPRESSION),
-            &ty,
+            &shape.ty,
         ) {
             // **At `number[]`, not at the view's own element.** Expecting
             // `Array(u8)` builds a `u8` array, which is not a representation an
@@ -59406,14 +59644,14 @@ impl<'a> FuncBuilder<'a> {
             self.values[count.0 as usize].ty,
             HirType::Managed(ManagedType::Buffer)
         ) {
-            return self.lower_view_over(id, count, &arguments[1..], width, kind, &ty);
+            return self.lower_view_over(id, count, &arguments[1..], &shape, made_as);
         }
         // `new Uint8Array([1, 2, 3])` **copies from** what it is given rather
         // than sizing to it, which is the one case below. Anything else is
         // refused by name rather than read as a length, which would allocate
         // whatever the pointer happened to be.
         if let HirType::Managed(ManagedType::Array(_)) = self.values[count.0 as usize].ty.clone() {
-            return self.view_copied_from_array(id, count, width, kind, &ty);
+            return self.view_copied_from_array(id, count, &shape, made_as);
         }
         if !matches!(
             self.values[count.0 as usize].ty,
@@ -59427,7 +59665,11 @@ impl<'a> FuncBuilder<'a> {
         // IR, so the backend that checks is the one that noticed.
         let count = self.coerce(count, &HirType::NUMBER, id)?;
         self.guard_buffer_length(id, count, "Invalid typed array length")?;
-        let width_value = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let width_value = self.push(
+            OpKind::ConstFloat(shape.width),
+            HirType::NUMBER,
+            origin.clone(),
+        );
         let bytes = self.push(
             OpKind::Binary {
                 op: BinOp::Mul,
@@ -59437,7 +59679,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::NUMBER,
             origin,
         );
-        self.view_over_fresh_buffer(id, bytes, count, kind, &ty)
+        self.view_over_fresh_buffer(id, bytes, count, &shape, made_as)
     }
 
     /// `new Uint8Array(buffer)`, `(buffer, offset)` and `(buffer, offset, length)`.
@@ -59463,10 +59705,14 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         buffer: ValueId,
         rest: &[NodeId],
-        width: f64,
-        kind: f64,
-        ty: &HirType,
+        shape: &ViewShape,
+        made_as: Option<TypeId>,
     ) -> Result<ValueId, Diagnostic> {
+        let &ViewShape {
+            width,
+            kind,
+            ref ty,
+        } = shape;
         let origin = self.origin(id);
         let offset = match rest.first() {
             Some(node) => {
@@ -59560,6 +59806,7 @@ impl<'a> FuncBuilder<'a> {
             ty.clone(),
             &origin,
         );
+        self.make_view_an_instance(view, made_as, &origin);
         self.guard_allocated_view(id, view)?;
         Ok(view)
     }
@@ -59651,13 +59898,16 @@ impl<'a> FuncBuilder<'a> {
         &mut self,
         id: NodeId,
         source: ValueId,
-        width: f64,
-        kind: f64,
-        ty: &HirType,
+        shape: &ViewShape,
+        made_as: Option<TypeId>,
     ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let length = self.push(OpKind::Length(source), HirType::NUMBER, origin.clone());
-        let stride = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
+        let stride = self.push(
+            OpKind::ConstFloat(shape.width),
+            HirType::NUMBER,
+            origin.clone(),
+        );
         let bytes = self.push(
             OpKind::Binary {
                 op: BinOp::Mul,
@@ -59667,7 +59917,7 @@ impl<'a> FuncBuilder<'a> {
             HirType::NUMBER,
             origin.clone(),
         );
-        let view = self.view_over_fresh_buffer(id, bytes, length, kind, ty)?;
+        let view = self.view_over_fresh_buffer(id, bytes, length, shape, made_as)?;
 
         let start = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
         let header = self.new_block();
@@ -59739,9 +59989,10 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         bytes: ValueId,
         count: ValueId,
-        kind: f64,
-        ty: &HirType,
+        shape: &ViewShape,
+        made_as: Option<TypeId>,
     ) -> Result<ValueId, Diagnostic> {
+        let &ViewShape { kind, ref ty, .. } = shape;
         let origin = self.origin(id);
         let buffer = self.call_runtime(
             "nts_buffer_new",
@@ -59761,8 +60012,21 @@ impl<'a> FuncBuilder<'a> {
             ty.clone(),
             &origin,
         );
+        self.make_view_an_instance(view, made_as, &origin);
         self.guard_allocated_view(id, view)?;
         Ok(view)
+    }
+
+    /// Make the view just made an instance of `made_as`, a class extending a
+    /// typed array, directly after its making ([`OpKind::ViewOfClass`]).
+    fn make_view_an_instance(&mut self, view: ValueId, made_as: Option<TypeId>, origin: &Origin) {
+        if let Some(class) = made_as {
+            self.push(
+                OpKind::ViewOfClass { view, class },
+                HirType::Void,
+                origin.clone(),
+            );
+        }
     }
 
     /// The same null check `guard_allocated` makes, for a view.

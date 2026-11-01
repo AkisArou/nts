@@ -460,6 +460,7 @@ pub fn substitute(kind: &mut OpKind, of: impl Fn(ValueId) -> ValueId) {
         | OpKind::TagOf { value }
         | OpKind::Unerase { value, .. }
         | OpKind::InstanceOf { value, .. }
+        | OpKind::ViewOfClass { view: value, .. }
         | OpKind::SharedFieldGet { value, .. }
         | OpKind::OpenFieldGet { object: value, .. } => {
             *value = of(*value);

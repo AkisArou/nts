@@ -1916,12 +1916,7 @@ impl Emitter<'_> {
                 let [only] = classes.as_slice() else {
                     return Err(refuse(self.func, "an `instanceof` against no class at all"));
                 };
-                let Some(layout) = self.program.layout(*only) else {
-                    return Err(refuse(
-                        self.func,
-                        "an `instanceof` against an unknown class",
-                    ));
-                };
+                let wanted = self.tested_class(*only)?;
                 self.load(code, pool, *value)?;
                 // **Unbox before asking for a class.** An erased operand is the
                 // common case, and `InstanceOf`'s own doc says the operand may
@@ -1937,17 +1932,43 @@ impl Emitter<'_> {
                 if *self.ty(*value) == HirType::Erased && !self.unboxed.contains(value) {
                     code.get_field(&origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
                 }
-                // The class this test *names*, which is not always the
-                // layout's: see `hierarchy::identities`. Testing the layout's
-                // class asks "does it have this shape", and `instanceof` asks
-                // "is it this class" -- the same question only while one class
-                // owns the layout.
-                let wanted = crate::hierarchy::identity_of(self.program, *only).map_or_else(
-                    || types::class_name(self.shape.package, layout),
-                    |class| types::identity_class_name(self.shape.package, layout, class),
-                );
                 code.instance_of(&origin, pool, &wanted);
                 Placed::OnStack
+            }
+            // The view just made, made again as its class's own object over
+            // the same buffer, which the view's slot holds from here on. Sound
+            // because nothing has seen the plain view: the verifier holds this
+            // directly after the view's making.
+            OpKind::ViewOfClass { view, class } => {
+                let Some(described) = self
+                    .program
+                    .view_classes
+                    .iter()
+                    .find(|known| known.class == *class)
+                else {
+                    return Err(refuse(
+                        self.func,
+                        "a view made as a class this program has no class for",
+                    ));
+                };
+                let ty = self.ty(*view).clone();
+                let element = match &ty {
+                    HirType::Managed(ManagedType::View(element)) => types::view_class(element),
+                    _ => None,
+                }
+                .ok_or_else(|| {
+                    refuse(
+                        self.func,
+                        "a view of an element this backend has no class for",
+                    )
+                })?;
+                let name = types::view_class_name(self.shape.package, described);
+                code.new_object(&origin, pool, &name);
+                code.dup(&origin);
+                self.load(code, pool, *view)?;
+                code.invoke_special(&origin, pool, &name, "<init>", &format!("(L{element};)V"));
+                self.place(code, *view, &ty, &origin)?;
+                Placed::Stored
             }
 
             // Everything the managed and erased slices bring, refused by name
@@ -3652,12 +3673,7 @@ impl Emitter<'_> {
             return Err(refuse(self.func, "an `instanceof` against no class at all"));
         }
         for (at, class) in classes.iter().enumerate() {
-            let Some(layout) = self.program.layout(*class) else {
-                return Err(refuse(
-                    self.func,
-                    "an `instanceof` against an unknown class",
-                ));
-            };
+            let wanted = self.tested_class(*class)?;
             self.load(code, pool, value)?;
             // Unbox before asking for a class; see the single-class arm. A
             // value `unbox` kept as a bare reference is already the thing to
@@ -3665,21 +3681,34 @@ impl Emitter<'_> {
             if *self.ty(value) == HirType::Erased && !self.unboxed.contains(&value) {
                 code.get_field(origin, pool, types::VALUE, "ref", "Ljava/lang/Object;");
             }
-            // The identity class, as in the single-class arm: a shared layout
-            // cannot tell two classes apart, and a set member is a class rather
-            // than a shape. Checked rather than assumed -- this arm resolved the
-            // layout's class and would have kept answering `true` for a sibling
-            // while the single-class arm was already right.
-            let wanted = crate::hierarchy::identity_of(self.program, *class).map_or_else(
-                || types::class_name(self.shape.package, layout),
-                |owner| types::identity_class_name(self.shape.package, layout, owner),
-            );
             code.instance_of(origin, pool, &wanted);
             if at > 0 {
                 code.bitwise(origin, insn::OR, Kind::Int);
             }
         }
         Ok(Placed::OnStack)
+    }
+
+    /// The class an `instanceof` against `class` names: the class's identity
+    /// class, which is not always its layout's (`hierarchy::identities`) --
+    /// a shared layout cannot tell two classes apart, and `instanceof` asks
+    /// "is it this class", not "does it have this shape" -- or, for a class
+    /// extending a typed array, which has no layout, the class written for it.
+    fn tested_class(&self, class: nts_semantic_schema::TypeId) -> Result<String, Diagnostic> {
+        if let Some(layout) = self.program.layout(class) {
+            return Ok(
+                crate::hierarchy::identity_of(self.program, class).map_or_else(
+                    || types::class_name(self.shape.package, layout),
+                    |owner| types::identity_class_name(self.shape.package, layout, owner),
+                ),
+            );
+        }
+        self.program
+            .view_classes
+            .iter()
+            .find(|view| view.class == class)
+            .map(|view| types::view_class_name(self.shape.package, view))
+            .ok_or_else(|| refuse(self.func, "an `instanceof` against an unknown class"))
     }
 
     /// The wrapper class for a growable array, by its element type.

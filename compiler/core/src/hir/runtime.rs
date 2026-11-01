@@ -2619,11 +2619,13 @@ static SIGNATURES: &[Declared] = &[
         Some(HirType::Float { bits: 64 }),
         Raising::NoRaise,
     ),
+    ("nts_view_make_instance", None, None, Raising::NoRaise),
     ("nts_view_new", None, None, Raising::NoRaise),
     ("nts_view_put", None, None, Raising::NoRaise),
     ("nts_view_set", None, None, Raising::NoRaise),
     ("nts_view_slice", None, None, Raising::NoRaise),
     ("nts_view_subarray", None, None, Raising::NoRaise),
+    ("nts_view_to_string", None, None, Raising::NoRaise),
     ("nts_view_unlend", Some(&[None]), None, Raising::NoRaise),
     (
         "nts_winrt_activate",

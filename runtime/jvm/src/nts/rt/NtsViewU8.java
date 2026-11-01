@@ -3,8 +3,21 @@ package nts.rt;
 /** `Uint8Array`: 1-byte elements over an {@link NtsBuffer}.
  *
  * <p>The same store as `Int8Array`; only the read differs, because the bits are the same and the interpretation is not. */
-public final class NtsViewU8 extends NtsView {
+public class NtsViewU8 extends NtsView {
     private NtsViewU8(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 0); }
+
+    /** The view {@code fresh}, which nothing has seen yet, made again as a
+     * class extending this typed array -- the compiler's class for
+     * {@code class Bytes extends Uint8Array}, which hands it the view its
+     * construction made. */
+    protected NtsViewU8(NtsViewU8 fresh) { this(fresh.buffer, fresh.offset, fresh.declared); }
+
+    /** The view {@code subarray} and {@code slice} make: of this view's own
+     * class, which a class extending a typed array overrides to make its own
+     * (JavaScript's species). */
+    protected NtsViewU8 like(NtsBuffer buffer, int offset, int declared) {
+        return new NtsViewU8(buffer, offset, declared);
+    }
 
     /** Tracks the buffer's length. */
     public static NtsViewU8 over(NtsBuffer buffer, double byteOffset) {
@@ -123,7 +136,7 @@ public final class NtsViewU8 extends NtsView {
         int n = count(view);
         int from = relative(begin, n);
         int to = relative(end, n);
-        return new NtsViewU8(view.buffer, view.offset + from * 1, Math.max(0, to - from));
+        return view.like(view.buffer, view.offset + from * 1, Math.max(0, to - from));
     }
 
     /** A copy, in a buffer of its own. */
@@ -132,7 +145,7 @@ public final class NtsViewU8 extends NtsView {
         int from = relative(begin, n);
         int to = relative(end, n);
         int taken = Math.max(0, to - from);
-        NtsViewU8 out = of(taken);
+        NtsViewU8 out = view.like(NtsBuffer.allocate((double) taken * 1), 0, taken);
         System.arraycopy(view.buffer.bytes, view.offset + from * 1,
             out.buffer.bytes, 0, taken * 1);
         return out;

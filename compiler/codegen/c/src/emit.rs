@@ -1991,6 +1991,7 @@ const ERASES_CLASS: &[(&str, usize)] = &[
     ("nts_tag_of_reference", 0),
     ("nts_value_eq_reference", 1),
     ("nts_value_of_reference", 0),
+    ("nts_view_to_string", 0),
 ];
 
 fn erases_class(callee: &Callee, at: usize) -> bool {
@@ -4067,7 +4068,51 @@ fn emit_object_descriptors(
         }
         writer.blank(origin);
     }
+    emit_view_class_descriptors(writer, origin, program);
     published_layouts
+}
+
+/// One descriptor per class extending a typed array that the program makes or
+/// tests ([`nts_core::hir::ViewClass`]): the runtime view's in everything but
+/// its name, so its instances are read, printed and released as views, and
+/// `instanceof` compares it as it compares any class's descriptor. Chosen by
+/// the same answer as a layout's (`hir::described_classes`), so a class
+/// nothing makes or tests has none to be unused.
+fn emit_view_class_descriptors(writer: &mut CodeWriter, origin: &Origin, program: &Emission<'_>) {
+    let mut wanted = rustc_hash::FxHashSet::default();
+    for func in program.native_funcs() {
+        for op in func
+            .blocks
+            .iter()
+            .flat_map(|block| block.ops.iter())
+            .map(|id| func.value(*id))
+        {
+            wanted.extend(nts_core::hir::described_classes(op));
+        }
+    }
+    for view in &program.view_classes {
+        if !wanted.contains(&view.class) {
+            continue;
+        }
+        writer.line(
+            origin,
+            format!(
+                "static const NtsViewDescriptor {} = {{{{NTS_KIND_VIEW, (uint32_t)sizeof(NtsView), \
+                 1u, 1u, (const uint32_t[]){{(uint32_t)offsetof(NtsView, buffer)}}, 0, {}, 0u, 0, \
+                 NTS_ARRAY_UNKNOWN, 0u, NULL, nts_view_to_string, NULL, NULL, NULL}}, NULL}};",
+                view_descriptor_name(view),
+                c_string(&view.name)
+            ),
+        );
+    }
+}
+
+/// The C name of a view class's descriptor, an `NtsViewDescriptor`.
+fn view_descriptor_name(view: &nts_core::hir::ViewClass) -> String {
+    format!(
+        "__nts_view_desc_{}",
+        nts_codegen_common::symbols::c_identifier(&view.name)
+    )
 }
 
 /// The construction hole for a published class, and the only symbol among these
@@ -4375,6 +4420,21 @@ fn instance_of(
                 descriptor_for(context.program, layout, Some(class))
             )
         })
+        // A class extending a typed array has no layout and a descriptor of
+        // its own, the view's but for its name.
+        .chain(classes.iter().filter_map(|class| {
+            context
+                .program
+                .view_classes
+                .iter()
+                .find(|view| view.class == *class)
+                .map(|view| {
+                    format!(
+                        "nts_is_class({subject}, &{}.descriptor)",
+                        view_descriptor_name(view)
+                    )
+                })
+        }))
         .collect();
     if tests.is_empty() {
         return format!("{name} = false;");
@@ -6324,6 +6384,27 @@ fn emit_op(
         OpKind::InstanceOf {
             value: at, classes, ..
         } => instance_of(&name, *at, classes, context),
+        // A view just made, given its class: the class's descriptor written
+        // into it, unless the allocation failed and there is no view.
+        OpKind::ViewOfClass { view, class } => {
+            let subject = value_name(*view);
+            let Some(described) = context
+                .program
+                .view_classes
+                .iter()
+                .find(|known| known.class == *class)
+            else {
+                return Err(Diagnostic::error(
+                    "NTS2009",
+                    "a view made as a class this program has no descriptor for",
+                    op.origin.location,
+                ));
+            };
+            format!(
+                "if ({subject}) {subject}->header.descriptor = &{}.descriptor;",
+                view_descriptor_name(described)
+            )
+        }
         // The absent reference. Typed, because C distinguishes a null
         // `NtsString *` from a null `NtsObj_Point *` even though the address is
         // the same one.

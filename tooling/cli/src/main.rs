@@ -3691,6 +3691,9 @@ fn render_op(index: usize, op: &nts_core::hir::Op) -> String {
             classes.len(),
             if *by_layout { " by layout" } else { "" }
         ),
+        OpKind::ViewOfClass { view, class } => {
+            format!("view.class %{} as obj#{}", view.0, class.0)
+        }
         OpKind::Erase { value, .. } | OpKind::TagOf { value } | OpKind::Unerase { value, .. } => {
             render_erasure(index, &ty, &op.kind, *value)
         }

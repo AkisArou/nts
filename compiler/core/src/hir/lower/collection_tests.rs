@@ -325,6 +325,7 @@ fn shared(n: u32) -> super::Shared {
         structural: super::Structural::default(),
         class_instances: std::rc::Rc::default(),
         thenables: std::rc::Rc::default(),
+        target_copies: rustc_hash::FxHashMap::default(),
     }
 }
 

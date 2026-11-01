@@ -185,7 +185,7 @@ impl FuncBuilder<'_> {
             let target = self
                 .native_constructor_of(declaration)
                 .ok_or_else(|| self.unsupported(id, NOT_ITS_STORAGE))?;
-            return self.construct_native(id, target, native);
+            return self.construct_native(id, target, native, declared);
         }
         let ty = if names_the_class {
             self.type_of(id)

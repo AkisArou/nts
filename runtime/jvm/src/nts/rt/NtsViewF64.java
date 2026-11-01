@@ -1,8 +1,21 @@
 package nts.rt;
 
 /** `Float64Array`: 8-byte elements over an {@link NtsBuffer}. */
-public final class NtsViewF64 extends NtsView {
+public class NtsViewF64 extends NtsView {
     private NtsViewF64(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 3); }
+
+    /** The view {@code fresh}, which nothing has seen yet, made again as a
+     * class extending this typed array -- the compiler's class for
+     * {@code class Bytes extends Uint8Array}, which hands it the view its
+     * construction made. */
+    protected NtsViewF64(NtsViewF64 fresh) { this(fresh.buffer, fresh.offset, fresh.declared); }
+
+    /** The view {@code subarray} and {@code slice} make: of this view's own
+     * class, which a class extending a typed array overrides to make its own
+     * (JavaScript's species). */
+    protected NtsViewF64 like(NtsBuffer buffer, int offset, int declared) {
+        return new NtsViewF64(buffer, offset, declared);
+    }
 
     /** Tracks the buffer's length. */
     public static NtsViewF64 over(NtsBuffer buffer, double byteOffset) {
@@ -95,7 +108,7 @@ public final class NtsViewF64 extends NtsView {
         int n = count(view);
         int from = relative(begin, n);
         int to = relative(end, n);
-        return new NtsViewF64(view.buffer, view.offset + from * 8, Math.max(0, to - from));
+        return view.like(view.buffer, view.offset + from * 8, Math.max(0, to - from));
     }
 
     /** A copy, in a buffer of its own. */
@@ -104,7 +117,7 @@ public final class NtsViewF64 extends NtsView {
         int from = relative(begin, n);
         int to = relative(end, n);
         int taken = Math.max(0, to - from);
-        NtsViewF64 out = of(taken);
+        NtsViewF64 out = view.like(NtsBuffer.allocate((double) taken * 8), 0, taken);
         System.arraycopy(view.buffer.bytes, view.offset + from * 8,
             out.buffer.bytes, 0, taken * 8);
         return out;

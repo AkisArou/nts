@@ -163,6 +163,14 @@
 /* Immutable primitive storage. It is managed, but compared by integer value,
  * never by the allocation's identity. */
 #define NTS_KIND_BIGINT 8u
+/* A typed array's view, `NtsView`, whose descriptor is an `NtsViewDescriptor`:
+ * the runtime's own for a builtin typed array, or the program's for a class
+ * extending one (`class Bytes extends Uint8Array`), which is the same view
+ * with a class of its own. "Is this a view" reads this kind, so a subclass is
+ * a view wherever one is asked for. Like a tuple it marks no storage of its
+ * own -- the view's struct is its whole block, and the buffer is a reference
+ * field -- and every site that frees by kind treats it as an object. */
+#define NTS_KIND_VIEW 9u
 
 /* How a foreign object system counts its objects: its retain and its release,
  * each safe on NULL. One per family the program uses, emitted by the compiler
@@ -602,6 +610,29 @@ typedef struct NtsView {
   uint8_t kind;
   bool tracking;
 } NtsView;
+
+/* What a typed array's species makes: the class JavaScript constructs for the
+ * result of `subarray` (`new C(buffer, byteOffset, length)`, `window`) and of
+ * `slice` (`new C(count)`, `count`). The compiler writes one for a view class
+ * whose species runs code of the program's -- a constructor its chain
+ * declares, or a `static [Symbol.species]` naming a known class. A view class
+ * whose species is the same view with its class has none, and the runtime
+ * makes the result with the receiver's descriptor. Each entry answers a fresh
+ * view or NULL, the allocation failure `nts_view_new` answers. */
+typedef struct NtsViewSpecies {
+  NtsView *(*window)(NtsBuffer *buffer, double byte_offset, double length);
+  NtsView *(*count)(double count);
+} NtsViewSpecies;
+
+/* A view's descriptor: the descriptor every object has, then the species its
+ * class constructs. `NTS_KIND_VIEW` in the descriptor's `kind` is what says a
+ * descriptor is one of these, so the runtime reads `species` only past that
+ * test. An extension rather than a field of every descriptor, because only a
+ * view has a species, and every descriptor states every field it has. */
+typedef struct NtsViewDescriptor {
+  NtsDescriptor descriptor;
+  const NtsViewSpecies *species;
+} NtsViewDescriptor;
 
 /* The nine element kinds. `Float16Array` is absent, as it is from the
  * lowering -- see `hir::builtin`, where the reason is that binary16 conversion
@@ -1719,6 +1750,12 @@ NTS_READS_ONLY unsigned char *nts_view_bytes(const NtsView *view);
  * is *for*, and it is safe here for the reason it was not safe on
  * `nts_view_buffer`: this one does not retain. */
 #define NTS_VIEW_ITEMS(view, type) ((type *)nts_view_bytes(view))
+
+/* Make `view`, just made by `nts_view_new`, an instance of a class extending a
+ * typed array, whose descriptor is `descriptor` (`hir::OpKind::ViewOfClass`).
+ * A null view -- an allocation that failed, which the caller tests next -- is
+ * left alone. The LLVM backend calls this; C writes the descriptor inline. */
+void nts_view_make_instance(NtsView *view, const NtsDescriptor *descriptor);
 
 /* A view over the same bytes: no copy, and mutations are visible through both.
  * The difference between this and `slice` is the whole point of a view. */
@@ -3020,6 +3057,10 @@ NtsString *nts_object_to_string(NtsHeader *object);
 NtsString *nts_function_to_string(NtsHeader *object);
 NtsString *nts_bound_function_to_string(NtsHeader *object);
 NtsString *nts_array_to_string(NtsHeader *object);
+/* A typed array: its elements joined by commas. The runtime's own view
+ * descriptor names it, and so does the descriptor the compiler writes for a
+ * class extending a typed array, which prints as its base does. */
+NtsString *nts_view_to_string(NtsHeader *object);
 /* `f.name` where the type does not settle it: the function's descriptor's
  * `function_name`. */
 NtsString *nts_function_name(NtsValue function);

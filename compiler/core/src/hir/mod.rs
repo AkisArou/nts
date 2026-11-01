@@ -1621,6 +1621,23 @@ pub enum OpKind {
         /// adds each identity once it is, so a backend reads an ordinary list.
         by_layout: bool,
     },
+    /// Make `view`, which the operation just before this one made, an
+    /// instance of `class`: a class extending a typed array ([`ViewClass`]),
+    /// whose instances are the same view with a class of their own
+    /// (`docs/foundations/objects.md`, typed arrays). It answers nothing; the
+    /// view itself is the instance from here on.
+    ///
+    /// **Directly after the view is made**, and the verifier holds it there:
+    /// the view is seen by nothing before it has its class. That is what lets
+    /// each backend give the class its own way. C and LLVM write the class's
+    /// descriptor into the view; the JVM, where an object's class is fixed when
+    /// it is made, makes the class's own object at the operation before
+    /// instead. The made view can be null -- an allocation that failed, which
+    /// the code after this tests -- and then nothing is written.
+    ViewOfClass {
+        view: ValueId,
+        class: TypeId,
+    },
     /// `object.field`, by index into the type's [`Layout`].
     ///
     /// An index rather than a name: the layout already decided the order, and
@@ -2314,6 +2331,41 @@ pub struct Layout {
     /// A `TypeId` rather than a layout index, because indices move as layouts
     /// merge and a `TypeId` does not. [`Program::base_layout`] resolves it.
     pub base: Option<TypeId>,
+}
+
+/// A class extending a typed array (`class Bytes extends Uint8Array {}`).
+///
+/// Its instances are views, `ManagedType::View`, as its builtin base's are --
+/// the same struct, read and written at the same width -- with a class of
+/// their own: a descriptor that is the view's in everything but its name, so
+/// `instanceof` compares it as it compares any class's
+/// (`docs/foundations/objects.md`, typed arrays). Not a [`Layout`], because it
+/// lays nothing out: it has no fields, and its storage is the runtime's.
+#[derive(Debug, Clone)]
+pub struct ViewClass {
+    /// The class's instance type, which [`OpKind::InstanceOf`] and
+    /// [`OpKind::ViewOfClass`] name.
+    pub class: TypeId,
+    /// The source name, for the descriptor's and the emitted class's name.
+    pub name: String,
+    /// The view's element type, which says which of the nine it is.
+    pub element: HirType,
+    /// The view class it extends, or `None` where it extends the builtin.
+    pub base: Option<TypeId>,
+    /// What its species makes, where that runs code of the program's -- a
+    /// constructor its chain declares, or a `static [Symbol.species]` naming a
+    /// known class. `None` where its species is the same view with its class,
+    /// which the runtime makes from the receiver's descriptor.
+    pub species: Option<ViewSpecies>,
+}
+
+/// A view class's species, as the functions that make each of its two forms:
+/// `subarray`'s `new C(buffer, byteOffset, length)` and `slice`'s `new
+/// C(count)`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ViewSpecies {
+    pub window: String,
+    pub count: String,
 }
 
 /// What a **null** operand of an [`OpKind::Erase`] means.
@@ -3384,6 +3436,15 @@ pub struct Program {
     pub foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
     /// Layouts for every object type the program uses.
     pub layouts: Vec<Layout>,
+    /// The classes extending a typed array that the program makes or tests,
+    /// each a descriptor of its own over the view's storage ([`ViewClass`]).
+    pub view_classes: Vec<ViewClass>,
+    /// The class each constructor copy keyed on a target constructs: a
+    /// constructor whose base makes the instance is copied per class that
+    /// inherits it, since the instance it makes is that class's
+    /// (`lower::target_constructor_copies`). The constant `new.target` reads
+    /// in that copy.
+    pub constructed_as: std::collections::BTreeMap<String, TypeId>,
     /// The Objective-C classes the program writes over a binding's -- `class
     /// Controller extends NSObject` -- which it registers when it loads, as
     /// Swift registers its own. Each method's implementation is an entry point
@@ -5613,6 +5674,8 @@ pub fn described_classes(op: &Op) -> impl Iterator<Item = TypeId> + '_ {
             OpKind::ObjectNew { .. } | OpKind::ClosureStatic,
             HirType::Managed(ManagedType::Object(ty)),
         ) => Some(*ty),
+        // A view made as a class extending a typed array.
+        (OpKind::ViewOfClass { class, .. }, _) => Some(*class),
         _ => None,
     };
     let tested: &[TypeId] = match &op.kind {
@@ -5989,10 +6052,12 @@ fn finish_preparation(prepared: Prepared) -> Result<Prepared, Unprepared> {
 /// into a declined one on the other. Filtering here means neither has to have
 /// an opinion, and the silent drop becomes unreachable rather than load-bearing.
 fn drop_classes_without_layouts(program: &mut Program) {
+    // A view class has a descriptor and no layout: its storage is the view's.
     let known: rustc_hash::FxHashSet<ClassId> = program
         .layouts
         .iter()
         .flat_map(|layout| layout.types.iter().copied())
+        .chain(program.view_classes.iter().map(|view| view.class))
         .collect();
     for func in &mut program.funcs {
         for op in &mut func.values {

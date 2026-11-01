@@ -165,6 +165,7 @@ fn effect(op: &OpKind) -> Effect<'_> {
         | OpKind::CellReady { .. }
         | OpKind::ClosureStatic
         | OpKind::InstanceOf { .. }
+        | OpKind::ViewOfClass { .. }
         | OpKind::FieldGet { .. }
         | OpKind::SharedFieldGet { .. }
         | OpKind::OpenFieldGet { .. }
