@@ -1,0 +1,38 @@
+/*---
+description: "Control for order-nested-default-closes-inner-outer; explicit reads preserve the same order, effects and failure."
+features: [ts-destructuring-routes, ts-destructuring-route-order, ts-functions, ts-iteration, ts-arrays, ts-objects, ts-type-aliases, ts-typeof-operator, ts-unknown, ts-numbers, ts-strings, ts-bigint, ts-null-undefined, ts-unions, ts-interfaces, ts-generics, ts-symbols, ts-errors]
+---*/
+// Explicit reads replace the pattern; the same typed sources, input values, full hook log and exact outcomes remain.
+type OrderValue = number | string | bigint | boolean | undefined | null | { id: number };
+const orderMarker = { id: 7 }, orderFallback = { id: 99 };
+const orderInputs: OrderValue[] = [0, -0, NaN, 0n, "", "hi", "😀", undefined, null, false, orderMarker];
+function same(actual: unknown, expected: unknown): void { assert.sameValue(Object.is(actual, expected), true); assert.sameValue(typeof actual, typeof expected); }
+interface OrderCursor<T> extends IterableIterator<T, undefined, unknown> { return(): IteratorResult<T, undefined>; }
+for (const input of orderInputs) {
+  const log: unknown[] = [], original = new RangeError("nested default", { cause: input });
+  function cursor<T>(label: string, values: T[]): OrderCursor<T> {
+    let index = 0;
+    return {
+      [Symbol.iterator]() { log.push(label + ".iterator", arguments.length); return this; },
+      next() { const value = values[index++]; log.push(label + ".next", arguments.length, false, value); return { done: false, value }; },
+      return() { log.push(label + ".return", arguments.length, true, undefined); return { done: true, value: undefined }; }
+    };
+  }
+  const inner = cursor<OrderValue>("inner", [input, undefined]), outer = cursor<Iterable<OrderValue, undefined, unknown>>("outer", [inner]);
+  function fail(value: OrderValue): OrderValue { same(value, input); log.push("default.throw", original, value); throw original; }
+  function run(): void {
+    try {
+      const outerIterator = outer[Symbol.iterator](), outerStep = outerIterator.next();
+      try {
+        if (outerStep.done) throw new TypeError("missing inner iterator");
+        const innerIterator = outerStep.value[Symbol.iterator](), firstStep = innerIterator.next(), first = firstStep.done ? undefined : firstStep.value;
+        const innerStep = firstStep.done ? firstStep : innerIterator.next();
+        try { const read = innerStep.done ? undefined : innerStep.value, chosen = read === undefined ? fail(first) : read; same(chosen, orderFallback); }
+        finally { if (!innerStep.done && innerIterator.return !== undefined) innerIterator.return(); }
+      } finally { if (!outerStep.done && outerIterator.return !== undefined) outerIterator.return(); }
+    } catch (error: unknown) { same(error, original); throw error; }
+  }
+  assert.throws(RangeError, run); same(original.cause, input);
+  assert.compareArray(log, ["outer.iterator", 0, "outer.next", 0, false, inner, "inner.iterator", 0, "inner.next", 0, false, input, "inner.next", 0, false, undefined,
+    "default.throw", original, input, "inner.return", 0, true, undefined, "outer.return", 0, true, undefined]);
+}
