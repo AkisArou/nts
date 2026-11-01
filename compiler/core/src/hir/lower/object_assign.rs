@@ -249,7 +249,14 @@ impl FuncBuilder<'_> {
         self.switch_to(lower);
         self.assign_record_entry(id, target, layout, (key, value), &fields[..middle], next)?;
         self.switch_to(higher);
-        self.assign_record_entry(id, target, layout, key, value, &fields[middle + 1..], next)
+        self.assign_record_entry(
+            id,
+            target,
+            layout,
+            (key, value),
+            &fields[middle + 1..],
+            next,
+        )
     }
 
     fn assign_field_payload(
