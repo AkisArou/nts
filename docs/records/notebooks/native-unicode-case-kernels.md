@@ -77,3 +77,47 @@ Every row cleared the Node bar; C/LLVM ratios against Bun JIT were 0.203–0.327
 The record retains raw counters/commands/output, all generated C/IR/header inputs, harness and TypeScript sources, variant producers, model bindings and attribution receipts in deduplicated compressed blobs. Each `provenance.blobs[sha]` decodes with base64 then zlib and must hash to its key; source-capsule manifests give relative generated filenames and shipping flags. This permits rebuilding without the scratch trees. Partial records cannot replace the official full result or own-best table.
 
 Subsequent source review found invalid local output `restrict` promises across the base-pointer cold/resize handoff. Commit `584ffb51e` removes both promises and adds widening/narrow twins plus original-input checks. No miscompile was claimed. Final-source parity and measurements run independently of this historical record.
+
+## Final source and exact owned resize
+
+The final source is `584ffb51ee30e7ceb5ae98298ca34ec41bff10cc`, based on `c74451dacd6840c7782c117d31512b086f757cc9`. Its builder-frozen compiler is explicitly not a formal `pin.ts` artifact. The [final retained-window record](../../../results/benchmarks/runs/2026-11-01-584ffb51ee30-native-first-change-final.json) binds the actual generated C/LLVM, timer and host sources, raw PMU windows, checksum controls, allocation observer and focused parity receipts. Its rows cannot replace own-best. The [standard all-column run](../../../results/benchmarks/runs/2026-11-01-4d7365f44c4e-91b7d02490a04116acbd790f2823dab1.json) independently records the official harness on the same compiler source; its JVM is unchanged, with no D4 code.
+
+Both output `restrict` promises are removed. The original input remains disjoint and immutable. Widening `éÿ` and narrow `éý` twins, in both storage widths, check the output and every original input unit after releasing the output. This closes the reviewed alias-contract defect without claiming that the historical version reproduced a miscompile.
+
+At the first width or expansion stop, the writer counts only the unconsumed original suffix and resizes its private unpublished result to the exact final width and length. The RC path preserves its actual heap prefix and byte accounting. NoGC and regions first use their provider frontier when available; fallback copies only the initialized prefix. In-place and forced-moving, width-contraction and backward-widening probes cover both cases.
+
+The allocation recount counts fresh logical Unicode result buffers separately from resize calls. It excludes source construction and allocator rounding. Values are per mapping, not per complete benchmark call.
+
+| Row | Fresh buffers | Resizes | Physical moves | Initial / final requested bytes |
+|---|---:|---:|---:|---:|
+| ASCII | 1 | 0 | 0 | 75.375 / 75.375 |
+| œ | 1 | 0.5 | 0 | 136.750 / 138.750 |
+| Greek | 1 | 0 | 0 | 126.750 / 126.750 |
+| CJK | 0.5 | 0 | 0 | 43.375 / 43.375 |
+| Unchanged ASCII | 0 | 0 | 0 | 0 / 0 |
+| Unchanged uppercase Greek | 0 | 0 | 0 | 0 / 0 |
+| Late first change | 1 | 0 | 0 | 156.750 / 156.750 |
+
+The œ result now needs one fresh buffer instead of the earlier 1.5. Its expanded exact length fits the already rounded physical block in this workload, so the logical resize has no address move. That observation does not substitute for the separate forced-moving provider control.
+
+The final retained-window sitting has 126 checked launches in three interleaved Node A0/C/LLVM/Bun JIT/Bun AOT/Node A1 brackets on CPU 4 under `with-lock`, sibling 5 idle. It uses 20,000 timed calls, 1,024 native warmup calls and 20,000 host warmup calls. Load was 16.47–18.67; MemAvailable 18.13–19.58 GiB. Instructions count the actual timed main-thread region. The Node denominator is geometric within each bracket; ranges and all raw launches remain in the record.
+
+| Row | C / LLVM instructions per unit | C / LLVM µs | Node A0 / A1 µs | Bun JIT / AOT µs | C / LLVM ÷ Node |
+|---|---:|---:|---:|---:|---:|
+| ASCII | 6.172 / 6.149 | 1.265 / 1.253 | 3.526 / 3.525 | 4.367 / 4.343 | 0.361 / 0.355 |
+| œ | 32.868 / 32.849 | 7.227 / 7.202 | 23.404 / 23.325 | 25.107 / 24.863 | 0.309 / 0.308 |
+| Greek | 26.489 / 26.467 | 5.402 / 5.380 | 20.802 / 20.984 | 25.813 / 26.128 | 0.258 / 0.257 |
+| CJK | 13.963 / 13.926 | 1.768 / 1.779 | 7.046 / 7.154 | 8.712 / 8.698 | 0.249 / 0.251 |
+| Unchanged ASCII | 4.999 / 4.923 | 1.027 / 1.013 | 3.337 / 3.340 | 5.315 / 5.340 | 0.308 / 0.306 |
+| Unchanged uppercase Greek | 25.190 / 25.161 | 1.613 / 1.603 | 5.874 / 5.852 | 6.514 / 6.503 | 0.275 / 0.273 |
+| Late first change | 23.486 / 23.464 | 6.953 / 6.982 | 21.035 / 21.106 | 25.760 / 25.499 | 0.330 / 0.331 |
+
+All seven rows clear the 0.8 Node bar on both native backends. The original below-30 œ instruction prediction remains falsified; it is not revised to fit the result. Greek is below 30 and CJK below 20. The whole conversion preserves the no-allocation unchanged path.
+
+The standard benchmark sitting uses its own standing timing/JIT caller graph. Its timings and Bun AOT ratios must not be mixed with the retained count-window table. It reports every column, including slower untouched JVM rows and unavailable C++/Java references. Its C/LLVM ratios against Node are 0.364/0.361 (ASCII), 0.312/0.313 (œ), 0.252/0.247 (Greek), 0.255/0.255 (CJK), 0.314/0.307 (unchanged ASCII), 0.300/0.297 (unchanged Greek) and 0.331/0.334 (late change). Every native cell clears the bar there too.
+
+The native Node census runs every code point and the Sigma contexts on C. Across the seven actual projects, all 21 C/LLVM Unicode/runtime/header blob pairs are byte-identical; both backends also execute their seven emitted programs. The version controls report three passes, zero failures and two existing TODOs: upstream frontend identifier data and the untouched JVM's JDK case data. The JVM TODO is not counted as a native correctness pass. The separate boundary probe passes 4,768,768 width, direction and retained-alias cases, and the GCC scalar probe passes under ASan/UBSan.
+
+The full `nts-dev` workspace round completed with 2,748 passes, one failure and eight ignored tests. Its sole failure was the existing ownership audit finding `nts_resize_private_string` without a disposition. Test-only commit `34dd6a86a` records its consumed-private-storage contract in `NOT_HANDED_BACK`, alongside the existing `nts_str_reserve` exception. It does not add borrowed-alias semantics to `RUNTIME_HANDS_BACK` or change the scanner. All 20 bound source files from the measured implementation remain byte-identical. The full-round red and the corrected core-library result are retained separately in the landing evidence.
+
+The corrected full core-library suite passes 477 tests with zero failures and one existing ignored test; cargo fmt also passes. The earlier full-round failure remains a separate receipt.
