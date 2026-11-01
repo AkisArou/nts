@@ -192,6 +192,14 @@ abstract class NativeRangeError extends NodeRangeError {
   }
 }
 
+/** Node v26.13.0 src/node_errors.h:292-297; a native Error, not RangeError. */
+export class ERR_STRING_TOO_LONG extends NativeError {
+  readonly code = "ERR_STRING_TOO_LONG";
+  constructor(maxLength: number) {
+    super(`Cannot create a string longer than 0x${maxLength.toString(16)} characters`);
+  }
+}
+
 /** `Invalid socket address`.
  *
  * Node throws this from C++ rather than from `lib/internal/errors.js`, which is

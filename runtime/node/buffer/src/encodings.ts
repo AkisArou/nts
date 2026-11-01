@@ -6,6 +6,8 @@
 // inside a method.
 
 import { utf8Decode, utf8Length, utf8Write } from "../../internal/utf8.ts";
+import { ERR_STRING_TOO_LONG } from "../../internal/errors.ts";
+import { kStringMaxLength, utf8DecodedLength } from "./string-length.ts";
 
 export type Encoding =
   | "utf8" | "utf-8"
@@ -237,6 +239,16 @@ export function decodeIn(
 ): string {
   switch (encoding) {
     case "utf8": case "utf-8":
+      // StringSlice has already validated/clamped the range. Node's native
+      // StringBytes::Encode limits its input to INT_MAX, then checks the
+      // decoded UTF-16 length before allocating the result. Every UTF-16
+      // unit consumes at most three input bytes, even for invalid subparts.
+      end = Math.min(end, start + 0x7fffffff);
+      if (end - start > kStringMaxLength &&
+          (Math.ceil((end - start) / 3) > kStringMaxLength ||
+           utf8DecodedLength(bytes, start, end) > kStringMaxLength)) {
+        throw new ERR_STRING_TOO_LONG(kStringMaxLength);
+      }
       return utf8Decode(bytes, start, end);
 
     case "ascii": {

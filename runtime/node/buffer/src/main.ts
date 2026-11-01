@@ -32,6 +32,9 @@ import {
 } from "./encodings.ts";
 import { validateInteger } from "../../internal/validators.ts";
 import { emitWarning } from "../../internal/process-warning.ts";
+import { kStringMaxLength } from "./string-length.ts";
+
+export { kStringMaxLength } from "./string-length.ts";
 
 export { Blob, File, resolveObjectURL } from "./blob.ts";
 
@@ -45,7 +48,6 @@ export { Blob, File, resolveObjectURL } from "./blob.ts";
  * reports `2**30 - 1`.
  */
 export const kMaxLength = 2 ** 53 - 1;
-export const kStringMaxLength = 536870888;
 export const constants = { MAX_LENGTH: kMaxLength, MAX_STRING_LENGTH: kStringMaxLength };
 /** How many bytes `inspect` shows before it says how many are left. */
 export const INSPECT_MAX_BYTES = 50;
