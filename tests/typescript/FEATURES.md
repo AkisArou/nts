@@ -108,6 +108,8 @@ flows through it.
 | `throw-routes-controls/` | direct calls to the same throwing bodies inside the caller try, with the same observations |
 | `tuples/` | tuples with optional, rest and labelled elements, readonly, variadic |
 | `type-operators/` | values through keyof, typeof, indexed access, mapped and conditional types |
+| `typed-array-contents/` | typed-array writes and reads, exact conversions, shared bytes, resize histories and subclass contents, with node as the oracle |
+| `typed-array-contents-controls/` | counterparts holding the view locally at its exact type with the same writes and assertions, with node as the oracle |
 | `typed-paths/` | where a static type and the run-time value part ways, and where a number's representation shows |
 | `unicode/` | exhaustive code-point blocks, contextual sequences and Unicode conformance inputs, with the pinned node as the oracle |
 | `unions/` | unions and every way TypeScript narrows them |
