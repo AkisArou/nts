@@ -2307,8 +2307,7 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
     let mut segments = Vec::new();
     let mut thrown: Vec<(usize, String)> = Vec::new();
     let mut incomplete = Vec::new();
-    let mut from = 0;
-    let mut restarts = 0;
+    let (mut from, mut restarts) = (0, 0);
     // Every restart advances `from` by at least one. The finite case list
     // bounds the work; a fixed restart cap would silently abandon its tail.
     while from < total {
