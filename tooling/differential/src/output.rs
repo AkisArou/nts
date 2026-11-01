@@ -148,4 +148,86 @@ mod tests {
         let node = run(b"before\nfinally\n", Vec::new());
         assert!(compare(&native, &node, |_| anyhow::bail!("oracle stopped")).is_err());
     }
+
+    #[test]
+    fn native_stops_preserve_output_prefixes_on_every_backend() {
+        const NAME: &str = "output::tests::native_stops_preserve_output_prefixes_on_every_backend";
+        if std::env::var_os("NTS_OUTPUT_PREFIX_ARM").is_none() {
+            for (backend, rc) in [
+                ("c", false),
+                ("llvm", false),
+                ("jvm", false),
+                ("c", true),
+                ("llvm", true),
+            ] {
+                let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+                command
+                    .args(["--exact", NAME, "--nocapture"])
+                    .env("NTS_OUTPUT_PREFIX_ARM", backend)
+                    .env("NTS_BACKEND", backend);
+                if rc {
+                    command.env("NTS_RC", "1");
+                } else {
+                    command.env_remove("NTS_RC");
+                }
+                let output = command.output().unwrap();
+                assert!(
+                    output.status.success(),
+                    "{backend}, RC={rc}: {}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+            }
+            return;
+        }
+        let path = camino::Utf8PathBuf::from_path_buf(std::env::temp_dir())
+            .unwrap()
+            .join(format!("nts-output-prefix-{}", std::process::id()));
+        let scratch = super::super::Scratch::holding(path);
+        std::fs::create_dir_all(scratch.path.join("src")).unwrap();
+        let main = scratch.path.join("src/main.ts");
+        let config = scratch.path.join("tsconfig.json");
+        let base =
+            camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../tsconfig.fixtures.json");
+        std::fs::write(
+            &config,
+            serde_json::json!({"extends":base,"include":["src/main.ts"]}).to_string(),
+        )
+        .unwrap();
+        let mut frontend =
+            nts_frontend_ts::Frontend::new(&scratch.path).with_checkers(std::num::NonZeroU16::MIN);
+        let source = |index: usize, wrong_print: bool| {
+            format!(
+                "export function probe(n:number):number {{ const printed={}; console.log(printed[0]); const values=[n]; const result=values[{index}]; console.log('after'); return result; }}",
+                if wrong_print {
+                    "new Array<number>(1)"
+                } else {
+                    "[0]"
+                }
+            )
+        };
+        for (index, wrong_print, compared, declined) in
+            [(0, false, 29, 0), (2, false, 0, 29), (2, true, 29, 0)]
+        {
+            std::fs::write(&main, source(index, wrong_print)).unwrap();
+            let report = super::super::check(&config, &mut frontend).unwrap();
+            assert!(
+                report.aborts.is_empty() && report.incomplete.is_empty(),
+                "{report:?}"
+            );
+            assert_eq!(
+                (report.checked, report.refused),
+                (compared, declined),
+                "{report:?}"
+            );
+            assert_eq!(
+                report.disagreements.len(),
+                if wrong_print { 29 } else { 0 },
+                "{report:?}"
+            );
+            if index == 0 {
+                assert!(report.agreed(), "{report:?}");
+            }
+        }
+    }
 }
