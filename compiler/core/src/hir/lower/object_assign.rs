@@ -55,7 +55,7 @@ impl FuncBuilder<'_> {
                     .map(|name| (name.to_owned(), index))
             })
             .collect();
-        fields.sort_by(|a, b| a.0.cmp(&b.0));
+        fields.sort_by(|a, b| a.0.encode_utf16().cmp(b.0.encode_utf16()));
         for (node, source) in sources {
             if !super::property_keys::string_record(self, *source) {
                 return Err(self.unsupported(
