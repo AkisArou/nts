@@ -25,10 +25,10 @@ const [nts,backend,scratch] = process.argv.slice(2);
 const tools={nts,backend,cc:"cc",language:"ts",memoryCapKb:6000000,objectCache:${JSON.stringify(join(homedir(), ".cache/nts/c-objects"))}};
 serialRun(tools);
 const dir=workspace(scratch,"ts");
-const source=(array,text)=>\
-  "const values="+array+"; console.log(values[0]); const text="+text+\
-  "; const claimed=text as unknown as number; console.log(claimed+1); console.log('after');";
-const cases=[source("new Array<number>(1)","'5'"),source("[0]","'5'"),source("[0]","5")];
+const source=(array,text,method="log")=>\
+  "const values="+array+"; console."+method+"(values[0]); const text="+text+\
+  "; const claimed=text as unknown as number; console."+method+"(claimed+1); console."+method+"('after');";
+const cases=[source("new Array<number>(1)","'5'"),source("[0]","'5'"),source("[0]","5"),source("new Array<number>(1)","'5'","error"),source("[0]","'5'","error")];
 console.log(JSON.stringify(cases.map(body=>attempt(dir,body,tools))));
 `);
     for (const backend of ["c", "llvm", "jvm"]) {
@@ -37,9 +37,11 @@ console.log(JSON.stringify(cases.map(body=>attempt(dir,body,tools))));
       });
       assert.equal(run.status, 0, `${backend}: ${run.stderr}`);
       const rows = JSON.parse(run.stdout.trim());
-      assert.deepEqual(rows.map(row => row.bucket), ["wrong-output", "crash", "strict-pass"], backend);
-      assert.equal(rows[0].printed, "0\n", backend);
-      assert.equal(rows[0].nodeOutput, "undefined\n51\nafter\n", backend);
+      assert.deepEqual(rows.map(row => row.bucket), ["wrong-output", "crash", "strict-pass", "wrong-output", "crash"], backend);
+      assert.deepEqual(rows[0].printed, { stdout: "0\n", stderr: "" }, backend);
+      assert.deepEqual(rows[0].nodeOutput, { stdout: "undefined\n51\nafter\n", stderr: "" }, backend);
+      assert.deepEqual(rows[3].printed, { stdout: "", stderr: "0\n" }, backend);
+      assert.deepEqual(rows[3].nodeOutput, { stdout: "", stderr: "undefined\n51\nafter\n" }, backend);
       assert.match(rows[1].runtimeFailure.output, /^nts: refused/m, backend);
     }
   } finally { rmSync(scratch, { recursive: true, force: true }); }

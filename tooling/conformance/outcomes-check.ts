@@ -134,7 +134,7 @@ import { compileSync, compileActive, serialRun } from "../census/worker-memory.t
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
-import { nativeDecline, outputPrefix } from "./output-prefix.ts";
+import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -245,7 +245,8 @@ function buildAndRun(emit, out, options) {
   const uncaught = last.find((l) => l.startsWith("nts: uncaught "));
   if (ran.signal || (ran.status !== 0 && !uncaught)) {
     return { category: "aborted", nts: `${ran.signal ?? `exit ${ran.status}`}${last[0] ? `; ${last[0]}` : ""}`,
-      printed: ran.stdout ?? "", nativeDecline: nativeDecline(ran.stderr ?? "") };
+      printed: { stdout: ran.stdout ?? "", stderr: beforeTerminalDiagnostic(ran.stderr ?? "", "decline") },
+      nativeDecline: nativeDecline(ran.stderr ?? "") };
   }
   return { category: "completed", nts: `exit ${ran.status}${uncaught ? `; ${uncaught}` : ""}` };
 }
@@ -310,15 +311,17 @@ function runNodeObservation(dir) {
     ["--experimental-transform-types", "--no-warnings", "--import", PRELOAD, join(dir, "src/main.ts")],
     { encoding: "utf8", timeout: 30_000, cwd: dir },
   );
-  if (ran.signal || ran.error) return { result: `node ${ran.signal ?? ran.error.message}`, printed: ran.stdout ?? "", complete: false };
+  const printed = { stdout: ran.stdout ?? "", stderr: ran.stderr ?? "" };
+  if (ran.signal || ran.error) return { result: `node ${ran.signal ?? ran.error.message}`, printed, complete: false };
   const lines = (ran.stderr ?? "").split("\n");
   const uncaught = lines.find((l) => l.startsWith("nts: uncaught "));
-  if (uncaught) return { result: `exit ${ran.status}; ${uncaught}`, printed: ran.stdout ?? "", complete: true };
+  if (uncaught) return { result: `exit ${ran.status}; ${uncaught}`,
+    printed: { ...printed, stderr: ran.status !== 0 ? beforeTerminalDiagnostic(printed.stderr, "uncaught") : printed.stderr }, complete: true };
   // A program node refuses to *load* never reaches the preload's handler: an
   // early error is thrown before any code runs. Its `SyntaxError: ...` line is
   // the answer -- the one a test of an early error exists to compare with.
   const early = lines.find((l) => /^\w*Error(?: \[\w+\])?: /.test(l));
-  return { result: `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`, printed: ran.stdout ?? "", complete: ran.status === 0 };
+  return { result: `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`, printed, complete: ran.status === 0 };
 }
 
 function runNode(dir) { return runNodeObservation(dir).result; }
@@ -372,7 +375,7 @@ async function measure(name) {
   if (nts.nativeDecline) {
     const node = runNodeObservation(dir);
     if (!node.complete) return { run: "build", category: "not-measured", nts: `output oracle did not complete: ${node.result}`, node: null };
-    if (!outputPrefix(nts.printed, node.printed)) return { run: "build", category: "wrong-answer",
+    if (!outputPrefixes(nts.printed, node.printed)) return { run: "build", category: "wrong-answer",
       nts: `${nts.nts}; output ${JSON.stringify(nts.printed)}`, node: `${node.result}; output ${JSON.stringify(node.printed)}` };
     return { run: "build", ...nts, node: node.result };
   }

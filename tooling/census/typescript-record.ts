@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
-import { nativeDecline, outputPrefix } from "../conformance/output-prefix.ts";
+import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformance/output-prefix.ts";
 
 // Version 3 checks printed output before native declines against Node.
 // An older raw checkpoint must be remeasured, not resumed with stale locations.
@@ -23,7 +23,7 @@ export interface RuntimeFailure { exit: number | null; signal: string | null; ou
 export type TypeScriptObservation =
   | { kind: "pass" }
   | { kind: "wrong"; errorClass: string; failure: RuntimeFailure }
-  | { kind: "wrong-output"; printed: string; nodeOutput: string; failure: RuntimeFailure }
+  | { kind: "wrong-output"; printed: PrintedOutput; nodeOutput: PrintedOutput; failure: RuntimeFailure }
   | { kind: "refused"; diagnostics: RefusalDiagnostic[] }
   | { kind: "invalid-hir"; validator: string }
   | { kind: "runtime-abort"; failure: RuntimeFailure };
@@ -74,6 +74,11 @@ function runtimeFailure(value: unknown): RuntimeFailure {
   assert.ok((row.exit === null) !== (row.signal === null), "runtime termination must name one exit status or signal");
   return { exit: row.exit, signal: row.signal, output: text(row.output, "invalid runtime output", true) };
 }
+function printedOutput(value: unknown): PrintedOutput {
+  const row = object(value, "missing printed output streams");
+  keys(row, ["stdout", "stderr"], "printed output streams");
+  return { stdout: text(row.stdout, "missing stdout", true), stderr: text(row.stderr, "missing stderr", true) };
+}
 function refusalDiagnostic(value: unknown): RefusalDiagnostic {
   const row = object(value, "invalid refusal diagnostic");
   keys(row, ["code", "where"], "refusal diagnostic");
@@ -94,11 +99,11 @@ export function parseObservation(input: unknown): TypeScriptObservation {
       return { kind: "wrong", errorClass: text(row.errorClass, "missing thrown class"), failure: runtimeFailure(row.failure) };
     case "wrong-output": {
       keys(row, ["kind", "printed", "nodeOutput", "failure"], "wrong output observation");
-      const printed = text(row.printed, "missing printed output", true);
-      const nodeOutput = text(row.nodeOutput, "missing Node output", true);
+      const printed = printedOutput(row.printed);
+      const nodeOutput = printedOutput(row.nodeOutput);
       const failure = runtimeFailure(row.failure);
       assert.ok(nativeDecline(failure.output), "wrong output before a stop needs a native decline");
-      assert.ok(!outputPrefix(printed, nodeOutput), "a valid prefix cannot be a wrong output observation");
+      assert.ok(!outputPrefixes(printed, nodeOutput), "a valid prefix cannot be a wrong output observation");
       return { kind: "wrong-output", printed, nodeOutput, failure };
     }
     case "refused": {

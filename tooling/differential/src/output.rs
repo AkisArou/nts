@@ -7,10 +7,39 @@ use anyhow::Result;
 
 use super::Run;
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct Printed {
+    pub(super) stdout: Vec<u8>,
+    pub(super) stderr: Vec<u8>,
+}
+
+impl Printed {
+    fn is_empty(&self) -> bool {
+        self.stdout.is_empty() && self.stderr.is_empty()
+    }
+}
+
 pub(super) struct Segment {
     pub(super) cases: Range<usize>,
-    pub(super) bytes: Range<usize>,
+    pub(super) stdout: Range<usize>,
+    pub(super) stderr: Range<usize>,
     pub(super) native_decline: bool,
+}
+
+/// The final runtime diagnostic is metadata; earlier lookalike lines are not.
+pub(super) fn before_terminal_diagnostic(stderr: &[u8]) -> &[u8] {
+    let mut boundary = None;
+    let mut at = 0;
+    for line in stderr.split_inclusive(|byte| *byte == b'\n') {
+        if line.starts_with(super::REFUSED.as_bytes())
+            || line.starts_with(super::EXHAUSTED.as_bytes())
+            || line.starts_with(super::UNCAUGHT.as_bytes())
+        {
+            boundary = Some(at);
+        }
+        at += line.len();
+    }
+    boundary.map_or(stderr, |end| &stderr[..end])
 }
 
 #[derive(Default)]
@@ -22,38 +51,54 @@ pub(super) struct Comparison {
 pub(super) fn compare(
     native: &Run,
     node: &Run,
-    mut oracle: impl FnMut(Range<usize>) -> Result<Vec<u8>>,
+    mut oracle: impl FnMut(Range<usize>) -> Result<Printed>,
 ) -> Result<Comparison> {
-    if !native.segments.iter().any(|segment| segment.native_decline) {
-        return Ok(Comparison {
-            disagreements: super::output_disagreements(
-                &super::lines(&native.output),
-                &super::lines(&node.output),
-            ),
-            rejected_declines: 0,
-        });
-    }
-    // Neither side printed anything: every process has the empty prefix. The
-    // full oracle above has already proved its complete case population.
+    // The full oracle has already proved its complete population. No output
+    // means each process has the empty prefix, with no window replays.
     if native.output.is_empty() && node.output.is_empty() {
         return Ok(Comparison::default());
     }
+    if native.segments.len() <= 1 && !native.segments.iter().any(|segment| segment.native_decline) {
+        let mut disagreements = super::output_disagreements(
+            &super::lines(&native.output.stdout),
+            &super::lines(&node.output.stdout),
+        );
+        disagreements.extend(
+            super::output_disagreements(
+                &super::lines(&native.output.stderr),
+                &super::lines(&node.output.stderr),
+            )
+            .into_iter()
+            .map(|(ours, theirs)| {
+                (
+                    ours.replacen("output ", "stderr ", 1),
+                    theirs.replacen("output ", "stderr ", 1),
+                )
+            }),
+        );
+        return Ok(Comparison {
+            disagreements,
+            rejected_declines: 0,
+        });
+    }
     let mut comparison = Comparison::default();
     for segment in &native.segments {
-        // A restart initializes the module afresh. Replaying exactly its case
-        // window preserves that fact, including output before the first call.
-        // The window oracle must complete; a failed replay propagates as an
-        // unmeasured oracle, never as a decline or a shortened reference.
+        // Each fresh process gets a fresh module and only its case window.
+        // A failed oracle propagates as unmeasured, never a shorter reference.
         let expected = oracle(segment.cases.clone())?;
-        let printed = &native.output[segment.bytes.clone()];
+        let stdout = &native.output.stdout[segment.stdout.clone()];
+        let stderr = &native.output.stderr[segment.stderr.clone()];
         let agrees = if segment.native_decline {
-            expected.starts_with(printed)
+            expected.stdout.starts_with(stdout) && expected.stderr.starts_with(stderr)
         } else {
-            expected == printed
+            expected.stdout == stdout && expected.stderr == stderr
         };
         if !agrees {
             comparison.disagreements.push((
-                format!("output cases {:?}: {printed:?}", segment.cases),
+                format!(
+                    "output cases {:?}: stdout {stdout:?}, stderr {stderr:?}",
+                    segment.cases
+                ),
                 format!("output cases {:?}: {expected:?}", segment.cases),
             ));
             comparison.rejected_declines += usize::from(segment.native_decline);
@@ -70,7 +115,10 @@ mod tests {
     fn run(output: &[u8], segments: Vec<Segment>) -> Run {
         Run {
             results: Vec::new(),
-            output: output.to_vec(),
+            output: Printed {
+                stdout: output.to_vec(),
+                stderr: Vec::new(),
+            },
             segments,
             thrown: Vec::new(),
             incomplete: Vec::new(),
@@ -80,7 +128,8 @@ mod tests {
     fn stop(bytes: Range<usize>, cases: Range<usize>) -> Segment {
         Segment {
             cases,
-            bytes,
+            stdout: bytes,
+            stderr: 0..0,
             native_decline: true,
         }
     }
@@ -112,7 +161,10 @@ mod tests {
         let node = run(b"before\nafter\n", Vec::new());
         let compared = compare(&native, &node, |window| {
             assert!(window == (0..1) || window == (1..2));
-            Ok(b"before\nafter\n".to_vec())
+            Ok(Printed {
+                stdout: b"before\nafter\n".to_vec(),
+                stderr: Vec::new(),
+            })
         })
         .unwrap();
         assert_eq!(compared.rejected_declines, 1);
@@ -124,7 +176,8 @@ mod tests {
             b"before\n",
             vec![Segment {
                 cases: 0..1,
-                bytes: 0..7,
+                stdout: 0..7,
+                stderr: 0..0,
                 native_decline: false,
             }],
         );
@@ -147,6 +200,14 @@ mod tests {
         let native = run(b"before\n", vec![stop(0..7, 0..1)]);
         let node = run(b"before\nfinally\n", Vec::new());
         assert!(compare(&native, &node, |_| anyhow::bail!("oracle stopped")).is_err());
+    }
+
+    #[test]
+    fn earlier_diagnostic_shaped_stderr_is_still_program_output() {
+        assert_eq!(
+            before_terminal_diagnostic(b"nts: refused: source line\nnts: refused: actual stop\n"),
+            b"nts: refused: source line\n"
+        );
     }
 
     #[test]
@@ -198,7 +259,7 @@ mod tests {
             nts_frontend_ts::Frontend::new(&scratch.path).with_checkers(std::num::NonZeroU16::MIN);
         let source = |index: usize, wrong_print: bool| {
             format!(
-                "export function probe(n:number):number {{ const printed={}; console.log(printed[0]); const values=[n]; const result=values[{index}]; console.log('after'); return result; }}",
+                "export function probe(n:number):number {{ const printed={}; console.{}(printed[0]); const values=[n]; const result=values[{index}]; console.{}('after'); return result; }}",
                 if wrong_print {
                     "new Array<number>(1)"
                 } else {
@@ -206,27 +267,29 @@ mod tests {
                 }
             )
         };
-        for (index, wrong_print, compared, declined) in
-            [(0, false, 29, 0), (2, false, 0, 29), (2, true, 29, 0)]
-        {
-            std::fs::write(&main, source(index, wrong_print)).unwrap();
-            let report = super::super::check(&config, &mut frontend).unwrap();
-            assert!(
-                report.aborts.is_empty() && report.incomplete.is_empty(),
-                "{report:?}"
-            );
-            assert_eq!(
-                (report.checked, report.refused),
-                (compared, declined),
-                "{report:?}"
-            );
-            assert_eq!(
-                report.disagreements.len(),
-                if wrong_print { 29 } else { 0 },
-                "{report:?}"
-            );
-            if index == 0 {
-                assert!(report.agreed(), "{report:?}");
+        for errors in [false, true] {
+            for (index, wrong_print, compared, declined) in
+                [(0, false, 29, 0), (2, false, 0, 29), (2, true, 29, 0)]
+            {
+                std::fs::write(&main, source(index, wrong_print, errors)).unwrap();
+                let report = super::super::check(&config, &mut frontend).unwrap();
+                assert!(
+                    report.aborts.is_empty() && report.incomplete.is_empty(),
+                    "{report:?}"
+                );
+                assert_eq!(
+                    (report.checked, report.refused),
+                    (compared, declined),
+                    "{report:?}"
+                );
+                assert_eq!(
+                    report.disagreements.len(),
+                    if wrong_print { 29 } else { 0 },
+                    "{report:?}"
+                );
+                if index == 0 {
+                    assert!(report.agreed(), "{report:?}");
+                }
             }
         }
     }

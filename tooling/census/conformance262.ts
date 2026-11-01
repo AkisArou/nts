@@ -129,6 +129,7 @@ import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 import {beginComparison,digest,resourceStop,RECORD_COMPARISON_STEPS} from "../lanes/resource-comparison.ts";
+import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 
 const comparisonOwner=RECORD_COMPARISON_STEPS.includes(process.env.NTS_GATE_STEP??"");
 const comparisonReport=beginComparison(comparisonOwner&&(process.argv.includes("--recorded")||process.argv.includes("--check"))?process.env:{});
@@ -466,17 +467,18 @@ async function runAll(all) {
   // The harness is part of what a row measured: a stand-in that gains an
   // overload changes which cases typecheck, so rows from two harnesses are two
   // runs even under one compiler.
-  const header = { fingerprint: FINGERPRINT, under, harness: HARNESS_HASH,
+  const header = { fingerprint: FINGERPRINT, under, harness: HARNESS_HASH, output_prefix: OUTPUT_PREFIX_VERSION,
     ...(TYPESCRIPT ? { observations: TYPESCRIPT_OBSERVATIONS_VERSION } : {}) };
   if (rowsFile && resume && existsSync(rowsFile)) {
     const [first, ...rest] = readFileSync(rowsFile, "utf8").split("\n");
     let was = null;
     try { was = JSON.parse(first); } catch {}
     if (was?.fingerprint !== FINGERPRINT || was?.under !== under || was?.harness !== HARNESS_HASH ||
+      was?.output_prefix !== OUTPUT_PREFIX_VERSION ||
       TYPESCRIPT && was?.observations !== header.observations) {
       cannotMeasure(`${rowsFile} was written by ${was?.fingerprint ?? "no named compiler"} over ${was?.under} ` +
         `with harness ${was?.harness ?? "unnamed"}; this run is ${FINGERPRINT} over ${under} with harness ${HARNESS_HASH}; ` +
-        "TypeScript rows must also retain versioned raw observations");
+        "rows must retain this output-prefix version; TypeScript rows must also retain versioned raw observations");
     }
     const wanted = new Set(paths);
     for (const line of rest) {

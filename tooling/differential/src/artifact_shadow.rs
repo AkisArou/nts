@@ -150,7 +150,9 @@ pub(crate) fn finish_oracle(
 
 fn outcome(run: &Result<super::Run>) -> Value {
     match run {
-        Ok(run) => json!({"results":run.results,"output":run.output,"thrown":run.thrown}),
+        Ok(run) => {
+            json!({"results":run.results,"output":run.output.stdout,"stderr":run.output.stderr,"thrown":run.thrown})
+        }
         Err(error) => json!({"error":format!("{error:#}")}),
     }
 }

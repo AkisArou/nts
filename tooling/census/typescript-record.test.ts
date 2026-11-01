@@ -16,7 +16,7 @@ const observations: TypeScriptObservation[] = [
 const paths = observations.map((_, index) => `tests/typescript/records/case-${index}.ts`);
 
 test("wrong output before a native stop is recorded as wrong with its exact witness", () => {
-  const raw = { bucket: "wrong-output", printed: "wrong\n", nodeOutput: "right\nfinally\n",
+  const raw = { bucket: "wrong-output", printed: { stdout: "wrong\n", stderr: "" }, nodeOutput: { stdout: "right\nfinally\n", stderr: "" },
     runtimeFailure: { exit: 1, signal: null, output: "nts: refused: unavailable representation" } };
   const observation = observationFromRow(raw);
   const before: TypeScriptRecord = { metadata: { ...record().metadata, version: 3 },
@@ -26,8 +26,8 @@ test("wrong output before a native stop is recorded as wrong with its exact witn
   assert.equal(compareTypeScriptObservation(observation, observations[0]).word, "FIXED");
   assert.equal(compareTypeScriptObservation(observation, observations[2]).word, "REFUSES NOW");
   assert.equal(compareTypeScriptObservation(observation, observation).word, "reproduces");
-  assert.equal(compareTypeScriptObservation(observation, observationFromRow({ ...raw, printed: "wrong 2\n" })).word, "CHANGED");
-  assert.throws(() => observationFromRow({ ...raw, printed: "right\n" }), /valid prefix/);
+  assert.equal(compareTypeScriptObservation(observation, observationFromRow({ ...raw, printed: { stdout: "wrong 2\n", stderr: "" } })).word, "CHANGED");
+  assert.throws(() => observationFromRow({ ...raw, printed: { stdout: "right\n", stderr: "" } }), /valid prefix/);
   assert.throws(() => observationFromRow({ ...raw, runtimeFailure: { ...raw.runtimeFailure, output: "nts: uncaught Error: source" } }), /native decline/);
   assert.throws(() => parseTypeScriptRecord(serializeTypeScriptRecord(before).replace('"version":3', '"version":2')), /version 3/);
 });

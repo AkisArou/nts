@@ -10,6 +10,7 @@ import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { harnessHashOf } from "./project.ts";
 import { parseObservation, parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, type TypeScriptObservation } from "./typescript-record.ts";
+import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
@@ -46,7 +47,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   writeFileSync(one, serializeTypeScriptRecord({ metadata: recorded.metadata, cases: new Map([[target, pass]]) }));
   function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION) {
     writeFileSync(expected, contents);
-    writeFileSync(rows, JSON.stringify({ fingerprint, under: "tests/typescript", harness: harnessHashOf("ts"), observations }) + "\n" +
+    writeFileSync(rows, JSON.stringify({ fingerprint, under: "tests/typescript", harness: harnessHashOf("ts"), observations, output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" +
       JSON.stringify({ path: target, ...observed }) + "\n");
     rmSync(json, { force: true });
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
@@ -93,7 +94,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     [contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), "new case has no record"],
     [contents + "tests/typescript/missing-source.ts\t{\"kind\":\"pass\"}\n", "recorded case gone missing"],
     [contents + contents.split("\n")[1] + "\n", "duplicate recorded case"],
-    [contents.replace('"version":2', '"version":99'), "unsupported TypeScript record version"],
+    [contents.replace(/"version":[23]/, '"version":99'), "unsupported TypeScript record version"],
   ]) {
     const result = invoke(mutated, row(pass));
     assert.equal(result.status, 2, result.stdout + result.stderr);

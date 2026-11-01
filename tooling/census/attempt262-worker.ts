@@ -24,6 +24,7 @@ import { attempt } from "./attempt262.ts";
 import { inResidentWorker } from "./worker-memory.ts";
 import { workspace } from "./project.ts";
 import { oracle } from "./suites/typescript.ts";
+import type { PrintedOutput } from "../conformance/output-prefix.ts";
 
 const [scratch, nts, cc, suite, memoryCapKb, objectCache, backend, fresh, language] = process.argv.slice(2);
 const tools = {
@@ -46,8 +47,8 @@ for await (const path of lines) {
     const source = readFileSync(join(suite, path), "utf8");
     // A TypeScript case is admitted by node first: one node fails is a wrong
     // case, and is reported as that rather than measured against nts.
-    let oracleOutput: string | undefined;
-    const admitted = tools.language === "ts" ? oracle(source, dir, output => { oracleOutput = output; }) : { ok: true as const };
+    let oracleOutput: PrintedOutput | undefined;
+    const admitted = tools.language === "ts" ? oracle(source, dir, (stdout, stderr) => { oracleOutput = { stdout, stderr }; }) : { ok: true as const };
     outcome = admitted.ok ? attempt(dir, source, { ...tools, oracleOutput }, join(suite, path)) : { bucket: "oracle", why: admitted.why };
   } catch (error) {
     // A throw out of `attempt` is this instrument failing, not the test: it is

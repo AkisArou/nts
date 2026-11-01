@@ -5,14 +5,15 @@ import { readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { flagsOf } from "./project.ts";
 import { oracle } from "./suites/typescript.ts";
+import type { PrintedOutput } from "../conformance/output-prefix.ts";
 
-export type OutputOracle = { ok: true; output: string } | { ok: false; why: string };
+export type OutputOracle = { ok: true; output: PrintedOutput } | { ok: false; why: string };
 
 export function outputOracle(project: string, scratch: string, body: string, tools,
   bounded: (command: string, args: string[]) => string[]): OutputOracle {
   if (tools.language === "ts") {
-    let output = "";
-    const admitted = oracle(body, scratch, printed => { output = printed; });
+    let output: PrintedOutput = { stdout: "", stderr: "" };
+    const admitted = oracle(body, scratch, (stdout, stderr) => { output = { stdout, stderr }; });
     return admitted.ok ? { ok: true, output } : admitted;
   }
   const marker = join(scratch, "output-oracle-terminal.json");
@@ -59,7 +60,7 @@ try {
   }
   try {
     const terminal = JSON.parse(readFileSync(marker, "utf8"));
-    if (terminal.complete === true) return { ok: true, output: run.stdout ?? "" };
+    if (terminal.complete === true) return { ok: true, output: { stdout: run.stdout ?? "", stderr: run.stderr ?? "" } };
     return { ok: false, why: `output oracle setup: ${terminal.why}` };
   } catch {
     return { ok: false, why: "output oracle ended without its terminal observation" };

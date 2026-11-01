@@ -540,7 +540,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     let mut native = if compiled.is_empty() {
         Run {
             results: Vec::new(),
-            output: Vec::new(),
+            output: output::Printed::default(),
             segments: Vec::new(),
             thrown: Vec::new(),
             incomplete: Vec::new(),
@@ -1532,7 +1532,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
             if !baselined {
                 baselined = true;
                 main.push_str(
-                    "#ifdef NTS_PROVIDER_RC\n                     \x20   nts_collect_cycles();\n                     \x20   fprintf(stderr, \"nts-live-first %zu\\n\", nts_live_count() - nts_permanent_count());\n                     #endif\n",
+                    "#ifdef NTS_PROVIDER_RC\n                     \x20   nts_collect_cycles();\n                     \x20   fprintf(nts_check_out, \"meta nts-live-first %zu\\n\", nts_live_count() - nts_permanent_count());\n                     #endif\n",
                 );
             }
         }
@@ -1560,7 +1560,7 @@ fn native_harness(testable: &[Testable], initializes: bool) -> String {
     // as much as its arms). An asynchronous case already drives the loop, and
     // runs what was queued before it, as node's `await` does.
     main.push_str(
-        "    nts_checkpoint();\n#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(stderr, \"nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   if (!nts_check_activity_mark(\"done\", at_case + 1)) return 2;\n         \x20   return 0;\n}\n",
+        "    nts_checkpoint();\n#ifdef NTS_PROVIDER_RC\n         \x20   nts_test_host_drain();\n         \x20   nts_collect_cycles();\n         \x20   fprintf(nts_check_out, \"meta nts-live-end %zu\\n\", nts_live_count() - nts_permanent_count());\n         #endif\n         \x20   /* The terminal marker: a run that stopped after three cases leaves\n         \x20    * three good lines and nothing else, which reads exactly like a\n         \x20    * short clean run unless the end is written down. */\n         \x20   fprintf(nts_check_out, \"done %ld\\n\", at_case + 1 - from);\n         \x20   fclose(nts_check_out);\n         \x20   if (!nts_check_activity_mark(\"done\", at_case + 1)) return 2;\n         \x20   return 0;\n}\n",
     );
     main
 }
@@ -2252,7 +2252,7 @@ fn run_done(path: &Utf8Path) -> Option<usize> {
 /// result told from its output by shape could be spoofed by it.
 struct Run {
     results: Vec<String>,
-    output: Vec<u8>,
+    output: output::Printed,
     segments: Vec<output::Segment>,
     /// The cases the compiled program stopped on by *throwing* -- an uncaught
     /// exception, `nts: uncaught ...` -- with the line it printed. Only these
@@ -2285,7 +2285,7 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
 ) -> Result<Run> {
     let total = results.len();
     let mut collected: Vec<String> = Vec::new();
-    let mut output = Vec::new();
+    let mut output = output::Printed::default();
     let mut segments = Vec::new();
     let mut thrown: Vec<(usize, String)> = Vec::new();
     let mut incomplete = Vec::new();
@@ -2309,6 +2309,18 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         let mut produced = std::fs::read(&path)
             .map(|bytes| lines(&bytes))
             .unwrap_or_default();
+        let mut metadata = String::new();
+        produced.retain(|line| {
+            if let Some(value) = line.strip_prefix("meta ")
+                && (value.starts_with("nts-live-first ") || value.starts_with("nts-live-end "))
+            {
+                metadata.push_str(value);
+                metadata.push('\n');
+                false
+            } else {
+                true
+            }
+        });
         // The terminal marker. A run that stopped after three cases leaves
         // three good lines; without `done` it is not a short clean run.
         let finished = produced
@@ -2318,8 +2330,8 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
             produced.pop();
         }
         let read = produced.len();
-        let output_start = output.len();
-        output.extend_from_slice(&run.stdout);
+        let output_start = output.stdout.len();
+        output.stdout.extend_from_slice(&run.stdout);
         // The cases answered: result lines, in the order they were asked for.
         //
         // **They arrive on a channel of their own**, the file named by
@@ -2345,16 +2357,20 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         collected.extend(produced);
         let complaint = String::from_utf8_lossy(&run.stderr);
         let stopped_case = reached < total - from;
-        let native_decline = stopped_case
-            && !supervised
-            && matches!(
-                stopped_with(run.status.code(), signal_of(run.status), &complaint),
-                Stopped::Declined
-            )
-            && !complaint.lines().any(|line| line.starts_with(UNCAUGHT));
+        let stop = stopped_with(run.status.code(), signal_of(run.status), &complaint);
+        let stopped_normally = stopped_case && !supervised && matches!(&stop, Stopped::Declined);
+        let native_decline =
+            stopped_normally && !complaint.lines().any(|line| line.starts_with(UNCAUGHT));
+        let errors_start = output.stderr.len();
+        output.stderr.extend_from_slice(if stopped_normally {
+            output::before_terminal_diagnostic(&run.stderr)
+        } else {
+            &run.stderr
+        });
         segments.push(output::Segment {
             cases: from..from + reached + usize::from(stopped_case),
-            bytes: output_start..output.len(),
+            stdout: output_start..output.stdout.len(),
+            stderr: errors_start..output.stderr.len(),
             native_decline,
         });
         // What the program still held, once and at the end. Only under a
@@ -2363,7 +2379,7 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         // Growth between the two is a leak: agreement cannot see one -- a
         // function that never gives an object back answers exactly as well as
         // one that does -- and this is the only place that asks.
-        if let Some(grew) = growth(&complaint) {
+        if let Some(grew) = growth(&metadata) {
             aborts.push(grew);
         }
         // The marker agreeing with the reader: `done <n>` is the cases this run
@@ -2404,7 +2420,7 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         if supervised {
             *timeouts += 1;
         } else {
-            match stopped_with(run.status.code(), signal_of(run.status), &complaint) {
+            match stop {
                 Stopped::Declined => {
                     if let Some(line) = complaint.lines().find(|line| line.starts_with(UNCAUGHT)) {
                         thrown.push((from + reached, line.to_owned()));
@@ -2907,6 +2923,7 @@ fn run_node_cases(
         ))
         .arg("node")
         .arg("--experimental-transform-types")
+        .arg("--no-warnings")
         .arg("--import")
         .arg(format!("file://{hook}"))
         .arg(&path)
@@ -2944,7 +2961,7 @@ fn run_node_cases(
             "delivered":delivered,"done":done,"case_key":coverage.key,"status":status,"measured":measured.is_ok()}));
         Ok(Run {
             results: measured?,
-            output: output.stdout,
+            output: output::Printed { stdout: output.stdout, stderr: output.stderr },
             segments: Vec::new(),
             thrown: Vec::new(),
             incomplete: Vec::new(),
@@ -3171,8 +3188,8 @@ fn report(
     // other did not is a disagreement, not a trailing detail.
     if compare_output {
         disagreements.extend(output_disagreements(
-            &lines(&native_run.output),
-            &lines(&engine_run.output),
+            &lines(&native_run.output.stdout),
+            &lines(&engine_run.output.stdout),
         ));
     }
     Report {
@@ -3803,6 +3820,38 @@ mod result_channel {
         );
     }
 
+    #[test]
+    fn live_counts_use_the_result_channel_and_source_stderr_cannot_spoof_them() {
+        let dir = scratch("live-metadata");
+        let (mut refused, mut aborts, mut timeouts) = (Vec::new(), Vec::new(), 0);
+        let run = collect_restarting(
+            &dir,
+            &expected(),
+            &mut refused,
+            &mut aborts,
+            &mut timeouts,
+            |_, path| {
+                std::fs::write(
+                    path,
+                    "meta nts-live-first 1\nf 0 1\nf 1 2\nmeta nts-live-end 2\ndone 2\n",
+                )
+                .expect("write protocol");
+                let mut output = exited("");
+                output.stderr = b"nts-live-first 999\nnts-live-end 0\n".to_vec();
+                Ok(output)
+            },
+        )
+        .expect("collect");
+        assert_eq!(run.results, vec!["f 0 1", "f 1 2"]);
+        assert_eq!(run.output.stderr, b"nts-live-first 999\nnts-live-end 0\n");
+        assert_eq!(
+            aborts.len(),
+            1,
+            "the real 1-to-2 growth must be caught: {aborts:?}"
+        );
+        assert!(refused.is_empty());
+    }
+
     /// Program output shaped exactly like a result stays output: it cannot
     /// answer, duplicate or hide a case, because results have their own file.
     #[test]
@@ -3823,7 +3872,7 @@ mod result_channel {
         .expect("collect");
         assert_eq!(run.results, vec!["f 0 1".to_owned(), "f 1 2".to_owned()]);
         assert_eq!(
-            super::lines(&run.output),
+            super::lines(&run.output.stdout),
             vec!["f 1 999 printed by the program".to_owned()]
         );
         assert!(refused.is_empty() && aborts.is_empty());
@@ -3851,7 +3900,7 @@ mod pairing {
     fn run(results: &[&str], thrown: &[(usize, &str)]) -> Run {
         Run {
             results: results.iter().map(|line| (*line).to_owned()).collect(),
-            output: Vec::new(),
+            output: output::Printed::default(),
             segments: Vec::new(),
             thrown: thrown
                 .iter()

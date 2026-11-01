@@ -17,7 +17,7 @@ import { caseRoot, environment, flagsOf, materialise, placeOf, workspace } from 
 import { jvmRun } from "../jvm/launch.ts";
 import { compileSync } from "./worker-memory.ts";
 import { bundledDependencies } from "../conformance/node-deps.mjs";
-import { nativeDecline, outputPrefix } from "../conformance/output-prefix.ts";
+import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
 import { outputOracle } from "./output-oracle.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
@@ -562,12 +562,12 @@ export function attempt(dir, body, tools, origin?) {
     if (host) return { bucket: "crash", why: "host exception", first: host[1],
       runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() } };
     if (nativeDecline(String(error.stderr ?? ""))) {
-      const oracle = typeof tools.oracleOutput === "string"
+      const oracle = tools.oracleOutput !== undefined
         ? { ok: true as const, output: tools.oracleOutput }
         : outputOracle(project, dir, body, tools, (command, args) => capped(tools, command, args));
       if (!oracle.ok) return { bucket: "infrastructure-error", why: oracle.why };
-      const printed = String(error.stdout ?? "");
-      if (!outputPrefix(printed, oracle.output)) return {
+      const printed = { stdout: String(error.stdout ?? ""), stderr: beforeTerminalDiagnostic(String(error.stderr ?? ""), "decline") };
+      if (!outputPrefixes(printed, oracle.output)) return {
         bucket: "wrong-output", printed, nodeOutput: oracle.output,
         runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() },
       };

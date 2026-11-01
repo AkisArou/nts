@@ -14,11 +14,11 @@ for (const language of ["js", "ts"] as const) for (const module of [false, true]
     const scratch = mkdtempSync(join(base, "case-"));
     try {
       const project = workspace(join(scratch, "project"), language);
-      const source = `/*---\nflags: [${module ? "module" : ""}]\n---*/\nassert.sameValue(2 + 2, 4); assert.sameValue(this === undefined, ${language === "ts" || module}); console.log("before"); try { console.log("body"); } finally { console.log("finally"); }`;
+      const source = `/*---\nflags: [${module ? "module" : ""}]\n---*/\nassert.sameValue(2 + 2, 4); assert.sameValue(this === undefined, ${language === "ts" || module}); console.log("before"); console.error("error"); try { console.log("body"); } finally { console.log("finally"); }`;
       materialise(project, source, undefined, language);
       const tools = { language, memoryCapKb: 6_000_000 };
       const result = outputOracle(project, scratch, source, tools, (command, args) => capped(tools, command, args));
-      assert.deepEqual(result, { ok: true, output: "before\nbody\nfinally\n" });
+      assert.deepEqual(result, { ok: true, output: { stdout: "before\nbody\nfinally\n", stderr: "error\n" } });
     } finally { rmSync(scratch, { recursive: true, force: true }); }
   });
 }
