@@ -218,11 +218,17 @@ the narrow type, as a `Map`'s and a `Set`'s contents do
     same struct, size and printer. A run-time test for a view reads the
     descriptor's kind, so a subclass is a view wherever one is asked for,
     native code included.
-  - A method that makes a typed array from another (`subarray`, `slice`)
-    makes one of the receiver's class, and runs that class's constructor with
-    `(buffer, byteOffset, length)` when the class declares one, as
-    JavaScript's species rule does. A `static [Symbol.species]` that names a
-    known class makes that class; any other species is refused by name.
+  - A method that makes a typed array from another makes one of the
+    receiver's class, as JavaScript's species rule does. A class that
+    declares a constructor has it called as JavaScript calls it: `subarray`
+    passes `(buffer, byteOffset, length)` and `slice` passes `(length)`, and a
+    `slice` result shorter than that length is a `TypeError`. A constructor
+    whose declared parameters do not accept those arguments still receives
+    them, as node passes them, since a false type claim behaves as node does
+    ([types](../language/types.md#decisions)); until a parameter's
+    representation comes from the values that arrive, such a call is refused
+    by name. A `static [Symbol.species]` that names a known class makes that
+    class; any other species is refused by name.
   - `Object.prototype.toString` names the element type
     (`[object Uint8Array]`), as JavaScript does; `constructor.name` names the
     class.

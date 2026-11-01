@@ -1198,14 +1198,27 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
     cannot change its class;
   - species through a slot every view descriptor has. A chain with no
     declared constructor makes the same view with the receiver's descriptor.
-    A declared constructor is called with `(buffer, byteOffset, length)`
-    through construction by identity. The call is direct wherever the closed
-    world proves the receiver's class, so a plain `Uint8Array` costs nothing;
-    only an open receiver loads the slot. A `static [Symbol.species]` that
-    names a known class makes it, and any other species getter is refused by
-    name;
+    A declared constructor is called as JavaScript calls it, with
+    `(buffer, byteOffset, length)` from `subarray` and `(length)` from
+    `slice`, through construction by identity. The call is direct wherever
+    the closed world proves the receiver's class, so a plain `Uint8Array`
+    costs nothing; only an open receiver loads the slot. A
+    `static [Symbol.species]` that names a known class makes it, and any
+    other species getter is refused by name;
   - names: `[object Uint8Array]` from the element type, and `Bytes` from
     `constructor.name` and inspect, with a guard per printer.
+- **Species through a declared constructor,** ruled on ClaudeHelper's
+  question while building it. Each class with a declared constructor in its
+  chain gets two species entries, synthesized calls of its constructor copy
+  keyed on the class. They are reached through synthetic call sites in the
+  copy planner, so a union parameter gets its member copy. Where the declared
+  parameters do not accept the species arguments (`constructor(length:
+  number)` reached by `subarray`'s buffer), the target is still node's
+  answer, since a false type claim on a typed value behaves as node does. It
+  is the same problem as a bivariant method argument, and it lifts with the
+  representation taken from proved arrivals. Until then that `subarray` or
+  `slice` call is refused by name, with a refusal fixture and an accepting
+  control.
 - **Why.** `new Bytes(4) instanceof Bytes` was folded to `false`, and
   `subarray` and `slice` lost the class: silent wrong answers, recorded in the
   builtin-identity family. The class had no descriptor, so the test had
