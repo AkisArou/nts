@@ -360,6 +360,14 @@ export const RULES = [
   { name: "tooling test discovery", when: p => p === "tooling/gate/tooling-discovery.ts", settled: true, steps: ["tooling"], arms: [] },
   { name: "shared ignored-input policy", when: p => p === ".gitignore", full: true, steps: [], arms: [] },
   {
+    // Offline complete-AST comparison; its only gate consumer is its test.
+    name: "the node transcription proof",
+    when: (p) => /^tooling\/conformance\/node-transcription(?:\.test)?\.mjs$/.test(p),
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does the proof reject undeclared body or scaffolding changes", run: "node --test tooling/conformance/node-transcription.test.mjs" }],
+  },
+  {
     name: "the bundled Node native dependencies",
     when: p => /^build\/node-deps\//.test(p)
       || /^tooling\/bootstrap\/node(?:\.test)?\.ts$/.test(p)
@@ -966,7 +974,7 @@ export const RULES = [
     // the compiled axis against its floor, and the web platform's own suite.
     name: "the node harness",
     wide: true,
-    when: (p) => nodeHarness(p) && !/^tooling\/conformance\/node-work-list(?:\.test)?\.ts$/.test(p),
+    when: (p) => nodeHarness(p) && !/^tooling\/conformance\/(node-work-list(?:\.test)?\.ts|node-transcription(?:\.test)?\.mjs)$/.test(p),
     settled: true,
     steps: [],
     arms: [

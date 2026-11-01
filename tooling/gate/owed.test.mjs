@@ -157,6 +157,16 @@ test("the offline Node migration inventory owes its discovered tooling tests", (
   assert.ok(owed([{path:"tooling/conformance/unplaced-inventory.ts",added:true}]).some(rule => rule.full));
 });
 
+test("the offline Node transcription proof owes its discovered tooling tests", () => {
+  for (const added of [false, true]) for (const path of ["tooling/conformance/node-transcription.mjs", "tooling/conformance/node-transcription.test.mjs"]) {
+    const rules = owed([{path, added}]);
+    assert.ok(rules.some(rule => rule.name === "the node transcription proof"));
+    assert.ok(!rules.some(rule => rule.full), path);
+    assert.deepEqual(gateSteps(rules).sort(), ["build", "clippy", "old-paths", "rustfmt", "tests", "tooling"], path);
+  }
+  assert.ok(owed([{path:"tooling/conformance/unplaced-transcription.mjs",added:true}]).some(rule => rule.full));
+});
+
 test("offline Unicode generators leave conformance obligations with their fixture outputs", () => {
   for (const added of [false, true]) {
     const generator = owed([{ path: "tooling/unicode-cases/case-mapping.ts", added }]);

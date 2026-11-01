@@ -1,0 +1,92 @@
+{
+  "source": {
+    "commit": "18b32a3b1552e199a01f1a8d9fd64aa756d3b75b",
+    "path": "lib/internal/mime.js",
+    "sha256": "4fbea1679908f457f39e6794a82a2988753dbbfae9849c92b13e61646dd5c50e"
+  },
+  "referenceSha256": "125e463cef3b95ef780f11d2ef5b49e6d27e6597673b13491774c75c9c6eb72f",
+  "scaffolding": {
+    "preamble": "// From Node v26.13.0 lib/internal/mime.js (complete body).\n// Import/export and primordial scaffolding are normalized; static types follow.\nimport { ERR_ILLEGAL_CONSTRUCTOR, ERR_INVALID_MIME_SYNTAX } from \"../../internal/errors.ts\";\n",
+    "requireExpression": "require('internal/errors').codes",
+    "globals": {
+      "ObjectDefineProperty": "Object.defineProperty",
+      "SafeMap": "Map",
+      "SymbolIterator": "Symbol.iterator"
+    },
+    "methods": {
+      "FunctionPrototypeCall": "call",
+      "StringPrototypeCharCodeAt": "charCodeAt",
+      "StringPrototypeSlice": "slice",
+      "StringPrototypeToLowerCase": "toLowerCase"
+    },
+    "exports": [
+      "MIMEParams",
+      "MIMEType"
+    ]
+  },
+  "conversions": [
+    {
+      "className": "MIMEParams",
+      "name": "set",
+      "bindings": {
+        "rawName": "name",
+        "rawValue": "value"
+      }
+    },
+    {
+      "className": "MIMEType",
+      "kind": "constructor",
+      "bindings": {
+        "rawString": "string"
+      }
+    },
+    {
+      "className": "MIMEType",
+      "name": "parse",
+      "bindings": {
+        "rawString": "string"
+      }
+    },
+    {
+      "className": "MIMEType",
+      "kind": "set",
+      "name": "type",
+      "bindings": {
+        "rawValue": "v"
+      }
+    },
+    {
+      "className": "MIMEType",
+      "kind": "set",
+      "name": "subtype",
+      "bindings": {
+        "rawValue": "v"
+      }
+    }
+  ],
+  "descriptors": [
+    "mimeParamsIteratorDescriptor",
+    "mimeParamsJSONDescriptor",
+    "mimeTypeJSONDescriptor"
+  ],
+  "factory": {
+    "name": "instantiateMimeParams",
+    "className": "MIMEParams",
+    "beforeClass": "MIMEType"
+  },
+  "invariant": {
+    "helper": "assertMimeParseString",
+    "parameter": "value",
+    "message": "nts internal invariant: MIME parser expected a string",
+    "className": "MIMEType",
+    "flag": "noThrowSymbol",
+    "marker": "kNoThrow",
+    "input": "string"
+  },
+  "reachability": [
+    "kNoThrow is a fresh module-lexical Symbol. The complete AST contains exactly its declaration, the constructor equality check and the argument passed by MIMEType.parse; it is neither exported nor returned.",
+    "MIMEType.parse converts its argument with the original template string before parseTypeAndSubtype, returns null on failure, then immediately calls new MIMEType(string, kNoThrow). Template conversion either throws at the original point or yields a primitive string. Neither parser state nor user callbacks can change this method-local string binding.",
+    "Every public constructor call lacks the private symbol, even if the caller supplies a second argument or a symbol with the same description. Only the checked parse call can enter the private branch. Thus the additional string check cannot fail through any public entry; if an internal invariant is broken it throws an ordinary Error with an nts internal invariant message, not a Node error code.",
+    "The checker validates this closed marker use set and exact parse body, then requires equality of the complete program AST after only the declared normalizations. Any new marker use, bypassed conversion, changed check or algorithm edit is rejected."
+  ]
+}

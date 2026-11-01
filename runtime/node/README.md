@@ -34,6 +34,30 @@ compile yet. An earlier port rewrote `break` into a flag so it would compile;
 that has to be unwound later, and while it is there the refusal list stops
 measuring what is actually missing.
 
+Typing scaffolding has a closed normalization set, checked by
+`tooling/conformance/node-transcription.mjs` against the pinned upstream
+source and the module's transcription policy:
+
+- A raw input may be alpha-renamed and its first conversion assigned to a
+  typed local at the original assignment point. Parameter count, conversion
+  order and subsequent operations stay the same; the raw input is unused
+  after conversion and the local is unused before it.
+- A literal null-prototype property descriptor may have an immediately
+  preceding, single-use typed binding. Its contents and registration remain
+  identical; it performs no calls or computed property accesses.
+- A hidden factory may be registered in a class static block through a
+  module-lexical binding. Its complete body stays identical, uses no receiver
+  or constructor context, and its temporary public registration disappears.
+  The factory is called only after class initialization.
+
+The checker folds only the declared forms and compares the complete erased
+AST; it does not excuse algorithm changes. A checked internal invariant needs
+a separate reachability proof that its failure cannot occur through any
+public entry. MIME's private fast-constructor string check and the closed
+private-symbol use set are specified in `util/mime.transcription.json` and
+validated by the same checker. An invariant failure is an internal error,
+never a replacement Node error.
+
 **Scaffolding is ours.** Node destructures its primitives from `primordials`
 and hangs functions off object literals; ours are ordinary imports and exports.
 `primordials` exists so node's library survives a program that reassigns

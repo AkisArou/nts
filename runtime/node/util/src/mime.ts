@@ -1,329 +1,527 @@
-// `MIMEType` and `MIMEParams`, from node v24.20.0 `lib/internal/mime.js`.
-//
-// A MIME type is not a string with a slash in it, which is the implementation
-// everybody writes first. It is `type/subtype` followed by parameters, and every
-// part of that has a grammar: a type is an HTTP token, a parameter value may be a
-// quoted string with backslash escapes, whitespace is significant in some positions
-// and not others, and a repeated parameter keeps its **first** value.
-//
-// Two things here are easy to get wrong and are why this follows node line by line
-// rather than being rewritten.
-//
-// `toASCIILower` lowers `A-Z` and nothing else. `String.prototype.toLowerCase` is
-// Unicode-aware, so it folds characters the MIME grammar does not consider equal
-// and two distinct types could compare the same. Node tests for a non-ASCII
-// character first and only then walks the string; the fast path is an optimisation
-// and the slow path is the specification.
-//
-// And a parameter whose name is already present is **dropped**, not overwritten:
-// `text/plain;a=1;a=2` answers `1`. That is the opposite of what assigning into a
-// map does, which is why the parse loop tests `has` before `set`.
-//
-// Parsed eagerly where node defers it. Node's parse can raise nothing -- it ignores
-// every malformed parameter rather than reporting one -- so laziness changes only
-// when the work happens, and a `MIMEType` whose parameters are never read is not a
-// case worth carrying two states for.
+// From Node v26.13.0 lib/internal/mime.js (complete body).
+// Import/export and primordial scaffolding are normalized; static types follow.
+import { ERR_ILLEGAL_CONSTRUCTOR, ERR_INVALID_MIME_SYNTAX } from "../../internal/errors.ts";
 
-import { ERR_INVALID_MIME_SYNTAX } from "../../internal/errors.ts";
 
-/** Anything that cannot appear in an HTTP token, which is what a type and a parameter name are. */
-const NOT_HTTP_TOKEN_CODE_POINT = /[^!#$%&'*+\-.^_`|~A-Za-z0-9]/;
 
-/**
- * Anything that cannot appear in an HTTP quoted string, which is what a parameter
- * value is: tab, printable ASCII, and the Latin-1 supplement.
- *
- * Built from a string rather than written as a literal because one of its range
- * boundaries is U+0080, which is itself a control character -- a source file
- * carrying it raw is a file nobody can review in a terminal.
- */
-const NOT_HTTP_QUOTED_STRING_CODE_POINT = new RegExp(
-  "[^\\t\\u0020-\\u007e\\u0080-\\u00ff]",
-);
 
-/** The first character that is not HTTP whitespace, or the end. */
-const END_BEGINNING_WHITESPACE = /[^\r\n\t ]|$/;
-/** Where the trailing HTTP whitespace begins. */
-const START_ENDING_WHITESPACE = /[\r\n\t ]*$/;
 
-const EQUALS_SEMICOLON_OR_END = /[;=]|$/;
-const QUOTED_VALUE_PATTERN = /^(?:([\\]$)|[\\][\s\S]|[^"])*(?:(")|$)/u;
+// Lookup table for the code point classes used by the MIME Sniffing
+// standard. Only code points <= 0xFF can be in either class.
+// https://mimesniff.spec.whatwg.org/#http-token-code-point
+// https://mimesniff.spec.whatwg.org/#http-quoted-string-token-code-point
+const kHTTPToken = 1;
+const kHTTPQuotedStringToken = 2;
+const codePointClass = new Uint8Array(256);
+{
+  codePointClass[0x09] = kHTTPQuotedStringToken;
+  for (let c = 0x20; c <= 0x7E; c++) codePointClass[c] = kHTTPQuotedStringToken;
+  for (let c = 0x80; c <= 0xFF; c++) codePointClass[c] = kHTTPQuotedStringToken;
+  const tokens = "!#$%&'*+-.^_`|~0123456789" +
+    'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz';
+  for (let i = 0; i < tokens.length; i++) {
+    codePointClass[(tokens).charCodeAt(i)]! |= kHTTPToken;
+  }
+}
 
-const SOLIDUS = "/";
-const SEMICOLON = ";";
+const kNoThrow = Symbol('kNoThrow');
+
+// https://fetch.spec.whatwg.org/#http-whitespace
+function isHTTPWhitespace(c: number): boolean {
+  return c === 0x20 || c === 0x09 || c === 0x0A || c === 0x0D;
+}
 
 /**
- * Lower-case `A-Z` and leave everything else alone.
- *
- * Not `toLowerCase`, which is Unicode-aware: it would fold characters the MIME
- * grammar does not consider equal, so two distinct types could compare the same.
+ * Returns the offset from `start` of the first code point in
+ * `str[start, end)` that is not in `cls`, or -1 if they all are.
+ * @param {string} str
+ * @param {number} start
+ * @param {number} end
+ * @param {number} cls
+ * @returns {number}
  */
+function findInvalid(str: string, start: number, end: number, cls: number): number {
+  for (let i = start; i < end; i++) {
+    const c = (str).charCodeAt(i);
+    if (c > 0xFF || (codePointClass[c]! & cls) === 0) return i - start;
+  }
+  return -1;
+}
+
 function toASCIILower(str: string): string {
-  if (!/[^\x00-\x7f]/.test(str)) return str.toLowerCase();
-  let result = "";
-  for (let index = 0; index < str.length; index++) {
-    const char = str[index] as string;
-    result += char >= "A" && char <= "Z" ? char.toLowerCase() : char;
+  let hasUpper = false;
+  for (let i = 0; i < str.length; i++) {
+    const c = (str).charCodeAt(i);
+    if (c > 0x7F) {
+      let result = '';
+      for (let j = 0; j < str.length; j++) {
+        const char = str[j]!;
+        result += char >= 'A' && char <= 'Z' ?
+          (char).toLowerCase() :
+          char;
+      }
+      return result;
+    }
+    if (c <= 0x5A && c >= 0x41) hasUpper = true;
   }
-  return result;
+  // Returning the input unchanged when possible avoids an allocation and
+  // keeps its cached hash for Map lookups.
+  return hasUpper ? (str).toLowerCase() : str;
 }
 
-/** `[type, subtype, positionAfterSubtype]`, or a throw naming which production failed. */
-function parseTypeAndSubtype(str: string): [string, string, number] {
-  let position = str.search(END_BEGINNING_WHITESPACE);
-  const typeEnd = str.indexOf(SOLIDUS, position);
-  const trimmedType = typeEnd === -1 ? str.slice(position) : str.slice(position, typeEnd);
-  const invalidTypeIndex = trimmedType.search(NOT_HTTP_TOKEN_CODE_POINT);
-  if (trimmedType === "" || invalidTypeIndex !== -1 || typeEnd === -1) {
-    throw new ERR_INVALID_MIME_SYNTAX("type", str, invalidTypeIndex);
-  }
-  position = typeEnd + 1;
-  const type = toASCIILower(trimmedType);
+// Results of parseTypeAndSubtype(). Kept in module state to avoid allocating
+// a result object per parse; they are consumed synchronously by the caller.
+let parsedType = '';
+let parsedSubtype = '';
+let parsedParamsStart = 0;
+let parsedParamsEnd = 0;
+let failedProduction = '';
+let failedIndex = -1;
 
-  const subtypeEnd = str.indexOf(SEMICOLON, position);
-  const rawSubtype = subtypeEnd === -1 ? str.slice(position) : str.slice(position, subtypeEnd);
-  position += rawSubtype.length;
-  if (subtypeEnd !== -1) position += 1;
-  const trimmedSubtype = rawSubtype.slice(0, rawSubtype.search(START_ENDING_WHITESPACE));
-  const invalidSubtypeIndex = trimmedSubtype.search(NOT_HTTP_TOKEN_CODE_POINT);
-  if (trimmedSubtype === "" || invalidSubtypeIndex !== -1) {
-    throw new ERR_INVALID_MIME_SYNTAX("subtype", str, invalidSubtypeIndex);
-  }
-  return [type, toASCIILower(trimmedSubtype), position];
-}
+/**
+ * Parses the type and subtype of a MIME type string and locates its
+ * parameters. Returns false on failure, with failedProduction and
+ * failedIndex describing the error.
+ * @see https://mimesniff.spec.whatwg.org/#parse-a-mime-type
+ * @param {string} str
+ * @returns {boolean}
+ */
+function parseTypeAndSubtype(str: string): boolean {
+  const length = str.length;
 
-/** Undo the backslash escapes inside a quoted parameter value. */
-function removeBackslashes(str: string): string {
-  let result = "";
-  let index = 0;
-  // Stops one short, because a backslash is read together with the character after it.
-  for (; index < str.length - 1; index++) {
-    const char = str[index] as string;
-    if (char === "\\") {
-      index++;
-      result += str[index] as string;
-    } else {
-      result += char;
+  // Skip leading HTTP whitespace.
+  let position = 0;
+  while (position < length &&
+         isHTTPWhitespace((str).charCodeAt(position))) {
+    position++;
+  }
+
+  // Collect the type, up to '/'.
+  const typeStart = position;
+  let invalidTypeIndex = -1;
+  let typeHasUpper = false;
+  for (; position < length; position++) {
+    const c = (str).charCodeAt(position);
+    if (c === 0x2F /* / */) break;
+    if (c > 0xFF || (codePointClass[c]! & kHTTPToken) === 0) {
+      if (invalidTypeIndex === -1) invalidTypeIndex = position - typeStart;
+    } else if (c <= 0x5A && c >= 0x41) {
+      typeHasUpper = true;
     }
   }
-  if (index === str.length - 1) result += str[index] as string;
-  return result;
+  if (position === typeStart || invalidTypeIndex !== -1 || position >= length) {
+    failedProduction = 'type';
+    failedIndex = invalidTypeIndex;
+    return false;
+  }
+  const typeEnd = position;
+
+  // Skip '/' and collect the subtype, up to ';'. In the same pass, find the
+  // first non-token code point and where the trailing HTTP whitespace starts.
+  position++;
+  const subtypeStart = position;
+  let subtypeEnd = position;
+  let firstNonToken = -1;
+  let subtypeHasUpper = false;
+  for (; position < length; position++) {
+    const c = (str).charCodeAt(position);
+    if (c === 0x3B /* ; */) break;
+    if (c <= 0xFF && (codePointClass[c]! & kHTTPToken) !== 0) {
+      if (c <= 0x5A && c >= 0x41) subtypeHasUpper = true;
+    } else if (firstNonToken === -1) {
+      firstNonToken = position;
+    }
+    if (!isHTTPWhitespace(c)) subtypeEnd = position + 1;
+  }
+  const subtypeRawEnd = position;
+  // Whitespace is not a token code point, so a non-token code point at or
+  // after subtypeEnd is part of the trailing whitespace, which is removed.
+  const invalidSubtypeIndex = firstNonToken !== -1 && firstNonToken < subtypeEnd ?
+    firstNonToken - subtypeStart : -1;
+  if (subtypeEnd === subtypeStart || invalidSubtypeIndex !== -1) {
+    failedProduction = 'subtype';
+    failedIndex = invalidSubtypeIndex;
+    return false;
+  }
+
+  // Parameters are everything after the ';' up to the trailing whitespace.
+  let paramsEnd = length;
+  while (paramsEnd > subtypeRawEnd &&
+         isHTTPWhitespace((str).charCodeAt(paramsEnd - 1))) {
+    paramsEnd--;
+  }
+
+  const type = (str).slice(typeStart, typeEnd);
+  const subtype = (str).slice(subtypeStart, subtypeEnd);
+  // Both are ASCII-only at this point, so toLowerCase() is ASCII lowercase.
+  parsedType = typeHasUpper ? (type).toLowerCase() : type;
+  parsedSubtype = subtypeHasUpper ? (subtype).toLowerCase() : subtype;
+  parsedParamsStart = subtypeRawEnd + 1;
+  parsedParamsEnd = paramsEnd;
+  return true;
+}
+
+/**
+ * Parses MIME type parameters from `str[position, end)` into `params`.
+ * `position` is just past the ';' that follows the subtype, and `end`
+ * excludes trailing HTTP whitespace. This is step 11 of
+ * https://mimesniff.spec.whatwg.org/#parse-a-mime-type
+ * @param {string} str
+ * @param {number} position
+ * @param {number} end
+ * @param {SafeMap<string, string>} params
+ */
+function parseParameters(str: string, position: number, end: number, params: Map<string, string>): void {
+  while (position < end) {
+    // Skip HTTP whitespace.
+    while (position < end &&
+           isHTTPWhitespace((str).charCodeAt(position))) {
+      position++;
+    }
+
+    // Collect the parameter name, up to ';' or '='.
+    const nameStart = position;
+    let nameIsToken = true;
+    let nameHasUpper = false;
+    for (; position < end; position++) {
+      const c = (str).charCodeAt(position);
+      if (c === 0x3B /* ; */ || c === 0x3D /* = */) break;
+      if (c > 0xFF || (codePointClass[c]! & kHTTPToken) === 0) {
+        nameIsToken = false;
+      } else if (c <= 0x5A && c >= 0x41) {
+        nameHasUpper = true;
+      }
+    }
+    const nameEnd = position;
+
+    if (position < end) {
+      // Parameters without a value are ignored.
+      if ((str).charCodeAt(position) === 0x3B /* ; */) {
+        position++;
+        continue;
+      }
+      // Skip '='.
+      position++;
+    }
+    if (position >= end) break;
+
+    let value: string;
+    if ((str).charCodeAt(position) === 0x22 /* " */) {
+      // Collect an HTTP quoted string with the extract-value flag.
+      // https://fetch.spec.whatwg.org/#collect-an-http-quoted-string
+      position++;
+      value = '';
+      let chunkStart = position;
+      while (true) {
+        while (position < end) {
+          const c = (str).charCodeAt(position);
+          if (c === 0x22 /* " */ || c === 0x5C /* \ */) break;
+          position++;
+        }
+        if (position >= end) {
+          value += (str).slice(chunkStart, position);
+          break;
+        }
+        const quoteOrBackslash = (str).charCodeAt(position);
+        value += (str).slice(chunkStart, position);
+        position++;
+        if (quoteOrBackslash === 0x5C /* \ */) {
+          if (position >= end) {
+            value += '\\';
+            break;
+          }
+          // The escaped code point starts the next chunk.
+          chunkStart = position;
+          position++;
+        } else {
+          break;
+        }
+      }
+      // Skip anything else up to the next ';'.
+      while (position < end &&
+             (str).charCodeAt(position) !== 0x3B /* ; */) {
+        position++;
+      }
+      if (findInvalid(value, 0, value.length, kHTTPQuotedStringToken) !== -1) {
+        position++;
+        continue;
+      }
+    } else {
+      // Collect the value up to ';', validating it and finding where its
+      // trailing HTTP whitespace starts in the same pass. CR and LF are not
+      // quoted-string token code points, but trailing ones are removed, so
+      // the value is only invalid if a bad code point comes before valueEnd.
+      const valueStart = position;
+      let valueEnd = position;
+      let firstInvalid = -1;
+      for (; position < end; position++) {
+        const c = (str).charCodeAt(position);
+        if (c === 0x3B /* ; */) break;
+        if (firstInvalid === -1 &&
+            (c > 0xFF || (codePointClass[c]! & kHTTPQuotedStringToken) === 0)) {
+          firstInvalid = position;
+        }
+        if (!isHTTPWhitespace(c)) valueEnd = position + 1;
+      }
+      // Parameters with an empty or invalid value are ignored.
+      if (valueEnd === valueStart ||
+          (firstInvalid !== -1 && firstInvalid < valueEnd)) {
+        position++;
+        continue;
+      }
+      value = (str).slice(valueStart, valueEnd);
+    }
+
+    if (nameEnd !== nameStart && nameIsToken) {
+      // The name is ASCII-only, so toLowerCase() is ASCII lowercase.
+      const name = nameHasUpper ?
+        ((str).slice(nameStart, nameEnd)).toLowerCase() :
+        (str).slice(nameStart, nameEnd);
+      if (!params.has(name)) params.set(name, value);
+    }
+    // Skip ';'.
+    position++;
+  }
 }
 
 function escapeQuoteOrSolidus(str: string): string {
-  let result = "";
-  for (let index = 0; index < str.length; index++) {
-    const char = str[index] as string;
-    result += char === '"' || char === "\\" ? `\\${char}` : char;
+  let result = '';
+  for (let i = 0; i < str.length; i++) {
+    const char = str[i]!;
+    result += (char === '"' || char === '\\') ? `\\${char}` : char;
   }
   return result;
 }
 
-/**
- * A parameter value as it goes on the wire: bare when it is a token, quoted when it
- * is not, and two quotes when it is empty.
- */
-function encodeValue(value: string): string {
+const encode = (value: string): string => {
   if (value.length === 0) return '""';
-  if (value.search(NOT_HTTP_TOKEN_CODE_POINT) === -1) return value;
+  if (findInvalid(value, 0, value.length, kHTTPToken) === -1) return value;
   return `"${escapeQuoteOrSolidus(value)}"`;
-}
+};
 
-export class MIMEParams {
-  #data = new Map<string, string>();
+let instantiateMimeParams: (str: string, start: number, end: number) => MIMEParams;
+class MIMEParams {
+  // Parsing is deferred until the parameters are first accessed, as most
+  // users only need the type and subtype. Until then #data is null and
+  // #string[#start, #end) holds the unparsed parameters.
+  #data: Map<string, string> | null = null;
+  #string: string | null = null;
+  #start = 0;
+  #end = 0;
 
   /**
-   * Fill an instance from the text after the subtype.
-   *
-   * A static that this module **deletes from the class** after capturing it, which
-   * is node's own arrangement. The reason is that `MIMEParams` must stay
-   * constructible with no arguments -- `new MIMEParams("a=1")` answers an empty set
-   * upstream, because its constructor takes nothing -- while `MIMEType` still needs
-   * a way in. A constructor parameter would have been simpler and would have made
-   * that call parse, which is a difference a caller can see.
+   * Used to instantiate a MIMEParams object within the MIMEType class and
+   * to allow it to be parsed lazily.
+   * @returns {MIMEParams}
    */
-  static instantiateMimeParams(str: string): MIMEParams {
-    const instance = new MIMEParams();
-    instance.#parseInto(str);
-    return instance;
+  static {
+    instantiateMimeParams = function instantiateMimeParams(str: string, start: number, end: number): MIMEParams {
+      const instance = new MIMEParams();
+      instance.#string = str;
+      instance.#start = start;
+      instance.#end = end;
+      return instance;
+    };
   }
 
-  delete(name: string): void {
-    this.#data.delete(toASCIILower(`${name}`));
+  /**
+   * @param {string} name
+   * @returns {void}
+   */
+  delete(name: unknown): void {
+    this.#parse().delete(toASCIILower(`${name}`));
   }
 
-  get(name: string): string | null {
-    const value = this.#data.get(toASCIILower(`${name}`));
+  get(name: unknown): string | null {
+    const value = this.#parse().get(toASCIILower(`${name}`));
     return value === undefined ? null : value;
   }
 
-  has(name: string): boolean {
-    return this.#data.has(toASCIILower(`${name}`));
+  has(name: unknown): boolean {
+    return this.#parse().has(toASCIILower(`${name}`));
   }
 
-  set(name: string, value: string): void {
-    const key = toASCIILower(`${name}`);
-    const text = `${value}`;
-    const invalidNameIndex = key.search(NOT_HTTP_TOKEN_CODE_POINT);
-    if (key.length === 0 || invalidNameIndex !== -1) {
-      throw new ERR_INVALID_MIME_SYNTAX("parameter name", key, invalidNameIndex);
+  set(rawName: unknown, rawValue: unknown): void {
+    const data = this.#parse();
+    let name = toASCIILower(`${rawName}`);
+    let value = `${rawValue}`;
+    const invalidNameIndex = findInvalid(name, 0, name.length, kHTTPToken);
+    if (name.length === 0 || invalidNameIndex !== -1) {
+      throw new ERR_INVALID_MIME_SYNTAX(
+        'parameter name',
+        name,
+        invalidNameIndex,
+      );
     }
-    const invalidValueIndex = text.search(NOT_HTTP_QUOTED_STRING_CODE_POINT);
+    const invalidValueIndex = findInvalid(value, 0, value.length,
+                                          kHTTPQuotedStringToken);
     if (invalidValueIndex !== -1) {
-      throw new ERR_INVALID_MIME_SYNTAX("parameter value", text, invalidValueIndex);
+      throw new ERR_INVALID_MIME_SYNTAX(
+        'parameter value',
+        value,
+        invalidValueIndex,
+      );
     }
-    this.#data.set(key, text);
+    data.set(name, value);
   }
 
   *entries(): IterableIterator<[string, string]> {
-    yield* this.#data.entries();
+    yield* this.#parse().entries();
   }
 
   *keys(): IterableIterator<string> {
-    yield* this.#data.keys();
+    yield* this.#parse().keys();
   }
 
   *values(): IterableIterator<string> {
-    yield* this.#data.values();
+    yield* this.#parse().values();
   }
 
   toString(): string {
-    let result = "";
-    for (const entry of this.#data) {
-      if (result.length) result += ";";
-      result += `${entry[0]}=${encodeValue(entry[1])}`;
+    let ret = '';
+    for (const { 0: key, 1: value } of this.#parse()) {
+      const encoded = encode(value);
+      // Ensure they are separated
+      if (ret.length) ret += ';';
+      ret += `${key}=${encoded}`;
     }
-    return result;
+    return ret;
   }
 
-  /** Node aliases `toJSON` to `toString`, so `JSON.stringify` answers the wire form. */
-  toJSON(): string {
-    return this.toString();
-  }
-
-  /** Node defines `Symbol.iterator` as `entries`, so a params object spreads to pairs. */
-  *[Symbol.iterator](): IterableIterator<[string, string]> {
-    yield* this.entries();
-  }
-
-  #parseInto(str: string): void {
-    const params = this.#data;
-    let position = 0;
-    const endOfSource = str.slice(position).search(START_ENDING_WHITESPACE) + position;
-    while (position < endOfSource) {
-      position += str.slice(position).search(END_BEGINNING_WHITESPACE);
-      const afterParameterName = str.slice(position).search(EQUALS_SEMICOLON_OR_END) + position;
-      const parameterString = toASCIILower(str.slice(position, afterParameterName));
-      position = afterParameterName;
-      if (position < endOfSource) {
-        const terminator = str.charAt(position);
-        position += 1;
-        // A parameter with no value is dropped rather than stored empty.
-        if (terminator === SEMICOLON) continue;
-      }
-      if (position >= endOfSource) break;
-      const opener = str.charAt(position);
-      let parameterValue: string;
-      if (opener === '"') {
-        position += 1;
-        const insideMatch = QUOTED_VALUE_PATTERN.exec(str.slice(position));
-        if (insideMatch === null) break;
-        const whole = insideMatch[0] as string;
-        position += whole.length;
-        // The last character is dropped when it closed the quote or was a dangling
-        // backslash: both are terminators rather than content.
-        const inside = insideMatch[1] !== undefined || insideMatch[2] !== undefined
-          ? whole.slice(0, -1)
-          : whole;
-        parameterValue = removeBackslashes(inside);
-        if (insideMatch[1] !== undefined) parameterValue += "\\";
-      } else {
-        const valueEnd = str.indexOf(SEMICOLON, position);
-        const rawValue = valueEnd === -1 ? str.slice(position) : str.slice(position, valueEnd);
-        position += rawValue.length;
-        const trimmedValue = rawValue.slice(0, rawValue.search(START_ENDING_WHITESPACE));
-        if (trimmedValue === "") continue;
-        parameterValue = trimmedValue;
-      }
-      // **`has` before `set`**: a repeated parameter keeps its first value, which is
-      // the opposite of what assigning into a map does.
-      if (
-        parameterString !== "" &&
-        parameterString.search(NOT_HTTP_TOKEN_CODE_POINT) === -1 &&
-        parameterValue.search(NOT_HTTP_QUOTED_STRING_CODE_POINT) === -1 &&
-        params.has(parameterString) === false
-      ) {
-        params.set(parameterString, parameterValue);
-      }
-      position++;
+  /**
+   * Parses the deferred parameter string on first use.
+   * @returns {SafeMap<string, string>}
+   */
+  #parse(): Map<string, string> {
+    let data = this.#data;
+    if (data !== null) return data;
+    data = this.#data = new Map();
+    const str = this.#string;
+    if (str !== null) {
+      this.#string = null;
+      parseParameters(str, this.#start, this.#end, data);
     }
+    return data;
+  }
+}
+const MIMEParamsStringify = MIMEParams.prototype.toString;
+interface NullPrototypePropertyDescriptor extends PropertyDescriptor {
+  __proto__?: null;
+}
+const mimeParamsIteratorDescriptor: NullPrototypePropertyDescriptor = {
+  __proto__: null,
+  configurable: true,
+  value: MIMEParams.prototype.entries,
+  writable: true,
+};
+Object.defineProperty(MIMEParams.prototype, Symbol.iterator, mimeParamsIteratorDescriptor);
+const mimeParamsJSONDescriptor: NullPrototypePropertyDescriptor = {
+  __proto__: null,
+  configurable: true,
+  value: MIMEParamsStringify,
+  writable: true,
+};
+Object.defineProperty(MIMEParams.prototype, 'toJSON', mimeParamsJSONDescriptor);
+
+// mime.transcription.json proves that the private marker is passed only by
+// parse(), after string conversion. This is an internal invariant, not a
+// replacement for any public Node validation or error.
+function assertMimeParseString(value: unknown): asserts value is string {
+  if (typeof value !== "string") {
+    throw new Error("nts internal invariant: MIME parser expected a string");
   }
 }
 
-/**
- * Captured before the static is removed from the class, which is node's trick and is
- * the only way `MIMEType` can fill a `MIMEParams` that a caller cannot.
- */
-const instantiateMimeParams = MIMEParams.instantiateMimeParams;
-delete (MIMEParams as { instantiateMimeParams?: unknown }).instantiateMimeParams;
-
-export class MIMEType {
-  #type: string;
-  #subtype: string;
-  #parameters: MIMEParams;
-
-  constructor(string: string) {
-    const text = `${string}`;
-    const data = parseTypeAndSubtype(text);
-    this.#type = data[0];
-    this.#subtype = data[1];
-    this.#parameters = instantiateMimeParams(text.slice(data[2]));
+class MIMEType {
+  #type!: string;
+  #subtype!: string;
+  #parameters!: MIMEParams;
+  constructor(rawString: unknown, noThrowSymbol: unknown = null) {
+    // MIMEType.parse() has already parsed the string successfully.
+    if (noThrowSymbol === kNoThrow) {
+      assertMimeParseString(rawString);
+      this.#init(rawString);
+      return;
+    }
+    let string = `${rawString}`;
+    if (noThrowSymbol != null) {
+      throw new ERR_ILLEGAL_CONSTRUCTOR();
+    }
+    if (!parseTypeAndSubtype(string)) {
+      throw new ERR_INVALID_MIME_SYNTAX(failedProduction, string, failedIndex);
+    }
+    this.#init(string);
   }
 
-  get type(): string {
+  // Consumes the results of a successful parseTypeAndSubtype(string).
+  #init(string: string): void {
+    this.#type = parsedType;
+    this.#subtype = parsedSubtype;
+    this.#parameters = instantiateMimeParams(string, parsedParamsStart,
+                                             parsedParamsEnd);
+  }
+
+  // Like the constructor, but returns null instead of throwing on invalid input.
+  static parse(rawString: unknown): MIMEType | null {
+    let string = `${rawString}`;
+    if (!parseTypeAndSubtype(string)) return null;
+    return new MIMEType(string, kNoThrow);
+  }
+
+  get type() {
     return this.#type;
   }
 
-  set type(value: string) {
-    const text = `${value}`;
-    const invalidTypeIndex = text.search(NOT_HTTP_TOKEN_CODE_POINT);
-    if (text.length === 0 || invalidTypeIndex !== -1) {
-      throw new ERR_INVALID_MIME_SYNTAX("type", text, invalidTypeIndex);
+  set type(rawValue: unknown) {
+    let v = `${rawValue}`;
+    const invalidTypeIndex = findInvalid(v, 0, v.length, kHTTPToken);
+    if (v.length === 0 || invalidTypeIndex !== -1) {
+      throw new ERR_INVALID_MIME_SYNTAX('type', v, invalidTypeIndex);
     }
-    this.#type = toASCIILower(text);
+    this.#type = toASCIILower(v);
   }
 
-  get subtype(): string {
+  get subtype() {
     return this.#subtype;
   }
 
-  set subtype(value: string) {
-    const text = `${value}`;
-    const invalidSubtypeIndex = text.search(NOT_HTTP_TOKEN_CODE_POINT);
-    if (text.length === 0 || invalidSubtypeIndex !== -1) {
-      throw new ERR_INVALID_MIME_SYNTAX("subtype", text, invalidSubtypeIndex);
+  set subtype(rawValue: unknown) {
+    let v = `${rawValue}`;
+    const invalidSubtypeIndex = findInvalid(v, 0, v.length, kHTTPToken);
+    if (v.length === 0 || invalidSubtypeIndex !== -1) {
+      throw new ERR_INVALID_MIME_SYNTAX('subtype', v, invalidSubtypeIndex);
     }
-    this.#subtype = toASCIILower(text);
+    this.#subtype = toASCIILower(v);
   }
 
-  /** `type/subtype` with no parameters, which is what a content negotiator compares. */
-  get essence(): string {
+  get essence() {
     return `${this.#type}/${this.#subtype}`;
   }
 
-  get params(): MIMEParams {
+  get params() {
     return this.#parameters;
   }
 
   toString(): string {
-    let result = `${this.#type}/${this.#subtype}`;
-    const paramString = this.#parameters.toString();
-    if (paramString.length) result += `;${paramString}`;
-    return result;
-  }
-
-  /** Aliased to `toString`, as node's is. */
-  toJSON(): string {
-    return this.toString();
+    let ret = `${this.#type}/${this.#subtype}`;
+    const paramStr = (MIMEParamsStringify).call(this.#parameters);
+    if (paramStr.length) ret += `;${paramStr}`;
+    return ret;
   }
 }
+const mimeTypeJSONDescriptor: NullPrototypePropertyDescriptor = {
+  __proto__: null,
+  configurable: true,
+  value: MIMEType.prototype.toString,
+  writable: true,
+};
+Object.defineProperty(MIMEType.prototype, 'toJSON', mimeTypeJSONDescriptor);
+
+// These properties are installed by the unchanged registration statements.
+interface MIMEParams extends Iterable<[string, string]> {
+  toJSON(): string;
+}
+interface MIMEType {
+  toJSON(): string;
+}
+export { MIMEParams, MIMEType };
