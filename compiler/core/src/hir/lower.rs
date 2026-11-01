@@ -24617,34 +24617,7 @@ impl<'a> FuncBuilder<'a> {
     /// a module-scope variable holding a function, an enum, a builtin this
     /// compiler does not provide.
     fn is_module_scope(&self, declaration: NodeId) -> bool {
-        // **A lexical loop binding is not module scope**, and `reached_by_name` asks this
-        // rather than the collector: closures are collected first, so it
-        // cannot consult `ModuleScope::variables`. Both call
-        // `declared_in_a_loop_scope` for heads and bodies -- one syntactic rule,
-        // because two would disagree again and the disagreement is the defect
-        // this closes.
-        if self.declared_in_a_loop_scope(declaration) {
-            return false;
-        }
-        let mut at = self.node(declaration).parent;
-        for _ in 0..64 {
-            // No parent left is the file itself, which is module scope.
-            let Some(node) = at else { return true };
-            match self.kind_of(node) {
-                Some(syntax::SOURCE_FILE) => return true,
-                Some(
-                    syntax::FUNCTION_DECLARATION
-                    | syntax::FUNCTION_EXPRESSION
-                    | syntax::ARROW_FUNCTION
-                    | syntax::METHOD_DECLARATION
-                    | syntax::CONSTRUCTOR
-                    | syntax::GET_ACCESSOR
-                    | syntax::SET_ACCESSOR,
-                ) => return false,
-                _ => at = self.node(node).parent,
-            }
-        }
-        false
+        self.snapshot.scopes.is_module_scope(declaration)
     }
 
     /// Whether a symbol's binding is created afresh on every loop iteration.
@@ -24959,156 +24932,8 @@ impl<'a> FuncBuilder<'a> {
         self.is_within_a_function(id)
     }
 
-    /// Whether this declaration is a loop head's **`let` or `const`**.
-    ///
-    /// `var` is excluded, and that exclusion was learned the expensive way.
-    /// This function skipped it too for one commit, on the reasoning that
-    /// `lower_for` binds the head variable as a block parameter whatever the
-    /// keyword, so the global was unwritten either way. **The reasoning was
-    /// wrong and the census said so**: three files that read the head's `var`
-    /// *after* the loop —
-    ///
-    /// ```js
-    /// for (var i = 0; i < 10; i++) {}
-    /// if (i !== 10) throw new Test262Error(…);
-    /// ```
-    ///
-    /// — passed before and refused after, so skipping `var` cost the read its
-    /// binding and the claim that `var` "was already a local in every way
-    /// except the one that produced the wrong answer" was false.
-    ///
-    /// **The conclusion held and the reason given for it did not.** This said
-    /// "the global was being written after all", and it is not written at all.
-    /// Measured 2026-09-20, `for (var i = 0; i < 3; i++) {}` and then:
-    ///
-    /// ```text
-    ///     const snap = i;                 3    module scope, agrees with node
-    ///     function f() { return i; }      0    node says 3
-    ///     const g = () => i;  g()         0    node says 3
-    /// ```
-    ///
-    /// So the three files above pass because a module-scope read resolves to
-    /// the loop's own binding, not because a global behind it holds 3. Skipping
-    /// `var` took that binding away, which is what broke them — a different
-    /// mechanism reaching the same verdict, and the verdict is still don't skip.
-    ///
-    /// **And the unfixed part is wider than a closure, in two directions.**
-    ///
-    /// It was recorded as "a closure over a `for` loop's `var` at module
-    /// scope". The second line above has no closure in it: *any* function
-    /// reading such a name is wrong. And it is not only `for` — all three head
-    /// forms, with a body-assigned `var` as the control that stays right:
-    ///
-    /// ```text
-    ///     for (var i = 0; i < 3; i++) {}     f() -> 0            node 3
-    ///     for (var e of [10, 20, 30]) {}     f() -> 0            node 30
-    ///     for (var k in { a: 1, b: 2 }) {}   f() -> undefined    node "b"
-    ///     var b; for (…) { b = j; }          f() -> 2            node 2
-    /// ```
-    ///
-    /// **The answer is the global's zero, not "the loop's first value"**, and
-    /// that phrasing survived because the only shape ever tried was
-    /// `for (var i = 0; …)`, where the two are both 0. `for...of` separates
-    /// them: the first value is 10 and the answer is 0.
-    ///
-    /// Which settles the mechanism rather than leaving it inferred. The head is
-    /// bound as a block parameter and **nothing ever stores through to the
-    /// global**, so a reader outside that block sees a slot that was never
-    /// written. The body-assigned control is right because an ordinary
-    /// assignment does store.
-    ///
-    /// Eight further statement forms were checked and all agree with node --- a
-    /// `var` written in a `switch`, a `try`, a `catch`, a `finally`, a nested
-    /// loop's body, a `do`/`while`, and one declared inside an `if` block. So
-    /// the extent is the head binding and nothing else, which is worth as much
-    /// as the failing cases: a fix that changes any of these has overreached.
-    ///
-    /// Pre-existing rather than introduced by the skip: a binary built
-    /// 2026-09-18 answers identically.
-    fn declared_in_a_loop_scope(&self, id: NodeId) -> bool {
-        let Some(list) = self.ancestor(id, syntax::VARIABLE_DECLARATION_LIST) else {
-            return false;
-        };
-        if !matches!(
-            nts_semantic_schema::VariableKind::from_flags(self.node(list).flags),
-            nts_semantic_schema::VariableKind::Let | nts_semantic_schema::VariableKind::Const
-        ) {
-            return false;
-        }
-        // Body lexicals are instantiated on each iteration too. The generic
-        // loop-body lowering binds them locally, so capture discovery and
-        // global collection must not give them a second, unwritten global.
-        // `var` returned above: it keeps its shared module storage.
-        let mut at = self.node(list).parent;
-        for _ in 0..self.snapshot.nodes.len() {
-            let Some(parent) = at else { return false };
-            match self.kind_of(parent) {
-                Some(
-                    syntax::FOR_STATEMENT
-                    | syntax::FOR_IN_STATEMENT
-                    | syntax::FOR_OF_STATEMENT
-                    | syntax::WHILE_STATEMENT
-                    | syntax::DO_STATEMENT,
-                ) => return true,
-                Some(
-                    syntax::SOURCE_FILE
-                    | syntax::FUNCTION_DECLARATION
-                    | syntax::FUNCTION_EXPRESSION
-                    | syntax::ARROW_FUNCTION
-                    | syntax::METHOD_DECLARATION
-                    | syntax::CONSTRUCTOR
-                    | syntax::GET_ACCESSOR
-                    | syntax::SET_ACCESSOR,
-                ) => return false,
-                _ => at = self.node(parent).parent,
-            }
-        }
-        false
-    }
-
     fn is_within_a_function(&self, id: NodeId) -> bool {
-        let mut at = self.node(id).parent;
-        while let Some(parent) = at {
-            if matches!(
-                self.kind_of(parent),
-                // **Every kind of function body, not the three with a name.**
-                //
-                // An arrow, a function expression and an accessor are function
-                // bodies too, and a `const` inside one is a local. Missing them
-                // meant `collect_module_scope` collected such a declaration as
-                // a module-scope global and deferred its initializer to
-                // `module#init` -- where the arrow's own parameters and its own
-                // receiver do not exist.
-                //
-                // The two diagnostics that came out of that both describe
-                // `module#init` truthfully and describe the source falsely:
-                //
-                //     const f = (k) => { const c = k + 1; return c; }
-                //     `k`, a name from an enclosing scope
-                //
-                //     count = (label) => { const c = this.#counts.get(label) }
-                //     `this` outside a method
-                //
-                // `k` is the arrow's own parameter and `this` is the instance.
-                // 192 refusals across eleven corpus modules said the first and
-                // about 170 said the second, and a census grouping by message
-                // ranked them as two unrelated items, neither of which named
-                // this function.
-                Some(
-                    syntax::FUNCTION_DECLARATION
-                        | syntax::METHOD_DECLARATION
-                        | syntax::CONSTRUCTOR
-                        | syntax::ARROW_FUNCTION
-                        | syntax::FUNCTION_EXPRESSION
-                        | syntax::GET_ACCESSOR
-                        | syntax::SET_ACCESSOR
-                )
-            ) {
-                return true;
-            }
-            at = self.node(parent).parent;
-        }
-        false
+        self.snapshot.scopes.is_within_a_function(id)
     }
 
     /// An expression's value, when it is one the checker or this compiler can
@@ -89394,6 +89219,7 @@ mod parameter_entries;
 mod printed;
 mod project_semantics;
 mod property_keys;
+mod scopes;
 mod string_positions;
 mod typed_signatures;
 mod uniform_inputs;

@@ -11,6 +11,7 @@ use rustc_hash::FxHashMap;
 /// AST while answering questions about the materialised one.
 pub(super) struct LoweringSnapshot<'a> {
     semantic: &'a SemanticSnapshot,
+    pub(super) scopes: super::scopes::Index,
     implementations: ImplementationIndex,
     /// Per symbol, its references that stand where a write lands. Built on
     /// the first question, in one pass over the nodes, by the classifier the
@@ -23,6 +24,7 @@ impl<'a> LoweringSnapshot<'a> {
     pub(super) fn new(semantic: &'a SemanticSnapshot) -> Self {
         Self {
             semantic,
+            scopes: super::scopes::Index::new(semantic),
             implementations: ImplementationIndex::build(semantic),
             written: OnceLock::new(),
         }
