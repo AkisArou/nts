@@ -1,0 +1,24 @@
+/*---
+description: A widened map value writes strings read through the original numeric array holder.
+features: [ts-array-contents, ts-array-widening, ts-arrays, ts-functions, ts-iteration, ts-typeof-operator, ts-unions, ts-numbers, ts-strings, ts-arrow-functions, ts-unsound-covariant-array, ts-map-set, ts-narrowing]
+---*/
+// Write through a widened map value; read through the original narrow holder; node preserves the actual elements, order and length.
+function check(n: number): void {
+  const xs: number[] = [-0, NaN, n];
+  const holder = new Map<string, number[]>([["slot", xs]]);
+  const writer: Map<string, (number | string)[]> = holder;
+  const target = writer.get("slot");
+  if (target === undefined) throw new Error("Missing writer array");
+  const text = "item:" + String(n);
+  target[2] = text;
+  target.push(text + "!");
+  const result = holder.get("slot");
+  if (result === undefined) throw new Error("Missing reader array");
+  assert.sameValue<unknown>(result, xs);
+  assert.sameValue<unknown>(result[2], text);
+  assert.sameValue(typeof result[2], "string");
+  assert.sameValue(result.length, 4);
+  assert.compareArray<unknown>(result, [-0, NaN, text, text + "!"]);
+  assert.compareArray(result.map(value => typeof value), ["number", "number", "string", "string"]);
+}
+for (const n of [-2, 0, 7]) check(n);
