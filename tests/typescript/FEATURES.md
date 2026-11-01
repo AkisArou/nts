@@ -166,6 +166,11 @@ one; add a row here in the same commit as the first case that uses it.
 33. **Object operations across typed views:** own-key order, copies, statics,
     property presence and shared aliases. [Object route contracts](#object-route-contracts)
     name their sources; `ts-object-route-*` identifies each area.
+28. **Integer-looking values across changing typed routes:** counters and
+    accumulators, bitwise and rounding results, typed-array storage, and
+    later widening to fractions, signed zero, NaN or larger doubles.
+    [Integer route contracts](#integer-route-contracts) name their sources;
+    `ts-integer-route-*` identifies each area.
 
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
@@ -213,6 +218,8 @@ flows through it.
 | `generics/` | a matrix of six positions by eight kinds of type argument, then the facets of type parameters |
 | `implicit-calls/` | implicit calls through interfaces, constrained generics, unions and declared class shapes, with exact call logs, state and results |
 | `implicit-calls-controls/` | explicit-call counterparts for implicit-call cases, preserving their instrumentation and observations |
+| `integer-routes/` | exact numeric stages when integer-looking values cross ranges, widen, wrap or clamp through typed routes, held to node |
+| `integer-routes-controls/` | matching computations unrolled into direct local number constants, with explicit scalar typed-array conversion |
 | `interfaces/` | dispatch through interfaces over classes and literals of different layouts, and the interface forms |
 | `iteration/` | the iteration protocols, generators, iterator helpers |
 | `json-routes/` | typed JSON parsing, narrowing, serialization and hooks with exact values, key order, outputs and callback logs |
@@ -515,6 +522,27 @@ Strict TypeScript checks each file as a script unless module-flagged, with
 all library diagnostics retained; the unchanged node oracle separately runs
 its `.mts` assembly. Existing bounds/length proofs and element-kind cases
 remain separate from these complete length-changing traversal histories.
+The `integer-routes/` matrix uses `<area>-<route>.ts` in place of
+combination cases. Each case has one `ts-integer-route-*` tag alongside
+existing syntax and carrier tags. At least eight inputs exercise the same
+route, including signed zeros, small integers, range boundaries, fractions,
+NaN and infinities where applicable. Fixed expectations check every numeric
+stage with `Object.is` and `typeof`, preserving signed zero and NaN as well
+as exact finite results. Array-index cases also retain absent reads.
+
+Its counterpart in `integer-routes-controls/` appends `-control` and
+writes each operand as a local `number` constant where it is used. Sequential
+computations become explicit constant stages in the same evaluation order,
+without loop-carried arithmetic state, stored operands, union narrowing,
+generic carriers or intervening helper calls. Typed-array controls compute
+the element conversion directly with scalar truncation, modulo or clamping.
+Input-selector loops and expectation tables organize the assertions; those
+tables never supply the computed operands. Inputs and assertions remain paired.
+
+Strict TypeScript checks each file as a script unless module-flagged, with
+all library diagnostics retained; the unchanged node oracle separately runs
+its `.mts` assembly. Existing number-route snapshots and typed-array element
+kind cases remain distinct from these successive integer-proof histories.
 
 The `lifetimes/` matrix likewise uses `<fact>-<route>-<detail>.ts` in place
 of combination cases: one `ts-lifetime-*` and one `ts-route-*` tag per
@@ -1141,6 +1169,20 @@ Bigint-route cases retain node's answer even where nts refuses a form.
 | indices | `indices-*` | 8 | 8 | Cached arithmetic indices including NaN and fractions, negative at offsets, saved and current countdowns, rebound and per-iteration captures, tuple tails and narrowed replacement arrays |
 
 Length-route cases retain node's answer even where nts refuses a form.
+### Integer route contracts
+
+| source | concepts |
+| --- | --- |
+| [Language, Numbers](../../docs/language/numbers.md#number) and [Integers proved from doubles](../../docs/language/numbers.md#integers-proved-from-doubles) | exact doubles when an integer range, whole-number or zero-sign fact stops holding |
+| [Foundations, Numbers](../../docs/foundations/numbers.md#integers-proved-from-doubles) | widening obligations for numeric fields, elements, signatures and loop-carried values |
+| ECMAScript [Number operations](https://tc39.es/ecma262/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number) and [Math object](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-math-object) | double arithmetic, signed zero, integer coercion, masked shifts, rounding and low-word multiplication |
+| ECMAScript [Type conversion](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-type-conversion) and [TypedArray objects](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-typedarray-objects) | signed and unsigned wrapping, truncation, clamp ties and number values read from integer elements |
+
+| area | case prefix | cases | controls | coverage |
+| --- | --- | ---: | ---: | --- |
+| counters | `counters-*` | 7 | 7 | Loop-carried fields, captures, generic and ordinary returns, update-clause indices and array accumulators cross 32-bit and 53-bit edges, go negative or gain half steps. |
+
+Integer-route cases retain node's answer even where nts refuses a form.
 Maintainers record backend results separately. Strict-rejected matrix
 forms are listed with their diagnostics in the pull request.
 
@@ -1561,6 +1603,8 @@ land without another open Unicode pull request.
 | `ts-array-writes` | writes and array construction through widened routes preserve values, length, order and holes | Objects, Arrays; ECMAScript, Array prototype methods | 40 | 0 |
 | `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3627 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 579 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3106 | 0 |
+| `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 509 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
@@ -1592,12 +1636,16 @@ land without another open Unicode pull request.
 | `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 1080 | 4 |
 | `ts-class-static-block` | a `static { }` block | conformance/classes/classStaticBlock; ts-eslint StaticBlock | 8 | 0 |
 | `ts-class` | a class declaration or expression | conformance/classes | 1775 | 29 |
+| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 1047 | 4 |
+| `ts-class-static-block` | a `static { }` block | conformance/classes/classStaticBlock; ts-eslint StaticBlock | 8 | 0 |
+| `ts-class` | a class declaration or expression | conformance/classes | 1724 | 29 |
 | `ts-class-value-route-exposure` | constructor metadata and new.target with exact construction, static observations and identities | Class value route contracts; typed paths | 18 | 0 |
 | `ts-class-value-route-factories` | class factories and mixins with exact construction, static observations and identities | Class value route contracts; typed paths | 12 | 0 |
 | `ts-class-value-route-selection` | classes selected at runtime with exact construction, static observations and identities | Class value route contracts; typed paths | 14 | 0 |
 | `ts-class-value-route-signatures` | construct signatures and generic factories with exact construction, static observations and identities | Class value route contracts; typed paths | 16 | 0 |
 | `ts-class-value-route-storage` | class values in storage with exact construction, static observations and identities | Class value route contracts; typed paths | 16 | 0 |
 | `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 811 | 1 |
+| `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 672 | 1 |
 | `ts-builtin-cast` | an own value asserted to a builtin constructor or object type keeps its runtime identity | builtin identity contracts; ts-eslint TSAsExpression | 76 | 0 |
 | `ts-builtin-identity` | the declaration or runtime value selects a builtin operation; spelling and asserted types do not establish identity | builtin identity contracts: Builtins, Feature identity; typed paths | 544 | 0 |
 | `ts-builtin-invocation` | call and construction preserve argument semantics through typed targets | builtin identity contracts; conformance/expressions/newOperator, callExpressions; typed paths | 60 | 0 |
@@ -1662,6 +1710,13 @@ land without another open Unicode pull request.
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 234 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
 | `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 681 | 0 |
+| `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 220 | 0 |
+| `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 725 | 0 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 3890 | 4 |
+| `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 133 | 0 |
+| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 205 | 0 |
+| `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
+| `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 629 | 0 |
 | `ts-implicit-accessor` | implicit getter and setter calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 138 | 0 |
 | `ts-implicit-conversion` | implicit valueOf, toString and Symbol.toPrimitive calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 114 | 0 |
 | `ts-implicit-iteration` | implicit iterator acquisition, stepping and closing through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 60 | 0 |
@@ -1684,10 +1739,14 @@ land without another open Unicode pull request.
 | `ts-inheritance` | `extends` between classes: super calls, super property access, the prototype chain | conformance/classes/classDeclarations/classHeritageSpecification; conformance/expressions/superCalls | 415 | 3 |
 | `ts-instanceof` | `instanceof`, and narrowing by it | conformance/expressions/typeGuards/typeGuardsWithInstanceOf | 411 | 0 |
 | `ts-instantiation-expression` | an instantiation expression (`f<number>`), erased | conformance/types/typeParameters/typeArgumentLists/instantiationExpressions; ts-eslint TSInstantiationExpression | 1 | 0 |
+| `ts-integer-route-counters` | counters and sums with exact numeric stages and representations | Integer route contracts; typed paths | 14 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 6 | 0 |
 | `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1246 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 16 | 0 |
 | `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 3880 | 0 |
+| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1137 | 0 |
+| `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 14 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 3472 | 0 |
 | `ts-json-replacers` | typed replacers, toJSON methods and space arguments preserve callback observations, selected keys and exact formatting | JSON.stringify; SerializeJSONProperty; SerializeJSONObject; SerializeJSONArray | 20 | 0 |
 | `ts-json-revivers` | declared reviver function routes preserve complete ordered key, value and holder observations through deletion and replacement | JSON.parse; InternalizeJSONProperty | 16 | 0 |
 | `ts-json-routes` | JSON values preserve exact parsed contents, serialization and callback observations across typed routes | JSON route contracts; typed paths | 110 | 0 |
@@ -1734,6 +1793,8 @@ land without another open Unicode pull request.
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
 | `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 1308 | 0 |
 | `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 2672 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 912 | 0 |
+| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 2217 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 20 | 0 |
 | `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 2280 | 0 |
 | `ts-object-route-key-order` | typed object enumeration preserves numeric ordering, string insertion histories, getter effects and symbol omission | Object route contracts; typed paths | 14 | 0 |
