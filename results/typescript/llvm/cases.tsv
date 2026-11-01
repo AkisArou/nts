@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":2,"backend":"llvm","commit":"916089acbd581f6145162a0b904bbe6262e67a58","compiler":"09997fca5eb9efeb","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":3,"backend":"llvm","commit":"94184f2b39ec68fa90c5ca0e0ec857cc7b5fe0b7","compiler":"ff292defb2ef3b3f","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/absent-routes-controls/bounds-array-generic-relative-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-array-index-signature-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-generic-grown-holes-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}

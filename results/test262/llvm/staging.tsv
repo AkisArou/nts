@@ -1,6 +1,6 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler cfadd4c6cbade722, commit f32cd26f1c61706fb81ebb9c0f021bbf583c573b, backend llvm, harness bbd3d84004e74dad; machine at start: 17.5 GB available, swap 7.9/31.5 GB, load 17.7/13.1 (1m/5m), 30 cores; 8 worker(s)
+# compiler ff292defb2ef3b3f, commit 94184f2b39ec68fa90c5ca0e0ec857cc7b5fe0b7, backend llvm, harness bbd3d84004e74dad; machine at start: 20 GB available, swap 9.1/31.5 GB, load 25.6/53.3 (1m/5m), 30 cores; 8 worker(s)
 test/staging/sm/Array/sort_native_string_nan.js	pass	
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
 test/staging/sm/BigInt/mod.js	pass	
