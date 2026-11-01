@@ -112,10 +112,16 @@ fn execute(case: &str, source: &str, provider: hir::Memory) -> Vec<String> {
     for name in &dual {
         let function = program.funcs.iter().find(|f| f.name == *name).unwrap();
         let entry = published.function(function).unwrap().unwrap();
+        let definition = llvm
+            .text
+            .lines()
+            .find(|line| {
+                line.starts_with("define ") && line.contains(&format!("@{}(", entry.symbol))
+            })
+            .unwrap();
         assert!(
-            llvm.text
-                .lines()
-                .any(|line| line.starts_with(&format!("define void @{}(ptr ", entry.symbol)))
+            definition.contains(&format!("void @{}(ptr ", entry.symbol)),
+            "{definition}"
         );
     }
     std::fs::write(dir.join("program.c"), c.writer.text()).unwrap();
