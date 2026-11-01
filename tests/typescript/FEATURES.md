@@ -1414,6 +1414,7 @@ land without another open Unicode pull request.
 | `ts-bigint-route-arithmetic` | arithmetic and wrapping with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 26 | 0 |
 | `ts-bigint-route-conversions` | conversions with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
 | `ts-bigint-route-storage` | bigints in storage with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
+| `ts-bigint-route-unions` | unions with number with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
 | `ts-builtin-subclass` | a class extending a built-in (Array, Error, Map) | conformance/es6/classDeclaration; typed paths | 76 | 0 |
 | `ts-call-route-population` | independent callback targets coexist in one typed registry | typed call routes: Language, Functions; Errors; Async | 12 | 0 |
 | `ts-call-route-receiver` | receiver identity and arguments through extracted or stored methods | typed call routes: Language, Functions; Errors; Async | 22 | 0 |
