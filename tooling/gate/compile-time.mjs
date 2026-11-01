@@ -15,7 +15,7 @@ import { measuredCompileEnvironment } from "./canonical-environment.ts";
 //
 // Compare launch-time user-space instructions for `nts hir --prepared` with
 // compile-times.tsv. Inheritance includes every compiler thread from exec and
-// any descendants; these 29 projects spawn no child processes. See cputime.mjs.
+// any descendants; these compiler inputs spawn no child processes. See cputime.mjs.
 // CPU seconds come from perf's waited-command rusage and validate the count;
 // missing or implausible readings fail closed, including for small modules.
 // A changed counter scope requires a fresh five-repeat baseline.
@@ -41,7 +41,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COUNTER_SCOPE, counterProblem, instructionsWork, spawnCounted } from "./cputime.mjs";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, compileWorkProblem, compileArm, compileCommand, readCounterTable } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, compileWorkProblem, compileArm, compileCommand, discoverCompileTimeFixtures, readCounterTable } from "./compile-counter.ts";
 import { withToken } from "./tokens.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -67,6 +67,7 @@ const modules = [
     .filter((e) => e.isDirectory() && existsSync(join(ROOT, "runtime/node", e.name, "tsconfig.json")))
     .map((e) => `runtime/node/${e.name}`),
   ...(existsSync(join(ROOT, "runtime/web-platform/tsconfig.json")) ? ["runtime/web-platform"] : []),
+  ...discoverCompileTimeFixtures(ROOT),
 ].sort();
 
 // Config evaluation would add Node/JIT work to a compiler-only tripwire.
@@ -148,7 +149,9 @@ let next = 0;
 await Promise.all(Array.from({ length: FROM ? 1 : Math.min(JOBS, modules.length) }, async () => {
   while (next < modules.length) {
     const module = modules[next++];
-    const r = FROM ? kept(module) : await lower(module);
+    // The integrity snapshot contains runtime projects only. The synthetic
+    // escape-analysis tripwire is lowered here on every compile-time run.
+    const r = FROM && module.startsWith("runtime/") ? kept(module) : await lower(module);
     const problem = counterProblem(r) ?? (r.work_profile !== COMPILE_WORK_PROFILE ? "incompatible compiler work profile" : null) ?? (r.status !== 0 ? "missing successful command status" : null);
     if (problem) {
       unmeasured.push(`${module}: ${problem}`);

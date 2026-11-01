@@ -1,3 +1,6 @@
+import { existsSync, readdirSync } from "node:fs";
+import { join, relative, sep } from "node:path";
+
 // Scope changes invalidate old baselines and kept listings. Inheritance covers
 // the exec's threads and descendants; the runtime hir population has no child
 // processes. CPU is perf's waited-command user+sys rusage in that same scope.
@@ -35,6 +38,25 @@ export function compileArm(args: readonly string[]): CompileArm {
 
 export function compileCommand(arm: CompileArm, module: string): string[] {
   return ["hir", "--prepared", "--checkers", String(COMPILE_CHECKERS), ...(arm === "rc" ? ["--rc"] : []), module];
+}
+
+/** Compile-time tripwire projects are discovered from their checked-in configs. */
+export function discoverCompileTimeFixtures(root: string): string[] {
+  const base = join(root, "tests/compile-time");
+  if (!existsSync(base)) return [];
+  const pending = [base];
+  const fixtures: string[] = [];
+  while (pending.length > 0) {
+    const directory = pending.pop()!;
+    const entries = readdirSync(directory, { withFileTypes: true });
+    if (entries.some(entry => entry.isFile() && entry.name === "tsconfig.json")) {
+      fixtures.push(relative(root, directory).split(sep).join("/"));
+    }
+    for (const entry of entries) {
+      if (entry.isDirectory()) pending.push(join(directory, entry.name));
+    }
+  }
+  return fixtures.sort();
 }
 
 export interface CounterRow {

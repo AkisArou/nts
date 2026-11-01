@@ -6,7 +6,22 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
-import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand } from "./compile-counter.ts";
+import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand, discoverCompileTimeFixtures } from "./compile-counter.ts";
+
+test("compile-time fixture discovery requires a config and includes each configured directory", t => {
+  const cache = join(homedir(), ".cache/nts-counter-tests");
+  mkdirSync(cache, { recursive: true });
+  const root = mkdtempSync(join(cache, "discovery-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  mkdirSync(join(root, "tests/compile-time"), { recursive: true });
+  assert.deepEqual(discoverCompileTimeFixtures(root), []);
+  mkdirSync(join(root, "tests/compile-time/fixture"), { recursive: true });
+  writeFileSync(join(root, "tests/compile-time/fixture/tsconfig.json"), "{}");
+  assert.deepEqual(discoverCompileTimeFixtures(root), ["tests/compile-time/fixture"]);
+  mkdirSync(join(root, "tests/compile-time/nested/another"), { recursive: true });
+  writeFileSync(join(root, "tests/compile-time/nested/another/tsconfig.json"), "{}");
+  assert.deepEqual(discoverCompileTimeFixtures(root), ["tests/compile-time/fixture", "tests/compile-time/nested/another"]);
+});
 
 test("counted work requires observed upstream single-threaded and Rayon settings",()=>{
   assert.throws(()=>compileWorkSettings({}),/RAYON_NUM_THREADS=1/);

@@ -10,7 +10,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as poll } from "node:timers/promises";
 import { Admission } from "./admission.ts";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, counterProblem, calibratedTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, discoverCompileTimeFixtures, counterProblem, calibratedTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -39,7 +39,7 @@ const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding:
 const modules = [
   ...readdirSync(join(root, "runtime/node"), { withFileTypes: true })
     .filter(e => e.isDirectory() && existsSync(join(root, "runtime/node", e.name, "tsconfig.json")))
-    .map(e => `runtime/node/${e.name}`), "runtime/web-platform",
+    .map(e => `runtime/node/${e.name}`), "runtime/web-platform", ...discoverCompileTimeFixtures(root),
 ].sort();
 // The inventoried command population has no config evaluator descendants.
 const configured = modules.filter(module => existsSync(join(root, module, "nts.config.ts")));
