@@ -1632,6 +1632,7 @@ land without another open Unicode pull request.
 | `ts-legacy-decorators` | `experimentalDecorators`: class, method, property, accessor and parameter decorators | conformance/decorators | 0 | 8 |
 | `ts-length-route-callbacks` | callbacks that change the array with complete indexed histories and final contents | Length route contracts; typed paths | 20 | 0 |
 | `ts-length-route-loops` | loops that change their own array with complete indexed histories and final contents | Length route contracts; typed paths | 24 | 0 |
+| `ts-length-route-shared` | shared arrays with complete indexed histories and final contents | Length route contracts; typed paths | 16 | 0 |
 | `ts-lifetime-acyclic` | a construction route closes a cycle that an acyclicity proof must include | lifetime contracts: Memory, How small the dynamic part can get; Cycles through foreign objects | 24 | 0 |
 | `ts-lifetime-borrow` | a borrowed reference remains live after its original anchor or read-only call ends | lifetime contracts: Memory, Where nts stands; The ladder of homes; record 0024 | 24 | 0 |
 | `ts-lifetime-frame` | an object or bounded string must outlive a frame after a retention route acts | lifetime contracts: Memory, The ladder of homes; Where nts stands | 28 | 0 |
