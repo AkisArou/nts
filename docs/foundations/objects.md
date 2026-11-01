@@ -211,7 +211,24 @@ the narrow type, as a `Map`'s and a `Set`'s contents do
   length follows its buffer through a resize, and a detached view has length
   0, so every index is out of range.
 - **A class extending a typed array** (`class Bytes extends Uint8Array {}`)
-  is that view: `new Bytes(8)` builds one.
+  is a view with a class of its own. Its constructor runs, and its
+  `super(...)` call makes the view, so `new Bytes(8)` answers `true` to both
+  `instanceof Bytes` and `instanceof Uint8Array`.
+  - Its descriptor is the view's in everything but its name and methods: the
+    same struct, size and printer. A run-time test for a view reads the
+    descriptor's kind, so a subclass is a view wherever one is asked for,
+    native code included.
+  - A method that makes a typed array from another (`subarray`, `slice`)
+    makes one of the receiver's class, and runs that class's constructor with
+    `(buffer, byteOffset, length)` when the class declares one, as
+    JavaScript's species rule does. A `static [Symbol.species]` that names a
+    known class makes that class; any other species is refused by name.
+  - `Object.prototype.toString` names the element type
+    (`[object Uint8Array]`), as JavaScript does; `constructor.name` names the
+    class.
+  - A subclass with fields of its own, or a constructor that writes elements
+    through `this`, is refused by name. The constructor runs today; the class
+    test and species are decided and not built yet.
 - **Not provided:** `Uint8ClampedArray` (its clamping store is a different
   operation), `Float16Array`, `BigInt64Array`, `BigUint64Array`.
 - Native code loads any width at any offset. A backend whose arrays are typed
@@ -303,3 +320,9 @@ and [objects](../records/notebooks/studies/primitives-objects.md) studies.
   ([Reads and writes](#arrays); 10-29,
   [log](../records/notebooks/decisions-log.md#compiler-10-29),
   [ideas and census](../records/notebooks/bounds-check-placement.md)).
+- **A typed-array subclass is its own class** with the view's
+  representation: its own descriptor, a view test that reads the descriptor's
+  kind, the view made with its class, and species through the receiver's
+  class, direct wherever the class is proved ([Typed arrays](#typed-arrays);
+  11-01,
+  [log](../records/notebooks/decisions-log.md#typed-array-subclasses-11-01)).

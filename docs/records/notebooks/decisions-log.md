@@ -1181,3 +1181,39 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   the narrowed representation, never at the predicate call. A false
   predicate over a typed value (an `A | B` narrowed to `B`) behaves as node
   does. Recorded in [types.md](../../language/types.md#decisions).
+
+## Typed-array subclasses (11-01)
+
+- **The decision.** A class extending a typed array is its own class with the
+  view's representation. The coordinator decided it under the user's
+  delegation, on ClaudeHelper's design note:
+  - its own descriptor, the runtime view's in everything but name and
+    methods, and a descriptor kind for views, which `instanceof Uint8Array`,
+    `ArrayBuffer.isView` and native hand-off read;
+  - `instanceof Bytes` takes the ordinary class path, no longer folded to
+    `false`;
+  - the view is made with its class where `super(...)` makes it: in C through
+    a creation helper that takes the descriptor, and on the JVM as a
+    generated class extending the element's view class, since a Java object
+    cannot change its class;
+  - species through a slot every view descriptor has. A chain with no
+    declared constructor makes the same view with the receiver's descriptor.
+    A declared constructor is called with `(buffer, byteOffset, length)`
+    through construction by identity. The call is direct wherever the closed
+    world proves the receiver's class, so a plain `Uint8Array` costs nothing;
+    only an open receiver loads the slot. A `static [Symbol.species]` that
+    names a known class makes it, and any other species getter is refused by
+    name;
+  - names: `[object Uint8Array]` from the element type, and `Bytes` from
+    `constructor.name` and inspect, with a guard per printer.
+- **Why.** `new Bytes(4) instanceof Bytes` was folded to `false`, and
+  `subarray` and `slice` lost the class: silent wrong answers, recorded in the
+  builtin-identity family. The class had no descriptor, so the test had
+  nothing to compare.
+- **Cost.** A program without typed-array subclasses changes only a view test,
+  from one pointer compare to a kind load, on erased paths. The typed-array
+  benchmark rows are measured as an A/B against main.
+- **How it lands.** Construction by identity (#144) makes the subclass's
+  constructor run. ClaudeHelper builds the rest on it: the failing fixtures
+  first, then the runtime kind, descriptors and creation, species, the JVM
+  classes, and the records last.
