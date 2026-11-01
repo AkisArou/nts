@@ -7,7 +7,7 @@ const log: string[] = [];
 let state = 0, expectedSource: object = {};
 interface Cursor { next(sent?: number): IteratorResult<number, number>; return(sent?: number): IteratorResult<number, number>; }
 interface Source { [Symbol.iterator](): Cursor; }
-function open(owner: object, count: number, base: number, argc: number): Cursor {
+function openCursor(owner: object, count: number, base: number, argc: number): Cursor {
   assert.sameValue(owner, expectedSource); state++; log.push(`iterator:${base}:${count}:${argc}:${state}`);
   let index = 0;
   const cursor: Cursor = {
@@ -24,8 +24,8 @@ function open(owner: object, count: number, base: number, argc: number): Cursor 
 }
 interface First extends Source { first: number; count: number; }
 interface Second extends Source { second: number; count: number; }
-function first(count: number): First { return { first: 10, count, [Symbol.iterator]() { return open(this, this.count, this.first, arguments.length); } }; }
-function second(count: number): Second { return { second: 20, count, [Symbol.iterator]() { return open(this, this.count, this.second, arguments.length); } }; }
+function first(count: number): First { return { first: 10, count, [Symbol.iterator]() { return openCursor(this, this.count, this.first, arguments.length); } }; }
+function second(count: number): Second { return { second: 20, count, [Symbol.iterator]() { return openCursor(this, this.count, this.second, arguments.length); } }; }
 function consume(source: First | Second): number[] {
   const out: number[] = [], cursor = source[Symbol.iterator]();
   for (let step = cursor.next(); !step.done; step = cursor.next()) out.push(step.value); return out;
