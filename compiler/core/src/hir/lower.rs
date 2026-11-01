@@ -9286,8 +9286,8 @@ fn collect_module_scope(
             continue;
         }
         let id = NodeId(u32::try_from(index).unwrap_or(u32::MAX));
-        // Inside a function, and therefore an ordinary local.
-        if probe.is_within_a_function(id) {
+        // The same storage decision capture discovery uses.
+        if !probe.is_module_scope(id) {
             continue;
         }
         // **A loop head's variable is not a module binding**, and it got a
@@ -9315,23 +9315,9 @@ fn collect_module_scope(
         // and this is a statement -- and neither can the test262 census, which
         // ranks refusals and this compiled and returned a number.
         //
-        // **`var` is skipped too, and that is the point rather than an
-        // oversight.** `let` is block-scoped so it was never a module binding;
-        // `var` hoists and genuinely is one, but `lower_for` does not write the
-        // global for it either, so the binding was already a local in every way
-        // except the one that produced the wrong answer. Skipping makes module
-        // scope behave exactly like a function body: the closure captures, and
-        // `rebinding_refusal` -- which was never reached before -- refuses a
-        // `var` head by name, as it already does inside a function.
-        //
-        // What that costs is stated rather than assumed: a *function* reading
-        // the head's `var` after the loop no longer resolves it, and refuses.
-        // It previously read the unwritten global and answered zero, so this
-        // trades a wrong answer for a refusal, which is the direction to trade
-        // in.
-        if probe.declared_in_a_loop_head(id) {
-            continue;
-        }
+        // Lexicals in a loop body are excluded by that same decision: their
+        // declarations execute per iteration and the body writes local storage.
+        // `var` retains its module route; this does not change its head writes.
 
         let children = probe.children(id);
         // The *first* child, and only when it is a name. A declaration's name
@@ -24631,13 +24617,13 @@ impl<'a> FuncBuilder<'a> {
     /// a module-scope variable holding a function, an enum, a builtin this
     /// compiler does not provide.
     fn is_module_scope(&self, declaration: NodeId) -> bool {
-        // **A loop head is not module scope**, and `reached_by_name` asks this
+        // **A lexical loop binding is not module scope**, and `reached_by_name` asks this
         // rather than the collector: closures are collected first, so it
         // cannot consult `ModuleScope::variables`. Both call
-        // `declared_in_a_loop_head` for that reason -- one syntactic rule,
+        // `declared_in_a_loop_scope` for heads and bodies -- one syntactic rule,
         // because two would disagree again and the disagreement is the defect
         // this closes.
-        if self.declared_in_a_loop_head(declaration) {
+        if self.declared_in_a_loop_scope(declaration) {
             return false;
         }
         let mut at = self.node(declaration).parent;
@@ -25039,7 +25025,7 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// Pre-existing rather than introduced by the skip: a binary built
     /// 2026-09-18 answers identically.
-    fn declared_in_a_loop_head(&self, id: NodeId) -> bool {
+    fn declared_in_a_loop_scope(&self, id: NodeId) -> bool {
         let Some(list) = self.ancestor(id, syntax::VARIABLE_DECLARATION_LIST) else {
             return false;
         };
@@ -25049,12 +25035,35 @@ impl<'a> FuncBuilder<'a> {
         ) {
             return false;
         }
-        self.node(list).parent.is_some_and(|parent| {
-            matches!(
-                self.kind_of(parent),
-                Some(syntax::FOR_STATEMENT | syntax::FOR_IN_STATEMENT | syntax::FOR_OF_STATEMENT)
-            )
-        })
+        // Body lexicals are instantiated on each iteration too. The generic
+        // loop-body lowering binds them locally, so capture discovery and
+        // global collection must not give them a second, unwritten global.
+        // `var` returned above: it keeps its shared module storage.
+        let mut at = self.node(list).parent;
+        for _ in 0..self.snapshot.nodes.len() {
+            let Some(parent) = at else { return false };
+            match self.kind_of(parent) {
+                Some(
+                    syntax::FOR_STATEMENT
+                    | syntax::FOR_IN_STATEMENT
+                    | syntax::FOR_OF_STATEMENT
+                    | syntax::WHILE_STATEMENT
+                    | syntax::DO_STATEMENT,
+                ) => return true,
+                Some(
+                    syntax::SOURCE_FILE
+                    | syntax::FUNCTION_DECLARATION
+                    | syntax::FUNCTION_EXPRESSION
+                    | syntax::ARROW_FUNCTION
+                    | syntax::METHOD_DECLARATION
+                    | syntax::CONSTRUCTOR
+                    | syntax::GET_ACCESSOR
+                    | syntax::SET_ACCESSOR,
+                ) => return false,
+                _ => at = self.node(parent).parent,
+            }
+        }
+        false
     }
 
     fn is_within_a_function(&self, id: NodeId) -> bool {
