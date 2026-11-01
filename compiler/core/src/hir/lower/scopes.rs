@@ -55,7 +55,7 @@ impl Index {
             let parent = index.scopes[owner];
             let kind = match node.kind {
                 NodeKind::Syntax(kind) => Some(kind),
-                _ => None,
+                NodeKind::List => None,
             };
             let function = kind.is_some_and(function_boundary);
             let in_loop = kind.is_some_and(loop_boundary);
