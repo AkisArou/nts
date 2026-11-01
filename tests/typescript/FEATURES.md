@@ -56,6 +56,11 @@ one; add a row here in the same commit as the first case that uses it.
    [Map and Set contents contracts](#map-and-set-contents-contracts)
    name the sources; `ts-contents-*` identifies the area.
 
+10. **Method selection across typed routes:** class and interface receivers,
+    lexical super, construction, accessors, statics and stored methods.
+    [Dispatch route contracts](#dispatch-route-contracts) name the sources;
+    `ts-dispatch-route-*` identifies the area.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -73,6 +78,8 @@ flows through it.
 | `call-routes-controls/` | single-change direct-call or nonthrowing counterparts for call-route cases |
 | `classes/` | fields under define semantics, parameter properties, inheritance, abstract, private, static, accessors |
 | `conversions/` | ToPrimitive under each operator, number and string conversions |
+| `dispatch-routes/` | method targets, receiver identities, entry order and state across typed class/interface routes, held to node |
+| `dispatch-routes-controls/` | stored class tags select plain function bodies with matching receivers, effects and assertions |
 | `enums/` | numeric, string, const, heterogeneous, computed, merged enums and their objects |
 | `errors/` | exceptions typed `unknown`, Error subclasses, finally |
 | `expressions/` | assertions, `satisfies`, non-null, tagged templates and operators, all erased or evaluated as written |
@@ -117,6 +124,18 @@ a direct call necessarily supplies a different receiver. Several inputs
 exercise each route, with exact argument, result, state and ordered-log
 checks on return and throw paths. Strict TypeScript and the pinned node
 oracle admit the cases; maintainers measure each backend.
+
+The `dispatch-routes/` matrix uses `<area>-<route>.ts` and one
+`ts-dispatch-route-*` tag with existing syntax and carrier tags. Each route
+receives at least three classes in a loop; static routes use class
+constructor receivers. Exact logs retain implementation labels, actual
+receiver identities, arguments, effects and order, with result and final
+state assertions. Matching `-control` files select plain functions by
+stored class tag. Super calls name their ancestor functions; saved method
+tags remain separate from later invocation receivers. Strict checks run
+as scripts unless module-flagged, including library diagnostics, before
+the unchanged node oracle. Existing soundness, call, implicit-call and
+capture families remain separate from these target-selection cases.
 
 The `lifetimes/` matrix likewise uses `<fact>-<route>-<detail>.ts` in place
 of combination cases: one `ts-lifetime-*` and one `ts-route-*` tag per
@@ -262,6 +281,23 @@ Every control preserves the case's instrumentation. Unsupported syntax
 or a current compiler refusal remains a finding; it does not change the
 program or its node answer. Backend results belong in the maintainers'
 records, not in the case or the feature tags.
+
+### Dispatch route contracts
+
+| source | concepts |
+| --- | --- |
+| [Objects, Classes](../../docs/foundations/objects.md#classes), [Interfaces](../../docs/foundations/objects.md#interfaces-satisfied-by-shape) and [Calls](../../docs/foundations/objects.md#calls) | class layouts and method selection across typed receiver views |
+| [Language, Methods](../../docs/language/functions.md#methods) and [this](../../docs/language/functions.md#this) | overrides, super, extracted methods and supplied/captured receivers |
+| TypeScript [Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html) and [Mixins](https://www.typescriptlang.org/docs/handbook/mixins.html) | abstract, implements, override, parameter properties and typed class factories |
+| ECMAScript [class definition evaluation](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-runtime-semantics-classdefinitionevaluation) | inheritance, accessors, fields and static blocks |
+
+| area | case prefix | cases | controls | coverage |
+| --- | --- | ---: | ---: | --- |
+| hierarchies | `hierarchy-*` | 8 | 8 | Declared hierarchy levels, passive levels, super chains, abstract members and concrete entries |
+
+Dispatch-route cases retain node's answer even where nts refuses a form.
+Maintainers record backend results separately. Strict-rejected matrix
+forms are listed with their diagnostics in the pull request.
 
 ### Proof contracts
 
@@ -449,12 +485,12 @@ land without another open Unicode pull request.
 <!-- tags:begin -->
 | tag | meaning | source | cases | pending |
 | --- | --- | --- | ---: | ---: |
-| `ts-abstract` | an `abstract` class and its abstract members | conformance/classes/classDeclarations/classAbstractKeyword; ts-eslint TSAbstractMethodDefinition, TSAbstractPropertyDefinition | 7 | 1 |
+| `ts-abstract` | an `abstract` class and its abstract members | conformance/classes/classDeclarations/classAbstractKeyword; ts-eslint TSAbstractMethodDefinition, TSAbstractPropertyDefinition | 13 | 1 |
 | `ts-accessor-fields` | an `accessor` field (auto-accessor), static, private or abstract | conformance/classes/propertyMemberDeclarations/autoAccessor; ts-eslint AccessorProperty, TSAbstractAccessorProperty | 0 | 7 |
 | `ts-accessors` | `get`/`set` accessors on a class or an object literal | conformance/classes/propertyMemberDeclarations; typed paths | 98 | 4 |
 | `ts-ambient` | an ambient declaration (`declare var/function/class/namespace/global`), which emits nothing | conformance/ambient; ts-eslint TSDeclareFunction, `declare` modifiers | 6 | 1 |
 | `ts-any` | an explicitly `any`-typed value, the dynamic escape hatch | conformance/types/any; ts-eslint TSAnyKeyword | 4 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 1537 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 1553 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 257 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 101 | 0 |
@@ -469,9 +505,9 @@ land without another open Unicode pull request.
 | `ts-call-route-throw` | exception propagation, rethrow identity and cleanup through typed call routes | typed call routes: Language, Functions; Errors; Async | 28 | 0 |
 | `ts-call-signatures` | a call signature in an interface or type literal: a callable object with properties | conformance/types/members; ts-eslint TSCallSignatureDeclaration | 22 | 0 |
 | `ts-class-expression` | a class expression, named or anonymous | conformance/classes/classExpressions; conformance/es6/classExpressions | 13 | 0 |
-| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 311 | 4 |
+| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 327 | 4 |
 | `ts-class-static-block` | a `static { }` block | conformance/classes/classStaticBlock; ts-eslint StaticBlock | 2 | 0 |
-| `ts-class` | a class declaration or expression | conformance/classes | 840 | 29 |
+| `ts-class` | a class declaration or expression | conformance/classes | 856 | 29 |
 | `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 426 | 1 |
 | `ts-builtin-cast` | an own value asserted to a builtin constructor or object type keeps its runtime identity | builtin identity contracts; ts-eslint TSAsExpression | 76 | 0 |
 | `ts-builtin-identity` | the declaration or runtime value selects a builtin operation; spelling and asserted types do not establish identity | builtin identity contracts: Builtins, Feature identity; typed paths | 544 | 0 |
@@ -498,6 +534,7 @@ land without another open Unicode pull request.
 | `ts-definite-assignment` | a definite assignment assertion (`x!: T`, `let x!: T`) | conformance/controlFlow/definiteAssignmentAssertions; ts-eslint PropertyDefinition.definite | 2 | 0 |
 | `ts-destructuring` | a typed destructuring declaration, parameter or assignment | conformance/es6/destructuring | 180 | 0 |
 | `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 8 | 0 |
+| `ts-dispatch-route-hierarchies` | class hierarchies with exact targets, receivers, order and state | Dispatch route contracts; typed paths | 16 | 0 |
 | `ts-dynamic-import` | a dynamic `import()` of a typed module | conformance/dynamicImport | 0 | 1 |
 | `ts-enum-computed` | an enum member whose initialiser is an expression, constant or not | conformance/enums | 6 | 0 |
 | `ts-enum-reverse-mapping` | a numeric enum member's value mapped back to its name | conformance/enums | 5 | 0 |
@@ -510,7 +547,7 @@ land without another open Unicode pull request.
 | `ts-exports` | export declarations, lists, renames and defaults, read back within the module | conformance/externalModules; conformance/es6/modules; ts-eslint ExportNamedDeclaration | 10 | 3 |
 | `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 64 | 0 |
 | `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 291 | 0 |
-| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 2108 | 4 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 2124 | 4 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 89 | 0 |
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 15 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 9 | 0 |
@@ -522,7 +559,7 @@ land without another open Unicode pull request.
 | `ts-index-signatures` | an index signature (`[key: string]: T`) on a type, interface or class | conformance/classes/indexMemberDeclarations; ts-eslint TSIndexSignature | 32 | 0 |
 | `ts-indexed-access` | an indexed access type (`T[K]`) | conformance/types/keyof; ts-eslint TSIndexedAccessType | 7 | 0 |
 | `ts-infer` | `infer` in a conditional type | conformance/types/conditional; ts-eslint TSInferType | 1 | 0 |
-| `ts-inheritance` | `extends` between classes: super calls, super property access, the prototype chain | conformance/classes/classDeclarations/classHeritageSpecification; conformance/expressions/superCalls | 196 | 3 |
+| `ts-inheritance` | `extends` between classes: super calls, super property access, the prototype chain | conformance/classes/classDeclarations/classHeritageSpecification; conformance/expressions/superCalls | 212 | 3 |
 | `ts-instanceof` | `instanceof`, and narrowing by it | conformance/expressions/typeGuards/typeGuardsWithInstanceOf | 197 | 0 |
 | `ts-instantiation-expression` | an instantiation expression (`f<number>`), erased | conformance/types/typeParameters/typeArgumentLists/instantiationExpressions; ts-eslint TSInstantiationExpression | 1 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 4 | 0 |
@@ -559,7 +596,7 @@ land without another open Unicode pull request.
 | `ts-optional-parameters` | a parameter marked `?` | conformance/functions; conformance/types/members | 31 | 0 |
 | `ts-optional-properties` | a property marked `?` in a type, a class or an interface | conformance/types/members; conformance/types/objectTypeLiteral | 18 | 0 |
 | `ts-overloads` | overload signatures on a function, method or constructor | conformance/functions/functionOverloads; ts-eslint TSDeclareFunction, TSEmptyBodyFunctionExpression | 15 | 0 |
-| `ts-override` | the `override` modifier on a method, accessor or field | conformance/override; ts-eslint MethodDefinition.override | 92 | 0 |
+| `ts-override` | the `override` modifier on a method, accessor or field | conformance/override; ts-eslint MethodDefinition.override | 108 | 0 |
 | `ts-parameter-properties` | a constructor parameter with a modifier, which declares and assigns a field | conformance/classes/constructorDeclarations; ts-eslint TSParameterProperty | 9 | 0 |
 | `ts-private-fields` | ECMAScript `#private` fields, methods and accessors | conformance/classes/members/privateNames | 8 | 2 |
 | `ts-private-keyword` | the `private` modifier, a compile-time check over an ordinary property | conformance/classes/members/accessibility; ts-eslint TSPrivateKeyword | 7 | 0 |
@@ -605,7 +642,7 @@ land without another open Unicode pull request.
 | `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 80 | 0 |
 | `ts-this-parameter` | a `this` parameter, which is erased | conformance/types/thisType; conformance/functions | 86 | 0 |
 | `ts-this-type` | the polymorphic `this` type | conformance/types/thisType | 2 | 0 |
-| `ts-this` | `this` in methods, arrow fields and detached calls | conformance/expressions/thisKeyword | 120 | 1 |
+| `ts-this` | `this` in methods, arrow fields and detached calls | conformance/expressions/thisKeyword | 136 | 1 |
 | `ts-to-primitive` | an object converted to a primitive: `valueOf`, `toString`, `Symbol.toPrimitive` | typed paths | 89 | 0 |
 | `ts-to-string` | an object converted to a string by its `toString` | typed paths | 52 | 0 |
 | `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 2 | 0 |
