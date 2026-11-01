@@ -34,7 +34,7 @@ fn begin(
     }
     let mut request = json!({"kind":kind,"mode":"prepare","context":super::case_costs::project_context(),
         "files":files.into_iter().map(|(name,path)| json!({"name":name,"path":path})).collect::<Vec<_>>(),
-        "values":{"differential_harness":include_str!("lib.rs"),"cwd":std::env::current_dir().ok()}});
+        "values":{"differential_harness":include_str!("lib.rs"),"output_protocol":include_str!("output.rs"),"cwd":std::env::current_dir().ok()}});
     request["absent"] = Value::Array(absent.into_iter().map(|path| json!(path)).collect());
     request["tools"] = Value::Array(tools.into_iter().map(Value::String).collect());
     request["values"]["options"] = values;
