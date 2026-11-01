@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-captured-number-keeps-every-writer",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-captured-number-keeps-every-writer/src/main.ts",
+      "signature": "e1f0e008dbb1f060324926e355a9f9ae3ca50dd467e57c6f5206291cabfa33af",
+      "keys": {
+        "c": "e201b0c963d20d72c4a5012c4867b936",
+        "jvm": "02e3c7a0f2a8ad8e9ab88292579f916e",
+        "llvm": "7bdb884253525d423b09d7d3c0a75800"
+      },
+      "cases_sha256": "ddebe0600c530bdac0077cf830a99e527f34ed24e511bda486a955aa7a398408",
+      "driver_sha256": "58a123a820381823300c638d0c68fda954710bd23837116e9a9b11cca06f4d57",
+      "populations": {
+        "ordinary": {
+          "count": 29,
+          "cases_sha256": "89998ef32afc431e643a94f71a8a63d28f5ace521fdf1ec38f419281e2f9449b"
+        },
+        "retained": {
+          "count": 29,
+          "cases_sha256": "13330648aa962400cfba0d3c1c63ba9e3fcbe4020dbb1bcbbb031bcd96b16492"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}
