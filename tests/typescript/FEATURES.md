@@ -142,6 +142,11 @@ one; add a row here in the same commit as the first case that uses it.
    subclasses. [Layout route contracts](#layout-route-contracts) name the
    sources; `ts-layout-route-*` identifies each area and its plain controls.
 
+28. **Array lengths across typed mutation routes:** cached and live bounds,
+    callback visitation, shared mutable views, resizable buffers and indices
+    after a change. [Length route contracts](#length-route-contracts)
+    name their sources; `ts-length-route-*` identifies each area.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -188,6 +193,8 @@ flows through it.
 | `iterator-routes-controls/` | the same protocol advanced and closed explicitly, with matching inputs, effects and observations |
 | `layout-routes/` | exact class fields, presence, order, identity and state across base, structural, private, static and builtin-subclass routes |
 | `layout-routes-controls/` | plain field-by-field literals, explicit kinds and private sidecars or builtin holders preserving the same observations |
+| `length-routes/` | current indexed values, lengths and visit histories while arrays through typed routes grow, shrink, recover or detach, held to node |
+| `length-routes-controls/` | the same computation with local arrays, stable copies or immediate fresh bounds before indexed accesses |
 | `lifetimes/` | lifetime facts followed by a retention or observation route, allocation churn and exact checks, with node as the oracle |
 | `lifetimes-controls/` | single-change counterparts and measured findings for lifetime cases, with node as the oracle |
 | `literal-types/` | literal types and the values they admit, `as const`, template literal types |
@@ -384,6 +391,28 @@ says `flags: [module]`, with strict TypeScript and all library diagnostics
 retained. The unchanged node oracle separately assembles an `.mts` module.
 Existing basic class metadata and method-dispatch cases remain separate
 from these constructor-storage, factory and class-selection histories.
+
+The `length-routes/` matrix uses `<area>-<route>.ts` in place of
+combination cases. Each case has one `ts-length-route-*` tag alongside
+existing syntax and container tags. Empty, singleton and longer shapes
+exercise one typed route while array length changes. Whole fixed logs retain
+every observed index, value and current length, with exact final contents,
+lengths and any method result. Hole presence, zeroed regrowth and ignored
+typed-array writes are checked where they distinguish the behavior.
+
+Its counterpart in `length-routes-controls/` appends `-control` and
+removes the invalidation route at the read: one local array, an independent
+stable copy, or a fresh bound immediately before access. Mutating callbacks
+become explicit loops, called writers are inlined, and retained readers become
+direct reads. Cached visit schedules stay schedules; they do not authorize
+unchecked reads after a mutation. Every counterpart keeps the same inputs,
+log and assertions. Sort uses the pinned node's observed comparison schedule
+over an immutable ascending copy, with source mutations recorded separately.
+
+Strict TypeScript checks each file as a script unless module-flagged, with
+all library diagnostics retained; the unchanged node oracle separately runs
+its `.mts` assembly. Existing bounds/length proofs and element-kind cases
+remain separate from these complete length-changing traversal histories.
 
 The `lifetimes/` matrix likewise uses `<fact>-<route>-<detail>.ts` in place
 of combination cases: one `ts-lifetime-*` and one `ts-route-*` tag per
@@ -917,6 +946,23 @@ Class-value-route cases retain node's answer even where nts refuses a form.
 Maintainers record backend results separately. Strict-rejected matrix
 forms are listed with their diagnostics in the pull request.
 
+### Length route contracts
+
+| source | concepts |
+| --- | --- |
+| [Objects, Arrays](../../docs/foundations/objects.md#arrays) and [Typed arrays](../../docs/foundations/objects.md#typed-arrays) | same-array bounds, aliases and effects that end length facts, views over changing buffers |
+| ECMAScript [Array objects and methods](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-objects) and [TypedArray objects](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-typedarray-objects) | mutation, live iteration, callback snapshots, hole visitation, index normalization and current view lengths |
+| ECMAScript [ArrayBuffer objects](https://tc39.es/ecma262/multipage/structured-data.html#sec-arraybuffer-objects) | resize, zeroed regrowth, offset recovery and transfer detachment |
+| TypeScript [Object types](https://www.typescriptlang.org/docs/handbook/2/objects.html), including readonly arrays and tuples | mutable aliases, declared element routes and claims that do not freeze a runtime array |
+
+| area | case prefix | cases | controls | coverage |
+| --- | --- | ---: | ---: | --- |
+| loops | `loops-*` | 12 | 12 | Cached and live for bounds, for-of, while and do-while with push, pop, shift, unshift, splice and length assignment, including direct and typed-parameter mutations |
+
+Length-route cases retain node's answer even where nts refuses a form.
+Maintainers record backend results separately. Strict-rejected matrix
+forms are listed with their diagnostics in the pull request.
+
 ### Proof contracts
 
 | source | concepts |
@@ -1277,7 +1323,7 @@ land without another open Unicode pull request.
 | `ts-array-representation` | concrete element storage crosses a wider reader with exact payloads, identities and slot presence | Language, Types, A type is a layout; Objects, Arrays | 24 | 0 |
 | `ts-array-widening` | one array crosses wider, readonly, generic, holder or tuple views without changing stored values | Language, Types, Decisions; Array contents contracts | 34 | 0 |
 | `ts-array-writes` | writes and array construction through widened routes preserve values, length, order and holes | Objects, Arrays; ECMAScript, Array prototype methods | 40 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3105 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3129 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 507 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 101 | 0 |
@@ -1351,9 +1397,9 @@ land without another open Unicode pull request.
 | `ts-exponent` | the `**` operator and `**=` | conformance/es7/exponentiationOperator | 2 | 0 |
 | `ts-export-equals` | `export =` | conformance/externalModules; ts-eslint TSExportAssignment | 0 | 4 |
 | `ts-exports` | export declarations, lists, renames and defaults, read back within the module | conformance/externalModules; conformance/es6/modules; ts-eslint ExportNamedDeclaration | 10 | 3 |
-| `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 206 | 0 |
+| `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 230 | 0 |
 | `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 723 | 0 |
-| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 3888 | 4 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 3892 | 4 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 133 | 0 |
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 204 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
@@ -1383,7 +1429,7 @@ land without another open Unicode pull request.
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 6 | 0 |
 | `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1137 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 14 | 0 |
-| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 3458 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 3482 | 0 |
 | `ts-json-replacers` | typed replacers, toJSON methods and space arguments preserve callback observations, selected keys and exact formatting | JSON.stringify; SerializeJSONProperty; SerializeJSONObject; SerializeJSONArray | 20 | 0 |
 | `ts-json-revivers` | declared reviver function routes preserve complete ordered key, value and holder observations through deletion and replacement | JSON.parse; InternalizeJSONProperty | 16 | 0 |
 | `ts-json-routes` | JSON values preserve exact parsed contents, serialization and callback observations across typed routes | JSON route contracts; typed paths | 110 | 0 |
@@ -1404,6 +1450,7 @@ land without another open Unicode pull request.
 | `ts-layout-route-structural` | class instances and class-shaped literals retain exact data and identities across smaller structural views, generics and object narrowing | TypeScript Relationships Between Classes; in-operator Narrowing | 16 | 0 |
 | `ts-layout-routes` | class data retains exact fields, presence, order, identity and alias writes across typed layout routes beside explicit plain-object controls | Layout route contracts; typed paths | 70 | 0 |
 | `ts-legacy-decorators` | `experimentalDecorators`: class, method, property, accessor and parameter decorators | conformance/decorators | 0 | 8 |
+| `ts-length-route-loops` | loops that change their own array with complete indexed histories and final contents | Length route contracts; typed paths | 24 | 0 |
 | `ts-lifetime-acyclic` | a construction route closes a cycle that an acyclicity proof must include | lifetime contracts: Memory, How small the dynamic part can get; Cycles through foreign objects | 24 | 0 |
 | `ts-lifetime-borrow` | a borrowed reference remains live after its original anchor or read-only call ends | lifetime contracts: Memory, Where nts stands; The ladder of homes; record 0024 | 24 | 0 |
 | `ts-lifetime-frame` | an object or bounded string must outlive a frame after a retention route acts | lifetime contracts: Memory, The ladder of homes; Where nts stands | 28 | 0 |
@@ -1423,8 +1470,8 @@ land without another open Unicode pull request.
 | `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 10 | 0 |
 | `ts-new-target` | `new.target` | conformance/es6/newTarget | 83 | 0 |
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
-| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 912 | 0 |
-| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 2203 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 936 | 0 |
+| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 2227 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 20 | 0 |
 | `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 1903 | 0 |
 | `ts-number-route-division` | division and remainder across typed numeric carriers with exact node values | Numeric route contracts: Language and Foundations, Numbers | 16 | 0 |
@@ -1480,7 +1527,7 @@ land without another open Unicode pull request.
 | `ts-satisfies` | the `satisfies` operator, which leaves its value and the value's type alone | conformance/expressions/typeSatisfaction; ts-eslint TSSatisfiesExpression | 5 | 0 |
 | `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 295 | 1 |
 | `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 184 | 4 |
-| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 1533 | 0 |
+| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 1557 | 0 |
 | `ts-scope-route-bindings` | reads and writes by binding kind with exact values, identities and read/write order | Scope route contracts; typed paths | 24 | 0 |
 | `ts-scope-route-control-flow` | top-level control flow with exact values, identities and read/write order | Scope route contracts; typed paths | 16 | 0 |
 | `ts-scope-route-initialization` | initialization order with exact values, identities and read/write order | Scope route contracts; typed paths | 16 | 0 |
