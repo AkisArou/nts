@@ -1,0 +1,35 @@
+/*---
+description: Control for values-closure-array-isarray; carry separate typed payloads in one kind record.
+features: [ts-union-routes, ts-union-route-values, ts-functions, ts-iteration, ts-arrays, ts-objects, ts-numbers, ts-bigint, ts-strings, ts-null-undefined, ts-typeof-operator, ts-interfaces, ts-unknown, ts-closures, ts-function-types]
+---*/
+// Keep the storage and observations; replace the union and narrowing with required payload fields and kind branches.
+interface EdgePoint { id: number; }
+interface EdgeRecord { kind: string; num: number; str: string; big: bigint; bool: boolean; nil: null; undef: undefined; ref: EdgePoint; text: string; arrayLength: number; }
+function fixture(kind: string, num: number, str: string, big: bigint, bool: boolean, ref: EdgePoint, text: string): EdgeRecord { return { kind, num, str, big, bool, nil: null, undef: undefined, ref, text, arrayLength: 1 }; }
+function same(actual: unknown, expected: unknown): void {
+  assert.sameValue(Object.is(actual, expected), true); assert.sameValue(typeof actual, typeof expected);
+}
+const marker: EdgePoint = { id: 7 };
+const rows: EdgeRecord[] = [
+  fixture("num", -0, "decoy", 5n, true, marker, "0"), fixture("str", 19, "", 7n, true, marker, ""),
+  fixture("big", 23, "decoy", 0n, true, marker, "0"), fixture("bool", 29, "decoy", 9n, false, marker, "false"),
+  fixture("nil", 31, "decoy", 11n, true, marker, "null"), fixture("undef", 37, "decoy", 13n, true, marker, "undefined"),
+  fixture("ref", 41, "decoy", 17n, true, marker, "[object Object]"), fixture("num", NaN, "decoy", 19n, true, marker, "NaN")
+];
+function expected(row: EdgeRecord, zero: boolean): unknown { if (row.kind === "num") return zero && row.num === 0 ? 0 : row.num; if (row.kind === "str") return row.str; if (row.kind === "big") return row.big; if (row.kind === "bool") return row.bool; if (row.kind === "nil") return row.nil; if (row.kind === "undef") return row.undef; return row.ref; }
+function make(row: EdgeRecord): EdgeRecord { return { kind: row.kind, num: row.num, str: row.str, big: row.big, bool: row.bool, nil: row.nil, undef: row.undef, ref: row.ref, text: row.text, arrayLength: row.arrayLength }; }
+function observe(value: EdgeRecord, log: string[]): unknown {
+  if (value.kind !== "ref") { log.push("array"); same(value.arrayLength, 1); return expected(value, false); }
+  log.push("object"); same(value.ref.id, 7); return value.ref;
+}
+const log: string[] = [], branches: string[] = ["array", "array", "array", "array", "array", "array", "object", "array"];
+function retain(first: EdgeRecord): { put: (value: EdgeRecord) => void; get: () => EdgeRecord } { let saved = first; return { put(value) { saved = value; }, get() { return saved; } }; }
+const storage = retain(make(rows[0]));
+for (const round of [0, 1]) for (const row of rows) {
+  const current = make(row);
+  storage.put(current); const read = storage.get();
+  same(read, current);
+  const actual = observe(read, log); same(actual, expected(row, false));
+  const printed = String(actual); same(printed, row.text); console.log(printed);
+}
+assert.compareArray(log, branches.concat(branches));
