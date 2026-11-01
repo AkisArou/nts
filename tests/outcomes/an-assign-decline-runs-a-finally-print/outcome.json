@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "aborted",
+  "nts": "exit 1; nts: refused: an Object.assign value outside the target field's native representation",
+  "node": "exit 0",
+  "measured_with": "85124a00bf305e36",
+  "source": "measured"
+}
