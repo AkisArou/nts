@@ -3881,6 +3881,7 @@ mod result_channel {
 
 #[cfg(test)]
 mod pairing {
+    use super::output;
     use super::{HirType, Run, Testable, report};
     use std::collections::HashSet;
 

@@ -257,14 +257,16 @@ mod tests {
         .unwrap();
         let mut frontend =
             nts_frontend_ts::Frontend::new(&scratch.path).with_checkers(std::num::NonZeroU16::MIN);
-        let source = |index: usize, wrong_print: bool| {
+        let source = |index: usize, wrong_print: bool, errors: bool| {
             format!(
                 "export function probe(n:number):number {{ const printed={}; console.{}(printed[0]); const values=[n]; const result=values[{index}]; console.{}('after'); return result; }}",
                 if wrong_print {
                     "new Array<number>(1)"
                 } else {
                     "[0]"
-                }
+                },
+                if errors { "error" } else { "log" },
+                if errors { "error" } else { "log" }
             )
         };
         for errors in [false, true] {

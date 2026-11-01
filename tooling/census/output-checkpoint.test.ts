@@ -22,9 +22,14 @@ test("a JavaScript checkpoint from before prefix validation cannot be resumed", 
     // Only selection is supplied by this fixture. The real runner performs
     // its compiler self-checks and reads the controlled checkpoint itself.
     const protocol = join(scratch, "select");
-    const selected = { path, schedule: "planned", variant_id: `${path}#strict`, strict_prefix: "",
-      includes: [], features: [], flags: [], source_hash: "test", body_hash: "test", function_token: false };
-    writeFileSync(protocol, `#!${process.execPath}\nconsole.log(${JSON.stringify(JSON.stringify(selected))});\n`, { mode: 0o700 });
+    const overrides = JSON.parse(readFileSync(join(root, "tooling/census/test262-evidence-overrides.json"), "utf8"));
+    const catalog = [...new Set<string>([path, ...overrides.overrides.flatMap(entry => entry.positives)])];
+    const selected = catalog.map(path => ({ path, schedule: "planned", variant_id: `${path}#strict`, strict_prefix: "",
+      includes: [], features: [], flags: [], source_hash: "test", body_hash: "test", function_token: false }));
+    writeFileSync(protocol, `#!${process.execPath}\nconsole.log(${JSON.stringify(selected.map(row => JSON.stringify(row)).join("\n"))});\n`, { mode: 0o700 });
+    const population = join(scratch, "population.tsv");
+    const header = readFileSync(join(root, "results/test262/c/language.tsv"), "utf8").split("\n").slice(0, 3).join("\n");
+    writeFileSync(population, `${header}\n${path}\tpass\t\n`);
     const fingerprint = createHash("sha256").update(readFileSync(binary)).digest("hex").slice(0, 16);
     const rows = join(scratch, "rows.jsonl"), report = join(scratch, "report.json");
     for (const version of [undefined, OUTPUT_PREFIX_VERSION]) {
@@ -33,7 +38,7 @@ test("a JavaScript checkpoint from before prefix validation cannot be resumed", 
         JSON.stringify({ path, bucket: "strict-pass" }) + "\n");
       rmSync(report, { force: true });
       const run = spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--under", "test/language",
-        "--jobs", "1", "--sample", "1", "--rows", rows, "--resume", "--json", report], {
+        "--jobs", "1", "--recorded", population, "--rows", rows, "--resume", "--json", report], {
         cwd: root, encoding: "utf8", timeout: 120_000, maxBuffer: 16 * 1024 * 1024,
         env: { ...process.env, NTS_BIN: binary, NTS_TEST262_PROTOCOL: protocol, NTS_CENSUS_DIR: join(scratch, "run") },
       });
