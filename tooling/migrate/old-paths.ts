@@ -25,7 +25,7 @@ const root = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 const TEXT = /\.(ts|tsx|mts|mjs|js|cjs|json|jsonc|ya?ml|toml|sh|bash|py|rs|md|txt|known|tsv|cfg|mk)$|(^|\/)(Makefile|Dockerfile|\.gitignore|\.gitattributes)$/;
 
 function tracked(): string[] {
-  const out = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8" });
+  const out = execFileSync("git", ["ls-files", "-z"], { cwd: root, encoding: "utf8", maxBuffer: Infinity });
   return out.split("\0").filter(Boolean);
 }
 

@@ -18,7 +18,8 @@ export function dependencyCache(root:string):string {
 }
 const failure=(message:string)=>new ToolingInstrumentError("tooling-setup",`dependency inputs: ${message}`);
 function git(repo:string,...args:string[]):string {
-  return execFileSync("git",args,{cwd:repo,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  // Repository inventories grow with the corpus, not a subprocess buffer cap.
+  return execFileSync("git",args,{cwd:repo,encoding:"utf8",maxBuffer:Infinity,stdio:["ignore","pipe","pipe"]}).trim();
 }
 function hasDependencies(tree:string):boolean {
   if(!existsSync(join(tree,"pnpm-lock.yaml"))) {
@@ -57,7 +58,7 @@ function assertPrivate(root:string,tree:string):void {
   if(realpathSync(root)===realpathSync(tree))throw failure("prepare a private tree; the shared checkout is never an installation target");
 }
 function removeModules(tree:string,importers:string[]):void {
-  const files=execFileSync("git",["ls-files","-z"],{cwd:tree,encoding:"utf8"}).split("\0").filter(Boolean);
+  const files=execFileSync("git",["ls-files","-z"],{cwd:tree,encoding:"utf8",maxBuffer:Infinity}).split("\0").filter(Boolean);
   const owners=new Set(importers),tracked=new Set<string>();
   for(const file of files) {
     const parts=file.split("/");

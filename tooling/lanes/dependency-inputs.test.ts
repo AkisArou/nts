@@ -1,0 +1,41 @@
+import assert from "node:assert/strict";
+import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
+import {tmpdir} from "node:os";
+import {join} from "node:path";
+import {test} from "node:test";
+import {spawnTest} from "../gate/test-wait.ts";
+import {dependencyCache,installDependencies} from "./dependency-inputs.ts";
+import {withPackageManager} from "./package-manager.ts";
+
+test("dependency preparation and old-paths accept a tracked inventory larger than 1 MiB",async t=>{
+  const scratch=mkdtempSync(join(tmpdir(),"nts-dependency-inventory-"));
+  const root=join(scratch,"shared"),tree=join(scratch,"tree");
+  mkdirSync(root);mkdirSync(tree);
+  t.after(()=>{rmSync(dependencyCache(root),{recursive:true,force:true});rmSync(scratch,{recursive:true,force:true});});
+  const git=(...args:string[])=>{
+    const result=spawnTest("git",args,{cwd:tree,encoding:"utf8",maxBuffer:Infinity});
+    assert.equal(result.status,0,result.error?.message??result.stderr);return result.stdout;
+  };
+  git("init","--quiet");
+  writeFileSync(join(tree,"package.json"),JSON.stringify({name:"large-inventory-control",private:true,packageManager:"pnpm@10.15.0"}));
+  writeFileSync(join(tree,"pnpm-lock.yaml"),"lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n");
+  await withPackageManager(tree,{},manager=>manager.run(["install","--offline","--lockfile-only","--ignore-scripts"]));
+  mkdirSync(join(tree,"inventory"));
+  for(let i=0;i<5000;i++)writeFileSync(join(tree,"inventory",`${"x".repeat(210)}-${i}.txt`),"");
+  const tracked=join(tree,"fixture/node_modules/source.txt");
+  mkdirSync(join(tree,"fixture/node_modules"),{recursive:true});writeFileSync(tracked,"tracked source\n");
+  git("add","--all");
+  const inventoryBytes=Buffer.byteLength(git("ls-files","-z"));
+  assert.ok(inventoryBytes>1024*1024,"the preparation must cross Node's default output ceiling");
+  t.diagnostic(`tracked inventory: ${inventoryBytes} bytes`);
+  const stale=join(tree,"node_modules/stale.txt");
+  mkdirSync(join(tree,"node_modules"));writeFileSync(stale,"old installation\n");
+  const identity=await installDependencies(root,tree);
+  assert.match(identity!,/^[0-9a-f]{64}$/);
+  assert.equal(existsSync(stale),false);
+  assert.equal(readFileSync(tracked,"utf8"),"tracked source\n");
+  assert.equal(JSON.parse(readFileSync(join(tree,"package.json"),"utf8")).name,"large-inventory-control");
+  const oldPaths=spawnTest(process.execPath,[new URL("../migrate/old-paths.ts",import.meta.url).pathname],{cwd:tree,encoding:"utf8"});
+  assert.equal(oldPaths.status,0,oldPaths.error?.message??oldPaths.stderr);
+  assert.match(oldPaths.stdout,/0 file\(s\) under an old root, 0 line\(s\) naming one/);
+});
