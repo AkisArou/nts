@@ -1,0 +1,32 @@
+/*---
+description: Control for expose-new-target-base; plain factory records expose the same metadata and preserve each construction.
+features: [ts-class-value-route-exposure, ts-class, ts-construct-signatures, ts-functions, ts-unions, ts-numbers, ts-strings, ts-objects, ts-new-target, ts-instanceof, ts-static, ts-inheritance]
+---*/
+// Control: plain records hold factory and metadata fields; instance tags replace class identity and ancestry.
+type ExposeValue = number | string | undefined | { id: number };
+interface ExposeItem { tag: string; value: ExposeValue; target: string; serial: number; }
+interface ExposeState { log: unknown[]; made: ExposeItem[]; count: number; }
+const identity = { id: 19 }; const inputs: ExposeValue[] = [0, -0, NaN, 0.5, 2147483648, "", "中", undefined, identity];
+interface ExposeRecord { factory: (state: ExposeState, value: ExposeValue, target: string) => ExposeItem; tag: string; code: string; name: string;  }
+const ExposeRoot: ExposeRecord = { tag: "root", code: "root:static", name: "ExposeRoot", factory(state: ExposeState, value: ExposeValue, target: string): ExposeItem { const item: ExposeItem = { tag: "root", value: undefined, target: "", serial: 0 }; item.value = value; item.target = target; item.serial = ++state.count; state.made.push(item); state.log.push("construct", "ExposeRoot", state, value, item.target, item.serial); return item; } };
+const ExposeAlpha: ExposeRecord = { tag: "alpha", code: "alpha:static", name: "ExposeAlpha", factory(state: ExposeState, value: ExposeValue, target: string): ExposeItem { const item = ExposeRoot.factory(state, value, target); item.tag = "alpha"; state.log.push("construct", "ExposeAlpha", state, value, target, item.serial); return item; } };
+const ExposeBeta: ExposeRecord = { tag: "beta", code: "beta:static", name: "ExposeBeta", factory(state: ExposeState, value: ExposeValue, target: string): ExposeItem { const item = ExposeRoot.factory(state, value, target); item.tag = "beta"; state.log.push("construct", "ExposeBeta", state, value, target, item.serial); return item; } };
+const ExposeGamma: ExposeRecord = { tag: "gamma", code: "gamma:static", name: "ExposeGamma", factory(state: ExposeState, value: ExposeValue, target: string): ExposeItem { const item = ExposeRoot.factory(state, value, target); item.tag = "gamma"; state.log.push("construct", "ExposeGamma", state, value, target, item.serial); return item; } };
+const choices: [ExposeRecord, string, string][] = [[ExposeRoot, "ExposeRoot", "root"], [ExposeAlpha, "ExposeAlpha", "alpha"], [ExposeBeta, "ExposeBeta", "beta"], [ExposeGamma, "ExposeGamma", "gamma"]];
+const state: ExposeState = { log: [], made: [], count: 0 };
+for (const input of inputs) for (const [Ctor, label, tag] of choices) {
+  state.log.length = 0; state.made.length = 0; state.count = 0;
+  const first = Ctor.factory(state, input, label), second = Ctor.factory(state, input, label);
+  const code = Ctor.code; state.log.push("static", label, code); assert.sameValue(Object.is(code, tag + ":static"), true); assert.sameValue(typeof code, "string");
+  const name = Ctor.name; state.log.push("name", name); assert.sameValue(Object.is(name, label), true); assert.sameValue(typeof name, "string");
+  assert.sameValue(Object.is(first, second), false); assert.sameValue(state.count, 2); assert.sameValue(state.made.length, 2);
+  const results: [ExposeItem, number][] = [[first, 1], [second, 2]];
+  for (const [item, serial] of results) {
+    const checks: [unknown, unknown][] = [[item, state.made[serial - 1]], [item.value, input], [item.tag, tag], [item.target, label], [item.serial, serial]];
+    for (const [actual, wanted] of checks) { assert.sameValue(Object.is(actual, wanted), true); assert.sameValue(typeof actual, typeof wanted); }
+    for (const [Candidate, candidateName, candidateTag] of choices) assert.sameValue(Candidate.tag === "root" || item.tag === Candidate.tag, candidateTag === "root" || tag === candidateTag, candidateName);
+  }
+  const expected: unknown[] = ["construct", "ExposeRoot", state, input, label, 1]; if (tag !== "root") expected.push("construct", label, state, input, label, 1);
+  expected.push("construct", "ExposeRoot", state, input, label, 2); if (tag !== "root") expected.push("construct", label, state, input, label, 2);
+  expected.push("static", label, tag + ":static", "name", label); assert.compareArray(state.log, expected);
+}
