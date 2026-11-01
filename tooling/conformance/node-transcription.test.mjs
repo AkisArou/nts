@@ -100,6 +100,21 @@ test('ordinary type erasure permits no executable change', () => {
   assert.throws(()=>verifyTranscription('export function f(x) { return x + 1; }','export function f(x: number): number { return x + 2; }'));
 });
 
+test('a raw-input closure cannot be folded into a converted local capture',()=>{
+  const reference='class C { set(value) { const f = () => value; value = `${value}`; return f(); } }';
+  const port='class C { set(raw: unknown) { const f = () => raw; let value = `${raw}`; return f(); } }';
+  assert.throws(()=>verifyTranscription(reference,port,{conversions:[{className:'C',name:'set',bindings:{raw:'value'}}]}),/captured by a nested function/);
+});
+
+test('method-to-private-function registration cannot authorize constructibility changes',()=>{
+  const changed={...policy};delete changed.referenceSha256;
+  for(const use of ['new instantiateMimeParams(string);','void instantiateMimeParams.prototype;','return instantiateMimeParams;']) {
+    const mutate=text=>text.replace('instantiateMimeParams(string);',use);
+    assert.notEqual(mutate(reference),reference);assert.notEqual(mutate(port),port);
+    assert.throws(()=>verifyTranscription(mutate(reference),mutate(port),changed),/hidden factory must not escape or be constructed/);
+  }
+});
+
 for(const [name,before,after] of [
   ['algorithm edit','return name.length;','return name.length + 1;'],
   ['conversion moved','let name = `${rawName}`; return name.length;','return name.length; let name = `${rawName}`;'],

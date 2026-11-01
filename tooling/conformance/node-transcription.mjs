@@ -89,6 +89,8 @@ function conversions(program,rules) {
       assert.equal(statement.kind,'let','conversion local must retain the reviewed binding form');
       const declaration=statement.declarations[0];assert.ok(declaration.init,'conversion must have an initializer');
       visit(fn.body,(node,parent,key)=>{
+        if(['FunctionExpression','ArrowFunctionExpression','FunctionDeclaration'].includes(node.type))
+          assert.equal(names(node,raw),0,`raw parameter ${raw} captured by a nested function`);
         if(!reference(node,parent,key))return;
         assert.ok(!(node.name===raw&&node.start>=statement.end),`raw parameter ${raw} used after conversion`);
         assert.ok(!(node.name===local&&node.start<statement.start),`conversion local ${local} used before initialization`);
@@ -141,6 +143,14 @@ function factory(program,rule) {
   const fn=assignment.right;assert.equal(fn.type,'FunctionExpression');assert.equal(fn.id?.name,name);
   assert.equal(fn.async,false);assert.equal(fn.generator,false);
   visit(fn.body,node=>assert.ok(!['ThisExpression','Super','MetaProperty'].includes(node.type),'factory relies on method receiver/constructibility'));
+  // A method and a function differ in constructibility and reflective shape.
+  // That difference is private only if the factory is used solely by calls.
+  visit(program,(node,parent,key)=>{
+    if(!reference(node,parent,key)||node.name!==name)return;
+    assert.ok((parent===declaration.declarations[0]&&key==='id')||
+      (parent===assignment&&key==='left')||(parent===fn&&key==='id')||
+      (parent.type==='CallExpression'&&key==='callee'), 'hidden factory must not escape or be constructed');
+  });
   owner.body.body[owner.body.body.indexOf(block)]={type:'MethodDefinition',static:true,computed:false,kind:'method',
     key:identifier(name),value:{...fn,id:null}};
   program.body.splice(program.body.indexOf(declaration),1);
