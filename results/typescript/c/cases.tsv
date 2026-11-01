@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":2,"backend":"c","commit":"0bdea5ad3ead41f86705286efadfc584f9862a8d","compiler":"76c4aa81a4d90c84","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":2,"backend":"c","commit":"f32cd26f1c61706fb81ebb9c0f021bbf583c573b","compiler":"cfadd4c6cbade722","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/ambient/declare-class.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-function.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/ambient/declare-global.ts	{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
@@ -213,8 +213,8 @@ tests/typescript/builtin-identity-controls/cast-biguint64-array-constructor-cont
 tests/typescript/builtin-identity-controls/cast-boolean-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-data-view-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-date-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-eval-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity-controls/cast-error-constructor-control.ts	{"kind":"pass"}
+tests/typescript/builtin-identity-controls/cast-eval-error-constructor-control.ts	{"kind":"pass"}
 tests/typescript/builtin-identity-controls/cast-float16-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-float32-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-float64-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -230,19 +230,19 @@ tests/typescript/builtin-identity-controls/cast-math-random-control.ts	{"kind":"
 tests/typescript/builtin-identity-controls/cast-number-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-object-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-promise-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-range-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-reference-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity-controls/cast-range-error-constructor-control.ts	{"kind":"pass"}
+tests/typescript/builtin-identity-controls/cast-reference-error-constructor-control.ts	{"kind":"pass"}
 tests/typescript/builtin-identity-controls/cast-regexp-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-set-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-string-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-suppressed-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-syntax-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-type-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity-controls/cast-syntax-error-constructor-control.ts	{"kind":"pass"}
+tests/typescript/builtin-identity-controls/cast-type-error-constructor-control.ts	{"kind":"pass"}
 tests/typescript/builtin-identity-controls/cast-uint16-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-uint32-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-uint8-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/cast-uint8-clamped-array-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
-tests/typescript/builtin-identity-controls/cast-uri-error-constructor-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity-controls/cast-uri-error-constructor-control.ts	{"kind":"pass"}
 tests/typescript/builtin-identity-controls/name-block-array-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/builtin-identity-controls/name-block-bigint64array-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/name-block-biguint64array-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -401,7 +401,7 @@ tests/typescript/builtin-identity-controls/reflection-construct-subclass-target-
 tests/typescript/builtin-identity-controls/reflection-global-map-shadowed-local-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/reflection-global-map-variable-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity-controls/reflection-prototype-map-parameter-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/builtin-identity-controls/subclass-array-implicit-constructor-control.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: -3 is not a valid array length"}}
+tests/typescript/builtin-identity-controls/subclass-array-implicit-constructor-control.ts	{"kind":"pass"}
 tests/typescript/builtin-identity-controls/subclass-array-method-override-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/builtin-identity-controls/subclass-array-static-inherited-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/builtin-identity-controls/subclass-array-static-override-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
@@ -504,7 +504,7 @@ tests/typescript/builtin-identity/cast-object-constructor.ts	{"kind":"refused","
 tests/typescript/builtin-identity/cast-promise-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/cast-range-error-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/cast-reference-error-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/cast-regexp-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/builtin-identity/cast-regexp-constructor.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/cast-set-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/cast-string-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/cast-suppressed-error-constructor.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
@@ -537,7 +537,7 @@ tests/typescript/builtin-identity/name-block-number-parsefloat.ts	{"kind":"wrong
 tests/typescript/builtin-identity/name-block-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-block-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/builtin-identity/name-block-parseint.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-block-promise.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-block-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-block-set.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-block-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/builtin-identity/name-block-typeerror.ts	{"kind":"pass"}
@@ -567,7 +567,7 @@ tests/typescript/builtin-identity/name-function-number-parsefloat.ts	{"kind":"wr
 tests/typescript/builtin-identity/name-function-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-function-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/builtin-identity/name-function-parseint.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-function-promise.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-function-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-function-set.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-function-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/builtin-identity/name-function-typeerror.ts	{"kind":"pass"}
@@ -597,7 +597,7 @@ tests/typescript/builtin-identity/name-module-number-parsefloat.ts	{"kind":"wron
 tests/typescript/builtin-identity/name-module-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-module-object-keys.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/builtin-identity/name-module-parseint.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-module-promise.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-module-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-module-set.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-module-string-fromcharcode.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/builtin-identity/name-module-typeerror.ts	{"kind":"pass"}
@@ -627,7 +627,7 @@ tests/typescript/builtin-identity/name-namespace-number-parsefloat.ts	{"kind":"r
 tests/typescript/builtin-identity/name-namespace-object-assign.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-object-keys.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-parseint.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/name-namespace-promise.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/name-namespace-promise.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-namespace-set.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/name-namespace-string-fromcharcode.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
 tests/typescript/builtin-identity/name-namespace-typeerror.ts	{"kind":"pass"}
@@ -2717,7 +2717,7 @@ tests/typescript/proofs/call-target-call-direct-receiver-write.ts	{"kind":"pass"
 tests/typescript/proofs/call-target-call-eleven-closure-classes.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-call-for-of-iterator-acquisition.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-call-interface-returned-implementation.ts	{"kind":"refused","diagnostics":[{"code":"TS2420","where":"body"},{"code":"TS2740","where":"body"}]}
-tests/typescript/proofs/call-target-call-mixin-factory-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/call-target-call-mixin-factory-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-call-nested-receiver-write.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-call-override-specialized-parameter.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-call-recursive-receiver-write.ts	{"kind":"pass"}
@@ -2746,7 +2746,7 @@ tests/typescript/proofs/call-target-loop-continue-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-loop-do-while-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-loop-interface-fraction-argument.ts	{"kind":"refused","diagnostics":[{"code":"TS2420","where":"body"},{"code":"TS2740","where":"body"}]}
 tests/typescript/proofs/call-target-loop-labelled-break-receiver.ts	{"kind":"pass"}
-tests/typescript/proofs/call-target-loop-mixin-replacement.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/call-target-loop-mixin-replacement.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-loop-nested-receiver.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-loop-replaced-class-iterable-body.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/proofs/call-target-loop-replaced-for-update-destructure.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
@@ -2758,7 +2758,7 @@ tests/typescript/proofs/call-target-merge-bind-in-generic-function.ts	{"kind":"r
 tests/typescript/proofs/call-target-merge-bind-into-rest.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-merge-bound-method-selection.ts	{"kind":"refused","diagnostics":[{"code":"TS2300","where":"body"},{"code":"TS2339","where":"body"},{"code":"TS2345","where":"body"},{"code":"TS4113","where":"body"}]}
 tests/typescript/proofs/call-target-merge-call-structural-this.ts	{"kind":"pass"}
-tests/typescript/proofs/call-target-merge-class-expression-mixin.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"}]}
+tests/typescript/proofs/call-target-merge-class-expression-mixin.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/call-target-merge-conditional-closure.ts	{"kind":"pass"}
 tests/typescript/proofs/call-target-merge-early-return-interface.ts	{"kind":"refused","diagnostics":[{"code":"TS2420","where":"body"},{"code":"TS2740","where":"body"}]}
 tests/typescript/proofs/call-target-merge-finally-receiver.ts	{"kind":"pass"}
@@ -4019,7 +4019,7 @@ tests/typescript/type-operators/no-infer.ts	{"kind":"refused","diagnostics":[{"c
 tests/typescript/type-operators/return-type-and-parameters.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/type-operators/template-literal-index-signature.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/type-operators/this-type-in-literal.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/type-operators/typeof-function-and-class.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/type-operators/typeof-function-and-class.ts	{"kind":"pass"}
 tests/typescript/type-operators/typeof-type-query.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents-controls/buffers-empty-class-offset-recovery-control.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/typed-array-contents-controls/buffers-fixed-interface-resize-history-control.ts	{"kind":"runtime-abort","failure":{"exit":null,"signal":"SIGABRT","output":"nts: refused: index 0 is outside [0, 0)"}}
@@ -4220,7 +4220,7 @@ tests/typescript/typed-array-contents/views-dataview-class-floating-bytes.ts	{"k
 tests/typescript/typed-array-contents/views-dataview-parameter-byte-orders.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents/views-float32-interface-bits.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents/views-int16-generic-offset-bytes.ts	{"kind":"pass"}
-tests/typescript/typed-array-contents/views-signed-bytes-union-parameter.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/typed-array-contents/views-signed-bytes-union-parameter.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents/views-slice-generic-copy.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents/views-subarray-interface-alias.ts	{"kind":"pass"}
 tests/typescript/typed-paths/array-holes.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}

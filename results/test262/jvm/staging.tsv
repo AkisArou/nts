@@ -1,9 +1,10 @@
 # Test262 test/staging cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler 6768eb8d0734aa63, commit 07b52742d0686dea30f111f5ac465af1defd8651, backend jvm, harness d6442dbc09f91ad0; machine at start: 23.6 GB available, swap 4.9/31.5 GB, load 4.2/3.3 (1m/5m), 16 cores; 4 worker(s)
+# compiler cfadd4c6cbade722, commit f32cd26f1c61706fb81ebb9c0f021bbf583c573b, backend jvm, harness bbd3d84004e74dad; machine at start: 18.2 GB available, swap 7.9/31.5 GB, load 27/18.7 (1m/5m), 30 cores; 8 worker(s)
 test/staging/sm/Array/sort_native_string_nan.js	pass	
 test/staging/sm/ArrayBuffer/bug1777413.js	pass	
 test/staging/sm/BigInt/mod.js	pass	
+test/staging/sm/JSON/stringify-special-escapes.js	pass	
 test/staging/sm/Math/cbrt-exact.js	pass	
 test/staging/sm/Math/cosh-exact.js	pass	
 test/staging/sm/Math/exp-exact.js	pass	
@@ -25,7 +26,6 @@ test/staging/sm/class/derivedConstructorInlining.js	pass
 test/staging/sm/class/derivedConstructorTDZExplicitThis.js	pass	
 test/staging/sm/class/derivedConstructorTDZOffEdge.js	pass	
 test/staging/sm/class/derivedConstructorTDZReturnTry.js	pass	
-test/staging/sm/class/newTargetProxyNative.js	pass	
 test/staging/sm/expressions/destructuring-array-lexical.js	pass	
 test/staging/sm/expressions/object-literal-accessor-property-name.js	pass	
 test/staging/sm/extensions/regress-591450.js	pass	
