@@ -560,6 +560,8 @@ static SIGNATURES: &[Declared] = &[
         Raising::NoRaise,
     ),
     ("nts_buffer_detached", None, None, Raising::NoRaise),
+    ("nts_buffer_has_detach_key", None, None, Raising::NoRaise),
+    ("nts_buffer_is_lent_to_c", None, None, Raising::NoRaise),
     (
         "nts_buffer_is_marked_as_untransferable",
         None,
@@ -2607,6 +2609,7 @@ static SIGNATURES: &[Declared] = &[
     ("nts_view_index", None, None, Raising::NoRaise),
     ("nts_view_index_fn", None, None, Raising::NoRaise),
     ("nts_view_join", None, None, Raising::NoRaise),
+    ("nts_view_lend_bytes", None, None, Raising::NoRaise),
     (
         "nts_view_length",
         Some(&[None]),
@@ -3134,6 +3137,8 @@ pub const READS_ONLY: &[&str] = &[
     "nts_bigint_unbox",
     "nts_buffer_byte_length",
     "nts_buffer_detached",
+    "nts_buffer_has_detach_key",
+    "nts_buffer_is_lent_to_c",
     "nts_buffer_is_marked_as_untransferable",
     "nts_buffer_max_byte_length",
     "nts_buffer_resizable",

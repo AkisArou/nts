@@ -278,6 +278,45 @@ static void the_mark_belongs_to_the_backing_identity(void) {
         "the last view releases its marked backing and all bytes");
 }
 
+static void a_native_loan_has_its_own_permanent_key(void) {
+  size_t count = nts_live_count();
+  size_t bytes = nts_live_bytes();
+  NtsBuffer *buffer = nts_buffer_new_resizable(8, 16);
+  NtsView *view = nts_view_new(buffer, 2, 4, NTS_ELEMENT_U8, false);
+  buffer->bytes[7] = 91;
+  unsigned char *storage = nts_view_bytes(view);
+  check(storage == buffer->bytes + 2 && !nts_buffer_has_detach_key(buffer),
+        "ordinary view reads do not lend storage to C");
+  check(nts_view_lend_bytes(view) == storage &&
+            nts_buffer_is_lent_to_c(buffer) &&
+            nts_buffer_has_detach_key(buffer) &&
+            !nts_buffer_is_marked_as_untransferable(buffer),
+        "foreign projection protects backing without setting the node mark");
+  nts_view_unlend(view);
+  check(nts_buffer_is_lent_to_c(buffer),
+        "finishing a call does not remove its permanent loan key");
+  nts_buffer_resize(buffer, 8);
+  nts_buffer_resize(buffer, 16);
+  check(buffer->bytes + 2 == storage && storage[5] == 91 &&
+            buffer->length == 16,
+        "equal length and growth preserve C's saved pointer and original tail");
+  NtsBuffer *copy = nts_buffer_slice(buffer, 0, 8);
+  check(!nts_buffer_has_detach_key(copy),
+        "copy has a fresh unprotected identity");
+  NtsBuffer *moved = nts_buffer_transfer(copy, 4, false);
+  check(moved && moved->length == 4 && !nts_buffer_has_detach_key(moved),
+        "the copied twin can transfer");
+  nts_release((NtsHeader *)moved);
+  nts_release((NtsHeader *)copy);
+  nts_release((NtsHeader *)buffer);
+  check(nts_view_lend_bytes(view) == storage && storage[5] == 91,
+        "the view alone keeps its loaned backing alive");
+  nts_release((NtsHeader *)view);
+  check(nts_live_count() == count && nts_live_bytes() == bytes,
+        "a permanent key adds no owned reference or retained bytes");
+  check(nts_view_lend_bytes(NULL) == NULL, "a null view lends no storage");
+}
+
 /* A direct C caller bypasses the catchable language guard. Both transfer
  * modes must still stop before touching a marked slab. Each child is ours;
  * no process discovery or signal cleanup is involved. */
@@ -344,6 +383,7 @@ int main(void) {
   a_view_is_a_window_and_a_slice_is_not();
   a_tracking_length_follows_its_buffer();
   the_mark_belongs_to_the_backing_identity();
+  a_native_loan_has_its_own_permanent_key();
   check(a_direct_marked_transfer_stops(false),
         "a direct marked transfer cannot bypass the native invariant");
   check(a_direct_marked_transfer_stops(true),

@@ -435,4 +435,5 @@ fn every_name_this_lane_renders_names_a_method_the_jar_has() {
 /// Java 8 and Android; System.console cannot answer either descriptor's state,
 /// and the native FFM route requires Java 22. Keep both calls refused by name.
 // Native-only private result construction; no JVM string helper is emitted.
-const REFUSED_FLOOR: usize = 142;
+// Native-only nts_view_lend_bytes adds one; both loan queries render on the JVM.
+const REFUSED_FLOOR: usize = 143;

@@ -2,8 +2,11 @@
 //! generated prototype agreeing with itself is not evidence of C ABI agreement.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+#[path = "../../common/test-support/native_lending.rs"]
+mod native_lending;
 #[path = "../../../test-support/scratch.rs"]
 mod scratch;
+
 use scratch::ScratchDir;
 
 use camino::Utf8Path;
@@ -1347,36 +1350,11 @@ declare function seen_u16(v: Uint16): Float64;
 /// passes its exact length.
 #[test]
 fn a_count_narrower_than_an_array_is_bounded_before_the_call() {
-    let source = r#"
-import type { CBytes, Counted } from "c:types";
-import type { Float64, Int32, Uint16 } from "@nts/scalars";
-/** @ntsNoEscape bytes */
-declare function count_of(bytes: Counted<CBytes, Uint16>): Float64;
-export function counted(n: Int32): number {
-  try {
-    return count_of(new Uint8Array(n));
-  } catch (error) {
-    return error instanceof RangeError ? -1 : -2;
-  }
-}
-"#;
-    let native = "#include <stdint.h>\n\
-         static int calls;\n\
-         int count_calls(void) { return calls; }\n\
-         double count_of(const uint8_t *bytes, uint16_t n) { (void)bytes; calls++; return n; }\n";
-    let caller = "#include <stdio.h>\n#include \"program.h\"\n\
-         int count_calls(void);\n\
-         static int failed;\n\
-         static void check(const char *what, double got, double want) {\n\
-           if (got != want) { printf(\"FAIL %s: got %.17g want %.17g\\n\", what, got, want); failed = 1; }\n\
-         }\n\
-         int main(void) {\n\
-           check(\"3\", counted(3), 3);\n\
-           check(\"65535\", counted(65535), 65535);\n\
-           check(\"65536 throws\", counted(65536), -1);\n\
-           check(\"C called twice\", count_calls(), 2);\n\
-           return failed;\n\
-         }\n";
+    let (source, native, caller) = (
+        native_lending::SOURCE,
+        native_lending::NATIVE,
+        native_lending::CALLER,
+    );
     for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
         let (dir, snapshot) =
             snapshot_with_types(&format!("bounded-count-{provider:?}"), source, false);

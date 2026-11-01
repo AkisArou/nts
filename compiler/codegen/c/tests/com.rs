@@ -1424,7 +1424,7 @@ fn a_static_taking_bytes_passes_the_count_before_them() {
         "FromBytes is not called with the factory, the count, the bytes and the slot:\n{text}"
     );
     assert!(
-        text.contains("nts_view_bytes("),
+        text.contains("nts_view_lend_bytes("),
         "the bytes are not lent in place:\n{text}"
     );
 

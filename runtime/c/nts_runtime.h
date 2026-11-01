@@ -562,6 +562,9 @@ typedef struct NtsBuffer {
   /* Node's private detach key belongs to this backing identity, shared by
    * every view. It neither keeps the buffer alive nor prevents resize. */
   bool marked_as_untransferable;
+  /* C may keep a pointer once a view has lent its bytes. This permanent
+   * detach key is independent of Node's explicit untransferable mark. */
+  bool lent_to_c;
 } NtsBuffer;
 
 /* A typed-array view: a window onto an `NtsBuffer`.
@@ -1645,6 +1648,10 @@ NTS_READS_ONLY bool nts_buffer_detached(const NtsBuffer *buffer);
 void nts_buffer_mark_as_untransferable(NtsBuffer *buffer);
 NTS_READS_ONLY bool
 nts_buffer_is_marked_as_untransferable(const NtsBuffer *buffer);
+/* All reasons the backing identity cannot detach. The public transfer guard
+ * and the native precondition consume this same answer. */
+NTS_READS_ONLY bool nts_buffer_has_detach_key(const NtsBuffer *buffer);
+NTS_READS_ONLY bool nts_buffer_is_lent_to_c(const NtsBuffer *buffer);
 
 /* A new fixed buffer holding the bytes between the clamped endpoints. Never
  * shares storage: `slice` is specified to copy, which is the whole difference
@@ -1653,13 +1660,15 @@ NTS_ALLOCATES_OR_NULL NtsBuffer *nts_buffer_slice(const NtsBuffer *buffer,
                                                   double from, double to);
 
 /* In place, and the address of the bytes does not change -- the maximum was
- * reserved at construction. Growth zeroes what it exposes. */
+ * reserved at construction. Growth zeroes what it exposes. A C loan permits
+ * growth and equal length, but forbids every later shrink. The language
+ * guard raises RangeError; a native violation stops before mutation. */
 void nts_buffer_resize(NtsBuffer *buffer, double byte_length);
 
 /* Move the bytes into a new buffer and detach this one. `fixed` chooses
  * between `transfer` and `transferToFixedLength`; both detach the source,
  * which is the point of them. The caller must first raise a TypeError for a
- * marked source. The native entry also rejects that invalid precondition
+ * source with a detach key. The native entry rejects that invalid precondition
  * before allocating or detaching; it never disguises it as allocation failure.
  */
 NTS_ALLOCATES_OR_NULL NtsBuffer *
@@ -2695,6 +2704,10 @@ NtsArray *nts_strings_from_cstrings(const char *const *c, bool required);
  * and C does not allow that of a `void` function, which the LLVM table
  * mirrors. */
 void nts_view_unlend(const NtsView *view);
+/* The actual foreign argument projection, unlike an ordinary bytes read.
+ * It installs the backing identity's permanent C-loan detach key and returns
+ * this view's byte address. A copy has a new identity without the key. */
+unsigned char *nts_view_lend_bytes(const NtsView *view);
 /* The end of a string's loan through a C struct: a `StringView` field of a
  * record passed by value (`Fields<T>`) points at the string itself, so the
  * string must outlive the call -- and the call reads only the struct, so this

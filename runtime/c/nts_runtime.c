@@ -9399,6 +9399,7 @@ static NtsBuffer *nts_buffer_make(size_t length, size_t reserved,
   buffer->reserved_bytes = reserved;
   buffer->resizable = resizable;
   buffer->marked_as_untransferable = false;
+  buffer->lent_to_c = false;
   buffer->bytes = bytes;
   nts_env->bytes_held += reserved;
   nts_note_allocation();
@@ -9455,6 +9456,14 @@ bool nts_buffer_is_marked_as_untransferable(const NtsBuffer *buffer) {
   return buffer && buffer->marked_as_untransferable;
 }
 
+bool nts_buffer_has_detach_key(const NtsBuffer *buffer) {
+  return buffer && (buffer->marked_as_untransferable || buffer->lent_to_c);
+}
+
+bool nts_buffer_is_lent_to_c(const NtsBuffer *buffer) {
+  return buffer && buffer->lent_to_c;
+}
+
 NtsBuffer *nts_buffer_slice(const NtsBuffer *buffer, double from, double to) {
   /* `nts_str_clamp` is what every relative-index endpoint in this file uses,
      and a buffer's are the same rule: negative counts from the end. */
@@ -9474,6 +9483,10 @@ void nts_buffer_resize(NtsBuffer *buffer, double byte_length) {
     return;
   }
   size_t length = nts_buffer_index(byte_length);
+  if (nts_buffer_is_lent_to_c(buffer) && length < buffer->length) {
+    fprintf(stderr, "nts: cannot shrink an ArrayBuffer lent to C\n");
+    abort();
+  }
   /* Growth exposes bytes nobody wrote, and the specification says they are
    * zero. They were zero when the block was reserved, but a previous `resize`
    * down and up again would otherwise show what the shrunk region held. */
@@ -9775,9 +9788,10 @@ NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
   /* The language guard raises the catchable TypeError. A direct native
    * caller that violates its precondition must never detach a pooled slab,
    * nor return null and let the caller misreport an allocation RangeError. */
-  if (nts_buffer_is_marked_as_untransferable(buffer)) {
-    fprintf(stderr,
-            "nts: cannot transfer an ArrayBuffer marked as untransferable\n");
+  if (nts_buffer_has_detach_key(buffer)) {
+    fprintf(stderr, "nts: cannot transfer an ArrayBuffer %s\n",
+            buffer->marked_as_untransferable ? "marked as untransferable"
+                                             : "lent to C");
     abort();
   }
   size_t length = nts_buffer_index(byte_length);
@@ -10152,6 +10166,14 @@ unsigned char *nts_view_bytes(const NtsView *view) {
     return 0;
   }
   return view->buffer->bytes + view->byte_offset;
+}
+
+unsigned char *nts_view_lend_bytes(const NtsView *view) {
+  unsigned char *bytes = nts_view_bytes(view);
+  if (bytes) {
+    view->buffer->lent_to_c = true;
+  }
+  return bytes;
 }
 
 NtsView *nts_view_subarray(const NtsView *view, double from, double to) {

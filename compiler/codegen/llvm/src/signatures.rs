@@ -653,6 +653,18 @@ pub const SIGNATURES: &[Signature] = &[
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
+        name: "nts_buffer_has_detach_key",
+        returns: "zeroext i1",
+        params: &["ptr"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_buffer_is_lent_to_c",
+        returns: "zeroext i1",
+        params: &["ptr"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
         name: "nts_buffer_is_marked_as_untransferable",
         returns: "zeroext i1",
         params: &["ptr"],
@@ -2845,6 +2857,12 @@ pub const SIGNATURES: &[Signature] = &[
         name: "nts_view_join",
         returns: "ptr",
         params: &["ptr", "ptr"],
+        attributes: &[],
+    },
+    Signature {
+        name: "nts_view_lend_bytes",
+        returns: "ptr",
+        params: &["ptr"],
         attributes: &[],
     },
     Signature {

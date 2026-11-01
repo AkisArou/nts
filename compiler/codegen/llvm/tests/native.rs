@@ -37,6 +37,9 @@ mod string_view_lend;
 #[path = "native/buffer_untransferable.rs"]
 mod buffer_untransferable;
 
+#[path = "native/native_lending.rs"]
+mod native_lending;
+
 #[path = "../../common/test-support/native_cases.rs"]
 mod native_cases;
 use native_cases::{CASES, WIDE_CASES, WINDOWS_ONLY};

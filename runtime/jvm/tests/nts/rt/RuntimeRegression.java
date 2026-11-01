@@ -1933,6 +1933,32 @@ public final class RuntimeRegression {
 
     /** Node26's private mark protects backing identity while ordinary twins move. */
     private static void testUntransferableBacking() {
+        NtsBuffer lent = NtsBuffer.allocateResizable(8, 16);
+        lent.bytes[7] = 91;
+        byte[] saved = NtsBuffer.storage(lent);
+        NtsBuffer.markLentToC(lent);
+        NtsBuffer.markLentToC(lent);
+        check(NtsBuffer.hasDetachKey(lent) && NtsBuffer.isLentToC(lent) &&
+                !NtsBuffer.isMarkedAsUntransferable(lent),
+            "a native loan is permanent and distinct from the explicit mark");
+        check(refusalFrom(() -> NtsBuffer.resize(lent, 4)).contains("lent to C"),
+            "native loan prevents shrink by name");
+        check(lent.bytes == saved && lent.length == 8 && saved[7] == 91,
+            "rejected shrink leaves C's saved extent unchanged");
+        NtsBuffer.resize(lent, 8.9);
+        NtsBuffer.resize(lent, 16);
+        check(lent.bytes == saved && lent.length == 16 && saved[7] == 91,
+            "equal length and growth preserve the saved backing");
+        check(refusalFrom(() -> NtsBuffer.resize(lent, 8)).contains("lent to C"),
+            "shrink after growth also rejects");
+        for (boolean fixed : new boolean[] {false, true}) {
+            check(refusalFrom(() -> NtsBuffer.transfer(lent, 4, fixed)).contains("not detachable"),
+                "native loan prevents either transfer mode");
+        }
+        NtsBuffer fresh = NtsBuffer.slice(lent, 0, 8);
+        check(!NtsBuffer.hasDetachKey(fresh), "copying does not copy a loan key");
+        NtsBuffer movedFresh = NtsBuffer.transfer(fresh, 4, true);
+        check(movedFresh.length == 4, "ordinary copy can transfer");
         for (boolean fixed : new boolean[] {false, true}) {
             NtsBuffer marked = NtsBuffer.allocateResizable(8, 16);
             NtsBuffer ordinary = NtsBuffer.allocateResizable(8, 16);

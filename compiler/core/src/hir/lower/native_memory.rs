@@ -8,6 +8,60 @@ use crate::hir::native::{Encoding, Handle, Pointee, Referenced, Scalar, Type, Wr
 use nts_semantic_schema::{LiteralValue, TypeId, TypeKind, syntax};
 
 impl FuncBuilder<'_> {
+    /// The host resize hook runs after `ToIndex` and the ordinary buffer guards.
+    /// C may still hold the old pointer and extent after its call returned.
+    pub(super) fn guard_native_buffer_shrink(
+        &mut self,
+        id: NodeId,
+        buffer: ValueId,
+        length: ValueId,
+    ) -> Result<(), Diagnostic> {
+        let origin = self.origin(id);
+        let lent = self.runtime_call(
+            "nts_buffer_is_lent_to_c",
+            vec![buffer],
+            HirType::Bool,
+            origin.clone(),
+        );
+        let check = self.new_block();
+        let done = self.new_block();
+        self.terminate(Terminator::Branch {
+            cond: lent,
+            then_target: check,
+            then_args: Vec::new(),
+            else_target: done,
+            else_args: Vec::new(),
+        });
+        self.switch_to(check);
+        let current = self.runtime_call(
+            "nts_buffer_byte_length",
+            vec![buffer],
+            HirType::NUMBER,
+            origin.clone(),
+        );
+        let shrink = self.push(
+            OpKind::Binary {
+                op: BinOp::Lt,
+                lhs: length,
+                rhs: current,
+            },
+            HirType::Bool,
+            origin,
+        );
+        self.refuse_when(
+            id,
+            shrink,
+            "RangeError",
+            "Cannot shrink an ArrayBuffer lent to C",
+        )?;
+        self.terminate(Terminator::Jump {
+            target: done,
+            args: Vec::new(),
+        });
+        self.switch_to(done);
+        Ok(())
+    }
+
     pub(super) fn native_member_key(&self, access: NodeId, key: NodeId) -> Option<String> {
         if self.kind_of(access) == Some(syntax::PROPERTY_ACCESS_EXPRESSION) {
             return self.literal_name(key);

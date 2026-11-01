@@ -46,6 +46,9 @@ public final class NtsBuffer {
     /** Node's private detach key, shared by every view of this identity. */
     private boolean markedAsUntransferable;
 
+    /** Independent native-loan key; unlike a node mark, it forbids shrinking. */
+    private boolean lentToC;
+
     private NtsBuffer(byte[] bytes, int length, int maxLength, boolean resizable) {
         this.bytes = bytes;
         this.length = length;
@@ -145,6 +148,20 @@ public final class NtsBuffer {
         return buffer != null && buffer.markedAsUntransferable;
     }
 
+    /** A native host that lends this backing must establish the same state. */
+    public static void markLentToC(NtsBuffer buffer) {
+        alive(buffer);
+        buffer.lentToC = true;
+    }
+
+    public static boolean isLentToC(NtsBuffer buffer) {
+        return buffer != null && buffer.lentToC;
+    }
+
+    public static boolean hasDetachKey(NtsBuffer buffer) {
+        return isMarkedAsUntransferable(buffer) || isLentToC(buffer);
+    }
+
     /**
      * `ArrayBuffer.prototype.resize`.
      *
@@ -167,6 +184,9 @@ public final class NtsBuffer {
         if (n > buffer.maxLength) {
             throw new NtsRefusal(
                 "a RangeError: resize to " + n + " exceeds maxByteLength " + buffer.maxLength);
+        }
+        if (isLentToC(buffer) && n < buffer.length) {
+            throw new NtsRefusal("a RangeError: Cannot shrink an ArrayBuffer lent to C");
         }
         if (n > buffer.length) {
             java.util.Arrays.fill(buffer.bytes, buffer.length, n, (byte) 0);
@@ -197,7 +217,7 @@ public final class NtsBuffer {
     public static NtsBuffer transfer(NtsBuffer buffer, double newLength, boolean fixed) {
         // The lowering raises the language TypeError. A direct native caller
         // must also be rejected before allocation or detachment.
-        if (isMarkedAsUntransferable(buffer)) {
+        if (hasDetachKey(buffer)) {
             throw new NtsRefusal("a TypeError: ArrayBuffer is not detachable and could not be cloned.");
         }
         alive(buffer);

@@ -366,8 +366,8 @@ fn a_marked_buffer_is_rejected_before_native_allocation_or_detachment() {
             &["-Wl,--wrap=abort"],
         );
         assert!(
-            checks(&report) >= 4,
-            "both marked subjects and ordinary twins: {report}"
+            checks(&report) >= 7,
+            "marked and C-loan subjects, shrink and ordinary twins: {report}"
         );
     }
 }

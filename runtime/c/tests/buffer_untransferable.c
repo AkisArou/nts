@@ -24,6 +24,8 @@ static struct {
   size_t length;
   size_t reserved;
   bool resizable;
+  bool marked;
+  bool lent;
   size_t live_count;
   size_t live_bytes;
   size_t allocations;
@@ -37,15 +39,18 @@ _Noreturn void __wrap_abort(void) {
     _exit(OBS_UNEXPECTED);
   }
   const NtsBuffer *buffer = observation.buffer;
-  bool unchanged = observation.alias->buffer == buffer &&
-                   buffer->bytes == observation.storage &&
-                   buffer->length == observation.length &&
-                   buffer->reserved_bytes == observation.reserved &&
-                   buffer->resizable == observation.resizable &&
-                   nts_buffer_is_marked_as_untransferable(buffer) &&
-                   nts_live_count() == observation.live_count &&
-                   nts_live_bytes() == observation.live_bytes &&
-                   nts_counted_allocations() == observation.allocations;
+  bool unchanged =
+      observation.alias->buffer == buffer &&
+      buffer->bytes == observation.storage &&
+      buffer->length == observation.length &&
+      buffer->reserved_bytes == observation.reserved &&
+      buffer->resizable == observation.resizable &&
+      nts_buffer_is_marked_as_untransferable(buffer) == observation.marked &&
+      nts_buffer_is_lent_to_c(buffer) == observation.lent &&
+      nts_buffer_has_detach_key(buffer) &&
+      nts_live_count() == observation.live_count &&
+      nts_live_bytes() == observation.live_bytes &&
+      nts_counted_allocations() == observation.allocations;
   /* Only read the contents if the live backing identity is intact; a late
    * guard may have freed it and cleared the source pointer. */
   if (unchanged) {
@@ -63,7 +68,7 @@ static void check(bool holds, const char *what) {
   }
 }
 
-static bool rejects_before_mutation(bool fixed) {
+static bool rejects_before_mutation(bool fixed, bool lent, bool shrink) {
   fflush(stdout);
   pid_t child = fork();
   if (child < 0) {
@@ -82,9 +87,19 @@ static bool rejects_before_mutation(bool fixed) {
     observation.live_bytes = nts_live_bytes();
     observation.allocations = nts_counted_allocations();
     memcpy(observation.contents, buffer->bytes, 8);
-    nts_buffer_mark_as_untransferable(buffer);
+    if (lent) {
+      (void)nts_view_lend_bytes(observation.alias);
+    } else {
+      nts_buffer_mark_as_untransferable(buffer);
+    }
+    observation.marked = !lent;
+    observation.lent = lent;
     observation.active = true;
-    (void)nts_buffer_transfer(buffer, 0, fixed);
+    if (shrink) {
+      nts_buffer_resize(buffer, 4);
+    } else {
+      (void)nts_buffer_transfer(buffer, 0, fixed);
+    }
     _exit(OBS_RETURNED);
   }
   int status = 0;
@@ -107,12 +122,19 @@ static void ordinary_twin(bool fixed) {
 
 int main(void) {
   check(
-      rejects_before_mutation(false),
+      rejects_before_mutation(false, false, false),
       "marked transfer rejects with source and allocation counters unchanged");
   ordinary_twin(false);
-  check(rejects_before_mutation(true),
+  check(rejects_before_mutation(true, false, false),
         "marked fixed transfer rejects with source and allocation counters "
         "unchanged");
   ordinary_twin(true);
+  check(rejects_before_mutation(false, true, false),
+        "C-loan transfer rejects before mutation through a backing alias");
+  check(
+      rejects_before_mutation(true, true, false),
+      "C-loan fixed transfer rejects before mutation through a backing alias");
+  check(rejects_before_mutation(false, true, true),
+        "C-loan shrink rejects with source and allocation counters unchanged");
   return failures != 0;
 }

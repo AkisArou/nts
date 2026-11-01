@@ -68872,15 +68872,15 @@ impl<'a> FuncBuilder<'a> {
                 // checking detached state and the private detach key. The
                 // argument may itself mark or detach the receiver.
                 self.guard_attached(id, receiver, &name)?;
-                let marked = self.call_runtime(
-                    "nts_buffer_is_marked_as_untransferable",
+                let protected = self.call_runtime(
+                    "nts_buffer_has_detach_key",
                     vec![receiver],
                     HirType::Bool,
                     &origin,
                 );
                 self.refuse_when(
                     id,
-                    marked,
+                    protected,
                     "TypeError",
                     "ArrayBuffer is not detachable and could not be cloned.",
                 )?;
@@ -68909,7 +68909,8 @@ impl<'a> FuncBuilder<'a> {
                 };
                 let length = self.lower_expression(*node)?;
                 let length = self.coerce(length, &HirType::NUMBER, id)?;
-                self.guard_within_maximum(id, receiver, length)?;
+                let length = self.guard_within_maximum(id, receiver, length)?;
+                self.guard_native_buffer_shrink(id, receiver, length)?;
                 Ok(self.call_runtime(
                     "nts_buffer_resize",
                     vec![receiver, length],
@@ -69162,7 +69163,7 @@ impl<'a> FuncBuilder<'a> {
         id: NodeId,
         buffer: ValueId,
         length: ValueId,
-    ) -> Result<(), Diagnostic> {
+    ) -> Result<ValueId, Diagnostic> {
         let origin = self.origin(id);
         let maximum = self.call_runtime(
             "nts_buffer_max_byte_length",
@@ -69207,7 +69208,8 @@ impl<'a> FuncBuilder<'a> {
             under,
             "RangeError",
             "ArrayBuffer.prototype.resize: Invalid length parameter",
-        )
+        )?;
+        Ok(length_index)
     }
 
     fn lower_date_method(
@@ -74073,7 +74075,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A typed array's storage lent to a call that reads it as `element`s
-    /// (`Role::Bytes`), in place (`nts_view_bytes`), given back after the call
+    /// (`Role::Bytes`), in place (`nts_view_lend_bytes`), given back after the call
     /// (`Lent::View`). No copy: C reads the elements the program holds.
     ///
     /// **Nothing else has that storage.** The call is checked against the
@@ -74114,7 +74116,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     /// A typed array's storage where C takes a pointer to its elements, NULL
-    /// for `null`: `nts_view_bytes`, in place -- read as the bytes it is and
+    /// for `null`: `nts_view_lend_bytes`, in place -- read as the bytes it is and
     /// cast to the element pointer C takes, which is a `const int32_t *` for
     /// an `Int32Array` and only coincides with the bytes for a `Uint8Array`.
     fn borrow_bytes(&mut self, view: ValueId, want: HirType, origin: &Origin) -> ValueId {
@@ -74123,8 +74125,12 @@ impl<'a> FuncBuilder<'a> {
             let bytes = HirType::NativePointer(super::native::Pointee::Scalar(
                 super::native::Scalar::UInt8,
             ));
-            let storage =
-                this.runtime_call("nts_view_bytes", vec![view], bytes.clone(), origin.clone());
+            let storage = this.runtime_call(
+                "nts_view_lend_bytes",
+                vec![view],
+                bytes.clone(),
+                origin.clone(),
+            );
             if want == bytes {
                 storage
             } else {

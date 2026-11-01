@@ -629,6 +629,8 @@ fn core_external(name: &str) -> Option<(&'static str, &'static str, &'static str
         "nts_buffer_max_byte_length" => (types::BUFFER, "maxByteLength", "(Lnts/rt/NtsBuffer;)D"),
         "nts_buffer_resizable" => (types::BUFFER, "resizable", "(Lnts/rt/NtsBuffer;)Z"),
         "nts_buffer_detached" => (types::BUFFER, "detached", "(Lnts/rt/NtsBuffer;)Z"),
+        "nts_buffer_has_detach_key" => (types::BUFFER, "hasDetachKey", "(Lnts/rt/NtsBuffer;)Z"),
+        "nts_buffer_is_lent_to_c" => (types::BUFFER, "isLentToC", "(Lnts/rt/NtsBuffer;)Z"),
         "nts_buffer_is_marked_as_untransferable" => (
             types::BUFFER,
             "isMarkedAsUntransferable",
