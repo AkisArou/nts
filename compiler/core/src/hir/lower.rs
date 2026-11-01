@@ -24,6 +24,7 @@ use super::{
 use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
 use layout_collection::{BuilderLayouts, LayoutCollector};
+use made_instance::{MadeBy, ThisPaths};
 use numeric_arguments::Builtin as NumericBuiltin;
 
 /// A table walk's cursor: `nts_map_next`'s `int32_t`, below `NTS_MAX_LENGTH`
@@ -6429,6 +6430,7 @@ fn an_operator_that_can_raise(probe: &FuncBuilder, at: NodeId) -> bool {
 
 fn a_synthesized_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
     probe.module.initialization.can_raise_at(at)
+        || probe.array_constructor_may_raise(at)
         || an_operator_that_can_raise(probe, at)
         || probe.iterators.close_can_raise(at)
         || an_immutable_store(probe, at)
@@ -7977,7 +7979,9 @@ fn a_copy_can_contain(
     // and the caller's `try` compiled with no handler edge because
     // `throwing_symbols` does not see a parameter-held callee: the `TypeError`
     // escaped, which is the wrong answer that record was written to catch and did.
-    if !a_call_that_can_raise(snapshot, probe, throwing, call) {
+    if probe.array_constructor_may_raise(call)
+        || !a_call_that_can_raise(snapshot, probe, throwing, call)
+    {
         return true;
     }
     if !probe.printers.at(call).is_empty() {
@@ -8048,7 +8052,10 @@ fn a_call_that_can_raise(
     throwing: &Throwing,
     call: NodeId,
 ) -> bool {
-    if !probe.implicit_iterator_callees(call).is_empty() || probe.iterators.close_can_raise(call) {
+    if probe.array_constructor_may_raise(call)
+        || !probe.implicit_iterator_callees(call).is_empty()
+        || probe.iterators.close_can_raise(call)
+    {
         return true;
     }
     if !probe.printers.at(call).is_empty() {
@@ -8866,23 +8873,34 @@ fn initialized_before_use(probe: &FuncBuilder, name_node: NodeId) -> bool {
 ///
 /// Unrecognised positions are writes. The cost of a false positive is that a
 /// refusal stays, and the cost of a false negative is a miscompile.
+///
+/// **One pass for the program, not one per question.** Every reference that
+/// stands on a target side is indexed by its symbol the first time this is
+/// asked (`LoweringSnapshot::written_references`); a question is then whether
+/// any of its symbol's is not the name itself. Walking every node per
+/// question made `initializer_settles` 68% of lowering `perf_hooks`, whose
+/// planner asks it of every call through a `let`.
 fn reassigned_anywhere(probe: &FuncBuilder, name_node: NodeId) -> bool {
     let Some(symbol) = probe.node(name_node).symbol else {
         return true;
     };
-    for at in 0..probe.snapshot.nodes.len() {
-        let Ok(index) = u32::try_from(at) else {
-            return true;
-        };
-        let id = NodeId(index);
-        if id == name_node || probe.node(id).symbol != Some(symbol) {
-            continue;
+    let written = probe.snapshot.written_references(|| {
+        let mut written: rustc_hash::FxHashMap<SymbolId, Vec<NodeId>> =
+            rustc_hash::FxHashMap::default();
+        for id in
+            (0..probe.snapshot.nodes.len()).filter_map(|at| u32::try_from(at).ok().map(NodeId))
+        {
+            if let Some(symbol) = probe.node(id).symbol
+                && probe.stands_on_the_target_side(id)
+            {
+                written.entry(symbol).or_default().push(id);
+            }
         }
-        if probe.stands_on_the_target_side(id) {
-            return true;
-        }
-    }
-    false
+        written
+    });
+    written
+        .get(&symbol)
+        .is_some_and(|references| references.iter().any(|id| *id != name_node))
 }
 
 /// Declare a global holding a closure, with the initializer deferred to
@@ -10920,6 +10938,29 @@ struct Structural {
     erased_copies: rustc_hash::FxHashSet<(NodeId, String)>,
     /// The subset that can carry exceptions in their own representation context.
     raising: rustc_hash::FxHashSet<(NodeId, String)>,
+    /// Constructor copies over a union member (`union_member_retype`), which
+    /// are lowered beside their class and named at each `new` and
+    /// `super(...)` that passes that member.
+    constructions: rustc_hash::FxHashSet<(NodeId, String)>,
+    /// The positions each copy re-types to a union member, which decide the
+    /// `typeof` tests on them (`FuncBuilder::decided_typeof`).
+    members: rustc_hash::FxHashMap<(NodeId, String), Retyped>,
+    /// Implementations with a union parameter that has no representation and
+    /// that something reaches as declared: a site passing a union, a reference
+    /// that is not a call, an export. The others are lowered as their copies
+    /// alone, as an uninstantiated generic is lowered as none.
+    declared_reached: rustc_hash::FxHashSet<NodeId>,
+}
+
+impl Structural {
+    /// Whether `declaration` is lowered as written as well as as its copies.
+    fn lowers_as_declared(&self, declaration: NodeId) -> bool {
+        !self
+            .members
+            .keys()
+            .any(|(copied, _)| *copied == declaration)
+            || self.declared_reached.contains(&declaration)
+    }
 }
 
 impl Structural {
@@ -10929,6 +10970,16 @@ impl Structural {
                 for (call, (suffix, bindings)) in calls {
                     builder.generic_calls.insert(*call, suffix.clone());
                     builder.structural_calls.insert(*call, bindings.clone());
+                    let constructed = planned_callee(builder, *call).is_some_and(|callee| {
+                        let implementation = builder.snapshot.implementation_of(callee);
+                        self.constructions
+                            .contains(&(implementation, suffix.clone()))
+                    });
+                    if constructed {
+                        builder.copied_constructions.insert(*call);
+                    } else {
+                        builder.copied_constructions.remove(call);
+                    }
                     let raises = planned_callee(builder, *call)
                         .is_some_and(|callee| self.raising.contains(&(callee, suffix.clone())));
                     if raises {
@@ -10940,6 +10991,25 @@ impl Structural {
             }
         }
     }
+}
+
+/// The parameter symbols, and their `const` aliases, a copy re-typed to a union
+/// member ([`Structural::members`]).
+fn member_symbols(
+    probe: &FuncBuilder,
+    structural: &Structural,
+    declaration: NodeId,
+    suffix: &str,
+) -> rustc_hash::FxHashSet<u32> {
+    structural
+        .members
+        .get(&(declaration, suffix.to_owned()))
+        .map(|members| {
+            retyped_symbols_of(probe, declaration, members)
+                .into_keys()
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 /// The declaration a call's structural copy is planned for: the function the
@@ -10956,7 +11026,28 @@ impl Structural {
 /// against `identity`, a generic function, the structural planner stands back
 /// as it does for every generic callee, and a plain function gets a copy that
 /// is actually lowered.
+///
+/// A `new` of a source class and a `super(...)` are planned against the
+/// constructor lowering runs (`referenced_constructor`, `super_constructor`),
+/// for the same reason: through `const C: new (n: number) => Sized = Sized`,
+/// the checker resolves `new C(n)` to the annotation's signature, and the site,
+/// unplanned, called a declared constructor lowered only as its copies.
 fn planned_callee(probe: &FuncBuilder, call: NodeId) -> Option<NodeId> {
+    let constructor = match probe.kind_of(call) {
+        Some(syntax::NEW_EXPRESSION) => probe.referenced_constructor(call),
+        Some(syntax::CALL_EXPRESSION)
+            if probe
+                .children(call)
+                .first()
+                .is_some_and(|callee| probe.kind_of(*callee) == Some(syntax::SUPER_KEYWORD)) =>
+        {
+            probe.super_constructor(call)
+        }
+        _ => None,
+    };
+    if constructor.is_some() {
+        return constructor;
+    }
     let checker = probe.snapshot.call_targets.get(&call)?.callee?;
     let named = probe
         .children(call)
@@ -11055,6 +11146,17 @@ fn structural_instantiations(snapshot: &LoweringSnapshot<'_>, hierarchy: &Hierar
     for copies in planner.found.copies.values_mut() {
         copies.sort_by(|a, b| a.1.cmp(&b.1));
     }
+    let copied: Vec<NodeId> = planner
+        .found
+        .members
+        .keys()
+        .map(|(declaration, _)| *declaration)
+        .collect();
+    for declaration in copied {
+        if reached_beyond_its_calls(&probe, declaration) {
+            planner.found.declared_reached.insert(declaration);
+        }
+    }
     planner.found.erased_copies = planner
         .erased_copies
         .into_iter()
@@ -11065,6 +11167,207 @@ fn structural_instantiations(snapshot: &LoweringSnapshot<'_>, hierarchy: &Hierar
         })
         .collect();
     planner.found
+}
+
+/// The signature a call is planned against, and whether only a copy over a
+/// union member may be made of it. A constructor's node carries its class
+/// rather than a signature, so a `new` or `super(...)` is planned from the
+/// signature it resolved to, and only for such a copy.
+fn planned_signature<'s>(
+    probe: &FuncBuilder<'s>,
+    call: NodeId,
+    callee: NodeId,
+) -> Option<(&'s nts_semantic_schema::SignatureRecord, bool)> {
+    let snapshot = probe.snapshot;
+    if let Some(declared) = super::generics::declared_signature(snapshot, callee) {
+        return Some((declared, false));
+    }
+    if probe.kind_of(callee) != Some(syntax::CONSTRUCTOR) {
+        return None;
+    }
+    let target = snapshot.call_targets.get(&call)?;
+    Some((snapshot.signatures.get(target.signature.0 as usize)?, true))
+}
+
+/// Whether an implementation declares a parameter whose union has no
+/// representation of its own: one only its copies over a member compile.
+fn has_a_union_without_representation(probe: &FuncBuilder, implementation: NodeId) -> bool {
+    probe.has_a_body(implementation)
+        && probe
+            .parameters_declared_by(implementation)
+            .iter()
+            .any(|(declared, _, rest)| {
+                !rest
+                    && declared.is_some_and(|ty| {
+                        matches!(
+                            probe
+                                .snapshot
+                                .types
+                                .get(ty.0 as usize)
+                                .map(|record| &record.kind),
+                            Some(TypeKind::Union(_))
+                        ) && probe.represent(ty).is_none()
+                    })
+            })
+}
+
+/// Whether a declaration with copies over union members is reached other than
+/// by the calls `record_call` planned. By identity: a module exports the
+/// symbol naming it (the export table holds every form -- a modifier, `export
+/// { }`, `export default`, `export =`; a constructor is named by its class), or,
+/// for a function, an identifier denoting it is not a call's callee. A
+/// shorthand `{ size }` carries the property's own symbol, and the value it
+/// reads is resolved by name in scope (`shorthand_value_symbol`), which the
+/// snapshot does not record: any shorthand spelling the name counts as a
+/// reach, which can keep a declaration nothing needs but never drops one
+/// something does.
+fn reached_beyond_its_calls(probe: &FuncBuilder, declaration: NodeId) -> bool {
+    let constructor = probe.kind_of(declaration) == Some(syntax::CONSTRUCTOR);
+    let mut owner = declaration;
+    while constructor && !probe.kind_of(owner).is_some_and(declares_a_class) {
+        let Some(parent) = probe.node(owner).parent else {
+            return true;
+        };
+        owner = parent;
+    }
+    let Some(name) = probe.name_node(owner) else {
+        return true;
+    };
+    let Some(symbol) = probe
+        .node(name)
+        .symbol
+        .map(|symbol| probe.denoted_symbol(symbol))
+    else {
+        return true;
+    };
+    let exported = probe.snapshot.modules.iter().any(|module| {
+        module
+            .exports
+            .iter()
+            .any(|(_, exported)| probe.denoted_symbol(*exported) == symbol)
+    });
+    if exported {
+        return true;
+    }
+    // A constructor runs only by `new` and `super(...)`, which are planned.
+    if constructor {
+        return false;
+    }
+    let spelled = probe.node(name).text.clone();
+    // Its overload signatures name it too, and are not uses.
+    let names: Vec<NodeId> = probe
+        .snapshot
+        .symbols
+        .get(symbol.0 as usize)
+        .map(|record| {
+            record
+                .declarations
+                .iter()
+                .filter_map(|at| probe.name_node(*at))
+                .collect()
+        })
+        .unwrap_or_default();
+    (0..probe.snapshot.nodes.len()).any(|at| {
+        let Ok(at) = u32::try_from(at).map(NodeId) else {
+            return false;
+        };
+        match probe.kind_of(at) {
+            Some(syntax::SHORTHAND_PROPERTY_ASSIGNMENT) => probe
+                .children(at)
+                .first()
+                .is_some_and(|key| spelled.is_some() && probe.node(*key).text == spelled),
+            Some(syntax::IDENTIFIER) if at != name && !names.contains(&at) => {
+                probe.node(at).symbol.map(|it| probe.denoted_symbol(it)) == Some(symbol)
+                    && !probe.node(at).parent.is_some_and(|parent| {
+                        probe.kind_of(parent) == Some(syntax::CALL_EXPRESSION)
+                            && probe.children(parent).first() == Some(&at)
+                    })
+            }
+            _ => false,
+        }
+    })
+}
+
+/// The union members a call passes, by position, each with its spelling
+/// (`union_member_retype`). A copy over union members is made where some
+/// parameter whose union has no representation receives one member; it then
+/// takes every union parameter at the member its argument is, one copy per
+/// tuple. Empty otherwise, and for a spread, whose positions are not the
+/// parameters'. Against the implementation's own parameters, the body a copy
+/// is made of; an optional one its site passes is re-typed like any other,
+/// since only sites passing it name the copy.
+fn member_retypes(
+    probe: &FuncBuilder,
+    implementation: NodeId,
+    arguments: &[NodeId],
+    actual: &impl Fn(NodeId) -> Option<TypeId>,
+) -> std::collections::BTreeMap<u32, (HirType, String)> {
+    let applies = probe.has_a_body(implementation)
+        && super::generics::declared_signature(probe.snapshot, implementation)
+            .is_none_or(|signature| signature.this_type.is_none())
+        && !arguments
+            .iter()
+            .any(|argument| probe.kind_of(*argument) == Some(syntax::SPREAD_ELEMENT));
+    if !applies {
+        return std::collections::BTreeMap::new();
+    }
+    let implemented = probe.parameters_declared_by(implementation);
+    let mut needed = false;
+    let members = arguments
+        .iter()
+        .enumerate()
+        .filter_map(|(at, argument)| {
+            let Some((Some(union), _, false)) = implemented.get(at).copied() else {
+                return None;
+            };
+            let (ty, spelling) = union_member_retype(probe, union, actual(*argument)?)?;
+            needed |= probe.represent(union).is_none();
+            Some((u32::try_from(at).ok()?, (ty, format!("{at}{spelling}"))))
+        })
+        .collect();
+    if needed {
+        members
+    } else {
+        std::collections::BTreeMap::new()
+    }
+}
+
+/// A parameter declared as a union, re-typed to the one member its argument is:
+/// `new Buffer(size)` with `value: number | string | ArrayBuffer |
+/// ArrayLike<number>` copies the constructor over a number. Proved by the
+/// argument's own type having a concrete representation, so a site whose
+/// argument is itself a union, an absence among its members included, keeps
+/// the declared parameter and its refusal.
+/// `record_call` makes such a copy only where some parameter's union has no
+/// representation, and then over every union parameter's member. In the copy,
+/// the `typeof` tests the member decides are folded (`decided_typeof`), so the
+/// other members' branches are never lowered.
+fn union_member_retype(
+    probe: &FuncBuilder,
+    declared: TypeId,
+    actual: TypeId,
+) -> Option<(HirType, String)> {
+    if !matches!(
+        probe.snapshot.types.get(declared.0 as usize)?.kind,
+        TypeKind::Union(_)
+    ) || super::instantiate::mentions_a_parameter(probe.snapshot, actual)
+        // `string | undefined` represents as the string alone, its absence a
+        // null pointer: still a union, so the site keeps the declaration.
+        || admits_absence(probe.snapshot, actual)
+    {
+        return None;
+    }
+    let member = probe.represent(actual)?;
+    if matches!(member, HirType::Erased | HirType::Void | HirType::Never) {
+        return None;
+    }
+    let spelling = match &member {
+        HirType::Managed(ManagedType::Array(element)) => {
+            format!("uarr{}", super::generics::spell(element))
+        }
+        other => format!("u{}", super::generics::spell(other)),
+    };
+    Some((member, spelling))
 }
 
 /// Whether a callee is copied with one parameter re-typed to what its argument
@@ -11174,6 +11477,21 @@ fn copy_retype(
 /// parameter the copy re-typed. A callee copy seen for the first time is
 /// queued so its own body gets walked.
 impl StructuralPlanner<'_, '_> {
+    /// The union members a call passes (`member_retypes`); a call passing none
+    /// to a union without a representation reaches the declaration as written.
+    fn plan_members(
+        &mut self,
+        implementation: NodeId,
+        arguments: &[NodeId],
+        actual: &impl Fn(NodeId) -> Option<TypeId>,
+    ) -> std::collections::BTreeMap<u32, (HirType, String)> {
+        let members = member_retypes(self.probe, implementation, arguments, actual);
+        if members.is_empty() && has_a_union_without_representation(self.probe, implementation) {
+            self.found.declared_reached.insert(implementation);
+        }
+        members
+    }
+
     fn record_call(
         &mut self,
         within: &str,
@@ -11187,7 +11505,7 @@ impl StructuralPlanner<'_, '_> {
         if is_generic_function(snapshot, callee) {
             return;
         }
-        let Some(signature) = super::generics::declared_signature(snapshot, callee) else {
+        let Some((signature, members_only)) = planned_signature(probe, call, callee) else {
             return;
         };
         let parameters: Vec<TypeId> = signature.parameters.iter().map(|p| p.ty).collect();
@@ -11202,6 +11520,9 @@ impl StructuralPlanner<'_, '_> {
         let mut legacy = Retyped::new();
         let mut legacy_spelled = Vec::new();
         let mut recovered = false;
+        let implementation = snapshot.implementation_of(callee);
+        let by_member = self.plan_members(implementation, &arguments, &actual);
+        let mut members = Retyped::new();
         for (at, (declared, argument)) in parameters.iter().zip(&arguments).enumerate() {
             // A literal is built as the parameter's own type, so it needs no
             // copy: an object literal always, and an array literal where the
@@ -11218,14 +11539,22 @@ impl StructuralPlanner<'_, '_> {
             let Ok(position) = u32::try_from(at) else {
                 continue;
             };
-            if let Some((ty, spelling)) = actual(*argument)
-                .and_then(|actual| copy_retype(probe, callee, position, *declared, actual))
+            if let Some((ty, spelling)) = by_member.get(&position) {
+                legacy.insert(position, ty.clone());
+                legacy_spelled.push(spelling.clone());
+                members.insert(position, ty.clone());
+                retyped.insert(position, ty.clone());
+                spelled.push(spelling.clone());
+            } else if !members_only
+                && let Some((ty, spelling)) = actual(*argument)
+                    .and_then(|actual| copy_retype(probe, callee, position, *declared, actual))
             {
                 legacy.insert(position, ty.clone());
                 legacy_spelled.push(format!("{at}{spelling}"));
                 retyped.insert(position, ty);
                 spelled.push(format!("{at}{spelling}"));
-            } else if positional
+            } else if !members_only
+                && positional
                 && probe.represent(*declared) == Some(HirType::Erased)
                 && let Some(ty) = producer(*argument)
                 && self.erased.admits(callee, position, &ty)
@@ -11258,13 +11587,25 @@ impl StructuralPlanner<'_, '_> {
             .entry(within.to_owned())
             .or_default()
             .insert(call, (suffix.clone(), retyped.clone()));
+        // A copy over a union member is a copy of the implementation, the one
+        // body there is; a constructor's is lowered beside its class.
+        let by_member = !members.is_empty();
+        let callee = if by_member { implementation } else { callee };
+        let constructs = by_member && probe.kind_of(callee) == Some(syntax::CONSTRUCTOR);
+        if constructs {
+            self.found.constructions.insert((callee, suffix.clone()));
+        }
+        if by_member {
+            self.found.members.insert((callee, suffix.clone()), members);
+        }
         let copies = self.found.copies.entry(callee).or_default();
         if !copies.iter().any(|(_, at)| *at == suffix) {
             copies.push((retyped.clone(), suffix.clone()));
             // Walked only where a copy will be lowered: `function_copies` makes
-            // copies of plain function declarations, and a method's or an
-            // accessor's would be a context no builder ever runs in.
-            if probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION) {
+            // copies of plain function declarations, and the class makes a
+            // constructor's over a union member. A method's or an accessor's
+            // would be a context no builder ever runs in.
+            if probe.kind_of(callee) == Some(syntax::FUNCTION_DECLARATION) || constructs {
                 self.pending.push(PendingCopy {
                     declaration: callee,
                     retyped,
@@ -11871,7 +12212,11 @@ fn function_copies(
         } else {
             // An ordinary function keeps its unspecialized body as well: a call
             // passing the declared parameter type still names that body.
-            let mut copies = vec![Copy::default()];
+            let mut copies = if structural.lowers_as_declared(id) {
+                vec![Copy::default()]
+            } else {
+                Vec::new()
+            };
             copies.extend(structural.copies.get(&id).into_iter().flatten().map(
                 |(retyped, suffix)| Copy {
                     retyped: retyped.clone(),
@@ -12357,6 +12702,76 @@ fn member_copy(
     }
 }
 
+/// A constructor's copies over the union members its `new` and `super(...)`
+/// sites pass ([`Structural::constructions`]), each beside its raising form
+/// where the constructor raises. Named as a site names them: the copy's
+/// suffix, then the exception mode's.
+#[expect(
+    clippy::too_many_arguments,
+    reason = "explicit layout owner during collection"
+)]
+fn constructor_copies(
+    layout_collector: &mut LayoutCollector,
+    snapshot: &LoweringSnapshot<'_>,
+    foreign: &super::runtime::ForeignTable,
+    shared: &Shared,
+    lowered: &mut Lowered,
+    class: NodeId,
+    member: NodeId,
+    wanted: &mut std::collections::BTreeSet<usize>,
+) {
+    let Some(copies) = shared.structural.copies.get(&member) else {
+        return;
+    };
+    let probe = FuncBuilder::probe(snapshot);
+    // An object's constructor takes the instance first; one whose base makes
+    // the instance takes none.
+    let receiver = u32::from(probe.native_instance(class, None).is_none());
+    for (retyped, suffix) in copies {
+        if !shared
+            .structural
+            .constructions
+            .contains(&(member, suffix.clone()))
+        {
+            continue;
+        }
+        let retyped_symbols = retyped_symbols_of(&probe, member, retyped);
+        let shifted: Retyped = retyped
+            .iter()
+            .map(|(at, ty)| (at + receiver, ty.clone()))
+            .collect();
+        for raises in [false, true] {
+            if raises && !shared.naming.raising.contains(&member) {
+                continue;
+            }
+            let copy = Copy {
+                retyped: shifted.clone(),
+                suffix: suffix.clone(),
+                raises,
+                ..Copy::default()
+            };
+            let mut builder = shared.builder(snapshot, foreign, copy);
+            builder.retyped_symbols.clone_from(&retyped_symbols);
+            builder.member_retyped = member_symbols(&probe, &shared.structural, member, suffix);
+            match builder.lower_method_of(class, member, None) {
+                Ok(mut func) => {
+                    let ordinary = std::mem::take(&mut func.name);
+                    let mode = if raises { RAISING_SUFFIX } else { "" };
+                    func.name = format!("{ordinary}{suffix}{mode}");
+                    builder.rename_arrivals(&ordinary, &func.name);
+                    lowered.program.funcs.push(func);
+                }
+                Err(diagnostic) => {
+                    note_member(&mut builder, lowered, class, member, None, &diagnostic);
+                    lowered.diagnostics.push(diagnostic);
+                }
+            }
+            builder.harvest(wanted, &mut lowered.arrivals);
+            layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+        }
+    }
+}
+
 /// The raising copy of one class member, where a `try` can reach it.
 ///
 /// Its own function because it is its own step and because `lower_class` is a loop
@@ -12566,6 +12981,25 @@ fn lower_class(
                 layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
                 continue;
             }
+            if instance.is_none()
+                && builder.kind_of(member) == Some(syntax::CONSTRUCTOR)
+                && !shared.structural.lowers_as_declared(member)
+            {
+                // Reached only as its copies over union members.
+                constructor_copies(
+                    layout_collector,
+                    snapshot,
+                    foreign,
+                    shared,
+                    lowered,
+                    class,
+                    member,
+                    wanted,
+                );
+                builder.harvest(wanted, &mut lowered.arrivals);
+                layout_collector.collect(&mut lowered.program, builder.layouts.into_layouts());
+                continue;
+            }
             // **Attempted whether or not the ordinary body compiles**, because the two
             // are independent lowerings and the *call site* names one of them without
             // asking: `callee_for` appends the suffix when the declaration is in
@@ -12588,6 +13022,18 @@ fn lower_class(
                 &sources,
                 wanted,
             );
+            if instance.is_none() && builder.kind_of(member) == Some(syntax::CONSTRUCTOR) {
+                constructor_copies(
+                    layout_collector,
+                    snapshot,
+                    foreign,
+                    shared,
+                    lowered,
+                    class,
+                    member,
+                    wanted,
+                );
+            }
             match builder.lower_method_of(class, member, instance) {
                 Ok(func) => lowered.program.funcs.push(func),
                 // **Recorded, not only reported** -- the same omission the two
@@ -16798,10 +17244,12 @@ pub fn lower_with(
             continue;
         }
         for copy in copies {
-            let retyped_symbols =
-                retyped_symbols_of(&FuncBuilder::probe(snapshot), id, &copy.retyped);
+            let probe = FuncBuilder::probe(snapshot);
+            let retyped_symbols = retyped_symbols_of(&probe, id, &copy.retyped);
+            let member_retyped = member_symbols(&probe, &shared.structural, id, &copy.suffix);
             let mut builder = shared.builder(snapshot, foreign, copy);
             builder.retyped_symbols = retyped_symbols;
+            builder.member_retyped = member_retyped;
             match builder.lower_function(id) {
                 Ok(mut func) => {
                     // A body that takes the call's `this`, and the entry by its
@@ -22171,6 +22619,12 @@ struct FuncBuilder<'a> {
     /// meets the same prefix check and the same refusal, and the copy is emitted
     /// and never reached.
     structural_calls: rustc_hash::FxHashMap<NodeId, Retyped>,
+    /// The `new` and `super(...)` sites that name a constructor's copy over a
+    /// union member ([`Structural::constructions`]).
+    copied_constructions: rustc_hash::FxHashSet<NodeId>,
+    /// In a copy over union members, the parameters (and their `const`
+    /// aliases) re-typed to one, which decide `typeof` tests on them.
+    member_retyped: rustc_hash::FxHashSet<u32>,
     /// What each generic class instantiation binds, by the instance's type.
     /// See `Shared::class_instances`.
     class_instances: std::rc::Rc<rustc_hash::FxHashMap<TypeId, Substitution>>,
@@ -22193,19 +22647,12 @@ struct FuncBuilder<'a> {
     /// and this compiler was refusing it, which is a refusal of valid code
     /// rather than a construct it does not understand.
     in_constructor: bool,
-    /// In the constructor of a class the program writes over an Objective-C
-    /// class: the class, which its `super(...)` makes an instance of, and
-    /// whether it has fields to make with it.
-    objc_construct: Option<ObjcConstruct>,
-    /// The name of the class over a `GObject` class whose constructor is
-    /// being lowered: its `super(...)` makes the instance (`gobject_super`).
-    gobject_construct: Option<String>,
+    /// In a constructor whose base makes the instance: what its `super(...)`
+    /// makes `this` with ([`MadeBy`]).
+    made_by: Option<MadeBy>,
     /// An override just lowered that answers its out parameters as a tuple:
     /// the slot wrapper the member loop builds for it (`lower_vfunc_slot`).
     vfunc_slot: Option<VfuncSlot>,
-    /// The name of the class over a composable Windows Runtime class whose
-    /// constructor is being lowered: its `super()` composes the instance.
-    com_construct: Option<String>,
     /// The chain-up (`super.vfunc_clicked()`) whose callee is being built
     /// from the overridden declaration, which is a virtual function a direct
     /// call of is otherwise refused.
@@ -22601,15 +23048,15 @@ impl<'a> FuncBuilder<'a> {
             qualified: rustc_hash::FxHashMap::default(),
             generic_calls: rustc_hash::FxHashMap::default(),
             structural_calls: rustc_hash::FxHashMap::default(),
+            copied_constructions: rustc_hash::FxHashSet::default(),
+            member_retyped: rustc_hash::FxHashSet::default(),
             class_instances: std::rc::Rc::default(),
             thenables: std::rc::Rc::default(),
             retyped: Retyped::new(),
             retyped_symbols: std::collections::BTreeMap::new(),
             in_constructor: false,
-            objc_construct: None,
-            gobject_construct: None,
+            made_by: None,
             vfunc_slot: None,
-            com_construct: None,
             chaining_up: None,
             objc_entry: None,
             record_out: None,
@@ -26123,8 +26570,7 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
         if member == "constructor" {
-            let name = self.gobject_construct.clone()?;
-            return Some(self.gobject_super(id, &name));
+            return None;
         }
         let target = self.snapshot.call_targets.get(&id).copied()?;
         let declaration = target.callee?;
@@ -26438,7 +26884,7 @@ impl<'a> FuncBuilder<'a> {
             let index = u32::try_from(params.len()).unwrap_or(0);
             params.extend(self.lower_param(child, index)?);
         }
-        self.com_construct = Some(name.clone());
+        self.made_by = Some(MadeBy::Com(name.clone()));
         self.returns = ty.clone();
         self.lower_block(body)?;
         if !self.is_terminated() {
@@ -26462,9 +26908,6 @@ impl<'a> FuncBuilder<'a> {
         name: &str,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        if self.this.is_some() {
-            return Err(self.unsupported(id, "a second `super()`"));
-        }
         if !arguments.is_empty() {
             return Err(self.unsupported(id, "a `super(...)` with arguments in a class over a composable Windows Runtime class, whose factory takes none"));
         }
@@ -26540,7 +26983,7 @@ impl<'a> FuncBuilder<'a> {
             let index = u32::try_from(params.len()).unwrap_or(0);
             params.extend(self.lower_param(child, index)?);
         }
-        self.gobject_construct = Some(name.clone());
+        self.made_by = Some(MadeBy::Gobject(name.clone()));
         self.returns = ty.clone();
         self.lower_block(body)?;
         if !self.is_terminated() {
@@ -26560,9 +27003,6 @@ impl<'a> FuncBuilder<'a> {
     /// `Property<T>` among them is written through its state's field
     /// (`constructed_setter`).
     fn gobject_super(&mut self, id: NodeId, name: &str) -> Result<ValueId, Diagnostic> {
-        if self.this.is_some() {
-            return Err(self.unsupported(id, "a second `super(...)`"));
-        }
         let instance = self.this_instance_type(id)?;
         let made = self.lower_gobject_made(id, name, instance)?;
         self.this = Some(made);
@@ -26624,11 +27064,11 @@ impl<'a> FuncBuilder<'a> {
             }
             params.extend(self.lower_param(child, index)?);
         }
-        self.objc_construct = Some(ObjcConstruct {
+        self.made_by = Some(MadeBy::Objc(ObjcConstruct {
             handle: handle.clone(),
             fields,
             parameter_properties,
-        });
+        }));
         let ty = HirType::NativePointer(super::native::Pointee::Opaque(handle.clone()));
         self.returns = ty.clone();
         self.lower_block(body)?;
@@ -26649,19 +27089,13 @@ impl<'a> FuncBuilder<'a> {
     fn lower_objc_super_init(
         &mut self,
         id: NodeId,
-        arguments: &[NodeId],
-    ) -> Result<ValueId, Diagnostic> {
-        let Some(ObjcConstruct {
+        ObjcConstruct {
             handle,
             fields,
             parameter_properties,
-        }) = self.objc_construct.clone()
-        else {
-            return Err(self.unsupported(id, "`super(...)` outside a constructor"));
-        };
-        if self.this.is_some() {
-            return Err(self.unsupported(id, "a second `super(...)`"));
-        }
+        }: ObjcConstruct,
+        arguments: &[NodeId],
+    ) -> Result<ValueId, Diagnostic> {
         let target = self
             .snapshot
             .call_targets
@@ -27562,6 +27996,10 @@ impl<'a> FuncBuilder<'a> {
 
         let origin = self.origin(member);
         let mut params = Vec::new();
+        // A constructor whose builtin base makes the instance has no receiver
+        // (`begin_made_constructor`).
+        let made =
+            self.begin_made_constructor(class, member, instance, is_constructor && !is_static)?;
         if is_static {
             // No receiver, so no `this`.
             //
@@ -27574,7 +28012,7 @@ impl<'a> FuncBuilder<'a> {
             // derived class` -- inside a derived class.
             self.this = None;
             self.base = self.base_class(class);
-        } else {
+        } else if made.is_none() {
             // `this` is parameter zero. Its type is the class's instance type
             // -- or, for one copy of a generic class, the instantiation's.
             //
@@ -27643,6 +28081,7 @@ impl<'a> FuncBuilder<'a> {
         // back with `PropertyRecord::declaration`, which is the other half.
         let generated = self.begin_generator(member)?;
         let return_type = self.method_return_type(member, is_constructor, generated.as_ref())?;
+        let return_type = made.clone().unwrap_or(return_type);
         // **Before the parameters, because a parameter's default can raise.** A
         // destructured parameter's element default -- `{ x = thrower() }` -- is
         // evaluated while the pattern is bound, which is the loop below; inside a
@@ -27684,10 +28123,7 @@ impl<'a> FuncBuilder<'a> {
         // the native constructor's (`lower_objc_super_init`, `gobject_super`,
         // `com_super`), which makes none of this class's fields, so nothing
         // after it would store them.
-        if self.objc_construct.is_some()
-            || self.gobject_construct.is_some()
-            || self.com_construct.is_some()
-        {
+        if self.made_by.is_some() {
             self.store_parameter_properties(&declared)?;
         } else {
             self.pending_parameter_properties = declared;
@@ -27723,6 +28159,7 @@ impl<'a> FuncBuilder<'a> {
         }
         if let Some(body) = body {
             self.lower_block(body)?;
+            self.end_made_constructor(member, made.is_some())?;
             // Falling off the end of an `extends null` constructor returns a
             // `this` that was never bound: see `this_is_never_bound`.
             if is_constructor && !self.is_terminated() && self.this_is_never_bound(body) {
@@ -27748,8 +28185,9 @@ impl<'a> FuncBuilder<'a> {
             .contains(nts_semantic_schema::DeclarationModifiers::EXPORT);
         let mut func = self.finish(name, params, return_type, origin, exported);
         // A constructor runs over an object `new` allocated a moment ago, so
-        // every field it writes is writing over a zero.
-        func.initializes_receiver = is_constructor;
+        // every field it writes is writing over a zero. One whose base made
+        // the instance has no receiver.
+        func.initializes_receiver = is_constructor && made.is_none();
         func.written_return = self.written_return(member);
         func.result_absent = self.result_absent(member);
         func.written_return_elements = self.written_tuple_return(member);
@@ -36375,6 +36813,12 @@ impl<'a> FuncBuilder<'a> {
     /// - an alias or constraint that resolves to one, which
     ///   [`Self::after_substitution`] already handled for object types.
     fn fixed_arity_positions(&self, ty: TypeId) -> Option<Vec<TypeId>> {
+        Some(self.tuple_shape(ty)?.elements.clone())
+    }
+
+    /// The checker's tuple shape after this copy's substitutions. Position
+    /// kinds remain part of the answer; positions alone do not prove arity.
+    fn tuple_shape(&self, ty: TypeId) -> Option<&nts_semantic_schema::TupleType> {
         let ty = self
             .sources
             .get(&ty)
@@ -36383,7 +36827,7 @@ impl<'a> FuncBuilder<'a> {
         let TypeKind::Tuple(positions) = &self.snapshot.types.get(ty.0 as usize)?.kind else {
             return None;
         };
-        Some(positions.elements.clone())
+        Some(positions)
     }
 
     /// The parameters as the callee declares them, before any expansion.
@@ -37450,20 +37894,22 @@ impl<'a> FuncBuilder<'a> {
         // takes any iterable**: its type is the pattern's own `[any?]`, which says
         // nothing about what a caller passes, so it is erased -- as every direct
         // call to it is told. See [`elision_patterns::takes_any_iterable`].
-        let ty = match rest_array {
-            Some(array) => array,
-            None if elision_patterns::takes_any_iterable(self, id) => HirType::Erased,
-            None => self
-                .type_of(name_node)
-                .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?,
-        };
         // **A structural specialisation re-types this parameter and nothing
         // else.** `readName(v: Named)` specialised over `Thing` takes a `Thing`
         // here, so the body's `v.name` reads Thing's layout at Thing's offset --
         // and every *other* mention of `Named` in the same function still means
         // `Named`, which is the distinction the first attempt got wrong by
-        // substituting the type. See [`Structural`].
-        let ty = self.retyped.get(&index).cloned().unwrap_or(ty);
+        // substituting the type. See [`Structural`]. Asked first, because a
+        // union with no representation of its own is copied over the member
+        // its callers pass.
+        let ty = match (self.retyped.get(&index), rest_array) {
+            (Some(retyped), _) => retyped.clone(),
+            (None, Some(array)) => array,
+            (None, None) if elision_patterns::takes_any_iterable(self, id) => HirType::Erased,
+            (None, None) => self
+                .type_of(name_node)
+                .ok_or_else(|| self.unrepresentable(name_node, "a parameter"))?,
+        };
         // **A parameter is a slot after all**, and the reason is the calling
         // convention rather than a read. See [`in_a_slot`].
         let ty = in_a_slot(ty);
@@ -38069,6 +38515,11 @@ impl<'a> FuncBuilder<'a> {
             // arm's, so a `return;` and a written `undefined` cannot
             // come to disagree about what an absence is at a nullable
             // pointer.
+            // A constructor whose base made the instance answers it, so a
+            // bare `return;` there is `return this`.
+            (None, None) if self.made_by.is_some() => Some(self.this.ok_or_else(|| {
+                self.unsupported(id, "a `return` before `super(...)` made the instance")
+            })?),
             (None, None)
                 if self.generator.is_none()
                     && !matches!(self.returns, HirType::Void | HirType::Never) =>
@@ -41962,6 +42413,9 @@ impl<'a> FuncBuilder<'a> {
         callee: NodeId,
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
+        if self.is_standard_array_constructor(callee) {
+            return Some(self.lower_array_call(id, callee));
+        }
         // `GtkStringObject.new("x")`: a C function as a static member of a
         // class value, which has no value to be a receiver.
         if self.kind_of(callee) == Some(syntax::PROPERTY_ACCESS_EXPRESSION)
@@ -46976,10 +47430,26 @@ impl<'a> FuncBuilder<'a> {
     /// One function because it is one fact. [`Self::instanceof_native`] and
     /// [`Self::instanceof_builtin`] both ask it, and two spellings of a guard
     /// this load-bearing is how they drift.
-    fn has_no_representation(&mut self, name: &str) -> bool {
-        self.type_named(name)
-            .and_then(|ty| self.represent(ty))
-            .is_none()
+    ///
+    /// **An instance type the snapshot does not hold has no values, because
+    /// every creation site records its type** -- a `new`, a literal, a library
+    /// module compiled in. So an absent instance type proves the fold as an
+    /// unrepresentable one does. The fold depends on that: if the snapshot
+    /// ever stops recording a creation site's type, absence proves nothing and
+    /// this answers `false` about a real value.
+    fn has_no_representation(&self, global: &construction::CheckedGlobalReference) -> bool {
+        self.global_instance_type(global)
+            .is_none_or(|ty| self.represent(ty).is_none())
+    }
+
+    /// The ES builtin an `instanceof`'s right side names, authenticated by what
+    /// it references: a program's own `Promise` is its own class whatever it
+    /// is called, and goes the ordinary class path. A `const` alias of a
+    /// builtin does too, until its read is checked here.
+    fn instanceof_global(&self, rhs: NodeId) -> Option<construction::CheckedGlobalReference> {
+        self.checked_global_reference(rhs).filter(|global| {
+            global.library == nts_semantic_schema::Library::Es && global.bindings.is_empty()
+        })
     }
 
     fn instanceof_native(
@@ -46988,15 +47458,10 @@ impl<'a> FuncBuilder<'a> {
         lhs: NodeId,
         rhs: NodeId,
     ) -> Result<Option<ValueId>, Diagnostic> {
-        let Some(name) = self
-            .node(rhs)
-            .text
-            .as_ref()
-            .and_then(|text| text.as_utf8())
-            .map(str::to_owned)
-        else {
+        let Some(global) = self.instanceof_global(rhs) else {
             return Ok(None);
         };
+        let name = global.name.clone();
         // A weak collection has **no representation**, so nothing a compiled
         // program can hold is one: `representation_within` gives `Map` and
         // `Set` a `ManagedType` and gives `WeakMap` and `WeakSet` none, no
@@ -47041,7 +47506,7 @@ impl<'a> FuncBuilder<'a> {
         if matches!(
             name.as_str(),
             "WeakMap" | "WeakSet" | "WeakRef" | "FinalizationRegistry"
-        ) && self.has_no_representation(&name)
+        ) && self.has_no_representation(&global)
         {
             let origin = self.origin(id);
             let _ = self.lower_expression(lhs)?;
@@ -47150,9 +47615,8 @@ impl<'a> FuncBuilder<'a> {
         // **Whether the class has one instance type or several**, which decides
         // whether a narrowing has a single answer. A generic class has one record
         // per instantiation, all sharing the symbol, so `named.first()` below is an
-        // arbitrary one of them -- correct for the *test*, because
-        // `classes_under` expands to every descriptor the chain must compare, and
-        // wrong as a *type* to re-type a binding to. Recording it anyway typed a
+        // arbitrary one of them -- the *test* expands every one (`classes` below),
+        // and it is wrong as a *type* to re-type a binding to. Recording it anyway typed a
         // narrowed value as one instantiation where the use wanted another: +46
         // refusals over the two corpora, at two sites in web-platform's streams,
         // reading `a ReadableStreamDefaultReader where a ReadableStreamDefaultReader
@@ -47165,16 +47629,8 @@ impl<'a> FuncBuilder<'a> {
         // [`super::builtin`] identifies these four by everywhere else, and they
         // are global, so there is nothing else they could be.
         let class = named.first().copied().or_else(|| {
-            let text = self
-                .node(rhs)
-                .text
-                .as_ref()
-                .and_then(|text| text.as_utf8())
-                .map(str::to_owned)?;
-            if !super::builtin::is_error(&text) {
-                return None;
-            }
-            self.type_named(&text)
+            let global = self.instanceof_global(rhs)?;
+            self.provided_error_class(&global)
         });
         // A typed array is not a class here and never will be: all nine share
         // one struct and one descriptor, differing only in how their bytes are
@@ -47201,7 +47657,15 @@ impl<'a> FuncBuilder<'a> {
             ));
         };
 
-        let classes = self.classes_under(class);
+        // Every type the class's symbol names is that class at run time: a
+        // generic class's instantiations are each an instance of it, and so
+        // are their subclasses.
+        let mut classes: Vec<TypeId> = std::iter::once(class)
+            .chain(named.iter().copied())
+            .flat_map(|ty| self.classes_under(ty))
+            .collect();
+        classes.sort_unstable_by_key(|ty| ty.0);
+        classes.dedup();
 
         let value = self.lower_expression(lhs)?;
         let origin = self.origin(id);
@@ -47277,7 +47741,8 @@ impl<'a> FuncBuilder<'a> {
         lhs: NodeId,
         rhs: NodeId,
     ) -> Result<Option<ValueId>, Diagnostic> {
-        let wanted = match self.node(rhs).text.as_ref().and_then(|text| text.as_utf8()) {
+        let global = self.instanceof_global(rhs);
+        let wanted = match global.as_ref().map(|global| global.name.as_str()) {
             Some("Array") => Builtin::Array,
             Some("Object") => Builtin::Object,
             Some("Function") => Builtin::Function,
@@ -47287,19 +47752,15 @@ impl<'a> FuncBuilder<'a> {
             // answerable and the answer is `false`. Guarded on the fact rather
             // than asserting it, so the day a regular expression represents
             // this falls through to the refusal it has today.
-            Some("RegExp") if self.has_no_representation("RegExp") => Builtin::Never,
+            Some("RegExp")
+                if global
+                    .as_ref()
+                    .is_some_and(|it| self.has_no_representation(it)) =>
+            {
+                Builtin::Never
+            }
             _ => return Ok(None),
         };
-        // Declared by the program rather than by `lib.d.ts` means it is an
-        // ordinary class and the hierarchy search is the right answer.
-        if self
-            .node(rhs)
-            .symbol
-            .and_then(|symbol| self.snapshot.symbols.get(symbol.0 as usize))
-            .is_some_and(|symbol| !symbol.declarations.is_empty())
-        {
-            return Ok(None);
-        }
         if matches!(wanted, Builtin::Array) {
             return self.decide_is_array(id, lhs).map(Some);
         }
@@ -52475,7 +52936,11 @@ impl<'a> FuncBuilder<'a> {
             let and = match self.kind_of(operator) {
                 Some(syntax::AMPERSAND_AMPERSAND_TOKEN) => true,
                 Some(syntax::BAR_BAR_TOKEN) => false,
-                _ => return self.the_checker_decided(condition),
+                _ => {
+                    return self
+                        .decided_typeof(condition)
+                        .or_else(|| self.the_checker_decided(condition));
+                }
             };
             // `false && b` is `false` and `true || b` is `true`, and neither reads
             // `b`. Otherwise the answer *is* `b`'s.
@@ -52486,6 +52951,75 @@ impl<'a> FuncBuilder<'a> {
             };
         }
         self.the_checker_decided(condition)
+    }
+
+    /// `typeof value === "number"`, where this copy re-typed `value` to the one
+    /// member of its union its callers pass (`union_member_retype`) and nothing
+    /// assigns it: the member decides the test, and the other members'
+    /// branches are dead here.
+    fn decided_typeof(&self, condition: NodeId) -> Option<bool> {
+        if self.retyped_symbols.is_empty()
+            || self.kind_of(condition) != Some(syntax::BINARY_EXPRESSION)
+        {
+            return None;
+        }
+        let children = self.children(condition);
+        let [left, operator, right] = children.as_slice() else {
+            return None;
+        };
+        let equal = match self.kind_of(*operator)? {
+            syntax::EQUALS_EQUALS_EQUALS_TOKEN | syntax::EQUALS_EQUALS_TOKEN => true,
+            syntax::EXCLAMATION_EQUALS_EQUALS_TOKEN | syntax::EXCLAMATION_EQUALS_TOKEN => false,
+            _ => return None,
+        };
+        let (left, right) = (
+            self.through_parentheses(*left),
+            self.through_parentheses(*right),
+        );
+        let (tested, tag) = if self.kind_of(left) == Some(syntax::TYPE_OF_EXPRESSION) {
+            (left, right)
+        } else {
+            (right, left)
+        };
+        if self.kind_of(tested) != Some(syntax::TYPE_OF_EXPRESSION) {
+            return None;
+        }
+        let tag = self
+            .snapshot
+            .node_types
+            .get(&tag)
+            .and_then(|ty| self.snapshot.types.get(ty.0 as usize))
+            .and_then(|record| match &record.kind {
+                TypeKind::Literal(LiteralValue::String(text)) => text.as_utf8(),
+                _ => None,
+            })?;
+        let operand = self.through_parentheses(*self.children(tested).first()?);
+        if self.kind_of(operand) != Some(syntax::IDENTIFIER) {
+            return None;
+        }
+        let symbol = self.node(operand).symbol?.0;
+        if !self.member_retyped.contains(&symbol) {
+            return None;
+        }
+        let member = self.retyped_symbols.get(&symbol)?;
+        let parameter = self
+            .snapshot
+            .symbols
+            .get(symbol as usize)?
+            .declarations
+            .iter()
+            .copied()
+            .find(|at| self.kind_of(*at) == Some(syntax::PARAMETER))?;
+        let mut function = self.node(parameter).parent?;
+        while self.kind_of(function).is_none() {
+            function = self.node(function).parent?;
+        }
+        let mut assigned = Vec::new();
+        self.assigned_symbols(function, &mut assigned);
+        if assigned.contains(&symbol) {
+            return None;
+        }
+        Some((self.spelling_for(member)? == tag) == equal)
     }
 
     /// The checker's literal answer for a condition, where the condition reads
@@ -52990,6 +53524,9 @@ impl<'a> FuncBuilder<'a> {
         // What each name held on entry: the baseline the arms are compared
         // against, and what the false edge carries when there is no `else`.
         let entry = self.bindings.clone();
+        // `this` is per path in a constructor whose base makes the instance:
+        // a `super(...)` in an arm binds it there and nowhere else.
+        let mut paths = ThisPaths::enter(self.this);
 
         self.switch_to(then_block);
         // The block the arm *ended* in, which nested control flow moves away from
@@ -52997,6 +53534,7 @@ impl<'a> FuncBuilder<'a> {
         // the real tail without a terminator.
         let (then_tail, then_open, then_bindings) =
             self.lower_arm(|this| this.lower_narrowed_arm(condition, then_branch, true))?;
+        paths.arm(&mut self.this, then_open);
 
         let (else_tail, else_open, else_bindings) = match else_branch {
             Some(else_branch) => {
@@ -53007,6 +53545,8 @@ impl<'a> FuncBuilder<'a> {
             // changes nothing.
             None => (else_block, true, entry.clone()),
         };
+        paths.arm(&mut self.this, else_open);
+        self.this = paths.rejoin().map_err(|why| self.unsupported(id, why))?;
 
         if !then_open && !else_open {
             // Both arms ended. Anything after the `if` is unreachable, and the
@@ -58364,7 +58904,10 @@ impl<'a> FuncBuilder<'a> {
         self.type_of(id)
             .filter(concrete)
             .or_else(|| Some(self.instead_of_an_unchosen_collection(id, unchosen)).filter(concrete))
-            .or_else(|| self.contextual_type(id, 0))
+            .or_else(|| {
+                self.contextual_type(id, 0)
+                    .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
+            })
             .or_else(|| {
                 self.type_of(id)
                     .filter(|ty| matches!(ty, HirType::Managed(ManagedType::Array(_))))
@@ -58407,10 +58950,6 @@ impl<'a> FuncBuilder<'a> {
         at
     }
 
-    #[expect(
-        clippy::too_many_lines,
-        reason = "keep semantic text and key projection beside its existing dispatch"
-    )]
     fn lower_new(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         let children = self.children(id);
         let callee = *children
@@ -58435,6 +58974,7 @@ impl<'a> FuncBuilder<'a> {
             .call_targets
             .get(&id)
             .and_then(|it| it.callee)
+            .filter(|declaration| self.references_the_class_of(callee, *declaration))
             .map(|declaration| self.location(declaration))
             .and_then(|at| self.foreign.get(&(at.file.0, at.span.end)))
             .map(|row| row.key.clone())
@@ -58473,6 +59013,10 @@ impl<'a> FuncBuilder<'a> {
                 origin,
             ));
         }
+        if let Some(construction) = self.lower_referenced_construction(id, callee) {
+            return construction;
+        }
+
         let class = self
             .node(callee)
             .text
@@ -58480,10 +59024,6 @@ impl<'a> FuncBuilder<'a> {
             .and_then(|text| text.as_utf8())
             .map(str::to_owned)
             .ok_or_else(|| self.unsupported(callee, "a computed constructor"))?;
-
-        if class == "SharedArrayBuffer" {
-            return Err(self.unsupported(callee, SHARED_BUFFER_REFUSAL));
-        }
 
         // **Before the provided-error path, not after it.**
         //
@@ -58508,100 +59048,27 @@ impl<'a> FuncBuilder<'a> {
         // shares the row with it does not.
         self.constructed_from_a_value(id, callee, &class)?;
 
-        // `new Array(n)` is an allocation with a length, which is what
-        // `ArrayNew` already is. It is worth taking rather than asking authors
-        // to write `[]` and push: an array made at its final size allocates
-        // once, and a benchmark that pre-sizes its array is measuring that.
-        //
-        // The type comes from where the result goes, because the constructor's
-        // own type is a union of the overloads in `lib.d.ts` and says nothing
-        // about the element.
-        // `new Uint8Array(n)` is the same allocation with the element width
-        // written down instead of inferred.
-        // Or a class whose instances *are* an array: one that extends a typed
-        // array and adds no storage of its own. `new Buffer(n)` is
-        // `new Uint8Array(n)` with a different name on it, and asking the
-        // representation rather than the name is what makes that true without
-        // keeping a list of subclasses.
-        //
-        // A subclass that declares a constructor is not this: taking the
-        // allocation here would skip it silently, so it falls through to the
-        // object path and is refused there.
-        let is_an_array = matches!(
-            self.type_of(id),
-            Some(HirType::Managed(ManagedType::Array(_)))
-        ) && self
-            .snapshot
-            .node_types
-            .get(&id)
-            .is_none_or(|constructed| self.hierarchy.constructor(*constructed).is_none());
-        // A typed array is a view now, and `new Uint8Array(8)` is what the
-        // specification says it is: allocate a buffer of the right byte length
-        // and return a window onto it. Handled before the `new Array` path
-        // below, which is about a *different* representation with its elements
-        // inline.
-        if let Some(element) = super::builtin::typed_array_element(&class) {
-            return self.lower_new_typed_array(id, &class, element);
-        }
-
-        if class == "Array" || is_an_array {
-            let ty = self.allocated_array_type(id)?;
-            if !matches!(ty, HirType::Managed(ManagedType::Array(_))) {
-                return Err(self.unsupported(id, "a `new Array` that is not an array"));
-            }
-            let origin = self.origin(id);
-            let arguments = self.arguments_of(id);
-            let Some(count) = arguments.first() else {
-                return self.lower_empty_array(id, ty);
-            };
-            let length = self.lower_expression(*count)?;
-            self.refuse_holes_that_read_as_null(id, &ty)?;
-            // `new Uint8Array([1, 2, 3])` and `new Uint8Array(other)` copy from
-            // what they are given rather than sizing to it. Refused, because
-            // taking the argument as a length would allocate an array of
-            // whatever the pointer happened to be.
-            if !matches!(
-                self.values[length.0 as usize].ty,
-                HirType::Int { .. } | HirType::Float { .. }
-            ) {
-                return Err(self.unsupported(id, &format!("a `new {class}` from a value")));
-            }
-            return Ok(self.push(
-                OpKind::ArrayNew {
-                    length,
-                    fill: ArrayFill::Holes,
-                },
-                ty,
-                origin,
-            ));
-        }
-
-        // A class a binding implements is constructed by the binding's
-        // constructor function: `new URL(href)` is `nts:dom`'s `newURL`.
         let arguments = self.arguments_of(id);
-        if let Some(constructor) = self.delegated_constructor(id, &arguments) {
+        if self.references_what_it_builds(callee, id)
+            && let Some(constructor) = self.delegated_constructor(id, &arguments)
+        {
             return self.lower_delegated_construction(id, constructor, &arguments);
         }
-
-        let ty = self.type_of(id);
-        let ty = self.widened(id, ty.ok_or_else(|| self.unrepresentable(id, "a `new`"))?);
-        // `new Map()` is the library's zero-argument `Map<any, any>` wherever it
-        // is written (and `new Set()` may be `Set<any>`), so where it goes says
-        // what it holds: a `return` into a `Map<string, number>` builds that
-        // table, string-hashed, rather than an erased one handed over
-        // unconverted.
-        let ty = self.instead_of_an_unchosen_collection(id, ty);
-        // The three the runtime builds rather than the program: a class's `new`
-        // is a call to its constructor, and none of these has one.
-        if let Some(built) = self.lower_new_provided(id, &ty) {
-            return built;
-        }
-
-        let HirType::Managed(ManagedType::Object(type_id)) = ty else {
+        // Nothing the callee references is a constructor this compiler knows,
+        // so the site's type says only why: not an object, a body nothing
+        // wrote, or a class reached through a value whose reference does not
+        // name its constructor.
+        let ty = self
+            .type_of(id)
+            .ok_or_else(|| self.unrepresentable(id, "a `new`"))?;
+        let HirType::Managed(ManagedType::Object(type_id)) = self.widened(id, ty) else {
             return Err(self.unsupported(id, "a `new` that does not produce an object"));
         };
         self.require_an_implemented_constructor(id, type_id)?;
-        self.lower_new_object(id, ty, type_id, callee, class)
+        Err(self.unsupported(
+            id,
+            &format!("a `new` through `{class}`, which does not name the constructor it holds"),
+        ))
     }
 
     /// Allocate a class instance and run what constructs it.
@@ -58824,9 +59291,10 @@ impl<'a> FuncBuilder<'a> {
         // ordering problem to solve, which is the other half of what that sentence
         // asserted.
         let suffix = self.raising_suffix_of(id);
+        let copy = self.constructed_copy(id);
         self.push(
             OpKind::Call {
-                callee: Callee::Direct(format!("{owner}#constructor{suffix}")),
+                callee: Callee::Direct(format!("{owner}#constructor{copy}{suffix}")),
                 args,
                 frame: None,
             },
@@ -58863,16 +59331,6 @@ impl<'a> FuncBuilder<'a> {
             HirType::Managed(ManagedType::Date) => Some(self.lower_new_date(id)),
             HirType::Managed(ManagedType::Buffer) => Some(self.lower_new_buffer(id)),
             HirType::Managed(ManagedType::DataView) => Some(self.lower_new_data_view(id)),
-            // `class Bytes extends Uint8Array {}` *is* that view, so `new
-            // Bytes(8)` builds one. Reached through the type rather than the
-            // name, because the name is the subclass's and
-            // `typed_array_element` only knows the eight it provides -- which
-            // is why these two examples went bare the moment typed arrays
-            // stopped being arrays.
-            HirType::Managed(ManagedType::View(element)) => {
-                let element = element.as_ref().clone();
-                Some(self.lower_new_typed_array(id, "typed array", element))
-            }
             _ => None,
         }
     }
@@ -83803,10 +84261,12 @@ impl<'a> FuncBuilder<'a> {
         member: &str,
         arguments: &[NodeId],
     ) -> Result<ValueId, Diagnostic> {
-        // The constructor of a class over an Objective-C class, whose
-        // `super(...)` makes the instance.
-        if member == "constructor" && self.objc_construct.is_some() {
-            return self.lower_objc_super_init(id, arguments);
+        // A constructor whose base makes the instance: `super(...)` is where
+        // `this` comes from.
+        if member == "constructor"
+            && let Some(made_by) = self.made_by.clone()
+        {
+            return self.make_the_instance(id, &made_by, arguments);
         }
         if let Some(call) = self.gobject_super_call(id, member, arguments) {
             return call;
@@ -83951,9 +84411,14 @@ impl<'a> FuncBuilder<'a> {
         // cases, and `tests/programs/a-throw-that-stays-in-its-function` carries both arms now --
         // an inherited constructor and an explicit `super`.
         let suffix = self.raising_suffix_of(id);
+        let copy = if member == "constructor" {
+            self.constructed_copy(id)
+        } else {
+            String::new()
+        };
         let call = self.push(
             OpKind::Call {
-                callee: Callee::Direct(format!("{base}#{member}{suffix}")),
+                callee: Callee::Direct(format!("{base}#{member}{copy}{suffix}")),
                 args,
                 frame: None,
             },
@@ -84064,8 +84529,7 @@ impl<'a> FuncBuilder<'a> {
         arguments: &[NodeId],
     ) -> Option<Result<ValueId, Diagnostic>> {
         if member == "constructor" {
-            let name = self.com_construct.clone()?;
-            return Some(self.com_super(id, &name, arguments));
+            return None;
         }
         let (method, tag) = self.overridable_target(id, member)?;
         let Some(receiver) = self.this else {
@@ -88894,12 +89358,14 @@ mod access_families;
 mod access_family_flow;
 mod access_family_functions;
 mod access_family_sites;
+mod array_construction;
 mod assertions;
 mod bigint;
 mod callable_fields;
 mod cast_descriptions;
 mod claimed_reads;
 mod closure_context;
+mod construction;
 mod elision_patterns;
 mod field_initialization;
 mod function_names;
@@ -88912,6 +89378,7 @@ mod iterator_close;
 mod json;
 mod layout_collection;
 mod literal_methods;
+mod made_instance;
 mod native_memory;
 mod numeric_arguments;
 mod parameter_entries;

@@ -1,8 +1,9 @@
 //! The overload sibling relation, indexed once for one immutable snapshot.
 
 use std::ops::Deref;
+use std::sync::OnceLock;
 
-use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, syntax};
+use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, syntax};
 use rustc_hash::FxHashMap;
 
 /// Analysis probes and body builders borrow the same snapshot and index.
@@ -11,6 +12,11 @@ use rustc_hash::FxHashMap;
 pub(super) struct LoweringSnapshot<'a> {
     semantic: &'a SemanticSnapshot,
     implementations: ImplementationIndex,
+    /// Per symbol, its references that stand where a write lands. Built on
+    /// the first question, in one pass over the nodes, by the classifier the
+    /// asker supplies (`reassigned_anywhere`); every later question is a
+    /// lookup rather than another pass.
+    written: OnceLock<FxHashMap<SymbolId, Vec<NodeId>>>,
 }
 
 impl<'a> LoweringSnapshot<'a> {
@@ -18,11 +24,20 @@ impl<'a> LoweringSnapshot<'a> {
         Self {
             semantic,
             implementations: ImplementationIndex::build(semantic),
+            written: OnceLock::new(),
         }
     }
 
     pub(super) fn implementation_of(&self, declaration: NodeId) -> NodeId {
         self.implementations.0[declaration.0 as usize]
+    }
+
+    /// The written references of every symbol, built once by `index`.
+    pub(super) fn written_references(
+        &self,
+        index: impl FnOnce() -> FxHashMap<SymbolId, Vec<NodeId>>,
+    ) -> &FxHashMap<SymbolId, Vec<NodeId>> {
+        self.written.get_or_init(index)
     }
 }
 
