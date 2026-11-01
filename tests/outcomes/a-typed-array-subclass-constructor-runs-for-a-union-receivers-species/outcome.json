@@ -1,0 +1,86 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 13,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "probe 0 4073700000000000",
+        "node": "probe 0 4074100000000000"
+      },
+      {
+        "compiled": "probe 1 4073700000000000",
+        "node": "probe 1 4074100000000000"
+      },
+      {
+        "compiled": "probe 4 407ff00000000000",
+        "node": "probe 4 4080480000000000"
+      },
+      {
+        "compiled": "probe 6 4073700000000000",
+        "node": "probe 6 4074100000000000"
+      },
+      {
+        "compiled": "probe 7 4073700000000000",
+        "node": "probe 7 4074100000000000"
+      },
+      {
+        "compiled": "probe 14 4073700000000000",
+        "node": "probe 14 4074100000000000"
+      },
+      {
+        "compiled": "probe 16 4073700000000000",
+        "node": "probe 16 4074100000000000"
+      },
+      {
+        "compiled": "probe 17 4073700000000000",
+        "node": "probe 17 4074100000000000"
+      },
+      {
+        "compiled": "probe 18 4073700000000000",
+        "node": "probe 18 4074100000000000"
+      },
+      {
+        "compiled": "probe 21 4073700000000000",
+        "node": "probe 21 4074100000000000"
+      },
+      {
+        "compiled": "probe 22 4073700000000000",
+        "node": "probe 22 4074100000000000"
+      },
+      {
+        "compiled": "probe 26 4073700000000000",
+        "node": "probe 26 4074100000000000"
+      },
+      {
+        "compiled": "probe 28 4073700000000000",
+        "node": "probe 28 4074100000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 13 disagreements",
+  "node": null,
+  "measured_with": "f4ec584cbc0d8196",
+  "source": "measured"
+}

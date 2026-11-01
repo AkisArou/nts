@@ -1,0 +1,156 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 29,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "`Uint8Array` used as a value rather than as a type is not supported by this lowering yet"
+      }
+    ],
+    "disagreements": [
+      {
+        "compiled": "probe 0 402e000000000000",
+        "node": "probe 0 4028000000000000"
+      },
+      {
+        "compiled": "probe 1 402e000000000000",
+        "node": "probe 1 4028000000000000"
+      },
+      {
+        "compiled": "probe 2 402e000000000000",
+        "node": "probe 2 4028000000000000"
+      },
+      {
+        "compiled": "probe 3 402e000000000000",
+        "node": "probe 3 4028000000000000"
+      },
+      {
+        "compiled": "probe 4 402e000000000000",
+        "node": "probe 4 4028000000000000"
+      },
+      {
+        "compiled": "probe 5 402e000000000000",
+        "node": "probe 5 4028000000000000"
+      },
+      {
+        "compiled": "probe 6 402e000000000000",
+        "node": "probe 6 4028000000000000"
+      },
+      {
+        "compiled": "probe 7 402e000000000000",
+        "node": "probe 7 4028000000000000"
+      },
+      {
+        "compiled": "probe 8 402e000000000000",
+        "node": "probe 8 4028000000000000"
+      },
+      {
+        "compiled": "probe 9 402e000000000000",
+        "node": "probe 9 4028000000000000"
+      },
+      {
+        "compiled": "probe 10 402e000000000000",
+        "node": "probe 10 4028000000000000"
+      },
+      {
+        "compiled": "probe 11 402e000000000000",
+        "node": "probe 11 4028000000000000"
+      },
+      {
+        "compiled": "probe 12 402e000000000000",
+        "node": "probe 12 4028000000000000"
+      },
+      {
+        "compiled": "probe 13 402e000000000000",
+        "node": "probe 13 4028000000000000"
+      },
+      {
+        "compiled": "probe 14 402e000000000000",
+        "node": "probe 14 4028000000000000"
+      },
+      {
+        "compiled": "probe 15 402e000000000000",
+        "node": "probe 15 4028000000000000"
+      },
+      {
+        "compiled": "probe 16 402e000000000000",
+        "node": "probe 16 4028000000000000"
+      },
+      {
+        "compiled": "probe 17 402e000000000000",
+        "node": "probe 17 4028000000000000"
+      },
+      {
+        "compiled": "probe 18 402e000000000000",
+        "node": "probe 18 4028000000000000"
+      },
+      {
+        "compiled": "probe 19 402e000000000000",
+        "node": "probe 19 4028000000000000"
+      },
+      {
+        "compiled": "probe 20 402e000000000000",
+        "node": "probe 20 4028000000000000"
+      },
+      {
+        "compiled": "probe 21 402e000000000000",
+        "node": "probe 21 4028000000000000"
+      },
+      {
+        "compiled": "probe 22 402e000000000000",
+        "node": "probe 22 4028000000000000"
+      },
+      {
+        "compiled": "probe 23 402e000000000000",
+        "node": "probe 23 4028000000000000"
+      },
+      {
+        "compiled": "probe 24 402e000000000000",
+        "node": "probe 24 4028000000000000"
+      },
+      {
+        "compiled": "probe 25 402e000000000000",
+        "node": "probe 25 4028000000000000"
+      },
+      {
+        "compiled": "probe 26 402e000000000000",
+        "node": "probe 26 4028000000000000"
+      },
+      {
+        "compiled": "probe 27 402e000000000000",
+        "node": "probe 27 4028000000000000"
+      },
+      {
+        "compiled": "probe 28 402e000000000000",
+        "node": "probe 28 4028000000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 29 disagreements",
+  "node": null,
+  "measured_with": "f4ec584cbc0d8196",
+  "source": "measured"
+}
