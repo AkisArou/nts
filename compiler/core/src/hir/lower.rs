@@ -42063,12 +42063,9 @@ impl<'a> FuncBuilder<'a> {
     /// of its own. Merging as we lowered would run the second source's side
     /// effects after the first source's entries had already landed.
     ///
-    /// A **struct** anywhere is refused by name, and at the argument rather than
-    /// at the call, so a merge of four tables says which one it could not walk.
-    /// Such a source's fields would be a static list and such a target's slots
-    /// fixed, so that case is a sequence of `FieldSet`s and not this loop -- a
-    /// different piece of work, and one whose refusal should not be borrowed by
-    /// this one.
+    /// A dictionary target keeps this runtime merge. A structured target uses
+    /// [`Self::assign_to_fields`]: source keys select checked stores into its
+    /// fixed slots, and an unrepresentable key declines instead of disappearing.
     /// `Object.create(null)`: an empty dictionary.
     ///
     /// **Only the `null` prototype.** Any other argument is a real prototype
@@ -42156,32 +42153,32 @@ impl<'a> FuncBuilder<'a> {
                  than merging anything into it",
             ));
         }
+        let target_node = target;
         let target = self.lower_expression(target)?;
         let ty = self.values[target.0 as usize].ty.clone();
-        if !matches!(ty, HirType::Managed(ManagedType::Table(_, _))) {
-            return Err(self.unsupported(
-                id,
-                "`Object.assign` onto something other than a dictionary, whose fields would be a \
-                 static list of stores rather than a walk",
-            ));
-        }
+        let dictionary = matches!(ty, HirType::Managed(ManagedType::Table(_, _)));
         let mut lowered = Vec::with_capacity(sources.len());
         for source in sources {
             let value = self.lower_expression(*source)?;
-            if !matches!(
-                self.values[value.0 as usize].ty,
-                HirType::Managed(ManagedType::Table(_, _))
-            ) {
+            if dictionary
+                && !matches!(
+                    self.values[value.0 as usize].ty,
+                    HirType::Managed(ManagedType::Table(_, _))
+                )
+            {
                 return Err(self.unsupported(
                     *source,
                     "`Object.assign` from something other than a dictionary",
                 ));
             }
-            lowered.push(value);
+            lowered.push((*source, value));
+        }
+        if !dictionary {
+            return self.assign_to_fields(id, target_node, target, &lowered);
         }
         let origin = self.origin(id);
         let mut into = target;
-        for value in lowered {
+        for (_, value) in lowered {
             // The call's own result is the next call's target. It is the same
             // pointer either way -- `nts_map_extend` answers the table it wrote
             // into -- but threading it makes the order a data dependency rather
@@ -89830,6 +89827,7 @@ mod made_instance;
 mod member_origins;
 mod native_memory;
 mod numeric_arguments;
+mod object_assign;
 mod parameter_entries;
 mod printed;
 mod project_semantics;
