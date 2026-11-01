@@ -270,11 +270,14 @@ fn emit_next(
             object_type_name(layout)
         ),
     );
+    let mut arguments = vec!["__nts_state".to_owned()];
+    program.direct_arguments(next.resume, &mut arguments)?;
     writer.line(
         origin,
         format!(
-            "    if ({}(__nts_state)) return false;",
-            program.function(&next.resume.name)
+            "    if ({}({})) return false;",
+            program.function(&next.resume.name),
+            arguments.join(", ")
         ),
     );
     writer.line(

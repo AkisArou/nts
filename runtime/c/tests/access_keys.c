@@ -25,7 +25,8 @@ static void key_is(NtsValue key, const char *wanted) {
   nts_release((NtsHeader *)out);
 }
 
-static NtsString *unexpected(const NtsHeader *object) {
+static NtsString *unexpected(NtsHeader *receiver) {
+  const NtsHeader *object = receiver;
   (void)object;
   callbacks++;
   return NULL;
