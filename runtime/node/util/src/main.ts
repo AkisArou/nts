@@ -970,7 +970,9 @@ export function parseEnv(content: string): Record<string, string> {
   }
 
   const source = content.replaceAll("\r", "");
-  const out: Record<string, string> = {};
+  // Node v26.13.0 src/node_dotenv.cc:88-114 Dotenv::ToObject sets
+  // v8::Null as the result's prototype, including for an empty result.
+  const out: Record<string, string> = Object.create(null);
   let position = 0;
   while (position < source.length) {
     const newline = source.indexOf("\n", position);
