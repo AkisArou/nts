@@ -1,11 +1,11 @@
 // Exercise the actual native-stop producer and census classifier together.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
+import { spawnTest } from "../gate/test-wait.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
@@ -32,9 +32,9 @@ const cases=[source("new Array<number>(1)","'5'"),source("[0]","'5'"),source("[0
 console.log(JSON.stringify(cases.map(body=>attempt(dir,body,tools))));
 `);
     for (const backend of ["c", "llvm", "jvm"]) {
-      const run = spawnSync(process.execPath, [helper, binary, backend, join(scratch, backend)], {
-        encoding: "utf8", timeout: 120_000, maxBuffer: 64 * 1024 * 1024,
-      });
+      const run = spawnTest(process.execPath, [helper, binary, backend, join(scratch, backend)], {
+        encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
+      }, `${backend} native output census rows`);
       assert.equal(run.status, 0, `${backend}: ${run.stderr}`);
       const rows = JSON.parse(run.stdout.trim());
       assert.deepEqual(rows.map(row => row.bucket), ["wrong-output", "crash", "strict-pass", "wrong-output", "crash"], backend);
