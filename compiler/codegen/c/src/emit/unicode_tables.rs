@@ -253,6 +253,10 @@ fn direction(out: &mut String, name: &str, direction: Direction) {
         let _ = writeln!(out);
     }
     let _ = writeln!(out, "}};");
+    descriptor(out, name, &tables);
+}
+
+fn descriptor(out: &mut String, name: &str, tables: &nts_unicode::CaseTables) {
     let _ = writeln!(
         out,
         "static const __nts_case_tables __nts_case_{name}_tables = {{"
