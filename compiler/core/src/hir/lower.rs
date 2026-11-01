@@ -38737,9 +38737,21 @@ impl<'a> FuncBuilder<'a> {
     fn declared_symbols(&self, root: NodeId, into: &mut Vec<u32>) {
         if self.kind_of(root) == Some(syntax::VARIABLE_DECLARATION)
             && let Some(name) = self.children(root).first()
-            && let Some(symbol) = self.node(*name).symbol
         {
-            into.push(symbol.0);
+            if matches!(
+                self.kind_of(*name),
+                Some(syntax::OBJECT_BINDING_PATTERN | syntax::ARRAY_BINDING_PATTERN)
+            ) {
+                let mut names = Vec::new();
+                self.pattern_names(*name, &mut names);
+                into.extend(
+                    names
+                        .into_iter()
+                        .filter_map(|name| self.node(name).symbol.map(|symbol| symbol.0)),
+                );
+            } else if let Some(symbol) = self.node(*name).symbol {
+                into.push(symbol.0);
+            }
         }
         for child in &self.node(root).children {
             self.declared_symbols(*child, into);
