@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-transfer-length-is-normalized-before-detached-state",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-transfer-length-is-normalized-before-detached-state/src/main.ts",
+      "signature": "8c6ea0f098ceac7a02bd3aafba5f92fe002b99d709490180adc82a9755362e6d",
+      "keys": {
+        "c": "c7a41b07ce98f95aca00f20bc1ce206c",
+        "jvm": "d637535447f68b74ddd9ec7fc002656f",
+        "llvm": "34b5708260cc62ed07e0d64593f8baad"
+      },
+      "cases_sha256": "79cd4a98b7fa4d795acf702875c37023e58f980fe96e24448f44d264579134d4",
+      "driver_sha256": "93f149bf560cde165da241f7fd5f1e05c038541d13f63c9ce794e6a6d2c6f3c3",
+      "populations": {
+        "invalidFixedTransferLength": {
+          "count": 1,
+          "cases_sha256": "4e3f2b73e3b6ad0c36f21d12f9ab33b53fc18fe7ddc660a5abeae0cd72e30f5f"
+        },
+        "invalidTransferLength": {
+          "count": 1,
+          "cases_sha256": "02af61d5c305417b4bf1dced174f60e5757d4cdc1992f61f4c98196a2aa5dc75"
+        },
+        "validFixedTransferLength": {
+          "count": 1,
+          "cases_sha256": "0c19c6db82f8abece4190dc40b5e887eed8979b2fbad99ee236c7aa12dd14b33"
+        },
+        "validTransferLength": {
+          "count": 1,
+          "cases_sha256": "f7757798ae3212059f336e931bec60c9a0ce4c8797e785e0b832a06b7273c601"
+        }
+      },
+      "complete": true,
+      "count": 4
+    }
+  ]
+}

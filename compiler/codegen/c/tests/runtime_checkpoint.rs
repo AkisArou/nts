@@ -357,6 +357,22 @@ fn a_view_is_a_window_onto_a_buffer() {
 }
 
 #[test]
+fn a_marked_buffer_is_rejected_before_native_allocation_or_detachment() {
+    for provider in [&[][..], &["-DNTS_PROVIDER_RC"][..]] {
+        let report = run_suite_with(
+            "buffer_untransferable",
+            provider,
+            &["nts_test_host.c"],
+            &["-Wl,--wrap=abort"],
+        );
+        assert!(
+            checks(&report) >= 4,
+            "both marked subjects and ordinary twins: {report}"
+        );
+    }
+}
+
+#[test]
 fn a_process_wide_count_still_answers_for_the_process() {
     // Reference counting, because half the suite is about an object being
     // released in one environment and a total taken in another, and under

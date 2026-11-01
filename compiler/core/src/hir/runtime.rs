@@ -561,6 +561,18 @@ static SIGNATURES: &[Declared] = &[
     ),
     ("nts_buffer_detached", None, None, Raising::NoRaise),
     (
+        "nts_buffer_is_marked_as_untransferable",
+        None,
+        None,
+        Raising::NoRaise,
+    ),
+    (
+        "nts_buffer_mark_as_untransferable",
+        None,
+        None,
+        Raising::NoRaise,
+    ),
+    (
         "nts_buffer_max_byte_length",
         Some(&[None]),
         Some(HirType::Float { bits: 64 }),
@@ -3121,6 +3133,7 @@ pub const READS_ONLY: &[&str] = &[
     "nts_bigint_unbox",
     "nts_buffer_byte_length",
     "nts_buffer_detached",
+    "nts_buffer_is_marked_as_untransferable",
     "nts_buffer_max_byte_length",
     "nts_buffer_resizable",
     // A view reads its buffer and does not retain it: `byteLength` on a

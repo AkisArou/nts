@@ -19,9 +19,13 @@
  *     match -- which is why `Float32Array` from `Int32Array` is here.
  */
 #include <math.h>
+#include <signal.h>
 #include <stddef.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/resource.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "nts_runtime.h"
 
@@ -225,6 +229,77 @@ static void a_tracking_length_follows_its_buffer(void) {
   nts_release((NtsHeader *)buffer);
 }
 
+/* Node26 lib/internal/buffer.js:1085-1105 and the ordinary unmarked twin.
+ * A mark protects the backing identity; it does not turn views or copies
+ * into marked objects, keep dead storage alive, or prohibit resize. */
+static void the_mark_belongs_to_the_backing_identity(void) {
+  size_t count = nts_live_count();
+  size_t bytes = nts_live_bytes();
+  NtsBuffer *buffer = nts_buffer_new_resizable(8, 16);
+  NtsView *view = nts_view_new(buffer, 0, 0, NTS_ELEMENT_U8, true);
+  nts_view_put(view, 0, 17);
+  NtsBuffer *alias = nts_view_buffer(view);
+  check(alias == buffer && !nts_buffer_is_marked_as_untransferable(alias),
+        "a fresh backing identity is unmarked through its alias");
+  nts_buffer_mark_as_untransferable(buffer);
+  nts_buffer_mark_as_untransferable(alias);
+  check(nts_buffer_is_marked_as_untransferable(alias),
+        "marking through an alias is visible and idempotent");
+  nts_buffer_resize(buffer, 4);
+  check(nts_buffer_is_marked_as_untransferable(buffer) &&
+            nts_view_length(view) == 4 && nts_view_get(view, 0) == 17,
+        "a mark permits resize and preserves the live bytes");
+  NtsBuffer *copy = nts_buffer_slice(buffer, 0, 4);
+  check(!nts_buffer_is_marked_as_untransferable(copy) && copy->bytes[0] == 17,
+        "a copied buffer has a fresh unmarked identity");
+  NtsView *copied_view = nts_view_slice(view, 0, 4);
+  NtsBuffer *copied_backing = nts_view_buffer(copied_view);
+  check(!nts_buffer_is_marked_as_untransferable(copied_backing),
+        "a copied view has fresh unmarked backing");
+  NtsBuffer *moved = nts_buffer_transfer(copy, 4, true);
+  check(nts_buffer_detached(copy) &&
+            !nts_buffer_is_marked_as_untransferable(moved) &&
+            moved->bytes[0] == 17,
+        "the unmarked twin transfers normally to an unmarked identity");
+  nts_buffer_mark_as_untransferable(copy);
+  check(nts_buffer_is_marked_as_untransferable(copy) &&
+            nts_buffer_detached(copy),
+        "the mark is independent of detached state");
+  nts_release((NtsHeader *)copied_backing);
+  nts_release((NtsHeader *)copied_view);
+  nts_release((NtsHeader *)moved);
+  nts_release((NtsHeader *)copy);
+  nts_release((NtsHeader *)alias);
+  nts_release((NtsHeader *)buffer);
+  check(nts_view_get(view, 0) == 17,
+        "the live view alone keeps the marked backing alive");
+  nts_release((NtsHeader *)view);
+  check(nts_live_count() == count && nts_live_bytes() == bytes,
+        "the last view releases its marked backing and all bytes");
+}
+
+/* A direct C caller bypasses the catchable language guard. Both transfer
+ * modes must still stop before touching a marked slab. Each child is ours;
+ * no process discovery or signal cleanup is involved. */
+static bool a_direct_marked_transfer_stops(bool fixed) {
+  fflush(stdout);
+  pid_t child = fork();
+  if (child < 0) {
+    return false;
+  }
+  if (child == 0) {
+    const struct rlimit no_core = {0, 0};
+    (void)setrlimit(RLIMIT_CORE, &no_core);
+    NtsBuffer *buffer = nts_buffer_new(8);
+    nts_buffer_mark_as_untransferable(buffer);
+    (void)nts_buffer_transfer(buffer, 0, fixed);
+    _exit(0);
+  }
+  int status = 0;
+  return waitpid(child, &status, 0) == child && WIFSIGNALED(status) &&
+         WTERMSIG(status) == SIGABRT;
+}
+
 /* Elements handed back by C -- a Windows Runtime `ReceiveArray` -- copied
  * into a typed array of their kind. The width is the kind's, so a count of
  * elements is not a count of bytes: three `int32` are twelve, and three
@@ -268,5 +343,10 @@ int main(void) {
   set_between_kinds_converts_values();
   a_view_is_a_window_and_a_slice_is_not();
   a_tracking_length_follows_its_buffer();
+  the_mark_belongs_to_the_backing_identity();
+  check(a_direct_marked_transfer_stops(false),
+        "a direct marked transfer cannot bypass the native invariant");
+  check(a_direct_marked_transfer_stops(true),
+        "nor can a direct marked transferToFixedLength");
   return failures != 0;
 }

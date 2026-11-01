@@ -68550,7 +68550,6 @@ impl<'a> FuncBuilder<'a> {
             // both refuse a source that is already detached. They differ only
             // in whether the result keeps the resizable state.
             "transfer" | "transferToFixedLength" => {
-                self.guard_attached(id, receiver, &name)?;
                 let length = match arguments.first() {
                     Some(node) => {
                         let value = self.lower_expression(*node)?;
@@ -68565,6 +68564,22 @@ impl<'a> FuncBuilder<'a> {
                         &origin,
                     ),
                 };
+                // Node 26's ArrayBufferTransfer converts the argument before
+                // checking detached state and the private detach key. The
+                // argument may itself mark or detach the receiver.
+                self.guard_attached(id, receiver, &name)?;
+                let marked = self.call_runtime(
+                    "nts_buffer_is_marked_as_untransferable",
+                    vec![receiver],
+                    HirType::Bool,
+                    &origin,
+                );
+                self.refuse_when(
+                    id,
+                    marked,
+                    "TypeError",
+                    "ArrayBuffer is not detachable and could not be cloned.",
+                )?;
                 let fixed = self.push(
                     OpKind::ConstBool(name == "transferToFixedLength"),
                     HirType::Bool,

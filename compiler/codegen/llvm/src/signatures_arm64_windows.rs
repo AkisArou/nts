@@ -627,6 +627,18 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
         attributes: &["nounwind", "willreturn", "memory(read)"],
     },
     Signature {
+        name: "nts_buffer_is_marked_as_untransferable",
+        returns: "i1",
+        params: &["ptr"],
+        attributes: &["nounwind", "willreturn", "memory(read)"],
+    },
+    Signature {
+        name: "nts_buffer_mark_as_untransferable",
+        returns: "void",
+        params: &["ptr"],
+        attributes: &[],
+    },
+    Signature {
         name: "nts_buffer_max_byte_length",
         returns: "double",
         params: &["ptr"],

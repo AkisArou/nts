@@ -551,6 +551,9 @@ typedef struct NtsBuffer {
    * `ArrayBuffer.prototype.resizable` is exactly this question. */
   size_t reserved_bytes;
   bool resizable;
+  /* Node's private detach key belongs to this backing identity, shared by
+   * every view. It neither keeps the buffer alive nor prevents resize. */
+  bool marked_as_untransferable;
 } NtsBuffer;
 
 /* A typed-array view: a window onto an `NtsBuffer`.
@@ -1628,6 +1631,13 @@ NTS_READS_ONLY double nts_buffer_max_byte_length(const NtsBuffer *buffer);
 NTS_READS_ONLY bool nts_buffer_resizable(const NtsBuffer *buffer);
 NTS_READS_ONLY bool nts_buffer_detached(const NtsBuffer *buffer);
 
+/* Node's Buffer pool marks its backing ArrayBuffer. The mark survives
+ * resize and belongs to the object, including after detachment; a copy is a
+ * new identity and starts unmarked. Neither operation changes ownership. */
+void nts_buffer_mark_as_untransferable(NtsBuffer *buffer);
+NTS_READS_ONLY bool
+nts_buffer_is_marked_as_untransferable(const NtsBuffer *buffer);
+
 /* A new fixed buffer holding the bytes between the clamped endpoints. Never
  * shares storage: `slice` is specified to copy, which is the whole difference
  * between it and a view's `subarray`. */
@@ -1640,7 +1650,10 @@ void nts_buffer_resize(NtsBuffer *buffer, double byte_length);
 
 /* Move the bytes into a new buffer and detach this one. `fixed` chooses
  * between `transfer` and `transferToFixedLength`; both detach the source,
- * which is the point of them. */
+ * which is the point of them. The caller must first raise a TypeError for a
+ * marked source. The native entry also rejects that invalid precondition
+ * before allocating or detaching; it never disguises it as allocation failure.
+ */
 NTS_ALLOCATES_OR_NULL NtsBuffer *
 nts_buffer_transfer(NtsBuffer *buffer, double byte_length, bool fixed);
 

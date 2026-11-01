@@ -1472,6 +1472,7 @@ public final class RuntimeRegression {
         testIntegerViewStores(); System.out.println("integer view stores passed");
         testFractionalWrapperReads(); System.out.println("wrapper reads at a double index passed");
         testProvedViewAccess(); System.out.println("proven view accesses passed");
+        testUntransferableBacking(); System.out.println("untransferable backing identities passed");
         testStringKeyDoors(); System.out.println("unboxed string keys passed");
         testTableFills(); System.out.println("table fills passed");
         testNumberColumns(); System.out.println("number columns passed");
@@ -1927,6 +1928,39 @@ public final class RuntimeRegression {
                 check(Arrays.equals(checked.bytes, proved.bytes), "Float64Array, stored " + at);
                 number(NtsViewF64.getProved(f64p, i), NtsViewF64.getAt(f64, i), "Float64Array, read " + at);
             }
+        }
+    }
+
+    /** Node26's private mark protects backing identity while ordinary twins move. */
+    private static void testUntransferableBacking() {
+        for (boolean fixed : new boolean[] {false, true}) {
+            NtsBuffer marked = NtsBuffer.allocateResizable(8, 16);
+            NtsBuffer ordinary = NtsBuffer.allocateResizable(8, 16);
+            marked.bytes[0] = 17;
+            ordinary.bytes[0] = 17;
+            check(!NtsBuffer.isMarkedAsUntransferable(marked), "fresh backing is unmarked");
+            NtsBuffer alias = marked;
+            NtsBuffer.markAsUntransferable(marked);
+            NtsBuffer.markAsUntransferable(alias);
+            check(NtsBuffer.isMarkedAsUntransferable(alias), "alias sees idempotent mark");
+            byte[] storage = marked.bytes;
+            check(refusalFrom(() -> NtsBuffer.transfer(alias, 4, fixed)).contains("not detachable"),
+                "native transfer rejects marked backing");
+            check(marked.bytes == storage && marked.length == 8 && marked.bytes[0] == 17,
+                "rejected transfer preserves storage and contents");
+            NtsBuffer.resize(marked, 4);
+            check(marked.length == 4 && NtsBuffer.isMarkedAsUntransferable(marked),
+                "marked backing can resize without losing its mark");
+            NtsBuffer copy = NtsBuffer.slice(marked, 0, 4);
+            check(copy.bytes[0] == 17 && !NtsBuffer.isMarkedAsUntransferable(copy),
+                "slice copies into a fresh unmarked identity");
+            NtsBuffer moved = NtsBuffer.transfer(ordinary, 4, fixed);
+            check(NtsBuffer.detached(ordinary) && moved.bytes[0] == 17 &&
+                    !NtsBuffer.isMarkedAsUntransferable(moved),
+                "unmarked twin transfers normally to a fresh unmarked identity");
+            NtsBuffer.markAsUntransferable(ordinary);
+            check(NtsBuffer.detached(ordinary) && NtsBuffer.isMarkedAsUntransferable(ordinary),
+                "mark is independent of detached state");
         }
     }
 

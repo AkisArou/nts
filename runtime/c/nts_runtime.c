@@ -9295,6 +9295,7 @@ static NtsBuffer *nts_buffer_make(size_t length, size_t reserved,
   buffer->length = length;
   buffer->reserved_bytes = reserved;
   buffer->resizable = resizable;
+  buffer->marked_as_untransferable = false;
   buffer->bytes = bytes;
   nts_env->bytes_held += reserved;
   nts_note_allocation();
@@ -9341,6 +9342,14 @@ bool nts_buffer_resizable(const NtsBuffer *buffer) {
 
 bool nts_buffer_detached(const NtsBuffer *buffer) {
   return !buffer || !buffer->bytes;
+}
+
+void nts_buffer_mark_as_untransferable(NtsBuffer *buffer) {
+  buffer->marked_as_untransferable = true;
+}
+
+bool nts_buffer_is_marked_as_untransferable(const NtsBuffer *buffer) {
+  return buffer && buffer->marked_as_untransferable;
 }
 
 NtsBuffer *nts_buffer_slice(const NtsBuffer *buffer, double from, double to) {
@@ -9660,6 +9669,14 @@ void nts_dataview_set_biguint64(NtsDataView *view, double at, __int128 value,
 
 NtsBuffer *nts_buffer_transfer(NtsBuffer *buffer, double byte_length,
                                bool fixed) {
+  /* The language guard raises the catchable TypeError. A direct native
+   * caller that violates its precondition must never detach a pooled slab,
+   * nor return null and let the caller misreport an allocation RangeError. */
+  if (nts_buffer_is_marked_as_untransferable(buffer)) {
+    fprintf(stderr,
+            "nts: cannot transfer an ArrayBuffer marked as untransferable\n");
+    abort();
+  }
   size_t length = nts_buffer_index(byte_length);
   /* The old maximum carries over only from a resizable buffer to a resizable
    * one. A fixed buffer's reserved bytes are its length, and `transfer(n)` of

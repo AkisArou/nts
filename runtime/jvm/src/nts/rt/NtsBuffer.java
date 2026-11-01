@@ -43,11 +43,15 @@ public final class NtsBuffer {
 
     final boolean resizable;
 
+    /** Node's private detach key, shared by every view of this identity. */
+    private boolean markedAsUntransferable;
+
     private NtsBuffer(byte[] bytes, int length, int maxLength, boolean resizable) {
         this.bytes = bytes;
         this.length = length;
         this.maxLength = maxLength;
         this.resizable = resizable;
+        this.markedAsUntransferable = false;
     }
 
     /**
@@ -133,6 +137,14 @@ public final class NtsBuffer {
     public static boolean resizable(NtsBuffer buffer) { return buffer.resizable; }
     public static boolean detached(NtsBuffer buffer) { return buffer.bytes == null; }
 
+    public static void markAsUntransferable(NtsBuffer buffer) {
+        buffer.markedAsUntransferable = true;
+    }
+
+    public static boolean isMarkedAsUntransferable(NtsBuffer buffer) {
+        return buffer != null && buffer.markedAsUntransferable;
+    }
+
     /**
      * `ArrayBuffer.prototype.resize`.
      *
@@ -183,6 +195,11 @@ public final class NtsBuffer {
      * because the array is a different size.
      */
     public static NtsBuffer transfer(NtsBuffer buffer, double newLength, boolean fixed) {
+        // The lowering raises the language TypeError. A direct native caller
+        // must also be rejected before allocation or detachment.
+        if (isMarkedAsUntransferable(buffer)) {
+            throw new NtsRefusal("a TypeError: ArrayBuffer is not detachable and could not be cloned.");
+        }
         alive(buffer);
         // No NaN sentinel for "no argument given". `transfer(NaN)` is
         // `ToIndex(NaN)`, which is **zero**, so a runtime that read NaN as
