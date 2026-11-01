@@ -152,6 +152,34 @@ fn an_uncaught_throw_names_a_class_that_shares_its_layout_as_c_does() {
     );
 }
 
+/// An error the runtime raises prints by its class's `toString` and names its
+/// class uncaught, in a program that never names it. A class's printer is
+/// reached only once something makes the class (`hir::described_classes`),
+/// and the compiled check beside `toFixed` is what makes this one. node
+/// prints `RangeError: toFixed() digits argument must be between 0 and 100`,
+/// caught and uncaught, as C does.
+#[test]
+fn an_error_the_runtime_raises_prints_by_its_class() {
+    let source = format!(
+        "{}\nconsole.log(printed(200));\nconsole.log(fixed(200));\n",
+        include_str!(
+            "../../../core/tests/programs/an-error-the-runtime-raises-keeps-its-printer/src/main.ts"
+        )
+    );
+    let Some((status, stdout, stderr)) = run_whole("runtime-raised", &source) else {
+        return;
+    };
+    assert_eq!(status, 1, "node and C exit 1: {stderr}");
+    assert_eq!(
+        stdout,
+        "RangeError: toFixed() digits argument must be between 0 and 100\n-1\n"
+    );
+    assert_eq!(
+        stderr.trim(),
+        "nts: uncaught RangeError: toFixed() digits argument must be between 0 and 100"
+    );
+}
+
 /// A run-time refusal ends the run as C's `abort()` does: status 134 and the
 /// line C prints, `nts: refused: ` and the reason. The refusal is a checked read past the end of an array --
 /// `xs[1]!` on a one-element array, where node answers `undefined` and nts

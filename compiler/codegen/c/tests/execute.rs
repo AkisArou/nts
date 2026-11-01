@@ -1195,6 +1195,133 @@ int main(void) {{
 }
 
 #[test]
+fn a_class_nothing_makes_keeps_no_printer() {
+    // Nothing calls `never`, so no `RangeError` exists, and the live `throw
+    // new Error(...)` hands the runtime an `Error`, which may be any class
+    // deriving from it. That kept every such class's `toString`, though the
+    // runtime calls a printer only off a descriptor and C emits none for a
+    // class nothing makes: `RangeError`'s was a `static` nothing calls,
+    // refused under `-Werror`.
+    //
+    // Expected values came from running this `src/main.ts` on node.
+    let harness = format!(
+        r#"{CHECK}
+double checked(double n);
+int main(void) {{
+    check("checked(1)", checked(1), 1);
+    return failures ? 1 : 0;
+}}
+"#
+    );
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let Some(output) =
+            build_and_run_with("a-class-nothing-makes-keeps-no-printer", &harness, provider)
+        else {
+            return;
+        };
+        let printed = String::from_utf8_lossy(&output.stdout);
+        assert!(output.status.success(), "{printed}");
+        assert!(printed.contains("ok checked(1) = 1"), "{printed}");
+    }
+}
+
+#[test]
+fn a_class_something_makes_keeps_its_printer() {
+    // The control: `checked` calls `never` past 100, so the `RangeError` is
+    // made, its descriptor emitted, and its `toString` kept -- `printed`
+    // prints the error through an `unknown`, which the runtime does by that
+    // `toString`, and the uncaught line names the class by its descriptor.
+    // node prints `RangeError: too large` for both.
+    let harness = format!(
+        r#"{CHECK}
+double checked(double n);
+double printed(double n);
+int main(void) {{
+    check("checked(1)", checked(1), 1);
+    check("printed(101)", printed(101), -1);
+    if (failures) return 0;
+    fflush(stdout);
+    checked(101);
+    printf("FAIL: kept going past the throw\n");
+    return 0;
+}}
+"#
+    );
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let Some(output) = build_and_run_with(
+            "a-class-nothing-makes-keeps-no-printer-control",
+            &harness,
+            provider,
+        ) else {
+            return;
+        };
+        let printed = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !output.status.success(),
+            "the throw must stop the program: {printed}"
+        );
+        assert!(
+            printed.contains("RangeError: too large\n")
+                && printed.contains("ok printed(101) = -1")
+                && !printed.contains("FAIL"),
+            "{printed}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "nts: uncaught RangeError: too large\n"
+        );
+    }
+}
+
+#[test]
+fn an_error_the_runtime_raises_keeps_its_printer() {
+    // The runtime's own `RangeError`, in a program that never names the
+    // class: `toFixed` past 100 digits answers a sentinel, and the compiled
+    // check beside the call makes the error, so the class is made and its
+    // `toString` kept. node prints `RangeError: toFixed() digits argument
+    // must be between 0 and 100`, caught and uncaught.
+    let harness = format!(
+        r#"{CHECK}
+double fixed(double digits);
+double printed(double digits);
+int main(void) {{
+    check("fixed(2)", fixed(2), 4);
+    check("printed(200)", printed(200), -1);
+    if (failures) return 0;
+    fflush(stdout);
+    fixed(200);
+    printf("FAIL: kept going past the throw\n");
+    return 0;
+}}
+"#
+    );
+    for provider in [hir::Memory::NoGc, hir::Memory::ReferenceCounting] {
+        let Some(output) = build_and_run_with(
+            "an-error-the-runtime-raises-keeps-its-printer",
+            &harness,
+            provider,
+        ) else {
+            return;
+        };
+        let printed = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            !output.status.success(),
+            "the throw must stop the program: {printed}"
+        );
+        assert!(
+            printed.contains("RangeError: toFixed() digits argument must be between 0 and 100\n")
+                && printed.contains("ok printed(200) = -1")
+                && !printed.contains("FAIL"),
+            "{printed}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&output.stderr),
+            "nts: uncaught RangeError: toFixed() digits argument must be between 0 and 100\n"
+        );
+    }
+}
+
+#[test]
 fn methods_are_static_calls_with_an_explicit_receiver() {
     // A method lowers to a function whose first parameter is the receiver, and a
     // call site to a direct call. There is no dispatch to arrange: the checker

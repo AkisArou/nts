@@ -5591,6 +5591,38 @@ pub fn may_stop(op: &Op) -> bool {
     matches!(op.kind, OpKind::ArrayGet { checked: true, .. }) && op.ty != HirType::Void
 }
 
+/// The classes whose descriptor an operation names: the one it allocates, a
+/// static closure instance's, and every class an `instanceof` or an open
+/// field's arms test against.
+///
+/// With the classes a host constructs (`Program::published_classes`) these
+/// are every layout a backend emits a descriptor for, and so every class an
+/// object can be an instance of at run time: the runtime allocates only
+/// descriptors of its own, and an error it raises is a sentinel the compiled
+/// check turns into a `new RangeError(...)` here. The C backend emits exactly
+/// these descriptors, and reachability keeps a class's printer only while one
+/// can exist, since only a descriptor names it (`reachable::prune`).
+pub fn described_classes(op: &Op) -> impl Iterator<Item = TypeId> + '_ {
+    let made = match (&op.kind, &op.ty) {
+        (
+            OpKind::ObjectNew { .. } | OpKind::ClosureStatic,
+            HirType::Managed(ManagedType::Object(ty)),
+        ) => Some(*ty),
+        _ => None,
+    };
+    let tested: &[TypeId] = match &op.kind {
+        OpKind::InstanceOf { classes, .. } => classes,
+        _ => &[],
+    };
+    let arms: &[FieldArm] = match &op.kind {
+        OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } => arms,
+        _ => &[],
+    };
+    made.into_iter()
+        .chain(tested.iter().copied())
+        .chain(arms.iter().map(|arm| arm.ty))
+}
+
 pub fn prepare(snapshot: &SemanticSnapshot) -> Result<Prepared, Unprepared> {
     prepare_with(snapshot, &Options::default())
 }

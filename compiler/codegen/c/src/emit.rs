@@ -2275,30 +2275,18 @@ fn layouts_needing_descriptors(program: &Emission<'_>) -> rustc_hash::FxHashSet<
             // only for as long as this scan never under-approximates; resting
             // a correctness property on a whole-program scan being complete is
             // a worse trade than a few static structs nothing reads.
-            if let OpKind::InstanceOf { classes, .. } = &op.kind {
-                for class in classes {
-                    want(&mut found, class);
-                }
-                continue;
-            }
-            if let OpKind::OpenFieldGet { arms, .. } | OpKind::OpenFieldSet { arms, .. } = &op.kind
-            {
-                for arm in arms {
-                    want(&mut found, &arm.ty);
-                }
-                continue;
-            }
+            //
             // A static closure instance is not allocated, but it *is* an
             // object: it carries a header, and a header needs a descriptor to
             // point at. Reference counting reads that descriptor before it
             // reads `NTS_IMMORTAL` and stops.
-            if !matches!(op.kind, OpKind::ObjectNew { .. } | OpKind::ClosureStatic) {
-                continue;
+            //
+            // The list is core's (`hir::described_classes`), because
+            // reachability keeps a class's printer by the same answer: the
+            // descriptor is the only thing that names it.
+            for class in nts_core::hir::described_classes(op) {
+                want(&mut found, &class);
             }
-            let HirType::Managed(ManagedType::Object(ty)) = &op.ty else {
-                continue;
-            };
-            want(&mut found, ty);
         }
     }
     found

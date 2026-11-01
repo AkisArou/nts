@@ -198,6 +198,26 @@ fn callback_targets<'p>(
     func: &'p Func,
     args: &[super::ValueId],
 ) -> Vec<&'p str> {
+    callback_layouts(program, hierarchy, func, args)
+        .into_iter()
+        .flat_map(|at| {
+            let layout = &program.layouts[at];
+            // And how it and its classes print, which the runtime calls off
+            // their descriptors when it converts one to a string
+            // (`Program::printing`).
+            methods_of(layout).chain(program.printing_functions_of(layout))
+        })
+        .collect()
+}
+
+/// The layouts [`callback_targets`] reaches the methods and printers of: those
+/// the arguments can be, and everything deriving from them.
+fn callback_layouts(
+    program: &Program,
+    hierarchy: &Hierarchy,
+    func: &Func,
+    args: &[super::ValueId],
+) -> Vec<usize> {
     let types = args
         .iter()
         .flat_map(|arg| super::carried_values(func, *arg))
@@ -206,22 +226,15 @@ fn callback_targets<'p>(
         .into_iter()
         .filter_map(|ty| hierarchy.layouts.of(ty))
         .flat_map(|at| hierarchy.implementations(at))
-        .flat_map(|at| {
-            let layout = &program.layouts[at];
-            // And how it and its classes print, which the runtime calls off
-            // their descriptors when it converts one to a string
-            // (`Program::printing`).
-            layout
-                .methods
-                .iter()
-                .filter_map(Option::as_deref)
-                .chain(program.printing_functions_of(layout))
-        })
         .collect()
 }
 
-/// The `toString` of every layout ([`super::Printed::By`]), where an operation
-/// hands the runtime an erased value to print.
+fn methods_of(layout: &super::Layout) -> impl Iterator<Item = &str> {
+    layout.methods.iter().filter_map(Option::as_deref)
+}
+
+/// Whether an operation hands the runtime an erased value to print, which can
+/// call the `toString` of every layout ([`super::Printed::By`]).
 ///
 /// [`callback_targets`] follows an argument back through its erasure to the
 /// layouts it can be, which is how `String(o)` on a typed object keeps that
@@ -231,28 +244,130 @@ fn callback_targets<'p>(
 /// every function a descriptor prints by: kept, and an edge for
 /// `interprocedural`, whose callers for a function only the runtime calls are
 /// otherwise none.
-fn printed_through_an_erasure<'p>(
-    program: &'p Program,
-    func: &Func,
-    kind: &OpKind,
-) -> Vec<&'p str> {
+fn prints_through_an_erasure(func: &Func, kind: &OpKind) -> bool {
     let OpKind::Call {
         callee: Callee::External(name),
         args,
         ..
     } = kind
     else {
-        return Vec::new();
+        return false;
     };
-    let prints = name == "nts_value_to_string";
-    let erased = args.iter().any(|arg| {
-        super::carried_values(func, *arg)
-            .any(|value| func.values[value.0 as usize].ty == super::HirType::Erased)
-    });
-    if !prints || !erased {
-        return Vec::new();
+    name == "nts_value_to_string"
+        && args.iter().any(|arg| {
+            super::carried_values(func, *arg)
+                .any(|value| func.values[value.0 as usize].ty == super::HirType::Erased)
+        })
+}
+
+/// The printers the walk has reached, and the layouts whose printers wait.
+///
+/// The runtime calls a printer off a descriptor -- C's and LLVM's `to_string`,
+/// the JVM class's `nts$print` -- so only on an instance of its class. A
+/// layout's printers are reached when the walk has both **requested** them,
+/// by handing the runtime a value of the layout or one to print through an
+/// erasure, and **described** the layout: allocated or tested it in a reached
+/// function, or published its class, which is when a backend emits its
+/// descriptor at all ([`super::described_classes`]). Nothing else makes an
+/// instance: the runtime allocates descriptors of its own, and an error it
+/// raises is built by compiled code. Both sets grow as the walk reaches
+/// functions, as [`dispatch::Dispatch`] grows a closure's frames with its
+/// slots.
+///
+/// Requested alone kept the `toString` of every class deriving from one the
+/// runtime is handed: a live `throw new Error(...)` kept `RangeError`'s,
+/// though nothing made a `RangeError`, and C, which emits no descriptor for a
+/// class nothing makes, refused the uncalled static under `-Werror`
+/// (`compiler/core/tests/programs/a-class-nothing-makes-keeps-no-printer`).
+struct Printers<'p> {
+    program: &'p Program,
+    requested: FxHashSet<usize>,
+    /// Every layout, by a print through an erasure.
+    everything: bool,
+    described: FxHashSet<usize>,
+    reached: FxHashSet<usize>,
+}
+
+impl<'p> Printers<'p> {
+    fn new(program: &'p Program, layouts: &super::fields::LayoutIndex) -> Self {
+        let mut printers = Self {
+            program,
+            requested: FxHashSet::default(),
+            everything: false,
+            described: FxHashSet::default(),
+            reached: FxHashSet::default(),
+        };
+        // A host constructs a published class through its factory, whether or
+        // not the program does.
+        printers.described.extend(
+            program
+                .published_classes()
+                .filter_map(|class| layouts.of_class(class.receiver)),
+        );
+        printers
     }
-    program.printing_functions().collect()
+
+    fn request(&mut self, at: usize) -> Vec<&'p str> {
+        self.requested.insert(at);
+        self.release(at)
+    }
+
+    fn request_everything(&mut self) -> Vec<&'p str> {
+        if self.everything {
+            return Vec::new();
+        }
+        self.everything = true;
+        let described: Vec<usize> = self.described.iter().copied().collect();
+        described
+            .into_iter()
+            .flat_map(|at| self.release(at))
+            .collect()
+    }
+
+    fn describe(&mut self, at: usize) -> Vec<&'p str> {
+        self.described.insert(at);
+        self.release(at)
+    }
+
+    fn release(&mut self, at: usize) -> Vec<&'p str> {
+        let wanted = self.everything || self.requested.contains(&at);
+        if !wanted || !self.described.contains(&at) || !self.reached.insert(at) {
+            return Vec::new();
+        }
+        let program = self.program;
+        program
+            .printing_functions_of(&program.layouts[at])
+            .collect()
+    }
+}
+
+/// What the runtime can call that `op` makes reachable, whether or not anything
+/// here calls it: the methods of what it is handed ([`called_back`]), and the
+/// printers that are now both requested and described ([`Printers`]).
+fn called_by_the_runtime<'p>(
+    program: &'p Program,
+    hierarchy: &Hierarchy,
+    printers: &mut Printers<'p>,
+    func: &Func,
+    op: &super::Op,
+) -> Vec<&'p str> {
+    let mut targets = Vec::new();
+    let handed = called_back(&op.kind);
+    if !handed.is_empty() {
+        for at in callback_layouts(program, hierarchy, func, handed) {
+            targets.extend(methods_of(&program.layouts[at]));
+            targets.extend(printers.request(at));
+        }
+    }
+    if prints_through_an_erasure(func, &op.kind) {
+        targets.extend(printers.request_everything());
+    }
+    for class in super::described_classes(op) {
+        if let Some(at) = hierarchy.layouts.of_class(class) {
+            targets.extend(printers.describe(at));
+        }
+    }
+    targets
 }
 
 /// Runtime helpers that read what they are handed and call none of it, so
@@ -363,9 +478,13 @@ pub fn callback_names(program: &Program) -> Vec<&str> {
             if handed.is_empty() {
                 continue;
             }
+            let printed = prints_through_an_erasure(func, &op.kind)
+                .then(|| program.printing_functions())
+                .into_iter()
+                .flatten();
             for name in callback_targets(program, &hierarchy, func, handed)
                 .into_iter()
-                .chain(printed_through_an_erasure(program, func, &op.kind))
+                .chain(printed)
             {
                 if !found.contains(&name) {
                     found.push(name);
@@ -618,6 +737,7 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         .collect();
     let hierarchy = Hierarchy::build(program);
     let mut dispatch = dispatch::Dispatch::build(program);
+    let mut printers = Printers::new(program, &hierarchy.layouts);
     let mut reached: FxHashSet<&str> = FxHashSet::default();
     let mut pending: Vec<&str> = root_names(program, roots);
     // **And what the outside calls through a function it is handed.** A
@@ -646,13 +766,13 @@ pub fn prune(program: &mut Program, roots: Roots<'_>) -> usize {
         };
         let mut targets = dispatch.enter(func);
         for op in placed(func) {
-            // What the runtime calls back is reached, whether or not anything here
-            // calls it: see [`called_back`].
-            let handed = called_back(&op.kind);
-            if !handed.is_empty() {
-                targets.extend(callback_targets(program, &hierarchy, func, handed));
-            }
-            targets.extend(printed_through_an_erasure(program, func, &op.kind));
+            targets.extend(called_by_the_runtime(
+                program,
+                &hierarchy,
+                &mut printers,
+                func,
+                op,
+            ));
             targets.extend(
                 program
                     .interface_access

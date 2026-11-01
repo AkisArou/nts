@@ -36,6 +36,26 @@ fn both_backends_with(
     driver: &str,
     flags: &[&str],
 ) -> Option<(String, String)> {
+    let (llvm, c) = both_backends_ran(case, source, driver, flags)?;
+    let read = |name: &str, out: std::process::Output| -> String {
+        assert!(
+            out.status.success(),
+            "{name} exited badly: {}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        String::from_utf8_lossy(&out.stdout).into_owned()
+    };
+    Some((read("run_llvm", llvm), read("run_c", c)))
+}
+
+/// Build both and run both, answering each run whole -- status and `stderr`
+/// as well -- for a case whose program is meant to stop.
+fn both_backends_ran(
+    case: &str,
+    source: &str,
+    driver: &str,
+    flags: &[&str],
+) -> Option<(std::process::Output, std::process::Output)> {
     // Per *case*, not per process: `cargo test` runs these in parallel and one
     // directory keyed on the pid means two tests writing each other's
     // `program.ll`. Which is how this was found -- the test that had passed
@@ -133,18 +153,12 @@ fn both_backends_with(
         panic!("building the C failed:\n{problem}");
     }
 
-    let read = |name: &str| -> String {
-        let out = std::process::Command::new(dir.join(name))
+    let run = |name: &str| {
+        std::process::Command::new(dir.join(name))
             .output()
-            .expect("the compiled program should run");
-        assert!(
-            out.status.success(),
-            "{name} exited badly: {}",
-            String::from_utf8_lossy(&out.stderr)
-        );
-        String::from_utf8_lossy(&out.stdout).into_owned()
+            .expect("the compiled program should run")
     };
-    Some((read("run_llvm"), read("run_c")))
+    Some((run("run_llvm"), run("run_c")))
 }
 
 fn compile_ir(dir: &std::path::Path, flags: &[&str]) -> std::path::PathBuf {
@@ -768,4 +782,50 @@ int main(void) {
         llvm, c,
         "the backends disagree about bitwise ops on doubles"
     );
+}
+
+/// An error the runtime raises, printed by its class's `toString` and named
+/// by its descriptor, the same on both backends and as node prints it.
+///
+/// A class's printer is reached only once something makes the class
+/// (`hir::described_classes`); this program never names `RangeError`, and the
+/// compiled check beside `toFixed` is what makes it. node prints
+/// `RangeError: toFixed() digits argument must be between 0 and 100`, caught
+/// and uncaught.
+#[test]
+fn an_error_the_runtime_raises_prints_by_its_class_on_both_backends() {
+    let source = include_str!(
+        "../../../core/tests/programs/an-error-the-runtime-raises-keeps-its-printer/src/main.ts"
+    );
+    let driver = r#"#include <stdio.h>
+double fixed(double digits);
+double printed(double digits);
+int main(void) {
+  printf("fixed(2) = %g\n", fixed(2));
+  printf("printed(200) = %g\n", printed(200));
+  fflush(stdout);
+  fixed(200);
+  printf("kept going past the throw\n");
+  return 0;
+}
+"#;
+    let Some((llvm, c)) = both_backends_ran("runtime-raised-printer", source, driver, &[]) else {
+        eprintln!("SKIP: the required backend toolchain is unavailable");
+        return;
+    };
+    for (name, out) in [("LLVM", &llvm), ("C", &c)] {
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout),
+            "fixed(2) = 4\n\
+             RangeError: toFixed() digits argument must be between 0 and 100\n\
+             printed(200) = -1\n",
+            "{name}"
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&out.stderr),
+            "nts: uncaught RangeError: toFixed() digits argument must be between 0 and 100\n",
+            "{name}"
+        );
+        assert_eq!(out.status.code(), Some(1), "{name}: node exits 1");
+    }
 }
