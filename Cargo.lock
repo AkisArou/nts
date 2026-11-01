@@ -451,6 +451,7 @@ dependencies = [
  "camino",
  "hmac-sha256",
  "nts-codegen-c",
+ "nts-codegen-llvm",
  "nts-core",
  "nts-diagnostics",
  "nts-frontend-ts",

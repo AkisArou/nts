@@ -17,6 +17,7 @@ hmac-sha256.workspace = true
 
 [dev-dependencies]
 camino.workspace = true
+nts-codegen-llvm.workspace = true
 nts-diagnostics.workspace = true
 nts-frontend-ts.workspace = true
 
