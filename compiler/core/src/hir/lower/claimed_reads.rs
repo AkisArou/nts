@@ -81,7 +81,7 @@ pub(super) fn narrowed(
             return builder.narrowed(at, read);
         }
     };
-    let number = to_number(builder, at, read, (null_is, what))?;
+    let number = to_number(builder, at, read, (null_is, what));
     match builder.type_of(at) {
         Some(want @ HirType::Int { .. }) => builder.coerce(number, &want, at),
         _ => Ok(number),
@@ -115,8 +115,8 @@ pub(super) fn family_read(
     );
     if want == HirType::NUMBER {
         match use_of(builder, at) {
-            Use::Numeric => return to_number(builder, at, read, (0.0, &what)),
-            Use::Equal => return to_number(builder, at, read, (f64::NAN, &what)),
+            Use::Numeric => return Ok(to_number(builder, at, read, (0.0, &what))),
+            Use::Equal => return Ok(to_number(builder, at, read, (f64::NAN, &what))),
             _ => {}
         }
     }
@@ -400,7 +400,7 @@ fn to_number(
     at: NodeId,
     read: ValueId,
     (null_is, what): (f64, &str),
-) -> Result<ValueId, Diagnostic> {
+) -> ValueId {
     let origin = builder.origin(at);
     let held = tag_of(builder, at, read);
     let is_number = compare(builder, at, held, BinOp::Eq, tags::NUMBER);
@@ -452,7 +452,7 @@ fn to_number(
         args: vec![nan],
     });
     builder.switch_to(merge);
-    Ok(result)
+    result
 }
 
 /// Where `cond` holds, jump to `merge` with `value`, a constant; the block

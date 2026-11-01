@@ -216,5 +216,5 @@ fn without_conversion(left: u32, right: u32) -> bool {
             }
     };
     let (left, right) = (group(left), group(right));
-    left == 0 || right == 0 || left == right && left.count_ones() == 1
+    left == 0 || right == 0 || left == right && left.is_power_of_two()
 }
