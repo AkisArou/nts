@@ -89,11 +89,24 @@ static void mapping(const uint16_t *units, uint32_t length, int wide,
   nts_release(actual);
   /* A missing retain on the unchanged return is a use-after-free here. */
   assert(source->length == length);
+  for (uint32_t i = 0; i < length; i++) {
+    uint16_t original = wide ? NTS_ELEMENTS(source, uint16_t)[i]
+                             : NTS_ELEMENTS(source, uint8_t)[i];
+    assert(original == units[i]);
+  }
   nts_release(source);
 }
 
 int main(void) {
   spans();
+  /* An already written narrow prefix, followed by a widening or narrow unit.
+   * These exercise the base-pointer handoff after local output stores. */
+  static const uint16_t widening[] = {0xe9, 0xff};
+  static const uint16_t narrow[] = {0xe9, 0xfd};
+  mapping(widening, 2, 0, 0);
+  mapping(narrow, 2, 0, 0);
+  mapping(widening, 2, 1, 0);
+  mapping(narrow, 2, 1, 0);
   static const uint16_t cold[] = {
       'A',    0x4e00, 0x4eff, 0x3a3,  0x301,  ' ',    0xdf, 0xff,
       0xb5,   0x153,  0x130,  0xd801, 0xdc00, 0xd800, 'B',  0xdc00,

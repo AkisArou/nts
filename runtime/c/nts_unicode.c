@@ -509,7 +509,7 @@ static uint32_t nts_case_identity_span(const uint16_t *source, uint32_t at,
   static void NAME(const NtsString *s, NtsString *out, uint32_t begin,         \
                    uint32_t prefix) {                                          \
     const SOURCE *restrict source = NTS_ELEMENTS(s, SOURCE);                   \
-    OUTPUT *restrict output = NTS_ELEMENTS(out, OUTPUT);                       \
+    OUTPUT *output = NTS_ELEMENTS(out, OUTPUT);                                \
     const uint32_t length = s->length;                                         \
     const uint8_t *restrict index = (TABLE).index;                             \
     const uint32_t *restrict blocks = (TABLE).blocks;                          \
@@ -614,7 +614,7 @@ static uint32_t nts_case_identity_span(const uint16_t *source, uint32_t at,
     if (at == length)                                                          \
       return nts_case_unchanged(s);                                            \
     NtsString *out = nts_str_raw(length, TWO_BYTE);                            \
-    SOURCE *restrict output = NTS_ELEMENTS(out, SOURCE);                       \
+    SOURCE *output = NTS_ELEMENTS(out, SOURCE);                                \
     if (at != 0)                                                               \
       memcpy(output, source, (size_t)at * sizeof(SOURCE));                     \
     while (at < length) {                                                      \
