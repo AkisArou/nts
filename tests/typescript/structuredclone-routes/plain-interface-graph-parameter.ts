@@ -1,0 +1,36 @@
+/*---
+description: An optional recursive interface parameter preserves complete graphs and scalar values.
+features: [ts-structuredclone-route-plain-data, ts-functions, ts-iteration, ts-arrays, ts-map-set, ts-objects, ts-unknown, ts-numbers, ts-null-undefined, ts-interfaces, ts-spread, ts-optional-properties]
+---*/
+// A Graph parameter carries empty objects, signed zero, NaN, undefined, shared or distinct children and cycles; node makes an independent graph with exact aliases.
+function same(actual: unknown, expected: unknown): void { assert.sameValue(Object.is(actual, expected), true); }
+interface CloneSnapshot { keys: string[]; names: string[]; values: unknown[]; prototype: unknown; length: unknown; }
+function captureGraph(value: unknown, seen = new Map<object, CloneSnapshot>()): Map<object, CloneSnapshot> {
+  if (typeof value !== "object" || value === null || seen.has(value)) return seen;
+  const values = Object.values<unknown>({ ...value }); seen.set(value, { keys: Object.keys(value), names: Object.getOwnPropertyNames(value), values, prototype: Object.getPrototypeOf(value), length: "length" in value ? value.length : undefined });
+  for (const child of values) captureGraph(child, seen); return seen;
+}
+function assertOriginal(seen: Map<object, CloneSnapshot>): void {
+  for (const [value, state] of seen) {
+    assert.compareArray(Object.keys(value), state.keys); assert.compareArray(Object.getOwnPropertyNames(value), state.names); assert.compareArray(Object.values<unknown>({ ...value }), state.values);
+    same(Object.getPrototypeOf(value), state.prototype); same("length" in value ? value.length : undefined, state.length);
+  }
+}
+interface Graph { value?: number; left?: Graph; right?: Graph; }
+function copyGraph(source: Graph): Graph { return structuredClone(source); }
+function inspect(source: Graph, result: Graph, seen: Map<Graph, Graph>): void {
+  const old = seen.get(source); if (old !== undefined) { same(result, old); return; }
+  same(Array.from(seen.values()).includes(result), false); seen.set(source, result); same(Object.is(result, source), false);
+  same(Object.getPrototypeOf(result), Object.prototype); assert.compareArray(Object.keys(result), Object.keys(source)); same(result.value, source.value);
+  if (source.left === undefined) same(result.left, undefined); else { if (result.left === undefined) throw new Error("left"); inspect(source.left, result.left, seen); }
+  if (source.right === undefined) same(result.right, undefined); else { if (result.right === undefined) throw new Error("right"); inspect(source.right, result.right, seen); }
+}
+const inputs: Graph[] = [{}, { value: -0 }, { value: NaN }, { value: undefined }];
+const shared: Graph = { value: 7 }; inputs.push({ left: shared, right: shared }, { left: { value: 7 }, right: { value: 7 } });
+const graphSelf: Graph = { value: -0 }; graphSelf.left = graphSelf; inputs.push(graphSelf);
+const first: Graph = { value: NaN }, second: Graph = {}; first.left = second; second.right = first; inputs.push(first);
+for (const source of inputs) {
+  const original = captureGraph(source), result = copyGraph(source), seen = new Map<Graph, Graph>(); assertOriginal(original); inspect(source, result, seen);
+  for (const [before, after] of seen) { for (const original of seen.keys()) same(Object.is(after, original), false); }
+  for (const [before, after] of seen) { const value = before.value; after.value = 91; same(before.value, value); before.value = 37; same(after.value, 91); }
+}
