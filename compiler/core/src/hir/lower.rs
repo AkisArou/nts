@@ -87052,6 +87052,11 @@ impl<'a> FuncBuilder<'a> {
             return self.exponentiate(id, ty, lhs, rhs);
         }
 
+        if let Some(equal) = self.lower_union_equality(id, [lhs_node, rhs_node], token, [lhs, rhs])
+        {
+            return equal;
+        }
+
         let op = self.binary_op_for(id, operator, lhs_node, rhs_node, token, &ty)?;
 
         let (lhs, rhs) = self.erased_equality_operands(token, [lhs_node, rhs_node], (lhs, rhs))?;
@@ -89809,6 +89814,7 @@ mod claimed_reads;
 mod closure_context;
 mod construction;
 mod elision_patterns;
+mod equality;
 mod field_initialization;
 mod function_names;
 mod gobject;
