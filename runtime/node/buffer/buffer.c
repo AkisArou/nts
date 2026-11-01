@@ -15,5 +15,6 @@ double nts_buffer_array_buffer_aligned_offset(NtsBuffer *buffer,
   return (double)((0 - address) & mask);
 }
 
-/* nts_buffer_mark_as_untransferable requires an actual detach-key state in
-   the ArrayBuffer runtime. It has no placeholder implementation here. */
+/* nts_buffer_mark_as_untransferable is the backing-identity operation in
+   nts_runtime.c, shared with the guards at both ArrayBuffer transfer methods.
+ */
