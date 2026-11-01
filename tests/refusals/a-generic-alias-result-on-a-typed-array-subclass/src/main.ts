@@ -5,8 +5,9 @@
 // type alias. The two factory results below are exactly the same TypeScript
 // type, and both bodies construct the same view. Changing only the result
 // annotation from its generic alias to the class name makes the call compile.
-// This blocks the Buffer refactor's landing: SlowBuffer's previously real
-// local/slowbuffer-length-static.js pass must be restored before it lands.
+// The lost local/slowbuffer-length-static.js pass stays attributed here.
+// The migration keeps the honest source; its Buffer floor may be acknowledged
+// by this fixture's name until the compiler fix restores the pass.
 
 class Bytes<T extends ArrayBufferLike = ArrayBufferLike> extends Uint8Array<T> {
   constructor(buffer: T) { super(buffer); }
