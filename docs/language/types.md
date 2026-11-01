@@ -98,6 +98,15 @@ representation, and checks it where it can:
 | `n as Uint16` and the other scalar kinds | proven at compile time or refused; nothing at run time ([numbers.md](numbers.md)) |
 | `satisfies`, `as const` | nothing at run time |
 
+A type predicate (`value is T`) and an assertion function
+(`asserts value is T`) claim a type as `as` does, and a false claim over an
+erased value throws the same `TypeError`. The test sits where the narrowed
+value's representation is first needed, at the field or element read through
+the narrowed view, never at the call that narrows it: a claim about a part
+the program never reads costs nothing. Over a typed value, as when an `A | B` is
+narrowed to `B`, a false predicate is one of the cases below that behave as
+node does.
+
 A failed test throws a `TypeError` ("The asserted native representation does
 not match the value", or "... native class ...") where the function can carry
 a throw to a handler: inside a `try` in the same function, in an `async`
@@ -172,7 +181,7 @@ claim reads the wrong bytes. Today's behaviour, case by case:
 | a `var` read before its assignment | `undefined` | at module scope a wrong answer (`tests/outcomes/a-var-read-before-its-declaration`); through a closure, a stop by name | L4 |
 | a `Sub[]` widened to `Base[]`, then given a `Base` | the `Base` behaves as a `Base` | widening between different element layouts is refused (NTS1001) on every backend; between equal layouts, C and LLVM call the `Base` as a `Sub` (`tests/outcomes/a-base-pushed-through-a-covariant-array-dispatches-as-the-subclass`), and the JVM declines (NTS4001) | L5, [decided](#decisions) |
 | a `Map<K, number>` passed as a `Map<K, unknown>`, which stores a string | the string reads back as a string | read back through the narrow type as a number, on every backend and in every way a Map or Set is read (`tests/outcomes/a-string-stored-through-a-widened-number-map-reads-as-a-number`) | [decided](#decisions) |
-| an erased value asserted to the wrong type | reads on | `TypeError` or a stop by name (casts, above) | L6, [decided](#decisions) |
+| an erased value asserted to the wrong type, by `as`, a type predicate or an assertion function | reads on | `TypeError` or a stop by name (casts, above) | L6, [decided](#decisions) |
 | a `this` that is not the declared `this:` type | reads on | stops by name ([functions.md](functions.md#this)) | L14, [decided](errors.md#decisions) |
 
 **The policy:** every case in this table behaves as node does, with one
@@ -196,6 +205,9 @@ Until each case meets the policy, a wrong answer that runs is recorded under
   one exception:** an erased value (from `any`, `unknown`, JSON or foreign
   code) asserted to a type it does not have throws a catchable `TypeError`
   (10-27, [log](../records/notebooks/decisions-log.md#language-and-hosts-10-27)).
+  A type predicate or an assertion function asserts as `as` does, checked
+  at the first read that needs the narrowed representation (11-01,
+  [log](../records/notebooks/decisions-log.md#language-11-01)).
 - **A literal type is tested where an erased value enters it, and is never a
   proof:** an erased value asserted to a literal type or an `enum` tests its
   value as well as its tag, and a mismatch is the same catchable `TypeError`. A

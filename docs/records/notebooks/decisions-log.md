@@ -1163,3 +1163,21 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   delegation; runtime3 built it, and it landed in 4dcd0a422.
 - **Documented.** The user approved the page line on 10-31, apart from the
   C-interop docs still being worked out.
+
+## Language (11-01)
+
+- **A type predicate or an assertion function over an erased value asserts
+  as `as` does.** Found when compiler4, building the per-type property plan
+  for the guarded-Record memory hole, asked what sixteen soundness cases
+  should give. In each, a lying `value is { value: number }` or
+  `asserts value is ...` narrows an `unknown` holding `{ value: "7" }`, and
+  the case expects node's string. The coordinator decided under the user's
+  10-27 choice ("Catchable TypeError", register L6) that `x is T` and
+  `asserts x is T` are TypeScript's other two ways to claim a type for an
+  erased value without proof. The same lie throws the same `TypeError`
+  however it is spelled. Keeping node's string would leave every value read
+  through such a guard erased, the representation cost that decision chose
+  not to pay. The check sits at the first field or element read that needs
+  the narrowed representation, never at the predicate call. A false
+  predicate over a typed value (an `A | B` narrowed to `B`) behaves as node
+  does. Recorded in [types.md](../../language/types.md#decisions).
