@@ -220,7 +220,7 @@ mod tests {
         let native = run(b"before\n", vec![stop(0..7, 0..1)]);
         let node = run(b"before\nfinally\n", Vec::new());
         let compared = compare(&native, &node, |_| Ok(node.output.clone())).unwrap();
-        assert!(compared.disagreements.is_empty());
+        assert_eq!(compared.disagreements, Vec::<(String, String)>::new());
         assert_eq!(compared.rejected_declines, 0);
     }
 
@@ -273,7 +273,7 @@ mod tests {
         let native = run(b"", vec![stop(0..0, 0..1)]);
         let node = run(b"", Vec::new());
         let compared = compare(&native, &node, |_| panic!("empty output needs no replay")).unwrap();
-        assert!(compared.disagreements.is_empty());
+        assert_eq!(compared.disagreements, Vec::<(String, String)>::new());
     }
 
     #[test]

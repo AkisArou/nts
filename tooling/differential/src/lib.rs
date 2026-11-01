@@ -3837,7 +3837,7 @@ mod result_channel {
             1,
             "the real 1-to-2 growth must be caught: {aborts:?}"
         );
-        assert!(refused.is_empty());
+        assert_eq!(refused, Vec::<usize>::new());
     }
 
     /// Program output shaped exactly like a result stays output: it cannot
