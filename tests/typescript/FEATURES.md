@@ -1346,6 +1346,7 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | `switch` | 7 | 7 | Literal and enum dispatch, fallthrough, middle-default search, cached discriminants, ordered narrowing guards and exhaustive returns |
 | `labels` | 9 | 9 | Labeled break and continue through nested loops and blocks, update/test order and retained iteration or shared bindings |
 | `finally` | 9 | 9 | Saved return and throw values, cleanup on every exit, cleanup overrides, nested order and post-cleanup reads |
+| `short-circuit` | 13 | 13 | Skipped and selected operands, cached logical-assignment references, optional boundaries, conditional narrowing and evaluation order |
 
 ### Union route contracts
 
@@ -1720,7 +1721,7 @@ land without another open Unicode pull request.
 | `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 872 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 560 | 0 |
 | `ts-type-assertions` | a type assertion (`x as T`, `<T>x`), erased, never a conversion | conformance/expressions/asOperator; conformance/expressions/typeAssertions; ts-eslint TSAsExpression, TSTypeAssertion | 81 | 0 |
-| `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 144 | 0 |
+| `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 146 | 0 |
 | `ts-type-operators` | values flowing through type-level operators: keyof, typeof, indexed access, mapped and conditional types | conformance/types (keyof, typeQueries, mapped, conditional) | 35 | 0 |
 | `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 1742 | 0 |
 | `ts-tuple-route-calls` | tuple parameters, results, argument lists, destructuring and variadic instantiations preserve every argument and returned slot | TypeScript Tuple Types; Variadic Tuple Types; rest arguments | 16 | 0 |
