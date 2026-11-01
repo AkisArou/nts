@@ -1,0 +1,5 @@
+sequential/test-cluster-inspect-brk.js
+sequential/test-cluster-net-listen-ipv6only-none.js
+sequential/test-cluster-net-listen-ipv6only-rr.js
+sequential/test-cluster-port-reuse-between-workers.js
+sequential/test-cluster-send-handle-large-payload.js

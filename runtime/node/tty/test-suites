@@ -1,1 +1,4 @@
 pseudo-tty/test-tty-isatty.js
+pseudo-tty/test-tty-color-support.js
+pseudo-tty/test-tty-stream-constructors.js
+pseudo-tty/test-tty-window-size.js

@@ -2,3 +2,11 @@ test-aborted-util.js
 test-global-encoder.js
 test-mime-api.js
 test-mime-whatwg.js
+test-mark-promise-handled.js
+test-whatwg-encoding-custom-textdecoder-api-invalid-label.js
+test-whatwg-encoding-custom-textdecoder-fatal.js
+test-whatwg-encoding-custom-textdecoder-ignorebom.js
+test-whatwg-encoding-custom-textdecoder-invalid-arg.js
+test-whatwg-encoding-custom-textdecoder-streaming.js
+test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js
+test-whatwg-encoding-custom-textdecoder.js

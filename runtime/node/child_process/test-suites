@@ -1,0 +1,5 @@
+pummel/test-child-process-spawn-loop.js
+sequential/test-child-process-emfile.js
+sequential/test-child-process-execsync.js
+sequential/test-child-process-exit.js
+sequential/test-child-process-pass-fd.js

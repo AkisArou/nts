@@ -86,6 +86,17 @@ interim gate for a module that does not compile yet, and running both tells a
 compiler bug from an implementation bug — fails compiled, passes on node, is a
 compiler bug.
 
+Upstream `test/known_issues` is outside the positive conformance population.
+Its `testcfg.py` sets `expect_fail = 1`: those files assert behaviour Node
+does not provide, and an empty module failing them proves nothing. Selection
+excludes that directory even if explicitly listed in `extra-tests` or
+`test-suites`. Their observations are diagnostic only. A file moved into a
+positive upstream suite enters through normal selection.
+The network-dependent `test/internet` suite is excluded by the same rule;
+Node's `tools/test.py` excludes it from the default suite list. Its outcomes
+are reported separately as diagnostics and do not contribute to population,
+passes, failures or not-runs.
+
 ## Adding a module
 
 1. `src/main.ts`, transcribed from `third_party/node/lib/<module>.js`.

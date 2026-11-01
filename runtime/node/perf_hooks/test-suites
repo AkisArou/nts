@@ -1,0 +1,4 @@
+addons/non-node-context/test-perf-hooks-timerify.js
+sequential/test-perf-hooks-histogram-heapdump.js
+sequential/test-perf-hooks.js
+sequential/test-performance-eventloopdelay.js

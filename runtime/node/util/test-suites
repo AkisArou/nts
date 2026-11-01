@@ -5,3 +5,4 @@ parallel/test-uv-errno.js
 parallel/test-uv-errmap.js
 pseudo-tty/test-start-trace-sigint.js
 pseudo-tty/test-stop-trace-sigint.js
+sequential/test-util-debug.js

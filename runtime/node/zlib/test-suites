@@ -1,0 +1,3 @@
+async-hooks/test-zlib.zlib-binding.deflate.js
+pummel/test-zlib-zip-slow.js
+sequential/test-zlib-crc32-fast-api.js

@@ -1,0 +1,3 @@
+pseudo-tty/test-assert-colors.js
+pseudo-tty/test-assert-no-color.js
+pseudo-tty/test-assert-position-indicator.js

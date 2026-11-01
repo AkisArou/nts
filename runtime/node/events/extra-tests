@@ -1,2 +1,5 @@
 test-events-add-abort-listener.mjs
 test-eventemitter-asyncresource.js
+test-eventtarget-memoryleakwarning.js
+test-eventtarget-once-twice.js
+test-eventtarget.js

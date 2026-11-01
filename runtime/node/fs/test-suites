@@ -16,3 +16,12 @@ parallel/test-fastutf8stream-retry.js
 parallel/test-fastutf8stream-sync.js
 parallel/test-fastutf8stream-write-buffer.js
 parallel/test-fastutf8stream-write.js
+pummel/test-fs-largefile.js
+pummel/test-fs-read-file-sync-utf8-memory.js
+pummel/test-fs-readfile-tostring-fail.js
+pummel/test-fs-watch-file-slow.js
+pummel/test-fs-watch-file.js
+pummel/test-fs-watch-non-recursive.js
+pummel/test-fs-watch-system-limit.js
+sequential/test-fs-readdir-recursive.js
+sequential/test-fs-watch.js

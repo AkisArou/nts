@@ -35,3 +35,16 @@ client-proxy/test-http-set-global-proxy-from-env-no-proxy.mjs
 client-proxy/test-http-set-global-proxy-from-env-override-http.mjs
 client-proxy/test-use-env-proxy-cli-http.mjs
 client-proxy/test-use-env-proxy-precedence.mjs
+abort/test-http-parser-consume.js
+async-hooks/test-http-agent-handle-reuse-parallel.js
+async-hooks/test-http-agent-handle-reuse-serial.js
+client-proxy/test-http-proxy-fetch.mjs
+client-proxy/test-http-proxy-perf-hooks.mjs
+pummel/test-http-many-keep-alive-connections.js
+pummel/test-http-upload-timeout.js
+sequential/test-http-econnrefused.js
+sequential/test-http-keep-alive-large-write.js
+sequential/test-http-keepalive-maxsockets.js
+sequential/test-http-server-keep-alive-timeout-slow-client-headers.js
+sequential/test-http-server-keep-alive-timeout-slow-server.js
+sequential/test-http-server-request-timeouts-mixed.js

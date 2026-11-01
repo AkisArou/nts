@@ -41,6 +41,7 @@ import { nodeEnvironment,nodeInputs } from "./node-environment.ts";
 import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 import {homedir} from 'node:os';
+import { positiveNodeTests } from "./node-test-population.mjs";
 import process from "node:process";
 import { leftBy, removeTestTmpDir, sweepOrphaned, testTmpDir, testTmpId, testTmpRoot } from "./tmpdir.mjs";
 
@@ -269,7 +270,7 @@ const local = existsSync(localDir)
   : [];
 
 const allTests = [
-  ...upstream.filter(
+  ...positiveNodeTests(join(NODE_ROOT, "test"), upstream).filter(
     (test, index, all) => all.findIndex((candidate) => candidate.name === test.name) === index,
   ),
   ...local.map((fileName) => ({ name: `local/${fileName}`, path: join(localDir, fileName) })),
