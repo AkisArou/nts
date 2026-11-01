@@ -42,6 +42,23 @@ impl FuncBuilder<'_> {
             ));
         }
         let layout = self.layout_of(id, owner)?;
+        // A copy-local substitution is not a new layout identity. An
+        // anonymous {value:T} cannot publish number and string slots under
+        // the same schema id in two generic copies.
+        let instantiated = self
+            .substitution
+            .instances()
+            .any(|(_, instance)| instance == owner);
+        for field in &layout.fields {
+            if !instantiated
+                && let Some(schema) = self.declared_type_of(owner, &field.name)
+                && super::super::lower::representation(self.snapshot, schema).is_none()
+                && self.represent(schema).is_some()
+            {
+                return Err(self.unsupported(id,
+                    "`Object.assign` into a generic target without an instantiated field-layout identity"));
+            }
+        }
         // Only storage is admitted here. A setter is an implicit call and must
         // be selected by the shared call/effect plan before it can run here.
         let mut fields: Vec<_> = layout
@@ -172,7 +189,7 @@ impl FuncBuilder<'_> {
                 id,
                 always,
                 "an Object.assign source key outside the target's fixed layout",
-            )?;
+            );
             self.terminate(Terminator::Jump {
                 target: next,
                 args: Vec::new(),
@@ -305,7 +322,7 @@ impl FuncBuilder<'_> {
             id,
             rejected,
             "an Object.assign value outside the target field's native representation",
-        )?;
+        );
         Ok(self.push(OpKind::unerase(value), want.clone(), origin))
     }
 }

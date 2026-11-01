@@ -440,7 +440,8 @@ fn reject_when(
     {
         return builder.refuse_when(id, condition, class, message);
     }
-    decline_when(builder, id, condition, message)
+    decline_when(builder, id, condition, message);
+    Ok(())
 }
 
 /// Where `condition` holds, decline the case by name (`nts: refused:`): the
@@ -453,7 +454,7 @@ pub(super) fn decline_when(
     id: NodeId,
     condition: ValueId,
     message: &str,
-) -> Result<(), Diagnostic> {
+) {
     let rejected = builder.new_block();
     let accepted = builder.new_block();
     builder.terminate(super::super::Terminator::Branch {
@@ -464,19 +465,17 @@ pub(super) fn decline_when(
         else_args: Vec::new(),
     });
     builder.switch_to(rejected);
-    builder.unwind_to(0, None)?;
-    if !builder.is_terminated() {
-        let origin = builder.origin(id);
-        let reason = builder.push(
-            OpKind::ConstString(message.to_owned().into()),
-            HirType::Managed(ManagedType::String),
-            origin.clone(),
-        );
-        builder.runtime_call("nts_assertion_failed", vec![reason], HirType::Void, origin);
-        builder.terminate(super::super::Terminator::Unreachable);
-    }
+    // A native stop is not a JavaScript completion. Running source cleanup
+    // could print out of order, throw into a catch, or return past this stop.
+    let origin = builder.origin(id);
+    let reason = builder.push(
+        OpKind::ConstString(message.to_owned().into()),
+        HirType::Managed(ManagedType::String),
+        origin.clone(),
+    );
+    builder.runtime_call("nts_assertion_failed", vec![reason], HirType::Void, origin);
+    builder.terminate(super::super::Terminator::Unreachable);
     builder.switch_to(accepted);
-    Ok(())
 }
 
 fn ensure_erasable(

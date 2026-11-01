@@ -77,7 +77,7 @@ pub(super) fn narrowed(
         _ => {
             let held = tag_of(builder, at, read);
             let other = compare(builder, at, held, BinOp::Ne, tag);
-            super::assertions::decline_when(builder, at, other, what)?;
+            super::assertions::decline_when(builder, at, other, what);
             return builder.narrowed(at, read);
         }
     };
@@ -191,7 +191,7 @@ fn checked_family_payload(
         HirType::Bool,
         builder.origin(at),
     );
-    super::assertions::decline_when(builder, at, reject, what)?;
+    super::assertions::decline_when(builder, at, reject, what);
     builder.materialize(at, &want)?;
     Ok(builder.push(OpKind::unerase(read), want, builder.origin(at)))
 }
@@ -442,7 +442,7 @@ fn to_number(
         HirType::Bool,
         origin.clone(),
     );
-    super::assertions::decline_when(builder, at, neither, what)?;
+    super::assertions::decline_when(builder, at, neither, what);
     let when_null = builder.push(OpKind::ConstFloat(null_is), HirType::NUMBER, origin.clone());
     let undefined_block = branch(builder, null, (merge, when_null));
     builder.switch_to(undefined_block);

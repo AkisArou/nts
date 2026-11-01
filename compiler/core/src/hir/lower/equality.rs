@@ -198,7 +198,7 @@ impl FuncBuilder<'_> {
             node,
             rejected,
             "a loose-equality operand outside its declared non-coercing union",
-        )?;
+        );
         Ok(value)
     }
 }
