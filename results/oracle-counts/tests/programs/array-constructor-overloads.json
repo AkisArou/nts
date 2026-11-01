@@ -1,0 +1,122 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/array-constructor-overloads",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/array-constructor-overloads/src/main.ts",
+      "signature": "7c2820fa5127b861985fd5c8f2647f788e15e05f06e671d7fc1f7bae8832a514",
+      "keys": {
+        "c": "9f978ad91450be7d28d15352ef2292a8",
+        "jvm": "507051fe32dd4eb72b855e2913cfc580",
+        "llvm": "38db9708943446f19fc52646421fabe8"
+      },
+      "cases_sha256": "e8a06a6dd84c8d4e7b18278abc441c35cd19fc092a76a779a74963b819374d78",
+      "driver_sha256": "b14e342efafd4c9d7e8c6dc6265f448f8ba9ba66ecbad0c0e584216cf6b47729",
+      "populations": {
+        "calledDynamicSpread": {
+          "count": 29,
+          "cases_sha256": "023c22dc70952fff7cc2a8dd42560bcfe841d3bdb30a8bef1c86f2120337182d"
+        },
+        "calledInvalidLength": {
+          "count": 29,
+          "cases_sha256": "0f929d367d28a4f89c1ace190beae27d60f0d3415a18638775e6798be272d0f3"
+        },
+        "dynamicSpread": {
+          "count": 29,
+          "cases_sha256": "f5bad87e79f6b6a06f81b68eefb116d181f67c3ea736bb2a5c9d312954694401"
+        },
+        "evaluatesEveryArgument": {
+          "count": 29,
+          "cases_sha256": "070b5a1788f815d087037bc3734083f419777366ff0a73a35f4c36331e688f6f"
+        },
+        "fractionalLength": {
+          "count": 29,
+          "cases_sha256": "d568412030e162f59fa7ba8e68bf9ca93aa2c3bb7fb32a3181f0735d4a352ed3"
+        },
+        "genericInstantiations": {
+          "count": 29,
+          "cases_sha256": "7349927f500d243a430231a70ee8d27a455151cf4bb99a555056d27ba53a5538"
+        },
+        "invalidIntegerLength": {
+          "count": 29,
+          "cases_sha256": "cf772f368d32a6e497eb4520fe031f6f4afed343164413e55b632cfbaf10ef37"
+        },
+        "moduleScope": {
+          "count": 29,
+          "cases_sha256": "84faae4e9835a7e24a56ece69ec8cb2e29b358e83fa3ad13ede3ae9c500f183e"
+        },
+        "negativeZeroLength": {
+          "count": 29,
+          "cases_sha256": "4cfe8889ce77951a44a2e820bee0757c9be0fe2ef29d7cab8a73ea2737fec1a7"
+        },
+        "nestedFractionalLength": {
+          "count": 29,
+          "cases_sha256": "7dee5cafc731c3d3812582c3492d273b3fd4b3ebff18ab05e89a14017c7d3fd4"
+        },
+        "noArguments": {
+          "count": 29,
+          "cases_sha256": "ac16c5c79b464ef9ed29fba11cce893201b1e8aa8f603e1e53b1d6dfb71eae35"
+        },
+        "nonfiniteLength": {
+          "count": 29,
+          "cases_sha256": "ca9b6f188363a541182a3b6abae938d57c8369f535a5a19fa5e154fcb39e3d40"
+        },
+        "numericLength": {
+          "count": 29,
+          "cases_sha256": "291b7fe2655370f2341c2392812db02bba34c51cb60ed5b9e3e7fcf089746a5f"
+        },
+        "oneBigInt": {
+          "count": 29,
+          "cases_sha256": "968a230568d8fa5e949e7f169b5cee0da304fbe6f8e6797b6dfff05399a68221"
+        },
+        "oneBoolean": {
+          "count": 29,
+          "cases_sha256": "510c113f04c799309e65f3549805d7ddaa73ee9254e09706b8c5a326af6f5ef0"
+        },
+        "oneCalledString": {
+          "count": 29,
+          "cases_sha256": "cf7c1905774446a54ad8577ea2a1ae96147b59966eeb1d5fba795461789335ff"
+        },
+        "oneString": {
+          "count": 29,
+          "cases_sha256": "378191ba018377ca79fb2954efe133ea77ad9f554ff7eafc4a45863a56193018"
+        },
+        "prefixSpread": {
+          "count": 29,
+          "cases_sha256": "906a8bd4efdbbc271f8d34fb7fde0cf2684493bceb42b88d3040a0fa15438cb1"
+        },
+        "runtimeSingletonType": {
+          "count": 29,
+          "cases_sha256": "3607137386c7ad6845562b947c7ed2484980916a7beff7856e0af0d42c9e2946"
+        },
+        "shadowedArray": {
+          "count": 29,
+          "cases_sha256": "6cbe1da1e62f3dd40032500368dfceb65c2187ad2038ff7ab32f53c72785bcab"
+        },
+        "spreadBeforeMutation": {
+          "count": 29,
+          "cases_sha256": "2b89a0aeda51d4b4f05cbce9dd81f33dbe42d66188efe1ac359fb761392e92c6"
+        },
+        "threeConstructed": {
+          "count": 29,
+          "cases_sha256": "84ea2a6ece90fffa6cf41b93b5a8359bedbef5fa9d9e205a468f0708862fed5c"
+        },
+        "tupleSpread": {
+          "count": 29,
+          "cases_sha256": "1be5d50574eb19d28df1d014e4ac4949459e3e668e6854e8192e8b407e54dff2"
+        },
+        "twoCalled": {
+          "count": 29,
+          "cases_sha256": "5229e4b3619ecbbc39bbba78ca90729d4b73f7b4e15be57eecce1398c9375c80"
+        },
+        "twoConstructed": {
+          "count": 29,
+          "cases_sha256": "08dc3ebee94df4b0aa5563d95fd828af2398dc2ba7bfd1d10479540e57879469"
+        }
+      },
+      "complete": true,
+      "count": 725
+    }
+  ]
+}

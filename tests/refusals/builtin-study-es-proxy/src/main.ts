@@ -1,4 +1,4 @@
-// expect: NTS1001 a `new` of something this program declares but does not implement: a `declare class`, or a value typed with a construct signature is not supported by this lowering yet
+// expect: NTS1001 a `new Proxy`, a builtin this compiler does not construct is not supported by this lowering yet
 //
 // Builtins study probe es-proxy; original.ts is the byte-identical archived
 // input, excluded from this project's include. Historical verdict: PARTIAL: NTS1001 a `new` of something this program declares but does not implement: a `declare class`, or a value typed with a construct signature | NTS1003 this module-scope statement was dropped because it calls `main`, which was refused above; the rest of the module's evaluation still runs, so the program this builds does less than its source says.

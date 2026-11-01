@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-instance-of-a-generic-class-is-that-class-to-instanceof-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-instance-of-a-generic-class-is-that-class-to-instanceof-control/src/main.ts",
+      "signature": "37ca4976607fe35a2af8ce43c7e0f213d33802813eda74f8f3e5e2fb7130bf63",
+      "keys": {
+        "c": "49ba647ca3dce69d364a76aa7eb1e1a9",
+        "jvm": "6806e34a044c7cb7e06933900b922fc0",
+        "llvm": "41fe0fc782327f4edba432f9adf04813"
+      },
+      "cases_sha256": "c25bf6e4091b4305d90217ce04191be692701b0c78a239ff3ff69e34eae8db2b",
+      "driver_sha256": "1faa65c961e3a528c41eb721997d02a7a53439e060d6af634957f0c65d8e125c",
+      "populations": {
+        "direct": {
+          "count": 29,
+          "cases_sha256": "3aa32d7d3a8d2988894064aa3f7a826dd0be67d2a0f33e75130562b024fc51eb"
+        },
+        "inherited": {
+          "count": 29,
+          "cases_sha256": "9e32b684580ac88ae58c6d1c0594f80fc2b80089c4c9d69f530a956159507818"
+        },
+        "other": {
+          "count": 29,
+          "cases_sha256": "2717aa534c07cef135fe2050943cd6282a43ecaaa8caa86cbe3a5e1e76aa4b00"
+        }
+      },
+      "complete": true,
+      "count": 87
+    }
+  ]
+}

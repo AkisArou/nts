@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-array-constructor-with-an-erased-unboxed-boolean-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-array-constructor-with-an-erased-unboxed-boolean-control/src/main.ts",
+      "signature": "a85efee8e2ffb6cf4e58620f9b3116c53dc060c38a95ea86571980ac58493a4a",
+      "keys": {
+        "c": "9dac701b1ee914d0d282ca023eff525a",
+        "jvm": "052c329a3f62620c213b52d7392f9ed8",
+        "llvm": "d156c789813b5b256e284d4fd3eda377"
+      },
+      "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47",
+      "driver_sha256": "f6af795f6b9b9f05bc99566ac86d04965f25e069e802b2cc8c0cd5f86613be18",
+      "populations": {
+        "probe": {
+          "count": 29,
+          "cases_sha256": "aed43d80ae173b087afb7c8e9623465d4b74d5f91e1e21402d7957966e286c47"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}

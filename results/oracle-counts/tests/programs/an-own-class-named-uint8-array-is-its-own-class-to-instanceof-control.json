@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/an-own-class-named-uint8-array-is-its-own-class-to-instanceof-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/an-own-class-named-uint8-array-is-its-own-class-to-instanceof-control/src/main.ts",
+      "signature": "68eb32ddc37cd7a8d8b3f8886b99142cc7e471baa122b0bd2b039981e9642d85",
+      "keys": {
+        "c": "4c117fe087284a9c6b49b30dae088fab",
+        "jvm": "fdb44a0390f148c92d8eafccd94d486a",
+        "llvm": "84302e6702c28bde943fa4040530db23"
+      },
+      "cases_sha256": "2ad351f1362a37023d488d183d39bee83cc4bc509c80c5222be4474b6643424d",
+      "driver_sha256": "053ffc5a54de65384616aad10ca10bb9171cf5cc30f85fed35bdfaba88967d93",
+      "populations": {
+        "other": {
+          "count": 29,
+          "cases_sha256": "2717aa534c07cef135fe2050943cd6282a43ecaaa8caa86cbe3a5e1e76aa4b00"
+        },
+        "own": {
+          "count": 29,
+          "cases_sha256": "dd15094cc16a96e84b1c0dd61f43c362cb2c0150777ce8495cebec688706852b"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

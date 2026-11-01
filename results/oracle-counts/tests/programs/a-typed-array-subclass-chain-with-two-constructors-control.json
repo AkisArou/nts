@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-typed-array-subclass-chain-with-two-constructors-control",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-typed-array-subclass-chain-with-two-constructors-control/src/main.ts",
+      "signature": "6778ce8e8e1728ead6b5adfa02e968b02d4d0a039ad5221582894284825302cf",
+      "keys": {
+        "c": "1170abb5755f94ce2b6b3006f149c36a",
+        "jvm": "1200a1d6daa79b091ae8da8fe68ae7c1",
+        "llvm": "53c5bc3da160ff6ec46169fa00e2065d"
+      },
+      "cases_sha256": "b275c286e11bc50f5f673f3c687d2306de3024281f093d679736873e685eee40",
+      "driver_sha256": "0afdab20ffba9c42f486ac7622ccb722f7cfeca70ee426af419a15ea4bb1393c",
+      "populations": {
+        "derived": {
+          "count": 29,
+          "cases_sha256": "4e69dbe65dc663a43498e8ba427c9efe5598cdcd9847e45b2671321fed177645"
+        },
+        "middle": {
+          "count": 29,
+          "cases_sha256": "30e9366404a960f8ff7f2b829acffe54f1a96b58bc78b8e161478d27ab516ead"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

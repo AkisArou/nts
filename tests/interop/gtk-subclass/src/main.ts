@@ -16,6 +16,8 @@
 //                 it, the body set a field and connected a handler that reads
 //                 it through `this`
 //   greeter Nts_Greeter
+//   early early early full Nts_Early  `Early`'s bare `return;` after its
+//                 `super(...)` answers the instance it made
 //   framed in false fr unset Nts_Framed  `Framed`'s constructor passes the
 //                 caller's props object through (`super(props)`): the child
 //                 label, a handle held erased in an optional field, `sensitive`
@@ -171,6 +173,22 @@ class Greeter extends GtkButton {
     this.connect("clicked", () => {
       console.log(this.greeting + " from " + (this.label ?? ""));
     });
+  }
+}
+
+// A bare `return;` in a constructor whose `super(...)` made the instance answers
+// that instance, as JavaScript's does `this`: the early path's field write
+// stands, and the full path's never runs.
+class Early extends GtkButton {
+  note = "unset";
+
+  constructor(name: string) {
+    super({ label: name });
+    if (name === "early") {
+      this.note = "early";
+      return;
+    }
+    this.note = "full";
   }
 }
 
@@ -624,6 +642,12 @@ function main(): void {
   const greeter = new Greeter("ada");
   greeter.emit("clicked");
   console.log("greeter " + g_type_name_from_instance(greeter));
+  const early = new Early("early");
+  const full = new Early("x");
+  console.log(
+    "early " + early.note + " " + (early.label ?? "") + " " + full.note + " " +
+      g_type_name_from_instance(early),
+  );
   console.log(framed());
   console.log(tally());
   console.log(notes());

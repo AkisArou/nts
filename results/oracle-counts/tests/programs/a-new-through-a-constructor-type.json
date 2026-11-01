@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-new-through-a-constructor-type",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-new-through-a-constructor-type/src/main.ts",
+      "signature": "e8129d9893aa8e393a15a97b5a6453e9cfb1335c6304eac06c7683f0655eeb3a",
+      "keys": {
+        "c": "2129a13604dc6c86f9539b6eb5bf5f0f",
+        "jvm": "46884030646e0608c350b3dcde203220",
+        "llvm": "04f5f98cc36d54d86ea41ac4567a73fc"
+      },
+      "cases_sha256": "c5ebf6cb6714708d976f272d133c7d639fb85c2cb6fbfb4d96672e7feb013903",
+      "driver_sha256": "676cee7cfa9aebd8c192a1579645e70e32a93a912a69166c37fab5c68f1e0669",
+      "populations": {
+        "control": {
+          "count": 29,
+          "cases_sha256": "6393f453fde83f0eb54ff20426d78ecf53819ace3a51bd2c8dc3dc79297a7dfb"
+        },
+        "run": {
+          "count": 29,
+          "cases_sha256": "c5043ed2986f82e6e3b54ce0216959a98055947da782840575c00a86447a7492"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

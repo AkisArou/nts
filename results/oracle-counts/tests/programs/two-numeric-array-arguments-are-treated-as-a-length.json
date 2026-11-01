@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/two-numeric-array-arguments-are-treated-as-a-length",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/two-numeric-array-arguments-are-treated-as-a-length/src/main.ts",
+      "signature": "aee866603192fd88cef1fb3f63c5a8892bd417889f98d6f5aaad5a703ac951a2",
+      "keys": {
+        "c": "8a5abc62137119c77840f8ae8c04b515",
+        "jvm": "b741239df3bb4b23a34bdf10c2a0f08b",
+        "llvm": "30d1bb08b00ab7f2b243690b72a8f70c"
+      },
+      "cases_sha256": "740807a8d4d8f711005df6e3a6408676b93e46ae55d7254988b00a9d0859f8b6",
+      "driver_sha256": "2592f65a14051be8d7de09777af50f56e8d1fa2e9428e9ba2a009e11f79c3d55",
+      "populations": {
+        "lengthOfTwoArguments": {
+          "count": 29,
+          "cases_sha256": "740807a8d4d8f711005df6e3a6408676b93e46ae55d7254988b00a9d0859f8b6"
+        }
+      },
+      "complete": true,
+      "count": 29
+    }
+  ]
+}
