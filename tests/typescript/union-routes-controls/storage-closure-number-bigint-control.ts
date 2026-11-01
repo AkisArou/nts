@@ -1,0 +1,34 @@
+/*---
+description: Control for storage-closure-number-bigint; store separate payload fields and branch on kind.
+features: [ts-union-routes, ts-union-route-storage, ts-functions, ts-iteration, ts-arrays, ts-objects, ts-type-aliases, ts-typeof-operator, ts-unknown, ts-numbers, ts-bigint, ts-closures, ts-function-types, ts-arrow-functions]
+---*/
+// Use one record with kind, num and big fields through the same closure; branch on kind with the same payload, log and text assertions.
+type StorageValue = { kind: string; num: number; big: bigint; };
+type StorageRow = { kind: string; num: number; big: bigint; text: string };
+function same(actual: unknown, expected: unknown): void {
+  assert.sameValue(Object.is(actual, expected), true); assert.sameValue(typeof actual, typeof expected);
+}
+const branches: string[] = [], printed: string[] = [];
+function observe(value: StorageValue, row: StorageRow): void {
+  if (value.kind === "number") { branches.push("number"); same(value.num, row.num); const line = String(value.num); same(line, row.text); printed.push(line); console.log(line); }
+  else if (value.kind === "bigint") { branches.push("bigint"); same(value.big, row.big); const line = String(value.big); same(line, row.text); printed.push(line); console.log(line); }
+  else throw new Test262Error("unrecognized stored member");
+}
+const rows: StorageRow[] = [
+  { kind: "number", num: -0, big: 7n, text: "0" },
+  { kind: "bigint", num: 91, big: 0n, text: "0" },
+  { kind: "number", num: NaN, big: 7n, text: "NaN" },
+  { kind: "bigint", num: 92, big: -1n, text: "-1" },
+  { kind: "number", num: 2.5, big: 7n, text: "2.5" },
+  { kind: "bigint", num: 93, big: 9007199254740993n, text: "9007199254740993" },
+];
+function slot(initial: StorageValue): { write: (value: StorageValue) => void; read: () => StorageValue } {
+  let held = initial; return { write: value => { held = value; }, read: () => held };
+}
+const carrier = slot({ kind: "number", num: 5, big: 7n });
+for (const row of rows) {
+  const input: StorageValue = { kind: row.kind, num: row.num, big: row.big };
+  carrier.write(input); observe(carrier.read(), row);
+}
+assert.compareArray(branches, ["number", "bigint", "number", "bigint", "number", "bigint"]);
+assert.compareArray(printed, ["0", "0", "NaN", "-1", "2.5", "9007199254740993"]);
