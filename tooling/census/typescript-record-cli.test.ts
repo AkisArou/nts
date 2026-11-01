@@ -25,6 +25,7 @@ function row(observed: TypeScriptObservation): object {
   switch (observed.kind) {
     case "pass": return { bucket: "strict-pass" };
     case "wrong": return { bucket: "threw", thrown: observed.errorClass, runtimeFailure: observed.failure };
+    case "wrong-output": return { bucket: "wrong-output", printed: observed.printed, nodeOutput: observed.nodeOutput, runtimeFailure: observed.failure };
     case "refused": return { bucket: "unsupported", why: "lowering", first: "test refusal", named: [],
       diagnostics: observed.diagnostics.map(d => ({ ...d, message: "test refusal", raw: "test refusal", named: [] })) };
     case "invalid-hir": return { bucket: "invalid-hir", validatorError: observed.validator };
@@ -65,7 +66,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     const result = invoke(serializeTypeScriptRecord({ metadata: recorded.metadata, cases }), row(after));
     assert.equal(result.status, status, result.stdout + result.stderr);
     const report = JSON.parse(readFileSync(json, "utf8"));
-    assert.equal(report.record_version, 2);
+    assert.equal(report.record_version, 3);
     assert.deepEqual(report.observations[target], parseObservation(after));
     assert.equal(report.comparison[word]?.length ?? 0, word === "reproduces" ? 0 : 1);
   }

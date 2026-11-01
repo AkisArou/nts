@@ -1136,7 +1136,7 @@ console.log(out.join("\n"));
 
 if (jsonFile) {
   writeFileSync(jsonFile, JSON.stringify({
-    ...(TYPESCRIPT ? { record_version: 2, observations: Object.fromEntries(typeScriptObserved) } : {}),
+    ...(TYPESCRIPT ? { record_version: 3, observations: Object.fromEntries(typeScriptObserved) } : {}),
     pin, compiler: NTS, fingerprint: FINGERPRINT, under, machine: { start: machineAtStart, end: machineAtEnd, jobs }, selected: records.length, population: population.length,
     attempted: toAttempt.length, checks, tally, inScope: inScope.length, inScopePass, excluded: excludedCases.length,
     rankSole, rankFirst, rankAny, rankNamed, exclusions: exclusionReport, comparison, problems,
