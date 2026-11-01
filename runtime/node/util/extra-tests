@@ -1,2 +1,4 @@
 test-aborted-util.js
 test-global-encoder.js
+test-mime-api.js
+test-mime-whatwg.js
