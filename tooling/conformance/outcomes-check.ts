@@ -134,6 +134,7 @@ import { compileSync, compileActive, serialRun } from "../census/worker-memory.t
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
+import { nativeDecline, outputPrefix } from "./output-prefix.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -198,7 +199,8 @@ function runBuild(dir, options = { rc: false, address: false }) {
     // artefact did, and a program that runs past its refusal is compared
     // rather than filed.
     const ran = emit.status === 0 ? buildAndRun(emit, out, options) : { category: "no artefact", nts: `emit-c exited ${emit.status}` };
-    return { category: "refused", nts: rootLine(rootOfTheProgram(said, roots, join(dir, "src/main.ts"))), roots: roots.map(rootLine), ran: ran.category === "completed" || ran.category === "aborted" ? ran.nts : ran.category === "not-measured" ? null : `${ran.category}: ${ran.nts}` };
+    return { category: "refused", nts: rootLine(rootOfTheProgram(said, roots, join(dir, "src/main.ts"))), roots: roots.map(rootLine), ran: ran.category === "completed" || ran.category === "aborted" ? ran.nts : ran.category === "not-measured" ? null : `${ran.category}: ${ran.nts}`,
+      printed: ran.printed, nativeDecline: ran.nativeDecline };
   }
   if (emit.status !== 0) return { category: "not-measured", nts: `emit-c exited ${emit.status}: ${said.trim().split("\n")[0]}` };
   return buildAndRun(emit, out, options);
@@ -242,7 +244,8 @@ function buildAndRun(emit, out, options) {
   const last = (ran.stderr ?? "").split("\n").filter((l) => l.startsWith("nts: "));
   const uncaught = last.find((l) => l.startsWith("nts: uncaught "));
   if (ran.signal || (ran.status !== 0 && !uncaught)) {
-    return { category: "aborted", nts: `${ran.signal ?? `exit ${ran.status}`}${last[0] ? `; ${last[0]}` : ""}` };
+    return { category: "aborted", nts: `${ran.signal ?? `exit ${ran.status}`}${last[0] ? `; ${last[0]}` : ""}`,
+      printed: ran.stdout ?? "", nativeDecline: nativeDecline(ran.stderr ?? "") };
   }
   return { category: "completed", nts: `exit ${ran.status}${uncaught ? `; ${uncaught}` : ""}` };
 }
@@ -301,22 +304,24 @@ function firstCError(text) {
 }
 
 /** node on the same text: its exit and its uncaught line, in nts's shape. */
-function runNode(dir) {
+function runNodeObservation(dir) {
   const ran = spawnSync(
     process.execPath,
     ["--experimental-transform-types", "--no-warnings", "--import", PRELOAD, join(dir, "src/main.ts")],
     { encoding: "utf8", timeout: 30_000, cwd: dir },
   );
-  if (ran.signal) return `node ${ran.signal}`;
+  if (ran.signal || ran.error) return { result: `node ${ran.signal ?? ran.error.message}`, printed: ran.stdout ?? "", complete: false };
   const lines = (ran.stderr ?? "").split("\n");
   const uncaught = lines.find((l) => l.startsWith("nts: uncaught "));
-  if (uncaught) return `exit ${ran.status}; ${uncaught}`;
+  if (uncaught) return { result: `exit ${ran.status}; ${uncaught}`, printed: ran.stdout ?? "", complete: true };
   // A program node refuses to *load* never reaches the preload's handler: an
   // early error is thrown before any code runs. Its `SyntaxError: ...` line is
   // the answer -- the one a test of an early error exists to compare with.
   const early = lines.find((l) => /^\w*Error(?: \[\w+\])?: /.test(l));
-  return `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`;
+  return { result: `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`, printed: ran.stdout ?? "", complete: ran.status === 0 };
 }
+
+function runNode(dir) { return runNodeObservation(dir).result; }
 
 /**
  * The backend a `check` fixture's text names with `// backend: <name>` on a
@@ -364,6 +369,13 @@ async function measure(name) {
   if (mode === "check") return { run: "check", ...await runCheck(dir, backendOf(name), options), node: null };
   const nts = runBuild(dir, options);
   if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
+  if (nts.nativeDecline) {
+    const node = runNodeObservation(dir);
+    if (!node.complete) return { run: "build", category: "not-measured", nts: `output oracle did not complete: ${node.result}`, node: null };
+    if (!outputPrefix(nts.printed, node.printed)) return { run: "build", category: "wrong-answer",
+      nts: `${nts.nts}; output ${JSON.stringify(nts.printed)}`, node: `${node.result}; output ${JSON.stringify(node.printed)}` };
+    return { run: "build", ...nts, node: node.result };
+  }
   if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : runNode(dir) };
   const node = runNode(dir);
   return { run: "build", category: nts.nts === node ? "agrees" : "wrong-answer", nts: nts.nts, node };

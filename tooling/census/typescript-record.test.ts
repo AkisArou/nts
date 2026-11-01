@@ -14,6 +14,23 @@ const observations: TypeScriptObservation[] = [
   { kind: "runtime-abort", failure: { exit: null, signal: "SIGABRT", output: "nts: refused: index 2 is outside [0, 1)" } },
 ];
 const paths = observations.map((_, index) => `tests/typescript/records/case-${index}.ts`);
+
+test("wrong output before a native stop is recorded as wrong with its exact witness", () => {
+  const raw = { bucket: "wrong-output", printed: "wrong\n", nodeOutput: "right\nfinally\n",
+    runtimeFailure: { exit: 1, signal: null, output: "nts: refused: unavailable representation" } };
+  const observation = observationFromRow(raw);
+  const before: TypeScriptRecord = { metadata: { ...record().metadata, version: 3 },
+    cases: new Map([["tests/typescript/records/output.ts", observation]]) };
+  assert.deepEqual(parseTypeScriptRecord(serializeTypeScriptRecord(before)), before);
+  assert.equal(compareTypeScriptObservation(observations[0], observation).word, "REGRESSED");
+  assert.equal(compareTypeScriptObservation(observation, observations[0]).word, "FIXED");
+  assert.equal(compareTypeScriptObservation(observation, observations[2]).word, "REFUSES NOW");
+  assert.equal(compareTypeScriptObservation(observation, observation).word, "reproduces");
+  assert.equal(compareTypeScriptObservation(observation, observationFromRow({ ...raw, printed: "wrong 2\n" })).word, "CHANGED");
+  assert.throws(() => observationFromRow({ ...raw, printed: "right\n" }), /valid prefix/);
+  assert.throws(() => observationFromRow({ ...raw, runtimeFailure: { ...raw.runtimeFailure, output: "nts: uncaught Error: source" } }), /native decline/);
+  assert.throws(() => parseTypeScriptRecord(serializeTypeScriptRecord(before).replace('"version":3', '"version":2')), /version 3/);
+});
 function record(): TypeScriptRecord {
   return { metadata: { version: 2, backend: "c", commit: "a".repeat(40), compiler: "b".repeat(16),
     harness: "c".repeat(16), under: "tests/typescript" }, cases: new Map(paths.map((path, i) => [path, observations[i]])) };

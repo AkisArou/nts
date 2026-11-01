@@ -46,8 +46,9 @@ for await (const path of lines) {
     const source = readFileSync(join(suite, path), "utf8");
     // A TypeScript case is admitted by node first: one node fails is a wrong
     // case, and is reported as that rather than measured against nts.
-    const admitted = tools.language === "ts" ? oracle(source, dir) : { ok: true as const };
-    outcome = admitted.ok ? attempt(dir, source, tools, join(suite, path)) : { bucket: "oracle", why: admitted.why };
+    let oracleOutput: string | undefined;
+    const admitted = tools.language === "ts" ? oracle(source, dir, output => { oracleOutput = output; }) : { ok: true as const };
+    outcome = admitted.ok ? attempt(dir, source, { ...tools, oracleOutput }, join(suite, path)) : { bucket: "oracle", why: admitted.why };
   } catch (error) {
     // A throw out of `attempt` is this instrument failing, not the test: it is
     // reported as such, never dropped, so the orchestrator's reconciliation

@@ -3,14 +3,15 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
+import { nativeDecline, outputPrefix } from "../conformance/output-prefix.ts";
 
-// Version 2 recognizes the TypeScript case body when classifying diagnostics.
+// Version 3 checks printed output before native declines against Node.
 // An older raw checkpoint must be remeasured, not resumed with stale locations.
-export const TYPESCRIPT_OBSERVATIONS_VERSION = 2;
+export const TYPESCRIPT_OBSERVATIONS_VERSION = 3;
 
 export type Backend = "c" | "llvm" | "jvm";
 export interface RecordMetadata {
-  version: 2;
+  version: 2 | 3;
   backend: Backend;
   commit: string;
   compiler: string;
@@ -22,6 +23,7 @@ export interface RuntimeFailure { exit: number | null; signal: string | null; ou
 export type TypeScriptObservation =
   | { kind: "pass" }
   | { kind: "wrong"; errorClass: string; failure: RuntimeFailure }
+  | { kind: "wrong-output"; printed: string; nodeOutput: string; failure: RuntimeFailure }
   | { kind: "refused"; diagnostics: RefusalDiagnostic[] }
   | { kind: "invalid-hir"; validator: string }
   | { kind: "runtime-abort"; failure: RuntimeFailure };
@@ -50,7 +52,8 @@ function canonical(path: string, label: string): void {
 function metadata(value: unknown): RecordMetadata {
   const row = object(value, "missing TypeScript record metadata");
   keys(row, ["version", "backend", "commit", "compiler", "harness", "under"], "TypeScript record metadata");
-  assert.equal(row.version, 2, "unsupported TypeScript record version");
+  const version = row.version;
+  assert.ok(version === 2 || version === 3, "unsupported TypeScript record version");
   const backend = oneOf(row.backend, ["c", "llvm", "jvm"], "unknown TypeScript backend");
   const commit = text(row.commit, "missing compiler commit");
   assert.match(commit, /^[0-9a-f]{40}$/, "invalid compiler commit");
@@ -60,7 +63,7 @@ function metadata(value: unknown): RecordMetadata {
   assert.match(harness, /^[0-9a-f]{16}$/, "invalid harness fingerprint");
   const under = text(row.under, "missing record selection");
   if (under !== "tests/typescript") canonical(under, "invalid record selection");
-  return { version: 2, backend, commit, compiler, harness, under };
+  return { version, backend, commit, compiler, harness, under };
 }
 function runtimeFailure(value: unknown): RuntimeFailure {
   const row = object(value, "missing raw runtime observation");
@@ -89,6 +92,15 @@ export function parseObservation(input: unknown): TypeScriptObservation {
     case "wrong":
       keys(row, ["kind", "errorClass", "failure"], "wrong observation");
       return { kind: "wrong", errorClass: text(row.errorClass, "missing thrown class"), failure: runtimeFailure(row.failure) };
+    case "wrong-output": {
+      keys(row, ["kind", "printed", "nodeOutput", "failure"], "wrong output observation");
+      const printed = text(row.printed, "missing printed output", true);
+      const nodeOutput = text(row.nodeOutput, "missing Node output", true);
+      const failure = runtimeFailure(row.failure);
+      assert.ok(nativeDecline(failure.output), "wrong output before a stop needs a native decline");
+      assert.ok(!outputPrefix(printed, nodeOutput), "a valid prefix cannot be a wrong output observation");
+      return { kind: "wrong-output", printed, nodeOutput, failure };
+    }
     case "refused": {
       keys(row, ["kind", "diagnostics"], "refused observation");
       assert.ok(Array.isArray(row.diagnostics) && row.diagnostics.length > 0, "a refusal needs compiler diagnostics");
@@ -116,6 +128,7 @@ export function observationFromRow(input: unknown): TypeScriptObservation {
   switch (row.bucket) {
     case "strict-pass": return { kind: "pass" };
     case "threw": return parseObservation({ kind: "wrong", errorClass: row.thrown, failure: row.runtimeFailure });
+    case "wrong-output": return parseObservation({ kind: "wrong-output", printed: row.printed, nodeOutput: row.nodeOutput, failure: row.runtimeFailure });
     case "invalid-hir": return parseObservation({ kind: "invalid-hir", validator: row.validatorError });
     case "crash": return parseObservation({ kind: "runtime-abort", failure: row.runtimeFailure });
     case "unsupported": {
@@ -143,6 +156,7 @@ export function parseTypeScriptRecord(contents: string): TypeScriptRecord {
     const fields = line.split("\t");
     assert.equal(fields.length, 2, "malformed TypeScript record row");
     const [path, json] = fields;
+    if (meta.version === 2) assert.notEqual(JSON.parse(json).kind, "wrong-output", "wrong output requires a version 3 record");
     canonical(path, "invalid TypeScript case path");
     assert.ok(path.endsWith(".ts") && (path === meta.under || path.startsWith(meta.under + "/")), "case outside record selection");
     assert.ok(!cases.has(path), `duplicate recorded case: ${path}`);

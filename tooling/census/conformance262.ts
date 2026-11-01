@@ -531,6 +531,9 @@ function classify(row) {
   switch (row.bucket) {
     case "strict-pass":
       return { outcome: "pass" };
+    case "wrong-output":
+      return { outcome: "fail", cause: "wrong output before a native decline",
+        detail: `printed ${JSON.stringify(row.printed)}; Node ${JSON.stringify(row.nodeOutput)}` };
     case "threw":
       return {
         outcome: "fail",
@@ -895,7 +898,7 @@ if (TYPESCRIPT) {
 
 if (recordFile && TYPESCRIPT) {
   const record = {
-    metadata: { version: 2, backend: BACKEND, commit: provenanceOf(NTS)?.sha,
+    metadata: { version: 3, backend: BACKEND, commit: provenanceOf(NTS)?.sha,
       compiler: FINGERPRINT, harness: HARNESS_HASH, under },
     cases: typeScriptObserved,
   };

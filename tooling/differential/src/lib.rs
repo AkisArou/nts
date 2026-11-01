@@ -54,6 +54,7 @@ mod oracle_exclusions;
 mod oracle_protocol_tests;
 mod oracle_records;
 mod oracle_run;
+mod output;
 mod source_contracts;
 
 /// Inputs chosen to hit the places TypeScript and C disagree.
@@ -540,6 +541,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         Run {
             results: Vec::new(),
             output: Vec::new(),
+            segments: Vec::new(),
             thrown: Vec::new(),
             incomplete: Vec::new(),
         }
@@ -580,14 +582,34 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     })
     .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
     let approximate = nts_core::hir::builtin::approximating(&prepared.program);
-    let mut report = report(
-        &native,
-        &engine,
-        &testable,
-        &refused,
-        &approximate,
-        !compiled.is_empty() && native.incomplete.is_empty(),
-    );
+    let mut output_cases = None;
+    let output_comparison =
+        if !compiled.is_empty() && native.incomplete.is_empty() && aborts.is_empty() {
+            output::compare(&native, &engine, |window| {
+                let cases = output_cases.get_or_insert_with(|| interleaved(&compiled));
+                let selected = cases
+                    .get(window)
+                    .context("invalid output oracle case window")?;
+                let ids = selected
+                    .iter()
+                    .map(|(one, at, tuple)| format!("{} {at} {tuple:?}", one.name))
+                    .collect::<Vec<_>>();
+                let identity = serde_json::to_vec(&(&coverage.key, ids))?;
+                let coverage = oracle_coverage::Coverage {
+                    count: selected.len(),
+                    key: format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&identity)),
+                };
+                run_node_cases(dir, &entry, selected, &snapshot.sources, &coverage)
+                    .map(|run| run.output)
+            })
+            .map_err(|error| annotate(error, FailureKind::OracleExecution))?
+        } else {
+            output::Comparison::default()
+        };
+    let mut report = report(&native, &engine, &testable, &refused, &approximate, false);
+    report.disagreements.extend(output_comparison.disagreements);
+    report.refused -= output_comparison.rejected_declines;
+    report.checked += output_comparison.rejected_declines;
     report.unavailable = unavailable;
     report.node_received = engine.results.len();
     report.refusals = prepared.diagnostics.iter().map(Into::into).collect();
@@ -1108,7 +1130,9 @@ fn results(testable: &[Testable]) -> Vec<String> {
         .collect()
 }
 
-fn interleaved(testable: &[Testable]) -> Vec<(&Testable, usize, Vec<f64>)> {
+type DriverCase<'a> = (&'a Testable, usize, Vec<f64>);
+
+fn interleaved(testable: &[Testable]) -> Vec<DriverCase<'_>> {
     let per: Vec<Vec<Vec<f64>>> = testable.iter().map(Testable::tuples).collect();
     let deepest = per.iter().map(Vec::len).max().unwrap_or(0);
 
@@ -2228,7 +2252,8 @@ fn run_done(path: &Utf8Path) -> Option<usize> {
 /// result told from its output by shape could be spoofed by it.
 struct Run {
     results: Vec<String>,
-    output: Vec<String>,
+    output: Vec<u8>,
+    segments: Vec<output::Segment>,
     /// The cases the compiled program stopped on by *throwing* -- an uncaught
     /// exception, `nts: uncaught ...` -- with the line it printed. Only these
     /// among the declines are paired with node's answer in [`report`]: a
@@ -2260,7 +2285,8 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
 ) -> Result<Run> {
     let total = results.len();
     let mut collected: Vec<String> = Vec::new();
-    let mut output: Vec<String> = Vec::new();
+    let mut output = Vec::new();
+    let mut segments = Vec::new();
     let mut thrown: Vec<(usize, String)> = Vec::new();
     let mut incomplete = Vec::new();
     let mut from = 0;
@@ -2292,7 +2318,8 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
             produced.pop();
         }
         let read = produced.len();
-        output.extend(lines(&run.stdout));
+        let output_start = output.len();
+        output.extend_from_slice(&run.stdout);
         // The cases answered: result lines, in the order they were asked for.
         //
         // **They arrive on a channel of their own**, the file named by
@@ -2317,6 +2344,19 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
         });
         collected.extend(produced);
         let complaint = String::from_utf8_lossy(&run.stderr);
+        let stopped_case = reached < total - from;
+        let native_decline = stopped_case
+            && !supervised
+            && matches!(
+                stopped_with(run.status.code(), signal_of(run.status), &complaint),
+                Stopped::Declined
+            )
+            && !complaint.lines().any(|line| line.starts_with(UNCAUGHT));
+        segments.push(output::Segment {
+            cases: from..from + reached + usize::from(stopped_case),
+            bytes: output_start..output.len(),
+            native_decline,
+        });
         // What the program still held, once and at the end. Only under a
         // provider that frees, and on stderr because stdout is the comparison.
         //
@@ -2382,6 +2422,7 @@ fn collect_restarting<T: Into<call_activity::Finished>>(
     Ok(Run {
         results: collected,
         output,
+        segments,
         thrown,
         incomplete,
     })
@@ -2669,6 +2710,10 @@ fn growth(complaint: &str) -> Option<String> {
 /// into `NTS_DIFF_RESULTS`, in exactly the order of the compiled arm.
 /// A source throw or rejection is recorded separately from a returned value.
 fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
+    driver_cases(import, &interleaved(testable), engine)
+}
+
+fn driver_cases(import: &str, cases: &[DriverCase<'_>], engine: Engine) -> String {
     let load = engine.load_module(import);
     let mut driver = format!(
         "import {{ openSync, writeSync, closeSync }} from \"node:fs\";\n\
@@ -2702,7 +2747,8 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
          }}\n"
     );
     driver.push_str(engine.stop_handler());
-    for (one, at, tuple) in interleaved(testable) {
+    let count = cases.len();
+    for (one, at, tuple) in cases {
         // A method lowers to `Class#method`, which is not an export.
         let exported = one.name.replace('#', "__");
         {
@@ -2793,7 +2839,7 @@ fn driver(import: &str, testable: &[Testable], engine: Engine) -> String {
          await new Promise(resolve => completeTurn(resolve)); \
          await Promise.all([process.stdout, process.stderr].map(stream => \
            new Promise(resolve => stream.write(\"\", resolve)))); process.exit(0);",
-        interleaved(testable).len()
+        count
     );
     driver
 }
@@ -2827,13 +2873,23 @@ fn run_node(
     sources: &[nts_diagnostics::SourceFile],
     coverage: &oracle_coverage::Coverage,
 ) -> Result<Run> {
+    run_node_cases(dir, entry, &interleaved(testable), sources, coverage)
+}
+
+fn run_node_cases(
+    dir: &Utf8Path,
+    entry: &Utf8Path,
+    cases: &[DriverCase<'_>],
+    sources: &[nts_diagnostics::SourceFile],
+    coverage: &oracle_coverage::Coverage,
+) -> Result<Run> {
     let absolute = entry
         .canonicalize_utf8()
         .with_context(|| format!("locating {entry}"))?;
     let path = dir.join("check_driver.mjs");
     std::fs::write(
         &path,
-        driver(&format!("file://{absolute}"), testable, Engine::Node),
+        driver_cases(&format!("file://{absolute}"), cases, Engine::Node),
     )?;
     let hook = dir.join("resolve_ts.mjs");
     std::fs::write(&hook, RESOLVE_TS)?;
@@ -2888,7 +2944,8 @@ fn run_node(
             "delivered":delivered,"done":done,"case_key":coverage.key,"status":status,"measured":measured.is_ok()}));
         Ok(Run {
             results: measured?,
-            output: lines(&output.stdout),
+            output: output.stdout,
+            segments: Vec::new(),
             thrown: Vec::new(),
             incomplete: Vec::new(),
         })
@@ -3113,7 +3170,10 @@ fn report(
     // channel of theirs: line for line, and a line one side printed and the
     // other did not is a disagreement, not a trailing detail.
     if compare_output {
-        disagreements.extend(output_disagreements(&native_run.output, &engine_run.output));
+        disagreements.extend(output_disagreements(
+            &lines(&native_run.output),
+            &lines(&engine_run.output),
+        ));
     }
     Report {
         functions: testable.len(),
@@ -3763,7 +3823,7 @@ mod result_channel {
         .expect("collect");
         assert_eq!(run.results, vec!["f 0 1".to_owned(), "f 1 2".to_owned()]);
         assert_eq!(
-            run.output,
+            super::lines(&run.output),
             vec!["f 1 999 printed by the program".to_owned()]
         );
         assert!(refused.is_empty() && aborts.is_empty());
@@ -3792,6 +3852,7 @@ mod pairing {
         Run {
             results: results.iter().map(|line| (*line).to_owned()).collect(),
             output: Vec::new(),
+            segments: Vec::new(),
             thrown: thrown
                 .iter()
                 .map(|(at, line)| (*at, (*line).to_owned()))

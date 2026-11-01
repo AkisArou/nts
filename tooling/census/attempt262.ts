@@ -17,6 +17,8 @@ import { caseRoot, environment, flagsOf, materialise, placeOf, workspace } from 
 import { jvmRun } from "../jvm/launch.ts";
 import { compileSync } from "./worker-memory.ts";
 import { bundledDependencies } from "../conformance/node-deps.mjs";
+import { nativeDecline, outputPrefix } from "../conformance/output-prefix.ts";
+import { outputOracle } from "./output-oracle.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
 const FIRST_REFUSAL = /NTS\d{4}\s+(.*?)(?: is not supported by this lowering yet)?$/m;
@@ -559,6 +561,17 @@ export function attempt(dir, body, tools, origin?) {
     const host = /^Exception in thread "[^"]*" ([\w.$]+)/m.exec(String(error.stderr ?? ""));
     if (host) return { bucket: "crash", why: "host exception", first: host[1],
       runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() } };
+    if (nativeDecline(String(error.stderr ?? ""))) {
+      const oracle = typeof tools.oracleOutput === "string"
+        ? { ok: true as const, output: tools.oracleOutput }
+        : outputOracle(project, dir, body, tools, (command, args) => capped(tools, command, args));
+      if (!oracle.ok) return { bucket: "infrastructure-error", why: oracle.why };
+      const printed = String(error.stdout ?? "");
+      if (!outputPrefix(printed, oracle.output)) return {
+        bucket: "wrong-output", printed, nodeOutput: oracle.output,
+        runtimeFailure: { exit: error.status ?? null, signal: error.signal ?? null, output: String(error.stderr ?? "").trimEnd() },
+      };
+    }
     const said = String(error.stderr ?? "").split("\n").find((text) => text.startsWith("nts: "));
     return {
       bucket: "crash",

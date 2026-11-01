@@ -70,7 +70,7 @@ export function selectTypescript(root: string, under: string): Selected[] {
  * the runtime-bearing syntax -- enums, namespaces, parameter properties --
  * as TypeScript emit does.
  */
-export function oracle(source: string, scratch: string): { ok: true } | { ok: false; why: string } {
+export function oracle(source: string, scratch: string, printed?: (output: string) => void): { ok: true } | { ok: false; why: string } {
   // **A module, so strict.** nts compiles every case strict, and node ran an
   // `oracle.ts` with no import as a sloppy script: `this` in a plain function
   // was `globalThis` there, so a case could pass the oracle on an answer nts
@@ -82,6 +82,7 @@ export function oracle(source: string, scratch: string): { ok: true } | { ok: fa
     timeout: 30_000,
   });
   const said = `${run.stderr ?? ""}${run.stdout ?? ""}`;
+  printed?.(run.stdout ?? "");
   if (run.status !== 0) {
     const line = said.split("\n").find((text) => /Error|error/.test(text)) ?? said.split("\n")[0] ?? "";
     return { ok: false, why: run.signal ? `node was stopped by ${run.signal}` : line.trim().slice(0, 200) };
