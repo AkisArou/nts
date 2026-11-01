@@ -214,6 +214,8 @@ flows through it.
 | `iterator-routes-controls/` | the same protocol advanced and closed explicitly, with matching inputs, effects and observations |
 | `layout-routes/` | exact class fields, presence, order, identity and state across base, structural, private, static and builtin-subclass routes |
 | `layout-routes-controls/` | plain field-by-field literals, explicit kinds and private sidecars or builtin holders preserving the same observations |
+| `length-routes/` | current indexed values, lengths and visit histories while arrays through typed routes grow, shrink, recover or detach, held to node |
+| `length-routes-controls/` | the same computation with local arrays, stable copies or immediate fresh bounds before indexed accesses |
 | `lifetimes/` | lifetime facts followed by a retention or observation route, allocation churn and exact checks, with node as the oracle |
 | `lifetimes-controls/` | single-change counterparts and measured findings for lifetime cases, with node as the oracle |
 | `literal-types/` | literal types and the values they admit, `as const`, template literal types |
@@ -1628,6 +1630,7 @@ land without another open Unicode pull request.
 | `ts-layout-route-structural` | class instances and class-shaped literals retain exact data and identities across smaller structural views, generics and object narrowing | TypeScript Relationships Between Classes; in-operator Narrowing | 16 | 0 |
 | `ts-layout-routes` | class data retains exact fields, presence, order, identity and alias writes across typed layout routes beside explicit plain-object controls | Layout route contracts; typed paths | 70 | 0 |
 | `ts-legacy-decorators` | `experimentalDecorators`: class, method, property, accessor and parameter decorators | conformance/decorators | 0 | 8 |
+| `ts-length-route-loops` | loops that change their own array with complete indexed histories and final contents | Length route contracts; typed paths | 24 | 0 |
 | `ts-lifetime-acyclic` | a construction route closes a cycle that an acyclicity proof must include | lifetime contracts: Memory, How small the dynamic part can get; Cycles through foreign objects | 24 | 0 |
 | `ts-lifetime-borrow` | a borrowed reference remains live after its original anchor or read-only call ends | lifetime contracts: Memory, Where nts stands; The ladder of homes; record 0024 | 24 | 0 |
 | `ts-lifetime-frame` | an object or bounded string must outlive a frame after a retention route acts | lifetime contracts: Memory, The ladder of homes; Where nts stands | 28 | 0 |
