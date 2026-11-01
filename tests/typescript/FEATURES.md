@@ -96,6 +96,8 @@ flows through it.
 | `map-set-contents-controls/` | counterparts using one declared collection type across writes and reads, with node as the oracle |
 | `modules-and-exports/` | module code in one file (`flags: [module]`) |
 | `namespaces/` | namespaces, their objects, merging and aliases |
+| `number-routes/` | exact numeric values, zero signs, NaN, results and text across typed carriers, held to node |
+| `number-routes-controls/` | the same inputs and computations with plain local number carriers and the same observations |
 | `objects/` | object literals and types, structural assignment, keys, spread, Record |
 | `proofs/` | facts proved from code, followed by a route that can invalidate them, with node as the oracle |
 | `proofs-controls/` | counterparts that remove one invalidating effect or callback throw from a proofs finding, with node as the oracle |
@@ -128,6 +130,20 @@ a direct call necessarily supplies a different receiver. Several inputs
 exercise each route, with exact argument, result, state and ordered-log
 checks on return and throw paths. Strict TypeScript and the pinned node
 oracle admit the cases; maintainers measure each backend.
+
+The `number-routes/` matrix uses `<area>-<route>.ts` in place of
+combination cases. Each case has one `ts-number-route-*` tag plus
+existing syntax and carrier tags. Several small, wide, fractional and
+special inputs exercise the same typed route. Fixed expectations use
+`Object.is`, `typeof`, exact string forms and observable reciprocals
+to distinguish signed zero. Expectations remain in record fields,
+so unrelated numeric expectation arrays do not widen a tested array.
+The `-control` counterpart under `number-routes-controls/` replaces
+the numeric carrier with plain local `number` variables and retains
+the same computation, input values and assertions. Enum and literal
+fixtures use their identical plain numeric values in the control.
+Each program passes strict checking as a script unless module-flagged,
+including all default-library diagnostics, and the unchanged node oracle.
 
 The `lifetimes/` matrix likewise uses `<fact>-<route>-<detail>.ts` in place
 of combination cases: one `ts-lifetime-*` and one `ts-route-*` tag per
@@ -569,7 +585,7 @@ land without another open Unicode pull request.
 | `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 293 | 0 |
 | `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 2250 | 4 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 89 | 0 |
-| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 15 | 0 |
+| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 25 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 9 | 0 |
 | `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 252 | 0 |
 | `ts-import-alias` | `import X = N.Y`, an alias for a namespace or a value it exports (`export import` too) | conformance/internalModules/importDeclarations; ts-eslint TSImportEqualsDeclaration | 3 | 0 |
