@@ -28,8 +28,8 @@ fn an_owned_result_resizes_without_another_logical_allocation() {
         if provider == "rc" {
             build.args(["-DNTS_PROVIDER_RC", "-DNTS_POISON=1"]);
         }
-        let built = build.output().unwrap();
-        assert!(built.status.success(), "{built:?}");
+        let compiled = build.output().unwrap();
+        assert!(compiled.status.success(), "{compiled:?}");
         let ran = Command::new(dir.join(provider))
             .env("ASAN_OPTIONS", "detect_leaks=0")
             .output()
