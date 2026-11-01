@@ -449,12 +449,15 @@ name = "nts-codegen-napi"
 version = "0.0.0"
 dependencies = [
  "camino",
+ "hmac-sha256",
  "nts-codegen-c",
  "nts-core",
  "nts-diagnostics",
  "nts-frontend-ts",
  "nts-semantic-schema",
  "rustc-hash",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

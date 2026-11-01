@@ -9902,8 +9902,9 @@ fn write_c_output(
     if emission.shape == Shape::Addon {
         let addon = addon.context("an addon emission has its bridge output")?;
         let addon_path = out.join(nts_codegen_napi::ADDON_SOURCE_NAME);
-        std::fs::write(&addon_path, &addon.source)
-            .with_context(|| format!("writing {addon_path}"))?;
+        addon
+            .write_into(out.as_std_path())
+            .with_context(|| format!("writing {addon_path} and its export manifest"))?;
         if emission.product.is_none() {
             for skipped in &addon.skipped {
                 report.err(format_args!(

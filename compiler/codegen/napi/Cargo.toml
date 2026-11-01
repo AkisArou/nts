@@ -11,6 +11,9 @@ nts-semantic-schema.workspace = true
 nts-core.workspace = true
 nts-codegen-c.workspace = true
 rustc-hash.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+hmac-sha256.workspace = true
 
 [dev-dependencies]
 camino.workspace = true

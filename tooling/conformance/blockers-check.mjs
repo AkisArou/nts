@@ -33,6 +33,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { childSucceeded, completedJvmClasses, recordChild } from "./blockers-child.mjs";
 import { fixturePool, fixtureWorker } from "./blockers-pool.ts";
+import { hasPublishedExport } from "./addon-manifest.ts";
 
 /* Every emitted tree under one root, removed when the run ends.
  *
@@ -133,7 +134,14 @@ function expectation(source) {
   return out.join(" ");
 }
 
-/** The addon the last `emit-c` wrote, so a "publishes X" expectation can be read. */
+/** The actual output directory announced by the completed emission. */
+function emittedDirectory(output) {
+  const match = /wrote .* to (\S+)/.exec(output);
+  if (match === null) throw new Error("Node-API export manifest: emission reported no output directory");
+  return match[1];
+}
+
+/** Read an artifact for the fixtures that explicitly assert generated text. */
 function readEmitted(output, file = "addon.c") {
   const m = /wrote .* to (\S+)/.exec(output);
   if (m === null) return "";
@@ -283,9 +291,7 @@ for (const name of worker ? [worker.name] : []) {
   );
   const expectsClean = expected.startsWith("nothing refused") || publishes !== null;
   const isClean = publishes !== null
-    ? new RegExp(`napi_set_named_property\\(env, exports, "${publishes[1]}"`).test(
-      readEmitted(output),
-    ) && !/no wrapper/.test(output)
+    ? hasPublishedExport(emittedDirectory(output), publishes[1]) && !/no wrapper/.test(output)
     : viaJvm ? jvmClasses !== null
     : /nothing refused/.test(output) && !/no wrapper/.test(output);
 

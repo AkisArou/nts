@@ -97,7 +97,7 @@ fn callable_source_transport_does_not_publish_function_value_storage() {
         addon.skipped
     );
     std::fs::write(dir.join("program.c"), program.writer.text()).unwrap();
-    std::fs::write(dir.join("addon.c"), addon.source).unwrap();
+    addon.write_into(dir.as_std_path()).unwrap();
     let mut sources = vec![dir.join("program.c"), dir.join("addon.c")];
     for file in program.support_files() {
         let path = file.write(dir.as_std_path()).unwrap();

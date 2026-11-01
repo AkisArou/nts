@@ -26,7 +26,11 @@ use nts_codegen_c::{c_global, c_identifier};
 use std::fmt::Write as _;
 
 use nts_core::hir::{self, HirType, ManagedType};
-use rustc_hash::FxHashSet;
+use rustc_hash::{FxHashMap, FxHashSet};
+
+mod manifest;
+pub use manifest::Manifest;
+pub const ADDON_MANIFEST_NAME: &str = manifest::FILE_NAME;
 
 /// A wrapper this cannot write, and why.
 #[derive(Debug)]
@@ -39,11 +43,24 @@ pub struct Skipped {
 #[derive(Debug)]
 pub struct Addon {
     pub source: String,
+    pub manifest: Manifest,
     pub skipped: Vec<Skipped>,
 }
 
 /// The file name the addon source is conventionally written to.
 pub const ADDON_SOURCE_NAME: &str = "addon.c";
+
+impl Addon {
+    /// Publish the glue and its matching observer metadata together.
+    pub fn write_into(&self, directory: &std::path::Path) -> std::io::Result<()> {
+        std::fs::create_dir_all(directory)?;
+        std::fs::write(directory.join(ADDON_SOURCE_NAME), &self.source)?;
+        std::fs::write(
+            directory.join(ADDON_MANIFEST_NAME),
+            self.manifest.json(&self.source),
+        )
+    }
+}
 
 /// How a value of this type crosses the boundary.
 enum Cross {
@@ -1754,6 +1771,7 @@ fn published_arity(func: &hir::Func) -> u32 {
         func.params
             .iter()
             .take_while(|p| {
+                manifest::parameter_visit();
                 matches!(
                     p.shape,
                     hir::ParamShape::Ordinary | hir::ParamShape::Optional
@@ -1770,19 +1788,25 @@ fn published_arity(func: &hir::Func) -> u32 {
 /// and `export const alias = impl.upper` are one function and two properties,
 /// and a loop that asked each function for *a* name published it once under
 /// whichever came first.
-fn publish_functions(program: &hir::Program, wrapped: &[(&str, &str)]) -> String {
+fn publish_functions(
+    functions: &FxHashMap<&str, manifest::Function<'_>>,
+    wrapped: &[(&str, &str)],
+    manifest: &mut Manifest,
+) -> String {
     let mut out = String::new();
     for (name, publish) in wrapped {
-        let symbol = c_identifier(name);
+        let function = functions
+            .get(name)
+            .expect("a successful wrapper is recorded");
+        let symbol = &function.symbol;
         let property = c_string_literal(publish);
-        let arity = program
-            .funcs
-            .iter()
-            .find(|func| func.name == *name)
-            .map_or(0, published_arity);
+        let arity = function.arity;
+        manifest
+            .exports
+            .push(function.export(vec![(*publish).to_owned()]));
         let _ = write!(
             out,
-            "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        nts_napi_set_length(env, fn, {arity}u);\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
+            "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {property}, NAPI_AUTO_LENGTH, {symbol}, NULL, &fn), \"could not create an exported function\")) return NULL;\n        nts_napi_set_length(env, fn, {arity}u);\n        if (!nts_napi_check(env, napi_set_named_property(env, exports, {property}, fn), \"could not export a function\")) return NULL;\n    }}\n"
         );
     }
     out
@@ -1856,11 +1880,12 @@ fn emit_classes<'a>(
     release_managed: bool,
     skipped: &mut Vec<Skipped>,
     out: &mut String,
-) -> (String, Vec<&'a str>) {
+) -> (String, Vec<&'a str>, Vec<manifest::Export>) {
+    let mut exports = Vec::new();
     let mut class_inits = String::new();
     let mut published_classes: Vec<&str> = Vec::new();
     for (emitted, publish) in defined_classes(program) {
-        if let Some((code, init)) = class_definition(
+        if let Some((code, init, export)) = class_definition(
             emitted,
             publish,
             program,
@@ -1872,9 +1897,10 @@ fn emit_classes<'a>(
             out.push_str(&code);
             class_inits.push_str(&init);
             published_classes.push(publish);
+            exports.push(export);
         }
     }
-    (class_inits, published_classes)
+    (class_inits, published_classes, exports)
 }
 
 /// The crossings of a class member, whose receiver is not an argument.
@@ -2136,7 +2162,7 @@ fn class_definition(
     ownership: &hir::own::Summaries,
     release_managed: bool,
     skipped: &mut Vec<Skipped>,
-) -> Option<(String, String)> {
+) -> Option<(String, String, manifest::Export)> {
     let layouts = &program.layouts;
     let Some(constructor) = program
         .funcs
@@ -2255,7 +2281,8 @@ fn class_definition(
             descriptors.join(",\n            ")
         )
     };
-    Some((out, init))
+    let export = manifest::Export::class(publish, &identity.identity.name, &instance, constructor);
+    Some((out, init, export))
 }
 
 /// The addon's fixed head: the includes every wrapper needs, and the support
@@ -2441,18 +2468,19 @@ fn refused_body(refused: &[String], name: &str) -> Option<Skipped> {
 }
 
 /// One function's wrapper. Every refusal is [`crossings_of`]'s.
-fn wrapper(
+fn wrapper<'a>(
     program: &hir::Program,
-    func: &hir::Func,
+    func: &'a hir::Func,
     layouts: &[hir::Layout],
     classes: &FxHashSet<String>,
     release_managed: bool,
     return_is_borrowed: bool,
     consumed_parameters: Option<&FxHashSet<u32>>,
-) -> Result<String, Skipped> {
+) -> Result<manifest::FunctionBody<'a>, Skipped> {
     let (ret, crossings) = crossings_of(func, layouts, classes)?;
 
     let symbol = c_identifier(&func.name);
+    let callback = format!("nts_napi_{symbol}");
     let params: Vec<String> = func.params.iter().map(|p| c_type(&p.ty, layouts)).collect();
     let signature = if params.is_empty() {
         "void".to_owned()
@@ -2461,16 +2489,11 @@ fn wrapper(
     };
 
     let mut out = format!(
-        "{} {symbol}({signature});\nstatic napi_value nts_napi_{symbol}(napi_env env, napi_callback_info info) {{\n",
+        "{} {symbol}({signature});\nstatic napi_value {callback}(napi_env env, napi_callback_info info) {{\n",
         c_type(&func.return_type, layouts)
     );
     // A rest parameter is not one of the arguments a caller must supply, so it
     // is out of the count and read separately. `join()` with nothing is legal.
-    let gathered = func
-        .params
-        .iter()
-        .position(|parameter| parameter.shape == hir::ParamShape::Rest);
-    let positional = gathered.unwrap_or(func.params.len());
     // How many a caller must actually supply.
     //
     // `basename(path: string, suffix?: string)` published with **two** required
@@ -2489,12 +2512,11 @@ fn wrapper(
     // every call site and the HIR does not carry the expression. A wrapper is a
     // caller with nowhere to get it from, so passing a zero would be inventing
     // a value the source never wrote.
-    let required = func
-        .params
-        .iter()
-        .take(positional)
-        .rposition(|parameter| parameter.shape != hir::ParamShape::Optional)
-        .map_or(0, |at| at + 1);
+    let manifest::Arguments {
+        gathered,
+        positional,
+        required,
+    } = manifest::Arguments::of(func);
     out.push_str(&read_arguments(func.params.len(), positional, required));
 
     let mut args: Vec<String> = Vec::new();
@@ -2585,7 +2607,7 @@ fn wrapper(
         }
     }
     out.push_str("    return out;\n}\n\n");
-    Ok(out)
+    Ok(manifest::FunctionBody::new(out, func, callback, required))
 }
 
 /// The preamble that reads the callback's arguments and checks how many there
@@ -3172,12 +3194,25 @@ fn emit_module_init_prototype(
     runs
 }
 
+/// Initialization precedes every published value read or JavaScript call.
+fn initialize_module(out: &mut String, runs_module_init: bool) {
+    out.push_str("    nts_napi_set_env(env);\n");
+    if runs_module_init {
+        let _ = writeln!(
+            out,
+            "    {}();",
+            c_identifier(nts_core::hir::lower::MODULE_INIT)
+        );
+    }
+}
+
 fn emit_namespaces(
     program: &hir::Program,
-    emitted: &[&str],
+    emitted: &FxHashMap<&str, manifest::Function<'_>>,
     refused: &[String],
     skipped: &mut Vec<Skipped>,
     out: &mut String,
+    manifest: &mut Manifest,
 ) {
     for (name, properties) in &program.public_namespaces {
         let object = format!("nts_ns_{}", c_identifier(name));
@@ -3204,7 +3239,7 @@ fn emit_namespaces(
         // instead of neither.
         let mut carried = 0usize;
         for (property, name_of) in properties {
-            if !emitted.contains(&name_of.as_str()) {
+            let Some(function) = emitted.get(name_of.as_str()) else {
                 // A member that is a *value* rather than a function.
                 // `export const sep = "/"` is a global, and a namespace built
                 // only out of wrappers had neither `sep` nor `delimiter` --
@@ -3214,8 +3249,12 @@ fn emit_namespaces(
                 // Read after `module__init()`, for the reason the top-level
                 // value exports are: a deferred global holds its zero until
                 // module evaluation assigns it.
-                if let Some(text) = namespace_value(program, name_of, property, refused) {
+                if let Some((text, reader)) = namespace_value(program, name_of, property, refused) {
                     out.push_str(&text.replace("__NTS_NS__", &object));
+                    manifest.exports.push(manifest::Export::value(
+                        vec![name.clone(), property.clone()],
+                        reader,
+                    ));
                     carried += 1;
                     continue;
                 }
@@ -3254,21 +3293,17 @@ fn emit_namespaces(
                     }),
                 });
                 continue;
-            }
+            };
             carried += 1;
-            let symbol = c_identifier(name_of);
+            let symbol = &function.symbol;
             let key = c_string_literal(property);
-            // A namespace member is where the arity count tripled: `path.posix`
-            // and `path.win32` hold most of `path`, `util.types` most of
-            // `util`, and a walk that stopped at the top level never saw them.
-            let arity = program
-                .funcs
-                .iter()
-                .find(|func| func.name == *name_of)
-                .map_or(0, published_arity);
+            let arity = function.arity;
+            manifest
+                .exports
+                .push(function.export(vec![name.clone(), property.clone()]));
             let _ = write!(
                 out,
-                "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {key}, NAPI_AUTO_LENGTH, nts_napi_{symbol}, NULL, &fn), \"could not create a namespace function\")) return NULL;\n        nts_napi_set_length(env, fn, {arity}u);\n        if (!nts_napi_check(env, napi_set_named_property(env, {object}, {key}, fn), \"could not add to a namespace\")) return NULL;\n    }}\n"
+                "    {{\n        napi_value fn;\n        if (!nts_napi_check(env, napi_create_function(env, {key}, NAPI_AUTO_LENGTH, {symbol}, NULL, &fn), \"could not create a namespace function\")) return NULL;\n        nts_napi_set_length(env, fn, {arity}u);\n        if (!nts_napi_check(env, napi_set_named_property(env, {object}, {key}, fn), \"could not add to a namespace\")) return NULL;\n    }}\n"
             );
         }
         // Not an empty one, though. A namespace object with no members at all
@@ -3276,6 +3311,14 @@ fn emit_namespaces(
         // call -- the same wrong-answer shape as a binding published as
         // `undefined`, and worse for being harder to see.
         if carried > 0 {
+            manifest.exports.push(manifest::Export {
+                path: vec![name.clone()],
+                kind: manifest::Kind::Namespace,
+                name: name.clone(),
+                arity: None,
+                required: None,
+                symbol: object.clone(),
+            });
             let key = c_string_literal(name);
             let _ = writeln!(
                 out,
@@ -3337,7 +3380,7 @@ fn namespace_value(
     emitted: &str,
     property: &str,
     refused: &[String],
-) -> Option<String> {
+) -> Option<(String, String)> {
     let at = program
         .globals
         .iter()
@@ -3374,13 +3417,11 @@ fn namespace_value(
     // spelled without one here -- the two would have disagreed about the same
     // global, and the reader generated for it would have named a symbol that
     // does not exist.
-    let symbol = format!(
-        "{}()",
-        value_reader(&c_global(
-            &global.name,
-            program.funcs.iter().map(|func| func.name.as_str())
-        ))
-    );
+    let reader = value_reader(&c_global(
+        &global.name,
+        program.funcs.iter().map(|func| func.name.as_str()),
+    ));
+    let symbol = format!("{reader}()");
     let key = c_string_literal(property);
     let make = match crossing {
         Cross::Bool => format!("napi_get_boolean(env, {symbol}, &value)"),
@@ -3415,8 +3456,11 @@ fn namespace_value(
     // Reachable only once module evaluation runs: with `module#init` dropped
     // every global sat at its zero, which is the `undefined` tag and crosses
     // fine. Fixing the initializer is what made an object arrive here.
-    Some(format!(
-        "    {{\n        napi_value value;\n        if ({make} == napi_ok) {{\n            if (!nts_napi_check(env, napi_set_named_property(env, __NTS_NS__, {key}, value), \"could not add a value to a namespace\")) return NULL;\n        }} else {{\n            bool pending = false;\n            if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {{\n                napi_value ignored;\n                napi_get_and_clear_last_exception(env, &ignored);\n            }}\n        }}\n    }}\n"
+    Some((
+        format!(
+            "    {{\n        napi_value value;\n        if ({make} == napi_ok) {{\n            if (!nts_napi_check(env, napi_set_named_property(env, __NTS_NS__, {key}, value), \"could not add a value to a namespace\")) return NULL;\n        }} else {{\n            bool pending = false;\n            if (napi_is_exception_pending(env, &pending) == napi_ok && pending) {{\n                napi_value ignored;\n                napi_get_and_clear_last_exception(env, &ignored);\n            }}\n        }}\n    }}\n"
+        ),
+        reader,
     ))
 }
 
@@ -3960,22 +4004,24 @@ fn publish_value_exports(
     values: &[(&hir::Global, &str, Cross)],
     layouts: &[hir::Layout],
     functions: &[String],
+    manifest: &mut Manifest,
 ) -> String {
     let mut out = String::new();
     for (global, publish, crossing) in values {
-        let symbol = format!(
-            "{}()",
-            value_reader(&c_global(
-                &global.name,
-                functions.iter().map(String::as_str)
-            ))
-        );
+        let reader = value_reader(&c_global(
+            &global.name,
+            functions.iter().map(String::as_str),
+        ));
+        let symbol = format!("{reader}()");
         let key = c_string_literal(publish);
         // `value_exports` refuses `Void`, so a `None` here is a bug in it
         // rather than a shape to handle.
         let Some(make) = conversion(crossing, &symbol, layouts) else {
             continue;
         };
+        manifest
+            .exports
+            .push(manifest::Export::value(vec![(*publish).to_owned()], reader));
         let _ = write!(
             out,
             // Left off the surface rather than fatal, for the reason the
@@ -4021,14 +4067,18 @@ pub fn emit(program: &hir::Program) -> Addon {
 /// -- `path.win32.sep` is published on the namespace object rather than on
 /// `exports`. Without the extern the addon, a different translation unit from
 /// `program.c`, reports `use of undeclared identifier 'sep17'`.
-fn value_export_text(program: &hir::Program, refused: &[String]) -> (String, String) {
+fn value_export_text(
+    program: &hir::Program,
+    refused: &[String],
+    manifest: &mut Manifest,
+) -> (String, String) {
     let values = value_exports(program, refused);
     let functions: Vec<String> = program.funcs.iter().map(|func| func.name.clone()).collect();
     let mut declarations = declare_value_exports(&values, &program.layouts, &functions);
     declarations.push_str(&declare_namespace_values(
         program, &values, &functions, refused,
     ));
-    let publishing = publish_value_exports(&values, &program.layouts, &functions);
+    let publishing = publish_value_exports(&values, &program.layouts, &functions, manifest);
     (declarations, publishing)
 }
 
@@ -4268,6 +4318,7 @@ fn converted_layouts(
 #[must_use]
 pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     let mut out = preamble(program);
+    let mut manifest = Manifest::default();
 
     let classes = class_names(program);
     let ownership = hir::own::summarize(program, &program.layouts);
@@ -4298,7 +4349,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     // two modules declared one name or a re-export renamed it.
     let mut wrapped: Vec<(&str, &str)> = Vec::new();
     // Every symbol that got a wrapper, published or not.
-    let mut emitted: Vec<&str> = Vec::new();
+    let mut emitted = FxHashMap::default();
     for func in &program.funcs {
         let names = published(program, func);
         // A namespace member needs a wrapper too, and is registered on the
@@ -4327,8 +4378,8 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
             ownership.hands_back(&func.name),
             ownership.consumes(&func.name),
         ) {
-            Ok(text) => {
-                out.push_str(&text);
+            Ok(body) => {
+                out.push_str(&body.text);
                 // One wrapper, one registration per name it is exported under:
                 // `export const upper = impl.upper` and
                 // `export const alias = impl.upper` are one function and two
@@ -4339,7 +4390,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
                 // and still has a wrapper, and looking it up in `wrapped`
                 // reported the namespace as unbuildable while its wrapper sat
                 // in the same file.
-                emitted.push(func.name.as_str());
+                emitted.insert(body.function.source.name.as_str(), body.function);
                 for publish in names {
                     wrapped.push((func.name.as_str(), publish));
                 }
@@ -4348,7 +4399,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         }
     }
 
-    let (class_inits, published_classes) = emit_classes(
+    let (class_inits, published_classes, class_exports) = emit_classes(
         program,
         &classes,
         &ownership,
@@ -4357,7 +4408,7 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
         &mut out,
     );
 
-    let (value_declarations, value_publishing) = value_export_text(program, refused);
+    let (value_declarations, value_publishing) = value_export_text(program, refused, &mut manifest);
     out.push_str(&value_declarations);
 
     out.push_str("NAPI_MODULE_INIT() {\n");
@@ -4389,17 +4440,18 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
     // `punycode`'s top-level code is where its `DEP0040` warning is emitted, so
     // an env set afterwards is set too late. Only `NAPI_MODULE_INIT` has one to
     // give.
-    out.push_str("    nts_napi_set_env(env);\n");
-    if runs_module_init {
-        let _ = writeln!(
-            out,
-            "    {}();",
-            c_identifier(nts_core::hir::lower::MODULE_INIT)
-        );
-    }
-    out.push_str(&publish_functions(program, &wrapped));
+    initialize_module(&mut out, runs_module_init);
+    out.push_str(&publish_functions(&emitted, &wrapped, &mut manifest));
+    manifest.exports.extend(class_exports);
     out.push_str(&class_inits);
-    emit_namespaces(program, &emitted, refused, &mut skipped, &mut out);
+    emit_namespaces(
+        program,
+        &emitted,
+        refused,
+        &mut skipped,
+        &mut out,
+        &mut manifest,
+    );
     out.push_str(&value_publishing);
     out.push_str("    return exports;\n}\n");
 
@@ -4414,9 +4466,13 @@ pub fn emit_with(program: &hir::Program, refused: &[String]) -> Addon {
 
     Addon {
         source: out,
+        manifest,
         skipped,
     }
 }
+
+#[cfg(test)]
+mod manifest_tests;
 
 #[cfg(test)]
 mod tests {
