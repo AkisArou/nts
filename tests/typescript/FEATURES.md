@@ -1344,6 +1344,7 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | area | cases | controls | typed routes |
 | --- | ---: | ---: | --- |
 | `switch` | 7 | 7 | Literal and enum dispatch, fallthrough, middle-default search, cached discriminants, ordered narrowing guards and exhaustive returns |
+| `labels` | 9 | 9 | Labeled break and continue through nested loops and blocks, update/test order and retained iteration or shared bindings |
 
 ### Union route contracts
 
