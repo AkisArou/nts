@@ -1347,6 +1347,7 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | `labels` | 9 | 9 | Labeled break and continue through nested loops and blocks, update/test order and retained iteration or shared bindings |
 | `finally` | 9 | 9 | Saved return and throw values, cleanup on every exit, cleanup overrides, nested order and post-cleanup reads |
 | `short-circuit` | 13 | 13 | Skipped and selected operands, cached logical-assignment references, optional boundaries, conditional narrowing and evaluation order |
+| `narrowing` | 13 | 13 | Branch and loop joins, closure mutations followed by guards, early exits, assertion branches and post-loop member reads |
 
 ### Union route contracts
 
@@ -1477,7 +1478,7 @@ land without another open Unicode pull request.
 | `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 3349 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 542 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
-| `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 101 | 0 |
+| `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
 | `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 262 | 1 |
 | `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 610 | 0 |
@@ -1683,7 +1684,7 @@ land without another open Unicode pull request.
 | `ts-route-global` | a module variable or static field keeps a value after its producer ends | lifetime contracts: Memory, The one memory analysis | 16 | 0 |
 | `ts-route-hook` | an implicit getter, setter, conversion, iterator hook or comparator retains or observes a value | lifetime contracts: Memory, The one memory analysis | 18 | 0 |
 | `ts-route-iterator` | iterator results or a spread hand out references retained by the consumer | lifetime contracts: Memory, The one memory analysis | 16 | 0 |
-| `ts-route-loop` | a back edge, nested loop or loop exit carries a change to a later use | proof contracts: Numbers, Integers proved from doubles; conformance/statements | 104 | 0 |
+| `ts-route-loop` | a back edge, nested loop or loop exit carries a change to a later use | proof contracts: Numbers, Integers proved from doubles; conformance/statements | 112 | 0 |
 | `ts-route-merge` | paths with different facts join before the value is used | proof contracts: Numbers, Integers proved from doubles; conformance/controlFlow | 85 | 0 |
 | `ts-route-re-entry` | a callback re-enters a function while an earlier activation still uses a value | lifetime contracts: Memory, The one memory analysis | 15 | 0 |
 | `ts-route-return-chain` | a value is retained after returning through many distinct functions | lifetime contracts: Memory, The one memory analysis | 16 | 0 |
