@@ -1412,6 +1412,7 @@ land without another open Unicode pull request.
 | `ts-async-route-rejections` | rejections and cleanup with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 16 | 0 |
 | `ts-async-route-values-thenables` | awaiting values and thenables with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 22 | 0 |
 | `ts-bigint-route-arithmetic` | arithmetic and wrapping with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 26 | 0 |
+| `ts-bigint-route-boundaries` | bigints at the boundaries with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 14 | 0 |
 | `ts-bigint-route-conversions` | conversions with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
 | `ts-bigint-route-storage` | bigints in storage with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
 | `ts-bigint-route-unions` | unions with number with exact wide values, runtime kinds and exception checks | Bigint route contracts; typed paths | 16 | 0 |
@@ -1525,7 +1526,7 @@ land without another open Unicode pull request.
 | `ts-json-revivers` | declared reviver function routes preserve complete ordered key, value and holder observations through deletion and replacement | JSON.parse; InternalizeJSONProperty | 16 | 0 |
 | `ts-json-routes` | JSON values preserve exact parsed contents, serialization and callback observations across typed routes | JSON route contracts; typed paths | 110 | 0 |
 | `ts-json-shapes` | matching JSON enters an annotated interface, field type, tuple, generic or union with exact leaf values and key order | Language, Types, Decisions; JSON.parse | 30 | 0 |
-| `ts-json-stringify` | declared classes, interfaces and unions serialize with exact conversion, omission, escaping and error behavior | JSON.stringify; SerializeJSONProperty; QuoteJSONString | 54 | 0 |
+| `ts-json-stringify` | declared classes, interfaces and unions serialize with exact conversion, omission, escaping and error behavior | JSON.stringify; SerializeJSONProperty; QuoteJSONString | 56 | 0 |
 | `ts-json-unknown` | unknown JSON results are truthfully narrowed before duplicate-key, ordering, nesting and whitespace observations | JSON route contracts; ParseJSON; OrdinaryOwnPropertyKeys | 12 | 0 |
 | `ts-iterator-route-builtins` | builtin iterables through typed routes with exact protocol order, arguments, values and state | Iterator route contracts: ECMAScript iteration and generators; typed paths | 42 | 0 |
 | `ts-iterator-route-early-exit` | early exit with exact protocol order, arguments, values and state | Iterator route contracts: ECMAScript iteration and generators; typed paths | 18 | 0 |
