@@ -1520,8 +1520,8 @@ function createUnsafeBuffer(size: number): Buffer<ArrayBuffer> {
 
 function createUnsafeAlignedBuffer(size: number, alignment: number): Buffer<ArrayBuffer> {
   if (size === 0) return createBuffer(0);
-  const buffer = nts_buffer_create_unsafe_array_buffer(size + alignmentPadding(alignment));
-  return new FastBuffer(buffer, nts_buffer_array_buffer_aligned_offset(buffer, alignment), size);
+  const allocation = nts_buffer_allocate_aligned(size, alignment);
+  return new FastBuffer(allocation.buffer, allocation.byteOffset, size);
 }
 
 function allocate(size: number): Buffer<ArrayBuffer> {
@@ -1574,6 +1574,29 @@ function createFromString(
 
 function fromString(string: string, encoding: Encoding): Buffer<ArrayBuffer> {
   return string.length === 0 ? createBuffer(0) : fromStringFast(string, encoding);
+}
+
+// The same allocation property observer runs on host and compiled paths.
+// Keep the backing store inside the typed implementation: ArrayBuffer-valued
+// records do not cross Node-API yet. Only this observer's scalar result crosses.
+export function checkAlignedAllocationForTest(size: number, alignment: number): number {
+  const allocation = nts_buffer_allocate_aligned(size, alignment);
+  const buffer = allocation.buffer;
+  const byteOffset = allocation.byteOffset;
+  const length = Math.trunc(size);
+  const view = new Uint8Array(buffer, byteOffset, size);
+  if (view.byteLength !== length) return 1;
+  if (byteOffset < 0 || byteOffset >= alignment) return 2;
+  if (byteOffset % Math.min(alignment, 8) !== 0) return 3;
+  if (buffer.byteLength !== (size === 0 ? 0 : length + Math.max(alignment, 8))) return 4;
+  const backing = new Uint8Array(buffer);
+  backing.fill(0xa5);
+  view.fill(0x5a);
+  for (let i = 0; i < backing.length; i++) {
+    const expected = i >= byteOffset && i < byteOffset + length ? 0x5a : 0xa5;
+    if (backing[i] !== expected) return 5;
+  }
+  return 0;
 }
 
 // Test-only native observation, hidden from the public buffer namespace.
