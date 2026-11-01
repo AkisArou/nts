@@ -1,0 +1,41 @@
+/*---
+description: Control for default-union-map-stable-strings; default sorts of a union-array Map value preserve numeric and string values with equal string forms.
+features: [ts-sort-route-default, ts-arrays, ts-strings, ts-numbers, ts-iteration, ts-functions, ts-unions, ts-type-aliases, ts-map-set]
+---*/
+// Control: stable insertion over a copy uses String comparison and preserves slot presence. A string-or-number array crosses a typed Map; node keeps equal string forms stable, sorts 10 before 9 and preserves the copying source.
+type SortValue = string | number;
+const stores = new Map<string, SortValue[]>();
+function inserted(values: SortValue[], copying: boolean): SortValue[] {
+  const copy = values.slice();
+  for (let i = 1; i < copy.length; i++) {
+    const value = copy[i]; let j = i;
+    while (j > 0 && String(copy[j - 1]) > String(value)) { copy[j] = copy[j - 1]; j--; }
+    copy[j] = value;
+  }
+  if (copying) return copy;
+  for (let i = 0; i < copy.length; i++) values[i] = copy[i];
+  return values;
+}
+const palette: SortValue[] = [-0, 0, "0", 1, "1", 10, "10", 2, "2", 9, "9", "A", "a"];
+const inputs: SortValue[][] = [];
+// Ordered, reversed, equal-key and duplicate-heavy inputs straddle each size boundary.
+for (const length of [0, 1, 9, 10, 11, 31, 32, 33, 63, 64, 65]) for (const shape of [0, 1, 2, 3]) {
+  const input: SortValue[] = new Array<SortValue>(length), buckets = palette.length;
+  for (let i = 0; i < length; i++) {
+    const bucket = shape === 0 ? Math.floor(i * buckets / length) : shape === 1 ? buckets - 1 - Math.floor(i * buckets / length) : shape === 2 ? i % 3 : (i * 7 + length) % buckets;
+    if (bucket < palette.length) input[i] = palette[bucket];
+  }
+  inputs.push(input);
+}
+for (const sample of inputs) {
+  stores.set("current", sample.slice());
+  const values = stores.get("current");
+  if (values === undefined) throw new Error("missing array");
+  const expected: SortValue[] = [];
+  for (const key of ["0", "1", "10", "2", "9", "A", "a"]) for (const value of sample) if (String(value) === key) expected.push(value);
+  const copied = inserted(values, true);
+  assert.sameValue(copied === values, false); assert.compareArray(copied, expected);
+  assert.compareArray(values, sample);
+  const result = inserted(values, false);
+  assert.sameValue(result, values); assert.compareArray(result, expected);
+}
