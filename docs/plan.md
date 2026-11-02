@@ -88,6 +88,9 @@ ids, kept so the records that cite them still resolve.
 - A rest parameter reads the second argument (#209); `Array.isArray` over a
   typed array (#208); a refused function called through `{ size }` (#161); a
   class called with `.call` through a construct signature (#222).
+- Preserve `number[]` element storage through nullable `Array.isArray`
+  narrowing ([defect](../tests/outcomes/a-nullable-array-narrowing-reinterprets-typed-elements/src/main.ts),
+  [control](../tests/outcomes/an-array-narrowing-without-the-null-union/src/main.ts)).
 - The compiler stops: recursive aliases through Map/Set (#200), `parseInt`
   through a widened interface (#260), property names that are not C
   identifiers (#165, #227), an export name with no C spelling (#134: refuse
