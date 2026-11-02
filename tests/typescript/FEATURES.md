@@ -243,6 +243,11 @@ one; add a row here in the same commit as the first case that uses it.
     name their sources; `ts-disposal-route-*` identifies each area and its
     explicit cleanup controls.
 
+49. **Weak collections across typed routes:** identity-bearing keys and values,
+    membership, rejected keys, private state, held targets and registration
+    tokens. [Weak collection route contracts](#weak-collection-route-contracts)
+    name their sources; `ts-weak-collection-route-*` identifies each area.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -363,6 +368,8 @@ flows through it.
 | `union-routes/` | exact union payloads, identities and branch histories across storage, narrowing, object layouts and widening, held to node |
 | `union-routes-controls/` | the same computations using one kind record with separate concrete payload fields and explicit branches |
 | `unions/` | unions and every way TypeScript narrows them |
+| `weak-collection-routes/` | weak collection identity, exact operations, key eligibility, private state and held-target or registration-token observations through typed routes, held to node |
+| `weak-collection-routes-controls/` | the same values, typed carriers and assertions using Maps, Sets, explicit key checks, plain target holders and token registration state |
 
 Each family has one or more `combination-*.ts` cases pairing its concept
 with others. The `soundness/` matrix instead uses `<route>-<place>-<read>.ts`
@@ -1205,6 +1212,32 @@ asynchronous cases must complete the harness's async protocol. Requested
 forms rejected by strict TypeScript are omitted with exact diagnostics in
 the pull request. Maintainers measure and record nts results; compiler
 refusals never weaken these assertions.
+
+
+The `weak-collection-routes/` matrix carries collections, keys, values,
+targets and tokens through declared fields, parameters, returns, interfaces,
+object-constrained generics, narrowed unions, tuple slots and array elements.
+Each case isolates one route and repeats it over several inputs. Exact results
+distinguish shared aliases from equal-content objects, stored undefined from
+absence, first deletions from later deletions, and one collection from another.
+The accepted key population includes objects, unregistered symbols and
+well-known symbols; runtime refusal routes check primitive and registered-symbol
+inputs wherever strict TypeScript admits the typed call.
+
+Controls under `weak-collection-routes-controls/` append `-control` to the
+case name and retain its inputs, typed carriers and assertions. Maps and Sets
+replace weak collections, explicit eligibility checks reproduce TypeErrors,
+plain holders retain WeakRef targets, and explicit registration state models
+FinalizationRegistry tokens. No case or control asserts whether or when a
+finalization callback runs, or depends on garbage collection.
+
+Every file is checked independently as a strict script unless its front matter
+specifies module mode, with all default-library diagnostics included. The
+unchanged suite oracle runs every case and control on the pinned Node. Requested
+forms rejected by strict TypeScript are omitted with their diagnostics in the
+pull request; admitted method-interface routes keep their ordinary runtime
+checks. Maintainers compile and record nts outcomes without changing the cases
+to accommodate a current refusal.
 
 ## Coverage, source by source
 
@@ -2284,6 +2317,27 @@ Maintainers compile and record every nts backend outcome.
 | `object-data` | 8 | 8 | complete ordered enum keys, values, entries and for-in observations across stored, returned, generic and keyed object views |
 | `flags-merging` | 8 | 8 | combined, tested and cleared flag values, repeated enum declarations and namespace functions with exact initialization and call histories |
 
+### Weak collection route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [CanBeHeldWeakly](https://tc39.es/ecma262/#sec-canbeheldweakly) | objects, unregistered symbols and well-known symbols are eligible weak keys, targets and tokens; registered symbols and other primitives are ineligible |
+| ECMAScript [WeakMap objects](https://tc39.es/ecma262/#sec-weakmap-objects), [set](https://tc39.es/ecma262/#sec-weakmap.prototype.set), [get](https://tc39.es/ecma262/#sec-weakmap.prototype.get), [has](https://tc39.es/ecma262/#sec-weakmap.prototype.has) and [delete](https://tc39.es/ecma262/#sec-weakmap.prototype.delete) | SameValue key identity, exact values, collection returns, presence, deletion and the distinction between insertion errors and quiet ineligible-key lookups |
+| ECMAScript [WeakSet objects](https://tc39.es/ecma262/#sec-weakset-objects), [add](https://tc39.es/ecma262/#sec-weakset.prototype.add), [has](https://tc39.es/ecma262/#sec-weakset.prototype.has) and [delete](https://tc39.es/ecma262/#sec-weakset.prototype.delete) | identity membership, duplicate addition, collection returns, deletion and key eligibility |
+| ECMAScript [WeakRef constructor](https://tc39.es/ecma262/#sec-weak-ref-constructor), [deref](https://tc39.es/ecma262/#sec-weakref.prototype.deref) and [AddToKeptObjects](https://tc39.es/ecma262/#sec-addtokeptobjects) | eligible targets, constructor errors and exact identity while the program retains the target |
+| ECMAScript [FinalizationRegistry constructor](https://tc39.es/ecma262/#sec-finalization-registry-constructor), [register](https://tc39.es/ecma262/#sec-finalization-registry.prototype.register) and [unregister](https://tc39.es/ecma262/#sec-finalization-registry.prototype.unregister) | callable cleanup callbacks, target and token validation, same-target held-value rejection, undefined register results and exact unregister answers |
+| ECMAScript [WeakRef processing model](https://tc39.es/ecma262/#sec-weakref-processing-model) | no promise of collection or finalization timing; these cases hold their observed targets and never assert callback delivery |
+| TypeScript [object types](https://www.typescriptlang.org/docs/handbook/2/objects.html), [generics](https://www.typescriptlang.org/docs/handbook/2/generics.html), [narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) and [strict function types](https://www.typescriptlang.org/docs/handbook/release-notes/typescript-2-6.html#strict-function-types) | declared carriers, object constraints, runtime-selected union members and method-parameter variance accepted by strict checking |
+
+Existing `map-set-contents/` and `symbol-routes/` cases remain unchanged.
+This family adds weak-collection routes and their matching strong controls;
+it does not repeat the symbol-only WeakMap parameter case or assert weak
+collection size, enumeration, reclamation or finalization timing.
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `map` | 8 | 8 | interface fields, replaced class-key fields, parameters and returned receivers, independent typed returns, object-constrained generics, aliases in tuples, narrowed unions and entry-tuple construction |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -2306,13 +2360,13 @@ Maintainers compile and record every nts backend outcome.
 | `ts-array-representation` | concrete element storage crosses a wider reader with exact payloads, identities and slot presence | Language, Types, A type is a layout; Objects, Arrays | 24 | 0 |
 | `ts-array-widening` | one array crosses wider, readonly, generic, holder or tuple views without changing stored values | Language, Types, Decisions; Array contents contracts | 34 | 0 |
 | `ts-array-writes` | writes and array construction through widened routes preserve values, length, order and holes | Objects, Arrays; ECMAScript, Array prototype methods | 40 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 4843 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 4859 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 809 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
 | `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 294 | 1 |
-| `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 670 | 0 |
+| `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 672 | 0 |
 | `ts-async-route-methods` | async methods and dispatch with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 14 | 0 |
 | `ts-async-route-ordering` | ordering and captures with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 10 | 0 |
 | `ts-async-route-promises` | generic and stored promises with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 28 | 0 |
@@ -2335,9 +2389,9 @@ Maintainers compile and record every nts backend outcome.
 | `ts-capture-route-storage` | storage and nesting across typed captures with exact node values, order and state | Capture route contracts: Functions, Objects and Async | 22 | 0 |
 | `ts-capture-route-suspension` | across await and yield across typed captures with exact node values, order and state | Capture route contracts: Functions, Objects and Async | 18 | 0 |
 | `ts-capture-route-writes` | writes after capture across typed captures with exact node values, order and state | Capture route contracts: Functions, Objects and Async | 24 | 0 |
-| `ts-class` | a class declaration or expression | conformance/classes | 2043 | 29 |
+| `ts-class` | a class declaration or expression | conformance/classes | 2059 | 29 |
 | `ts-class-expression` | a class expression, named or anonymous | conformance/classes/classExpressions; conformance/es6/classExpressions | 33 | 0 |
-| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 1319 | 4 |
+| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 1335 | 4 |
 | `ts-class-static-block` | a `static { }` block | conformance/classes/classStaticBlock; ts-eslint StaticBlock | 8 | 0 |
 | `ts-class-value-route-exposure` | constructor metadata and new.target with exact construction, static observations and identities | Class value route contracts; typed paths | 18 | 0 |
 | `ts-class-value-route-factories` | class factories and mixins with exact construction, static observations and identities | Class value route contracts; typed paths | 12 | 0 |
@@ -2387,7 +2441,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-destructuring-route-order` | defaults, repeated getters and failing typed patterns preserve lazy left-to-right effects, partial writes, cleanup order and original errors | BindingInitialization; IteratorBindingInitialization; IteratorClose | 18 | 0 |
 | `ts-destructuring-route-parameters` | typed parameter and callback patterns retain earlier-binding dependencies, receiver data, optional and rest inputs and exact effects | TypeScript Destructuring; BindingInitialization; IteratorBindingInitialization | 20 | 0 |
 | `ts-destructuring-routes` | typed binding and assignment patterns retain exact values, rest contents and observable getter, default and iterator histories beside explicit-read controls | Destructuring route contracts; typed paths | 88 | 0 |
-| `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 86 | 0 |
+| `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 88 | 0 |
 | `ts-descriptor-route-accessors` | defined accessors preserve receiver binding, getter-only refusal, setter-only reads and conversion to data properties | Descriptor route contracts; typed paths | 14 | 0 |
 | `ts-descriptor-route-defining` | typed definitions preserve data and accessor defaults, descriptor snapshots, permitted redefinitions and exact refusal state | Descriptor route contracts; typed paths | 16 | 0 |
 | `ts-descriptor-route-enumerability` | typed hidden properties remain directly readable while enumeration, object copies and object JSON honor enumerable flags | Descriptor route contracts; typed paths | 14 | 0 |
@@ -2430,15 +2484,15 @@ Maintainers compile and record every nts backend outcome.
 | `ts-function-object-route-call-apply` | typed call and apply routes preserve receiver identity, complete argument order, return values and caught errors | Function object route contracts; typed paths | 18 | 0 |
 | `ts-function-object-route-defaults-rest` | typed parameter routes preserve lazy per-call defaults, earlier parameter dependencies, exact rest arrays and spread argument order | Function object route contracts; typed paths | 20 | 0 |
 | `ts-function-object-route-length-name` | typed function values preserve exact declared and inferred names, accessor prefixes and parameter counts before defaults or rest | Function object route contracts; typed paths | 22 | 0 |
-| `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 1076 | 0 |
-| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 5352 | 4 |
+| `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 1078 | 0 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 5368 | 4 |
 | `ts-generator-route-delegation` | typed delegated generators preserve active delegate identity, next sends, completion values, return and throw forwarding, cleanup and resumed continuations | Generator route contracts; typed paths | 18 | 0 |
 | `ts-generator-route-iterables` | typed generator iterables preserve complete yielded sequences, consumer exhaustion and early closing with exact cleanup and permanent completed state | Generator route contracts; typed paths | 16 | 0 |
 | `ts-generator-route-return-throw-finally` | typed generator control methods preserve supplied values and error identities, precise catch sites, suspended cleanup and once-only finally order | Generator route contracts; typed paths | 20 | 0 |
 | `ts-generator-route-sending-completion` | typed generator objects ignore the first send, deliver later values to the paused yield, return their completion once and keep fresh completed results | Generator route contracts; typed paths | 16 | 0 |
 | `ts-generator-route-values` | generator values retain their receiver, instance state and suspension through typed carriers and reject re-entrant next with TypeError | Generator route contracts; typed paths | 16 | 0 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 227 | 0 |
-| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 354 | 0 |
+| `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 356 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
 | `ts-generic-route-callbacks` | generic interfaces, stored callbacks and generic methods preserve call arguments, results, identities and receiver state | TypeScript Generic Types; Function Type Expressions | 8 | 0 |
 | `ts-generic-route-classes` | generic class fields and methods preserve values across instantiations, aliases, inheritance, initialization and shared static state | TypeScript Generic Classes; Objects, Classes | 28 | 0 |
@@ -2446,7 +2500,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-generic-route-functions` | multiple generic function instantiations preserve payloads through arguments, tuples, defaults, constraints, nested calls and recursion | TypeScript Generics; Language, Types | 20 | 0 |
 | `ts-generic-route-narrowing` | union, unknown, constrained and conditional instantiations preserve runtime payloads through guards and resolved shapes | TypeScript Narrowing; Generic Constraints; Conditional Types | 10 | 0 |
 | `ts-generic-routes` | stored, returned and compared values preserve their runtime representation across generic instantiations and handwritten concrete controls | Generic route contracts; typed paths | 84 | 0 |
-| `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 888 | 0 |
+| `ts-generics` | type parameters on a function, class, method or interface | conformance/types/typeParameters; ts-eslint TSTypeParameter | 890 | 0 |
 | `ts-implicit-accessor` | implicit getter and setter calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 138 | 0 |
 | `ts-implicit-conversion` | implicit valueOf, toString and Symbol.toPrimitive calls through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 114 | 0 |
 | `ts-implicit-iteration` | implicit iterator acquisition, stepping and closing through typed views, with exact order and visible effects | implicit call contracts: Objects; Language; typed paths | 60 | 0 |
@@ -2469,9 +2523,9 @@ Maintainers compile and record every nts backend outcome.
 | `ts-integer-route-rounding` | rounding and division with exact numeric stages and representations | Integer route contracts; typed paths | 18 | 0 |
 | `ts-integer-route-typed-arrays` | typed-array storage with exact numeric stages and representations | Integer route contracts; typed paths | 10 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 16 | 0 |
-| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1907 | 0 |
+| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1909 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 18 | 0 |
-| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 5022 | 0 |
+| `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 5038 | 0 |
 | `ts-iterator-route-builtins` | builtin iterables through typed routes with exact protocol order, arguments, values and state | Iterator route contracts: ECMAScript iteration and generators; typed paths | 42 | 0 |
 | `ts-iterator-route-early-exit` | early exit with exact protocol order, arguments, values and state | Iterator route contracts: ECMAScript iteration and generators; typed paths | 18 | 0 |
 | `ts-iterator-route-generators` | generators with exact protocol order, arguments, values and state | Iterator route contracts: ECMAScript iteration and generators; typed paths | 18 | 0 |
@@ -2505,8 +2559,8 @@ Maintainers compile and record every nts backend outcome.
 | `ts-lifetime-region` | a reference remains reachable after the original call result reaches its last use | lifetime contracts: Memory, The ladder of homes; Resetting a region is safe only if nothing can still walk into it; A region needs two proofs | 25 | 0 |
 | `ts-lifetime-scalar` | an object initially used through fields gains an observable identity or shared mutation | lifetime contracts: Memory, Where nts stands; The ladder of homes | 20 | 0 |
 | `ts-lifetime-slot` | successive loop allocations remain distinct when their live instances overlap | lifetime contracts: Memory, Where nts stands; The one memory analysis | 18 | 0 |
-| `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 190 | 0 |
-| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 892 | 0 |
+| `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 192 | 0 |
+| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 900 | 0 |
 | `ts-map-set-contents` | Map and Set contents keep their values, runtime kinds and order across typed writes and reads | Map and Set contents contracts; typed paths | 200 | 0 |
 | `ts-mapped-types` | a mapped type (`{ [K in keyof T]: U }`), with modifiers and `as` remapping | conformance/types/mapped; ts-eslint TSMappedType | 24 | 0 |
 | `ts-math-route-extremes` | signed-zero orders, NaN positions, empty and spread extrema, absolute magnitude and prescribed hypot special values with exact values and observations | Math route contracts; typed paths | 16 | 0 |
@@ -2518,11 +2572,11 @@ Maintainers compile and record every nts backend outcome.
 | `ts-mixins` | a function returning a subclass of the class it is given | conformance/classes/mixinClassesAndInterfaces | 14 | 0 |
 | `ts-modules` | an ES module (the `module` flag): module scope, strictness, top-level await | conformance/externalModules; conformance/es6/modules | 414 | 10 |
 | `ts-namespace` | a namespace (internal module) and its object | conformance/internalModules; ts-eslint TSModuleDeclaration | 90 | 6 |
-| `ts-narrowing` | control-flow narrowing of a union or `unknown` | conformance/controlFlow; conformance/expressions/typeGuards | 747 | 0 |
+| `ts-narrowing` | control-flow narrowing of a union or `unknown` | conformance/controlFlow; conformance/expressions/typeGuards | 749 | 0 |
 | `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 19 | 0 |
 | `ts-new-target` | `new.target` | conformance/es6/newTarget | 83 | 0 |
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
-| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 1811 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 1827 | 0 |
 | `ts-number-format-route-fixed-notation` | binary-value rounding and ties, exact fixed digits, signed zero, exponent fallback and digit-count validation through typed numbers with exact values and observations | Number-format route contracts; typed paths | 18 | 0 |
 | `ts-number-format-route-partial-parsing` | longest valid prefixes, optional and wrapped radices, signed zero and explicit number-to-text pipelines through typed parser inputs with exact values and observations | Number-format route contracts; typed paths | 20 | 0 |
 | `ts-number-format-route-precision-exponent` | significant digits, exponent carries, padding, omitted arguments and range precedence through generic and interface routes with exact values and observations | Number-format route contracts; typed paths | 20 | 0 |
@@ -2534,7 +2588,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-number-route-strings` | conversions to and from strings across typed numeric carriers with exact node values | Numeric route contracts: Language and Foundations, Numbers | 40 | 0 |
 | `ts-number-route-types` | numbers in unions, enums and generics across typed numeric carriers with exact node values | Numeric route contracts: Language and Foundations, Numbers | 14 | 0 |
 | `ts-number-route-zero-nan` | signed zero and nan across typed numeric carriers with exact node values | Numeric route contracts: Language and Foundations, Numbers | 22 | 0 |
-| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 3602 | 0 |
+| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 3618 | 0 |
 | `ts-object-route-key-order` | typed object enumeration preserves numeric ordering, string insertion histories, getter effects and symbol omission | Object route contracts; typed paths | 14 | 0 |
 | `ts-object-route-presence` | typed optional and index properties preserve absent-versus-undefined membership, deletion and narrowing | Object route contracts; typed paths | 16 | 0 |
 | `ts-object-route-spread-rest` | typed spread and rest copy own enumerable string and symbol values once in order into plain data properties | Object route contracts; typed paths | 18 | 0 |
@@ -2542,7 +2596,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-object-route-views` | one object preserves identity, writes, accessors and ordered shape across simultaneous typed views | Object route contracts; typed paths | 16 | 0 |
 | `ts-object-routes` | typed object operations preserve ordered shapes, exact values, presence, identity and accessor histories beside explicit controls | Object route contracts; typed paths | 84 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 52 | 0 |
-| `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 2967 | 0 |
+| `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 2983 | 0 |
 | `ts-optional-chaining` | `?.` on properties, calls and elements, in typed code | conformance/expressions/optionalChaining | 44 | 0 |
 | `ts-optional-parameters` | a parameter marked `?` | conformance/functions; conformance/types/members | 67 | 0 |
 | `ts-optional-properties` | a property marked `?` in a type, a class or an interface | conformance/types/members; conformance/types/objectTypeLiteral | 251 | 0 |
@@ -2612,7 +2666,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-string-route-searching` | searching and splitting across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 28 | 0 |
 | `ts-string-route-slicing` | slicing and indexing across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 20 | 0 |
 | `ts-string-route-types` | strings in unions, literals and generics across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 14 | 0 |
-| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 2721 | 0 |
+| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 2725 | 0 |
 | `ts-structural-typing` | a value accepted for its shape, not its declared name: literals and classes that never say `implements` | conformance/types/typeRelationships; typed paths | 80 | 0 |
 | `ts-structuredclone-route-buffers` | typed buffer clones preserve bytes, values, view windows, shared storage and transfer detachment | Structured clone route contracts; typed paths | 32 | 0 |
 | `ts-structuredclone-route-classes` | class clones yield plain own data with private slots and inherited behavior omitted and own getters read once | Structured clone route contracts; typed paths | 14 | 0 |
@@ -2624,7 +2678,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-symbol-route-listing` | typed mixed-key listings preserve order, exclude symbols from string enumeration and JSON, and include hidden own symbols | Symbol route contracts; typed paths | 16 | 0 |
 | `ts-symbol-route-values` | typed symbol values preserve descriptions, explicit strings, registry identity and collection membership, with admitted conversion errors | Symbol route contracts; typed paths | 20 | 0 |
 | `ts-symbol-route-well-known` | typed well-known symbols dispatch tags, instanceof, concat spreading and primitive conversion with exact hints and receivers | Symbol route contracts; typed paths | 24 | 0 |
-| `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 493 | 2 |
+| `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 501 | 2 |
 | `ts-tagged-templates` | a tagged template with a typed tag function | conformance/es6/templates | 28 | 0 |
 | `ts-template-literal-types` | a template literal type, and the intrinsic string types (Uppercase, Capitalize, ...) | conformance/types/literal/templateLiteralTypes; ts-eslint TSTemplateLiteralType | 12 | 0 |
 | `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 138 | 0 |
@@ -2648,7 +2702,7 @@ Maintainers compile and record every nts backend outcome.
 | `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 14 | 0 |
 | `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 21 | 0 |
 | `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 12 | 0 |
-| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 1393 | 0 |
+| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 1407 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 1162 | 0 |
 | `ts-type-assertions` | a type assertion (`x as T`, `<T>x`), erased, never a conversion | conformance/expressions/asOperator; conformance/expressions/typeAssertions; ts-eslint TSAsExpression, TSTypeAssertion | 81 | 0 |
 | `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 146 | 0 |
@@ -2676,9 +2730,9 @@ Maintainers compile and record every nts backend outcome.
 | `ts-union-route-values` | all six carriers crossed with all seven narrowing forms retain signed zero, NaN, zero bigint, empty text, false, both absences and identity | Union route contracts; TypeScript Narrowing; Set semantics | 84 | 0 |
 | `ts-union-route-widening` | union widening, unknown and generic storage, overload and conditional results, and built arrays preserve every member | TypeScript Union Types; assignments and control-flow analysis | 16 | 0 |
 | `ts-union-routes` | declared unions preserve exact payloads, runtime kinds, identities and branch histories across typed routes beside concrete-record controls | Union route contracts; typed paths | 190 | 0 |
-| `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 2265 | 0 |
+| `ts-unions` | a union type and the values that flow through it | conformance/types/union; ts-eslint TSUnionType | 2267 | 0 |
 | `ts-unique-symbol` | a `unique symbol` constant as a member key | conformance/types/uniqueSymbol | 16 | 0 |
-| `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 2432 | 0 |
+| `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 2446 | 0 |
 | `ts-unsound-arity` | a shorter function signature hides an optional parameter from a wider caller | conformance/types/typeRelationships; typed paths | 3 | 0 |
 | `ts-unsound-assertion` | an assertion function claims a type without establishing it at runtime | conformance/controlFlow/assertionTypePredicates; typed paths | 89 | 0 |
 | `ts-unsound-bivariance` | method parameter bivariance permits a wider writer to violate a narrow value type | conformance/types/typeRelationships; typed paths | 203 | 0 |
@@ -2694,4 +2748,6 @@ Maintainers compile and record every nts backend outcome.
 | `ts-utility-types` | the lib's utility types (Partial, Pick, Omit, ReturnType, Parameters, Awaited, ...) through values | lib.es5.d.ts; conformance/types/mapped | 31 | 0 |
 | `ts-variadic-tuples` | a variadic tuple type (`[...A, ...B]`) | conformance/types/tuple/variadicTuples | 3 | 0 |
 | `ts-void` | the `void` return type, which does not discard a returned value | conformance/types/primitives/void; ts-eslint TSVoidKeyword | 1 | 0 |
+| `ts-weak-collection-route-map` | typed WeakMap routes preserve object identity, alias updates, independently replaced fields, stored values, chain returns, presence and deletion | Weak collection route contracts; typed paths | 16 | 0 |
+| `ts-weak-collection-routes` | weak collection keys, values, membership, held targets and registration tokens preserve identity and exact results through typed routes beside strong-collection and plain-holder controls | Weak collection route contracts; typed paths | 16 | 0 |
 <!-- tags:end -->
