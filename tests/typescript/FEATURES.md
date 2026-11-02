@@ -2773,4 +2773,4 @@ unchanged node oracle gate admission before maintainers record backends.
 
 | tag | what it proves | origin | cases | pending |
 | --- | --- | --- | ---: | ---: |
-| `ts-iterator-helper-route-mapping` | map, filter and flatMap evaluation order across typed carriers | typed paths; Iterator Helpers | 6 | 0 |
+| `ts-iterator-helper-route-mapping` | map, filter and flatMap evaluation order across typed carriers | typed paths; Iterator Helpers | 8 | 0 |
