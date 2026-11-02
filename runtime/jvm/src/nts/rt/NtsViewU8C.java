@@ -4,13 +4,16 @@ package nts.rt;
  *
  * <p>`Uint8ClampedArray` is the one that is neither `ToInt32` nor a cast: it clamps to 0..255 and rounds **half to even**, so 0.5 is 0 and 1.5 is 2. See `clamp`. */
 public class NtsViewU8C extends NtsView {
-    private NtsViewU8C(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 0); }
+    protected NtsViewU8C(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 0); }
 
-    /** The view {@code fresh}, which nothing has seen yet, made again as a
-     * class extending this typed array -- the compiler's class for
-     * {@code class Bytes extends Uint8Array}, which hands it the view its
-     * construction made. */
-    protected NtsViewU8C(NtsViewU8C fresh) { this(fresh.buffer, fresh.offset, fresh.declared); }
+    /** The runtime helper's original arguments, validated without allocating
+     * an intermediate view. Generated subclasses delegate this constructor. */
+    protected NtsViewU8C(NtsBuffer buffer, double byteOffset, double length,
+                        double kind, boolean tracking) {
+        this(buffer, NtsBuffer.toIndex(byteOffset, "byteOffset"),
+            tracking ? -1 : NtsBuffer.toIndex(length, "length"));
+        check(buffer, this.offset, this.declared, 1);
+    }
 
     /** The view {@code subarray} and {@code slice} make: of this view's own
      * class, which a class extending a typed array overrides to make its own
@@ -21,17 +24,12 @@ public class NtsViewU8C extends NtsView {
 
     /** Tracks the buffer's length. */
     public static NtsViewU8C over(NtsBuffer buffer, double byteOffset) {
-        int at = NtsBuffer.toIndex(byteOffset, "byteOffset");
-        check(buffer, at, -1, 1);
-        return new NtsViewU8C(buffer, at, -1);
+        return new NtsViewU8C(buffer, byteOffset, 0, 0, true);
     }
 
     /** A fixed number of elements. */
     public static NtsViewU8C part(NtsBuffer buffer, double byteOffset, double length) {
-        int at = NtsBuffer.toIndex(byteOffset, "byteOffset");
-        int n = NtsBuffer.toIndex(length, "length");
-        check(buffer, at, n, 1);
-        return new NtsViewU8C(buffer, at, n);
+        return new NtsViewU8C(buffer, byteOffset, length, 0, false);
     }
 
     /** `new Uint8ClampedArray(n)`: its own buffer, zero filled. */
@@ -55,7 +53,7 @@ public class NtsViewU8C extends NtsView {
      */
     public static NtsViewU8C create(NtsBuffer buffer, double byteOffset, double length,
                             double kind, boolean tracking) {
-        return tracking ? over(buffer, byteOffset) : part(buffer, byteOffset, length);
+        return new NtsViewU8C(buffer, byteOffset, length, kind, tracking);
     }
 
     public static NtsViewU8C of(double length) {

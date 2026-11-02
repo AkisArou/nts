@@ -819,11 +819,9 @@ fn identity_class(
     })
 }
 
-/// The class a class extending a typed array is here
-/// ([`nts_core::hir::ViewClass`]): a subclass of its element's runtime view,
-/// or of the view class it extends. Its constructor takes the view its
-/// construction made (`OpKind::ViewOfClass`), and its `like` makes the views
-/// `subarray` and `slice` answer of it, as JavaScript's species does.
+/// A typed-array subclass. Both constructor forms delegate the original
+/// buffer arguments through the hierarchy, allocating only the requested class.
+/// `like` selects that class directly, without invoking an intermediate like.
 fn view_subclass(
     package: &str,
     program: &JvmProgram<'_>,
@@ -841,12 +839,7 @@ fn view_subclass(
         types::view_class(&view.element).ok_or_else(|| failed("its element has no view class"))?;
     let base = view
         .base
-        .and_then(|base| {
-            program
-                .view_classes
-                .iter()
-                .find(|known| known.class == base)
-        })
+        .and_then(|base| program.view_classes.get(base))
         .map_or_else(
             || element.to_owned(),
             |base| types::view_class_name(package, base),
@@ -856,25 +849,46 @@ fn view_subclass(
     let mut builder = ClassBuilder::new(&name, base.clone());
     builder.access = access::PUBLIC | access::SUPER;
     builder.source_file = Some("nts".to_owned());
-    let fresh = format!("(L{element};)V");
-    // `<init>(fresh)`: the base's, which makes the same view again.
-    let mut init = Code::new(
-        vec![
+    // The validated runtime entry point retains ToIndex, tracking and range
+    // checks. The integer form is used only with subarray/slice's checked
+    // buffer, offset and declared length, as in the runtime's own like().
+    for (descriptor, parameters, loads, locals) in [
+        (
+            "(Lnts/rt/NtsBuffer;DDDZ)V",
+            vec![VType::Double, VType::Double, VType::Double, VType::Integer],
+            vec![
+                (Kind::Double, 2),
+                (Kind::Double, 4),
+                (Kind::Double, 6),
+                (Kind::Int, 8),
+            ],
+            9,
+        ),
+        (
+            "(Lnts/rt/NtsBuffer;II)V",
+            vec![VType::Integer, VType::Integer],
+            vec![(Kind::Int, 2), (Kind::Int, 3)],
+            4,
+        ),
+    ] {
+        let mut types = vec![
             VType::Object(name.clone()),
-            VType::Object(element.to_owned()),
-        ],
-        2,
-    );
-    init.load(&origin, Kind::Ref, 0);
-    init.load(&origin, Kind::Ref, 1);
-    init.invoke_special(&origin, &mut pool, &base, "<init>", &fresh);
-    init.ret(&origin, None);
-    let body = init
-        .finish(&pool)
-        .map_err(|error| failed(&error.to_string()))?;
-    builder.method(access::PUBLIC, "<init>", fresh.as_str(), Some(body));
-    // `like(buffer, offset, declared)`: the base's view, made again as this
-    // class.
+            VType::Object("nts/rt/NtsBuffer".to_owned()),
+        ];
+        types.extend(parameters);
+        let mut init = Code::new(types, locals);
+        init.load(&origin, Kind::Ref, 0);
+        init.load(&origin, Kind::Ref, 1);
+        for (kind, slot) in loads {
+            init.load(&origin, kind, slot);
+        }
+        init.invoke_special(&origin, &mut pool, &base, "<init>", descriptor);
+        init.ret(&origin, None);
+        let body = init
+            .finish(&pool)
+            .map_err(|error| failed(&error.to_string()))?;
+        builder.method(access::PUBLIC, "<init>", descriptor, Some(body));
+    }
     let like = format!("(Lnts/rt/NtsBuffer;II)L{element};");
     let mut species = Code::new(
         vec![
@@ -887,18 +901,21 @@ fn view_subclass(
     );
     species.new_object(&origin, &mut pool, &name);
     species.dup(&origin);
-    species.load(&origin, Kind::Ref, 0);
     species.load(&origin, Kind::Ref, 1);
     species.load(&origin, Kind::Int, 2);
     species.load(&origin, Kind::Int, 3);
-    species.invoke_special(&origin, &mut pool, &base, "like", &like);
-    species.invoke_special(&origin, &mut pool, &name, "<init>", &fresh);
+    species.invoke_special(
+        &origin,
+        &mut pool,
+        &name,
+        "<init>",
+        "(Lnts/rt/NtsBuffer;II)V",
+    );
     species.ret(&origin, Some(Kind::Ref));
     let body = species
         .finish(&pool)
         .map_err(|error| failed(&error.to_string()))?;
-    // Public: an override may widen the base's protected access.
-    builder.method(access::PUBLIC, "like", like.as_str(), Some(body));
+    builder.method(access::PUBLIC, "like", &like, Some(body));
     builder
         .build(pool)
         .map_err(|error| failed(&error.to_string()))

@@ -6712,41 +6712,48 @@ fn const_alias_of(probe: &FuncBuilder, declaration: NodeId) -> Option<u32> {
 /// The program's view classes ([`ViewClass`]): each class extending a typed
 /// array that a view is made as or an `instanceof` asks about, with the view
 /// class it extends where it extends one rather than the builtin.
-fn collect_view_classes(probe: &FuncBuilder<'_>, program: &Program) -> Vec<ViewClass> {
-    let mut named: Vec<TypeId> = program
+fn collect_view_classes(probe: &FuncBuilder<'_>, program: &Program) -> super::ViewClasses {
+    let mut pending: Vec<TypeId> = program
         .funcs
         .iter()
-        .flat_map(|func| func.values.iter())
-        .flat_map(|op| match &op.kind {
-            OpKind::ViewOfClass { class, .. } => vec![*class],
-            OpKind::InstanceOf { classes, .. } => classes.clone(),
-            _ => Vec::new(),
-        })
+        .flat_map(|func| &func.values)
+        .flat_map(super::described_classes)
         .collect();
-    named.sort_unstable_by_key(|ty| ty.0);
-    named.dedup();
-    named
-        .into_iter()
-        .filter_map(|class| {
-            let declaration = declared_view_class(probe, class)?;
-            let Some(HirType::Managed(ManagedType::View(element))) = probe.represent(class) else {
-                return None;
-            };
-            let base = probe
-                .snapshot
-                .base_types
-                .get(&class)
-                .and_then(|bases| bases.first().copied())
-                .filter(|base| declared_view_class(probe, *base).is_some());
-            Some(ViewClass {
-                class,
-                name: probe.class_name(declaration)?,
-                element: *element,
-                base,
-                species: None,
-            })
-        })
-        .collect()
+    let mut visited = rustc_hash::FxHashSet::default();
+    let mut views = Vec::new();
+    // Include every ancestor, even one no operation directly names. Shared
+    // ancestry is visited once; publication is sorted by semantic class id.
+    while let Some(class) = pending.pop() {
+        #[cfg(test)]
+        view_class_tests::note_class();
+        if !visited.insert(class) {
+            continue;
+        }
+        let Some(declaration) = declared_view_class(probe, class) else {
+            continue;
+        };
+        let Some(HirType::Managed(ManagedType::View(element))) = probe.represent(class) else {
+            continue;
+        };
+        let base = probe
+            .snapshot
+            .base_types
+            .get(&class)
+            .and_then(|bases| bases.first().copied())
+            .filter(|base| declared_view_class(probe, *base).is_some());
+        pending.extend(base);
+        let Some(name) = probe.class_name(declaration) else {
+            continue;
+        };
+        views.push(ViewClass {
+            class,
+            name,
+            element: *element,
+            base,
+            species: None,
+        });
+    }
+    views.into()
 }
 
 /// The declaration of `ty` where it is a class the program declares whose
@@ -12792,7 +12799,7 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
     }
     built.sort_unstable_by_key(|class| class.0);
     built.dedup();
-    let mut targets: rustc_hash::FxHashMap<NodeId, Vec<TypeId>> = rustc_hash::FxHashMap::default();
+    let mut targets = ConstructorTargets::default();
     for class in built {
         if !probe.kind_of(class).is_some_and(declares_a_class) {
             continue;
@@ -12807,18 +12814,37 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
         }) = next
         {
             if owner != class {
-                let keyed = targets.entry(constructor).or_default();
-                if !keyed.contains(&target) {
-                    keyed.push(target);
-                }
+                targets.insert(constructor, target);
             }
             next = probe.native_constructor_above(owner);
         }
     }
-    for keyed in targets.values_mut() {
-        keyed.sort_unstable_by_key(|ty| ty.0);
+    targets.finish()
+}
+
+/// Membership is indexed while collecting; only publication orders the rows.
+#[derive(Default)]
+struct ConstructorTargets {
+    rows: rustc_hash::FxHashMap<NodeId, rustc_hash::FxHashSet<TypeId>>,
+}
+
+impl ConstructorTargets {
+    fn insert(&mut self, constructor: NodeId, target: TypeId) {
+        #[cfg(test)]
+        view_class_tests::note_target();
+        self.rows.entry(constructor).or_default().insert(target);
     }
-    targets
+
+    fn finish(self) -> rustc_hash::FxHashMap<NodeId, Vec<TypeId>> {
+        self.rows
+            .into_iter()
+            .map(|(owner, targets)| {
+                let mut targets: Vec<_> = targets.into_iter().collect();
+                targets.sort_unstable_by_key(|ty| ty.0);
+                (owner, targets)
+            })
+            .collect()
+    }
 }
 
 /// A constructor's copies keyed on the classes that inherit it
@@ -22162,7 +22188,7 @@ struct PartialBlock {
 /// `typed_array_shape`, and handed whole to each way of making the view.
 struct ViewShape {
     width: f64,
-    kind: f64,
+    kind: super::builtin::ElementKind,
     ty: HirType,
 }
 
@@ -59483,7 +59509,7 @@ impl<'a> FuncBuilder<'a> {
         };
         Ok(ViewShape {
             width: f64::from(width),
-            kind: f64::from(kind),
+            kind,
             ty: HirType::Managed(ManagedType::View(Box::new(element))),
         })
     }
@@ -59757,7 +59783,11 @@ impl<'a> FuncBuilder<'a> {
         )?;
 
         let width_value = self.push(OpKind::ConstFloat(width), HirType::NUMBER, origin.clone());
-        let kind_value = self.push(OpKind::ConstFloat(kind), HirType::NUMBER, origin.clone());
+        let kind_value = self.push(
+            OpKind::ConstFloat(f64::from(kind)),
+            HirType::NUMBER,
+            origin.clone(),
+        );
         let (count, tracking) = if let Some(node) = rest.get(1) {
             {
                 let value = self.lower_expression(*node)?;
@@ -60002,7 +60032,11 @@ impl<'a> FuncBuilder<'a> {
         );
         self.guard_allocated(id, buffer)?;
         let zero = self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone());
-        let kind_value = self.push(OpKind::ConstFloat(kind), HirType::NUMBER, origin.clone());
+        let kind_value = self.push(
+            OpKind::ConstFloat(f64::from(kind)),
+            HirType::NUMBER,
+            origin.clone(),
+        );
         // Not tracking: a view constructed from a length has that length, and
         // only `new Uint8Array(buffer)` follows the buffer through a resize.
         let tracking = self.push(OpKind::ConstBool(false), HirType::Bool, origin.clone());
@@ -88652,6 +88686,8 @@ mod import_phase_tests;
 
 #[cfg(test)]
 mod collection_tests;
+#[cfg(test)]
+mod view_class_tests;
 
 #[cfg(test)]
 mod carried_reference_tests;

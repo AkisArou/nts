@@ -1935,41 +1935,9 @@ impl Emitter<'_> {
                 code.instance_of(&origin, pool, &wanted);
                 Placed::OnStack
             }
-            // The view just made, made again as its class's own object over
-            // the same buffer, which the view's slot holds from here on. Sound
-            // because nothing has seen the plain view: the verifier holds this
-            // directly after the view's making.
-            OpKind::ViewOfClass { view, class } => {
-                let Some(described) = self
-                    .program
-                    .view_classes
-                    .iter()
-                    .find(|known| known.class == *class)
-                else {
-                    return Err(refuse(
-                        self.func,
-                        "a view made as a class this program has no class for",
-                    ));
-                };
-                let ty = self.ty(*view).clone();
-                let element = match &ty {
-                    HirType::Managed(ManagedType::View(element)) => types::view_class(element),
-                    _ => None,
-                }
-                .ok_or_else(|| {
-                    refuse(
-                        self.func,
-                        "a view of an element this backend has no class for",
-                    )
-                })?;
-                let name = types::view_class_name(self.shape.package, described);
-                code.new_object(&origin, pool, &name);
-                code.dup(&origin);
-                self.load(code, pool, *view)?;
-                code.invoke_special(&origin, pool, &name, "<init>", &format!("(L{element};)V"));
-                self.place(code, *view, &ty, &origin)?;
-                Placed::Stored
-            }
+            // Its requested class was allocated by the original creation.
+            // Publication itself has no runtime work on this backend.
+            OpKind::ViewOfClass { .. } => Placed::Stored,
 
             // Everything the managed and erased slices bring, refused by name
             // rather than half-emitted -- a backend that writes *something* for
@@ -3705,8 +3673,7 @@ impl Emitter<'_> {
         }
         self.program
             .view_classes
-            .iter()
-            .find(|view| view.class == class)
+            .get(class)
             .map(|view| types::view_class_name(self.shape.package, view))
             .ok_or_else(|| refuse(self.func, "an `instanceof` against an unknown class"))
     }
@@ -7652,6 +7619,22 @@ impl Emitter<'_> {
             }
             Callee::Direct(name) => name,
             Callee::External(name) => {
+                if name == "nts_view_new"
+                    && let Some(class) = self.view_makers.get(&value)
+                {
+                    let described = self
+                        .program
+                        .view_classes
+                        .get(*class)
+                        .ok_or_else(|| refuse(self.func, "a view made as an unknown class"))?;
+                    let name = types::view_class_name(self.shape.package, described);
+                    code.new_object(origin, pool, &name);
+                    code.dup(origin);
+                    let constructor = "(Lnts/rt/NtsBuffer;DDDZ)V";
+                    self.push_arguments(code, pool, args, constructor, origin)?;
+                    code.invoke_special(origin, pool, &name, "<init>", constructor);
+                    return Ok(Placed::OnStack);
+                }
                 // A keyed table call's last argument is the key kind it was
                 // written against, which the C runtime is told. `NtsTable`
                 // chooses its columns from the table's type and erases itself

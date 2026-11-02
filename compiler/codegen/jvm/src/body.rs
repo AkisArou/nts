@@ -474,6 +474,9 @@ pub struct Emitter<'a> {
     /// Scratch for a parallel-copy cycle, one per `(temp, kind)` actually used.
     pub(crate) temps: FxHashMap<(u32, u8), u16>,
     pub(crate) labels: FxHashMap<BlockId, Label>,
+    /// View creation results and the semantic class allocated there. The HIR
+    /// verifier guarantees that class publication precedes every use.
+    pub(crate) view_makers: FxHashMap<ValueId, nts_core::hir::ClassId>,
     pub(crate) uses: Vec<u32>,
     pub(crate) char_codes: rustc_hash::FxHashSet<ValueId>,
     pub(crate) order: Vec<BlockId>,
@@ -661,6 +664,15 @@ impl<'a> Emitter<'a> {
             widened_fields: plans.widened_fields,
             temps: FxHashMap::default(),
             labels: FxHashMap::default(),
+            view_makers: func
+                .blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .filter_map(|at| match func.values[at.0 as usize].kind {
+                    OpKind::ViewOfClass { view, class } => Some((view, class)),
+                    _ => None,
+                })
+                .collect(),
             uses,
             order,
         })

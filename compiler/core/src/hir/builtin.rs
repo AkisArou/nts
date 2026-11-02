@@ -375,37 +375,64 @@ typed_arrays! {
 /// Kind 2 is `Uint8ClampedArray`, which [`typed_array_element`] does not accept:
 /// clamping and wrapping disagree on exactly the inputs typed-array code is
 /// written for, so the slot is reserved rather than aliased onto `u8`.
-#[must_use]
-pub fn element_kind(element: &HirType) -> Option<u32> {
-    Some(match element {
-        HirType::Int {
-            bits: 8,
-            signed: true,
-        } => 0,
-        HirType::Int {
-            bits: 8,
-            signed: false,
-        } => 1,
-        HirType::Int {
-            bits: 16,
-            signed: true,
-        } => 3,
-        HirType::Int {
-            bits: 16,
-            signed: false,
-        } => 4,
-        HirType::Int {
-            bits: 32,
-            signed: true,
-        } => 5,
-        HirType::Int {
-            bits: 32,
-            signed: false,
-        } => 6,
-        HirType::Float { bits: 32 } => 7,
-        HirType::Float { bits: 64 } => 8,
-        _ => return None,
-    })
+macro_rules! element_kinds {
+    ($($variant:ident = $number:literal => $element:pat),+ $(,)?) => {
+        /// A runtime view element tag, kept typed until the runtime ABI boundary.
+        #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+        #[repr(u32)]
+        pub enum ElementKind {
+            $($variant = $number,)+
+        }
+
+        impl ElementKind {
+            /// Decode the runtime helper's numeric ABI literal without truncation.
+            #[must_use]
+            pub fn from_runtime_number(number: f64) -> Option<Self> {
+                // The ABI uses doubles, but identity is an integer enum code.
+                // Signed zero has one tag; every other encoding stays exact.
+                let bits = match number.to_bits() {
+                    0x8000_0000_0000_0000 => 0,
+                    bits => bits,
+                };
+                match bits {
+                    $(bits if bits == f64::from(Self::$variant).to_bits() => Some(Self::$variant),)+
+                    _ => None,
+                }
+            }
+        }
+
+        impl From<ElementKind> for u32 {
+            fn from(kind: ElementKind) -> Self {
+                kind as Self
+            }
+        }
+
+        impl From<ElementKind> for f64 {
+            fn from(kind: ElementKind) -> Self {
+                Self::from(u32::from(kind))
+            }
+        }
+
+        /// Which runtime view element tag represents this element type.
+        #[must_use]
+        pub fn element_kind(element: &HirType) -> Option<ElementKind> {
+            Some(match element {
+                $($element => ElementKind::$variant,)+
+                _ => return None,
+            })
+        }
+    };
+}
+
+element_kinds! {
+    Int8 = 0 => HirType::Int { bits: 8, signed: true },
+    Uint8 = 1 => HirType::Int { bits: 8, signed: false },
+    Int16 = 3 => HirType::Int { bits: 16, signed: true },
+    Uint16 = 4 => HirType::Int { bits: 16, signed: false },
+    Int32 = 5 => HirType::Int { bits: 32, signed: true },
+    Uint32 = 6 => HirType::Int { bits: 32, signed: false },
+    Float32 = 7 => HirType::Float { bits: 32 },
+    Float64 = 8 => HirType::Float { bits: 64 },
 }
 
 /// Bytes per element, which the kind decides.

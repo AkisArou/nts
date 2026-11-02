@@ -4261,7 +4261,7 @@ fn received_array(snapshot: &SemanticSnapshot, ty: TypeId) -> Option<(Scalar, u3
         HirType::Float { bits: 64 } => Scalar::Double,
         _ => return None,
     };
-    Some((scalar, super::builtin::element_kind(&element)?))
+    Some((scalar, u32::from(super::builtin::element_kind(&element)?)))
 }
 
 /// Whether `ty` is an array of Windows Runtime objects, each perhaps `null`:

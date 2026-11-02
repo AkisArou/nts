@@ -1284,8 +1284,7 @@ fn view_of_class(
 fn view_descriptor(program: &Program, class: nts_core::hir::ClassId) -> Option<String> {
     program
         .view_classes
-        .iter()
-        .find(|view| view.class == class)
+        .get(class)
         .map(|view| format!("@nts_view_desc_{}", view_tag(view)))
 }
 

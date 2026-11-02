@@ -4423,17 +4423,12 @@ fn instance_of(
         // A class extending a typed array has no layout and a descriptor of
         // its own, the view's but for its name.
         .chain(classes.iter().filter_map(|class| {
-            context
-                .program
-                .view_classes
-                .iter()
-                .find(|view| view.class == *class)
-                .map(|view| {
-                    format!(
-                        "nts_is_class({subject}, &{}.descriptor)",
-                        view_descriptor_name(view)
-                    )
-                })
+            context.program.view_classes.get(*class).map(|view| {
+                format!(
+                    "nts_is_class({subject}, &{}.descriptor)",
+                    view_descriptor_name(view)
+                )
+            })
         }))
         .collect();
     if tests.is_empty() {
@@ -6388,12 +6383,7 @@ fn emit_op(
         // into it, unless the allocation failed and there is no view.
         OpKind::ViewOfClass { view, class } => {
             let subject = value_name(*view);
-            let Some(described) = context
-                .program
-                .view_classes
-                .iter()
-                .find(|known| known.class == *class)
-            else {
+            let Some(described) = context.program.view_classes.get(*class) else {
                 return Err(Diagnostic::error(
                     "NTS2009",
                     "a view made as a class this program has no descriptor for",

@@ -15,7 +15,8 @@
 use rustc_hash::FxHashSet;
 
 use super::{
-    BinOp, Block, BlockId, Callee, Func, HirType, OpKind, Program, Terminator, UnOp, ValueId,
+    BinOp, Block, BlockId, Callee, Func, HirType, ManagedType, OpKind, Program, Terminator, UnOp,
+    ValueId,
 };
 
 /// A way the IR was malformed.
@@ -889,51 +890,98 @@ fn check_subscriptions(program: &Program, problems: &mut Vec<Invalid>) {
 /// and naming one of the program's view classes
 /// ([`Invalid::MisplacedViewClass`]).
 fn check_view_classes(program: &Program, problems: &mut Vec<Invalid>) {
+    if !program.view_classes.indexed() {
+        problems.push(Invalid::MisplacedViewClass {
+            func: "<view classes>".to_owned(),
+            reason: "has an inconsistent class index",
+        });
+    }
+    for view in &program.view_classes {
+        if view.base.is_some_and(|base| {
+            program
+                .view_classes
+                .get(base)
+                .is_none_or(|base| base.element != view.element)
+        }) {
+            problems.push(Invalid::MisplacedViewClass {
+                func: view.name.clone(),
+                reason: "has no matching typed-array base class",
+            });
+        }
+    }
     for func in &program.funcs {
         for block in &func.blocks {
+            let mut made = rustc_hash::FxHashMap::default();
+            let mut last_read = rustc_hash::FxHashMap::default();
             for (position, at) in block.ops.iter().enumerate() {
                 let op = &func.values[at.0 as usize];
-                let OpKind::ViewOfClass { view, class } = op.kind else {
-                    continue;
-                };
-                let made_by_view_new = matches!(
-                    &func.values[view.0 as usize].kind,
-                    OpKind::Call {
-                        callee: super::Callee::External(name),
-                        ..
-                    } if name == "nts_view_new"
-                );
-                let made_at = block.ops[..position]
-                    .iter()
-                    .rposition(|earlier| *earlier == view);
-                let read_between = made_at.is_some_and(|made| {
-                    block.ops[made + 1..position].iter().any(|between| {
-                        operands(&func.values[between.0 as usize].kind).contains(&view)
-                    })
-                });
-                let reason = if !program
-                    .view_classes
-                    .iter()
-                    .any(|known| known.class == class)
-                {
-                    Some("names no class extending a typed array")
-                } else if made_at.is_none() {
-                    Some("is not in the block that made its view")
-                } else if read_between {
-                    Some("follows a read of its view since the view was made")
-                } else if !made_by_view_new {
-                    Some("names a view `nts_view_new` did not make")
-                } else if op.ty != HirType::Void {
-                    Some("answers a value")
-                } else {
-                    None
-                };
-                if let Some(reason) = reason {
-                    problems.push(Invalid::MisplacedViewClass {
-                        func: func.name.clone(),
-                        reason,
-                    });
+                if let OpKind::ViewOfClass { view, class } = op.kind {
+                    let made_by_view_new = matches!(
+                        &func.values[view.0 as usize].kind,
+                        OpKind::Call { callee: super::Callee::External(name), .. }
+                            if name == "nts_view_new"
+                    );
+                    let creation_kind_matches = match (
+                        &func.values[view.0 as usize].kind,
+                        &func.values[view.0 as usize].ty,
+                    ) {
+                        (
+                            OpKind::Call { args, .. },
+                            HirType::Managed(ManagedType::View(element)),
+                        ) => {
+                            let kind = args
+                                .get(3)
+                                .and_then(|kind| func.values.get(kind.0 as usize));
+                            match kind.map(|op| &op.kind) {
+                                Some(OpKind::ConstFloat(kind)) => {
+                                    super::builtin::element_kind(element).is_some_and(|expected| {
+                                        super::builtin::ElementKind::from_runtime_number(*kind)
+                                            == Some(expected)
+                                    })
+                                }
+                                _ => false,
+                            }
+                        }
+                        _ => false,
+                    };
+                    let made_at = made.get(&view);
+                    let read_between = made_at
+                        .is_some_and(|made| last_read.get(&view).is_some_and(|read| read > made));
+                    let known = program.view_classes.get(class);
+                    let actual = &func.values[view.0 as usize].ty;
+                    let reason = if known.is_none() {
+                        Some("names no class extending a typed array")
+                    } else if !matches!(actual, HirType::Managed(ManagedType::View(_))) {
+                        Some("names a value that is not a typed-array view")
+                    } else if known.is_some_and(|known| {
+                        !matches!(actual,
+                        HirType::Managed(ManagedType::View(element)) if **element == known.element)
+                    }) {
+                        Some("names a class with a different view element")
+                    } else if made_at.is_none() {
+                        Some("is not in the block that made its view")
+                    } else if read_between {
+                        Some("follows a read of its view since the view was made")
+                    } else if !made_by_view_new {
+                        Some("names a view `nts_view_new` did not make")
+                    } else if !creation_kind_matches {
+                        Some("has a creation kind different from its view element")
+                    } else if op.ty != HirType::Void {
+                        Some("answers a value")
+                    } else {
+                        None
+                    };
+                    if let Some(reason) = reason {
+                        problems.push(Invalid::MisplacedViewClass {
+                            func: func.name.clone(),
+                            reason,
+                        });
+                    }
                 }
+                for operand in operands(&op.kind) {
+                    last_read.insert(operand, position);
+                }
+                made.insert(*at, position);
             }
         }
     }
@@ -3312,6 +3360,10 @@ mod tests {
     /// read the view and is accepted; a read, a call the view is passed to, and
     /// a store of it are each rejected.
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one owned-HIR control exercises the view-class placement and kind negatives"
+    )]
     fn a_view_is_given_its_class_before_anything_reads_it() {
         use crate::hir::{ManagedType, ViewClass};
         use nts_semantic_schema::TypeId;
@@ -3331,10 +3383,25 @@ mod tests {
                 Op {
                     kind: OpKind::Call {
                         callee: Callee::External("nts_view_new".to_owned()),
-                        args: vec![ValueId(0)],
+                        args: vec![ValueId(0), ValueId(2), ValueId(2), ValueId(3), ValueId(4)],
                         frame: None,
                     },
                     ty: view.clone(),
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::ConstFloat(0.0),
+                    ty: HirType::NUMBER,
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::ConstFloat(8.0),
+                    ty: HirType::NUMBER,
+                    origin: origin(),
+                },
+                Op {
+                    kind: OpKind::ConstBool(false),
+                    ty: HirType::Bool,
                     origin: origin(),
                 },
             ];
@@ -3353,8 +3420,10 @@ mod tests {
                 ty: HirType::Void,
                 origin: origin(),
             });
-            let ops = (0..values.len())
-                .map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX)))
+            let ops = [0, 2, 3, 4, 1]
+                .into_iter()
+                .map(ValueId)
+                .chain((5..values.len()).map(|at| ValueId(u32::try_from(at).unwrap_or(u32::MAX))))
                 .collect();
             let mut program = func(
                 values,
@@ -3366,7 +3435,8 @@ mod tests {
                 element: HirType::NUMBER,
                 base: None,
                 species: None,
-            }];
+            }]
+            .into();
             program
         };
         let misplaced = |program: &Program| {
@@ -3377,6 +3447,54 @@ mod tests {
                 .any(|problem| matches!(problem, Invalid::MisplacedViewClass { .. }))
         };
         assert!(!misplaced(&program(None)), "the control must verify");
+        let mut mismatched = program(None);
+        mismatched.view_classes[0].element = HirType::Bool;
+        assert!(
+            misplaced(&mismatched),
+            "the class element must match the actual creation"
+        );
+        let mut non_view = program(None);
+        non_view.funcs[0].values[1].ty = HirType::Managed(ManagedType::Buffer);
+        assert!(
+            misplaced(&non_view),
+            "only an actual view can be given a view class"
+        );
+        let mut wrong_kind = program(None);
+        wrong_kind.funcs[0].values[3].kind = OpKind::ConstFloat(1.0);
+        assert!(
+            misplaced(&wrong_kind),
+            "the helper's runtime element kind must agree too"
+        );
+        for invalid_kind in [f64::NAN, f64::INFINITY, -1.0, 2.0, 8.25, 9.0] {
+            let mut invalid_tag = program(None);
+            invalid_tag.funcs[0].values[3].kind = OpKind::ConstFloat(invalid_kind);
+            assert!(
+                misplaced(&invalid_tag),
+                "non-element ABI literal {invalid_kind} must not acquire a view class"
+            );
+        }
+        let mut zero_kind = program(None);
+        zero_kind.funcs[0].values[3].kind = OpKind::ConstFloat(-0.0);
+        zero_kind.funcs[0].values[1].ty =
+            HirType::Managed(ManagedType::View(Box::new(HirType::Int {
+                bits: 8,
+                signed: true,
+            })));
+        zero_kind.view_classes[0].element = HirType::Int {
+            bits: 8,
+            signed: true,
+        };
+        assert!(
+            !misplaced(&zero_kind),
+            "negative zero encodes the integer tag zero"
+        );
+        let mut renamed = program(None);
+        renamed.view_classes[0].class = TypeId(2);
+        assert!(
+            misplaced(&renamed),
+            "owned metadata cannot hide a stale index"
+        );
+
         assert!(
             !misplaced(&program(Some((OpKind::Release(ValueId(0)), HirType::Void)))),
             "releasing the buffer does not read the view"

@@ -4,13 +4,16 @@ package nts.rt;
  *
  * <p>`floatToRawIntBits`, so a NaN keeps its payload -- `floatToIntBits` canonicalises and node does not. Measured; see `memory.rs`. */
 public class NtsViewF32 extends NtsView {
-    private NtsViewF32(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 2); }
+    protected NtsViewF32(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 2); }
 
-    /** The view {@code fresh}, which nothing has seen yet, made again as a
-     * class extending this typed array -- the compiler's class for
-     * {@code class Bytes extends Uint8Array}, which hands it the view its
-     * construction made. */
-    protected NtsViewF32(NtsViewF32 fresh) { this(fresh.buffer, fresh.offset, fresh.declared); }
+    /** The runtime helper's original arguments, validated without allocating
+     * an intermediate view. Generated subclasses delegate this constructor. */
+    protected NtsViewF32(NtsBuffer buffer, double byteOffset, double length,
+                        double kind, boolean tracking) {
+        this(buffer, NtsBuffer.toIndex(byteOffset, "byteOffset"),
+            tracking ? -1 : NtsBuffer.toIndex(length, "length"));
+        check(buffer, this.offset, this.declared, 4);
+    }
 
     /** The view {@code subarray} and {@code slice} make: of this view's own
      * class, which a class extending a typed array overrides to make its own
@@ -21,17 +24,12 @@ public class NtsViewF32 extends NtsView {
 
     /** Tracks the buffer's length. */
     public static NtsViewF32 over(NtsBuffer buffer, double byteOffset) {
-        int at = NtsBuffer.toIndex(byteOffset, "byteOffset");
-        check(buffer, at, -1, 4);
-        return new NtsViewF32(buffer, at, -1);
+        return new NtsViewF32(buffer, byteOffset, 0, 0, true);
     }
 
     /** A fixed number of elements. */
     public static NtsViewF32 part(NtsBuffer buffer, double byteOffset, double length) {
-        int at = NtsBuffer.toIndex(byteOffset, "byteOffset");
-        int n = NtsBuffer.toIndex(length, "length");
-        check(buffer, at, n, 4);
-        return new NtsViewF32(buffer, at, n);
+        return new NtsViewF32(buffer, byteOffset, length, 0, false);
     }
 
     /** `new Float32Array(n)`: its own buffer, zero filled. */
@@ -55,7 +53,7 @@ public class NtsViewF32 extends NtsView {
      */
     public static NtsViewF32 create(NtsBuffer buffer, double byteOffset, double length,
                             double kind, boolean tracking) {
-        return tracking ? over(buffer, byteOffset) : part(buffer, byteOffset, length);
+        return new NtsViewF32(buffer, byteOffset, length, kind, tracking);
     }
 
     public static NtsViewF32 of(double length) {

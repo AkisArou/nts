@@ -31,6 +31,8 @@ mod boxing;
 pub mod builtin;
 pub mod cfg;
 mod class_sets;
+mod view_classes;
+pub use view_classes::ViewClasses;
 pub mod contents;
 pub mod dce;
 mod destinations;
@@ -3438,7 +3440,7 @@ pub struct Program {
     pub layouts: Vec<Layout>,
     /// The classes extending a typed array that the program makes or tests,
     /// each a descriptor of its own over the view's storage ([`ViewClass`]).
-    pub view_classes: Vec<ViewClass>,
+    pub view_classes: ViewClasses,
     /// The class each constructor copy keyed on a target constructs: a
     /// constructor whose base makes the instance is copied per class that
     /// inherits it, since the instance it makes is that class's

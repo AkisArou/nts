@@ -2,13 +2,16 @@ package nts.rt;
 
 /** `Uint16Array`: 2-byte elements over an {@link NtsBuffer}. */
 public class NtsViewU16 extends NtsView {
-    private NtsViewU16(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 1); }
+    protected NtsViewU16(NtsBuffer buffer, int offset, int declared) { super(buffer, offset, declared, 1); }
 
-    /** The view {@code fresh}, which nothing has seen yet, made again as a
-     * class extending this typed array -- the compiler's class for
-     * {@code class Bytes extends Uint8Array}, which hands it the view its
-     * construction made. */
-    protected NtsViewU16(NtsViewU16 fresh) { this(fresh.buffer, fresh.offset, fresh.declared); }
+    /** The runtime helper's original arguments, validated without allocating
+     * an intermediate view. Generated subclasses delegate this constructor. */
+    protected NtsViewU16(NtsBuffer buffer, double byteOffset, double length,
+                        double kind, boolean tracking) {
+        this(buffer, NtsBuffer.toIndex(byteOffset, "byteOffset"),
+            tracking ? -1 : NtsBuffer.toIndex(length, "length"));
+        check(buffer, this.offset, this.declared, 2);
+    }
 
     /** The view {@code subarray} and {@code slice} make: of this view's own
      * class, which a class extending a typed array overrides to make its own
@@ -19,17 +22,12 @@ public class NtsViewU16 extends NtsView {
 
     /** Tracks the buffer's length. */
     public static NtsViewU16 over(NtsBuffer buffer, double byteOffset) {
-        int at = NtsBuffer.toIndex(byteOffset, "byteOffset");
-        check(buffer, at, -1, 2);
-        return new NtsViewU16(buffer, at, -1);
+        return new NtsViewU16(buffer, byteOffset, 0, 0, true);
     }
 
     /** A fixed number of elements. */
     public static NtsViewU16 part(NtsBuffer buffer, double byteOffset, double length) {
-        int at = NtsBuffer.toIndex(byteOffset, "byteOffset");
-        int n = NtsBuffer.toIndex(length, "length");
-        check(buffer, at, n, 2);
-        return new NtsViewU16(buffer, at, n);
+        return new NtsViewU16(buffer, byteOffset, length, 0, false);
     }
 
     /** `new Uint16Array(n)`: its own buffer, zero filled. */
@@ -53,7 +51,7 @@ public class NtsViewU16 extends NtsView {
      */
     public static NtsViewU16 create(NtsBuffer buffer, double byteOffset, double length,
                             double kind, boolean tracking) {
-        return tracking ? over(buffer, byteOffset) : part(buffer, byteOffset, length);
+        return new NtsViewU16(buffer, byteOffset, length, kind, tracking);
     }
 
     public static NtsViewU16 of(double length) {
