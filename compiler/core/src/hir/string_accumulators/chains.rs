@@ -579,6 +579,35 @@ mod tests {
         );
     }
     #[test]
+    fn helper_continuation_decision_census() {
+        let mut count = 0;
+        for name in hir::runtime::helper_names().chain(["unknown_contract"]) {
+            let mut body = function(
+                "helper",
+                Vec::new(),
+                vec![OpKind::Call {
+                    callee: Callee::External(name.into()),
+                    args: Vec::new(),
+                    frame: None,
+                }],
+                false,
+            );
+            body.blocks[0].terminator = Terminator::Return(None);
+            body.return_type = HirType::Void;
+            body.values[0].ty = HirType::Void;
+            let program = Program {
+                funcs: vec![body],
+                ..Program::default()
+            };
+            let quiet = continuations::quiet(&program, &mut GraphBudget::new(&program))
+                .expect("one helper census fits the graph budget");
+            println!("continuation-helper\t{name}\t{}", quiet.contains("helper"));
+            count += 1;
+        }
+        assert!(count > 400, "the complete helper catalog must be observed");
+    }
+
+    #[test]
     fn transitive_calls_and_helper_effects_cannot_hide_an_exception() {
         let external = |name: &str| {
             let mut func = function(
