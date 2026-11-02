@@ -747,6 +747,113 @@ mod tests {
         );
     }
 
+    fn review_edge_program(args: Vec<ValueId>) -> Program {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let mut body = function(
+            "edge#init".to_owned(),
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::BlockParam(0),
+                OpKind::ConstInt(7),
+            ],
+        );
+        body.values[0].ty = object.clone();
+        body.values[1].ty = object.clone();
+        body.values[2].ty = HirType::NUMBER;
+        body.return_type = object;
+        body.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(2)],
+                terminator: Terminator::Jump {
+                    target: BlockId(1),
+                    args,
+                },
+            },
+            Block {
+                params: vec![ValueId(1)],
+                ops: Vec::new(),
+                terminator: Terminator::Return(Some(ValueId(1))),
+            },
+        ];
+        Program {
+            funcs: vec![body],
+            ..Program::default()
+        }
+    }
+
+    fn review_invalid_edge(args: Vec<ValueId>) {
+        let program = review_edge_program(args);
+        let report = super::super::Analysis::of(&program).into_report();
+        println!(
+            "review-edge\tfailure={:?}\thomes={:?}\tproofs={:?}",
+            report.failure,
+            report
+                .sites
+                .iter()
+                .map(|site| &site.home)
+                .collect::<Vec<_>>(),
+            report.proofs
+        );
+        assert!(matches!(
+            report.failure,
+            Some(Reason::InvalidControlFlow(_))
+        ));
+        assert_eq!(
+            report.sites.len(),
+            1,
+            "the actual allocation inventory stays complete"
+        );
+        assert!(
+            report
+                .sites
+                .iter()
+                .all(|site| matches!(site.home, Home::Heap(_)))
+        );
+        assert!(
+            report
+                .proofs
+                .iter()
+                .all(|proof| proof.bound.starts_with("outside "))
+        );
+    }
+
+    #[test]
+    fn review_edge_missing_argument_cannot_publish_frame_permission() {
+        review_invalid_edge(Vec::new());
+    }
+
+    #[test]
+    fn review_edge_excess_argument_is_not_silently_discarded() {
+        review_invalid_edge(vec![ValueId(0), ValueId(0)]);
+    }
+
+    #[test]
+    fn review_edge_missing_operand_publishes_unknown_without_panicking() {
+        review_invalid_edge(vec![ValueId(99)]);
+    }
+
+    #[test]
+    fn review_edge_incompatible_operand_uses_the_verifiers_type_authority() {
+        review_invalid_edge(vec![ValueId(2)]);
+    }
+
+    #[test]
+    fn review_edge_matching_argument_control_keeps_the_returned_alias() {
+        let program = review_edge_program(vec![ValueId(0)]);
+        let report = super::super::Analysis::of(&program).into_report();
+        assert!(report.failure.is_none());
+        let value = |id| {
+            report
+                .values
+                .iter()
+                .find(|v| v.function == "edge#init" && v.value == id)
+                .expect("both definitions are in the complete inventory")
+        };
+        assert!(!value(0).aliases.is_empty());
+        assert_eq!(value(0).aliases, value(1).aliases);
+    }
+
     fn review_dispatch_body(name: &str, writes: bool, raises: bool) -> Func {
         let receiver = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
         let child = HirType::Managed(ManagedType::Object(super::super::super::TypeId(9)));
