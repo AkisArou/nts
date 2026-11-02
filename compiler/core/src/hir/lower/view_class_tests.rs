@@ -8,6 +8,7 @@ thread_local! {
     static CLASSES: Cell<usize> = const { Cell::new(0) };
     static TARGETS: Cell<usize> = const { Cell::new(0) };
     static ANCESTRY: Cell<usize> = const { Cell::new(0) };
+    static ALIAS_LINKS: Cell<usize> = const { Cell::new(0) };
 }
 pub(super) fn note_class() {
     CLASSES.with(|n| n.set(n.get() + 1));
@@ -17,6 +18,9 @@ pub(super) fn note_target() {
 }
 pub(super) fn note_ancestor() {
     ANCESTRY.with(|n| n.set(n.get() + 1));
+}
+pub(super) fn note_alias_link() {
+    ALIAS_LINKS.with(|n| n.set(n.get() + 1));
 }
 
 #[test]
@@ -232,12 +236,12 @@ fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
     );
 }
 
-#[test]
-fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
+fn alias_proof_population(siblings: bool) -> Vec<(usize, usize, usize, usize)> {
+    let mut reports = Vec::new();
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for count in [16, 64, 256] {
         let dir = std::env::temp_dir().join(format!(
-            "nts-view-alias-proof-{}-{count}",
+            "nts-view-alias-proof-{}-{siblings}-{count}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -245,9 +249,13 @@ fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
         for at in 1..count {
             writeln!(source, "const Alias{at} = Alias{};", at - 1).unwrap();
         }
-        writeln!(source, "class View0 extends Alias{} {{}}", count - 1).unwrap();
-        for at in 1..count {
-            writeln!(source, "class View{at} extends View{} {{}}", at - 1).unwrap();
+        for at in 0..count {
+            let base = if siblings || at == 0 {
+                format!("Alias{}", count - 1)
+            } else {
+                format!("View{}", at - 1)
+            };
+            writeln!(source, "class View{at} extends {base} {{}}").unwrap();
         }
         source.push_str("export function present(n: number): number { return n; }\n");
         std::fs::write(dir.join("main.ts"), source).unwrap();
@@ -274,6 +282,7 @@ fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
             .collect();
         assert_eq!(classes.len(), count);
         ANCESTRY.with(|n| n.set(0));
+        ALIAS_LINKS.with(|n| n.set(0));
         let mut constructors = super::made_instance::ConstructorMemo::new(&probe);
         // Deepest first: one cold path fills every memo row, then all hits.
         for class in classes.into_iter().rev() {
@@ -282,14 +291,36 @@ fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
         }
         let ancestry = ANCESTRY.with(Cell::get);
         let owned = constructors.owned_binding_elements();
+        let alias_links = ALIAS_LINKS.with(Cell::get);
         eprintln!(
-            "alias depth/class chain {count}: ancestry {ancestry}, owned binding elements {owned}"
+            "alias depth/classes {count} siblings={siblings}: ancestry {ancestry}, alias links {alias_links}, owned binding elements {owned}"
         );
-        assert!(ancestry <= count + 1);
-        assert_eq!(
-            owned, count,
-            "the complete alias proof is owned once, independently of memo rows"
-        );
+        reports.push((count, ancestry, alias_links, owned));
         std::fs::remove_dir_all(dir).unwrap();
+    }
+    reports
+}
+
+#[test]
+fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
+    for (count, ancestry, links, owned) in alias_proof_population(false) {
+        assert!(ancestry <= count + 1);
+        assert!(
+            links <= count * 2 + 2,
+            "alias links {links} exceed input at {count}"
+        );
+        assert_eq!(owned, count, "one owned alias proof, not one per class");
+    }
+}
+
+#[test]
+fn a_long_builtin_alias_proof_is_shared_by_sibling_classes() {
+    for (count, ancestry, links, owned) in alias_proof_population(true) {
+        assert!(ancestry <= count + 1);
+        assert!(
+            links <= count * 2 + 2,
+            "alias links {links} exceed input at {count}"
+        );
+        assert_eq!(owned, count, "one owned alias proof, not one per sibling");
     }
 }

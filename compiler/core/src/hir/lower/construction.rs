@@ -71,6 +71,8 @@ impl FuncBuilder<'_> {
             let Some(target) = const_alias_of(self, *declaration) else {
                 return Some(ReferencedValue { symbol, bindings });
             };
+            #[cfg(test)]
+            super::view_class_tests::note_alias_link();
             bindings.push(symbol.0);
             symbol = SymbolId(target);
         }
