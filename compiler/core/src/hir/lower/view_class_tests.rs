@@ -7,12 +7,16 @@ use std::{cell::Cell, fmt::Write as _};
 thread_local! {
     static CLASSES: Cell<usize> = const { Cell::new(0) };
     static TARGETS: Cell<usize> = const { Cell::new(0) };
+    static ANCESTRY: Cell<usize> = const { Cell::new(0) };
 }
 pub(super) fn note_class() {
     CLASSES.with(|n| n.set(n.get() + 1));
 }
 pub(super) fn note_target() {
     TARGETS.with(|n| n.set(n.get() + 1));
+}
+pub(super) fn note_ancestor() {
+    ANCESTRY.with(|n| n.set(n.get() + 1));
 }
 
 #[test]
@@ -102,5 +106,52 @@ fn constructor_target_membership_is_unique_and_published_in_order() {
             (0..count).map(super::TypeId).collect::<Vec<_>>()
         );
         assert_eq!(TARGETS.with(Cell::get), count as usize * 2);
+    }
+}
+
+#[test]
+fn deep_implicit_constructor_ancestry_is_resolved_once() {
+    let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for count in [16, 64, 256] {
+        let dir =
+            std::env::temp_dir().join(format!("nts-view-implicit-{}-{count}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut source = String::from(
+            "class Base extends Uint8Array { constructor(n: number) { super(n); } }\n",
+        );
+        for at in 0..count {
+            let base = if at == 0 {
+                "Base".to_owned()
+            } else {
+                format!("View{}", at - 1)
+            };
+            writeln!(source, "class View{at} extends {base} {{}}\nexport function probe{at}(n: number): boolean {{ return new View{at}((n & 3) + 1) instanceof View{at}; }}").unwrap();
+        }
+        std::fs::write(dir.join("main.ts"), source).unwrap();
+        let config = dir.join("tsconfig.json");
+        std::fs::write(
+            &config,
+            format!("{{\"extends\":\"{root}/tsconfig.fixtures.json\",\"files\":[\"main.ts\"]}}"),
+        )
+        .unwrap();
+        let snapshot = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(camino::Utf8Path::from_path(&config).unwrap())
+            .unwrap();
+        ANCESTRY.with(|n| n.set(0));
+        let lowered = super::lower(&snapshot);
+        assert!(
+            lowered.program.uncompiled.is_empty(),
+            "{:?}",
+            lowered.program.uncompiled
+        );
+        assert_eq!(lowered.program.constructed_as.len(), count);
+        let ancestry = ANCESTRY.with(Cell::get);
+        eprintln!("implicit constructor depth {count}: actual ancestry steps {ancestry}");
+        assert!(
+            ancestry <= count * 4 + 4,
+            "ancestry repeats across implicit subclasses"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
     }
 }

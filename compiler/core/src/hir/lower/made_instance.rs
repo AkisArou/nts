@@ -223,6 +223,8 @@ impl FuncBuilder<'_> {
     pub(super) fn native_constructor_above(&self, class: NodeId) -> Option<NativeConstructor> {
         let mut class = class;
         for _ in 0..self.snapshot.nodes.len() {
+            #[cfg(test)]
+            super::view_class_tests::note_ancestor();
             let base = self.extends_operand(class)?;
             if let Some(global) = self.checked_global_reference(base) {
                 return (global.library == Library::Es)
