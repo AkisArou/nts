@@ -8439,10 +8439,7 @@ fn mark_exact(program: &mut Program, roots: reachable::Roots<'_>) {
 /// Dead parameters and values, after specialization has orphaned them.
 fn collect_orphans(program: &mut Program) {
     for func in &mut program.funcs {
-        // Parameters first: dropping one can be what makes the value feeding
-        // it dead, and that is an operation for the pass below to collect.
-        dce::prune_parameters(func);
-        dce::eliminate(func);
+        dce::collect(func);
     }
 }
 
