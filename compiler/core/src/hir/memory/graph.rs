@@ -336,6 +336,9 @@ enum Event {
 
 #[derive(Debug)]
 pub(super) struct Graph {
+    pub event: Option<super::events::Origin>,
+    pub stores: Vec<super::events::Store>,
+    pub unknown_events: BTreeMap<super::events::Origin, Reason>,
     pub values: Vec<Value>,
     pub objects: Vec<ObjectInfo>,
     twins: Vec<Option<Object>>,
@@ -362,6 +365,9 @@ pub(super) struct Graph {
 impl Graph {
     pub(super) fn new(work_limit: usize, edge_limit: usize) -> Self {
         Self {
+            event: None,
+            stores: Vec::new(),
+            unknown_events: BTreeMap::new(),
             values: Vec::new(),
             objects: vec![ObjectInfo {
                 label: "outside:any-reference".to_owned(),
@@ -716,6 +722,19 @@ impl Graph {
     }
 
     pub(super) fn store(&mut self, base: Node, slot: Slot, from: Node) {
+        let from = if let Some(origin) = self.event {
+            let version = self.node();
+            self.copy(from, version);
+            self.stores.push(super::events::Store {
+                origin,
+                base,
+                slot: slot.clone(),
+                version,
+            });
+            version
+        } else {
+            from
+        };
         self.watch(base, &Watch::Store { slot, from });
     }
 

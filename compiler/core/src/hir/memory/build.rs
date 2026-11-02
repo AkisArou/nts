@@ -8,7 +8,10 @@ use super::super::{
 use super::graph::{Graph, Instance, Node, Object, ObjectInfo, Slot};
 use super::lifetime::{self, Bound, Exposure};
 use super::outcomes;
-use super::report::{Frontier, FunctionSummary, Outcome, Report, Site, SlotFact, Value};
+use super::report::{
+    CaptureWrite, Frontier, FunctionSummary, Outcome, Report, RetainedBytes, Retention, Site,
+    SlotFact, StoreVersion, Value,
+};
 use super::summary::Summary;
 use super::{Home, Limits, Multiplicity, Reason, SiteId, Storage};
 
@@ -111,7 +114,7 @@ mod tests {
             build.contexts.push(context(parent));
             for _ in 0..n {
                 build.contexts.push(context(Effects::default()));
-                build.calls.push((0, build.contexts.len() - 1));
+                build.calls.push((0, build.contexts.len() - 1, ValueId(0)));
             }
             build.contexts[1].effects.writes.insert("late".to_owned());
             build.contexts[1].effects.suspension = true;
@@ -445,6 +448,127 @@ mod tests {
     }
 
     #[test]
+    fn capture_order_reads_the_shared_writer_versions_and_keeps_retained_unknown() {
+        let cell_id = super::super::super::TypeId(super::super::super::SYNTHETIC_CELLS);
+        let env_id = super::super::super::TypeId(super::super::super::SYNTHETIC_CLOSURES);
+        let cell = HirType::Managed(ManagedType::Object(cell_id));
+        let environment = HirType::Managed(ManagedType::Object(env_id));
+        for write_after in [false, true] {
+            for retained in [false, true] {
+                let mut body = function(
+                    "root#init".to_owned(),
+                    vec![
+                        OpKind::ObjectNew { frame: false },
+                        OpKind::ConstInt(1),
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(1),
+                        },
+                        OpKind::ObjectNew { frame: false },
+                        OpKind::FieldSet {
+                            object: ValueId(3),
+                            field: 0,
+                            value: ValueId(0),
+                        },
+                        OpKind::ConstInt(3),
+                        OpKind::FieldSet {
+                            object: ValueId(0),
+                            field: 0,
+                            value: ValueId(5),
+                        },
+                    ],
+                );
+                body.values[0].ty = cell.clone();
+                body.values[3].ty = environment.clone();
+                body.values[1].ty = HirType::NUMBER;
+                body.values[5].ty = HirType::NUMBER;
+                if !write_after {
+                    body.blocks[0].ops = vec![
+                        ValueId(0),
+                        ValueId(1),
+                        ValueId(2),
+                        ValueId(3),
+                        ValueId(5),
+                        ValueId(6),
+                        ValueId(4),
+                    ];
+                }
+                if retained {
+                    body.blocks[0].terminator = Terminator::Return(Some(ValueId(3)));
+                    body.return_type = environment.clone();
+                }
+                let field = |name: &str, ty, readonly| super::super::super::Field {
+                    name: name.into(),
+                    ty,
+                    readonly,
+                    written: None,
+                    declared_by: None,
+                };
+                let program = Program {
+                    funcs: vec![body],
+                    layouts: vec![
+                        Layout {
+                            types: vec![cell_id],
+                            name: "binding".to_owned(),
+                            fields: vec![field("value", HirType::NUMBER, false)],
+                            methods: Vec::new(),
+                            interfaces: Vec::new(),
+                            base: None,
+                        },
+                        Layout {
+                            types: vec![env_id],
+                            name: "environment".to_owned(),
+                            fields: vec![field("captured", cell.clone(), true)],
+                            methods: Vec::new(),
+                            interfaces: Vec::new(),
+                            base: None,
+                        },
+                    ],
+                    ..Program::default()
+                };
+                let report = analyze(&program, Limits::default());
+                assert!(report.failure.is_none(), "{:?}", report.failure);
+                assert_eq!(report.store_versions.len(), 3);
+                assert_eq!(report.captures.len(), 1);
+                let answer = &report.captures[0].later_write;
+                if write_after {
+                    assert!(
+                        matches!(answer, super::super::LaterWrite::MayWrite { .. }),
+                        "{answer:?}"
+                    );
+                } else if retained {
+                    assert!(
+                        matches!(
+                            answer,
+                            super::super::LaterWrite::Unknown(Reason::RetainedEnvironment(_))
+                        ),
+                        "{answer:?}"
+                    );
+                } else {
+                    assert!(
+                        matches!(answer, super::super::LaterWrite::ProvedNone { .. }),
+                        "{answer:?}"
+                    );
+                }
+                assert!(
+                    report
+                        .event_changes
+                        .iter()
+                        .all(|changes| *changes <= report.state_change_limit)
+                );
+                assert!(
+                    report
+                        .store_versions
+                        .iter()
+                        .filter(|store| store.value != 4)
+                        .all(|store| store.payload.has_only(Tags::NUMBER))
+                );
+            }
+        }
+    }
+
+    #[test]
     fn a_shared_dispatch_slot_has_one_target_index_and_preserves_first_seen_order() {
         for n in [16, 64, 256] {
             for closure in [false, true] {
@@ -600,7 +724,7 @@ struct Builder<'p> {
     parameters: Vec<Vec<(ValueId, u32)>>,
     allocations: Vec<Allocation>,
     roots: Vec<(Node, Exposure)>,
-    calls: Vec<(usize, usize)>,
+    calls: Vec<(usize, usize, ValueId)>,
     operations: usize,
     stages: Vec<(String, usize)>,
     cycles: Vec<Result<cfg::CyclicBlocks<'p>, cfg::CfgError>>,
@@ -1140,6 +1264,12 @@ impl<'p> Builder<'p> {
     }
 
     fn opaque(&mut self, context: usize, id: ValueId, args: &[ValueId], label: &str) {
+        self.graph
+            .unknown_events
+            .entry(super::events::Origin { context, value: id })
+            .or_insert_with(|| {
+                Reason::UnsealedWriter(format!("{}:%{}: {label}", self.contexts[context].key, id.0))
+            });
         let op = self.program.funcs[self.contexts[context].function].value(id);
         if matches!(op.kind, OpKind::Call { .. }) {
             if op.ty.is_counted() {
@@ -1248,6 +1378,7 @@ impl<'p> Builder<'p> {
 
     #[allow(clippy::too_many_lines)]
     fn operation(&mut self, context: usize, id: ValueId, repeated: bool) {
+        self.graph.event = Some(super::events::Origin { context, value: id });
         let function = &self.program.funcs[self.contexts[context].function];
         let op = function.value(id);
         let into = self.value(context, id);
@@ -1478,6 +1609,7 @@ impl<'p> Builder<'p> {
                 }
             }
         }
+        self.graph.event = None;
     }
 
     fn call(
@@ -1545,7 +1677,7 @@ impl<'p> Builder<'p> {
                 continue;
             }
             let child = self.context(target, Some(context), Some(id));
-            self.calls.push((context, child));
+            self.calls.push((context, child, id));
             let parameters = self.parameters[target].clone();
             for (parameter, slot) in parameters {
                 if let Some(arg) = args.get(slot as usize) {
@@ -1731,7 +1863,7 @@ impl<'p> Builder<'p> {
 
     fn effects(&mut self) {
         let mut callers = vec![BTreeSet::new(); self.contexts.len()];
-        for &(caller, callee) in &self.calls {
+        for &(caller, callee, _) in &self.calls {
             callers[callee].insert(caller);
         }
         let mut pending: BTreeSet<_> = (0..self.contexts.len()).collect();
@@ -1849,6 +1981,278 @@ impl<'p> Builder<'p> {
             (&a.function, &a.context, a.value).cmp(&(&b.function, &b.context, b.value))
         });
         reports
+    }
+
+    /// Order the same writes recorded by Graph::store, including summary and
+    /// helper stores. This constructs no second alias or writer analysis.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one shared event-index construction and query detachment"
+    )]
+    fn store_order(
+        &mut self,
+        lifetimes: &lifetime::Result,
+    ) -> (Vec<CaptureWrite>, Vec<usize>, usize) {
+        use super::events::{Events, LaterWrite, Origin};
+        let program = self.program;
+        let index_cost = self
+            .contexts
+            .iter()
+            .map(|context| {
+                let function = &program.funcs[context.function];
+                3 * function.blocks.len()
+                    + 3 * function
+                        .blocks
+                        .iter()
+                        .map(|block| block.ops.len())
+                        .sum::<usize>()
+            })
+            .sum::<usize>()
+            .saturating_add(self.allocations.len())
+            .saturating_add(self.calls.len())
+            .saturating_add(3 * self.graph.stores.len());
+        if !self.graph.charge_many(index_cost) {
+            return (Vec::new(), Vec::new(), 0);
+        }
+        let mut allocation_origins: BTreeMap<Origin, Vec<Object>> = BTreeMap::new();
+        for allocation in &self.allocations {
+            if allocation.id.storage != Storage::CallStorage {
+                allocation_origins
+                    .entry(Origin {
+                        context: allocation.context,
+                        value: ValueId(allocation.id.value),
+                    })
+                    .or_default()
+                    .push(allocation.object);
+            }
+        }
+        let mut events = Events::default();
+        let entries: Vec<Vec<_>> = self
+            .contexts
+            .iter()
+            .map(|context| {
+                program.funcs[context.function]
+                    .blocks
+                    .iter()
+                    .map(|_| events.node())
+                    .collect()
+            })
+            .collect();
+        let exits: Vec<_> = self.contexts.iter().map(|_| events.node()).collect();
+        let mut points = BTreeMap::new();
+        let mut links: BTreeMap<Origin, BTreeSet<usize>> = BTreeMap::new();
+        for &(parent, child, value) in &self.calls {
+            links
+                .entry(Origin {
+                    context: parent,
+                    value,
+                })
+                .or_default()
+                .insert(child);
+        }
+        let store_origins: BTreeSet<_> =
+            self.graph.stores.iter().map(|store| store.origin).collect();
+        let mut context_unknown = BTreeMap::new();
+        for (context, info) in self.contexts.iter().enumerate() {
+            let function = &program.funcs[info.function];
+            let Ok(cycle) = &self.cycles[info.function] else {
+                continue;
+            };
+            for (block_index, block) in function.blocks.iter().enumerate() {
+                let mut cursor = entries[context][block_index];
+                for &id in &block.ops {
+                    let op = function.value(id);
+                    let origin = Origin { context, value: id };
+                    let unsealed = outcomes::unsealed(op, &self.by_name, &self.raises)
+                        .map(Reason::MissingOutcome)
+                        .or_else(|| self.graph.unknown_events.get(&origin).cloned());
+                    if let Some(reason) = &unsealed {
+                        context_unknown
+                            .entry(context)
+                            .or_insert_with(|| reason.clone());
+                    }
+                    let allocations: Vec<_> =
+                        if matches!(op.kind, OpKind::ObjectNew { .. } | OpKind::ArrayNew { .. }) {
+                            allocation_origins.get(&origin).cloned().unwrap_or_default()
+                        } else {
+                            Vec::new()
+                        };
+                    if !store_origins.contains(&origin)
+                        && unsealed.is_none()
+                        && allocations.is_empty()
+                        && !matches!(op.kind, OpKind::Call { .. })
+                    {
+                        continue;
+                    }
+                    if !self.graph.charge() {
+                        break;
+                    }
+                    let at = events.node();
+                    events.edge(cursor, at, &mut self.graph);
+                    if let Some(reason) = unsealed {
+                        events.unknown(at, reason);
+                    }
+                    for object in allocations {
+                        events.fresh(at, object);
+                    }
+                    let after = if matches!(op.kind, OpKind::Call { .. }) {
+                        let after = events.node();
+                        if let Some(children) = links.get(&origin) {
+                            for &child in children {
+                                if let Some(entry) = entries[child].first() {
+                                    events.edge(at, *entry, &mut self.graph);
+                                    events.edge(exits[child], after, &mut self.graph);
+                                } else {
+                                    events.unknown(at, Reason::ProducerUnproved);
+                                }
+                            }
+                        } else {
+                            events.edge(at, after, &mut self.graph);
+                        }
+                        after
+                    } else {
+                        at
+                    };
+                    points.insert(origin, after);
+                    cursor = after;
+                }
+                let block_id = BlockId(u32::try_from(block_index).unwrap_or(u32::MAX));
+                if let Some(successors) = cycle.successors(block_id) {
+                    for target in successors {
+                        events.edge(cursor, entries[context][target.0 as usize], &mut self.graph);
+                    }
+                }
+                if matches!(block.terminator, Terminator::Return(_)) {
+                    events.edge(cursor, exits[context], &mut self.graph);
+                }
+            }
+        }
+        for store in &self.graph.stores {
+            let Some(&at) = points.get(&store.origin) else {
+                continue;
+            };
+            if self.graph.values[store.base].objects.is_empty() {
+                events.unknown(
+                    at,
+                    Reason::BindingIdentityUnproved(
+                        "store base has no proved allocation identity".to_owned(),
+                    ),
+                );
+            }
+            for &object in &self.graph.values[store.base].objects {
+                events.write(at, (object, store.slot.clone()));
+            }
+        }
+        events.solve(&mut self.graph);
+        let mut captures = Vec::new();
+        for store in &self.graph.stores {
+            let info = &self.contexts[store.origin.context];
+            let function = &program.funcs[info.function];
+            let op = function.value(store.origin.value);
+            let OpKind::FieldSet {
+                object: environment,
+                value: binding,
+                ..
+            } = &op.kind
+            else {
+                continue;
+            };
+            let HirType::Managed(ManagedType::Object(environment_ty)) =
+                &function.value(*environment).ty
+            else {
+                continue;
+            };
+            if !super::super::is_closure_type(*environment_ty) {
+                continue;
+            }
+            let HirType::Managed(ManagedType::Object(binding_ty)) = &function.value(*binding).ty
+            else {
+                continue;
+            };
+            if !(super::super::SYNTHETIC_CELLS..super::super::SYNTHETIC_OBJC_STATES)
+                .contains(&binding_ty.0)
+            {
+                continue;
+            }
+            let Some(layout) = self.layouts.get(binding_ty).map(|at| &program.layouts[*at]) else {
+                continue;
+            };
+            let Some(slot_index) = layout
+                .fields
+                .iter()
+                .position(|field| field.name == super::super::PropertyKey::from("value"))
+            else {
+                continue;
+            };
+            let Some(slot) = self.field(
+                &function.value(*binding).ty,
+                u32::try_from(slot_index).unwrap_or(u32::MAX),
+            ) else {
+                continue;
+            };
+            let origin = store.origin;
+            let Some(&event) = points.get(&origin) else {
+                continue;
+            };
+            let direct = matches!(function.value(*binding).kind, OpKind::ObjectNew { .. });
+            let object = allocation_origins
+                .get(&Origin {
+                    context: origin.context,
+                    value: *binding,
+                })
+                .and_then(|objects| objects.first())
+                .copied();
+            let later_write = if let Some(failure) = &self.graph.failure {
+                LaterWrite::Unknown(failure.clone())
+            } else if let Some(reason) = context_unknown.get(&origin.context) {
+                LaterWrite::Unknown(reason.clone())
+            } else if !direct || info.fallback || object.is_none() {
+                LaterWrite::Unknown(Reason::BindingIdentityUnproved(
+                    "capture has no direct fresh binding instance".to_owned(),
+                ))
+            } else if let Some(object) = object {
+                let ordered = events.query(event, &(object, slot.clone()), &self.graph);
+                if matches!(ordered, LaterWrite::ProvedNone { .. }) {
+                    let escapes = self.graph.values[store.base].objects.iter().any(|environment|
+                        !matches!(lifetimes.bounds[*environment], Bound::Frame(owner) if owner == origin.context));
+                    if self.graph.is_widened(object) || self.graph.objects[object].open {
+                        LaterWrite::Unknown(Reason::BindingIdentityUnproved(
+                            "binding has merged or open writers".to_owned(),
+                        ))
+                    } else if escapes {
+                        LaterWrite::Unknown(Reason::RetainedEnvironment(
+                            "retained callback entry writer authority is not sealed".to_owned(),
+                        ))
+                    } else {
+                        ordered
+                    }
+                } else {
+                    ordered
+                }
+            } else {
+                unreachable!()
+            };
+            captures.push(CaptureWrite {
+                function: function.name.clone(),
+                context: info.key.clone(),
+                capture: origin.value.0,
+                binding: object.map_or_else(
+                    || format!("%{}", binding.0),
+                    |object| self.graph.label(object),
+                ),
+                slot: format!("{slot:?}"),
+                later_write,
+            });
+        }
+        captures.sort_by(|a, b| {
+            (&a.function, &a.context, a.capture, &a.binding).cmp(&(
+                &b.function,
+                &b.context,
+                b.capture,
+                &b.binding,
+            ))
+        });
+        (captures, events.changes().to_vec(), events.len())
     }
 
     fn frontiers(&mut self) -> Vec<Frontier> {
@@ -1976,6 +2380,10 @@ impl<'p> Builder<'p> {
         let frontiers = self.frontiers();
         self.stages
             .push(("frontiers".to_owned(), self.graph.work - start));
+        let start = self.graph.work;
+        let (captures, event_changes, memory_events) = self.store_order(&lifetimes);
+        self.stages
+            .push(("store-order".to_owned(), self.graph.work - start));
         let unknown = ValueFact::Unknown(Unknown::NotAnalysed);
         let payload = |node: Node| {
             if self.graph.failure.is_some() {
@@ -1998,6 +2406,7 @@ impl<'p> Builder<'p> {
             aliases
         };
         let mut sites = Vec::new();
+        let mut retention_sites: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         for (index, allocation) in self.allocations.iter().enumerate() {
             let context = &self.contexts[allocation.context];
             let mut reasons = site_reasons[index].clone();
@@ -2025,6 +2434,25 @@ impl<'p> Builder<'p> {
                 .zip(context.call)
                 .filter(|_| !context.fallback)
                 .map(|(parent, call)| format!("{}:%{}", self.contexts[parent].key, call.0));
+            let retention_frontier = match &lifetimes.bounds[allocation.object] {
+                Bound::Frame(owner) => format!("frame {}", self.contexts[*owner].key),
+                Bound::Outside(reason) => format!("unknown frontier: {reason:?}"),
+            };
+            retention_sites
+                .entry(retention_frontier.clone())
+                .or_default()
+                .insert(format!(
+                    "{}:%{}:{:?}",
+                    context.key, allocation.id.value, allocation.id.storage
+                ));
+            let bytes_held_to_frontier = RetainedBytes::Unknown {
+                witness: if allocation.repeated {
+                    "no finite live-instance bound; backing and held heap graphs remain included"
+                        .to_owned()
+                } else {
+                    "no sealed target/runtime allocation-footprint witness at this HIR boundary; backing and held heap graphs remain included".to_owned()
+                },
+            };
             sites.push(Site {
                 id: allocation.id.clone(),
                 origin: self.program.funcs[context.function]
@@ -2041,6 +2469,8 @@ impl<'p> Builder<'p> {
                         "{}:%{}: acyclic placed producer in a unique nonreentrant activation",
                         context.key, allocation.id.value) }
                 },
+                retention_frontier,
+                bytes_held_to_frontier,
                 home,
                 obligations: reasons.into_iter().collect(),
                 candidate_owner,
@@ -2120,6 +2550,27 @@ impl<'p> Builder<'p> {
             })
             .collect();
         slots.sort_by(|a, b| (&a.owner, &a.slot).cmp(&(&b.owner, &b.slot)));
+        let store_versions = self
+            .graph
+            .stores
+            .iter()
+            .map(|store| {
+                let context = &self.contexts[store.origin.context];
+                StoreVersion {
+                    function: self.program.funcs[context.function].name.clone(),
+                    context: context.key.clone(),
+                    value: store.origin.value.0,
+                    version: store.version,
+                    aliases: aliases(store.version),
+                    payload: payload(store.version),
+                    slot: format!("{:?}", store.slot),
+                }
+            })
+            .collect();
+        let retentions = retention_sites.into_iter().map(|(frontier,sites)| Retention {
+            frontier, sites: sites.into_iter().collect(),
+            bytes: RetainedBytes::Unknown { witness: "complete target footprint, live-instance and held-graph bound is not sealed".to_owned() },
+        }).collect();
         Report {
             sites,
             values,
@@ -2127,6 +2578,11 @@ impl<'p> Builder<'p> {
             functions,
             frontiers,
             outcomes,
+            captures,
+            store_versions,
+            retentions,
+            event_changes,
+            memory_events,
             proofs: lifetimes.proofs,
             alias_classes: self.graph.classes(),
             operations: self.operations,

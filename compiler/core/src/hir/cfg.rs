@@ -47,6 +47,7 @@ impl std::error::Error for CfgError {}
 pub struct CyclicBlocks<'func> {
     _func: &'func Func,
     members: Vec<bool>,
+    successors: Vec<Vec<BlockId>>,
 }
 
 impl CyclicBlocks<'_> {
@@ -56,10 +57,17 @@ impl CyclicBlocks<'_> {
     pub fn is_cyclic(&self, block: BlockId) -> Option<bool> {
         self.members.get(block.0 as usize).copied()
     }
+
+    /// Validated outgoing edges for a block in this exact CFG snapshot.
+    /// `None` means the block ID is outside this CFG.
+    #[must_use]
+    pub fn successors(&self, block: BlockId) -> Option<&[BlockId]> {
+        self.successors.get(block.0 as usize).map(Vec::as_slice)
+    }
 }
 
-/// Build and validate the CFG in O(blocks + placed operations + edges), then
-/// compute SCC membership in O(blocks + edges) time and space.
+/// Build, validate, and retain the CFG in O(blocks + placed operations + edges),
+/// then compute SCC membership in O(blocks + edges) time and space.
 ///
 /// A block is cyclic iff it belongs to a multi-node strongly connected
 /// component or has a self-edge. Invalid successor IDs fail the whole query;
@@ -67,7 +75,7 @@ impl CyclicBlocks<'_> {
 /// non-repetition proof.
 pub fn cyclic_blocks(func: &Func) -> Result<CyclicBlocks<'_>, CfgError> {
     let count = func.blocks.len();
-    let mut successors = vec![Vec::new(); count];
+    let mut successors: Vec<Vec<BlockId>> = vec![Vec::new(); count];
     let mut predecessors = vec![Vec::new(); count];
     for (at, block) in func.blocks.iter().enumerate() {
         let from = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
@@ -95,7 +103,7 @@ pub fn cyclic_blocks(func: &Func) -> Result<CyclicBlocks<'_>, CfgError> {
                     to: target,
                 }));
             }
-            successors[at].push(target_index);
+            successors[at].push(target);
             predecessors[target_index].push(at);
         }
     }
@@ -103,12 +111,13 @@ pub fn cyclic_blocks(func: &Func) -> Result<CyclicBlocks<'_>, CfgError> {
     Ok(CyclicBlocks {
         _func: func,
         members: cycle_members(&successors, &predecessors),
+        successors,
     })
 }
 
 /// Iterative Kosaraju SCC pass in O(blocks + edges); iterative traversal also
 /// handles very deep CFGs.
-fn cycle_members(successors: &[Vec<usize>], predecessors: &[Vec<usize>]) -> Vec<bool> {
+fn cycle_members(successors: &[Vec<BlockId>], predecessors: &[Vec<usize>]) -> Vec<bool> {
     let count = successors.len();
     debug_assert_eq!(predecessors.len(), count);
 
@@ -122,7 +131,7 @@ fn cycle_members(successors: &[Vec<usize>], predecessors: &[Vec<usize>]) -> Vec<
         let mut stack = vec![(root, 0_usize)];
         while let Some(&(node, edge)) = stack.last() {
             if edge < successors[node].len() {
-                let next = successors[node][edge];
+                let next = successors[node][edge].0 as usize;
                 stack.last_mut().expect("nonempty DFS stack").1 += 1;
                 if !visited[next] {
                     visited[next] = true;
@@ -154,7 +163,10 @@ fn cycle_members(successors: &[Vec<usize>], predecessors: &[Vec<usize>]) -> Vec<
                 }
             }
         }
-        let is_cycle = members.len() > 1 || successors[root].contains(&root);
+        let is_cycle = members.len() > 1
+            || successors[root]
+                .iter()
+                .any(|target| target.0 as usize == root);
         if is_cycle {
             for node in members {
                 cyclic[node] = true;
@@ -250,6 +262,8 @@ mod tests {
             ]
         );
         assert_eq!(cyclic.is_cyclic(BlockId(6)), None);
+        assert_eq!(cyclic.successors(BlockId(0)), Some(&[BlockId(1)][..]));
+        assert_eq!(cyclic.successors(BlockId(6)), None);
     }
 
     #[test]
@@ -297,10 +311,53 @@ mod tests {
             cyclic_blocks(&func).unwrap().is_cyclic(BlockId(0)),
             Some(false)
         );
+        assert_eq!(
+            cyclic_blocks(&func).unwrap().successors(BlockId(0)),
+            Some(&[][..])
+        );
         func.blocks[0].ops.push(ValueId(0));
         let cyclic = cyclic_blocks(&func).unwrap();
         assert_eq!(cyclic.is_cyclic(BlockId(0)), Some(true));
         assert_eq!(cyclic.is_cyclic(BlockId(1)), Some(true));
+        assert_eq!(cyclic.successors(BlockId(0)), Some(&[BlockId(1)][..]));
+        assert_eq!(cyclic.successors(BlockId(1)), Some(&[BlockId(0)][..]));
+    }
+
+    #[test]
+    fn successors_preserve_terminator_order_and_duplicate_edges() {
+        let mut func = func(vec![
+            Terminator::Branch {
+                cond: ValueId(0),
+                then_target: BlockId(1),
+                then_args: Vec::new(),
+                else_target: BlockId(2),
+                else_args: Vec::new(),
+            },
+            Terminator::Return(None),
+            Terminator::Return(None),
+        ]);
+        func.values.push(Op {
+            kind: OpKind::Await {
+                promise: ValueId(0),
+                rejects_to: Some(Rejection {
+                    handler: BlockId(2),
+                    args: Vec::new(),
+                    reason_at: 0,
+                }),
+            },
+            ty: HirType::Void,
+            origin: Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            }),
+        });
+        func.blocks[0].ops.push(ValueId(0));
+
+        let cfg = cyclic_blocks(&func).unwrap();
+        assert_eq!(
+            cfg.successors(BlockId(0)),
+            Some(&[BlockId(1), BlockId(2), BlockId(2)][..])
+        );
     }
 
     #[test]

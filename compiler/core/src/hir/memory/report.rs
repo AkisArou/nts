@@ -9,6 +9,8 @@ pub struct Site {
     pub origin: nts_semantic_schema::Origin,
     pub context: String,
     pub multiplicity: Multiplicity,
+    pub retention_frontier: String,
+    pub bytes_held_to_frontier: RetainedBytes,
     pub home: Home,
     /// All unsealed obligations, even when another reason selects the home.
     pub obligations: Vec<Reason>,
@@ -61,6 +63,43 @@ pub struct Frontier {
     pub ends: Result<Vec<String>, String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct StoreVersion {
+    pub function: String,
+    pub context: String,
+    pub value: u32,
+    pub version: usize,
+    pub aliases: Vec<String>,
+    pub payload: ValueFact,
+    pub slot: String,
+}
+
+#[derive(Debug, Clone)]
+pub struct CaptureWrite {
+    pub function: String,
+    pub context: String,
+    pub capture: u32,
+    pub binding: String,
+    pub slot: String,
+    pub later_write: super::LaterWrite,
+}
+
+/// Bytes include backing storage and transitively held heap graphs. An
+/// unavailable target/runtime footprint is Unknown, never an invented quota.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum RetainedBytes {
+    Bound { bytes: u64, witness: String },
+    Unknown { witness: String },
+}
+
+#[derive(Debug, Clone)]
+pub struct Retention {
+    pub frontier: String,
+    /// One row per source site/context, with shared sites counted once here.
+    pub sites: Vec<String>,
+    pub bytes: RetainedBytes,
+}
+
 /// An operation whose escaping outcome has no complete HIR successor.
 /// Its unknown payload and every live-before reference reach the same root.
 #[derive(Debug, Clone)]
@@ -92,6 +131,11 @@ pub struct Report {
     pub functions: Vec<FunctionSummary>,
     pub frontiers: Vec<Frontier>,
     pub outcomes: Vec<Outcome>,
+    pub store_versions: Vec<StoreVersion>,
+    pub captures: Vec<CaptureWrite>,
+    pub retentions: Vec<Retention>,
+    pub memory_events: usize,
+    pub event_changes: Vec<usize>,
     pub proofs: Vec<Proof>,
     pub alias_classes: Vec<(String, Vec<String>)>,
     pub operations: usize,
@@ -116,7 +160,7 @@ impl Report {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "memory-v1\tops={}\tcontexts={}\tnodes={}\twork={}/{}\tedges={}/{}\tfailure={:?}",
+            "memory-v2\tops={}\tcontexts={}\tnodes={}\twork={}/{}\tedges={}/{}\tfailure={:?}",
             self.operations,
             self.contexts,
             self.nodes,
@@ -133,6 +177,13 @@ impl Report {
             self.state_changes.iter().max().unwrap_or(&0),
             self.state_change_limit
         );
+        let _ = writeln!(
+            out,
+            "memory-events\tnodes={}\tmax-changes={}\tlimit={}",
+            self.memory_events,
+            self.event_changes.iter().max().unwrap_or(&0),
+            self.state_change_limit
+        );
         for (node, changes) in self.state_changes.iter().enumerate() {
             let _ = writeln!(out, "node-changes\t{node}\t{changes}");
         }
@@ -142,7 +193,7 @@ impl Report {
         for site in &self.sites {
             let _ = writeln!(
                 out,
-                "site\t{:?}\t%{}\t{:?}\t{:?}\t{:?}\t{:?}\tlegacy={:?}\towner={:?}\tobligations={:?}\twitness={:?}\torigin={:?}",
+                "site\t{:?}\t%{}\t{:?}\t{:?}\t{:?}\t{:?}\tlegacy={:?}\towner={:?}\tobligations={:?}\twitness={:?}\torigin={:?}\tretention={:?}\theld-bytes={:?}",
                 site.id.function,
                 site.id.value,
                 site.id.storage,
@@ -153,7 +204,9 @@ impl Report {
                 site.candidate_owner,
                 site.obligations,
                 site.witness,
-                site.origin
+                site.origin,
+                site.retention_frontier,
+                site.bytes_held_to_frontier
             );
         }
         for function in &self.functions {
@@ -169,6 +222,38 @@ impl Report {
                 function.may_suspend,
                 function.may_reenter,
                 function.unknown_effects
+            );
+        }
+        for store in &self.store_versions {
+            let _ = writeln!(
+                out,
+                "store-version\t{:?}\t{:?}\t%{}\t{}\t{:?}\t{:?}\t{:?}",
+                store.function,
+                store.context,
+                store.value,
+                store.version,
+                store.slot,
+                store.aliases,
+                store.payload
+            );
+        }
+        for capture in &self.captures {
+            let _ = writeln!(
+                out,
+                "capture-write\t{:?}\t{:?}\t%{}\t{:?}\t{:?}\t{:?}",
+                capture.function,
+                capture.context,
+                capture.capture,
+                capture.binding,
+                capture.slot,
+                capture.later_write
+            );
+        }
+        for retention in &self.retentions {
+            let _ = writeln!(
+                out,
+                "retention\t{:?}\t{:?}\t{:?}",
+                retention.frontier, retention.sites, retention.bytes
             );
         }
         for outcome in &self.outcomes {

@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use super::{Memory, OpKind, Program};
 
 mod build;
+mod events;
 mod graph;
 mod lifetime;
 mod outcomes;
@@ -17,7 +18,11 @@ mod report;
 mod summary;
 
 pub use super::regions::placement::Storage;
-pub use report::{Frontier, FunctionSummary, Outcome, Proof, Report, Site, SlotFact, Value};
+pub use events::LaterWrite;
+pub use report::{
+    CaptureWrite, Frontier, FunctionSummary, Outcome, Proof, Report, RetainedBytes, Retention,
+    Site, SlotFact, StoreVersion, Value,
+};
 
 #[cfg(test)]
 std::thread_local! {
@@ -84,6 +89,10 @@ pub enum Reason {
     ManualStorage,
     ProducerUnproved,
     WeakUnionBudget,
+    StoreOrderBudget,
+    UnsealedWriter(String),
+    BindingIdentityUnproved(String),
+    RetainedEnvironment(String),
     MissingOutcome(String),
     InvalidControlFlow(String),
 }
