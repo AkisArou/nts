@@ -249,7 +249,7 @@ mod tests {
     #[test]
     fn event_versions_widen_once_with_bounded_changes_and_linear_work() {
         for n in [16, 32, 64] {
-            let mut graph = Graph::new(100000, 10000);
+            let mut graph = Graph::new(100_000, 10_000);
             let mut events = Events::default();
             let nodes: Vec<_> = (0..n).map(|_| events.node()).collect();
             for (at, &node) in nodes.iter().enumerate() {

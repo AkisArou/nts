@@ -234,7 +234,7 @@ mod tests {
                     .outcomes
                     .iter()
                     .find(|outcome| outcome.function == "caller#init" && outcome.value == 3)
-                    .unwrap();
+                    .expect("the missing-edge call has an outcome fence");
                 assert!(fence.live.contains(&0));
                 assert!(
                     !fence.live.contains(&1),
@@ -329,7 +329,7 @@ mod tests {
             .values
             .iter()
             .find(|value| value.function == "recursive" && value.value == 0)
-            .unwrap();
+            .expect("the recursive producer is in the complete inventory");
         assert!(value.aliases.iter().any(|alias| alias.ends_with(":recent")));
         assert!(value.aliases.iter().any(|alias| alias.ends_with(":older")));
     }
@@ -448,6 +448,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "one capture-order cross product over writes and retention"
+    )]
     fn capture_order_reads_the_shared_writer_versions_and_keeps_retained_unknown() {
         let cell_id = super::super::super::TypeId(super::super::super::SYNTHETIC_CELLS);
         let env_id = super::super::super::TypeId(super::super::super::SYNTHETIC_CLOSURES);
@@ -677,7 +681,11 @@ mod tests {
         );
         for site in &report.sites {
             for witness in &site.witness {
-                let at: usize = witness.strip_prefix("proof ").unwrap().parse().unwrap();
+                let at: usize = witness
+                    .strip_prefix("proof ")
+                    .expect("site witness names a proof")
+                    .parse()
+                    .expect("proof ordinal is numeric");
                 assert!(report.proofs[at].bound.starts_with("outside "));
             }
         }
@@ -781,7 +789,8 @@ mod tests {
             body.blocks[0].ops.push(ValueId(3));
         }
         if raises {
-            let id = ValueId(u32::try_from(body.values.len()).unwrap());
+            let id =
+                ValueId(u32::try_from(body.values.len()).expect("fixture value index fits HIR"));
             body.values.push(Op {
                 kind: OpKind::Call {
                     callee: Callee::External("nts_raise".to_owned()),
@@ -888,7 +897,7 @@ mod tests {
                     .values
                     .iter()
                     .find(|v| v.function == "root#init" && v.value == id)
-                    .unwrap()
+                    .expect("the caller value is in the complete inventory")
             };
             println!(
                 "dispatch-default\texplicit={explicit_row}\tother={other_row}\traises={raises}\tcall={:?}\tstored={:?}",
