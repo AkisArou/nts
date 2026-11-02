@@ -1,6 +1,6 @@
 //! Shared facts about the control-flow graph of one HIR function.
 
-use super::{BlockId, Func};
+use super::{BlockId, Func, OpKind, ValueId};
 
 /// A malformed successor prevents publishing a repetition proof.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -11,17 +11,33 @@ pub struct InvalidSuccessor {
     pub to: BlockId,
 }
 
-impl std::fmt::Display for InvalidSuccessor {
+/// Why a CFG query could not publish a complete graph.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CfgError {
+    /// A terminator or placed Await names a block outside the function.
+    InvalidSuccessor(InvalidSuccessor),
+    /// A placed operation ID does not resolve in the function's value arena.
+    InvalidPlacedOperation { block: BlockId, value: ValueId },
+}
+
+impl std::fmt::Display for CfgError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            formatter,
-            "CFG edge from block {} targets missing block {}",
-            self.from.0, self.to.0
-        )
+        match self {
+            Self::InvalidSuccessor(edge) => write!(
+                formatter,
+                "CFG edge from block {} targets missing block {}",
+                edge.from.0, edge.to.0
+            ),
+            Self::InvalidPlacedOperation { block, value } => write!(
+                formatter,
+                "block {} places missing operation value {}",
+                block.0, value.0
+            ),
+        }
     }
 }
 
-impl std::error::Error for InvalidSuccessor {}
+impl std::error::Error for CfgError {}
 
 /// Cyclic-block membership for the exact borrowed function revision.
 ///
@@ -42,24 +58,42 @@ impl CyclicBlocks<'_> {
     }
 }
 
-/// Compute cyclic-block membership in O(V + E) time and space.
+/// Build and validate the CFG in O(blocks + placed operations + edges), then
+/// compute SCC membership in O(blocks + edges) time and space.
 ///
 /// A block is cyclic iff it belongs to a multi-node strongly connected
 /// component or has a self-edge. Invalid successor IDs fail the whole query;
 /// omitting an edge could otherwise turn malformed input into a false
 /// non-repetition proof.
-pub fn cyclic_blocks(func: &Func) -> Result<CyclicBlocks<'_>, InvalidSuccessor> {
+pub fn cyclic_blocks(func: &Func) -> Result<CyclicBlocks<'_>, CfgError> {
     let count = func.blocks.len();
     let mut successors = vec![Vec::new(); count];
     let mut predecessors = vec![Vec::new(); count];
     for (at, block) in func.blocks.iter().enumerate() {
-        for target in block.terminator.successors() {
+        let from = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+        let mut targets = block.terminator.successors();
+        for value in &block.ops {
+            let Some(op) = func.values.get(value.0 as usize) else {
+                return Err(CfgError::InvalidPlacedOperation {
+                    block: from,
+                    value: *value,
+                });
+            };
+            if let OpKind::Await {
+                rejects_to: Some(rejection),
+                ..
+            } = &op.kind
+            {
+                targets.push(rejection.handler);
+            }
+        }
+        for target in targets {
             let target_index = target.0 as usize;
             if target_index >= count {
-                return Err(InvalidSuccessor {
-                    from: BlockId(u32::try_from(at).unwrap_or(u32::MAX)),
+                return Err(CfgError::InvalidSuccessor(InvalidSuccessor {
+                    from,
                     to: target,
-                });
+                }));
             }
             successors[at].push(target_index);
             predecessors[target_index].push(at);
@@ -72,7 +106,8 @@ pub fn cyclic_blocks(func: &Func) -> Result<CyclicBlocks<'_>, InvalidSuccessor> 
     })
 }
 
-/// Iterative Kosaraju SCC pass; iterative traversal also handles very deep CFGs.
+/// Iterative Kosaraju SCC pass in O(blocks + edges); iterative traversal also
+/// handles very deep CFGs.
 fn cycle_members(successors: &[Vec<usize>], predecessors: &[Vec<usize>]) -> Vec<bool> {
     let count = successors.len();
     debug_assert_eq!(predecessors.len(), count);
@@ -133,7 +168,7 @@ fn cycle_members(successors: &[Vec<usize>], predecessors: &[Vec<usize>]) -> Vec<
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::hir::{Absent, Block, HirType, Terminator};
+    use crate::hir::{Absent, Block, HirType, Op, Rejection, Terminator};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
@@ -225,9 +260,86 @@ mod tests {
         }]);
         assert!(matches!(
             cyclic_blocks(&func),
-            Err(InvalidSuccessor {
+            Err(CfgError::InvalidSuccessor(InvalidSuccessor {
                 from: BlockId(0),
                 to: BlockId(1)
+            }))
+        ));
+    }
+
+    #[test]
+    fn placed_await_rejection_is_a_cfg_edge() {
+        let mut func = func(vec![
+            Terminator::Return(None),
+            Terminator::Jump {
+                target: BlockId(0),
+                args: Vec::new(),
+            },
+        ]);
+        func.values.push(Op {
+            kind: OpKind::Await {
+                promise: ValueId(0),
+                rejects_to: Some(Rejection {
+                    handler: BlockId(1),
+                    args: Vec::new(),
+                    reason_at: 0,
+                }),
+            },
+            ty: HirType::Void,
+            origin: Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            }),
+        });
+        // An operation only contributes its exceptional edge when placed in
+        // the block; dead values in the arena are not CFG edges.
+        assert_eq!(
+            cyclic_blocks(&func).unwrap().is_cyclic(BlockId(0)),
+            Some(false)
+        );
+        func.blocks[0].ops.push(ValueId(0));
+        let cyclic = cyclic_blocks(&func).unwrap();
+        assert_eq!(cyclic.is_cyclic(BlockId(0)), Some(true));
+        assert_eq!(cyclic.is_cyclic(BlockId(1)), Some(true));
+    }
+
+    #[test]
+    fn invalid_await_handler_fails_the_query() {
+        let mut func = func(vec![Terminator::Return(None)]);
+        func.values.push(Op {
+            kind: OpKind::Await {
+                promise: ValueId(0),
+                rejects_to: Some(Rejection {
+                    handler: BlockId(1),
+                    args: Vec::new(),
+                    reason_at: 0,
+                }),
+            },
+            ty: HirType::Void,
+            origin: Origin::source(Location {
+                file: SourceId(0),
+                span: Span::new(0, 1),
+            }),
+        });
+        func.blocks[0].ops.push(ValueId(0));
+        assert!(matches!(
+            cyclic_blocks(&func),
+            Err(CfgError::InvalidSuccessor(InvalidSuccessor {
+                from: BlockId(0),
+                to: BlockId(1)
+            }))
+        ));
+    }
+
+    #[test]
+    fn invalid_placed_operation_fails_the_query() {
+        let mut func = func(vec![Terminator::Return(None)]);
+        func.blocks[0].ops.push(ValueId(1));
+        assert!(matches!(
+            cyclic_blocks(&func),
+            Err(CfgError::InvalidPlacedOperation {
+                block: BlockId(0),
+                value: ValueId(1)
             })
         ));
     }

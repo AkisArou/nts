@@ -12,11 +12,12 @@ use super::{Memory, OpKind, Program};
 mod build;
 mod graph;
 mod lifetime;
+mod outcomes;
 mod report;
 mod summary;
 
 pub use super::regions::placement::Storage;
-pub use report::{Frontier, FunctionSummary, Proof, Report, Site, SlotFact, Value};
+pub use report::{Frontier, FunctionSummary, Outcome, Proof, Report, Site, SlotFact, Value};
 
 #[cfg(test)]
 std::thread_local! {
@@ -83,6 +84,8 @@ pub enum Reason {
     ManualStorage,
     ProducerUnproved,
     WeakUnionBudget,
+    MissingOutcome(String),
+    InvalidControlFlow(String),
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

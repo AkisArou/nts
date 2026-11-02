@@ -404,6 +404,20 @@ impl Graph {
         true
     }
 
+    /// Charge a known scan before allocating its result. An optional analysis
+    /// publishes no partial facts when even one dependency is unfinished.
+    pub(super) fn charge_many(&mut self, units: usize) -> bool {
+        if self.failure.is_some() {
+            return false;
+        }
+        if units > self.work_limit.saturating_sub(self.work) {
+            self.failure = Some(Reason::WorkBudget);
+            return false;
+        }
+        self.work += units;
+        true
+    }
+
     pub(super) fn node(&mut self) -> Node {
         let id = self.values.len();
         self.values.push(Value::default());

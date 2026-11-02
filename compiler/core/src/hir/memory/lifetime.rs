@@ -20,6 +20,7 @@ pub(super) enum Exposure {
     Returned(usize),
     Outside(String),
     Collector,
+    Unknown(Reason),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -157,6 +158,7 @@ pub(super) fn analyze(
         let bound = match exposure {
             Exposure::Outside(why) => Bound::Outside(Reason::Outside(why.clone())),
             Exposure::Collector => Bound::Outside(Reason::RuntimeRootContract),
+            Exposure::Unknown(why) => Bound::Outside(why.clone()),
             Exposure::Returned(at) if contexts[*at].fallback => {
                 Bound::Outside(Reason::ContextBudget)
             }

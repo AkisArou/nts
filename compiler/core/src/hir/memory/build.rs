@@ -2,12 +2,13 @@ use std::collections::{BTreeMap, BTreeSet, VecDeque};
 
 use super::super::contents::{Tags, Unknown, ValueFact};
 use super::super::{
-    BinOp, BlockId, Callee, HirType, ManagedType, OpKind, Program, Terminator, ValueId, facts,
+    BinOp, BlockId, Callee, HirType, ManagedType, OpKind, Program, Terminator, ValueId, cfg, facts,
     reachable, regions, verify,
 };
 use super::graph::{Graph, Instance, Node, Object, ObjectInfo, Slot};
 use super::lifetime::{self, Bound, Exposure};
-use super::report::{Frontier, FunctionSummary, Report, Site, SlotFact, Value};
+use super::outcomes;
+use super::report::{Frontier, FunctionSummary, Outcome, Report, Site, SlotFact, Value};
 use super::summary::Summary;
 use super::{Home, Limits, Multiplicity, Reason, SiteId, Storage};
 
@@ -154,6 +155,134 @@ mod tests {
     }
 
     #[test]
+    fn missing_outcomes_root_live_before_references_and_their_held_graph() {
+        for may_raise in [false, true] {
+            let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+            let mut caller = function(
+                "caller#init".to_owned(),
+                vec![
+                    OpKind::ObjectNew { frame: false },
+                    OpKind::ObjectNew { frame: false },
+                    OpKind::FieldSet {
+                        object: ValueId(0),
+                        field: 0,
+                        value: ValueId(1),
+                    },
+                    OpKind::Call {
+                        callee: Callee::Direct("ordinary".to_owned()),
+                        args: Vec::new(),
+                        frame: None,
+                    },
+                    OpKind::FieldGet {
+                        object: ValueId(0),
+                        field: 0,
+                    },
+                ],
+            );
+            for at in [0, 1, 4] {
+                caller.values[at].ty = object.clone();
+            }
+            let kinds = if may_raise {
+                vec![OpKind::Call {
+                    callee: Callee::External("nts_raise".to_owned()),
+                    args: Vec::new(),
+                    frame: None,
+                }]
+            } else {
+                Vec::new()
+            };
+            // Same ordinary name and void return type in both programs. Only
+            // the actual placed body supplies (or defeats) NoRaise evidence.
+            let ordinary = function("ordinary".to_owned(), kinds);
+            let program = Program {
+                funcs: vec![caller, ordinary],
+                layouts: vec![Layout {
+                    types: vec![super::super::super::TypeId(7)],
+                    name: "held".to_owned(),
+                    interfaces: Vec::new(),
+                    base: None,
+                    methods: Vec::new(),
+                    fields: vec![super::super::super::Field {
+                        name: super::super::super::PropertyKey::from("child"),
+                        ty: object,
+                        readonly: false,
+                        written: None,
+                        declared_by: None,
+                    }],
+                }],
+                ..Program::default()
+            };
+            let report = analyze(&program, Limits::default());
+            assert!(report.failure.is_none(), "{:?}", report.failure);
+            let sites: Vec<_> = report
+                .sites
+                .iter()
+                .filter(|site| site.id.function == "caller#init")
+                .collect();
+            assert_eq!(sites.len(), 2);
+            if may_raise {
+                assert!(sites.iter().all(|site| {
+                    site.obligations
+                        .iter()
+                        .any(|why| matches!(why, Reason::MissingOutcome(_)))
+                }));
+                let fence = report
+                    .outcomes
+                    .iter()
+                    .find(|outcome| outcome.function == "caller#init" && outcome.value == 3)
+                    .unwrap();
+                assert!(fence.live.contains(&0));
+                assert!(
+                    !fence.live.contains(&1),
+                    "held graph is rooted transitively, not by a last local use"
+                );
+                assert!(
+                    report
+                        .proofs
+                        .iter()
+                        .any(|proof| proof.object == fence.payload)
+                );
+            } else {
+                assert!(sites.iter().all(|site| site.home == Home::Frame));
+                assert!(report.outcomes.is_empty());
+            }
+        }
+    }
+
+    #[test]
+    fn missing_outcomes_include_last_use_operands() {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let mut caller = function(
+            "caller#init".to_owned(),
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::Call {
+                    callee: Callee::External("nts_raise".to_owned()),
+                    args: vec![ValueId(0)],
+                    frame: None,
+                },
+            ],
+        );
+        caller.values[0].ty = object;
+        let report = analyze(
+            &Program {
+                funcs: vec![caller],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none());
+        assert_eq!(report.outcomes.len(), 1);
+        assert_eq!(report.outcomes[0].live, [0]);
+        assert!(
+            report.sites[0]
+                .obligations
+                .iter()
+                .any(|why| matches!(why, Reason::MissingOutcome(_)))
+        );
+    }
+
+    #[test]
     fn a_shared_dispatch_slot_has_one_target_index_and_preserves_first_seen_order() {
         for n in [16, 64, 256] {
             for closure in [false, true] {
@@ -209,7 +338,7 @@ mod tests {
                     );
                     let calls = CallGraph::of(&program);
                     assert_eq!(calls.index_edges, n + 1 + usize::from(cyclic));
-                    assert!(calls.work <= 8 * n + 8, "n={n}: {}", calls.work);
+                    assert!(calls.work <= 20 * n + 32, "n={n}: {}", calls.work);
                     assert_eq!(calls.recursive.contains(&0), cyclic);
                     assert_eq!(calls.recursive.contains(&1), cyclic);
                     assert!(calls.recursive.iter().all(|at| *at <= 1));
@@ -301,6 +430,7 @@ struct Builder<'p> {
     reference_layouts: Vec<bool>,
     components: Vec<usize>,
     recursive: BTreeSet<usize>,
+    raises: Vec<bool>,
     globals: Vec<Node>,
     globals_opened: bool,
     parameters: Vec<Vec<(ValueId, u32)>>,
@@ -309,6 +439,7 @@ struct Builder<'p> {
     calls: Vec<(usize, usize)>,
     operations: usize,
     stages: Vec<(String, usize)>,
+    cycles: Vec<Result<cfg::CyclicBlocks<'p>, cfg::CfgError>>,
     summaries: Vec<Option<Summary>>,
     summary_used: Vec<bool>,
 }
@@ -362,6 +493,7 @@ struct CallGraph<'p> {
     targets: BTreeMap<u32, Vec<usize>>,
     components: Vec<usize>,
     recursive: BTreeSet<usize>,
+    raises: Vec<bool>,
     work: usize,
     #[cfg(test)]
     index_edges: usize,
@@ -398,7 +530,7 @@ impl<'p> CallGraph<'p> {
                 func.blocks
                     .iter()
                     .flat_map(|block| &block.ops)
-                    .filter_map(|id| match &func.value(*id).kind {
+                    .filter_map(|id| match &func.values.get(id.0 as usize)?.kind {
                         OpKind::Call {
                             callee: Callee::Direct(name),
                             ..
@@ -430,6 +562,8 @@ impl<'p> CallGraph<'p> {
                 .sum::<usize>()
             + edges.len()
             + index_edges;
+        let (raises, outcome_work) = outcomes::escaping(program, &edges, &by_name);
+        let work = work.saturating_add(outcome_work);
         let components = super::super::strongly_connected(&edges);
         let recursive = edges
             .iter()
@@ -447,6 +581,7 @@ impl<'p> CallGraph<'p> {
             targets,
             components,
             recursive,
+            raises,
             work,
             #[cfg(test)]
             index_edges,
@@ -499,6 +634,39 @@ fn parameters(program: &Program, graph: &mut Graph) -> Vec<Vec<(ValueId, u32)>> 
 
 impl<'p> Builder<'p> {
     fn new(program: &'p Program, limits: Limits) -> Self {
+        let cycles: Vec<_> = program.funcs.iter().map(cfg::cyclic_blocks).collect();
+        let cfg_failure = cycles
+            .iter()
+            .find_map(|cycle| cycle.as_ref().err())
+            .map(|error| Reason::InvalidControlFlow(error.to_string()));
+        let cfg_work = program
+            .funcs
+            .iter()
+            .map(|function| {
+                4 * function.blocks.len()
+                    + function
+                        .blocks
+                        .iter()
+                        .map(|block| {
+                            2 * block.ops.len()
+                                + 3 * block.terminator.successors().len()
+                                + 3 * block
+                                    .ops
+                                    .iter()
+                                    .filter(|id| {
+                                        matches!(
+                                            function.values.get(id.0 as usize).map(|op| &op.kind),
+                                            Some(OpKind::Await {
+                                                rejects_to: Some(_),
+                                                ..
+                                            })
+                                        )
+                                    })
+                                    .count()
+                        })
+                        .sum::<usize>()
+            })
+            .sum::<usize>();
         let calls = CallGraph::of(program);
         let operations = program
             .funcs
@@ -524,7 +692,8 @@ impl<'p> Builder<'p> {
             input.saturating_mul(limits.work_per_operation),
             input.saturating_mul(limits.edges_per_operation),
         );
-        graph.work = calls.work;
+        graph.work = calls.work.saturating_add(cfg_work);
+        graph.failure = cfg_failure;
         if graph.work > graph.work_limit {
             graph.failure = Some(Reason::WorkBudget);
         }
@@ -546,6 +715,7 @@ impl<'p> Builder<'p> {
             reference_layouts,
             components: calls.components,
             recursive: calls.recursive,
+            raises: calls.raises,
             globals,
             globals_opened: false,
             parameters,
@@ -553,7 +723,11 @@ impl<'p> Builder<'p> {
             roots: Vec::new(),
             calls: Vec::new(),
             operations,
-            stages: vec![("call-index".to_owned(), calls.work)],
+            stages: vec![(
+                "call-and-cfg-index".to_owned(),
+                calls.work.saturating_add(cfg_work),
+            )],
+            cycles,
             summaries: Vec::new(),
             summary_used: vec![false; program.funcs.len()],
         };
@@ -817,32 +991,16 @@ impl<'p> Builder<'p> {
             };
             return;
         }
-        let edges: Vec<Vec<usize>> = function
-            .blocks
-            .iter()
-            .map(|block| {
-                block
-                    .terminator
-                    .successors()
-                    .into_iter()
-                    .map(|to| to.0 as usize)
-                    .collect()
-            })
-            .collect();
-        let components = super::super::strongly_connected(&edges);
-        let repeats: BTreeSet<usize> = edges
-            .iter()
-            .enumerate()
-            .filter_map(|(at, targets)| {
-                targets
-                    .iter()
-                    .any(|to| components[at] == components[*to])
-                    .then_some(at)
-            })
-            .collect();
+        if self.cycles[function_index].is_err() {
+            return;
+        }
         for block in verify::reverse_postorder(function) {
-            let repeated =
-                self.recursive.contains(&function_index) || repeats.contains(&(block.0 as usize));
+            let repeated = self.recursive.contains(&function_index)
+                || self.cycles[function_index]
+                    .as_ref()
+                    .ok()
+                    .and_then(|cycle| cycle.is_cyclic(block))
+                    != Some(false);
             for &id in &function.blocks[block.0 as usize].ops {
                 // Inventory still completes after exhaustion. Graph mutations
                 // stop charging/publishing facts, and every home becomes Heap.
@@ -1394,6 +1552,97 @@ impl<'p> Builder<'p> {
         }
     }
 
+    /// The shared liveness authority runs once per affected function, not
+    /// once per call/context. Walk backward so operands whose final read is
+    /// the failing operation are included; an output does not yet exist.
+    fn outcome_fences(&mut self) -> Vec<Outcome> {
+        let program = self.program;
+        let mut reports = Vec::new();
+        for (function_index, function) in program.funcs.iter().enumerate() {
+            if self.cycles[function_index].is_err() {
+                continue;
+            }
+            let unsealed: BTreeMap<_, _> = function
+                .blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .filter_map(|id| {
+                    outcomes::unsealed(function.value(*id), &self.by_name, &self.raises)
+                        .map(|reason| (*id, reason))
+                })
+                .collect();
+            if unsealed.is_empty() {
+                continue;
+            }
+            let live = match super::super::liveness::analyze_limited(function, &mut |units| {
+                self.graph.charge_many(units)
+            }) {
+                Ok(live) => live,
+                Err(failure) => {
+                    let _ = failure.for_optional();
+                    self.graph.failure.get_or_insert(Reason::WorkBudget);
+                    break;
+                }
+            };
+            for context in 0..self.contexts.len() {
+                if self.contexts[context].function != function_index {
+                    continue;
+                }
+                for (block_index, block) in function.blocks.iter().enumerate() {
+                    let block_id = BlockId(u32::try_from(block_index).unwrap_or(u32::MAX));
+                    let mut before: BTreeSet<_> = live
+                        .live_out(block_id)
+                        .iter()
+                        .copied()
+                        .chain(super::super::operands_of_terminator(&block.terminator))
+                        .filter(|id| function.value(*id).ty.may_hold_a_reference())
+                        .collect();
+                    for &id in block.ops.iter().rev() {
+                        before.remove(&id);
+                        for operand in verify::operands(&function.value(id).kind) {
+                            if function.value(operand).ty.may_hold_a_reference() {
+                                before.insert(operand);
+                            }
+                        }
+                        let Some(reason) = unsealed.get(&id) else {
+                            continue;
+                        };
+                        if !self.graph.charge_many(before.len().saturating_add(1)) {
+                            return reports;
+                        }
+                        let root = self.graph.node();
+                        for &value in &before {
+                            self.graph.copy(self.value(context, value), root);
+                        }
+                        let payload = self.graph.node();
+                        let payload_label = format!(
+                            "{}:%{}:unknown-raised-payload",
+                            self.contexts[context].key, id.0
+                        );
+                        self.outside(context, payload, payload_label.clone());
+                        self.graph.copy(payload, root);
+                        let witness = format!("{}:%{}: {reason}", self.contexts[context].key, id.0);
+                        self.roots
+                            .push((root, Exposure::Unknown(Reason::MissingOutcome(witness))));
+                        reports.push(Outcome {
+                            function: function.name.clone(),
+                            context: self.contexts[context].key.clone(),
+                            value: id.0,
+                            reason: reason.clone(),
+                            live: before.iter().map(|value| value.0).collect(),
+                            payload: payload_label,
+                        });
+                    }
+                }
+            }
+        }
+        self.graph.solve();
+        reports.sort_by(|a, b| {
+            (&a.function, &a.context, a.value).cmp(&(&b.function, &b.context, b.value))
+        });
+        reports
+    }
+
     fn frontiers(&mut self) -> Vec<Frontier> {
         let mut reads: BTreeMap<(usize, usize), BTreeSet<ValueId>> = BTreeMap::new();
         'index: for (parent, context) in self.contexts.iter().enumerate() {
@@ -1482,6 +1731,10 @@ impl<'p> Builder<'p> {
         reason = "one detachment of the solved graph into canonical diagnostic tables"
     )]
     fn finish(mut self) -> Report {
+        let outcome_start = self.graph.work;
+        let outcomes = self.outcome_fences();
+        self.stages
+            .push(("outcome-fences".to_owned(), self.graph.work - outcome_start));
         let exposure_start = self.graph.work;
         let hierarchy: Vec<_> = self
             .contexts
@@ -1661,6 +1914,7 @@ impl<'p> Builder<'p> {
             slots,
             functions,
             frontiers,
+            outcomes,
             proofs: lifetimes.proofs,
             alias_classes: self.graph.classes(),
             operations: self.operations,

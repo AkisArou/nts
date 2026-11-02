@@ -61,6 +61,18 @@ pub struct Frontier {
     pub ends: Result<Vec<String>, String>,
 }
 
+/// An operation whose escaping outcome has no complete HIR successor.
+/// Its unknown payload and every live-before reference reach the same root.
+#[derive(Debug, Clone)]
+pub struct Outcome {
+    pub function: String,
+    pub context: String,
+    pub value: u32,
+    pub reason: String,
+    pub live: Vec<u32>,
+    pub payload: String,
+}
+
 /// Immutable proof nodes share their premises. Expanding a separate path for
 /// every site would reintroduce quadratic work on long or cyclic graphs.
 #[derive(Debug, Clone)]
@@ -79,6 +91,7 @@ pub struct Report {
     pub slots: Vec<SlotFact>,
     pub functions: Vec<FunctionSummary>,
     pub frontiers: Vec<Frontier>,
+    pub outcomes: Vec<Outcome>,
     pub proofs: Vec<Proof>,
     pub alias_classes: Vec<(String, Vec<String>)>,
     pub operations: usize,
@@ -156,6 +169,18 @@ impl Report {
                 function.may_suspend,
                 function.may_reenter,
                 function.unknown_effects
+            );
+        }
+        for outcome in &self.outcomes {
+            let _ = writeln!(
+                out,
+                "outcome\t{:?}\t{:?}\t%{}\tunknown={:?}\tlive={:?}\tpayload={:?}",
+                outcome.function,
+                outcome.context,
+                outcome.value,
+                outcome.reason,
+                outcome.live,
+                outcome.payload
             );
         }
         for frontier in &self.frontiers {
