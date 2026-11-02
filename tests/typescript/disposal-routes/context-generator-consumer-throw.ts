@@ -1,0 +1,36 @@
+/*---
+description: A consumer throw keeps its identity while a typed generator closes throwing resources.
+features: [ts-disposal-route-loops-generators-functions, ts-using, ts-generators, ts-iteration, ts-errors, ts-unknown, ts-tuples]
+---*/
+// Resources: Disposable tuple suspended in a generator; node preserves a consumer throw over iterator-close failures while still disposing every resource.
+type ResourceTriple = [Disposable | null | undefined, Disposable | null | undefined, Disposable | null | undefined];
+function checkFailure(error: unknown, expected: unknown[], raised: boolean): void {
+  assert.sameValue(raised, expected.length > 0);
+  if (expected.length === 0) { assert.sameValue(error, undefined); return; }
+  for (let index = expected.length - 1; index > 0; index--) {
+    assert.sameValue(error instanceof SuppressedError, true);
+    if (!(error instanceof SuppressedError)) throw new Error("missing suppression");
+    assert.sameValue(error.error, expected[index]); error = error.suppressed;
+  }
+  assert.sameValue(error, expected[0]);
+}
+for (const count of [0, 1, 3]) for (const mask of [0, 1, 2, 4, 7]) for (const bodyFails of [false, true]) {
+  const log: unknown[] = ["before"]; const bodyError = { tag: "consumer" }; const errors: unknown[] = [undefined, new Error("middle"), { tag: "third" }];
+  function make(id: number): Disposable { return { [Symbol.dispose](): void { log.push("dispose", id, this); if ((mask & (1 << id)) !== 0) throw errors[id]; } }; }
+  const first = make(0), second = make(1), third = make(2);
+  const slots: ResourceTriple = count === 0 ? [null, undefined, null] : count === 1 ? [first, null, undefined] : [first, second, third];
+  function* produce(resources: ResourceTriple): Generator<number, void, unknown> {
+    using first = resources[0], second = resources[1], third = resources[2];
+    log.push("yield"); yield 17; log.push("resume");
+  }
+  const iterator = produce(slots); let caught: unknown; let raised = false;
+  try { for (const value of iterator) { log.push("body", value); if (bodyFails) throw bodyError; log.push("body:last"); } log.push("after"); }
+  catch (error: unknown) { caught = error; raised = true; log.push("catch"); }
+  const expected: unknown[] = ["before", "yield", "body", 17]; const disposalErrors: unknown[] = [];
+  if (!bodyFails) expected.push("body:last", "resume");
+  for (let id = count - 1; id >= 0; id--) { expected.push("dispose", id, slots[id]); if ((mask & (1 << id)) !== 0) disposalErrors.push(errors[id]); }
+  const failures = bodyFails ? [bodyError] : disposalErrors; expected.push(failures.length > 0 ? "catch" : "after");
+  checkFailure(caught, failures, raised);
+  const finalResult = iterator.next(); assert.sameValue(finalResult.value, undefined); assert.sameValue(finalResult.done, true);
+  assert.compareArray(log, expected);
+}
