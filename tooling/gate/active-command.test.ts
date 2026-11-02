@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {spawnSync} from "node:child_process";
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {homedir} from "node:os";
 import {join} from "node:path";
@@ -12,6 +13,26 @@ function fixture(t) {
   const root=mkdtempSync(join(base,"case-"));t.after(()=>rmSync(root,{recursive:true,force:true}));
   return {root,env:{...process.env,NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
 }
+
+function processHasExited(pid:number,readStat=()=>readFileSync(`/proc/${pid}/stat`,"utf8")):boolean {
+  try{return /^\d+ \(.+\) Z /.test(readStat());}
+  catch(error){if(error.code==="ENOENT"||error.code==="ESRCH")return true;throw error;}
+}
+
+test("the exit probe reads a reaped child and preserves other read errors",t=>{
+  const {root,env}=fixture(t);
+  assert.equal(processHasExited(process.pid),false);
+  const child=spawnSync(process.execPath,["-e",""],{cwd:root,env});
+  assert.equal(child.status,0);assert.equal(child.signal,null);assert.ok(child.pid>0);
+  assert.equal(processHasExited(child.pid),true);
+  for(const code of ["ENOENT","ESRCH"]){
+    const error=Object.assign(new Error(code),{code});
+    assert.equal(processHasExited(child.pid,()=>{throw error;}),true);
+  }
+  for(const error of [Object.assign(new Error("denied"),{code:"EACCES"}),new Error("other read error")]){
+    assert.throws(()=>processHasExited(child.pid,()=>{throw error;}),caught=>caught===error);
+  }
+});
 
 test("process activity parses group identity and all user/sys CPU including reaped children",()=>{
   const fields=Array(20).fill("0");fields[0]="S";
@@ -104,9 +125,7 @@ test("leader exit stops its grandchild even when inherited pipes postpone close"
   assert.equal(result.status,0);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
   assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
   assert.ok(existsSync(ready));const pid=Number(readFileSync(ready,"utf8"));
-  await waitFor("the directly recorded grandchild to leave its group",()=>{
-    try{return /^\d+ \(.+\) Z /.test(readFileSync(`/proc/${pid}/stat`,"utf8"));}catch(error){if(error.code==="ENOENT")return true;throw error;}
-  });
+  await waitFor("the directly recorded grandchild to leave its group",()=>processHasExited(pid));
 });
 
 test("close reaps a helper whose redirected stdio does not keep the leader open",async t=>{
@@ -118,9 +137,7 @@ test("close reaps a helper whose redirected stdio does not keep the leader open"
   assert.equal(result.status,0);assert.equal(result.hung,undefined);assert.equal(result.runaway,undefined);
   assert.equal(existsSync(env.NTS_GATE_STEP_RESULT),false);
   const pid=Number(readFileSync(ready,"utf8"));
-  await waitFor("the helper with redirected stdio to leave its directly owned group",()=>{
-    try{return /^\d+ \(.+\) Z /.test(readFileSync(`/proc/${pid}/stat`,"utf8"));}catch(error){if(error.code==="ENOENT")return true;throw error;}
-  });
+  await waitFor("the helper with redirected stdio to leave its directly owned group",()=>processHasExited(pid));
 });
 
 test("nested supervisors forward observed busy/output progress while idle children hold",async t=>{
