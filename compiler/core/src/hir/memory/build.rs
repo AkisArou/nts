@@ -792,6 +792,10 @@ mod tests {
 
     fn review_invalid_edge(args: Vec<ValueId>) {
         let program = review_edge_program(args);
+        assert!(
+            verify::verify(&program).is_err(),
+            "the verifier refuses the same invalid edge"
+        );
         let report = super::super::Analysis::of(&program).into_report();
         println!(
             "review-edge\tfailure={:?}\thomes={:?}\tproofs={:?}",
@@ -875,6 +879,47 @@ mod tests {
                 verify::Invalid::ArgumentCount { target: BlockId(1), expected: 1, found: actual, .. }
                     if *actual == found)));
         }
+    }
+
+    #[test]
+    fn review_edge_verifier_names_source_block_branch_side_and_both_counts() {
+        let mut program = review_edge_program(Vec::new());
+        let body = &mut program.funcs[0];
+        body.values.push(Op {
+            kind: OpKind::ConstBool(true),
+            ty: HirType::Bool,
+            origin: origin(),
+        });
+        body.blocks[0].ops.push(ValueId(3));
+        body.blocks[0].terminator = Terminator::Branch {
+            cond: ValueId(3),
+            then_target: BlockId(1),
+            then_args: Vec::new(),
+            else_target: BlockId(1),
+            else_args: vec![ValueId(0), ValueId(0)],
+        };
+        let errors = verify::verify(&program).expect_err("both branch edges have the wrong arity");
+        let edges: Vec<_> = errors
+            .iter()
+            .filter_map(|error| match error {
+                verify::Invalid::ArgumentCount {
+                    from,
+                    edge,
+                    target,
+                    expected,
+                    found,
+                    ..
+                } => Some((*from, *edge, *target, *expected, *found)),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(
+            edges,
+            [
+                (BlockId(0), "then", BlockId(1), 1, 0),
+                (BlockId(0), "else", BlockId(1), 1, 2)
+            ]
+        );
     }
 
     fn review_dispatch_body(name: &str, writes: bool, raises: bool) -> Func {
