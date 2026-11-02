@@ -212,7 +212,7 @@ mod tests {
             abstract_declaration: false,
             async_result: None,
             obligations: Vec::new(),
-            exact: Default::default(),
+            exact: rustc_hash::FxHashMap::default(),
         }
     }
 
@@ -247,7 +247,7 @@ mod tests {
                 args: Vec::new(),
             },
         ]);
-        let cyclic = cyclic_blocks(&func).unwrap();
+        let cyclic = cyclic_blocks(&func).expect("the control has a valid CFG");
         assert_eq!(
             (0..6)
                 .map(|index| cyclic.is_cyclic(BlockId(index)))
@@ -308,15 +308,19 @@ mod tests {
         // An operation only contributes its exceptional edge when placed in
         // the block; dead values in the arena are not CFG edges.
         assert_eq!(
-            cyclic_blocks(&func).unwrap().is_cyclic(BlockId(0)),
+            cyclic_blocks(&func)
+                .expect("the control has a valid CFG")
+                .is_cyclic(BlockId(0)),
             Some(false)
         );
         assert_eq!(
-            cyclic_blocks(&func).unwrap().successors(BlockId(0)),
+            cyclic_blocks(&func)
+                .expect("the control has a valid CFG")
+                .successors(BlockId(0)),
             Some(&[][..])
         );
         func.blocks[0].ops.push(ValueId(0));
-        let cyclic = cyclic_blocks(&func).unwrap();
+        let cyclic = cyclic_blocks(&func).expect("the control has a valid CFG");
         assert_eq!(cyclic.is_cyclic(BlockId(0)), Some(true));
         assert_eq!(cyclic.is_cyclic(BlockId(1)), Some(true));
         assert_eq!(cyclic.successors(BlockId(0)), Some(&[BlockId(1)][..]));
@@ -353,7 +357,7 @@ mod tests {
         });
         func.blocks[0].ops.push(ValueId(0));
 
-        let cfg = cyclic_blocks(&func).unwrap();
+        let cfg = cyclic_blocks(&func).expect("the control has a valid CFG");
         assert_eq!(
             cfg.successors(BlockId(0)),
             Some(&[BlockId(1), BlockId(2), BlockId(2)][..])
@@ -403,16 +407,16 @@ mod tests {
 
     #[test]
     fn iterative_scc_handles_deep_control_flow() {
-        let count = 20_000;
+        let count: u32 = 20_000;
         let mut terminators: Vec<_> = (1..count)
             .map(|target| Terminator::Jump {
-                target: BlockId(target as u32),
+                target: BlockId(target),
                 args: Vec::new(),
             })
             .collect();
         terminators.push(Terminator::Return(None));
         let func = func(terminators);
-        let cyclic = cyclic_blocks(&func).unwrap();
-        assert!((0..count).all(|index| cyclic.is_cyclic(BlockId(index as u32)) == Some(false)));
+        let cyclic = cyclic_blocks(&func).expect("the control has a valid CFG");
+        assert!((0..count).all(|index| cyclic.is_cyclic(BlockId(index)) == Some(false)));
     }
 }
