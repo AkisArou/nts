@@ -694,6 +694,28 @@ mod tests {
     }
 
     #[test]
+    fn review_invalid_placed_id_publishes_failure_without_panicking() {
+        let mut body = function("invalid#init".to_owned(), Vec::new());
+        body.blocks[0].ops.push(ValueId(99));
+        let program = Program {
+            funcs: vec![body],
+            ..Program::default()
+        };
+        let report = crate::hir::memory::Analysis::of(&program).into_report();
+        println!("review-invalid-placed\tfailure={:?}", report.failure);
+        assert!(matches!(
+            report.failure,
+            Some(Reason::InvalidControlFlow(_))
+        ));
+        assert!(
+            report
+                .functions
+                .iter()
+                .all(|function| function.unknown_effects)
+        );
+    }
+
+    #[test]
     fn review_unsealed_functions_visit_only_their_indexed_contexts() {
         let mut counts = Vec::new();
         for n in [16, 64, 256] {
