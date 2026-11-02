@@ -1254,3 +1254,33 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   #159, since they are the foundation's own.
 - **Stage 3 of the builtins mechanism** has had no owner since runtime2
   left. It goes to the runtime agent once its compile-time fix (#168) lands.
+
+## JVM class archive (11-02)
+
+- **The decision.** The user approved, on the coordinator's recommendation,
+  an archive that belongs to its installation, revising the 10-31 entry,
+  which expected one archive shipped with the program. An explicit build or
+  install step writes a classic CDS archive at the jar's final absolute path,
+  from the emitted classes and without running the program. The jar stays the
+  reproducible, portable product. The archive repeats byte for byte at the
+  same path and differs between installation roots. A launcher supplies it
+  only when the selected Java's `release` file matches the one recorded when
+  it was written, and otherwise runs the plain `java -jar` route. A moved or
+  changed jar falls back the same way until the archive is written again.
+  With it, a program the build proves can start no threads of its own (no
+  Java interop, no host provider that starts threads) returns from `main`
+  after its work drains with status zero, instead of calling `System.exit`.
+  Every other program keeps the exit path.
+- **Why.** helper2's design note measured the alternatives on 409dd, on eight
+  CLI-built jars under Corretto 21 and OpenJDK 27. The installed archive won
+  on every row. A first-run cache costs about 330 ms on its first launch, 8–12
+  times a warm start, which a one-shot program never earns back. JDK 27's AOT
+  cache regressed four rows and was neither relocatable nor byte-reproducible.
+  A relative-path classic archive reproduces across roots but fails from
+  another working directory. With the clean return, startup falls to
+  0.71–0.82 of today's on all eight rows. The remaining gap to plain Java is
+  2–4 ms of entry reflection and initialization.
+- **How it lands.** helper2 builds it as its own change with startup rows,
+  runtime3 reviews it as the JVM's owner, and the launcher is qualified on
+  each platform it ships for. The design note goes into `docs/records/` with
+  the change.

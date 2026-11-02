@@ -192,8 +192,15 @@ decided ([JVM and Wasm](../foundations/jvm-and-wasm.md#where-they-stand)).
   fallback (X-4; 10-28,
   [log](../records/notebooks/decisions-log.md#debugging-security-and-versioning-10-28)).
   Not built.
-- A program ships with a class archive that `nts build` writes from the
-  classes it emitted, without running the program. The program uses it on the
-  Java that built it and runs the same without it on any other (10-31,
-  [log](../records/notebooks/decisions-log.md#jvm-class-archive-10-31)).
+- A program's class archive belongs to its installation. An explicit build or
+  install step writes it at the jar's final absolute path, from the classes
+  the build emitted, without running the program. The jar stays the
+  reproducible, portable product; the archive repeats byte for byte only at
+  the same path. A launcher passes it to Java only when that Java's `release`
+  file matches the one recorded when it was written. After a move, a changed
+  jar or on another Java, the program runs as a plain `java -jar`, with the
+  same output. A program the build proves can start no threads of its own (no
+  Java interop, no host provider that starts threads) returns from `main` once
+  its work drains with status zero, instead of calling `System.exit` (11-02,
+  [log](../records/notebooks/decisions-log.md#jvm-class-archive-11-02)).
   Not built.

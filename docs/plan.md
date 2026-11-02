@@ -61,10 +61,11 @@ one page that changes as work goes; the designs it builds are in
     links the node inputs its own `.tool-versions` names, so trees on both
     versions coexist during the move
     ([log](records/notebooks/decisions-log.md#node-26-10-31)).
-- **The JVM's class archive:** a JVM program ships with a class archive
-  written at build time. helper2 builds it after D4's corrections, as its own
-  change with startup rows, and runtime3 reviews it
-  ([log](records/notebooks/decisions-log.md#jvm-class-archive-10-31)).
+- **The JVM's class archive:** each installation gets its own class archive,
+  written at the jar's final path, and a program the build proves starts no
+  threads returns from `main` instead of calling `System.exit`. helper2
+  builds it as its own change with startup rows, and runtime3 reviews it
+  ([log](records/notebooks/decisions-log.md#jvm-class-archive-11-02)).
 - **The machine:** one shared 32 GB box. At most two heavy jobs run at once,
   CPUs 4–5 are kept for measurement, and every build checks the disk floor
   first ([`../AGENTS.md`](../AGENTS.md)).
