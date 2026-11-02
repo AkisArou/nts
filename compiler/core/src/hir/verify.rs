@@ -988,17 +988,21 @@ fn check_view_classes(program: &Program, problems: &mut Vec<Invalid>) {
             let mut made = rustc_hash::FxHashMap::default();
             let mut last_read = rustc_hash::FxHashMap::default();
             for (position, at) in block.ops.iter().enumerate() {
-                let op = &func.values[at.0 as usize];
+                let op = func
+                    .values
+                    .get(at.0 as usize)
+                    .expect("placed IDs were validated before semantic checks");
                 if let OpKind::ViewOfClass { view, class } = op.kind {
+                    let created = func
+                        .values
+                        .get(view.0 as usize)
+                        .expect("operand IDs were validated before semantic checks");
                     let made_by_view_new = matches!(
-                        &func.values[view.0 as usize].kind,
+                        &created.kind,
                         OpKind::Call { callee: super::Callee::External(name), .. }
                             if name == "nts_view_new"
                     );
-                    let creation_kind_matches = match (
-                        &func.values[view.0 as usize].kind,
-                        &func.values[view.0 as usize].ty,
-                    ) {
+                    let creation_kind_matches = match (&created.kind, &created.ty) {
                         (
                             OpKind::Call { args, .. },
                             HirType::Managed(ManagedType::View(element)),
@@ -1022,7 +1026,7 @@ fn check_view_classes(program: &Program, problems: &mut Vec<Invalid>) {
                     let read_between = made_at
                         .is_some_and(|made| last_read.get(&view).is_some_and(|read| read > made));
                     let known = program.view_classes.get(class);
-                    let actual = &func.values[view.0 as usize].ty;
+                    let actual = &created.ty;
                     let reason = if known.is_none() {
                         Some("names no class extending a typed array")
                     } else if !matches!(actual, HirType::Managed(ManagedType::View(_))) {
