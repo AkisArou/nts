@@ -22,6 +22,15 @@ use super::{
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
+    /// A placed definition or executed operand names no operation in its arena.
+    ValueDomain {
+        func: String,
+        block: BlockId,
+        value: ValueId,
+        role: &'static str,
+    },
+    /// A function has no entry block for its consumers to read.
+    MissingEntry { func: String },
     /// An executed operation names a module slot outside the program table.
     GlobalOperand {
         func: String,
@@ -391,17 +400,9 @@ pub enum Invalid {
 /// whole picture.
 pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     let mut problems = Vec::new();
-    // Validate program-table operands before store/type checks consume them.
-    // Orphan arena operations do not execute and grant no metadata authority.
-    for func in &program.funcs {
-        for &value in func.blocks.iter().flat_map(|block| &block.ops) {
-            if let Some(op) = func.values.get(value.0 as usize)
-                && let Some(problem) = check_program_operand(program, func, value, &op.kind)
-            {
-                problems.push(problem);
-            }
-        }
-    }
+    // Establish every arena/control-flow domain before any consumer indexes it.
+    // A failed domain cannot license dominance or later program-wide checks.
+    check_input_domains(program, &mut problems);
     if !problems.is_empty() {
         return Err(problems);
     }
@@ -427,6 +428,79 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
         Ok(())
     } else {
         Err(problems)
+    }
+}
+
+/// One structural preflight for every executed ID, before semantic consumers.
+/// Arena membership is deliberately distinct from memory's stronger placed/ABI
+/// definition facts: this changes no valid-input readiness or typing policy.
+fn check_input_domains(program: &Program, problems: &mut Vec<Invalid>) {
+    for func in &program.funcs {
+        if func.blocks.is_empty() {
+            problems.push(Invalid::MissingEntry {
+                func: func.name.clone(),
+            });
+            continue;
+        }
+        for (index, block) in func.blocks.iter().enumerate() {
+            let from = BlockId(u32::try_from(index).unwrap_or(u32::MAX));
+            for &value in &block.params {
+                let _ = checked_arena_value(func, from, value, "block parameter", problems);
+            }
+            for &value in &block.ops {
+                let Some(op) = checked_arena_value(func, from, value, "placed operation", problems)
+                else {
+                    continue;
+                };
+                for operand in operands(&op.kind) {
+                    let _ = checked_arena_value(func, from, operand, "operation operand", problems);
+                }
+                if let Some(problem) = check_program_operand(program, func, value, &op.kind) {
+                    problems.push(problem);
+                }
+                if let OpKind::Await {
+                    rejects_to: Some(rejection),
+                    ..
+                } = &op.kind
+                {
+                    check_block_domain(func, rejection.handler, problems);
+                }
+            }
+            for value in terminator_operands(&block.terminator) {
+                let _ = checked_arena_value(func, from, value, "terminator operand", problems);
+            }
+            for target in block.terminator.successors() {
+                check_block_domain(func, target, problems);
+            }
+        }
+    }
+}
+
+fn checked_arena_value<'func>(
+    func: &'func Func,
+    block: BlockId,
+    value: ValueId,
+    role: &'static str,
+    problems: &mut Vec<Invalid>,
+) -> Option<&'func super::Op> {
+    let found = func.values.get(value.0 as usize);
+    if found.is_none() {
+        problems.push(Invalid::ValueDomain {
+            func: func.name.clone(),
+            block,
+            value,
+            role,
+        });
+    }
+    found
+}
+
+fn check_block_domain(func: &Func, target: BlockId, problems: &mut Vec<Invalid>) {
+    if func.blocks.get(target.0 as usize).is_none() {
+        problems.push(Invalid::DanglingSuccessor {
+            func: func.name.clone(),
+            target,
+        });
     }
 }
 
@@ -3350,6 +3424,107 @@ mod tests {
                 }
             )),
             "the read must be reported against the layout: {problems:#?}"
+        );
+    }
+
+    fn view_class_endpoint_program() -> Program {
+        use crate::hir::ViewClass;
+        use nts_semantic_schema::TypeId;
+
+        let mut buffer = op(OpKind::Call {
+            callee: Callee::External("nts_buffer_new".to_owned()),
+            args: Vec::new(),
+            frame: None,
+        });
+        buffer.ty = HirType::Managed(ManagedType::Buffer);
+        let mut view = op(OpKind::Call {
+            callee: Callee::External("nts_view_new".to_owned()),
+            args: vec![ValueId(0), ValueId(1), ValueId(1), ValueId(2), ValueId(3)],
+            frame: None,
+        });
+        view.ty = HirType::Managed(ManagedType::View(Box::new(HirType::NUMBER)));
+        let mut length_tracking = op(OpKind::ConstBool(false));
+        length_tracking.ty = HirType::Bool;
+        let mut class = op(OpKind::ViewOfClass {
+            view: ValueId(4),
+            class: TypeId(1),
+        });
+        class.ty = HirType::Void;
+        let mut program = func(
+            vec![
+                buffer,
+                op(OpKind::ConstFloat(0.0)),
+                op(OpKind::ConstFloat(8.0)),
+                length_tracking,
+                view,
+                class,
+            ],
+            vec![block(
+                Vec::new(),
+                (0..6).map(ValueId).collect(),
+                Terminator::Return(None),
+            )],
+        );
+        program.funcs[0].return_type = HirType::Void;
+        program.view_classes = vec![ViewClass {
+            class: TypeId(1),
+            name: "Bytes".to_owned(),
+            element: HirType::NUMBER,
+            base: None,
+            species: None,
+        }]
+        .into();
+        program
+    }
+
+    #[test]
+    fn view_class_endpoint_valid_view_control() {
+        verify(&view_class_endpoint_program()).expect("the view operand exists");
+    }
+
+    #[test]
+    fn view_class_endpoint_missing_view_refuses() {
+        let mut program = view_class_endpoint_program();
+        let OpKind::ViewOfClass { view, .. } = &mut program.funcs[0].values[5].kind else {
+            panic!("the endpoint must contain the view-class operation");
+        };
+        *view = ValueId(99);
+        let problems =
+            verify(&program).expect_err("a missing view must be diagnosed instead of indexed");
+        assert!(
+            problems.iter().any(|problem| matches!(
+                problem,
+                Invalid::ValueDomain {
+                    value: ValueId(99),
+                    role: "operation operand",
+                    ..
+                }
+            )),
+            "{problems:?}"
+        );
+    }
+
+    #[test]
+    fn view_class_endpoint_valid_placed_control() {
+        verify(&view_class_endpoint_program()).expect("the placed operation exists");
+    }
+
+    #[test]
+    fn view_class_endpoint_invalid_placed_refuses() {
+        let mut program = view_class_endpoint_program();
+        program.funcs[0].blocks[0].ops[5] = ValueId(99);
+        let problems = verify(&program)
+            .expect_err("an absent placed operation must be diagnosed instead of indexed");
+        assert!(
+            problems.iter().any(|problem| matches!(
+                problem,
+                Invalid::ValueDomain {
+                    value: ValueId(99),
+                    role: "placed operation",
+                    ..
+                }
+            )),
+            "{problems:?}"
         );
     }
 
