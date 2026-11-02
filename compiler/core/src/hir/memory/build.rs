@@ -3475,11 +3475,11 @@ impl<'p> Builder<'p> {
         'index: for (parent, context) in self.contexts.iter().enumerate() {
             let function = &self.program.funcs[context.function];
             for &value in function.blocks.iter().flat_map(|block| &block.ops) {
-                let objects: Vec<_> = self.graph.values[context.values[&value]]
-                    .objects
-                    .iter()
-                    .copied()
-                    .collect();
+                let Some(&node) = context.values.get(&value) else {
+                    debug_assert!(self.invalid_values);
+                    continue;
+                };
+                let objects: Vec<_> = self.graph.values[node].objects.iter().copied().collect();
                 for object in objects {
                     if self.graph.is_widened(object) {
                         // A shared weak class supplies no caller-specific
