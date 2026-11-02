@@ -313,6 +313,8 @@ flows through it.
 | `json-routes/` | typed JSON parsing, narrowing, serialization and hooks with exact values, key order, outputs and callback logs |
 | `json-routes-controls/` | counterparts using unknown narrowing or plain literal values with the same text and assertions |
 | `iterator-routes/` | complete protocol histories, delivered values, cleanup and final state through typed iterator routes, held to node |
+| `iterator-helper-routes/` | lazy iterator helpers carried across typed fields, generic parameters and tuple returns, with exact pull and callback histories |
+| `iterator-helper-routes-controls/` | explicit next loops and callback bookkeeping with the same sources, routes, results and logs |
 | `iterator-routes-controls/` | the same protocol advanced and closed explicitly, with matching inputs, effects and observations |
 | `layout-routes/` | exact class fields, presence, order, identity and state across base, structural, private, static and builtin-subclass routes |
 | `layout-routes-controls/` | plain field-by-field literals, explicit kinds and private sidecars or builtin holders preserving the same observations |
@@ -2759,3 +2761,16 @@ collection size, enumeration, reclamation or finalization timing.
 | `ts-weak-collection-route-set` | typed WeakSet routes preserve object membership, aliases, chain returns, deletion and constructed-instance brands | Weak collection route contracts; typed paths | 16 | 0 |
 | `ts-weak-collection-routes` | weak collection keys, values, membership, held targets and registration tokens preserve identity and exact results through typed routes beside strong-collection and plain-holder controls | Weak collection route contracts; typed paths | 86 | 0 |
 <!-- tags:end -->
+
+## Iterator helper route contracts
+
+The `iterator-helper-routes/` matrix uses `<helper>-<route>.ts` with
+`ts-iterator-helper-route-mapping` for mapping and filtering. Each case
+observes lazy pulls, indexed callbacks, exact values and completion while
+its `-control` counterpart substitutes an explicit `next()` loop. Both
+use the same typed carriers and input sets. Strict TypeScript and the
+unchanged node oracle gate admission before maintainers record backends.
+
+| tag | what it proves | origin | cases | pending |
+| --- | --- | --- | ---: | ---: |
+| `ts-iterator-helper-route-mapping` | map, filter and flatMap evaluation order across typed carriers | typed paths; Iterator Helpers | 6 | 0 |
