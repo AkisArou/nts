@@ -17,10 +17,7 @@ fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {
         OpKind::Call {
             callee: Callee::External(name),
             ..
-        } => !matches!(
-            runtime::raising(name),
-            Some(runtime::Raising::NoRaise | runtime::Raising::Diverges)
-        ),
+        } => runtime::has_exceptional_outcome(name),
         OpKind::Binary { .. } | OpKind::Unary { .. } => op.ty == HirType::BigInt,
         OpKind::Param(_)
         | OpKind::BlockParam(_)
@@ -99,10 +96,7 @@ pub(super) fn escaping(
                     ..
                 } => {
                     super::super::regions::helper(name).is_none()
-                        || matches!(
-                            runtime::raising(name),
-                            Some(runtime::Raising::MayRaise) | None
-                        )
+                        || runtime::has_exceptional_outcome(name)
                 }
                 OpKind::Call { .. }
                 | OpKind::Await { .. }

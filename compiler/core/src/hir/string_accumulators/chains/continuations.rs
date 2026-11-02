@@ -2,10 +2,7 @@
 //! can change representation. This uses the helper catalog, not source spelling.
 
 use super::GraphBudget;
-use crate::hir::{
-    Callee, OpKind, Program,
-    runtime::{self, Raising},
-};
+use crate::hir::{Callee, OpKind, Program, runtime};
 use rustc_hash::{FxHashMap, FxHashSet};
 use std::collections::VecDeque;
 
@@ -97,17 +94,10 @@ fn effect(op: &OpKind) -> Effect<'_> {
             callee: Callee::External(name),
             ..
         } => {
-            // Source throw lowers to this semantic root even though
-            // its present physical helper terminates the process.
-            if name != "nts_uncaught"
-                && matches!(
-                    runtime::raising(name),
-                    Some(Raising::NoRaise | Raising::Diverges)
-                )
-            {
-                Effect::Quiet
-            } else {
+            if runtime::has_exceptional_outcome(name) {
                 Effect::Unsupported
+            } else {
+                Effect::Quiet
             }
         }
         OpKind::Call {

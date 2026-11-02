@@ -44,13 +44,16 @@ type Declared = (
     Raising,
 );
 
-/// Language-level raising behavior. A host refusal or allocation failure is
-/// not a catchable JavaScript value; a helper which always ends the process
-/// has no returning or exceptional edge.
+/// Language-level raising behavior, independent of the physical return ABI.
+/// A host refusal or allocation failure is not a catchable JavaScript value.
+/// A nonreturning helper may still transfer a payload to an outer landing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Raising {
     NoRaise,
     MayRaise,
+    /// Does not return, but can deliver values to a surviving outer landing.
+    Transfers,
+    /// Always ends the process; neither a return nor an exceptional edge.
     Diverges,
 }
 
@@ -2407,7 +2410,7 @@ static SIGNATURES: &[Declared] = &[
         Raising::NoRaise,
     ),
     ("nts_to_uint8_fn", None, None, Raising::NoRaise),
-    ("nts_uncaught", None, None, Raising::Diverges),
+    ("nts_uncaught", None, None, Raising::Transfers),
     (
         "nts_unit",
         Some(&[
@@ -2842,6 +2845,17 @@ pub fn helper_names() -> impl Iterator<Item = &'static str> {
 #[must_use]
 pub fn raising(name: &str) -> Option<Raising> {
     declared(name).map(|it| it.3)
+}
+
+/// Whether a helper can expose an exceptional outcome to a surviving caller.
+/// Unknown contracts fail closed. Physical `noreturn` alone is insufficient:
+/// a nonlocal transfer can preserve its payload beyond the allocating frame.
+#[must_use]
+pub fn has_exceptional_outcome(name: &str) -> bool {
+    match raising(name) {
+        Some(Raising::NoRaise | Raising::Diverges) => false,
+        Some(Raising::MayRaise | Raising::Transfers) | None => true,
+    }
 }
 
 /// What `name` declares its parameters to be, if the runtime declares it.

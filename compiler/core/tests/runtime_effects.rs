@@ -54,11 +54,15 @@ fn effects_do_not_extend_the_scalar_conversion_view() {
 
 #[test]
 fn process_ending_helpers_are_distinct_from_language_raises() {
-    for name in ["nts_refused", "nts_assertion_failed", "nts_uncaught"] {
+    for name in ["nts_refused", "nts_assertion_failed"] {
         assert_eq!(runtime::raising(name), Some(Raising::Diverges), "{name}");
+        assert!(!runtime::has_exceptional_outcome(name), "{name}");
     }
+    assert_eq!(runtime::raising("nts_uncaught"), Some(Raising::Transfers));
+    assert!(runtime::has_exceptional_outcome("nts_uncaught"));
     for name in ["nts_raise", "nts_value_to_string", "nts_array_to_string"] {
         assert_eq!(runtime::raising(name), Some(Raising::MayRaise), "{name}");
+        assert!(runtime::has_exceptional_outcome(name), "{name}");
     }
     for name in [
         "nts_str_append",
@@ -70,5 +74,7 @@ fn process_ending_helpers_are_distinct_from_language_raises() {
         "nts_region_end_call",
     ] {
         assert_eq!(runtime::raising(name), Some(Raising::NoRaise), "{name}");
+        assert!(!runtime::has_exceptional_outcome(name), "{name}");
     }
+    assert!(runtime::has_exceptional_outcome("unknown_helper_contract"));
 }

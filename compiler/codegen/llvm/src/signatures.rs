@@ -2963,6 +2963,26 @@ mod tests {
     use super::SIGNATURES;
 
     #[test]
+    fn nonreturning_uncaught_still_has_an_exceptional_outcome() {
+        assert!(nts_core::hir::runtime::has_exceptional_outcome(
+            "nts_uncaught"
+        ));
+        for table in [
+            SIGNATURES,
+            super::super::signatures_win64::SIGNATURES_WIN64,
+            super::super::signatures_arm64::SIGNATURES_ARM64,
+            super::super::signatures_arm64_linux::SIGNATURES_ARM64_LINUX,
+            super::super::signatures_arm64_windows::SIGNATURES_ARM64_WINDOWS,
+        ] {
+            let signature = table
+                .iter()
+                .find(|entry| entry.name == "nts_uncaught")
+                .expect("uncaught ABI");
+            assert!(signature.attributes.contains(&"noreturn"));
+        }
+    }
+
+    #[test]
     fn every_native_helper_signature_has_a_shared_raising_contract() {
         for table in [
             SIGNATURES,

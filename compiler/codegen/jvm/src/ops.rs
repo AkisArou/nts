@@ -8561,6 +8561,19 @@ mod agrees_with_hir {
     use nts_core::hir::{self, HirType};
 
     #[test]
+    fn uncaught_mapping_preserves_the_shared_exceptional_outcome() {
+        assert!(hir::runtime::has_exceptional_outcome("nts_uncaught"));
+        assert_eq!(
+            core_external("nts_uncaught"),
+            Some((
+                super::RUNTIME,
+                "uncaught",
+                "(Lnts/rt/NtsValue;Ljava/lang/String;)V"
+            ))
+        );
+    }
+
+    #[test]
     fn every_mapped_runtime_helper_has_a_shared_raising_contract() {
         for name in mapped_names() {
             if core_external(name).is_some() {

@@ -140,6 +140,7 @@ fn nonreturning_helper_outcomes_match_the_shared_contract() {
 
     for flags in [vec![], vec!["-DNTS_PROVIDER_RC"]] {
         let report = run_suite("helper_outcomes", &flags);
+        println!("provider={flags:?}\n{report}");
         let mut observed = BTreeSet::new();
         for row in report.lines() {
             let columns: Vec<_> = row.split('\t').collect();
@@ -148,21 +149,22 @@ fn nonreturning_helper_outcomes_match_the_shared_contract() {
             assert!(observed.insert(name));
             assert_eq!(
                 columns[1] == "transfer",
-                !matches!(
-                    runtime::raising(name),
-                    Some(Raising::NoRaise | Raising::Diverges)
-                ),
+                runtime::has_exceptional_outcome(name),
                 "actual runtime observation disagrees with {name}: {row}"
             );
         }
         let declared: BTreeSet<_> = runtime::helper_names()
-            .filter(|name| runtime::raising(name) == Some(Raising::Diverges))
+            .filter(|name| {
+                matches!(
+                    runtime::raising(name),
+                    Some(Raising::Diverges | Raising::Transfers)
+                )
+            })
             .collect();
         assert_eq!(
             observed, declared,
             "every nonreturning helper must be observed"
         );
-        println!("provider={flags:?}\n{report}");
     }
 }
 
