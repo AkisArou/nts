@@ -198,7 +198,7 @@ NtsArray *nts_web_compression_process(NtsHeader *handle, NtsView *input,
   NtsArray *chunks = nts_array_new(&chunks_descriptor, 0);
   state->consumed = 0;
   if (state->closed || state->finished) {
-    state->status = OPERATION;
+    fail(state, OPERATION);
     return chunks;
   }
   if (!isfinite(flush) || flush < PROCESS || flush > FINISH ||

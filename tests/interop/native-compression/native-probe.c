@@ -91,7 +91,30 @@ static void one_format(int format, size_t size) {
   assert(nts_live_count() == live);
 }
 
+static void finished_failure(bool illegal_process) {
+  size_t live = nts_live_count();
+  NtsHeader *encoder = nts_web_compression_open(0, false, 15);
+  NtsView *empty = nts_view_from_bytes(NULL, 0);
+  NtsArray *chunks = nts_web_compression_process(encoder, empty, 2, INFINITY);
+  assert(nts_web_compression_status(encoder) == 0);
+  nts_release((NtsHeader *)chunks);
+  if (illegal_process) {
+    chunks = nts_web_compression_process(encoder, empty, 0, INFINITY);
+    assert(nts_web_compression_status(encoder) == 4);
+    assert(chunks->header.length == 0);
+    nts_release((NtsHeader *)chunks);
+  }
+  // The only difference between the subject and control is the illegal call.
+  assert(nts_web_compression_reset(encoder) == !illegal_process);
+  nts_web_compression_close(encoder);
+  nts_release(encoder);
+  nts_release((NtsHeader *)empty);
+  assert(nts_live_count() == live);
+}
+
 int main(void) {
+  finished_failure(false);
+  finished_failure(true);
   for (int format = 0; format < 4; format++) {
     one_format(format, 0);
     one_format(format, 1);
