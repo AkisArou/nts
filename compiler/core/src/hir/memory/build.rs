@@ -947,6 +947,29 @@ mod tests {
         review_dispatch_facts(false, false);
     }
 
+    #[test]
+    fn review_unavailable_dispatch_entry_keeps_partial_set_unknown() {
+        for closure in [false, true] {
+            let mut program = review_dispatch_program(false, true, false);
+            program.funcs.retain(|f| f.name != "default");
+            if closure {
+                let OpKind::Call { callee, .. } = &mut program.funcs[0].values[5].kind else {
+                    panic!("the subject has a dispatch call")
+                };
+                *callee = Callee::Closure { slot: 0 };
+            }
+            let report = super::super::Analysis::of(&program).into_report();
+            assert!(report.failure.is_none());
+            assert!(
+                report
+                    .functions
+                    .iter()
+                    .any(|f| f.function == "root#init" && f.unknown_effects),
+                "one known row must not hide an unavailable default body"
+            );
+        }
+    }
+
     fn review_abi_program(invalid_neighbor: bool) -> Program {
         let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
         let mut body = function(
@@ -1248,6 +1271,7 @@ struct Builder<'p> {
     pending: VecDeque<usize>,
     by_name: BTreeMap<&'p str, usize>,
     targets: BTreeMap<u32, Vec<usize>>,
+    unsealed_targets: BTreeSet<u32>,
     layouts: BTreeMap<super::super::TypeId, usize>,
     field_slots: Vec<Vec<Slot>>,
     reference_layouts: Vec<bool>,
@@ -1319,6 +1343,7 @@ pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
 struct CallGraph<'p> {
     by_name: BTreeMap<&'p str, usize>,
     targets: BTreeMap<u32, Vec<usize>>,
+    unsealed_targets: BTreeSet<u32>,
     components: Vec<usize>,
     recursive: BTreeSet<usize>,
     raises: Vec<bool>,
@@ -1326,6 +1351,43 @@ struct CallGraph<'p> {
     work: usize,
     #[cfg(test)]
     index_edges: usize,
+}
+
+struct DispatchTargets {
+    known: BTreeMap<u32, Vec<usize>>,
+    unsealed: BTreeSet<u32>,
+    work: usize,
+}
+
+impl DispatchTargets {
+    fn of(program: &Program, by_name: &BTreeMap<&str, usize>) -> Self {
+        let mut sets: BTreeMap<u32, BTreeSet<usize>> = BTreeMap::new();
+        let mut unsealed = BTreeSet::new();
+        // Charge the iterator's complete scan, including absent row entries.
+        let mut work = program
+            .layouts
+            .iter()
+            .map(|layout| layout.methods.len())
+            .sum();
+        for (slot, name) in program.dispatch_entries() {
+            work += 1;
+            let targets = sets.entry(slot).or_default();
+            if let Some(&target) = by_name.get(name) {
+                targets.insert(target);
+            } else {
+                // A known subset is not a complete producer authority.
+                unsealed.insert(slot);
+            }
+        }
+        Self {
+            known: sets
+                .into_iter()
+                .map(|(slot, set)| (slot, set.into_iter().collect()))
+                .collect(),
+            unsealed,
+            work,
+        }
+    }
 }
 
 impl<'p> CallGraph<'p> {
@@ -1336,15 +1398,8 @@ impl<'p> CallGraph<'p> {
             .enumerate()
             .map(|(at, func)| (func.name.as_str(), at))
             .collect();
-        let targets: BTreeMap<_, _> = program
-            .slot_targets()
-            .into_iter()
-            .map(|(slot, mut targets)| {
-                targets.sort_unstable();
-                targets.dedup();
-                (slot, targets)
-            })
-            .collect();
+        let dispatch = DispatchTargets::of(program, &by_name);
+        let targets = dispatch.known;
         // Each slot owns its target set once. Repeating that set at each call
         // site makes even the initial SCC index quadratic before budgets exist.
         let slots: BTreeMap<_, _> = targets
@@ -1378,11 +1433,7 @@ impl<'p> CallGraph<'p> {
         edges.extend(targets.values().cloned());
         let index_edges = edges.iter().map(Vec::len).sum::<usize>();
         let work = program.funcs.len().saturating_mul(2)
-            + program
-                .layouts
-                .iter()
-                .map(|layout| layout.methods.len())
-                .sum::<usize>()
+            + dispatch.work
             + program
                 .funcs
                 .iter()
@@ -1408,6 +1459,7 @@ impl<'p> CallGraph<'p> {
         Self {
             by_name,
             targets,
+            unsealed_targets: dispatch.unsealed,
             components,
             recursive,
             raises,
@@ -1603,6 +1655,7 @@ impl<'p> Builder<'p> {
             pending: VecDeque::new(),
             by_name: calls.by_name,
             targets: calls.targets,
+            unsealed_targets: calls.unsealed_targets,
             layouts,
             field_slots,
             reference_layouts,
@@ -2263,9 +2316,14 @@ impl<'p> Builder<'p> {
             }
             Callee::Native(_) => Vec::new(),
         };
-        if targets.is_empty() {
+        let unsealed = matches!(callee,
+            Callee::Virtual { slot, .. } | Callee::Closure { slot }
+                if self.unsealed_targets.contains(slot));
+        if targets.is_empty() || unsealed {
             self.opaque(context, id, args, "unresolved call target");
-            return;
+            if targets.is_empty() {
+                return;
+            }
         }
         for target in targets {
             if self.program.funcs[target].abstract_declaration
