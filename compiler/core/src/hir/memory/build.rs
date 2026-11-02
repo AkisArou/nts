@@ -907,6 +907,25 @@ mod tests {
         review_operand("unplaced", false);
     }
 
+    #[test]
+    fn review_operand_domain_charges_actual_wide_call_operands_once() {
+        for n in [16, 64, 256] {
+            let mut kinds = vec![OpKind::ConstInt(0); n];
+            kinds.push(OpKind::Call {
+                callee: Callee::External("opaque".to_owned()),
+                args: (0..n)
+                    .map(|id| ValueId(u32::try_from(id).expect("test value")))
+                    .collect(),
+                frame: None,
+            });
+            let body = function("operand-cost".to_owned(), kinds);
+            let (failure, work) = operand_domain(&body);
+            assert!(failure.is_none());
+            assert_eq!(work, 3 * n + 2);
+            println!("review-operand-domain\tn={n}\twork={work}");
+        }
+    }
+
     fn review_edge_program(args: Vec<ValueId>) -> Program {
         let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
         let mut body = function(
