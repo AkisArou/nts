@@ -1580,6 +1580,23 @@ struct FunctionIndex<'p> {
     value_blocks: Vec<BTreeMap<ValueId, BlockId>>,
 }
 
+fn metadata_work(program: &Program) -> usize {
+    // parameter_values must scan the actual arena to find ABI definitions,
+    // including unplaced parameters. Other orphan producers remain excluded
+    // from facts. Reserve the complete scan before constructing that metadata.
+    program
+        .funcs
+        .iter()
+        .map(|function| function.values.len() + function.params.len())
+        .sum::<usize>()
+        + program
+            .layouts
+            .iter()
+            .map(|layout| 2 * layout.fields.len() + layout.types.len())
+            .sum::<usize>()
+        + program.globals.len()
+}
+
 impl<'p> FunctionIndex<'p> {
     fn of(program: &'p Program) -> Self {
         let cycles: Vec<_> = program.funcs.iter().map(cfg::cyclic_blocks).collect();
@@ -1653,7 +1670,7 @@ impl<'p> FunctionIndex<'p> {
             cycles,
             failure: cfg_failure.or(phase_failure),
             unsupported_phase,
-            work: cfg_work,
+            work: cfg_work.saturating_add(metadata_work(program)),
             value_blocks,
         }
     }

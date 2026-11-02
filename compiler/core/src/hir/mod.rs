@@ -3982,18 +3982,15 @@ impl Program {
             .collect();
 
         let mut targets: rustc_hash::FxHashMap<u32, Vec<usize>> = rustc_hash::FxHashMap::default();
-        let mut seen: rustc_hash::FxHashMap<u32, rustc_hash::FxHashSet<usize>> =
-            rustc_hash::FxHashMap::default();
         for layout in &self.layouts {
             for (slot, method) in layout.methods.iter().enumerate() {
                 let Some(target) = method.as_deref().and_then(|name| by_name.get(name)) else {
                     continue;
                 };
-                let slot = u32::try_from(slot).unwrap_or(u32::MAX);
-                let entry = targets.entry(slot).or_default();
-                // Keep first-seen target order, without rescanning the growing
-                // vector for every implementation of a widely shared slot.
-                if seen.entry(slot).or_default().insert(*target) {
+                let entry = targets
+                    .entry(u32::try_from(slot).unwrap_or(u32::MAX))
+                    .or_default();
+                if !entry.contains(target) {
                     entry.push(*target);
                 }
             }
