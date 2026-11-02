@@ -668,6 +668,16 @@ mod tests {
             report.failure
         );
         assert!(
+            matches!(report.failure, Some(Reason::UnsupportedPhase(_))),
+            "untransformed input must be named Unknown"
+        );
+        assert!(
+            report
+                .sites
+                .iter()
+                .all(|site| matches!(site.home, Home::Heap(Reason::UnsupportedPhase(_))))
+        );
+        assert!(
             report
                 .sites
                 .iter()
@@ -913,6 +923,8 @@ struct Builder<'p> {
     summaries: Vec<Option<Summary>>,
     summary_used: Vec<bool>,
     context_membership_visits: usize,
+    contexts_of: Vec<Vec<usize>>,
+    unsupported_phase: bool,
 }
 
 pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
@@ -1112,6 +1124,24 @@ impl<'p> Builder<'p> {
             .iter()
             .find_map(|cycle| cycle.as_ref().err())
             .map(|error| Reason::InvalidControlFlow(error.to_string()));
+        let phase_failure = program.funcs.iter().find_map(|function| {
+            function
+                .blocks
+                .iter()
+                .flat_map(|block| &block.ops)
+                .find_map(|id| {
+                    function.values.get(id.0 as usize).and_then(|op| {
+                        matches!(op.kind, OpKind::Await { .. } | OpKind::Yield { .. }).then(|| {
+                            Reason::UnsupportedPhase(format!(
+                                "{}:%{}: await/yield must be transformed before memory analysis",
+                                function.name, id.0
+                            ))
+                        })
+                    })
+                })
+        });
+        let unsupported_phase = phase_failure.is_some();
+        let validated_input = cfg_failure.is_none() && !unsupported_phase;
         let cfg_work = program
             .funcs
             .iter()
@@ -1183,13 +1213,17 @@ impl<'p> Builder<'p> {
             input.saturating_mul(limits.edges_per_operation),
         );
         graph.work = calls.work.saturating_add(cfg_work);
-        graph.failure = cfg_failure;
+        graph.failure = cfg_failure.or(phase_failure);
         if graph.work > graph.work_limit {
-            graph.failure = Some(Reason::WorkBudget);
+            graph.failure.get_or_insert(Reason::WorkBudget);
         }
         graph.alias_limit = limits.aliases_per_value;
         let globals = program.globals.iter().map(|_| graph.node()).collect();
-        let parameters = parameters(program, &mut graph);
+        let parameters = if validated_input {
+            parameters(program, &mut graph)
+        } else {
+            vec![Vec::new(); program.funcs.len()]
+        };
         let mut build = Self {
             program,
             limits,
@@ -1223,11 +1257,20 @@ impl<'p> Builder<'p> {
             summaries: Vec::new(),
             summary_used: vec![false; program.funcs.len()],
             context_membership_visits: 0,
+            contexts_of: vec![Vec::new(); program.funcs.len()],
+            unsupported_phase,
         };
         build.summaries = program
             .funcs
             .iter()
-            .map(|function| Summary::of(function, |ty, index| build.field(ty, index)))
+            .enumerate()
+            .map(|(at, function)| {
+                if build.cycles[at].is_err() || build.unsupported_phase {
+                    None
+                } else {
+                    Summary::of(function, |ty, index| build.field(ty, index))
+                }
+            })
             .collect();
         build
     }
@@ -1312,6 +1355,9 @@ impl<'p> Builder<'p> {
             repeated,
             effects: Effects::default(),
         });
+        self.contexts_of[function].push(at);
+        self.context_membership_visits += 1;
+        self.graph.charge();
         self.counts[function] += 1;
         if fallback {
             self.fallback_contexts[function] = Some(at);
@@ -1515,7 +1561,17 @@ impl<'p> Builder<'p> {
         if self.cycles[function_index].is_err() {
             return;
         }
-        for block in verify::reverse_postorder(function) {
+        // Unsupported pre-suspend input still gets a complete placed-site
+        // inventory. No liveness/alias/lifetime fact from that phase publishes
+        // a proof; ordinary preparation observes only transformed input.
+        let blocks = if self.unsupported_phase {
+            (0..function.blocks.len())
+                .map(|at| BlockId(u32::try_from(at).unwrap_or(u32::MAX)))
+                .collect()
+        } else {
+            verify::reverse_postorder(function)
+        };
+        for block in blocks {
             let repeated = self.contexts[context].repeated
                 || self.cycles[function_index]
                     .as_ref()
@@ -2107,11 +2163,13 @@ impl<'p> Builder<'p> {
                     break;
                 }
             };
-            for context in 0..self.contexts.len() {
+            let count = self.contexts_of[function_index].len();
+            if !self.graph.charge_many(count) {
+                break;
+            }
+            for position in 0..count {
+                let context = self.contexts_of[function_index][position];
                 self.context_membership_visits += 1;
-                if self.contexts[context].function != function_index {
-                    continue;
-                }
                 for (block_index, block) in function.blocks.iter().enumerate() {
                     let block_id = BlockId(u32::try_from(block_index).unwrap_or(u32::MAX));
                     let mut before: BTreeSet<_> = live
@@ -2571,14 +2629,30 @@ impl<'p> Builder<'p> {
         let unknown = ValueFact::Unknown(Unknown::NotAnalysed);
         let payload = |node: Node| {
             if self.graph.failure.is_some() {
-                ValueFact::Unknown(Unknown::Budget)
+                ValueFact::Unknown(
+                    if matches!(
+                        self.graph.failure,
+                        Some(Reason::WorkBudget | Reason::EdgeBudget)
+                    ) {
+                        Unknown::Budget
+                    } else {
+                        Unknown::NotAnalysed
+                    },
+                )
             } else {
                 self.graph.values[node].payload.unwrap_or(unknown)
             }
         };
         let aliases = |node: Node| {
             if self.graph.failure.is_some() {
-                return vec!["unknown:budget".to_owned()];
+                return vec![if matches!(
+                    self.graph.failure,
+                    Some(Reason::WorkBudget | Reason::EdgeBudget)
+                ) {
+                    "unknown:budget".to_owned()
+                } else {
+                    format!("unknown:{:?}", self.graph.failure)
+                }];
             }
             let mut aliases: Vec<_> = self.graph.values[node]
                 .objects
@@ -2644,7 +2718,9 @@ impl<'p> Builder<'p> {
                     .origin
                     .clone(),
                 context: context.key.clone(),
-                multiplicity: if allocation.repeated {
+                multiplicity: if let Some(failure) = &self.graph.failure {
+                    Multiplicity::Unbounded { witness: format!("no finite-instance proof: {failure:?}") }
+                } else if allocation.repeated {
                     Multiplicity::Unbounded { witness: format!(
                         "{}:%{}: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained",
                         context.key, allocation.id.value) }

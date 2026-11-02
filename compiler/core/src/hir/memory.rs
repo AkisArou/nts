@@ -95,6 +95,7 @@ pub enum Reason {
     RetainedEnvironment(String),
     MissingOutcome(String),
     InvalidControlFlow(String),
+    UnsupportedPhase(String),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
