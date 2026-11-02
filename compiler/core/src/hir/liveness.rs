@@ -221,23 +221,22 @@ fn analyze_using(
 ) -> Result<Liveness, Failure> {
     let count = func.blocks.len();
     let values = func.values.len();
-    control.take(
-        values
-            .saturating_mul(values)
-            .saturating_mul(4)
-            .saturating_add(count.saturating_mul(values)),
-    )?;
+    control.take(count.saturating_mul(2))?;
     let mut live_in: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
     let mut live_out: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
 
     // Precomputed per block, since the fixpoint revisits them.
-    let used: Vec<FxHashSet<ValueId>> = (0..count).map(|index| reads(func, index)).collect();
-    let defined: Vec<FxHashSet<ValueId>> = (0..count).map(|index| writes(func, index)).collect();
+    let used: Vec<_> = (0..count)
+        .map(|index| reads(func, index, control))
+        .collect::<Result<_, _>>()?;
+    let defined: Vec<_> = (0..count)
+        .map(|index| writes(func, index, control))
+        .collect::<Result<_, _>>()?;
     // Only *frame* objects, and only because their retain is a no-op: an
     // immortal header has no count to raise, so a name cannot keep one alive
     // and the frame has to. See `super::undominated_names` for the objects this
     // cannot be done for, which `place_allocations` keeps off the frame.
-    let names = object_names_using(func, stores, control)?;
+    let frame_named_by = frame_names(func, stores, control)?;
     // A counted handle converted to a type nothing counts -- a `GObject *`
     // passed where C takes a `GTypeInstance *` or a `void *` -- is read through
     // the conversion afterwards, which holds no reference: the handle is live
@@ -250,27 +249,13 @@ fn analyze_using(
     // its own either (`own::views_borrow`): the same rule, for the same
     // reason. Where the view does take one, the handle living longer costs a
     // later release and nothing else.
-    let viewed = counted_views(func);
-    let mut frame_named_by: FxHashMap<ValueId, Vec<ValueId>> = FxHashMap::default();
-    for (alias, roots) in &names {
-        let framed: Vec<ValueId> = roots
-            .iter()
-            .copied()
-            .filter(|root| {
-                matches!(
-                    func.values[root.0 as usize].kind,
-                    OpKind::ObjectNew { frame: true }
-                )
-            })
-            .collect();
-        if !framed.is_empty() {
-            frame_named_by.insert(*alias, framed);
-        }
-    }
+    let viewed = counted_views(func, control)?;
 
+    control.take(count.saturating_mul(3))?;
     let mut predecessors = vec![Vec::new(); count];
     let mut edges = 0u128;
     for (index, block) in func.blocks.iter().enumerate() {
+        control.take(1)?;
         for successor in block.terminator.successors() {
             control.take(1)?;
             predecessors[successor.0 as usize].push(index);
@@ -286,19 +271,14 @@ fn analyze_using(
     while let Some(index) = pending.pop_front() {
         step(&mut remaining, "backward propagation")?;
         queued[index] = false;
-        // Successor unions, live/used/defined sets, and every possible
-        // frame-name relation are bounded by this function's value set.
-        control.take(
-            values
-                .saturating_mul(values)
-                .saturating_add(values.saturating_mul(12))
-                .saturating_add(1),
-        )?;
+        control.take(1)?;
         let mut out = FxHashSet::default();
         for successor in func.blocks[index].terminator.successors() {
+            control.take(live_in[successor.0 as usize].len().saturating_add(1))?;
             out.extend(live_in[successor.0 as usize].iter().copied());
         }
 
+        control.take(out.len().saturating_add(used[index].len()))?;
         let mut entering = out.clone();
         entering.extend(used[index].iter().copied());
         // A frame object is kept alive by whatever names it, and a name is
@@ -316,19 +296,27 @@ fn analyze_using(
         // lane that counts, and nothing in the corpus reached it: the shape
         // needs a computed message, a frame-placed error, and a `catch`
         // that reads it back.
+        control.take(entering.len().saturating_mul(3))?;
         for value in entering.iter().copied().collect::<Vec<_>>() {
             if let Some(named) = frame_named_by.get(&value) {
+                control.take(named.len())?;
                 entering.extend(named.iter().copied());
             }
             if let Some(handle) = viewed.get(&value) {
+                control.take(1)?;
                 entering.insert(*handle);
             }
         }
+        control.take(defined[index].len())?;
         for value in &defined[index] {
             entering.remove(value);
         }
 
         live_out[index] = out;
+        // Hash-set equality visits entries only when the lengths agree.
+        if entering.len() == live_in[index].len() {
+            control.take(entering.len())?;
+        }
         if entering != live_in[index] {
             live_in[index] = entering;
             for &predecessor in &predecessors[index] {
@@ -343,11 +331,17 @@ fn analyze_using(
 
     let available = (0..count)
         .map(|index| {
+            control.take(
+                live_in[index]
+                    .len()
+                    .saturating_add(defined[index].len())
+                    .saturating_add(1),
+            )?;
             let mut here = live_in[index].clone();
             here.extend(defined[index].iter().copied());
-            here
+            Ok(here)
         })
-        .collect();
+        .collect::<Result<_, Failure>>()?;
 
     Ok(Liveness {
         live_in,
@@ -356,34 +350,87 @@ fn analyze_using(
     })
 }
 
+/// Only actual placed frame roots can add ownership liveness. Before placement
+/// this column is empty; memory's existing graph owns alias/held reachability.
+fn frame_names(
+    func: &Func,
+    stores: &CalleeStores<'_>,
+    control: &mut Control<'_>,
+) -> Result<FxHashMap<ValueId, Vec<ValueId>>, Failure> {
+    let mut has_frame = false;
+    for block in &func.blocks {
+        control.take(1)?;
+        for id in &block.ops {
+            control.take(1)?;
+            has_frame |= matches!(
+                func.values[id.0 as usize].kind,
+                OpKind::ObjectNew { frame: true }
+            );
+        }
+    }
+    let mut framed = FxHashMap::default();
+    if has_frame {
+        for (alias, roots) in object_names_using(func, stores, control)? {
+            control.take(roots.len().saturating_add(1))?;
+            let roots: Vec<_> = roots
+                .into_iter()
+                .filter(|id| {
+                    matches!(
+                        func.values[id.0 as usize].kind,
+                        OpKind::ObjectNew { frame: true }
+                    )
+                })
+                .collect();
+            if !roots.is_empty() {
+                framed.insert(alias, roots);
+            }
+        }
+    }
+    Ok(framed)
+}
+
 /// A borrowed native view keeps its counted handle alive.
-fn counted_views(func: &Func) -> FxHashMap<ValueId, ValueId> {
-    func.values
-        .iter()
-        .enumerate()
-        .filter_map(|(at, op)| match op.kind {
+fn counted_views(
+    func: &Func,
+    control: &mut Control<'_>,
+) -> Result<FxHashMap<ValueId, ValueId>, Failure> {
+    let mut viewed = FxHashMap::default();
+    // This really scans the complete arena, including orphan entries.
+    control.take(func.values.len())?;
+    for (at, op) in func.values.iter().enumerate() {
+        match op.kind {
             OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }
                 if func.values[operand.0 as usize].ty.counting().is_some() =>
             {
-                Some((ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand))
+                control.take(1)?;
+                viewed.insert(ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand);
             }
-            _ => None,
-        })
-        .collect()
+            _ => {}
+        }
+    }
+    Ok(viewed)
 }
 
 /// Values a block reads, including the arguments its terminator passes on.
 ///
 /// An edge argument is read by the block that *jumps*, not by the one that
 /// receives it: that is where the value is loaded from.
-fn reads(func: &Func, index: usize) -> FxHashSet<ValueId> {
+fn reads(
+    func: &Func,
+    index: usize,
+    control: &mut Control<'_>,
+) -> Result<FxHashSet<ValueId>, Failure> {
     let block = &func.blocks[index];
     let mut used = FxHashSet::default();
     for value in &block.ops {
-        used.extend(super::operands_of(&func.values[value.0 as usize].kind));
+        let operands = super::operands_of(&func.values[value.0 as usize].kind);
+        control.take(operands.len().saturating_add(1))?;
+        used.extend(operands);
     }
-    used.extend(super::operands_of_terminator(&block.terminator));
-    used
+    let operands = super::operands_of_terminator(&block.terminator);
+    control.take(operands.len().saturating_add(1))?;
+    used.extend(operands);
+    Ok(used)
 }
 
 /// Which objects each value can still reach.
@@ -422,6 +469,7 @@ fn object_names_using(
     let edges = name_edges(func, callee_stores, control)?;
     let mut named: FxHashMap<ValueId, FxHashSet<ValueId>> = FxHashMap::default();
     let mut pending = VecDeque::new();
+    control.take(func.values.len())?;
     for (at, op) in func.values.iter().enumerate() {
         if matches!(op.kind, OpKind::ObjectNew { .. }) {
             let root = ValueId(u32::try_from(at).unwrap_or(u32::MAX));
@@ -442,17 +490,25 @@ fn object_names_using(
             }
         }
     }
-    for roots in named.values() {
-        control.take(roots.len().saturating_mul(roots.len()).saturating_add(1))?;
-    }
-    Ok(named
-        .into_iter()
-        .map(|(alias, roots)| {
-            let mut roots: Vec<_> = roots.into_iter().collect();
+    let mut result = FxHashMap::default();
+    for (alias, roots) in named {
+        control.take(roots.len().saturating_add(1))?;
+        let mut roots: Vec<_> = roots.into_iter().collect();
+        if control.charge.is_none() {
             roots.sort_unstable_by_key(|root| root.0);
-            (alias, roots)
-        })
-        .collect())
+        } else {
+            // Canonicalization is bounded by this already charged input row.
+            // Meter actual comparisons, not a hypothetical V² sort price.
+            let mut comparisons = 0usize;
+            roots.sort_unstable_by(|a, b| {
+                comparisons = comparisons.saturating_add(1);
+                a.0.cmp(&b.0)
+            });
+            control.take(comparisons)?;
+        }
+        result.insert(alias, roots);
+    }
+    Ok(result)
 }
 
 fn name_edges(
@@ -553,11 +609,7 @@ fn call_name_edges(
     callee_stores: &CalleeStores<'_>,
     control: &mut Control<'_>,
 ) -> Result<(), Failure> {
-    control.take(
-        args.len()
-            .saturating_mul(args.len())
-            .saturating_add(args.len()),
-    )?;
+    control.take(1)?;
     if let Some(pairs) = callee_stores(callee) {
         control.take(pairs.len())?;
         for (what, into) in pairs {
@@ -570,6 +622,7 @@ fn call_name_edges(
         }
     } else {
         for (what, &kept) in args.iter().enumerate() {
+            control.take(args.len().saturating_add(1))?;
             for (into, &container) in args.iter().enumerate() {
                 if what != into && func.values[container.0 as usize].ty.may_hold_a_reference() {
                     edges[kept.0 as usize].insert(container);
@@ -578,6 +631,7 @@ fn call_name_edges(
         }
     }
     if func.values[value.0 as usize].ty.may_hold_a_reference() {
+        control.take(args.len())?;
         for kept in args {
             edges[kept.0 as usize].insert(value);
         }
@@ -586,11 +640,22 @@ fn call_name_edges(
 }
 
 /// Values a block defines: its operations and its own parameters.
-fn writes(func: &Func, index: usize) -> FxHashSet<ValueId> {
+fn writes(
+    func: &Func,
+    index: usize,
+    control: &mut Control<'_>,
+) -> Result<FxHashSet<ValueId>, Failure> {
     let block = &func.blocks[index];
+    control.take(
+        block
+            .ops
+            .len()
+            .saturating_add(block.params.len())
+            .saturating_add(1),
+    )?;
     let mut defined: FxHashSet<ValueId> = block.ops.iter().copied().collect();
     defined.extend(block.params.iter().copied());
-    defined
+    Ok(defined)
 }
 
 #[cfg(test)]

@@ -3357,8 +3357,19 @@ impl<'p> Builder<'p> {
         let program = self.program;
         let mut reports = Vec::new();
         for (function_index, function) in program.funcs.iter().enumerate() {
+            if self.graph.failure.is_some() {
+                break;
+            }
             if self.cycles[function_index].is_err() {
                 continue;
+            }
+            let scan = function
+                .blocks
+                .iter()
+                .map(|block| block.ops.len().saturating_add(1))
+                .sum();
+            if !self.graph.charge_many(scan) {
+                break;
             }
             let unsealed: BTreeMap<_, _> = function
                 .blocks
@@ -3391,17 +3402,39 @@ impl<'p> Builder<'p> {
                 self.context_membership_visits += 1;
                 for (block_index, block) in function.blocks.iter().enumerate() {
                     let block_id = BlockId(u32::try_from(block_index).unwrap_or(u32::MAX));
+                    let operands = super::super::operands_of_terminator(&block.terminator);
+                    if !self.graph.charge_many(
+                        live.live_out(block_id)
+                            .len()
+                            .saturating_add(operands.len())
+                            .saturating_add(1),
+                    ) {
+                        return reports;
+                    }
                     let mut before: BTreeSet<_> = live
                         .live_out(block_id)
                         .iter()
                         .copied()
-                        .chain(super::super::operands_of_terminator(&block.terminator))
-                        .filter(|id| function.value(*id).ty.may_hold_a_reference())
+                        .chain(operands)
+                        // Identity carriers can have an uncounted machine type.
+                        // The solved graph, not that type, owns their aliases.
+                        .filter(|id| {
+                            !self.graph.values[self.value(context, *id)]
+                                .objects
+                                .is_empty()
+                        })
                         .collect();
                     for &id in block.ops.iter().rev() {
+                        let operands = verify::operands(&function.value(id).kind);
+                        if !self.graph.charge_many(operands.len().saturating_add(1)) {
+                            return reports;
+                        }
                         before.remove(&id);
-                        for operand in verify::operands(&function.value(id).kind) {
-                            if function.value(operand).ty.may_hold_a_reference() {
+                        for operand in operands {
+                            if !self.graph.values[self.value(context, operand)]
+                                .objects
+                                .is_empty()
+                            {
                                 before.insert(operand);
                             }
                         }
