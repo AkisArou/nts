@@ -59,40 +59,23 @@ static const uint32_t step_offsets[] = {
     (uint32_t)offsetof(Step, next),
 };
 
-static const NtsDescriptor desc_step = {NTS_KIND_OBJECT,
-                                        (uint32_t)sizeof(Step),
-                                        2u,
-                                        1u,
-                                        step_offsets,
-                                        0,
-                                        "Step",
-                                        0u,
-                                        0,
-                                        NTS_ARRAY_UNKNOWN,
-                                        0u,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL};
+static const NtsDescriptor desc_step = {
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(Step),
+    .references = 2u,
+    .cyclic = 1u,
+    .offsets = step_offsets,
+    .name = "Step",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 
 /* The result array of an `all` over number payloads. */
-static const NtsDescriptor desc_numbers = {NTS_KIND_ARRAY,
-                                           (uint32_t)sizeof(double),
-                                           0u,
-                                           0u,
-                                           0,
-                                           0,
-                                           "number[]",
-                                           0u,
-                                           0,
-                                           NTS_ARRAY_FLOAT,
-                                           0u,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL};
+static const NtsDescriptor desc_numbers = {
+    .kind = NTS_KIND_ARRAY,
+    .size = (uint32_t)sizeof(double),
+    .name = "number[]",
+    .element = NTS_ARRAY_FLOAT,
+};
 
 static void step_run(void *state) {
   Step *step = (Step *)state;

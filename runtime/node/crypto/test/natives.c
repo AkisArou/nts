@@ -167,7 +167,10 @@ static void on_job(NtsHeader *self, bool ok, NtsView *out) {
 
 static void *const job_methods[] = {(void *)(void (*)(NtsHeader *, bool, NtsView *))on_job};
 static const NtsDescriptor job_desc = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL, job_methods, "OnJob", 0u, NULL,
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(NtsHeader),
+    .methods = job_methods,
+    .name = "OnJob",
 };
 static NtsHeader job_callback = {&job_desc, NTS_IMMORTAL, 0u, 0u};
 
@@ -585,7 +588,10 @@ static void on_keygen(NtsHeader *self, bool ok, double key) {
 
 static void *const keygen_methods[] = {(void *)(void (*)(NtsHeader *, bool, double))on_keygen};
 static const NtsDescriptor keygen_desc = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL, keygen_methods, "OnKeygen", 0u, NULL,
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(NtsHeader),
+    .methods = keygen_methods,
+    .name = "OnKeygen",
 };
 static NtsHeader keygen_callback = {&keygen_desc, NTS_IMMORTAL, 0u, 0u};
 
@@ -859,7 +865,10 @@ static void on_pair(NtsHeader *self, bool ok, NtsView *first, NtsView *second) {
 
 static void *const pair_methods[] = {(void *)(void (*)(NtsHeader *, bool, NtsView *, NtsView *))on_pair};
 static const NtsDescriptor pair_desc = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL, pair_methods, "OnPair", 0u, NULL,
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(NtsHeader),
+    .methods = pair_methods,
+    .name = "OnPair",
 };
 static NtsHeader pair_callback = {&pair_desc, NTS_IMMORTAL, 0u, 0u};
 

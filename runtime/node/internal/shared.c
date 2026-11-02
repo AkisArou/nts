@@ -7,14 +7,13 @@
 #include "shared.h"
 
 const NtsDescriptor nts_node_desc_double = {
-    NTS_KIND_ARRAY, sizeof(double), 0, 0, 0, 0, "double", 0, 0,
-    NTS_ARRAY_FLOAT};
+    .kind = NTS_KIND_ARRAY,
+    .size = sizeof(double),
+    .name = "double",
+    .element = NTS_ARRAY_FLOAT,
+};
 
 /* Matches what the emitter writes for the same shape, field for field:
- *
- *     static const NtsDescriptor nts_desc_NtsValue = {
- *         NTS_KIND_ARRAY, sizeof(NtsValue), 0, 1, 0, 0, "NtsValue[]", 1, 0,
- *         ...};
  *
  * Copied from a program that builds one rather than reasoned out, because the
  * two have to agree exactly and only one of them is generated. `cyclic` is 1
@@ -22,8 +21,13 @@ const NtsDescriptor nts_node_desc_double = {
  * caller pushes into itself is collected only if the collector may start at
  * it (the emitter's `emit_descriptors` says why). */
 const NtsDescriptor nts_node_desc_value = {
-    NTS_KIND_ARRAY, sizeof(NtsValue), 0, 1, 0, 0, "NtsValue[]", 1, 0,
-    NTS_ARRAY_VALUE};
+    .kind = NTS_KIND_ARRAY,
+    .size = sizeof(NtsValue),
+    .cyclic = 1,
+    .name = "NtsValue[]",
+    .erased = 1,
+    .element = NTS_ARRAY_VALUE,
+};
 
 /* A loaded addon can be shared by Node workers. Result-plus-status calls are
  * synchronous, but their status still belongs to the calling runtime thread. */

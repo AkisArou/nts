@@ -25,8 +25,14 @@ typedef struct Node {
 
 static const uint32_t node_refs[] = {offsetof(Node, a), offsetof(Node, b)};
 static const NtsDescriptor node_desc = {
-    NTS_KIND_OBJECT,   sizeof(Node), 2u,   1u,   node_refs, 0,    "Node", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u,           NULL, NULL, NULL,      NULL, NULL};
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(Node),
+    .references = 2u,
+    .cyclic = 1u,
+    .offsets = node_refs,
+    .name = "Node",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 
 static int failures;
 

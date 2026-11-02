@@ -32,22 +32,12 @@ static void check(const char *what, bool ok) {
 }
 
 /* An array of references, in the shape `codegen/c` emits for `string[]`. */
-static const NtsDescriptor desc_strings = {NTS_KIND_ARRAY,
-                                           (uint32_t)sizeof(void *),
-                                           0u,
-                                           0u,
-                                           0,
-                                           0,
-                                           "NtsString*[]",
-                                           0u,
-                                           0,
-                                           NTS_ARRAY_REFERENCE,
-                                           0u,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL};
+static const NtsDescriptor desc_strings = {
+    .kind = NTS_KIND_ARRAY,
+    .size = (uint32_t)sizeof(void *),
+    .name = "NtsString*[]",
+    .element = NTS_ARRAY_REFERENCE,
+};
 
 int main(void) {
   NtsArray *options = nts_array_new(&desc_strings, 0);

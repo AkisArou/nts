@@ -302,22 +302,13 @@ int main(void) {
     NtsSymbol *symbol = nts_symbol_new(NULL);
     NtsBigIntBox *wide = nts_bigint_box((__int128)9007199254740993ULL);
     /* Closure layouts are OBJECTs; their FUNCTION tag comes from lowering. */
-    static const NtsDescriptor closure = {NTS_KIND_OBJECT,
-                                          sizeof(NtsHeader),
-                                          0,
-                                          1,
-                                          NULL,
-                                          NULL,
-                                          "closure",
-                                          0,
-                                          NULL,
-                                          NTS_ARRAY_UNKNOWN,
-                                          0,
-                                          NULL,
-                                          NULL,
-                                          NULL,
-                                          NULL,
-                                          NULL};
+    static const NtsDescriptor closure = {
+        .kind = NTS_KIND_OBJECT,
+        .size = sizeof(NtsHeader),
+        .cyclic = 1,
+        .name = "closure",
+        .element = NTS_ARRAY_UNKNOWN,
+    };
     NtsHeader *function = nts_object_new(&closure);
     NtsPromise *object = nts_promise_new();
     rejection_roundtrip(reference((NtsHeader *)text, NTS_TAG_STRING));

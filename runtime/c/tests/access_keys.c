@@ -33,22 +33,13 @@ static NtsString *unexpected(NtsHeader *receiver) {
 }
 
 static void objects_run_no_code(void) {
-  static const NtsDescriptor descriptor = {NTS_KIND_OBJECT,
-                                           sizeof(NtsHeader),
-                                           0,
-                                           0,
-                                           NULL,
-                                           NULL,
-                                           "Key",
-                                           0,
-                                           NULL,
-                                           NTS_ARRAY_UNKNOWN,
-                                           0,
-                                           NULL,
-                                           unexpected,
-                                           NULL,
-                                           NULL,
-                                           NULL};
+  static const NtsDescriptor descriptor = {
+      .kind = NTS_KIND_OBJECT,
+      .size = sizeof(NtsHeader),
+      .name = "Key",
+      .element = NTS_ARRAY_UNKNOWN,
+      .to_string = unexpected,
+  };
   NtsHeader object = {&descriptor, NTS_IMMORTAL, 0, 0};
   expect("object description omitted",
          nts_access_key_description(

@@ -86,8 +86,11 @@ static void one_value(__int128 n, const char *plain, const char *inspected) {
   nts_release((NtsHeader *)array);
 
   static const NtsDescriptor wide = {
-      NTS_KIND_ARRAY, sizeof(__int128), 0, 0,    NULL, NULL, "bigint[]", 0,
-      NULL,           NTS_ARRAY_BIGINT, 0, NULL, NULL, NULL, NULL,       NULL};
+      .kind = NTS_KIND_ARRAY,
+      .size = sizeof(__int128),
+      .name = "bigint[]",
+      .element = NTS_ARRAY_BIGINT,
+  };
   array = nts_array_new(&wide, 1);
   NTS_ITEMS(array, __int128)[0] = n;
   found = nts_array_element(

@@ -53,42 +53,30 @@ typedef struct Node {
 
 static const uint32_t node_refs[] = {offsetof(Node, a)};
 static const NtsDescriptor node_desc = {
-    NTS_KIND_OBJECT,   sizeof(Node), 1u,   1u,   node_refs, 0,    "Node", 0u, 0,
-    NTS_ARRAY_UNKNOWN, 0u,           NULL, NULL, NULL,      NULL, NULL};
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(Node),
+    .references = 1u,
+    .cyclic = 1u,
+    .offsets = node_refs,
+    .name = "Node",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 
-static const NtsDescriptor numbers_desc = {NTS_KIND_ARRAY,
-                                           (uint32_t)sizeof(double),
-                                           0u,
-                                           0u,
-                                           0,
-                                           0,
-                                           "number[]",
-                                           0u,
-                                           0,
-                                           NTS_ARRAY_FLOAT,
-                                           0u,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL};
+static const NtsDescriptor numbers_desc = {
+    .kind = NTS_KIND_ARRAY,
+    .size = (uint32_t)sizeof(double),
+    .name = "number[]",
+    .element = NTS_ARRAY_FLOAT,
+};
 
-static const NtsDescriptor refs_desc = {NTS_KIND_ARRAY,
-                                        (uint32_t)sizeof(void *),
-                                        1u,
-                                        1u,
-                                        0,
-                                        0,
-                                        "Node[]",
-                                        0u,
-                                        0,
-                                        NTS_ARRAY_REFERENCE,
-                                        0u,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL};
+static const NtsDescriptor refs_desc = {
+    .kind = NTS_KIND_ARRAY,
+    .size = (uint32_t)sizeof(void *),
+    .references = 1u,
+    .cyclic = 1u,
+    .name = "Node[]",
+    .element = NTS_ARRAY_REFERENCE,
+};
 
 static Node *node(double value) {
   Node *made = (Node *)nts_object_new(&node_desc);

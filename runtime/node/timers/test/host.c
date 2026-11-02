@@ -104,12 +104,16 @@ static void *const immediates_methods[] = {(void *)(void (*)(NtsHeader *))
                                                on_immediates_called};
 
 static const NtsDescriptor timers_desc = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL,
-    timers_methods,  "OnTimers",                  0u, NULL,
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(NtsHeader),
+    .methods = timers_methods,
+    .name = "OnTimers",
 };
 static const NtsDescriptor immediates_desc = {
-    NTS_KIND_OBJECT,    (uint32_t)sizeof(NtsHeader), 0u, 0u, NULL,
-    immediates_methods, "OnImmediates",              0u, NULL,
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(NtsHeader),
+    .methods = immediates_methods,
+    .name = "OnImmediates",
 };
 
 static NtsHeader on_timers = {&timers_desc, NTS_IMMORTAL, 0u, 0u};

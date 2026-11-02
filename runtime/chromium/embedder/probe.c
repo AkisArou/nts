@@ -267,18 +267,12 @@ typedef struct Completion {
   NtsHeader header;
   NtsChromiumProbe* probe; /* C owner lives until its document drops this. */
 } Completion;
-static const NtsDescriptor completion_descriptor = {NTS_KIND_OBJECT,
-                                                    sizeof(Completion),
-                                                    0u,
-                                                    0u,
-                                                    NULL,
-                                                    NULL,
-                                                    "Chromium completion",
-                                                    0u,
-                                                    NULL,
-                                                    NTS_ARRAY_UNKNOWN,
-                                                    0u,
-                                                    NULL, NULL, NULL};
+static const NtsDescriptor completion_descriptor = {
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(Completion),
+    .name = "Chromium completion",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 static void finish_counter(void* state) {
   Completion* completion = state;
   NtsChromiumProbe* probe = completion->probe;
@@ -326,18 +320,14 @@ typedef struct CancellationTask {
 } CancellationTask;
 static const uint32_t cancellation_offsets[] = {
     offsetof(CancellationTask, counter)};
-static const NtsDescriptor cancellation_descriptor = {NTS_KIND_OBJECT,
-                                                      sizeof(CancellationTask),
-                                                      1u,
-                                                      0u,
-                                                      cancellation_offsets,
-                                                      NULL,
-                                                      "Chromium cancellation",
-                                                      0u,
-                                                      NULL,
-                                                      NTS_ARRAY_UNKNOWN,
-                                                      0u,
-                                                      NULL, NULL, NULL};
+static const NtsDescriptor cancellation_descriptor = {
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(CancellationTask),
+    .references = 1u,
+    .offsets = cancellation_offsets,
+    .name = "Chromium cancellation",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 static void canceled_run(void* state) {
   CancellationTask* task = state;
   ntsChromiumIncrementCounter(task->counter);

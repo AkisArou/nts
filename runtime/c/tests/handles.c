@@ -170,22 +170,13 @@ int main(void) {
    * reference of its own, and every container gives back what it holds when
    * it dies -- the box a handle used to travel in did both by being managed,
    * and a handle is not. */
-  static const NtsDescriptor values = {NTS_KIND_ARRAY,
-                                       sizeof(NtsValue),
-                                       0,
-                                       0,
-                                       0,
-                                       0,
-                                       "NtsValue[]",
-                                       1,
-                                       0,
-                                       NTS_ARRAY_VALUE,
-                                       0u,
-                                       0,
-                                       NULL,
-                                       NULL,
-                                       NULL,
-                                       NULL};
+  static const NtsDescriptor values = {
+      .kind = NTS_KIND_ARRAY,
+      .size = sizeof(NtsValue),
+      .name = "NtsValue[]",
+      .erased = 1,
+      .element = NTS_ARRAY_VALUE,
+  };
   retained = 0;
   released = 0;
   NtsValue held = handle(NTS_TAG_HANDLE_GOBJECT, &object_a);

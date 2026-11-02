@@ -10,38 +10,20 @@ static void check(const char *name, bool holds) {
   failures += !holds;
 }
 
-static const NtsDescriptor leaf = {NTS_KIND_OBJECT,
-                                   sizeof(NtsHeader),
-                                   0u,
-                                   0u,
-                                   0,
-                                   0,
-                                   "leaf",
-                                   0u,
-                                   0,
-                                   NTS_ARRAY_UNKNOWN,
-                                   0u,
-                                   0,
-                                   0,
-                                   0,
-                                   NULL,
-                                   NULL};
-static const NtsDescriptor refs = {NTS_KIND_ARRAY,
-                                   sizeof(NtsHeader *),
-                                   1u,
-                                   1u,
-                                   0,
-                                   0,
-                                   "refs",
-                                   0u,
-                                   0,
-                                   NTS_ARRAY_REFERENCE,
-                                   0u,
-                                   0,
-                                   0,
-                                   0,
-                                   NULL,
-                                   NULL};
+static const NtsDescriptor leaf = {
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(NtsHeader),
+    .name = "leaf",
+    .element = NTS_ARRAY_UNKNOWN,
+};
+static const NtsDescriptor refs = {
+    .kind = NTS_KIND_ARRAY,
+    .size = sizeof(NtsHeader *),
+    .references = 1u,
+    .cyclic = 1u,
+    .name = "refs",
+    .element = NTS_ARRAY_REFERENCE,
+};
 
 static NtsArray *array(bool grown) {
   NtsArray *a = nts_array_new(&refs, grown ? 0 : 1);

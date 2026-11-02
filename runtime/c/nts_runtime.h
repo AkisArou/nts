@@ -260,12 +260,10 @@ typedef struct NtsDescriptor {
    * For an array, `erased` is 1 when the elements are `NtsValue`s and 0
    * otherwise, matching how `references` works for one.
    *
-   * Last in the struct, and every descriptor states them: this runtime is
-   * built with `-Wmissing-field-initializers -Werror`, so C's zero-fill is
-   * not available and each descriptor has to say it has no erased slots
-   * rather than be assumed to. That is the better half of the trade -- adding
-   * a slot kind costs one line in every descriptor and cannot be forgotten in
-   * one. */
+   * Generated descriptors state every field. Handwritten C descriptors use
+   * designated initializers: omitted fields are zero even under
+   * `-Wmissing-field-initializers -Werror`, so adding a descriptor field does
+   * not change an existing literal's meaning. */
   uint32_t erased;
   const uint32_t *erased_offsets;
   /* What an array's elements *are*, which `size` and `references` between them
@@ -295,9 +293,8 @@ typedef struct NtsDescriptor {
    * collector cannot see through it. Except to a holder: a family that
    * registers `NtsHolders` makes the object a node of the collector's trace
    * while it holds a closure the program lent it, which is how a cycle through
-   * a GObject's signal handler is found. Last, after `element`, because
-   * descriptors in `runtime/node` set `element` positionally and zero-fill
-   * what follows. */
+   * a GObject's signal handler is found. Handwritten descriptors name the
+   * fields they set and zero-fill the rest. */
   uint32_t foreign;
   const NtsForeignSlot *foreign_slots;
   /* How an object of this type prints: `String(o)`, `${o}`, and `o` joined

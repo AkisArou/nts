@@ -157,6 +157,7 @@ extern "C" NtsString *nts_icu_locale_type(NtsString *key, NtsString *value) {
 
 // The runtime array helpers inspect element shape, not descriptor identity.
 // Strings cannot form cycles; the returned array owns each freshly made string.
+// Positional for the C++17 provider; designated initializers require C++20.
 static const NtsDescriptor strings = {
     NTS_KIND_ARRAY, sizeof(NtsString *), 1, 0, nullptr, nullptr, "ICU strings",
     0, nullptr, NTS_ARRAY_REFERENCE, 0, nullptr};

@@ -17,38 +17,23 @@ typedef struct Value {
 } Value;
 static const uint32_t fields[] = {offsetof(Value, items),
                                   offsetof(Value, keys)};
-static const NtsDescriptor value_desc = {NTS_KIND_OBJECT,
-                                         sizeof(Value),
-                                         2u,
-                                         1u,
-                                         fields,
-                                         0,
-                                         "Value",
-                                         0u,
-                                         0,
-                                         NTS_ARRAY_UNKNOWN,
-                                         0u,
-                                         0,
-                                         0,
-                                         0,
-                                         NULL,
-                                         NULL};
-static const NtsDescriptor refs = {NTS_KIND_ARRAY,
-                                   sizeof(NtsHeader *),
-                                   1u,
-                                   1u,
-                                   0,
-                                   0,
-                                   "refs",
-                                   0u,
-                                   0,
-                                   NTS_ARRAY_REFERENCE,
-                                   0u,
-                                   0,
-                                   0,
-                                   0,
-                                   NULL,
-                                   NULL};
+static const NtsDescriptor value_desc = {
+    .kind = NTS_KIND_OBJECT,
+    .size = sizeof(Value),
+    .references = 2u,
+    .cyclic = 1u,
+    .offsets = fields,
+    .name = "Value",
+    .element = NTS_ARRAY_UNKNOWN,
+};
+static const NtsDescriptor refs = {
+    .kind = NTS_KIND_ARRAY,
+    .size = sizeof(NtsHeader *),
+    .references = 1u,
+    .cyclic = 1u,
+    .name = "refs",
+    .element = NTS_ARRAY_REFERENCE,
+};
 
 static size_t rss(void) {
 #if defined(__linux__)

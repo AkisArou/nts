@@ -133,6 +133,7 @@ extern "C" NtsString *nts_icu_date_style_pattern(NtsHeader *handle, double date_
   return U_SUCCESS(status) ? pattern_result(state->output.data(), length) : nullptr;
 }
 
+// Positional for the C++17 provider; designated initializers require C++20.
 static const NtsDescriptor strings = {
     NTS_KIND_ARRAY, sizeof(NtsString *), 1, 0, nullptr, nullptr, "ICU patterns",
     0, nullptr, NTS_ARRAY_REFERENCE, 0, nullptr};

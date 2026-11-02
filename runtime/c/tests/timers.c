@@ -48,22 +48,13 @@ static void closure_call(Closure *self) { note(self->label); }
 /* Slot zero, which is the slot every closure's call occupies. */
 static void *const closure_methods[] = {(void *)closure_call};
 
-static const NtsDescriptor desc_closure = {NTS_KIND_OBJECT,
-                                           (uint32_t)sizeof(Closure),
-                                           0u,
-                                           0u,
-                                           0,
-                                           closure_methods,
-                                           "Closure",
-                                           0u,
-                                           0,
-                                           NTS_ARRAY_UNKNOWN,
-                                           0u,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL,
-                                           NULL};
+static const NtsDescriptor desc_closure = {
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(Closure),
+    .methods = closure_methods,
+    .name = "Closure",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 
 static Closure *closure(const char *label) {
   Closure *made = (Closure *)nts_object_new(&desc_closure);
@@ -134,22 +125,13 @@ static void tick(Closure *self) {
 
 static void *const tick_methods[] = {(void *)tick};
 
-static const NtsDescriptor desc_tick = {NTS_KIND_OBJECT,
-                                        (uint32_t)sizeof(Closure),
-                                        0u,
-                                        0u,
-                                        0,
-                                        tick_methods,
-                                        "Tick",
-                                        0u,
-                                        0,
-                                        NTS_ARRAY_UNKNOWN,
-                                        0u,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL,
-                                        NULL};
+static const NtsDescriptor desc_tick = {
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(Closure),
+    .methods = tick_methods,
+    .name = "Tick",
+    .element = NTS_ARRAY_UNKNOWN,
+};
 
 static void an_interval_repeats_until_cleared(void) {
   reset();

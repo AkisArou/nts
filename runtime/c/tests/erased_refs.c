@@ -42,31 +42,28 @@ typedef struct Box {
 
 static const uint32_t box_erased[] = {(uint32_t)offsetof(Box, held)};
 
-/* Seven fields positionally, then the erased table. Every descriptor written
- * before erased slots existed sets only the seven and C zero-fills the rest,
- * which is why the two new members are last. */
+/* The boxed value is an erased edge; the reference walker reads its tag
+ * through the erased-offset table rather than treating it as a pointer. */
 static const NtsDescriptor desc_box = {
-    NTS_KIND_OBJECT, (uint32_t)sizeof(Box), 0u, 1u,   0,    0,    "Box", 1u,
-    box_erased,      NTS_ARRAY_UNKNOWN,     0u, NULL, NULL, NULL, NULL,  NULL};
+    .kind = NTS_KIND_OBJECT,
+    .size = (uint32_t)sizeof(Box),
+    .cyclic = 1u,
+    .name = "Box",
+    .erased = 1u,
+    .erased_offsets = box_erased,
+    .element = NTS_ARRAY_UNKNOWN,
+};
 
 /* An array whose elements are erased values. `erased` is 1 for an array in the
  * same sense `references` is: a fact about every element, with no table. */
-static const NtsDescriptor desc_values = {NTS_KIND_ARRAY,
-                                          (uint32_t)sizeof(NtsValue),
-                                          0u,
-                                          1u,
-                                          0,
-                                          0,
-                                          "unknown[]",
-                                          1u,
-                                          0,
-                                          NTS_ARRAY_VALUE,
-                                          0u,
-                                          NULL,
-                                          NULL,
-                                          NULL,
-                                          NULL,
-                                          NULL};
+static const NtsDescriptor desc_values = {
+    .kind = NTS_KIND_ARRAY,
+    .size = (uint32_t)sizeof(NtsValue),
+    .cyclic = 1u,
+    .name = "unknown[]",
+    .erased = 1u,
+    .element = NTS_ARRAY_VALUE,
+};
 
 /* Through the runtime's own constructors, like every other reader: the
  * representation is meant to be swappable in one file, and a test that built
