@@ -12809,11 +12809,11 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
             continue;
         };
         let mut next = constructors.of(class);
-        while let Some(NativeConstructor::Source {
-            class: owner,
-            constructor,
-        }) = next
-        {
+        while let Some(proof) = next {
+            let (owner, constructor) = match proof.as_ref() {
+                NativeConstructor::Source { class, constructor } => (*class, *constructor),
+                NativeConstructor::Builtin(_) => break,
+            };
             if owner != class {
                 targets.insert(constructor, target);
             }

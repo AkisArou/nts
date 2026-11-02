@@ -185,7 +185,7 @@ fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
     let child_ty = super::instance_type_of(&snapshot, child).unwrap();
     let valid = super::made_instance::ConstructorMemo::new(&probe).of(child);
     assert!(
-        matches!(valid, Some(super::NativeConstructor::Source { class, .. }) if class == parent)
+        matches!(valid.as_deref(), Some(super::NativeConstructor::Source { class, .. }) if *class == parent)
     );
     let mut instance_context = super::FuncBuilder::probe(&snapshot);
     instance_context
@@ -230,4 +230,66 @@ fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
             .is_some(),
         "a failed context must not poison the original one"
     );
+}
+
+#[test]
+fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
+    let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    for count in [16, 64, 256] {
+        let dir = std::env::temp_dir().join(format!(
+            "nts-view-alias-proof-{}-{count}",
+            std::process::id()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let mut source = String::from("const Alias0 = Uint8Array;\n");
+        for at in 1..count {
+            writeln!(source, "const Alias{at} = Alias{};", at - 1).unwrap();
+        }
+        writeln!(source, "class View0 extends Alias{} {{}}", count - 1).unwrap();
+        for at in 1..count {
+            writeln!(source, "class View{at} extends View{} {{}}", at - 1).unwrap();
+        }
+        source.push_str("export function present(n: number): number { return n; }\n");
+        std::fs::write(dir.join("main.ts"), source).unwrap();
+        let config = dir.join("tsconfig.json");
+        std::fs::write(
+            &config,
+            format!("{{\"extends\":\"{root}/tsconfig.fixtures.json\",\"files\":[\"main.ts\"]}}"),
+        )
+        .unwrap();
+        let semantic = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(camino::Utf8Path::from_path(&config).unwrap())
+            .unwrap();
+        let snapshot = super::LoweringSnapshot::new(&semantic);
+        let probe = super::FuncBuilder::probe(&snapshot);
+        let classes: Vec<_> = (0..snapshot.nodes.len())
+            .map(|at| super::NodeId(u32::try_from(at).unwrap()))
+            .filter(|at| {
+                probe.kind_of(*at).is_some_and(super::declares_a_class)
+                    && probe
+                        .class_name(*at)
+                        .is_some_and(|name| name.starts_with("View"))
+            })
+            .collect();
+        assert_eq!(classes.len(), count);
+        ANCESTRY.with(|n| n.set(0));
+        let mut constructors = super::made_instance::ConstructorMemo::new(&probe);
+        // Deepest first: one cold path fills every memo row, then all hits.
+        for class in classes.into_iter().rev() {
+            assert!(matches!(constructors.of(class).as_deref(),
+                Some(super::NativeConstructor::Builtin(global)) if global.name == "Uint8Array"));
+        }
+        let ancestry = ANCESTRY.with(Cell::get);
+        let owned = constructors.owned_binding_elements();
+        eprintln!(
+            "alias depth/class chain {count}: ancestry {ancestry}, owned binding elements {owned}"
+        );
+        assert!(ancestry <= count + 1);
+        assert_eq!(
+            owned, count,
+            "the complete alias proof is owned once, independently of memo rows"
+        );
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 }

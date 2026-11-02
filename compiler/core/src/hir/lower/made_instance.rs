@@ -31,7 +31,6 @@ pub(super) enum MadeBy {
 
 /// What builds a native-storage instance: the nearest constructor a class in
 /// the chain declares, or the builtin at its root when none does.
-#[derive(Clone)]
 pub(super) enum NativeConstructor {
     Source { class: NodeId, constructor: NodeId },
     Builtin(CheckedGlobalReference),
@@ -47,7 +46,7 @@ enum NativeParent {
 /// reuse them through the snapshot, and binding readiness remains the caller's.
 pub(super) struct ConstructorMemo<'a, 'snapshot> {
     probe: &'a FuncBuilder<'snapshot>,
-    above: rustc_hash::FxHashMap<NodeId, Option<NativeConstructor>>,
+    above: rustc_hash::FxHashMap<NodeId, Option<std::sync::Arc<NativeConstructor>>>,
 }
 
 impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
@@ -58,17 +57,20 @@ impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
         }
     }
 
-    pub(super) fn of(&mut self, class: NodeId) -> Option<NativeConstructor> {
+    pub(super) fn of(&mut self, class: NodeId) -> Option<std::sync::Arc<NativeConstructor>> {
         if !self.probe.is_native_storage(class) {
             return None;
         }
         if let Some(constructor) = the_constructor_declared_by(self.probe, class) {
-            return Some(NativeConstructor::Source { class, constructor });
+            return Some(std::sync::Arc::new(NativeConstructor::Source {
+                class,
+                constructor,
+            }));
         }
         self.above(class)
     }
 
-    pub(super) fn above(&mut self, class: NodeId) -> Option<NativeConstructor> {
+    pub(super) fn above(&mut self, class: NodeId) -> Option<std::sync::Arc<NativeConstructor>> {
         let mut at = class;
         let mut path = Vec::new();
         let mut seen = rustc_hash::FxHashSet::default();
@@ -82,14 +84,14 @@ impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
             path.push(at);
             match self.probe.native_constructor_parent(at) {
                 Some(NativeParent::Builtin(global)) => {
-                    break Some(NativeConstructor::Builtin(global));
+                    break Some(std::sync::Arc::new(NativeConstructor::Builtin(global)));
                 }
                 Some(NativeParent::Source(parent)) => {
                     if let Some(constructor) = the_constructor_declared_by(self.probe, parent) {
-                        break Some(NativeConstructor::Source {
+                        break Some(std::sync::Arc::new(NativeConstructor::Source {
                             class: parent,
                             constructor,
-                        });
+                        }));
                     }
                     at = parent;
                 }
@@ -100,6 +102,19 @@ impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
             self.above.insert(at, answer.clone());
         }
         answer
+    }
+    #[cfg(test)]
+    pub(super) fn owned_binding_elements(&self) -> usize {
+        let mut proofs = rustc_hash::FxHashSet::default();
+        self.above
+            .values()
+            .flatten()
+            .filter(|proof| proofs.insert(std::sync::Arc::as_ptr(proof)))
+            .map(|proof| match proof.as_ref() {
+                NativeConstructor::Builtin(global) => global.bindings.len(),
+                NativeConstructor::Source { .. } => 0,
+            })
+            .sum()
     }
 }
 
