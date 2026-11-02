@@ -1377,7 +1377,7 @@ forms are listed with their diagnostics in the pull request.
 | slicing | `slicing-*` | 10 | 10 | Slice, substring and substr bounds; at, charAt, charCodeAt and codePointAt; code-point traversal against code-unit indexing |
 | searching | `searching-*` | 14 | 14 | Positioned searches, both width directions, split separators and limits, string-pattern replace and replaceAll with replacement tokens |
 | comparing | `comparing-*` | 14 | 14 | Equality after different constructions, UTF-16 ordering and sort, all normalization forms, Map and Set identity, Unicode trims |
-| types | `types-*` | 8 | 8 | Narrowed literal and string-number unions, widened string enums, template-typed fields, keyof names, constrained generics and optional defaults |
+| types | `types-*` | 7 | 7 | Narrowed literal and string-number unions, widened string enums, template-typed fields, constrained generics and optional defaults |
 
 String-route cases retain node's exact answer even if nts currently
 refuses a form. Maintainers run and record each backend separately.
@@ -2038,7 +2038,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-exports` | export declarations, lists, renames and defaults, read back within the module | conformance/externalModules; conformance/es6/modules; ts-eslint ExportNamedDeclaration | 10 | 3 |
 | `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 413 | 0 |
 | `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 889 | 0 |
-| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 4870 | 4 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 4868 | 4 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 135 | 0 |
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 300 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
@@ -2071,7 +2071,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-integer-route-rounding` | rounding and division with exact numeric stages and representations | Integer route contracts; typed paths | 18 | 0 |
 | `ts-integer-route-typed-arrays` | typed-array storage with exact numeric stages and representations | Integer route contracts; typed paths | 10 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 6 | 0 |
-| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1543 | 0 |
+| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1541 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 16 | 0 |
 | `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 4544 | 0 |
 | `ts-iterator-route-builtins` | builtin iterables through typed routes with exact protocol order, arguments, values and state | Iterator route contracts: ECMAScript iteration and generators; typed paths | 42 | 0 |
@@ -2086,7 +2086,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-json-stringify` | declared classes, interfaces and unions serialize with exact conversion, omission, escaping and error behavior | JSON.stringify; SerializeJSONProperty; QuoteJSONString | 70 | 0 |
 | `ts-json-unknown` | unknown JSON results are truthfully narrowed before duplicate-key, ordering, nesting and whitespace observations | JSON route contracts; ParseJSON; OrdinaryOwnPropertyKeys | 12 | 0 |
 | `ts-jsx` | JSX in a `.tsx` file, compiled to factory calls | conformance/jsx; ts-eslint JSX nodes | 0 | 6 |
-| `ts-keyof` | `keyof T`, and values of that type | conformance/types/keyof; ts-eslint TSTypeOperator | 56 | 0 |
+| `ts-keyof` | `keyof T`, and values of that type | conformance/types/keyof; ts-eslint TSTypeOperator | 54 | 0 |
 | `ts-layout-route-builtins` | Error, Map, Set, Array and Promise subclasses preserve own payloads, constructor-write histories and returned species through builtin views | Error, Map and Set constructors; ArraySpeciesCreate; Promise.prototype.then | 14 | 0 |
 | `ts-layout-route-presence` | three class layouts retain exact own-field presence and order across declaration forms, enumeration, spread and JSON | Type-only Field Declarations; Initialization Order; OrdinaryOwnPropertyKeys | 16 | 0 |
 | `ts-layout-route-state` | private slots and brands, methods and accessors, inherited references and shadowed static fields preserve exact state across typed routes | TypeScript Classes; Static Members; PrivateGet | 16 | 0 |
@@ -2207,8 +2207,8 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-string-route-comparing` | comparing and normalizing across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 28 | 0 |
 | `ts-string-route-searching` | searching and splitting across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 28 | 0 |
 | `ts-string-route-slicing` | slicing and indexing across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 20 | 0 |
-| `ts-string-route-types` | strings in unions, literals and generics across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 16 | 0 |
-| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 2371 | 0 |
+| `ts-string-route-types` | strings in unions, literals and generics across typed string carriers with exact node values | String route contracts: Foundations, Strings and Unicode | 14 | 0 |
+| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 2369 | 0 |
 | `ts-structural-typing` | a value accepted for its shape, not its declared name: literals and classes that never say `implements` | conformance/types/typeRelationships; typed paths | 80 | 0 |
 | `ts-structuredclone-route-buffers` | typed buffer clones preserve bytes, values, view windows, shared storage and transfer detachment | Structured clone route contracts; typed paths | 32 | 0 |
 | `ts-structuredclone-route-classes` | class clones yield plain own data with private slots and inherited behavior omitted and own getters read once | Structured clone route contracts; typed paths | 14 | 0 |
