@@ -66,7 +66,7 @@ fn transfer_program(transfers: bool) -> Program {
         written: None,
     }];
     ordinary.values[0].ty = HirType::Erased;
-    ordinary.values[1].ty = HirType::STRING;
+    ordinary.values[1].ty = HirType::Managed(ManagedType::String);
     if transfers {
         ordinary.values.push(Op {
             kind: OpKind::Call {
