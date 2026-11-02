@@ -692,6 +692,70 @@ pub(in crate::hir) mod tests {
     }
 
     #[test]
+    fn sparse_blocks_charge_their_visited_work_not_the_square_of_the_arena() {
+        let mut rows = Vec::new();
+        for n in [16, 32, 64] {
+            let mut func = branching();
+            func.params.clear();
+            func.return_type = HirType::Void;
+            func.values = (0..n).map(|_| op(OpKind::ConstFloat(1.0))).collect();
+            func.blocks = (0..n)
+                .map(|at| Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(u32::try_from(at).expect("small control"))],
+                    terminator: if at + 1 == n {
+                        Terminator::Return(None)
+                    } else {
+                        Terminator::Jump {
+                            target: BlockId(u32::try_from(at + 1).expect("small control")),
+                            args: Vec::new(),
+                        }
+                    },
+                })
+                .collect();
+            let mut work = 0usize;
+            let live = analyze_limited(&func, &mut |units| {
+                work += units;
+                true
+            })
+            .expect("complete sparse control");
+            assert!(
+                live.live_in
+                    .iter()
+                    .chain(&live.live_out)
+                    .all(FxHashSet::is_empty)
+            );
+            println!("liveness-sparse-work\tn={n}\twork={work}");
+            rows.push(work);
+        }
+        assert!(
+            rows.windows(2).all(|pair| pair[1] * 2 <= pair[0] * 5),
+            "{rows:?}"
+        );
+    }
+
+    #[test]
+    fn orphan_arena_entries_have_linear_inventory_cost() {
+        let mut rows = Vec::new();
+        for n in [16, 64, 256] {
+            let mut func = branching();
+            func.values.resize_with(n, || op(OpKind::ConstFloat(7.0)));
+            let mut work = 0usize;
+            analyze_limited(&func, &mut |units| {
+                work += units;
+                true
+            })
+            .expect("complete orphan control");
+            println!("liveness-orphan-work\tn={n}\twork={work}");
+            rows.push(work);
+        }
+        assert!(
+            rows.windows(2).all(|pair| pair[1] <= pair[0] * 4),
+            "{rows:?}"
+        );
+    }
+
+    #[test]
     fn optional_charges_do_not_change_a_completed_analysis() {
         let func = branching();
         let expected = analyze(&func).expect("complete liveness");

@@ -179,3 +179,103 @@ fn uncaught_transfer_roots_payload_children_live_values_and_capture_order() {
 fn closed_body_no_raise_keeps_the_same_roots_confined() {
     check_transfer(false);
 }
+
+#[test]
+fn an_uncounted_identity_carrier_keeps_its_owner_and_child_at_an_outcome() {
+    use crate::hir::{Block, native};
+    for transfers in [false, true] {
+        for through_block_loop in [false, true] {
+            let mut program = transfer_program(transfers);
+            let caller = &mut program.funcs[0];
+            caller.values[6].kind = OpKind::FieldView {
+                value: ValueId(0),
+                source: TypeId(SYNTHETIC_CELLS),
+                face: TypeId(SYNTHETIC_CELLS),
+            };
+            let raw = HirType::NativePointer(native::Pointee::Void);
+            caller.values[6].ty = raw.clone();
+            let OpKind::Call { args, .. } = &mut caller.values[7].kind else {
+                unreachable!()
+            };
+            args.clear();
+            caller.values[8].kind = OpKind::Binary {
+                op: BinOp::Eq,
+                lhs: ValueId(6),
+                rhs: ValueId(6),
+            };
+            caller.values[8].ty = HirType::Bool;
+            caller.return_type = HirType::Bool;
+            caller.blocks[0].terminator = Terminator::Return(Some(ValueId(8)));
+            if through_block_loop {
+                caller.values.push(Op {
+                    kind: OpKind::BlockParam(0),
+                    ty: raw,
+                    origin: origin(),
+                });
+                caller.blocks[0].ops.pop();
+                caller.blocks[0].terminator = Terminator::Jump {
+                    target: BlockId(1),
+                    args: vec![ValueId(6)],
+                };
+                caller.values[8].kind = OpKind::Binary {
+                    op: BinOp::Eq,
+                    lhs: ValueId(9),
+                    rhs: ValueId(9),
+                };
+                caller.blocks.push(Block {
+                    params: vec![ValueId(9)],
+                    ops: vec![ValueId(8)],
+                    terminator: Terminator::Branch {
+                        cond: ValueId(8),
+                        then_target: BlockId(1),
+                        then_args: vec![ValueId(9)],
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                });
+                caller.blocks.push(Block {
+                    params: Vec::new(),
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(Some(ValueId(8))),
+                });
+            }
+            let callee = &mut program.funcs[1];
+            callee.params.clear();
+            callee.values[0].kind = OpKind::ConstUndefined;
+            let report = memory::Analysis::of(&program).into_report();
+            assert!(report.failure.is_none(), "{:?}", report.failure);
+            for value in [0, 1] {
+                let site = report
+                    .sites
+                    .iter()
+                    .find(|site| site.id.function == "root#init" && site.id.value == value)
+                    .expect("owner and held child inventoried");
+                println!(
+                    "raw-carrier\ttransfers={transfers}\tloop={through_block_loop}\tvalue={value}\thome={:?}\tfrontier={}",
+                    site.home, site.retention_frontier
+                );
+                if transfers {
+                    assert!(
+                        site.obligations
+                            .iter()
+                            .any(|reason| matches!(reason, Reason::MissingOutcome(_))),
+                        "{site:?}"
+                    );
+                } else {
+                    assert_eq!(site.home, Home::Frame);
+                }
+            }
+            if transfers {
+                let fence = report
+                    .outcomes
+                    .iter()
+                    .find(|outcome| outcome.function == "root#init" && outcome.value == 7)
+                    .expect("missing outcome");
+                assert!(
+                    fence.live.contains(&6),
+                    "the raw carrier's own type does not erase its graph aliases"
+                );
+            }
+        }
+    }
+}
