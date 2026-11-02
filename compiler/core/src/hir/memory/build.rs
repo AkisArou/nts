@@ -921,7 +921,7 @@ mod tests {
             let body = function("operand-cost".to_owned(), kinds);
             let (failure, work) = operand_domain(&body);
             assert!(failure.is_none());
-            assert_eq!(work, 3 * n + 2);
+            assert_eq!(work, 4 * n + 3);
             println!("review-operand-domain\tn={n}\twork={work}");
         }
     }
@@ -1706,7 +1706,7 @@ pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
     let outside = if build.invalid_values {
         // Invalid input cannot enter a root resolver that reads its operands.
         // The unseen-body walk below still inventories every actual function.
-        Default::default()
+        rustc_hash::FxHashSet::default()
     } else {
         reachable::outside_callers(program)
     };
@@ -1963,22 +1963,32 @@ fn metadata_work(program: &Program) -> usize {
 /// enumeration, including terminators and actual unplaced ABI parameters.
 /// A valid arena entry alone is not a definition after DCE removed its producer.
 fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
-    let mut work = function.values.len().saturating_add(function.params.len());
-    let (mut failure, mut definitions): (_, BTreeSet<_>) = match function.parameter_values() {
-        Some(values) => (None, values.into_iter().flatten().collect()),
-        None => (
-            Some(Reason::InvalidControlFlow(format!(
+    // One arena scan for actual ABI definitions, and one dense bitmap initialization.
+    let mut work = function
+        .values
+        .len()
+        .saturating_mul(2)
+        .saturating_add(function.params.len());
+    let mut definitions = vec![false; function.values.len()];
+    let mut failure = None;
+    match function.parameter_values() {
+        Some(values) => {
+            for id in values.into_iter().flatten() {
+                definitions[id.0 as usize] = true;
+            }
+        }
+        None => {
+            failure = Some(Reason::InvalidControlFlow(format!(
                 "{}: invalid ABI parameter definitions",
                 function.name
-            ))),
-            BTreeSet::new(),
-        ),
-    };
+            )));
+        }
+    }
     for (at, block) in function.blocks.iter().enumerate() {
         for &id in block.params.iter().chain(&block.ops) {
             work += 1;
-            if function.values.get(id.0 as usize).is_some() {
-                definitions.insert(id);
+            if let Some(defined) = definitions.get_mut(id.0 as usize) {
+                *defined = true;
             } else {
                 failure.get_or_insert_with(|| {
                     Reason::InvalidControlFlow(format!(
@@ -1992,7 +2002,7 @@ fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
     for (at, block) in function.blocks.iter().enumerate() {
         let mut check = |value: ValueId, user: Option<ValueId>| {
             work += 1;
-            if !definitions.contains(&value) {
+            if definitions.get(value.0 as usize) != Some(&true) {
                 failure.get_or_insert_with(|| {
                     let user = user.map_or_else(
                         || "terminator".to_owned(),
@@ -2260,14 +2270,10 @@ impl<'p> Builder<'p> {
             .chain(self.parameters[function].iter().map(|(id, _)| id))
             .copied()
             .collect();
+        let arena_len = self.program.funcs[function].values.len();
         let values = live
             .into_iter()
-            .filter(|id| {
-                self.program.funcs[function]
-                    .values
-                    .get(id.0 as usize)
-                    .is_some()
-            })
+            .filter(|id| (id.0 as usize) < arena_len)
             .map(|id| (id, self.graph.node()))
             .collect();
         let result = self.graph.node();
