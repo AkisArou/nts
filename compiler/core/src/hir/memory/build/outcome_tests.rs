@@ -322,6 +322,7 @@ fn a_verified_string_loan_carrier_and_held_payload_survive_an_outcome() {
 
 #[test]
 fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
+    let mut panics = Vec::new();
     for bad in [false, true] {
         for field_view in [false, true] {
             let mut program = transfer_program(true);
@@ -339,7 +340,13 @@ fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
                 ty: body.values[0].ty.clone(),
                 origin: origin(),
             });
-            let report = memory::Analysis::of(&program).into_report();
+            let measured = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                memory::Analysis::of(&program).into_report()
+            }));
+            let Ok(report) = measured else {
+                panics.push((bad, field_view));
+                continue;
+            };
             assert!(
                 report.failure.is_none(),
                 "unused metadata changes no executed operand domain: {:?}",
@@ -359,4 +366,8 @@ fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
             );
         }
     }
+    assert!(
+        panics.is_empty(),
+        "unused metadata caused endpoint panics: {panics:?}"
+    );
 }
