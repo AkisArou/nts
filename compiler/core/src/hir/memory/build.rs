@@ -747,6 +747,166 @@ mod tests {
         );
     }
 
+    fn review_operand_program(kind: &str, invalid: bool) -> Program {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let mut body = function(
+            "operand#init".to_owned(),
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::ObjectNew { frame: false },
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(if invalid && kind == "store" { 99 } else { 1 }),
+                },
+            ],
+        );
+        body.values[0].ty = object.clone();
+        body.values[1].ty = object.clone();
+        match kind {
+            "return" => {
+                body.blocks[0].ops = vec![ValueId(0)];
+                body.blocks[0].terminator =
+                    Terminator::Return(Some(ValueId(if invalid { 99 } else { 0 })));
+                body.return_type = object.clone();
+            }
+            "condition" => {
+                body.values.push(Op {
+                    kind: OpKind::ConstBool(true),
+                    ty: HirType::Bool,
+                    origin: origin(),
+                });
+                body.blocks = vec![
+                    Block {
+                        params: Vec::new(),
+                        ops: vec![ValueId(0), ValueId(3)],
+                        terminator: Terminator::Branch {
+                            cond: ValueId(if invalid { 99 } else { 3 }),
+                            then_target: BlockId(1),
+                            then_args: Vec::new(),
+                            else_target: BlockId(2),
+                            else_args: Vec::new(),
+                        },
+                    },
+                    Block {
+                        params: Vec::new(),
+                        ops: Vec::new(),
+                        terminator: Terminator::Return(None),
+                    },
+                    Block {
+                        params: Vec::new(),
+                        ops: Vec::new(),
+                        terminator: Terminator::Return(None),
+                    },
+                ];
+            }
+            "unplaced" if invalid => body.blocks[0].ops = vec![ValueId(0), ValueId(2)],
+            "store" | "unplaced" => {}
+            _ => panic!("unknown operand fixture"),
+        }
+        Program {
+            funcs: vec![body],
+            layouts: vec![Layout {
+                types: vec![super::super::super::TypeId(7)],
+                name: "operand-object".to_owned(),
+                fields: vec![super::super::super::Field {
+                    name: super::super::super::PropertyKey::from("child"),
+                    ty: object,
+                    readonly: false,
+                    written: None,
+                    declared_by: None,
+                }],
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..Program::default()
+        }
+    }
+
+    fn review_operand(kind: &str, invalid: bool) {
+        let program = review_operand_program(kind, invalid);
+        let report = super::super::Analysis::of(&program).into_report();
+        println!(
+            "review-operand\tkind={kind}\tinvalid={invalid}\tfailure={:?}\tsites={}",
+            report.failure,
+            report.sites.len()
+        );
+        let expected = if kind == "store" || (kind == "unplaced" && !invalid) {
+            2
+        } else {
+            1
+        };
+        assert_eq!(
+            report.sites.len(),
+            expected,
+            "all actually placed allocations remain inventoried"
+        );
+        if invalid {
+            assert!(matches!(
+                report.failure,
+                Some(Reason::InvalidControlFlow(_))
+            ));
+            assert!(
+                report
+                    .sites
+                    .iter()
+                    .all(|site| matches!(site.home, Home::Heap(Reason::InvalidControlFlow(_))))
+            );
+            assert!(
+                report
+                    .proofs
+                    .iter()
+                    .all(|proof| proof.bound.starts_with("outside "))
+            );
+            assert!(
+                report
+                    .functions
+                    .iter()
+                    .all(|function| function.unknown_effects)
+            );
+        } else {
+            verify::verify(&program).expect("the one-difference operand control verifies");
+            assert!(report.failure.is_none(), "{:?}", report.failure);
+            if kind == "return" {
+                assert_ne!(report.functions[0].returned, Vec::<String>::new());
+            }
+        }
+    }
+
+    #[test]
+    fn review_operand_missing_store_value_is_unknown_not_a_panic() {
+        review_operand("store", true);
+    }
+    #[test]
+    fn review_operand_store_control_preserves_both_objects() {
+        review_operand("store", false);
+    }
+    #[test]
+    fn review_operand_missing_return_value_is_unknown_not_a_panic() {
+        review_operand("return", true);
+    }
+    #[test]
+    fn review_operand_return_control_keeps_the_alias() {
+        review_operand("return", false);
+    }
+    #[test]
+    fn review_operand_missing_condition_is_unknown_not_a_proof() {
+        review_operand("condition", true);
+    }
+    #[test]
+    fn review_operand_condition_control_keeps_its_allocation() {
+        review_operand("condition", false);
+    }
+    #[test]
+    fn review_operand_unplaced_definition_is_unknown_not_a_panic() {
+        review_operand("unplaced", true);
+    }
+    #[test]
+    fn review_operand_placed_definition_control_keeps_its_store() {
+        review_operand("unplaced", false);
+    }
+
     fn review_edge_program(args: Vec<ValueId>) -> Program {
         let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
         let mut body = function(
