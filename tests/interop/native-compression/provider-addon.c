@@ -67,11 +67,26 @@ static napi_value processed(napi_env env, napi_callback_info info) {
     napi_value buffer, view;
     void *bytes;
     size_t size = (size_t)nts_view_byte_length(chunk);
-    checked(napi_create_arraybuffer(env, size, &bytes, &buffer));
-    if (size != 0)
-      __builtin_memcpy(bytes, nts_view_bytes(chunk), size);
-    checked(
-        napi_create_typedarray(env, napi_uint8_array, size, buffer, 0, &view));
+    size_t backing_size = (size_t)nts_buffer_byte_length(chunk->buffer);
+    size_t byte_offset = (size_t)nts_view_byte_offset(chunk);
+    bool shared = false;
+    for (uint32_t j = 0; j < i; j++) {
+      if (NTS_ITEMS(chunks, NtsView *)[j]->buffer == chunk->buffer) {
+        napi_value prior;
+        checked(napi_get_element(env, result, j, &prior));
+        checked(napi_get_typedarray_info(env, prior, &kind, &length, &data,
+                                         &buffer, &offset));
+        shared = true;
+        break;
+      }
+    }
+    if (!shared) {
+      checked(napi_create_arraybuffer(env, backing_size, &bytes, &buffer));
+      if (backing_size != 0)
+        __builtin_memcpy(bytes, chunk->buffer->bytes, backing_size);
+    }
+    checked(napi_create_typedarray(env, napi_uint8_array, size, buffer,
+                                   byte_offset, &view));
     checked(napi_set_element(env, result, i, view));
   }
   nts_release((NtsHeader *)chunks);

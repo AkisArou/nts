@@ -139,17 +139,24 @@ for (const format of formats) {
     const buffers = new Set<ArrayBufferLike>();
     for (const chunk of chunks) {
       assert.ok(chunk instanceof Uint8Array);
-      assert.equal(chunk.byteOffset, 0);
-      assert.equal(chunk.buffer.byteLength, chunk.byteLength);
+      assert.ok(chunk.byteOffset + chunk.byteLength <= chunk.buffer.byteLength);
       assert.notEqual(chunk.buffer, input.buffer);
       assert.equal(buffers.has(chunk.buffer), false);
       buffers.add(chunk.buffer);
     }
+    // A provider may transfer a larger backing than the produced view. The
+    // whole backing belongs to this result, including its unused capacity.
+    const backings = chunks.map((chunk) => new Uint8Array(chunk.buffer));
+    for (const backing of backings) backing.fill(0xa5);
+    const savedBackings = backings.map((backing) => backing.slice());
     assert.equal(compressor.reset(), undefined);
     const next = success(compressor.process(original, "finish", Infinity));
     for (const chunk of next.chunks) assert.equal(buffers.has(chunk.buffer), false);
+    assert.deepEqual(decode(format, Buffer.concat(next.chunks)), Buffer.from(original));
     compressor.close();
-    assert.deepEqual(chunks, saved);
+    assert.deepEqual(backings, savedBackings);
+    // Output before the caller's mutation was also independent of its input.
+    assert.deepEqual(decode(format, Buffer.concat(saved)), Buffer.from(original));
   });
 
   test(`${format}: failure after finish is terminal while finish alone permits reset`, () => {

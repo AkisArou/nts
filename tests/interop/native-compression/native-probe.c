@@ -91,9 +91,75 @@ static void one_format(int format, size_t size) {
   assert(nts_live_count() == live);
 }
 
-static void finished_failure(bool illegal_process) {
+static void backing_ownership(int format, size_t size) {
   size_t live = nts_live_count();
-  NtsHeader *encoder = nts_web_compression_open(0, false, 15);
+  uint8_t *source = malloc(size);
+  uint8_t *encoded = malloc(size * 2 + 4096);
+  uint8_t *decoded = malloc(size);
+  assert(source != NULL && encoded != NULL && decoded != NULL);
+  memset(source, 65, size);
+  NtsView *input = nts_view_from_bytes(source, (double)size);
+  NtsHeader *encoder = nts_web_compression_open(format, false, 15);
+  NtsArray *encoded_chunks =
+      nts_web_compression_process(encoder, input, 2, INFINITY);
+  assert(nts_web_compression_status(encoder) == 0);
+  size_t encoded_size = collect(encoded_chunks, encoded, size * 2 + 4096);
+  nts_release((NtsHeader *)encoded_chunks);
+  nts_release(encoder);
+  nts_release((NtsHeader *)input);
+  NtsView *compressed = nts_view_from_bytes(encoded, (double)encoded_size);
+  NtsHeader *decoder = nts_web_compression_open(format, true, 15);
+  NtsArray *old = nts_web_compression_process(decoder, compressed, 2, INFINITY);
+  assert(nts_web_compression_status(decoder) == 0);
+  assert(collect(old, decoded, size) == size);
+  assert(memcmp(source, decoded, size) == 0);
+  for (uint32_t i = 0; i < old->header.length; i++) {
+    NtsView *chunk = NTS_ITEMS(old, NtsView *)[i];
+    assert(nts_view_byte_offset(chunk) == 0);
+    assert(nts_view_byte_length(chunk) <=
+           nts_buffer_byte_length(chunk->buffer));
+    assert(chunk->buffer != compressed->buffer);
+    for (uint32_t j = 0; j < i; j++) {
+      NtsView *prior = NTS_ITEMS(old, NtsView *)[j];
+      assert(chunk->buffer != prior->buffer);
+      assert(chunk->buffer->bytes != prior->buffer->bytes);
+    }
+    // The caller owns the entire backing, including unused capacity.
+    memset(chunk->buffer->bytes, 0xa5, chunk->buffer->length);
+  }
+  assert(nts_web_compression_reset(decoder));
+  NtsArray *next =
+      nts_web_compression_process(decoder, compressed, 2, INFINITY);
+  assert(nts_web_compression_status(decoder) == 0);
+  assert(collect(next, decoded, size) == size);
+  assert(memcmp(source, decoded, size) == 0);
+  for (uint32_t i = 0; i < next->header.length; i++) {
+    NtsView *chunk = NTS_ITEMS(next, NtsView *)[i];
+    for (uint32_t j = 0; j < old->header.length; j++) {
+      NtsView *prior = NTS_ITEMS(old, NtsView *)[j];
+      assert(chunk->buffer != prior->buffer);
+      assert(chunk->buffer->bytes != prior->buffer->bytes);
+    }
+  }
+  nts_web_compression_close(decoder);
+  nts_release(decoder);
+  nts_release((NtsHeader *)next);
+  for (uint32_t i = 0; i < old->header.length; i++) {
+    NtsBuffer *buffer = NTS_ITEMS(old, NtsView *)[i]->buffer;
+    for (size_t j = 0; j < buffer->length; j++)
+      assert(buffer->bytes[j] == 0xa5);
+  }
+  nts_release((NtsHeader *)old);
+  nts_release((NtsHeader *)compressed);
+  free(source);
+  free(encoded);
+  free(decoded);
+  assert(nts_live_count() == live);
+}
+
+static void finished_failure(int format, bool illegal_process) {
+  size_t live = nts_live_count();
+  NtsHeader *encoder = nts_web_compression_open(format, false, 15);
   NtsView *empty = nts_view_from_bytes(NULL, 0);
   NtsArray *chunks = nts_web_compression_process(encoder, empty, 2, INFINITY);
   assert(nts_web_compression_status(encoder) == 0);
@@ -113,9 +179,12 @@ static void finished_failure(bool illegal_process) {
 }
 
 int main(void) {
-  finished_failure(false);
-  finished_failure(true);
   for (int format = 0; format < 4; format++) {
+    finished_failure(format, false);
+    finished_failure(format, true);
+    backing_ownership(format, 1);
+    backing_ownership(format, 16384);
+    backing_ownership(format, 65537);
     one_format(format, 0);
     one_format(format, 1);
     one_format(format, 1024);
@@ -126,5 +195,5 @@ int main(void) {
   assert(nts_web_compression_open(4, false, 15) == NULL);
   assert(nts_web_compression_open(NAN, true, 15) == NULL);
   puts("native compression: 17 populations, exact limits, trailers, "
-       "incomplete, finalizers PASS");
+       "incomplete, finalizers, terminal twins and 12 backing controls PASS");
 }

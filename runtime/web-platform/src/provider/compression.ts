@@ -14,6 +14,11 @@
  * Each result transfers fresh, nonempty Uint8Array chunks backed by ordinary
  * ArrayBuffers, without aliases to inputs, previous results or provider scratch
  * memory. An empty result has no chunks. Output is never reused after return.
+ * Backing length and byte offset are not part of this contract: a produced
+ * view may own a larger backing. The Compression Streams algorithms convert
+ * output byte sequences into fresh Uint8Arrays; Node's zlib streams instead
+ * expose slices of larger, sometimes shared buffers. This provider permits
+ * spare backing capacity like Node while requiring independent ownership.
  *
  * Contexts are opaque provider-owned state, with one caller and no concurrent
  * operations. Their native resources follow object lifetime as a final backstop;

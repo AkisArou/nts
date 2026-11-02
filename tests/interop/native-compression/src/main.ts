@@ -52,3 +52,21 @@ console.log(roundTrip("brotli", 1048576));
 console.log(roundTrip("gzip", 1024));
 console.log(roundTrip("deflate", 1024));
 console.log(roundTrip("deflate-raw", 1024));
+
+// Actual compiled value shape, separate from the copying Node test transport.
+for (const size of [1, 16384]) {
+  const provider = new NativeCompressionProvider();
+  const encoder = context(provider.createCompressor("brotli", 15));
+  const encoded = bytes(result(encoder.process(new Uint8Array(size).fill(65), "finish", Infinity)).chunks);
+  const decoder = context(provider.createDecompressor("brotli", 15));
+  const decoded = result(decoder.process(encoded, "finish", Infinity));
+  check(decoded.chunks.length === 1);
+  for (const chunk of decoded.chunks) {
+    check(chunk.byteLength === size);
+    check(chunk.byteOffset + chunk.byteLength <= chunk.buffer.byteLength);
+    console.log(chunk.byteLength);
+    console.log(chunk.buffer.byteLength);
+  }
+  encoder.close();
+  decoder.close();
+}
