@@ -133,6 +133,50 @@ pub(super) fn failed(graph: &Graph, reason: &Reason) -> Result {
     }
 }
 
+impl<'a> State<'a> {
+    fn of(graph: &Graph, contexts: &'a [Context<'a>]) -> Self {
+        let bounds: Vec<_> = graph
+            .objects
+            .iter()
+            .enumerate()
+            .map(|(index, object)| {
+                if graph.is_widened(index) {
+                    Bound::Outside(Reason::WeakUnionBudget)
+                } else if object.site.is_some() {
+                    Bound::Frame(object.context)
+                } else {
+                    Bound::Outside(Reason::Outside("external or immortal storage".to_owned()))
+                }
+            })
+            .collect();
+        let proofs: Vec<_> = graph
+            .objects
+            .iter()
+            .zip(&bounds)
+            .enumerate()
+            .map(|(id, (_, bound))| Proof {
+                id,
+                object: graph.label(id),
+                bound: spelling(bound, contexts),
+                causes: Vec::new(),
+                edge: "allocation scope or external storage contract".to_owned(),
+            })
+            .collect();
+        Self {
+            contexts,
+            result: Result {
+                bounds,
+                witnesses: (0..graph.objects.len()).collect(),
+                proofs,
+            },
+            pending: (0..graph.objects.len())
+                .filter(|object| graph.representative(*object) == *object)
+                .collect(),
+            queued: vec![true; graph.objects.len()],
+        }
+    }
+}
+
 pub(super) fn analyze(
     graph: &mut Graph,
     contexts: &[Context<'_>],
@@ -148,45 +192,7 @@ pub(super) fn analyze(
             proofs: Vec::new(),
         };
     }
-    let bounds: Vec<_> = graph
-        .objects
-        .iter()
-        .enumerate()
-        .map(|(index, object)| {
-            if graph.is_widened(index) {
-                Bound::Outside(Reason::WeakUnionBudget)
-            } else if object.site.is_some() {
-                Bound::Frame(object.context)
-            } else {
-                Bound::Outside(Reason::Outside("external or immortal storage".to_owned()))
-            }
-        })
-        .collect();
-    let proofs: Vec<_> = graph
-        .objects
-        .iter()
-        .zip(&bounds)
-        .enumerate()
-        .map(|(id, (_, bound))| Proof {
-            id,
-            object: graph.label(id),
-            bound: spelling(bound, contexts),
-            causes: Vec::new(),
-            edge: "allocation scope or external storage contract".to_owned(),
-        })
-        .collect();
-    let mut state = State {
-        contexts,
-        result: Result {
-            bounds,
-            witnesses: (0..graph.objects.len()).collect(),
-            proofs,
-        },
-        pending: (0..graph.objects.len())
-            .filter(|object| graph.representative(*object) == *object)
-            .collect(),
-        queued: vec![true; graph.objects.len()],
-    };
+    let mut state = State::of(graph, contexts);
     'roots: for (node, exposure) in roots {
         let bound = match exposure {
             Exposure::Outside(why) => Bound::Outside(Reason::Outside(why.clone())),

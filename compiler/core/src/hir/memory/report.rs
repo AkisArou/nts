@@ -230,6 +230,34 @@ impl Report {
                 function.unknown_effects
             );
         }
+        self.render_events(&mut out);
+        for frontier in &self.frontiers {
+            let _ = writeln!(out, "frontier\t{:?}\t{:?}", frontier.owner, frontier.ends);
+        }
+        for proof in &self.proofs {
+            let _ = writeln!(
+                out,
+                "proof\t{}\t{:?}\t{:?}\t{:?}\t{:?}",
+                proof.id, proof.object, proof.bound, proof.causes, proof.edge
+            );
+        }
+        for slot in &self.slots {
+            let _ = writeln!(
+                out,
+                "slot\t{:?}\t{:?}\t{:?}\t{:?}\t{:?}\t{:?}",
+                slot.owner, slot.context, slot.instance, slot.slot, slot.aliases, slot.payload
+            );
+        }
+        for value in &self.values {
+            let _ = writeln!(
+                out,
+                "value\t{:?}\t{:?}\t%{}\t{:?}\t{:?}",
+                value.function, value.context, value.value, value.aliases, value.payload
+            );
+        }
+        out
+    }
+    fn render_events(&self, out: &mut String) {
         for store in &self.store_versions {
             let _ = writeln!(
                 out,
@@ -274,30 +302,5 @@ impl Report {
                 outcome.payload
             );
         }
-        for frontier in &self.frontiers {
-            let _ = writeln!(out, "frontier\t{:?}\t{:?}", frontier.owner, frontier.ends);
-        }
-        for proof in &self.proofs {
-            let _ = writeln!(
-                out,
-                "proof\t{}\t{:?}\t{:?}\t{:?}\t{:?}",
-                proof.id, proof.object, proof.bound, proof.causes, proof.edge
-            );
-        }
-        for slot in &self.slots {
-            let _ = writeln!(
-                out,
-                "slot\t{:?}\t{:?}\t{:?}\t{:?}\t{:?}\t{:?}",
-                slot.owner, slot.context, slot.instance, slot.slot, slot.aliases, slot.payload
-            );
-        }
-        for value in &self.values {
-            let _ = writeln!(
-                out,
-                "value\t{:?}\t{:?}\t%{}\t{:?}\t{:?}",
-                value.function, value.context, value.value, value.aliases, value.payload
-            );
-        }
-        out
     }
 }

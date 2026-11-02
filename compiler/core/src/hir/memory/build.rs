@@ -1168,8 +1168,16 @@ fn parameters(program: &Program, graph: &mut Graph) -> Vec<Vec<(ValueId, u32)>> 
         .collect()
 }
 
-impl<'p> Builder<'p> {
-    fn new(program: &'p Program, limits: Limits) -> Self {
+struct FunctionIndex<'p> {
+    cycles: Vec<Result<cfg::CyclicBlocks<'p>, cfg::CfgError>>,
+    failure: Option<Reason>,
+    unsupported_phase: bool,
+    work: usize,
+    value_blocks: Vec<BTreeMap<ValueId, BlockId>>,
+}
+
+impl<'p> FunctionIndex<'p> {
+    fn of(program: &'p Program) -> Self {
         let cycles: Vec<_> = program.funcs.iter().map(cfg::cyclic_blocks).collect();
         let cfg_failure = cycles
             .iter()
@@ -1192,7 +1200,6 @@ impl<'p> Builder<'p> {
                 })
         });
         let unsupported_phase = phase_failure.is_some();
-        let validated_input = cfg_failure.is_none() && !unsupported_phase;
         let cfg_work = program
             .funcs
             .iter()
@@ -1238,6 +1245,20 @@ impl<'p> Builder<'p> {
                     .collect()
             })
             .collect();
+        Self {
+            cycles,
+            failure: cfg_failure.or(phase_failure),
+            unsupported_phase,
+            work: cfg_work,
+            value_blocks,
+        }
+    }
+}
+
+impl<'p> Builder<'p> {
+    fn new(program: &'p Program, limits: Limits) -> Self {
+        let index = FunctionIndex::of(program);
+        let validated_input = index.failure.is_none();
         let calls = CallGraph::of(program);
         let operations = program
             .funcs
@@ -1263,8 +1284,8 @@ impl<'p> Builder<'p> {
             input.saturating_mul(limits.work_per_operation),
             input.saturating_mul(limits.edges_per_operation),
         );
-        graph.work = calls.work.saturating_add(cfg_work);
-        graph.failure = cfg_failure.or(phase_failure);
+        graph.work = calls.work.saturating_add(index.work);
+        graph.failure = index.failure;
         if graph.work > graph.work_limit {
             graph.failure.get_or_insert(Reason::WorkBudget);
         }
@@ -1301,15 +1322,15 @@ impl<'p> Builder<'p> {
             operations,
             stages: vec![(
                 "call-and-cfg-index".to_owned(),
-                calls.work.saturating_add(cfg_work),
+                calls.work.saturating_add(index.work),
             )],
-            cycles,
-            value_blocks,
+            cycles: index.cycles,
+            value_blocks: index.value_blocks,
             summaries: Vec::new(),
             summary_used: vec![false; program.funcs.len()],
             context_membership_visits: 0,
             contexts_of: vec![Vec::new(); program.funcs.len()],
-            unsupported_phase,
+            unsupported_phase: index.unsupported_phase,
         };
         build.summaries = program
             .funcs
@@ -2276,7 +2297,7 @@ impl<'p> Builder<'p> {
         reports
     }
 
-    /// Order the same writes recorded by Graph::store, including summary and
+    /// Order the same writes recorded by `Graph::store`, including summary and
     /// helper stores. This constructs no second alias or writer analysis.
     #[expect(
         clippy::too_many_lines,

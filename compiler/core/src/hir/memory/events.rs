@@ -43,7 +43,7 @@ enum Facts {
 
 #[derive(Debug, Default)]
 pub(super) struct Events {
-    events: Vec<Event>,
+    nodes: Vec<Event>,
     facts: Vec<Facts>,
     changes: Vec<usize>,
 }
@@ -63,8 +63,8 @@ enum Delta {
 
 impl Events {
     pub(super) fn node(&mut self) -> EventId {
-        let at = self.events.len();
-        self.events.push(Event::default());
+        let at = self.nodes.len();
+        self.nodes.push(Event::default());
         self.facts.push(Facts::Empty);
         self.changes.push(0);
         at
@@ -72,20 +72,20 @@ impl Events {
 
     pub(super) fn edge(&mut self, from: EventId, to: EventId, graph: &mut Graph) {
         if graph.charge() {
-            self.events[to].previous.insert(from);
+            self.nodes[to].previous.insert(from);
         }
     }
 
     pub(super) fn fresh(&mut self, at: EventId, object: Object) {
-        self.events[at].fresh.insert(object);
+        self.nodes[at].fresh.insert(object);
     }
 
     pub(super) fn write(&mut self, at: EventId, key: Key) {
-        self.events[at].writes.insert(key);
+        self.nodes[at].writes.insert(key);
     }
 
     pub(super) fn unknown(&mut self, at: EventId, reason: Reason) {
-        self.events[at].unknown.get_or_insert(reason);
+        self.nodes[at].unknown.get_or_insert(reason);
     }
 
     fn insert(&mut self, at: EventId, delta: &Delta, limit: usize) -> Option<Delta> {
@@ -129,7 +129,7 @@ impl Events {
     pub(super) fn solve(&mut self, graph: &mut Graph) {
         let limit = graph.alias_limit.max(1);
         let mut pending = VecDeque::new();
-        for (at, event) in self.events.iter().enumerate() {
+        for (at, event) in self.nodes.iter().enumerate() {
             for key in &event.writes {
                 pending.push_back((at, Delta::Write(key.clone(), at)));
             }
@@ -144,13 +144,13 @@ impl Events {
             let Some(delta) = self.insert(at, &delta, limit) else {
                 continue;
             };
-            if matches!(&delta, Delta::Write((object, _), _) if self.events[at].fresh.contains(object))
+            if matches!(&delta, Delta::Write((object, _), _) if self.nodes[at].fresh.contains(object))
             {
                 // The previous direct-instance lifetime ended at this fresh
                 // allocation. Retained older/callback identities are separate.
                 continue;
             }
-            for &before in &self.events[at].previous {
+            for &before in &self.nodes[at].previous {
                 if !graph.charge() {
                     return;
                 }
@@ -183,7 +183,7 @@ impl Events {
         &self.changes
     }
     pub(super) fn len(&self) -> usize {
-        self.events.len()
+        self.nodes.len()
     }
 }
 

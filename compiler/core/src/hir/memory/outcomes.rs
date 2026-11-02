@@ -1,5 +1,5 @@
 //! Escaping outcomes are a column of the existing shared call index.
-//! A return type or entry name never proves NoRaise. Only accepted placed
+//! A return type or entry name never proves `NoRaise`. Only accepted placed
 //! producers, their actual bodies and the helper contract can close an edge.
 
 use std::collections::{BTreeMap, VecDeque};
@@ -21,9 +21,6 @@ fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {
             runtime::raising(name),
             Some(runtime::Raising::NoRaise | runtime::Raising::Diverges)
         ),
-        // A dispatch slot alone does not seal the set of actual incoming
-        // receivers, foreign callbacks or implementations.
-        OpKind::Call { .. } => true,
         OpKind::Binary { .. } | OpKind::Unary { .. } => op.ty == HirType::BigInt,
         OpKind::Param(_)
         | OpKind::BlockParam(_)
@@ -59,14 +56,16 @@ fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {
         | OpKind::Retain(_)
         | OpKind::Release(_) => false,
         // Includes suspension/reentry and future implicit producers. An
-        // unrecognised producer never grants a proved-empty event set.
+        // unrecognised producer never grants a proved-empty event set. A
+        // dispatch slot alone does not seal incoming implementations.
         _ => true,
     }
 }
 
 /// Share the function/dispatch SCC index's edges rather than build another
 /// call graph. Each boolean promotes at most once and visits each caller edge
-/// once; recursive bodies cannot refill a cleared state.
+/// at most twice across the two columns; recursive bodies cannot refill a
+/// cleared state.
 pub(super) fn escaping(
     program: &Program,
     edges: &[Vec<usize>],
