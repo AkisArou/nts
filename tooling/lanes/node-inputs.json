@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "releases": {
+    "24.20.0": {
+      "commit": "71b8b174857e25106d39b61a9e6f30d927da8b01",
+      "tree": "f74b6fe00859f75e09838706bf9ec2b4aabbbca3",
+      "archive": "2732fc3f588dd335cd6779c06864f7cd424bb1b5ff9a1743059a66c54f9ca4a1",
+      "sourceRecord": "a3dbe137ff405cb4ecd2651dbe2e5d1065b55e95d25e80fb6df2a009b0f324b4"
+    },
+    "26.13.0": {
+      "commit": "18b32a3b1552e199a01f1a8d9fd64aa756d3b75b",
+      "tree": "48b8ff59875b66f70dd9edee17d12ef5792324e3",
+      "archive": "263f639ecfa7a17b49438d76cdbf9aff73179e3c7cb789da69b900718427fa2e",
+      "sourceRecord": "f9e1054a2ecdd1ce7ab277516806a693fad303046f6aa9f416af60922250d751"
+    }
+  }
+}

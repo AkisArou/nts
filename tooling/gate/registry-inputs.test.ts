@@ -3,14 +3,13 @@ import {acquireRevision,dependencyCache} from "../lanes/dependency-inputs.ts";
 import { readFileSync, writeFileSync, rmSync, readdirSync, mkdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import { pathToFileURL } from "node:url";
 import { command, registryInputsFixture, REGISTRY_FIXTURE_MARKER,
   REGISTRY_FIXTURE_PACKAGE, SECOND_REGISTRY_PACKAGE, SECOND_REGISTRY_MARKER, treeIdentity } from "./registry-inputs-fixture.ts";
 
-const inputs = fileURLToPath(new URL("../lanes/inputs.sh", import.meta.url));
 const prepare = (fixture: Awaited<ReturnType<typeof registryInputsFixture>>) => {
   const home=join(fixture.root,"consumer-home");mkdirSync(home,{recursive:true});
-  return command("sh", [inputs, "lane", fixture.main, fixture.frozen], fixture.root,undefined,{HOME:home,COREPACK_ENABLE_NETWORK:"0"});
+  return command("sh", [fixture.inputs, "lane", fixture.main, fixture.frozen], fixture.root,undefined,{HOME:home,COREPACK_ENABLE_NETWORK:"0"});
 };
 
 test("a frozen candidate gets its new registry dev dependency before main has it", async t => {

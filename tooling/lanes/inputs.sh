@@ -16,9 +16,13 @@ mode=$1
 root=$2
 tree=$3
 case $mode in
-  gate|lane) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/node third_party/node-source third_party/deno" ;;
+  gate|lane) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/deno" ;;
   *) echo "inputs.sh: mode is gate or lane, not $mode" >&2; exit 2 ;;
 esac
+
+# The candidate's own pin selects an already acquired immutable Node pair.
+# Neither a gate nor a lane may borrow the shared checkout's other release.
+node "$(dirname -- "$0")/node-inputs.ts" --link "$tree"
 
 # The gitignored third-party clones are inputs rather than sources -- test262,
 # Are We Fast Yet, TypeScript's tests and node's `lib/`. They are not in any

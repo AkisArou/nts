@@ -5,10 +5,15 @@ import { spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { createServer } from "node:http";
 import { once } from "node:events";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, lstatSync, writeFileSync } from "node:fs";
+import { chmodSync,copyFileSync,mkdirSync, mkdtempSync, readFileSync, readdirSync, readlinkSync, rmSync, statSync, lstatSync, symlinkSync,writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TestContext } from "node:test";
+import {withPackageManager} from "../lanes/package-manager.ts";
+import {fixtureInputs} from "../lanes/node-inputs-test-fixture.ts";
+import {acquire as acquireNodeInputs} from "../lanes/node-inputs.ts";
+import {nodePin} from "../bootstrap/node.ts";
+import {fileURLToPath} from "node:url";
 
 export const REGISTRY_FIXTURE_PACKAGE = "nts-registry-input-fixture";
 export const REGISTRY_FIXTURE_MARKER = "candidate-registry-input-v1";
@@ -17,6 +22,11 @@ export const SECOND_REGISTRY_MARKER = "candidate-registry-input-second-v1";
 export type CommandResult = { status: number | null; stdout: string; stderr: string };
 
 export function command(program: string, args: string[], cwd: string, input?: Buffer, overrides:NodeJS.ProcessEnv={}): Promise<CommandResult> {
+  if(program==="pnpm"){
+    assert.equal(input,undefined,"the pinned manager takes command arguments, not stdin");
+    assert.equal(Object.keys(overrides).length,0,"manager capabilities come from the canonical host environment");
+    return withPackageManager(cwd,{},async manager=>({status:0,stdout:await manager.run(args),stderr:""}));
+  }
   return new Promise((resolve, reject) => {
     const env={...process.env,...overrides};
     for(const key of ["NTS_GATE_STEP","NTS_GATE_STEP_RESULT","NTS_GATE_STEP_ATTEMPT"])delete env[key];
@@ -55,7 +65,7 @@ export function treeIdentity(root: string): string {
 
 export type RegistryInputsFixture = {
   root: string; main: string; candidate: string; frozen: string; store: string;
-  integrity: string; mainIdentity: string; registryRequests: string[];
+  integrity: string; mainIdentity: string; registryRequests: string[]; inputs:string;
 };
 
 /** The optional hook is the submission cache-population seam for the fix. */
@@ -65,7 +75,21 @@ export async function registryInputsFixture(t: TestContext,
   const main = join(root, "main"), candidate = join(root, "candidate"), frozen = join(root, "frozen");
   const store = join(root, "store"), packageRoot = join(root, "artifact/package");
   for (const directory of [main, frozen, store, packageRoot]) mkdirSync(directory, { recursive: true });
-  t.after(() => { if (!process.env.REGISTRY_INPUTS_FIXTURE_KEEP) rmSync(root, { recursive: true, force: true }); });
+  t.after(() => { if (!process.env.REGISTRY_INPUTS_FIXTURE_KEEP) {
+    const writable=(path:string)=>{if(lstatSync(path).isDirectory()){chmodSync(path,0o755);for(const name of readdirSync(path))writable(join(path,name));}};
+    writable(root);rmSync(root, { recursive: true, force: true });
+  } });
+  const toolingRoot=fileURLToPath(new URL("../../",import.meta.url));
+  const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),lanes=join(consumer,"tooling/lanes");
+  acquireNodeInputs(main,join(root,"consumer-home/.cache/nts-node-inputs"),table);
+  mkdirSync(lanes,{recursive:true});mkdirSync(join(consumer,"tooling/bootstrap"),{recursive:true});
+  for(const file of ["inputs.sh","node-inputs.ts","dependency-inputs.ts"])copyFileSync(join(toolingRoot,"tooling/lanes",file),join(lanes,file));
+  copyFileSync(join(toolingRoot,"tooling/bootstrap/node.ts"),join(consumer,"tooling/bootstrap/node.ts"));
+  writeFileSync(join(lanes,"node-inputs.json"),JSON.stringify(table));
+  for(const file of ["gate-resource.ts","durable-record.ts","package-manager.ts"])symlinkSync(join(toolingRoot,"tooling/lanes",file),join(lanes,file));
+  mkdirSync(join(consumer,"tooling/gate"));symlinkSync(join(toolingRoot,"tooling/gate/step-result.ts"),join(consumer,"tooling/gate/step-result.ts"));
+  writeFileSync(join(consumer,"package.json"),'{"type":"module"}\n');
+  const inputs=join(lanes,"inputs.sh");
   const packageJson = { name: REGISTRY_FIXTURE_PACKAGE, version: "1.0.0", type: "module",
     exports: "./index.js", license: "MIT" };
   writeFileSync(join(packageRoot, "package.json"), JSON.stringify(packageJson));
@@ -106,13 +130,13 @@ export async function registryInputsFixture(t: TestContext,
   writeFileSync(join(main, "package.json"), JSON.stringify({ name: "inputs-main-fixture", private: true,
     packageManager: "pnpm@10.15.0" }));
   writeFileSync(join(main, "pnpm-workspace.yaml"), "packages:\n  - test/*\n");
-  writeFileSync(join(main, ".gitignore"), "node_modules/\n");
+  writeFileSync(join(main, ".gitignore"), "node_modules/\n/third_party/node\n/third_party/node-source\n/third_party/node-inputs\n");
   writeFileSync(join(main, ".npmrc"), `registry=${origin}/\nstore-dir=${store}\ncache-dir=${join(root,"metadata-cache")}\nstate-dir=${join(root,"state")}\nverify-store-integrity=true\n`);
   const git = (cwd: string, args: string[]) => checked("git", ["-c", "commit.gpgsign=false",
     "-c", "core.hooksPath=/dev/null", "-c", "user.name=Registry input fixture",
     "-c", "user.email=fixture@example.invalid", ...args], cwd);
   await git(main, ["init", "--initial-branch=main"]);
-  await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc"]);
+  await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc", ".tool-versions", "build/node-deps/recipes.json"]);
   await git(main, ["commit", "-m", "fixture main has no registry dependency or test importer"]);
   mkdirSync(join(main, "node_modules"));
   const mainIdentity = treeIdentity(main);
@@ -127,7 +151,7 @@ export async function registryInputsFixture(t: TestContext,
   await git(candidate, ["add", "pnpm-lock.yaml", "test/new-importer"]);
   await git(candidate, ["commit", "-m", "candidate adds a registry dev dependency in a new importer"]);
   const fixture: RegistryInputsFixture = { root, main, candidate, frozen, store, integrity,
-    mainIdentity, registryRequests };
+    mainIdentity, registryRequests, inputs };
   // Seed acquisition is allowed here; preparation below cannot contact even
   // this isolated registry once the submission cache has been populated.
   await populateCache?.(fixture);

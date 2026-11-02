@@ -17,6 +17,12 @@ import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStr
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
 
+test("the immutable Node input selector retains the gate-inputs' full reach",()=>{
+  const expected=stepsFor('tooling/lanes/inputs.sh');
+  for(const path of ['tooling/lanes/node-inputs.ts','tooling/lanes/node-inputs.json','tooling/lanes/node-inputs.test.ts','tooling/lanes/node-inputs-test-fixture.ts'])
+    for(const added of [false,true])assert.deepEqual(changeOwes([{path,added}]),expected,path);
+});
+
 test("every new or changed program fixture owes the complete native capture invariant",()=>{
   for(const added of [false,true]) for(const path of ['tests/programs/a-deep-base-keeps-its-physical-storage/src/main.ts','tests/programs/another/tsconfig.json']) {
     assert.ok(changeOwes([{path,added}]).includes('frontend-tsrs'),path);

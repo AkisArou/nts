@@ -28,6 +28,8 @@ import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
 import {randomUUID} from "node:crypto";
 import {systemdEnvironment} from "../gate/environment.ts";
 import {selectorFixture} from "./selector-fixture.ts";
+import {fixtureInputs} from "./node-inputs-test-fixture.ts";
+import {acquire as acquireNodeInputs} from "./node-inputs.ts";
 
 // Fake gates read their own fixture controls from a private file. The real
 // gate environment deliberately does not forward these launcher variables.
@@ -668,16 +670,35 @@ test("native inputs link the upstream TypeScript corpus without an external comp
   const corpus = join(s.root, "third_party/typescript");
   mkdirSync(corpus, { recursive: true });
   writeFileSync(join(corpus, "marker"), "upstream corpus\n");
-  const a = lane(s, "native-inputs", { "package.json": JSON.stringify({name:"corpus-input-control",private:true,packageManager:"pnpm@10.15.0"}), "pnpm-lock.yaml": "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n" });
+  const a = lane(s, "native-inputs", { "package.json": JSON.stringify({name:"corpus-input-control",type:"module",private:true,packageManager:"pnpm@10.15.0"}), "pnpm-workspace.yaml":"packages: []\n", "pnpm-lock.yaml": "lockfileVersion: '9.0'\nsettings:\n  autoInstallPeers: true\n  excludeLinksFromLockfile: false\nimporters:\n  .: {}\n" });
+  const reference=join(s.home,"node-reference"),nodeCache=join(s.home,".cache/nts-node-inputs");
+  const identities=fixtureInputs(reference,"24.20.0");
+  // cleanupFixtures runs in this test wrapper's finally, before t.after.
+  // Restore and remove this control's immutable cache before that owner drains.
+  const releaseInputs=()=>{
+    function writable(path:string){if(statSync(path).isDirectory()){chmodSync(path,0o755);for(const name of readdirSync(path))writable(join(path,name));}}
+    if(existsSync(nodeCache)){writable(nodeCache);rmSync(nodeCache,{recursive:true,force:true});}
+  };
+  try {
+  acquireNodeInputs(reference,nodeCache,identities);
+  for(const name of [".tool-versions","build/node-deps/recipes.json"]){
+    mkdirSync(dirname(join(a,name)),{recursive:true});writeFileSync(join(a,name),readFileSync(join(reference,name)));
+  }
+  const scripts=join(a,"tooling/lanes");mkdirSync(scripts,{recursive:true});mkdirSync(join(a,"tooling/bootstrap"),{recursive:true});
+  for(const name of ["inputs.sh","node-inputs.ts"])writeFileSync(join(scripts,name),readFileSync(new URL("./"+name,import.meta.url)));
+  writeFileSync(join(scripts,"node-inputs.json"),JSON.stringify(identities));
+  symlinkSync(new URL("../bootstrap/node.ts",import.meta.url).pathname,join(a,"tooling/bootstrap/node.ts"));
+  assert.ok(existsSync(join(scripts,"dependency-inputs.ts")),"the landing fixture supplies the real dependency consumer");
   await withPackageManager(a,{},manager=>manager.run(["install","--offline","--lockfile-only","--ignore-scripts"]));
   run(s,a,["add","pnpm-lock.yaml"]);run(s,a,["commit","--allow-empty","-qm","canonical empty dependency lock"]);
   const cache=dependencyCache(s.root);t.after(()=>rmSync(cache,{recursive:true,force:true}));
   await acquireRevision(s.root,a,"HEAD");
   for (const mode of ["lane", "gate"]) {
-    const prepared = spawnTest("sh", [new URL("./inputs.sh", import.meta.url).pathname, mode, s.root, a], { env: s.env, encoding: "utf8" });
+    const prepared = spawnTest("sh", [join(scripts,"inputs.sh"), mode, s.root, a], { env: s.env, encoding: "utf8" });
     assert.equal(prepared.status, 0, prepared.stderr);
     assert.equal(realpathSync(join(a, "third_party/typescript")), corpus);
   }
+  } finally { releaseInputs(); }
 });
 
 test("landing refuses a caller checker override before enqueue", async () => {

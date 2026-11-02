@@ -69,6 +69,7 @@ node_modules
 #   cd third_party/node && git sparse-checkout set lib
 /third_party/node
 /third_party/node-source
+/third_party/node-inputs
 
 # Deno, cloned sparsely to measure its extension JS and its Rust crates against
 # the Node question. Not vendored, for the same reason as the others.

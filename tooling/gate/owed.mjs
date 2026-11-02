@@ -811,7 +811,7 @@ export const RULES = [
     // `pinned.sh` builds every gate tree with it, the full run's too, so it
     // owes every step, as the runner does.
     name: "the gate trees' inputs",
-    when: (p) => p === "tooling/lanes/inputs.sh",
+    when: (p) => p === "tooling/lanes/inputs.sh" || /^tooling\/lanes\/node-inputs(?:-test-fixture|\.test)?\.(?:ts|json)$/.test(p),
     full: true,
     wide: true,
     steps: [],
