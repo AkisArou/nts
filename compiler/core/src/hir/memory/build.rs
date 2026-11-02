@@ -1679,11 +1679,18 @@ struct Builder<'p> {
     context_membership_visits: usize,
     contexts_of: Vec<Vec<usize>>,
     unsupported_phase: bool,
+    invalid_values: bool,
 }
 
 pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
     let mut build = Builder::new(program, limits);
-    let outside = reachable::outside_callers(program);
+    let outside = if build.invalid_values {
+        // Invalid input cannot enter a root resolver that reads its operands.
+        // The unseen-body walk below still inventories every actual function.
+        Default::default()
+    } else {
+        reachable::outside_callers(program)
+    };
     for (at, function) in program.funcs.iter().enumerate() {
         if outside.contains(function.name.as_str()) || function.name.ends_with("#init") {
             let context = build.context(at, None, None);
@@ -1911,6 +1918,7 @@ struct FunctionIndex<'p> {
     cycles: Vec<Result<cfg::CyclicBlocks<'p>, cfg::CfgError>>,
     failure: Option<Reason>,
     unsupported_phase: bool,
+    invalid_values: bool,
     work: usize,
     value_blocks: Vec<BTreeMap<ValueId, BlockId>>,
 }
@@ -1932,9 +1940,62 @@ fn metadata_work(program: &Program) -> usize {
         + program.globals.len()
 }
 
+/// Validate the domain consumed by memory using the verifier's operand
+/// enumeration, including terminators and actual unplaced ABI parameters.
+/// A valid arena entry alone is not a definition after DCE removed its producer.
+fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
+    let mut work = function.values.len();
+    let mut definitions: BTreeSet<_> = function.parameter_values().into_iter().collect();
+    let mut failure = None;
+    for (at, block) in function.blocks.iter().enumerate() {
+        for &id in block.params.iter().chain(&block.ops) {
+            work += 1;
+            if function.values.get(id.0 as usize).is_some() {
+                definitions.insert(id);
+            } else {
+                failure.get_or_insert_with(|| {
+                    Reason::InvalidControlFlow(format!(
+                        "{}: block {at} places missing definition %{}",
+                        function.name, id.0
+                    ))
+                });
+            }
+        }
+    }
+    for (at, block) in function.blocks.iter().enumerate() {
+        let mut check = |value: ValueId, user: String| {
+            work += 1;
+            if !definitions.contains(&value) {
+                failure.get_or_insert_with(|| {
+                    Reason::InvalidControlFlow(format!(
+                        "{}: block {at} {user} reads %{} without a placed or ABI definition",
+                        function.name, value.0
+                    ))
+                });
+            }
+        };
+        for &id in &block.ops {
+            let Some(op) = function.values.get(id.0 as usize) else {
+                continue;
+            };
+            for operand in verify::operands(&op.kind) {
+                check(operand, format!("operation %{}", id.0));
+            }
+        }
+        for operand in verify::terminator_operands(&block.terminator) {
+            check(operand, "terminator".to_owned());
+        }
+    }
+    (failure, work)
+}
+
 impl<'p> FunctionIndex<'p> {
     fn of(program: &'p Program) -> Self {
         let cycles: Vec<_> = program.funcs.iter().map(cfg::cyclic_blocks).collect();
+        let domains: Vec<_> = program.funcs.iter().map(operand_domain).collect();
+        let domain_failure = domains.iter().find_map(|(failure, _)| failure.clone());
+        let invalid_values = domain_failure.is_some();
+        let domain_work = domains.iter().map(|(_, work)| work).sum::<usize>();
         let cfg_failure = cycles
             .iter()
             .find_map(|cycle| cycle.as_ref().err())
@@ -2003,9 +2064,12 @@ impl<'p> FunctionIndex<'p> {
             .collect();
         Self {
             cycles,
-            failure: cfg_failure.or(phase_failure),
+            failure: cfg_failure.or(domain_failure).or(phase_failure),
             unsupported_phase,
-            work: cfg_work.saturating_add(metadata_work(program)),
+            invalid_values,
+            work: cfg_work
+                .saturating_add(domain_work)
+                .saturating_add(metadata_work(program)),
             value_blocks,
         }
     }
@@ -2083,13 +2147,14 @@ impl<'p> Builder<'p> {
             context_membership_visits: 0,
             contexts_of: vec![Vec::new(); program.funcs.len()],
             unsupported_phase: index.unsupported_phase,
+            invalid_values: index.invalid_values,
         };
         build.summaries = program
             .funcs
             .iter()
             .enumerate()
             .map(|(at, function)| {
-                if build.cycles[at].is_err() || build.unsupported_phase {
+                if build.cycles[at].is_err() || build.unsupported_phase || build.invalid_values {
                     None
                 } else {
                     Summary::of(function, |ty, index| build.field(ty, index))
@@ -2164,7 +2229,16 @@ impl<'p> Builder<'p> {
             .chain(self.parameters[function].iter().map(|(id, _)| id))
             .copied()
             .collect();
-        let values = live.into_iter().map(|id| (id, self.graph.node())).collect();
+        let values = live
+            .into_iter()
+            .filter(|id| {
+                self.program.funcs[function]
+                    .values
+                    .get(id.0 as usize)
+                    .is_some()
+            })
+            .map(|id| (id, self.graph.node()))
+            .collect();
         let result = self.graph.node();
         let at = self.contexts.len();
         self.contexts.push(Context {
@@ -2382,13 +2456,22 @@ impl<'p> Builder<'p> {
             };
             return;
         }
-        if self.cycles[function_index].is_err() {
+        if self.cycles[function_index].is_err() && !self.invalid_values {
             return;
+        }
+        if self.invalid_values {
+            self.contexts[context].effects = Effects {
+                length: true,
+                suspension: true,
+                reentrant: true,
+                unknown: true,
+                ..Effects::default()
+            };
         }
         // Unsupported pre-suspend input still gets a complete placed-site
         // inventory. No liveness/alias/lifetime fact from that phase publishes
         // a proof; ordinary preparation observes only transformed input.
-        let blocks = if self.unsupported_phase {
+        let blocks = if self.unsupported_phase || self.invalid_values {
             (0..function.blocks.len())
                 .map(|at| BlockId(u32::try_from(at).unwrap_or(u32::MAX)))
                 .collect()
@@ -2405,8 +2488,13 @@ impl<'p> Builder<'p> {
             for &id in &function.blocks[block_id.0 as usize].ops {
                 // Inventory still completes after exhaustion. Graph mutations
                 // stop charging/publishing facts, and every home becomes Heap.
-                self.graph.charge();
-                self.operation(context, id, repeated);
+                if function.values.get(id.0 as usize).is_some() {
+                    self.graph.charge();
+                    self.operation(context, id, repeated);
+                }
+            }
+            if self.invalid_values {
+                continue;
             }
             let block = &function.blocks[block_id.0 as usize];
             match &block.terminator {
@@ -2473,6 +2561,22 @@ impl<'p> Builder<'p> {
         let function = &self.program.funcs[self.contexts[context].function];
         let op = function.value(id);
         let into = self.value(context, id);
+        if self.invalid_values {
+            match &op.kind {
+                // These existing allocation arms need no operand values.
+                OpKind::ObjectNew { .. }
+                | OpKind::ArrayNew { .. }
+                | OpKind::NativeMalloc { .. }
+                | OpKind::Binary {
+                    op: BinOp::Concat, ..
+                } => {}
+                OpKind::Call { .. } => {
+                    self.opaque(context, id, &[], "invalid value domain");
+                    return;
+                }
+                _ => return,
+            }
+        }
         let known = |tags| ValueFact::Known {
             tags,
             numbers: facts::Facts::BOTTOM,
