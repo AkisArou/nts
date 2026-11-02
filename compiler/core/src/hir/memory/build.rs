@@ -77,21 +77,6 @@ mod tests {
         }
     }
 
-    fn context_values(&mut self, function: usize) -> BTreeMap<ValueId, Node> {
-        let live: BTreeSet<_> = self.program.funcs[function]
-            .blocks
-            .iter()
-            .flat_map(|block| block.params.iter().chain(&block.ops))
-            .chain(self.parameters[function].iter().map(|(id, _)| id))
-            .copied()
-            .collect();
-        let arena_len = self.program.funcs[function].values.len();
-        live.into_iter()
-            .filter(|id| (id.0 as usize) < arena_len)
-            .map(|id| (id, self.graph.node()))
-            .collect()
-    }
-
     fn context(effects: Effects) -> Context {
         Context {
             function: 0,
@@ -2218,6 +2203,21 @@ impl<'p> Builder<'p> {
             })
             .collect();
         build
+    }
+
+    fn context_values(&mut self, function: usize) -> BTreeMap<ValueId, Node> {
+        let live: BTreeSet<_> = self.program.funcs[function]
+            .blocks
+            .iter()
+            .flat_map(|block| block.params.iter().chain(&block.ops))
+            .chain(self.parameters[function].iter().map(|(id, _)| id))
+            .copied()
+            .collect();
+        let arena_len = self.program.funcs[function].values.len();
+        live.into_iter()
+            .filter(|id| (id.0 as usize) < arena_len)
+            .map(|id| (id, self.graph.node()))
+            .collect()
     }
 
     fn context(&mut self, function: usize, parent: Option<usize>, call: Option<ValueId>) -> usize {
