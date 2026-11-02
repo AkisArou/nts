@@ -1232,11 +1232,19 @@ fn slot_names(program: &Program) -> Vec<Vec<Slot>> {
         .collect()
 }
 
-fn parameters(program: &Program, graph: &mut Graph) -> Vec<Vec<(ValueId, u32)>> {
+fn parameters(
+    program: &Program,
+    graph: &mut Graph,
+    cycles: &[Result<cfg::CyclicBlocks<'_>, cfg::CfgError>],
+) -> Vec<Vec<(ValueId, u32)>> {
     program
         .funcs
         .iter()
-        .map(|function| {
+        .enumerate()
+        .map(|(at, function)| {
+            if cycles[at].is_err() {
+                return Vec::new();
+            }
             // A coroutine's frame parameter belongs to its ABI even when it is
             // absent from block.ops. Use the same authority as forwarding/verifying.
             let Some(values) = function.parameter_values() else {
@@ -1344,7 +1352,6 @@ impl<'p> FunctionIndex<'p> {
 impl<'p> Builder<'p> {
     fn new(program: &'p Program, limits: Limits) -> Self {
         let index = FunctionIndex::of(program);
-        let validated_input = index.failure.is_none();
         let calls = CallGraph::of(program);
         let operations = program
             .funcs
@@ -1377,11 +1384,7 @@ impl<'p> Builder<'p> {
         }
         graph.alias_limit = limits.aliases_per_value;
         let globals = program.globals.iter().map(|_| graph.node()).collect();
-        let parameters = if validated_input {
-            parameters(program, &mut graph)
-        } else {
-            vec![Vec::new(); program.funcs.len()]
-        };
+        let parameters = parameters(program, &mut graph, &index.cycles);
         let mut build = Self {
             program,
             limits,
@@ -2938,17 +2941,14 @@ impl<'p> Builder<'p> {
         let mut functions = Vec::new();
         for context in &self.contexts {
             let function = &self.program.funcs[context.function];
-            for block in &function.blocks {
-                for &id in block.params.iter().chain(&block.ops) {
-                    let node = context.values[&id];
-                    values.push(Value {
-                        function: function.name.clone(),
-                        context: context.key.clone(),
-                        value: id.0,
-                        aliases: aliases(node),
-                        payload: payload(node),
-                    });
-                }
+            for (&id, &node) in &context.values {
+                values.push(Value {
+                    function: function.name.clone(),
+                    context: context.key.clone(),
+                    value: id.0,
+                    aliases: aliases(node),
+                    payload: payload(node),
+                });
             }
             functions.push(FunctionSummary {
                 function: function.name.clone(),
