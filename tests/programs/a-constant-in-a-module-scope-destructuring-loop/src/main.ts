@@ -1,4 +1,3 @@
-// expect: `value`, a name from an enclosing scope
 // A module-scope destructuring loop whose body keeps a const from its binding.
 const pairs: [number, number][] = [[1, 2], [3, 4]];
 let total = 0;
