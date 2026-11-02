@@ -1,0 +1,399 @@
+# measured_commit=713b0f63fe000980d9ae457ff4e80ee08f858b03
+# generating_command=["node","/home/akisarou/.cache/nts-handover/compiler3/stage2-current/slice-final-v6.ts","713b0f63fe000980d9ae457ff4e80ee08f858b03"]
+# diagnostic_command=["/home/akisarou/.cache/nts-pins/713b0f63fe00/nts","regions","/home/akisarou/.cache/nts-compiler3-memory/cases/tree-teardown.tsconfig.json","--rc","--entry","work","--main","--checkers","1","--backend","llvm"]
+# config_sha256=5c9c5b3a7c1c9b345fe37d4f38ff6732a2bc007a491e4644828eac8283e4fbb6
+memory-v2	ops=98	contexts=7	nodes=191	work=6305/125440	edges=189/3920	failure=None
+work-stages	[("call-and-cfg-index", 1282), ("construction", 597), ("propagation", 782), ("effects", 19), ("outcome-fences", 108), ("exposure", 57), ("frontiers", 204), ("store-order", 1677), ("report", 1579)]
+points-to-changes	max=4	limit=9
+memory-events	nodes=74	max-changes=9	limit=9
+fence-context-visits	7
+node-changes	0	0
+node-changes	1	0
+node-changes	2	0
+node-changes	3	0
+node-changes	4	0
+node-changes	5	0
+node-changes	6	0
+node-changes	7	0
+node-changes	8	0
+node-changes	9	0
+node-changes	10	0
+node-changes	11	0
+node-changes	12	0
+node-changes	13	0
+node-changes	14	0
+node-changes	15	0
+node-changes	16	0
+node-changes	17	0
+node-changes	18	4
+node-changes	19	0
+node-changes	20	0
+node-changes	21	0
+node-changes	22	0
+node-changes	23	0
+node-changes	24	0
+node-changes	25	0
+node-changes	26	0
+node-changes	27	0
+node-changes	28	0
+node-changes	29	0
+node-changes	30	0
+node-changes	31	0
+node-changes	32	0
+node-changes	33	0
+node-changes	34	0
+node-changes	35	0
+node-changes	36	2
+node-changes	37	0
+node-changes	38	0
+node-changes	39	0
+node-changes	40	2
+node-changes	41	0
+node-changes	42	0
+node-changes	43	0
+node-changes	44	0
+node-changes	45	4
+node-changes	46	0
+node-changes	47	0
+node-changes	48	0
+node-changes	49	0
+node-changes	50	4
+node-changes	51	0
+node-changes	52	0
+node-changes	53	0
+node-changes	54	4
+node-changes	55	4
+node-changes	56	0
+node-changes	57	4
+node-changes	58	0
+node-changes	59	0
+node-changes	60	4
+node-changes	61	0
+node-changes	62	0
+node-changes	63	0
+node-changes	64	0
+node-changes	65	4
+node-changes	66	0
+node-changes	67	0
+node-changes	68	4
+node-changes	69	0
+node-changes	70	0
+node-changes	71	0
+node-changes	72	0
+node-changes	73	0
+node-changes	74	0
+node-changes	75	0
+node-changes	76	0
+node-changes	77	0
+node-changes	78	0
+node-changes	79	0
+node-changes	80	0
+node-changes	81	0
+node-changes	82	0
+node-changes	83	0
+node-changes	84	0
+node-changes	85	0
+node-changes	86	0
+node-changes	87	0
+node-changes	88	0
+node-changes	89	0
+node-changes	90	4
+node-changes	91	0
+node-changes	92	0
+node-changes	93	0
+node-changes	94	0
+node-changes	95	0
+node-changes	96	0
+node-changes	97	1
+node-changes	98	0
+node-changes	99	0
+node-changes	100	0
+node-changes	101	0
+node-changes	102	4
+node-changes	103	4
+node-changes	104	4
+node-changes	105	0
+node-changes	106	4
+node-changes	107	4
+node-changes	108	4
+node-changes	109	0
+node-changes	110	1
+node-changes	111	0
+node-changes	112	0
+node-changes	113	0
+node-changes	114	0
+node-changes	115	0
+node-changes	116	0
+node-changes	117	0
+node-changes	118	0
+node-changes	119	0
+node-changes	120	0
+node-changes	121	0
+node-changes	122	0
+node-changes	123	0
+node-changes	124	0
+node-changes	125	0
+node-changes	126	0
+node-changes	127	2
+node-changes	128	0
+node-changes	129	0
+node-changes	130	0
+node-changes	131	2
+node-changes	132	0
+node-changes	133	0
+node-changes	134	0
+node-changes	135	0
+node-changes	136	4
+node-changes	137	0
+node-changes	138	0
+node-changes	139	0
+node-changes	140	0
+node-changes	141	4
+node-changes	142	0
+node-changes	143	0
+node-changes	144	0
+node-changes	145	4
+node-changes	146	4
+node-changes	147	0
+node-changes	148	4
+node-changes	149	0
+node-changes	150	0
+node-changes	151	4
+node-changes	152	0
+node-changes	153	0
+node-changes	154	0
+node-changes	155	0
+node-changes	156	4
+node-changes	157	0
+node-changes	158	0
+node-changes	159	4
+node-changes	160	0
+node-changes	161	0
+node-changes	162	0
+node-changes	163	0
+node-changes	164	0
+node-changes	165	1
+node-changes	166	0
+node-changes	167	0
+node-changes	168	0
+node-changes	169	0
+node-changes	170	4
+node-changes	171	4
+node-changes	172	4
+node-changes	173	0
+node-changes	174	4
+node-changes	175	4
+node-changes	176	4
+node-changes	177	0
+node-changes	178	1
+node-changes	179	0
+node-changes	180	0
+node-changes	181	0
+node-changes	182	0
+node-changes	183	0
+node-changes	184	0
+node-changes	185	0
+node-changes	186	0
+node-changes	187	0
+node-changes	188	0
+node-changes	189	0
+node-changes	190	0
+site	"build"	%4	Object	"work:entry/build:%23"	Unbounded { witness: "work:entry/build:%23:%4: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained" }	Heap(RepeatedInstances)	legacy=["call-region"]	owner=Some("work:entry:%23")	obligations=[RepeatedInstances, RuntimeRootContract]	witness=["proof 11", "proof 12"]	origin=Origin { location: Location { file: SourceId(0), span: Span { start: 455, end: 482 } }, scope: None, inline_chain: [], async_parent: None, generated: None }	retention="unknown frontier: RuntimeRootContract"	held-bytes=Unknown { witness: "no finite live-instance bound; backing and held heap graphs remain included" }
+site	"build"	%4	Object	"work:entry/work#whole:%34/build:%23"	Unbounded { witness: "work:entry/work#whole:%34/build:%23:%4: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained" }	Heap(RepeatedInstances)	legacy=["call-region"]	owner=Some("work:entry/work#whole:%34:%23")	obligations=[RepeatedInstances, RuntimeRootContract]	witness=["proof 15", "proof 16"]	origin=Origin { location: Location { file: SourceId(0), span: Span { start: 455, end: 482 } }, scope: None, inline_chain: [], async_parent: None, generated: None }	retention="unknown frontier: RuntimeRootContract"	held-bytes=Unknown { witness: "no finite live-instance bound; backing and held heap graphs remain included" }
+site	"build"	%8	Object	"work:entry/build:%23"	Unbounded { witness: "work:entry/build:%23:%8: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained" }	Heap(RepeatedInstances)	legacy=["call-region"]	owner=Some("work:entry:%23")	obligations=[RepeatedInstances, RuntimeRootContract]	witness=["proof 9", "proof 10"]	origin=Origin { location: Location { file: SourceId(0), span: Span { start: 493, end: 582 } }, scope: None, inline_chain: [], async_parent: None, generated: None }	retention="unknown frontier: RuntimeRootContract"	held-bytes=Unknown { witness: "no finite live-instance bound; backing and held heap graphs remain included" }
+site	"build"	%8	Object	"work:entry/work#whole:%34/build:%23"	Unbounded { witness: "work:entry/work#whole:%34/build:%23:%8: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained" }	Heap(RepeatedInstances)	legacy=["call-region"]	owner=Some("work:entry/work#whole:%34:%23")	obligations=[RepeatedInstances, RuntimeRootContract]	witness=["proof 13", "proof 14"]	origin=Origin { location: Location { file: SourceId(0), span: Span { start: 493, end: 582 } }, scope: None, inline_chain: [], async_parent: None, generated: None }	retention="unknown frontier: RuntimeRootContract"	held-bytes=Unknown { witness: "no finite live-instance bound; backing and held heap graphs remain included" }
+function	"Tree#constructor"	"parametric"	returns=[]	writes=["Field(\"Name(\\\"left\\\")@None\")", "Field(\"Name(\\\"right\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=["parameter 0.Field(\"Name(\\\"value\\\")@None\") <- parameter 1", "parameter 0.Field(\"Name(\\\"left\\\")@None\") <- parameter 2", "parameter 0.Field(\"Name(\\\"right\\\")@None\") <- parameter 3"]	length=false	suspend=false	reenter=false	unknown=false
+function	"build"	"work:entry/build:%23"	returns=["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	writes=["Field(\"Name(\\\"left\\\")@None\")", "Field(\"Name(\\\"right\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"build"	"work:entry/work#whole:%34/build:%23"	returns=["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	writes=["Field(\"Name(\\\"left\\\")@None\")", "Field(\"Name(\\\"right\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"module#init"	"module#init:entry"	returns=[]	writes=[]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"sum"	"work:entry/sum:%24"	returns=[]	writes=[]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"sum"	"work:entry/work#whole:%34/sum:%24"	returns=[]	writes=[]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"work"	"work:entry"	returns=[]	writes=["Field(\"Name(\\\"left\\\")@None\")", "Field(\"Name(\\\"right\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"work#whole"	"work:entry/work#whole:%34"	returns=[]	writes=["Field(\"Name(\\\"left\\\")@None\")", "Field(\"Name(\\\"right\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+store-version	"build"	"work:entry/build:%23"	%27	98	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+store-version	"build"	"work:entry/build:%23"	%27	102	"Field(\"Name(\\\"left\\\")@None\")"	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/build:%23"	%27	106	"Field(\"Name(\\\"right\\\")@None\")"	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/build:%23"	%7	111	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+store-version	"build"	"work:entry/build:%23"	%7	115	"Field(\"Name(\\\"left\\\")@None\")"	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/build:%23"	%7	119	"Field(\"Name(\\\"right\\\")@None\")"	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/work#whole:%34/build:%23"	%27	166	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+store-version	"build"	"work:entry/work#whole:%34/build:%23"	%27	170	"Field(\"Name(\\\"left\\\")@None\")"	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/work#whole:%34/build:%23"	%27	174	"Field(\"Name(\\\"right\\\")@None\")"	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/work#whole:%34/build:%23"	%7	179	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+store-version	"build"	"work:entry/work#whole:%34/build:%23"	%7	183	"Field(\"Name(\\\"left\\\")@None\")"	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"build"	"work:entry/work#whole:%34/build:%23"	%7	187	"Field(\"Name(\\\"right\\\")@None\")"	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+retention	"unknown frontier: RuntimeRootContract"	["work:entry/build:%23:%4:Object", "work:entry/build:%23:%8:Object", "work:entry/work#whole:%34/build:%23:%4:Object", "work:entry/work#whole:%34/build:%23:%8:Object"]	Unknown { witness: "complete target footprint, live-instance and held-graph bound is not sealed" }
+frontier	"work:entry/work#whole:%34:%23"	Ok(["after last reference use in block 2"])
+frontier	"work:entry:%23"	Ok(["after last reference use in block 2"])
+proof	0	"outside:any-reference"	"outside Outside(\"external or immortal storage\")"	[]	"allocation scope or external storage contract"
+proof	1	"work:entry/build:%23:%8:Object:recent"	"frame work:entry/build:%23"	[]	"allocation scope or external storage contract"
+proof	2	"work:entry/build:%23:%8:Object:older"	"frame work:entry/build:%23"	[]	"allocation scope or external storage contract"
+proof	3	"work:entry/build:%23:%4:Object:recent"	"frame work:entry/build:%23"	[]	"allocation scope or external storage contract"
+proof	4	"work:entry/build:%23:%4:Object:older"	"frame work:entry/build:%23"	[]	"allocation scope or external storage contract"
+proof	5	"work:entry/work#whole:%34/build:%23:%8:Object:recent"	"frame work:entry/work#whole:%34/build:%23"	[]	"allocation scope or external storage contract"
+proof	6	"work:entry/work#whole:%34/build:%23:%8:Object:older"	"frame work:entry/work#whole:%34/build:%23"	[]	"allocation scope or external storage contract"
+proof	7	"work:entry/work#whole:%34/build:%23:%4:Object:recent"	"frame work:entry/work#whole:%34/build:%23"	[]	"allocation scope or external storage contract"
+proof	8	"work:entry/work#whole:%34/build:%23:%4:Object:older"	"frame work:entry/work#whole:%34/build:%23"	[]	"allocation scope or external storage contract"
+proof	9	"work:entry/build:%23:%8:Object:recent"	"outside RuntimeRootContract"	[1]	"Collector"
+proof	10	"work:entry/build:%23:%8:Object:older"	"outside RuntimeRootContract"	[2]	"Collector"
+proof	11	"work:entry/build:%23:%4:Object:recent"	"outside RuntimeRootContract"	[3]	"Collector"
+proof	12	"work:entry/build:%23:%4:Object:older"	"outside RuntimeRootContract"	[4]	"Collector"
+proof	13	"work:entry/work#whole:%34/build:%23:%8:Object:recent"	"outside RuntimeRootContract"	[5]	"Collector"
+proof	14	"work:entry/work#whole:%34/build:%23:%8:Object:older"	"outside RuntimeRootContract"	[6]	"Collector"
+proof	15	"work:entry/work#whole:%34/build:%23:%4:Object:recent"	"outside RuntimeRootContract"	[7]	"Collector"
+proof	16	"work:entry/work#whole:%34/build:%23:%4:Object:older"	"outside RuntimeRootContract"	[8]	"Collector"
+slot	"work:entry/build:%23:%4:Object:older"	"work:entry/build:%23"	"Summary"	"Field(\"Name(\\\"left\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%4:Object:older"	"work:entry/build:%23"	"Summary"	"Field(\"Name(\\\"right\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%4:Object:older"	"work:entry/build:%23"	"Summary"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%4:Object:recent"	"work:entry/build:%23"	"Recent"	"Field(\"Name(\\\"left\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%4:Object:recent"	"work:entry/build:%23"	"Recent"	"Field(\"Name(\\\"right\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%4:Object:recent"	"work:entry/build:%23"	"Recent"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%8:Object:older"	"work:entry/build:%23"	"Summary"	"Field(\"Name(\\\"left\\\")@None\")"	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%8:Object:older"	"work:entry/build:%23"	"Summary"	"Field(\"Name(\\\"right\\\")@None\")"	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%8:Object:older"	"work:entry/build:%23"	"Summary"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%8:Object:recent"	"work:entry/build:%23"	"Recent"	"Field(\"Name(\\\"left\\\")@None\")"	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%8:Object:recent"	"work:entry/build:%23"	"Recent"	"Field(\"Name(\\\"right\\\")@None\")"	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/build:%23:%8:Object:recent"	"work:entry/build:%23"	"Recent"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%4:Object:older"	"work:entry/work#whole:%34/build:%23"	"Summary"	"Field(\"Name(\\\"left\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%4:Object:older"	"work:entry/work#whole:%34/build:%23"	"Summary"	"Field(\"Name(\\\"right\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%4:Object:older"	"work:entry/work#whole:%34/build:%23"	"Summary"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%4:Object:recent"	"work:entry/work#whole:%34/build:%23"	"Recent"	"Field(\"Name(\\\"left\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%4:Object:recent"	"work:entry/work#whole:%34/build:%23"	"Recent"	"Field(\"Name(\\\"right\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%4:Object:recent"	"work:entry/work#whole:%34/build:%23"	"Recent"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%8:Object:older"	"work:entry/work#whole:%34/build:%23"	"Summary"	"Field(\"Name(\\\"left\\\")@None\")"	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%8:Object:older"	"work:entry/work#whole:%34/build:%23"	"Summary"	"Field(\"Name(\\\"right\\\")@None\")"	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%8:Object:older"	"work:entry/work#whole:%34/build:%23"	"Summary"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%8:Object:recent"	"work:entry/work#whole:%34/build:%23"	"Recent"	"Field(\"Name(\\\"left\\\")@None\")"	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%8:Object:recent"	"work:entry/work#whole:%34/build:%23"	"Recent"	"Field(\"Name(\\\"right\\\")@None\")"	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/work#whole:%34/build:%23:%8:Object:recent"	"work:entry/work#whole:%34/build:%23"	"Recent"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/build:%23"	%0	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/build:%23"	%1	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/build:%23"	%2	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%3	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%4	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%5	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%6	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%7	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/build:%23"	%8	["work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%9	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%10	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/build:%23"	%12	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/build:%23"	%14	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/build:%23"	%17	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%19	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/build:%23"	%21	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/build:%23"	%23	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/build:%23"	%26	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%27	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/build:%23"	%29	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/build:%23"	%31	[]	Known { tags: Tags(4), numbers: Facts { lo: 3.0, hi: 3.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%0	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%1	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/work#whole:%34/build:%23"	%2	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%3	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%4	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%5	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%6	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%7	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/work#whole:%34/build:%23"	%8	["work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%9	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%10	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%12	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%14	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/work#whole:%34/build:%23"	%17	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%19	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%21	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%23	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/work#whole:%34/build:%23"	%26	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%27	[]	Unknown(NotAnalysed)
+value	"build"	"work:entry/work#whole:%34/build:%23"	%29	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"build"	"work:entry/work#whole:%34/build:%23"	%31	[]	Known { tags: Tags(4), numbers: Facts { lo: 3.0, hi: 3.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/sum:%24"	%0	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%1	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%2	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%3	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/sum:%24"	%4	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/sum:%24"	%5	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%6	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%7	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"sum"	"work:entry/sum:%24"	%9	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%12	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%13	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%14	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/sum:%24"	%15	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/sum:%24"	%16	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%17	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"sum"	"work:entry/sum:%24"	%20	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/sum:%24"	%23	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%0	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%1	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%2	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%3	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%4	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%5	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%6	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%7	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%9	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%12	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%13	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%14	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%15	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%16	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%17	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%20	[]	Unknown(NotAnalysed)
+value	"sum"	"work:entry/work#whole:%34/sum:%24"	%23	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%0	[]	Unknown(ExternalValue)
+value	"work"	"work:entry"	%2	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%3	[]	Known { tags: Tags(4), numbers: Facts { lo: 3.0, hi: 3.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%4	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%5	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%6	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%7	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%8	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%9	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%10	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%11	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%12	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%13	[]	Known { tags: Tags(4), numbers: Facts { lo: 16.0, hi: 16.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%14	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%15	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%16	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: 8.0, hi: 8.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%23	["work:entry/build:%23:%4:Object:older", "work:entry/build:%23:%4:Object:recent", "work:entry/build:%23:%8:Object:older", "work:entry/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%24	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%25	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%27	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%30	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%31	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%32	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%33	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%34	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%35	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%38	[]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%39	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%0	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%3	[]	Known { tags: Tags(4), numbers: Facts { lo: 3.0, hi: 3.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%4	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work#whole"	"work:entry/work#whole:%34"	%5	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%6	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work#whole"	"work:entry/work#whole:%34"	%7	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%8	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%9	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%10	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%11	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work#whole"	"work:entry/work#whole:%34"	%12	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work#whole"	"work:entry/work#whole:%34"	%13	[]	Known { tags: Tags(4), numbers: Facts { lo: 16.0, hi: 16.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%14	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work#whole"	"work:entry/work#whole:%34"	%15	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%16	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: 8.0, hi: 8.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%23	["work:entry/work#whole:%34/build:%23:%4:Object:older", "work:entry/work#whole:%34/build:%23:%4:Object:recent", "work:entry/work#whole:%34/build:%23:%8:Object:older", "work:entry/work#whole:%34/build:%23:%8:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%24	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%25	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work#whole"	"work:entry/work#whole:%34"	%27	[]	Unknown(NotAnalysed)
+value	"work#whole"	"work:entry/work#whole:%34"	%30	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work#whole"	"work:entry/work#whole:%34"	%31	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }

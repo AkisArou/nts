@@ -1,0 +1,1991 @@
+{
+  "measured_commit": "713b0f63fe000980d9ae457ff4e80ee08f858b03",
+  "generating_command": [
+    "/usr/bin/python3",
+    "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/publish-stage2-v6.py",
+    "713b0f63fe000980d9ae457ff4e80ee08f858b03"
+  ],
+  "scope": "Historical-source accounting correction, exact before/default/complete experiments and ranked future proof obligations. Each nested observation keeps its own measured source; none is relabelled as the final source.",
+  "observations": [
+    {
+      "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/composition-after47.json",
+      "sha256": "0378f177751dac337f01a19907088f7f92857f5fb98847989d8c3b2116011642",
+      "observation": {
+        "measured_commit": "713b0f63fe000980d9ae457ff4e80ee08f858b03",
+        "parent": "ed4698fed552c465efeab1a00cee434e1b55bc3f",
+        "previous_measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+        "generating_command": [
+          "git",
+          "rebase",
+          "--onto",
+          "ed4698fed552c465efeab1a00cee434e1b55bc3f",
+          "56367ac44f390eb02d38f96e429c995ad8c672bd"
+        ],
+        "compiler_runtime_cli_cargo_delta_empty": true
+      }
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/ordinary-accounting-47a-run.json",
+      "sha256": "66ffe45f09e2b243271c7a52f3dd3cc2a4fe51997ea7ad5b5ed25a12540091a3",
+      "observation": {
+        "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+        "phases": [
+          {
+            "name": "ordinary-prepared-47a",
+            "command": [
+              "python3",
+              "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/compare-ordinary-accounting.py"
+            ],
+            "status": 0,
+            "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+            "log": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/ordinary-prepared-47a.log",
+            "sha256": "f28c2200970abe85567a22e6125a0e112589ab7047589459b21715021e84abe3"
+          },
+          {
+            "name": "ordinary-corpus-47a",
+            "command": [
+              "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+              "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/compare-core-accounting.ts",
+              "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+              "883fad54da930b662c0395d1ce917f5f47f7a6f5",
+              "/home/akisarou/.cache/nts-pins/883fad54da93/nts"
+            ],
+            "status": 0,
+            "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+            "log": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/ordinary-corpus-47a.log",
+            "sha256": "752c80477f4254d8090e4a0cff7db1f113e27b85ec472ec841d1e7761fc5e696"
+          },
+          {
+            "name": "accumulator-integration-47a",
+            "command": [
+              "cargo",
+              "test",
+              "-p",
+              "nts-core",
+              "--profile",
+              "nts-dev",
+              "--no-fail-fast",
+              "--test",
+              "string_accumulators",
+              "--test",
+              "accumulator_widths"
+            ],
+            "status": 0,
+            "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+            "log": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/accumulator-integration-47a.log",
+            "sha256": "938299c6cfe1394b28c6c61e1591a588f70adfd591c63d7df944ebbea11f7cb9"
+          }
+        ]
+      }
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/28-site-table.json",
+      "sha256": "d54b3d9648d36cd5f6201aa034cd8cd01449c9ee4bb1f15d6daf4f45fdb0c5b3",
+      "observation": {
+        "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+        "generating_command": [
+          "/usr/bin/python3",
+          "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/summarize-positive-47a.py"
+        ],
+        "controller_sha256": "da4faadd1e6bfdb6781e6f4eb64d769f264d08b29e8ff766a57fb9e13cdf1a46",
+        "inputs": [
+          {
+            "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-v5b-883fad54d/summary.json",
+            "sha256": "3ca60f1cb2432e025d3b06ae6ea254f00ce3b2542d5abf4d26e261b799e36cea"
+          },
+          {
+            "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/summary.json",
+            "sha256": "27241876b722f5068d50ea7b38beaaa16fe7f2037b4b60b3115c1c4e01a151e7"
+          }
+        ],
+        "counts": {
+          "sites": 28,
+          "former_budget": 16,
+          "now_complete": 28,
+          "heap": 28
+        },
+        "table": {
+          "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/28-site-table.tsv",
+          "sha256": "b0975b7faceed61ee8b308ddf5589ee882352788717c5387296ea509490d79ef"
+        }
+      }
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/frontier-ranked.json",
+      "sha256": "8a65087bc8596e04567ff07752e4c7ac6868108283f5fa8c5978566ec7a29ba4",
+      "observation": {
+        "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+        "generating_command": [
+          "/usr/bin/python3",
+          "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/rank-28-frontier-47a.py"
+        ],
+        "controller_sha256": "e985b0c37eff7b01be4017e3294d5366a817de768a6bf975e8bc4061a6f50b9f",
+        "inputs": [
+          {
+            "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/summary.json",
+            "sha256": "27241876b722f5068d50ea7b38beaaa16fe7f2037b4b60b3115c1c4e01a151e7"
+          },
+          {
+            "path": "/home/akisarou/Projects/nts-lanes/compiler3-memory/compiler/core/src/hir/memory/outcomes.rs",
+            "sha256": "35042fc23036812f8410beb9b13cc706b7babb98dadc8688d0d290addc548d69"
+          },
+          {
+            "path": "/home/akisarou/Projects/nts-lanes/compiler3-memory/compiler/core/src/hir/memory/build.rs",
+            "sha256": "10469be569559f36a3f4cff1d293a9dd68d5f922c993a762d6af10019753e097"
+          },
+          {
+            "path": "/home/akisarou/Projects/nts-lanes/compiler3-memory/compiler/core/src/hir/runtime.rs",
+            "sha256": "618537441a911535e917becae7448c2fcedca2e23ebf9e1f27dcb098d25930a4"
+          }
+        ],
+        "scope": "Ranked proof obligations only, no counterfactual rerun or claimed allocation saving. Counts include four backend/provider configurations per physical source site.",
+        "ranked": [
+          {
+            "rank": 1,
+            "producer": "Complete nonlocal-transfer outcome/landing edges for nts_uncaught, from actual Transfers contract (#18 ordering authority)",
+            "affected_site_configurations": 28,
+            "distinct_source_sites": 7,
+            "proven_heap_releases_from_this_fact_alone": 0,
+            "remaining_co_obligation": "RepeatedInstances on all 28; a sealed landing and a precise reentry/overlap proof must be established together."
+          },
+          {
+            "rank": 1,
+            "producer": "Instance/activation overlap proof consuming those sealed outcomes and the existing SCC facts",
+            "affected_site_configurations": 28,
+            "distinct_source_sites": 7,
+            "proven_heap_releases_from_this_fact_alone": 0,
+            "remaining_co_obligation": "MissingOutcome on all 28; do not turn Transfers into NoRaise to obtain this proof."
+          }
+        ],
+        "sites": [
+          {
+            "project": "an-elision-pattern-over-an-array",
+            "function": "Closure0#call",
+            "value": "%10",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "36",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[28]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "37",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[29]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-c-nogc-0.tsv.gz",
+                  "sha256": "62a3c529565fe0618f4d7f89548a5ea2070fc0a666b8f16206c6c6c96b985476",
+                  "payload_sha256": "7f7d99201d1d7fc7689eaf11869f6f36edbe0145f527176fc5fadfa623e1528c"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "36",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[28]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "37",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[29]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-c-rc-0.tsv.gz",
+                  "sha256": "8d99f27ff925708811486fe13a5cd0aea04fa29bb97f5b14da791c3a79aca8f3",
+                  "payload_sha256": "94a18dd44440b08c3edbfdec170969c19461b1fa52c7dc7437e05574281fb11a"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "36",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[28]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "37",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[29]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-llvm-nogc-0.tsv.gz",
+                  "sha256": "a37157cfb0d670a77a0a8383dd5f0a5f9e5c6f07423717cc8ca65808a6951924",
+                  "payload_sha256": "e0f618460646aefe239a78d1d214ecbfccdc9107c39f9739ecfb6dfb880e5a81"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "36",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[28]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "37",
+                    "\"module#init:entry/Closure0#call:%12:%10:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[29]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%15: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-llvm-rc-0.tsv.gz",
+                  "sha256": "1ec839267ee4548ae347b7337a0cd8e8bb0d48df106dd2f860980d073e9338b7",
+                  "payload_sha256": "bb928783bf59d260c214a95190bb2ff94d623cf4dc0cd25cf919c48b4b766b95"
+                }
+              }
+            ]
+          },
+          {
+            "project": "an-elision-pattern-over-an-array",
+            "function": "Closure0#call",
+            "value": "%37",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "40",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[26]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "41",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[27]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-c-nogc-0.tsv.gz",
+                  "sha256": "62a3c529565fe0618f4d7f89548a5ea2070fc0a666b8f16206c6c6c96b985476",
+                  "payload_sha256": "7f7d99201d1d7fc7689eaf11869f6f36edbe0145f527176fc5fadfa623e1528c"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "40",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[26]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "41",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[27]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-c-rc-0.tsv.gz",
+                  "sha256": "8d99f27ff925708811486fe13a5cd0aea04fa29bb97f5b14da791c3a79aca8f3",
+                  "payload_sha256": "94a18dd44440b08c3edbfdec170969c19461b1fa52c7dc7437e05574281fb11a"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "40",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[26]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "41",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[27]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-llvm-nogc-0.tsv.gz",
+                  "sha256": "a37157cfb0d670a77a0a8383dd5f0a5f9e5c6f07423717cc8ca65808a6951924",
+                  "payload_sha256": "e0f618460646aefe239a78d1d214ecbfccdc9107c39f9739ecfb6dfb880e5a81"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "40",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[26]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "41",
+                    "\"module#init:entry/Closure0#call:%12:%37:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[27]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/Closure0#call:%12:%42: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-elision-pattern-over-an-array-llvm-rc-0.tsv.gz",
+                  "sha256": "1ec839267ee4548ae347b7337a0cd8e8bb0d48df106dd2f860980d073e9338b7",
+                  "payload_sha256": "bb928783bf59d260c214a95190bb2ff94d623cf4dc0cd25cf919c48b4b766b95"
+                }
+              }
+            ]
+          },
+          {
+            "project": "an-empty-array-pattern-of-a-generator-function",
+            "function": "g@0arrf64",
+            "value": "%5",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "24",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[21]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "25",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[22]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-empty-array-pattern-of-a-generator-function-c-nogc-0.tsv.gz",
+                  "sha256": "d4a96900069eed0a3efb32e39314199793f06cec42f282eceee48e625b4b6d40",
+                  "payload_sha256": "dcb7274ba59d056270a89b20fab093007c3a6b5edf06e111b5e65e89224e1fc3"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "24",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[21]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "25",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[22]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-empty-array-pattern-of-a-generator-function-c-rc-0.tsv.gz",
+                  "sha256": "c3829f8995c57c290aa2623ea09b634f5ce8dfd74a69536c4987fa93bb2dc6fb",
+                  "payload_sha256": "27ee48c55cc402888257f72a0203f606990dbf13b2b2e0cccd7a8ff3ce7775db"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "24",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[21]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "25",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[22]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-empty-array-pattern-of-a-generator-function-llvm-nogc-0.tsv.gz",
+                  "sha256": "4ec29d45b51d13923f3d2db5b9b7c9c151a709ab1071355f016dfa6bd9648f16",
+                  "payload_sha256": "97f5485fc0682c5f11826b38342dc20e496dc3ee97001c63e9968ba39f238756"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "24",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[21]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "25",
+                    "\"module#init:entry/g@0arrf64:%8:%5:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[22]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry/g@0arrf64:%8:%10: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/an-empty-array-pattern-of-a-generator-function-llvm-rc-0.tsv.gz",
+                  "sha256": "e05da161749fef1f9e1ec4e0d0bce505f2e636a1856911cff0fdb384be7908ac",
+                  "payload_sha256": "b9dee87401de38960b4e03afc71ae47d738f3b4695976e9d12f46b5933fc9811"
+                }
+              }
+            ]
+          },
+          {
+            "project": "module-scope-destructuring",
+            "function": "module#init",
+            "value": "%23",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%28: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "62",
+                    "\"module#init:entry:%23:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[57]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "63",
+                    "\"module#init:entry:%23:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[58]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-nogc-0.tsv.gz",
+                  "sha256": "579d6cff8128bfc546a46df31446d991b83bf6f747f421eb4d7d3bd8de97cff5",
+                  "payload_sha256": "33c09d3a2fa49ba66374c37058070c773691d54091adaa11ca8a1845edc4e086"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%28: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "62",
+                    "\"module#init:entry:%23:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[57]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "63",
+                    "\"module#init:entry:%23:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[58]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-rc-0.tsv.gz",
+                  "sha256": "2cbae1a8815704c683b42397d1b0ac6597ce77eabd848eebd803820db5dafe19",
+                  "payload_sha256": "ad2c3feaacde2d0b57ddfa9ac72d409fd266bbb93f38b42b01664ce04c5d40d8"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%28: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "62",
+                    "\"module#init:entry:%23:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[57]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "63",
+                    "\"module#init:entry:%23:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[58]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-nogc-0.tsv.gz",
+                  "sha256": "b17d1f62679c6d0192fd79242f14821c9a8c42f41679e591a2fa89e004d49389",
+                  "payload_sha256": "2158d659148592f9fa1a49c5105627788561e9234863625fc68483fde6598a47"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%28: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "62",
+                    "\"module#init:entry:%23:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[57]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "63",
+                    "\"module#init:entry:%23:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[58]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%28: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-rc-0.tsv.gz",
+                  "sha256": "e4411fb43f11ab1ef721b282eaf016fa7b7075e5f25744299cfab99666f91dca",
+                  "payload_sha256": "599ad75cfab56e84c176edcee6a14dd7baf1cc28aa3e6a89b74b1facd476f626"
+                }
+              }
+            ]
+          },
+          {
+            "project": "module-scope-destructuring",
+            "function": "module#init",
+            "value": "%40",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%45: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "66",
+                    "\"module#init:entry:%40:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[55]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "67",
+                    "\"module#init:entry:%40:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[56]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-nogc-0.tsv.gz",
+                  "sha256": "579d6cff8128bfc546a46df31446d991b83bf6f747f421eb4d7d3bd8de97cff5",
+                  "payload_sha256": "33c09d3a2fa49ba66374c37058070c773691d54091adaa11ca8a1845edc4e086"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%45: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "66",
+                    "\"module#init:entry:%40:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[55]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "67",
+                    "\"module#init:entry:%40:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[56]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-rc-0.tsv.gz",
+                  "sha256": "2cbae1a8815704c683b42397d1b0ac6597ce77eabd848eebd803820db5dafe19",
+                  "payload_sha256": "ad2c3feaacde2d0b57ddfa9ac72d409fd266bbb93f38b42b01664ce04c5d40d8"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%45: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "66",
+                    "\"module#init:entry:%40:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[55]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "67",
+                    "\"module#init:entry:%40:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[56]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-nogc-0.tsv.gz",
+                  "sha256": "b17d1f62679c6d0192fd79242f14821c9a8c42f41679e591a2fa89e004d49389",
+                  "payload_sha256": "2158d659148592f9fa1a49c5105627788561e9234863625fc68483fde6598a47"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%45: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "66",
+                    "\"module#init:entry:%40:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[55]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "67",
+                    "\"module#init:entry:%40:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[56]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%45: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-rc-0.tsv.gz",
+                  "sha256": "e4411fb43f11ab1ef721b282eaf016fa7b7075e5f25744299cfab99666f91dca",
+                  "payload_sha256": "599ad75cfab56e84c176edcee6a14dd7baf1cc28aa3e6a89b74b1facd476f626"
+                }
+              }
+            ]
+          },
+          {
+            "project": "module-scope-destructuring",
+            "function": "module#init",
+            "value": "%57",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%62: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "70",
+                    "\"module#init:entry:%57:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[53]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "71",
+                    "\"module#init:entry:%57:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[54]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-nogc-0.tsv.gz",
+                  "sha256": "579d6cff8128bfc546a46df31446d991b83bf6f747f421eb4d7d3bd8de97cff5",
+                  "payload_sha256": "33c09d3a2fa49ba66374c37058070c773691d54091adaa11ca8a1845edc4e086"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%62: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "70",
+                    "\"module#init:entry:%57:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[53]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "71",
+                    "\"module#init:entry:%57:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[54]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-rc-0.tsv.gz",
+                  "sha256": "2cbae1a8815704c683b42397d1b0ac6597ce77eabd848eebd803820db5dafe19",
+                  "payload_sha256": "ad2c3feaacde2d0b57ddfa9ac72d409fd266bbb93f38b42b01664ce04c5d40d8"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%62: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "70",
+                    "\"module#init:entry:%57:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[53]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "71",
+                    "\"module#init:entry:%57:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[54]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-nogc-0.tsv.gz",
+                  "sha256": "b17d1f62679c6d0192fd79242f14821c9a8c42f41679e591a2fa89e004d49389",
+                  "payload_sha256": "2158d659148592f9fa1a49c5105627788561e9234863625fc68483fde6598a47"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%62: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "70",
+                    "\"module#init:entry:%57:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[53]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "71",
+                    "\"module#init:entry:%57:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[54]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%62: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-rc-0.tsv.gz",
+                  "sha256": "e4411fb43f11ab1ef721b282eaf016fa7b7075e5f25744299cfab99666f91dca",
+                  "payload_sha256": "599ad75cfab56e84c176edcee6a14dd7baf1cc28aa3e6a89b74b1facd476f626"
+                }
+              }
+            ]
+          },
+          {
+            "project": "module-scope-destructuring",
+            "function": "module#init",
+            "value": "%68",
+            "configurations": 4,
+            "current_primary_home": "Heap(RepeatedInstances)",
+            "outcome_producer": "Callee::External(nts_uncaught), runtime Raising::Transfers",
+            "missing_fact": "Actual nonlocal-transfer successor, landing payload/detail and live-reference mapping before ownership; NoRaise would be false.",
+            "multiplicity_producer": "Shared call/outcome SCC columns plus validated CFG cyclic-block facts",
+            "missing_multiplicity_fact": "Proof of activation overlap or finite live-instance bound; current escaping outcome conservatively sets reentry, and neither acyclic producer location nor ordinary function spelling licenses One.",
+            "witnesses": [
+              {
+                "backend": "c",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%73: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "74",
+                    "\"module#init:entry:%68:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[51]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "75",
+                    "\"module#init:entry:%68:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[52]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-nogc-0.tsv.gz",
+                  "sha256": "579d6cff8128bfc546a46df31446d991b83bf6f747f421eb4d7d3bd8de97cff5",
+                  "payload_sha256": "33c09d3a2fa49ba66374c37058070c773691d54091adaa11ca8a1845edc4e086"
+                }
+              },
+              {
+                "backend": "c",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%73: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "74",
+                    "\"module#init:entry:%68:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[51]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "75",
+                    "\"module#init:entry:%68:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[52]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-c-rc-0.tsv.gz",
+                  "sha256": "2cbae1a8815704c683b42397d1b0ac6597ce77eabd848eebd803820db5dafe19",
+                  "payload_sha256": "ad2c3feaacde2d0b57ddfa9ac72d409fd266bbb93f38b42b01664ce04c5d40d8"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "nogc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%73: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "74",
+                    "\"module#init:entry:%68:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[51]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "75",
+                    "\"module#init:entry:%68:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[52]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-nogc-0.tsv.gz",
+                  "sha256": "b17d1f62679c6d0192fd79242f14821c9a8c42f41679e591a2fa89e004d49389",
+                  "payload_sha256": "2158d659148592f9fa1a49c5105627788561e9234863625fc68483fde6598a47"
+                }
+              },
+              {
+                "backend": "llvm",
+                "provider": "rc",
+                "obligations": "obligations=[RepeatedInstances, MissingOutcome(\"module#init:entry:%73: unsealed call outcome: External(\\\"nts_uncaught\\\")\")]",
+                "frontier": "retention=\"unknown frontier: MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                "proofs": [
+                  [
+                    "proof",
+                    "74",
+                    "\"module#init:entry:%68:Object:recent\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[51]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ],
+                  [
+                    "proof",
+                    "75",
+                    "\"module#init:entry:%68:Object:older\"",
+                    "\"outside MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\")\"",
+                    "[52]",
+                    "\"Unknown(MissingOutcome(\\\"module#init:entry:%73: unsealed call outcome: External(\\\\\\\"nts_uncaught\\\\\\\")\\\"))\""
+                  ]
+                ],
+                "report": {
+                  "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/positive-recheck-after-47a84fa89/module-scope-destructuring-llvm-rc-0.tsv.gz",
+                  "sha256": "e4411fb43f11ab1ef721b282eaf016fa7b7075e5f25744299cfab99666f91dca",
+                  "payload_sha256": "599ad75cfab56e84c176edcee6a14dd7baf1cc28aa3e6a89b74b1facd476f626"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/completed-work.json",
+      "sha256": "626fb418b4f6749c13028531949e30554b8cc2de896afe862eca879622d38e7e",
+      "observation": {
+        "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+        "generating_command": [
+          "python3",
+          "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/measure-after.py"
+        ],
+        "scope": "Actual default production limits on the fixed formal artifact. Three actual analysis-phase CPU brackets and completed work counters at each size; original capped and completion-only before reports remain distinct.",
+        "artifact": {
+          "measured_commit": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+          "producer": {
+            "sha": "47a84fa893a8e2fc760ae75266cdd1e7722481ea",
+            "subject": "Read only placed view definitions and preserve licensed string loans",
+            "clean": true,
+            "applied": null,
+            "built_at": "2026-11-02T16:50:30.722Z",
+            "binary_sha256": "8a84d8f654dee53b3d2b519665563d492fb05ff8fa11a919a4a3b26e78c6dae5"
+          },
+          "binary": "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+          "scope": "Untouched formal artifact with unchanged production Limits"
+        },
+        "inputs": {
+          "generating_command": [
+            "/usr/bin/python3",
+            "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/scale-destructuring-inputs.py"
+          ],
+          "generator_sha256": "ceec91c8873d9a5a10bf0f902b985fb395fee99ffd419f46c6d30683dc03bee7",
+          "original_source": "/home/akisarou/Projects/nts-lanes/compiler3-memory/tests/programs/module-scope-destructuring/src/main.ts",
+          "original_sha256": "1bbac9f14aeaf6e867fffaa9ad76d64b7ecc95b7674e589e9ab8d7fea1916010",
+          "scope": "Repeat the exact module-scope destructuring source at 1x/2x/4x with only binding/export identifiers renamed in subsequent copies; no function/namespace wrapping.",
+          "rows": [
+            {
+              "n": 1,
+              "source": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/src/main.ts",
+              "source_sha256": "1bbac9f14aeaf6e867fffaa9ad76d64b7ecc95b7674e589e9ab8d7fea1916010",
+              "config": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+              "config_sha256": "a0e1820386405f89f5c6b7eaa1e399bf3dc8dbc332bfd858b48cf133e52faedc"
+            },
+            {
+              "n": 2,
+              "source": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/src/main.ts",
+              "source_sha256": "7048b9e0286d6da2367d05d907d3da5ac6e8a0fa757ed7e8be1c07ee3df875a7",
+              "config": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+              "config_sha256": "a0e1820386405f89f5c6b7eaa1e399bf3dc8dbc332bfd858b48cf133e52faedc"
+            },
+            {
+              "n": 4,
+              "source": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/src/main.ts",
+              "source_sha256": "bed1704425c2186e3f9f5d0c7d7833e3adc05175f1d172f8e9acde7156502c60",
+              "config": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+              "config_sha256": "a0e1820386405f89f5c6b7eaa1e399bf3dc8dbc332bfd858b48cf133e52faedc"
+            }
+          ]
+        },
+        "rows": [
+          {
+            "n": 1,
+            "header": "memory-v2\tops=194\tcontexts=11\tnodes=306\twork=9827/248320\tedges=237/7760\tfailure=None",
+            "work_stages": {
+              "call-and-cfg-index": 2222,
+              "construction": 928,
+              "propagation": 687,
+              "effects": 0,
+              "outcome-fences": 1992,
+              "exposure": 110,
+              "frontiers": 56,
+              "store-order": 1361,
+              "report": 2471
+            },
+            "outcome_fence_work": 1992,
+            "analysis_thread_cpu_ns_median": 690920,
+            "runs": [
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-1-0.stdout",
+                "stdout_sha256": "96c69dc9861d0ca4c691f511ee7385f6bcb27543a92d635c7298b9801eac413d",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-1-0.json",
+                "raw_sha256": "17598dcc6107d4f4323838721d3fd8c6fd004f49ccea85143c28115343b0470e",
+                "phase": {
+                  "entry_thread": [
+                    3030546,
+                    3030569,
+                    0
+                  ],
+                  "return_thread": [
+                    3030546,
+                    3030569,
+                    0
+                  ],
+                  "cpu_ns": 685898
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-1-1.stdout",
+                "stdout_sha256": "1232e5fc3f523cda903d3288ddb60a13e7ed594f7dca2d9148cc44c109e69039",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-1-1.json",
+                "raw_sha256": "77e0269398e192c299a9e54cc4ecc69c28e279e89210f1f4a29def753af715ea",
+                "phase": {
+                  "entry_thread": [
+                    3031335,
+                    3031385,
+                    0
+                  ],
+                  "return_thread": [
+                    3031335,
+                    3031385,
+                    0
+                  ],
+                  "cpu_ns": 826940
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-1-2.stdout",
+                "stdout_sha256": "267a462c2179a754240b1250aae67bb0d66d20d582e8fdd4c609a9e37f537f55",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-1-2.json",
+                "raw_sha256": "e9558792357a567fcd099ca6633de5c79365706719cb2e97a683815403b7467f",
+                "phase": {
+                  "entry_thread": [
+                    3086376,
+                    3086410,
+                    0
+                  ],
+                  "return_thread": [
+                    3086376,
+                    3086410,
+                    0
+                  ],
+                  "cpu_ns": 690920
+                }
+              }
+            ]
+          },
+          {
+            "n": 2,
+            "header": "memory-v2\tops=376\tcontexts=20\tnodes=594\twork=19209/481280\tedges=465/15040\tfailure=None",
+            "work_stages": {
+              "call-and-cfg-index": 4261,
+              "construction": 1790,
+              "propagation": 1327,
+              "effects": 0,
+              "outcome-fences": 3952,
+              "exposure": 206,
+              "frontiers": 104,
+              "store-order": 2782,
+              "report": 4787
+            },
+            "outcome_fence_work": 3952,
+            "analysis_thread_cpu_ns_median": 1071759,
+            "runs": [
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-2-0.stdout",
+                "stdout_sha256": "3d454e840194d2fafb0f07340533e4ccc0ccbdc2cbb444a13fbc209e90ac66cb",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-2-0.json",
+                "raw_sha256": "05101cd82463bed196ad46c15ab64e5061a5ec20fb583ac51fd500157025d38d",
+                "phase": {
+                  "entry_thread": [
+                    3100798,
+                    3100807,
+                    0
+                  ],
+                  "return_thread": [
+                    3100798,
+                    3100807,
+                    0
+                  ],
+                  "cpu_ns": 1071759
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-2-1.stdout",
+                "stdout_sha256": "ac8bc65d1df1aad32db89dfe516480c4207b108062851e4f0a24af00aa5ea13d",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-2-1.json",
+                "raw_sha256": "69a4dc7203869d9f6de6ce775d1bae4a46ea208b12ee90ff3800c4c851ffc6be",
+                "phase": {
+                  "entry_thread": [
+                    3113247,
+                    3113270,
+                    0
+                  ],
+                  "return_thread": [
+                    3113247,
+                    3113270,
+                    0
+                  ],
+                  "cpu_ns": 1238249
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-2-2.stdout",
+                "stdout_sha256": "8e4e2bc4a298a7ae5b79f1b40a226786a43124e8685b7cce56bc3b5cf7b4a13f",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-2-2.json",
+                "raw_sha256": "0508fe31a81070d127c199decbdea17b0f7425e7eadc151a56fc601aa18f2327",
+                "phase": {
+                  "entry_thread": [
+                    3114609,
+                    3114647,
+                    0
+                  ],
+                  "return_thread": [
+                    3114609,
+                    3114647,
+                    0
+                  ],
+                  "cpu_ns": 984491
+                }
+              }
+            ]
+          },
+          {
+            "n": 4,
+            "header": "memory-v2\tops=740\tcontexts=38\tnodes=1170\twork=37973/947200\tedges=921/29600\tfailure=None",
+            "work_stages": {
+              "call-and-cfg-index": 8339,
+              "construction": 3514,
+              "propagation": 2607,
+              "effects": 0,
+              "outcome-fences": 7872,
+              "exposure": 398,
+              "frontiers": 200,
+              "store-order": 5624,
+              "report": 9419
+            },
+            "outcome_fence_work": 7872,
+            "analysis_thread_cpu_ns_median": 2041810,
+            "runs": [
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-4-0.stdout",
+                "stdout_sha256": "9804ab56ea929b4407c501079d56578840faa30d34ea6f7f9a5056dfb9b3ebcf",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-4-0.json",
+                "raw_sha256": "dacb014b2272133ede924f9b9554b0c4ff5af7a3775f7b8ba59bdd072b8d7f74",
+                "phase": {
+                  "entry_thread": [
+                    3115581,
+                    3115586,
+                    0
+                  ],
+                  "return_thread": [
+                    3115581,
+                    3115586,
+                    0
+                  ],
+                  "cpu_ns": 1950350
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-4-1.stdout",
+                "stdout_sha256": "80cc9af3d1085ad5b6351aa8fc2942fd0f7fc3b7c74e6d1478cc2fded0da51b0",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-4-1.json",
+                "raw_sha256": "a1296dc3d9489f6d5f85ca9d22a9b3b0df00149691f989025baef35c1d57a526",
+                "phase": {
+                  "entry_thread": [
+                    3116778,
+                    3116872,
+                    0
+                  ],
+                  "return_thread": [
+                    3116778,
+                    3116872,
+                    0
+                  ],
+                  "cpu_ns": 2041810
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/47a84fa893a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-4-2.stdout",
+                "stdout_sha256": "ccdf8290138dee4fea48fdd0f1563fd1fda7f89d3799e8a8430a10028803e00c",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-after-47a/default-after-4-2.json",
+                "raw_sha256": "8958a73aee78825ee6a669788c6167b6283b30049d84c7a35642d49e1f5b0342",
+                "phase": {
+                  "entry_thread": [
+                    3253953,
+                    3254227,
+                    0
+                  ],
+                  "return_thread": [
+                    3253953,
+                    3254227,
+                    0
+                  ],
+                  "cpu_ns": 2447717
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "path": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completed-work.json",
+      "sha256": "7b38779dccb8b8822f44f9f2dcf2a546dba87e855da2baca8061ca1fe57ed50b",
+      "observation": {
+        "measured_commit": "883fad54da930b662c0395d1ce917f5f47f7a6f5",
+        "generating_command": [
+          "python3",
+          "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/measure-completion.py"
+        ],
+        "scope": "Separate completion-only diagnostic artifact, not production policy/precision/cost evidence. Original capped reports retained alongside. Three actual phase CPU brackets and completed work counters at each size.",
+        "artifact": {
+          "measured_commit": "883fad54da930b662c0395d1ce917f5f47f7a6f5",
+          "generating_command": [
+            "python3",
+            "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/build-completion-instrument.py"
+          ],
+          "source_file": "compiler/core/src/hir/memory.rs",
+          "before_sha256": "9e8546a930401f9d3fe98ae1cc4c46ef9afb4fc4ae16c60885cee8af04d54a4e",
+          "after_sha256": "d0154d4033732dff8efd7f744e5fef3f71fedaafe5eee2b0e4b3bd484fd1c57a",
+          "patch": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-only.diff",
+          "patch_sha256": "34e60fd9a7a885ee716c455f8e35d066fa8af768e3ee5a6db272fa9e90a25a26",
+          "scope": "Diagnostic-only completion experiment: only the optional work stop is relaxed at Analysis::of for measurement. Production default Limits, all analysis algorithms, ordinary compilation and allocator remain unchanged. No experimental report grants precision or consumer authority.",
+          "command": [
+            "/home/akisarou/.asdf/installs/nodejs/24.20.0/bin/node",
+            "tooling/conformance/pin.ts",
+            "883fad54da930b662c0395d1ce917f5f47f7a6f5",
+            "--patch",
+            "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-only.diff"
+          ],
+          "status": 0,
+          "binary": "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+          "producer": {
+            "sha": "883fad54da930b662c0395d1ce917f5f47f7a6f5",
+            "subject": "Retain actual continuation decisions for every runtime helper",
+            "clean": true,
+            "applied": {
+              "source": "patch",
+              "sha256": "34e60fd9a7a885ee716c455f8e35d066fa8af768e3ee5a6db272fa9e90a25a26",
+              "files": [],
+              "insertions": 1,
+              "deletions": 1
+            },
+            "built_at": "2026-11-02T16:11:09.839Z",
+            "binary_sha256": "869b6d37323db895b3e1ec3977df15f5a8e3e48c4517d892e97460d2fa1c9a76"
+          }
+        },
+        "inputs": {
+          "generating_command": [
+            "/usr/bin/python3",
+            "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/scale-destructuring-inputs.py"
+          ],
+          "generator_sha256": "ceec91c8873d9a5a10bf0f902b985fb395fee99ffd419f46c6d30683dc03bee7",
+          "original_source": "/home/akisarou/Projects/nts-lanes/compiler3-memory/tests/programs/module-scope-destructuring/src/main.ts",
+          "original_sha256": "1bbac9f14aeaf6e867fffaa9ad76d64b7ecc95b7674e589e9ab8d7fea1916010",
+          "scope": "Repeat the exact module-scope destructuring source at 1x/2x/4x with only binding/export identifiers renamed in subsequent copies; no function/namespace wrapping.",
+          "rows": [
+            {
+              "n": 1,
+              "source": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/src/main.ts",
+              "source_sha256": "1bbac9f14aeaf6e867fffaa9ad76d64b7ecc95b7674e589e9ab8d7fea1916010",
+              "config": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+              "config_sha256": "a0e1820386405f89f5c6b7eaa1e399bf3dc8dbc332bfd858b48cf133e52faedc"
+            },
+            {
+              "n": 2,
+              "source": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/src/main.ts",
+              "source_sha256": "7048b9e0286d6da2367d05d907d3da5ac6e8a0fa757ed7e8be1c07ee3df875a7",
+              "config": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+              "config_sha256": "a0e1820386405f89f5c6b7eaa1e399bf3dc8dbc332bfd858b48cf133e52faedc"
+            },
+            {
+              "n": 4,
+              "source": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/src/main.ts",
+              "source_sha256": "bed1704425c2186e3f9f5d0c7d7833e3adc05175f1d172f8e9acde7156502c60",
+              "config": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+              "config_sha256": "a0e1820386405f89f5c6b7eaa1e399bf3dc8dbc332bfd858b48cf133e52faedc"
+            }
+          ]
+        },
+        "rows": [
+          {
+            "n": 1,
+            "header": "memory-v2\tops=194\tcontexts=11\tnodes=306\twork=306376/1017118720\tedges=237/7760\tfailure=None",
+            "work_stages": {
+              "call-and-cfg-index": 2222,
+              "construction": 928,
+              "propagation": 687,
+              "effects": 0,
+              "outcome-fences": 298541,
+              "exposure": 110,
+              "frontiers": 56,
+              "store-order": 1361,
+              "report": 2471
+            },
+            "outcome_fence_work": 298541,
+            "analysis_thread_cpu_ns_median": 664535,
+            "runs": [
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-1-0.stdout",
+                "stdout_sha256": "fea1390d354191e60018dc6f81658b2b598bcda603f913a606e80e7e1f7b1c55",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-1-0.json",
+                "raw_sha256": "4b8ebb715710ee58a32f7914aee398f6d881c74339ff6c50343adcc068cdbb8b",
+                "phase": {
+                  "entry_thread": [
+                    64208,
+                    64242,
+                    0
+                  ],
+                  "return_thread": [
+                    64208,
+                    64242,
+                    0
+                  ],
+                  "cpu_ns": 503918
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-1-1.stdout",
+                "stdout_sha256": "83e9eacc901c486d944b5a838d4f2cd4b520e062da309cbc47ba460d532d463d",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-1-1.json",
+                "raw_sha256": "e0ef6a12395c9ae0f759cf6189fd24a0a56bf911412430ef14726194319011a1",
+                "phase": {
+                  "entry_thread": [
+                    64957,
+                    64963,
+                    0
+                  ],
+                  "return_thread": [
+                    64957,
+                    64963,
+                    0
+                  ],
+                  "cpu_ns": 691761
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-1/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-1-2.stdout",
+                "stdout_sha256": "20970eaaf27e5495137f4226c02bb067021e2323c3bbe8f1c4f8acecbda26968",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-1-2.json",
+                "raw_sha256": "e5bcbdcc25e24afaec8e43578e93fed8d07cf2fb979156d641bc4631a00ba8a5",
+                "phase": {
+                  "entry_thread": [
+                    65521,
+                    65529,
+                    0
+                  ],
+                  "return_thread": [
+                    65521,
+                    65529,
+                    0
+                  ],
+                  "cpu_ns": 664535
+                }
+              }
+            ]
+          },
+          {
+            "n": 2,
+            "header": "memory-v2\tops=376\tcontexts=20\tnodes=594\twork=1896234/1971322880\tedges=465/15040\tfailure=None",
+            "work_stages": {
+              "call-and-cfg-index": 4261,
+              "construction": 1790,
+              "propagation": 1327,
+              "effects": 0,
+              "outcome-fences": 1880977,
+              "exposure": 206,
+              "frontiers": 104,
+              "store-order": 2782,
+              "report": 4787
+            },
+            "outcome_fence_work": 1880977,
+            "analysis_thread_cpu_ns_median": 1115806,
+            "runs": [
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-2-0.stdout",
+                "stdout_sha256": "a5ad9ab862edaeab844c8ac2c94fcf0cb100b3e208470dfff393224206f04791",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-2-0.json",
+                "raw_sha256": "aadc4feed9be6101a2d4100244d7468f6516d8184cd97065f913d6a1366df0dc",
+                "phase": {
+                  "entry_thread": [
+                    66055,
+                    66058,
+                    0
+                  ],
+                  "return_thread": [
+                    66055,
+                    66058,
+                    0
+                  ],
+                  "cpu_ns": 771869
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-2-1.stdout",
+                "stdout_sha256": "a77cf5bd807ba6e2d92a0af5c4a4b3723d716a6934536c842793aa99b126463c",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-2-1.json",
+                "raw_sha256": "5ca39cd03bbc8db07c851b921b3f0a563144f2a35f90755750783fd07dff4976",
+                "phase": {
+                  "entry_thread": [
+                    66673,
+                    66712,
+                    0
+                  ],
+                  "return_thread": [
+                    66673,
+                    66712,
+                    0
+                  ],
+                  "cpu_ns": 1115806
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-2/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-2-2.stdout",
+                "stdout_sha256": "1c4b0fc31f74bd89c42ea7c0b4ebcbc0ee156bec593492a724e0b25d1f480034",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-2-2.json",
+                "raw_sha256": "c1c4725c94ce4a431f22f946f35e44a8b1e9c21396ed3bb0a099797fa7750ebb",
+                "phase": {
+                  "entry_thread": [
+                    67261,
+                    67332,
+                    0
+                  ],
+                  "return_thread": [
+                    67261,
+                    67332,
+                    0
+                  ],
+                  "cpu_ns": 1147072
+                }
+              }
+            ]
+          },
+          {
+            "n": 4,
+            "header": "memory-v2\tops=740\tcontexts=38\tnodes=1170\twork=13076572/3879731200\tedges=921/29600\tfailure=None",
+            "work_stages": {
+              "call-and-cfg-index": 8339,
+              "construction": 3514,
+              "propagation": 2607,
+              "effects": 0,
+              "outcome-fences": 13046471,
+              "exposure": 398,
+              "frontiers": 200,
+              "store-order": 5624,
+              "report": 9419
+            },
+            "outcome_fence_work": 13046471,
+            "analysis_thread_cpu_ns_median": 1963693,
+            "runs": [
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-4-0.stdout",
+                "stdout_sha256": "fd4ce6bf941a2b4f2d492d599791b52c98aef7243b7a15fa7ef5d81e9da5d1ce",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-4-0.json",
+                "raw_sha256": "ee11f158e240979c27cc66fda550f1ada7c20990448623d8187d52a961ea69e7",
+                "phase": {
+                  "entry_thread": [
+                    68023,
+                    68046,
+                    0
+                  ],
+                  "return_thread": [
+                    68023,
+                    68046,
+                    0
+                  ],
+                  "cpu_ns": 2012026
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-4-1.stdout",
+                "stdout_sha256": "405dc4b273cb0ce192bfa1f3cf7d2a7e21f8c1da59c1e89c7b1748cf6ad678b4",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-4-1.json",
+                "raw_sha256": "8b6e34692416d7148e9f2b3ffac27837bf56cbc47fb9ba630fab84583ac7578c",
+                "phase": {
+                  "entry_thread": [
+                    68643,
+                    68650,
+                    0
+                  ],
+                  "return_thread": [
+                    68643,
+                    68650,
+                    0
+                  ],
+                  "cpu_ns": 1963693
+                }
+              },
+              {
+                "command": [
+                  "gdb",
+                  "--batch",
+                  "--nx",
+                  "-q",
+                  "-x",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/allocator-observer-v5/cpu.gdb",
+                  "--args",
+                  "/home/akisarou/.cache/nts-pins/883fad54da93+34e60fd9a7a8/nts",
+                  "regions",
+                  "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/blocks-4/tsconfig.json",
+                  "--backend",
+                  "c",
+                  "--checkers",
+                  "1"
+                ],
+                "status": 0,
+                "stdout": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-4-2.stdout",
+                "stdout_sha256": "16a709509bd76a7e87d55de6cc8b8ae6f53862f134cfb19b0c72712fa740bd28",
+                "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                "raw": "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/fence-scaling-883/completion-4-2.json",
+                "raw_sha256": "4ae63025640608caa299409799fe0abf73a2b7fa54029b9bff0f3186ea3c3749",
+                "phase": {
+                  "entry_thread": [
+                    69288,
+                    69297,
+                    0
+                  ],
+                  "return_thread": [
+                    69288,
+                    69297,
+                    0
+                  ],
+                  "cpu_ns": 1276865
+                }
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

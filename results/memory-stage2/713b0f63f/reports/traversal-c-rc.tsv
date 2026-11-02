@@ -1,0 +1,123 @@
+# measured_commit=713b0f63fe000980d9ae457ff4e80ee08f858b03
+# generating_command=["node","/home/akisarou/.cache/nts-handover/compiler3/stage2-current/slice-final-v6.ts","713b0f63fe000980d9ae457ff4e80ee08f858b03"]
+# diagnostic_command=["/home/akisarou/.cache/nts-pins/713b0f63fe00/nts","regions","/home/akisarou/Projects/nts-lanes/compiler3-memory/tests/memory/traversal/tsconfig.json","--rc","--entry","work","--main","--checkers","1","--backend","c"]
+# config_sha256=83148ec74bdbf0a34eb7dbcac46e61b6459a9feb8b295e0affc2743cb544db46
+memory-v2	ops=35	contexts=3	nodes=54	work=1609/44800	edges=60/1400	failure=None
+work-stages	[("call-and-cfg-index", 446), ("construction", 195), ("propagation", 205), ("effects", 4), ("outcome-fences", 39), ("exposure", 19), ("frontiers", 22), ("store-order", 284), ("report", 395)]
+points-to-changes	max=4	limit=9
+memory-events	nodes=24	max-changes=6	limit=9
+fence-context-visits	3
+node-changes	0	0
+node-changes	1	0
+node-changes	2	2
+node-changes	3	0
+node-changes	4	0
+node-changes	5	0
+node-changes	6	0
+node-changes	7	2
+node-changes	8	0
+node-changes	9	0
+node-changes	10	4
+node-changes	11	2
+node-changes	12	0
+node-changes	13	0
+node-changes	14	0
+node-changes	15	2
+node-changes	16	0
+node-changes	17	0
+node-changes	18	0
+node-changes	19	0
+node-changes	20	0
+node-changes	21	2
+node-changes	22	2
+node-changes	23	0
+node-changes	24	0
+node-changes	25	4
+node-changes	26	0
+node-changes	27	0
+node-changes	28	0
+node-changes	29	0
+node-changes	30	0
+node-changes	31	2
+node-changes	32	0
+node-changes	33	1
+node-changes	34	0
+node-changes	35	0
+node-changes	36	0
+node-changes	37	0
+node-changes	38	0
+node-changes	39	0
+node-changes	40	2
+node-changes	41	2
+node-changes	42	0
+node-changes	43	1
+node-changes	44	0
+node-changes	45	0
+node-changes	46	0
+node-changes	47	0
+node-changes	48	0
+node-changes	49	0
+node-changes	50	2
+node-changes	51	2
+node-changes	52	0
+node-changes	53	2
+site	"chain"	%1	Object	"work:entry/chain:%3"	Unbounded { witness: "work:entry/chain:%3:%1: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained" }	Heap(RepeatedInstances)	legacy=["call-region"]	owner=Some("work:entry:%3")	obligations=[RepeatedInstances, RuntimeRootContract]	witness=["proof 5", "proof 6"]	origin=Origin { location: Location { file: SourceId(0), span: Span { start: 405, end: 416 } }, scope: None, inline_chain: [], async_parent: None, generated: None }	retention="unknown frontier: RuntimeRootContract"	held-bytes=Unknown { witness: "no finite live-instance bound; backing and held heap graphs remain included" }
+site	"chain"	%12	Object	"work:entry/chain:%3"	Unbounded { witness: "work:entry/chain:%3:%12: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained" }	Heap(RepeatedInstances)	legacy=["call-region"]	owner=Some("work:entry:%3")	obligations=[RepeatedInstances, RuntimeRootContract]	witness=["proof 7", "proof 8"]	origin=Origin { location: Location { file: SourceId(0), span: Span { start: 491, end: 502 } }, scope: None, inline_chain: [], async_parent: None, generated: None }	retention="unknown frontier: RuntimeRootContract"	held-bytes=Unknown { witness: "no finite live-instance bound; backing and held heap graphs remain included" }
+function	"Link#constructor"	"parametric"	returns=[]	writes=["Field(\"Name(\\\"next\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=["parameter 0.Field(\"Name(\\\"value\\\")@None\") <- parameter 1", "parameter 0.Field(\"Name(\\\"next\\\")@None\") <- %3"]	length=false	suspend=false	reenter=false	unknown=false
+function	"chain"	"work:entry/chain:%3"	returns=["work:entry/chain:%3:%1:Object:older", "work:entry/chain:%3:%1:Object:recent"]	writes=["Field(\"Name(\\\"next\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"total"	"work:entry/total:%4"	returns=[]	writes=[]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+function	"work"	"work:entry"	returns=[]	writes=["Field(\"Name(\\\"next\\\")@None\")", "Field(\"Name(\\\"value\\\")@None\")"]	stores=[]	length=false	suspend=false	reenter=false	unknown=false
+store-version	"chain"	"work:entry/chain:%3"	%3	34	"Field(\"Name(\\\"value\\\")@None\")"	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"chain"	"work:entry/chain:%3"	%3	39	"Field(\"Name(\\\"next\\\")@None\")"	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"chain"	"work:entry/chain:%3"	%13	44	"Field(\"Name(\\\"value\\\")@None\")"	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+store-version	"chain"	"work:entry/chain:%3"	%13	49	"Field(\"Name(\\\"next\\\")@None\")"	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+store-version	"chain"	"work:entry/chain:%3"	%14	53	"Field(\"Name(\\\"next\\\")@None\")"	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+retention	"unknown frontier: RuntimeRootContract"	["work:entry/chain:%3:%12:Object", "work:entry/chain:%3:%1:Object"]	Unknown { witness: "complete target footprint, live-instance and held-graph bound is not sealed" }
+frontier	"work:entry:%3"	Ok(["after last reference use in block 0"])
+proof	0	"outside:any-reference"	"outside Outside(\"external or immortal storage\")"	[]	"allocation scope or external storage contract"
+proof	1	"work:entry/chain:%3:%1:Object:recent"	"frame work:entry/chain:%3"	[]	"allocation scope or external storage contract"
+proof	2	"work:entry/chain:%3:%1:Object:older"	"frame work:entry/chain:%3"	[]	"allocation scope or external storage contract"
+proof	3	"work:entry/chain:%3:%12:Object:recent"	"frame work:entry/chain:%3"	[]	"allocation scope or external storage contract"
+proof	4	"work:entry/chain:%3:%12:Object:older"	"frame work:entry/chain:%3"	[]	"allocation scope or external storage contract"
+proof	5	"work:entry/chain:%3:%1:Object:recent"	"outside RuntimeRootContract"	[1]	"Collector"
+proof	6	"work:entry/chain:%3:%1:Object:older"	"outside RuntimeRootContract"	[2]	"Collector"
+proof	7	"work:entry/chain:%3:%12:Object:recent"	"outside RuntimeRootContract"	[3]	"Collector"
+proof	8	"work:entry/chain:%3:%12:Object:older"	"outside RuntimeRootContract"	[4]	"Collector"
+slot	"work:entry/chain:%3:%12:Object:older"	"work:entry/chain:%3"	"Summary"	"Field(\"Name(\\\"next\\\")@None\")"	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%12:Object:older"	"work:entry/chain:%3"	"Summary"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%12:Object:recent"	"work:entry/chain:%3"	"Recent"	"Field(\"Name(\\\"next\\\")@None\")"	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%12:Object:recent"	"work:entry/chain:%3"	"Recent"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%1:Object:older"	"work:entry/chain:%3"	"Summary"	"Field(\"Name(\\\"next\\\")@None\")"	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%1:Object:older"	"work:entry/chain:%3"	"Summary"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%1:Object:recent"	"work:entry/chain:%3"	"Recent"	"Field(\"Name(\\\"next\\\")@None\")"	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Unknown(NotAnalysed)
+slot	"work:entry/chain:%3:%1:Object:recent"	"work:entry/chain:%3"	"Recent"	"Field(\"Name(\\\"value\\\")@None\")"	[]	Unknown(NotAnalysed)
+value	"chain"	"work:entry/chain:%3"	%0	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"chain"	"work:entry/chain:%3"	%1	["work:entry/chain:%3:%1:Object:older", "work:entry/chain:%3:%1:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%3	[]	Unknown(NotAnalysed)
+value	"chain"	"work:entry/chain:%3"	%4	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%5	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent", "work:entry/chain:%3:%1:Object:older", "work:entry/chain:%3:%1:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%6	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%7	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"chain"	"work:entry/chain:%3"	%8	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"chain"	"work:entry/chain:%3"	%9	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%12	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%13	[]	Unknown(NotAnalysed)
+value	"chain"	"work:entry/chain:%3"	%14	[]	Unknown(NotAnalysed)
+value	"chain"	"work:entry/chain:%3"	%16	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"chain"	"work:entry/chain:%3"	%17	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"chain"	"work:entry/chain:%3"	%18	[]	Known { tags: Tags(4), numbers: Facts { lo: 1.0, hi: 1.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"total"	"work:entry/total:%4"	%0	["work:entry/chain:%3:%1:Object:older", "work:entry/chain:%3:%1:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"total"	"work:entry/total:%4"	%1	[]	Known { tags: Tags(4), numbers: Facts { lo: 0.0, hi: 0.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"total"	"work:entry/total:%4"	%2	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"total"	"work:entry/total:%4"	%3	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent", "work:entry/chain:%3:%1:Object:older", "work:entry/chain:%3:%1:Object:recent"]	Unknown(NotAnalysed)
+value	"total"	"work:entry/total:%4"	%4	[]	Known { tags: Tags(128), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"total"	"work:entry/total:%4"	%5	[]	Known { tags: Tags(2), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"total"	"work:entry/total:%4"	%6	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"total"	"work:entry/total:%4"	%8	[]	Unknown(NotAnalysed)
+value	"total"	"work:entry/total:%4"	%9	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"total"	"work:entry/total:%4"	%10	["work:entry/chain:%3:%12:Object:older", "work:entry/chain:%3:%12:Object:recent"]	Unknown(NotAnalysed)
+value	"work"	"work:entry"	%0	[]	Unknown(ExternalValue)
+value	"work"	"work:entry"	%2	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%3	["work:entry/chain:%3:%1:Object:older", "work:entry/chain:%3:%1:Object:recent"]	Known { tags: Tags(64), numbers: Facts { lo: inf, hi: -inf, whole: true, maybe_nan: false, maybe_negative_zero: false } }
+value	"work"	"work:entry"	%4	[]	Known { tags: Tags(4), numbers: Facts { lo: -inf, hi: inf, whole: false, maybe_nan: true, maybe_negative_zero: true } }
+value	"work"	"work:entry"	%5	[]	Known { tags: Tags(4), numbers: Facts { lo: 32.0, hi: 32.0, whole: true, maybe_nan: false, maybe_negative_zero: false } }

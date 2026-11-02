@@ -1,0 +1,44 @@
+{
+  "measured_commit": "713b0f63fe000980d9ae457ff4e80ee08f858b03",
+  "generating_command": [
+    "/usr/bin/python3",
+    "/home/akisarou/.cache/nts-handover/compiler3/stage2-current/publish-stage2-v6.py",
+    "713b0f63fe000980d9ae457ff4e80ee08f858b03"
+  ],
+  "scope": "Review scope only: source-variant direction counts are provisional pending exact context matching, with no placement or no-proof inference.",
+  "reviewer_addendum": {
+    "path": "/home/akisarou/.cache/nts-handover/compiler4/memory-713b-registered-audit/variant-lineage-scope-addendum.json",
+    "sha256": "cab01429835f246a7945a093e3589a6694ceaef6de41c4cb01c0bf2f691a276b",
+    "content": {
+      "version": 1,
+      "reviewer": "compiler4",
+      "at_utc": "2026-11-02T18:05:59.274129+00:00",
+      "disposition": "SUPERSEDES SEMANTIC LEGACY/PROPOSAL DIRECTION ATTRIBUTION PENDING VARIANT-LINEAGE CORRECTION",
+      "source": "713b0f63fe000980d9ae457ff4e80ee08f858b03",
+      "prior_review": {
+        "path": "/home/akisarou/.cache/nts-handover/compiler4/memory-713b-registered-audit/review.json",
+        "sha256": "ee2197ccd6f565614675f3a05594abe41dee36b71e6f8a4b0aaddb000d5467a1"
+      },
+      "trigger": {
+        "message": "02cf3fbf-7566-4156-93c2-3d6462e4e657",
+        "authority": "Main explicitly requires actual original/region-clone comparison correction before no-proof-on-main classification"
+      },
+      "retained_scope": [
+        "Exact file bindings and actual per-arm emission/prepared-listing/body identities",
+        "Byte-stable raw reports, actual site inventories and raw report/proof-root joins",
+        "Completed713b cost/report observations at their original source and limits"
+      ],
+      "provisional": [
+        "Raw16558 frame->heap and340 call-region->heap counts do not yet prove actual main-vs-stage2 placement directions at each reachable original/region-clone variant",
+        "No no-proof-on-main/lifetime defect classification or placement-authority clearance may use these provisional directions"
+      ],
+      "required_authority": [
+        "Typed analysis context IDs and actual existing caller/callee-context/ValueId edges",
+        "Actual post-legacy original/region-clone call at stable ID; complete existing indirect dispatch authority",
+        "Finite mixed/recursive variant-state propagation without parsing context labels or unioning caller homes",
+        "NamedUnknown for unavailable lineage; mixed variants explicit instead of optimistic selection"
+      ],
+      "acceptance_rule": "Stage2 becomes placement authority only when frame->heap is zero under a sound complete comparison. This addendum grants no placement consumer, whole solver/source or LAND clearance."
+    }
+  }
+}
