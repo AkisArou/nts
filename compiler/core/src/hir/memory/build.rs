@@ -1971,10 +1971,14 @@ fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
         }
     }
     for (at, block) in function.blocks.iter().enumerate() {
-        let mut check = |value: ValueId, user: String| {
+        let mut check = |value: ValueId, user: Option<ValueId>| {
             work += 1;
             if !definitions.contains(&value) {
                 failure.get_or_insert_with(|| {
+                    let user = user.map_or_else(
+                        || "terminator".to_owned(),
+                        |id| format!("operation %{}", id.0),
+                    );
                     Reason::InvalidControlFlow(format!(
                         "{}: block {at} {user} reads %{} without a placed or ABI definition",
                         function.name, value.0
@@ -1987,11 +1991,11 @@ fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
                 continue;
             };
             for operand in verify::operands(&op.kind) {
-                check(operand, format!("operation %{}", id.0));
+                check(operand, Some(id));
             }
         }
         for operand in verify::terminator_operands(&block.terminator) {
-            check(operand, "terminator".to_owned());
+            check(operand, None);
         }
     }
     (failure, work)
