@@ -1203,7 +1203,7 @@ impl<'p> Builder<'p> {
             return;
         }
         for block in verify::reverse_postorder(function) {
-            let repeated = self.recursive.contains(&function_index)
+            let repeated = self.contexts[context].repeated
                 || self.cycles[function_index]
                     .as_ref()
                     .ok()
