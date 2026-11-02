@@ -2651,7 +2651,54 @@ impl<'p> Builder<'p> {
                 fallback: context.fallback,
             })
             .collect();
-        let lifetimes = lifetime::analyze(&mut self.graph, &hierarchy, &self.roots);
+        let mut lifetimes = lifetime::analyze(&mut self.graph, &hierarchy, &self.roots);
+        self.stages
+            .push(("exposure".to_owned(), self.graph.work - exposure_start));
+        let start = self.graph.work;
+        let mut frontiers = self.frontiers();
+        self.stages
+            .push(("frontiers".to_owned(), self.graph.work - start));
+        let start = self.graph.work;
+        let (mut captures, event_changes, memory_events) = self.store_order(&lifetimes);
+        self.stages
+            .push(("store-order".to_owned(), self.graph.work - start));
+        // Charge optional detachment before cloning aliases and symbolic
+        // rows. Top inventories remain mandatory after a failed analysis.
+        let report_start = self.graph.work;
+        let report_cost = self
+            .allocations
+            .len()
+            .saturating_mul(3)
+            .saturating_add(
+                self.graph
+                    .slots
+                    .len()
+                    .saturating_mul(self.graph.alias_limit.max(1) + 2),
+            )
+            .saturating_add(
+                self.contexts
+                    .iter()
+                    .map(|context| {
+                        context
+                            .values
+                            .len()
+                            .saturating_mul(self.graph.alias_limit.max(1) + 2)
+                    })
+                    .sum::<usize>(),
+            )
+            .saturating_add(lifetimes.proofs.len());
+        self.graph.charge_many(report_cost);
+        self.stages
+            .push(("report".to_owned(), self.graph.work - report_start));
+        if let Some(reason) = &self.graph.failure {
+            lifetimes = lifetime::failed(&self.graph, reason);
+            for frontier in &mut frontiers {
+                frontier.ends = Err(format!("unknown: {reason:?}"));
+            }
+            for capture in &mut captures {
+                capture.later_write = super::LaterWrite::Unknown(reason.clone());
+            }
+        }
         let mut site_reasons = vec![BTreeSet::new(); self.allocations.len()];
         let mut site_witnesses = vec![Vec::new(); self.allocations.len()];
         for (object, info) in self.graph.objects.iter().enumerate() {
@@ -2667,16 +2714,6 @@ impl<'p> Builder<'p> {
                 site_witnesses[site].push(format!("proof {}", lifetimes.witnesses[object]));
             }
         }
-        self.stages
-            .push(("exposure".to_owned(), self.graph.work - exposure_start));
-        let start = self.graph.work;
-        let frontiers = self.frontiers();
-        self.stages
-            .push(("frontiers".to_owned(), self.graph.work - start));
-        let start = self.graph.work;
-        let (captures, event_changes, memory_events) = self.store_order(&lifetimes);
-        self.stages
-            .push(("store-order".to_owned(), self.graph.work - start));
         let unknown = ValueFact::Unknown(Unknown::NotAnalysed);
         let payload = |node: Node| {
             if self.graph.failure.is_some() {
@@ -2832,9 +2869,17 @@ impl<'p> Builder<'p> {
             functions.push(FunctionSummary {
                 function: self.program.funcs[at].name.clone(),
                 context: "parametric".to_owned(),
-                returned: summary.result.clone(),
+                returned: if self.graph.failure.is_some() {
+                    vec![format!("unknown:{:?}", self.graph.failure)]
+                } else {
+                    summary.result.clone()
+                },
                 writes: summary.writes.clone(),
-                stores: summary.stores.clone(),
+                stores: if self.graph.failure.is_some() {
+                    vec!["unknown writer summary".to_owned()]
+                } else {
+                    summary.stores.clone()
+                },
                 may_change_length: self.graph.failure.is_some(),
                 may_suspend: self.graph.failure.is_some(),
                 may_reenter: self.graph.failure.is_some(),

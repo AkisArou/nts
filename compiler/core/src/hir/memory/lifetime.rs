@@ -111,11 +111,36 @@ impl State<'_> {
     }
 }
 
+/// One failure authority for every published lifetime column. A partial
+/// positive lattice seed cannot serve as a final witness after invalidation.
+pub(super) fn failed(graph: &Graph, reason: &Reason) -> Result {
+    let proofs = graph
+        .objects
+        .iter()
+        .enumerate()
+        .map(|(id, _)| Proof {
+            id,
+            object: graph.label(id),
+            bound: format!("outside {reason:?}"),
+            causes: Vec::new(),
+            edge: "Unknown: a required memory dependency failed".to_owned(),
+        })
+        .collect();
+    Result {
+        bounds: vec![Bound::Outside(reason.clone()); graph.objects.len()],
+        witnesses: (0..graph.objects.len()).collect(),
+        proofs,
+    }
+}
+
 pub(super) fn analyze(
     graph: &mut Graph,
     contexts: &[Context<'_>],
     roots: &[(usize, Exposure)],
 ) -> Result {
+    if let Some(reason) = &graph.failure {
+        return failed(graph, reason);
+    }
     if contexts.is_empty() {
         return Result {
             bounds: Vec::new(),
@@ -213,7 +238,11 @@ pub(super) fn analyze(
             );
         }
     }
-    state.result
+    if let Some(reason) = &graph.failure {
+        failed(graph, reason)
+    } else {
+        state.result
+    }
 }
 
 #[cfg(test)]
