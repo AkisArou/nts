@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":3,"backend":"c","commit":"699841b4d0bf239efbb75d2a02780a718b945181","compiler":"e256bf1cbed868e7","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":3,"backend":"c","commit":"0a588711a4c1a2e074884442c0e4d44b65827afb","compiler":"7cca4c3ac33ccdef","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/absent-routes-controls/bounds-array-generic-relative-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-array-index-signature-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-generic-grown-holes-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -954,11 +954,11 @@ tests/typescript/builtin-identity/subclass-type-error-method-override.ts	{"kind"
 tests/typescript/builtin-identity/subclass-type-error-static-inherited.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/subclass-type-error-static-override.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/subclass-type-error-super-arguments.ts	{"kind":"pass"}
-tests/typescript/builtin-identity/subclass-uint8-array-implicit-constructor.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/subclass-uint8-array-implicit-constructor.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/subclass-uint8-array-method-override.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/subclass-uint8-array-static-inherited.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/subclass-uint8-array-static-override.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/builtin-identity/subclass-uint8-array-super-arguments.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/builtin-identity/subclass-uint8-array-super-arguments.ts	{"kind":"pass"}
 tests/typescript/builtin-identity/value-array-array-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/value-array-array-construct.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/builtin-identity/value-condition-array-call.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
