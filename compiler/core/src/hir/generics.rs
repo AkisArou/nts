@@ -52,6 +52,12 @@ pub struct Substitution {
 }
 
 impl Substitution {
+    /// An owned context for the native-constructor cache's negative control.
+    #[cfg(test)]
+    pub(crate) fn test_instance(&mut self, template: TypeId, instance: TypeId) {
+        self.instances.insert(template, instance);
+    }
+
     #[must_use]
     pub fn get(&self, parameter: &TypeId) -> Option<&HirType> {
         self.types.get(parameter)

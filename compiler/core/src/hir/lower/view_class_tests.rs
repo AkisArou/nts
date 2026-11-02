@@ -125,7 +125,7 @@ fn deep_implicit_constructor_ancestry_is_resolved_once() {
             } else {
                 format!("View{}", at - 1)
             };
-            writeln!(source, "class View{at} extends {base} {{}}\nexport function probe{at}(n: number): boolean {{ return new View{at}((n & 3) + 1) instanceof View{at}; }}").unwrap();
+            writeln!(source, "class View{at} extends {base} {{}}\nexport function probe{at}(n: number): number {{ return new View{at}((n & 3) + 1).length; }}").unwrap();
         }
         std::fs::write(dir.join("main.ts"), source).unwrap();
         let config = dir.join("tsconfig.json");
@@ -138,7 +138,17 @@ fn deep_implicit_constructor_ancestry_is_resolved_once() {
             .with_checkers(std::num::NonZeroU16::MIN)
             .snapshot(camino::Utf8Path::from_path(&config).unwrap())
             .unwrap();
+        let indexed = super::LoweringSnapshot::new(&snapshot);
+        let probe = super::FuncBuilder::probe(&indexed);
         ANCESTRY.with(|n| n.set(0));
+        let targets = super::constructor_targets(&probe);
+        assert_eq!(targets.values().map(Vec::len).sum::<usize>(), count);
+        let ancestry = ANCESTRY.with(Cell::get);
+        eprintln!("implicit constructor depth {count}: actual collector ancestry steps {ancestry}");
+        assert!(
+            ancestry <= count * 4 + 4,
+            "collector ancestry repeats across implicit subclasses"
+        );
         let lowered = super::lower(&snapshot);
         assert!(
             lowered.program.uncompiled.is_empty(),
@@ -146,12 +156,78 @@ fn deep_implicit_constructor_ancestry_is_resolved_once() {
             lowered.program.uncompiled
         );
         assert_eq!(lowered.program.constructed_as.len(), count);
-        let ancestry = ANCESTRY.with(Cell::get);
-        eprintln!("implicit constructor depth {count}: actual ancestry steps {ancestry}");
-        assert!(
-            ancestry <= count * 4 + 4,
-            "ancestry repeats across implicit subclasses"
-        );
         std::fs::remove_dir_all(dir).unwrap();
     }
+}
+
+#[test]
+fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
+    let config = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../tests/programs/a-typed-array-subclass-is-made-as-the-class-its-new-names/tsconfig.json");
+    let semantic = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(&config)
+        .unwrap();
+    let snapshot = super::LoweringSnapshot::new(&semantic);
+    let probe = super::FuncBuilder::probe(&snapshot);
+    let class = |name: &str| {
+        (0..snapshot.nodes.len())
+            .map(|at| super::NodeId(u32::try_from(at).unwrap()))
+            .find(|at| {
+                probe.kind_of(*at).is_some_and(super::declares_a_class)
+                    && probe.class_name(*at).as_deref() == Some(name)
+            })
+            .unwrap()
+    };
+    let parent = class("Counted");
+    let child = class("Octets");
+    let parent_ty = super::instance_type_of(&snapshot, parent).unwrap();
+    let child_ty = super::instance_type_of(&snapshot, child).unwrap();
+    let valid = super::made_instance::ConstructorMemo::new(&probe).of(child);
+    assert!(
+        matches!(valid, Some(super::NativeConstructor::Source { class, .. }) if class == parent)
+    );
+    let mut instance_context = super::FuncBuilder::probe(&snapshot);
+    instance_context
+        .substitution
+        .test_instance(parent_ty, child_ty);
+    assert!(matches!(
+        instance_context.represent(parent_ty),
+        Some(super::HirType::Managed(super::ManagedType::Object(_)))
+    ));
+    assert!(
+        super::made_instance::ConstructorMemo::new(&instance_context)
+            .of(child)
+            .is_none(),
+        "same parent identity, contextual Object storage"
+    );
+    let mut face_context = super::FuncBuilder::probe(&snapshot);
+    face_context.hierarchy.cast_faces.insert(parent_ty);
+    if cfg!(debug_assertions) {
+        // Debug builds reject this deliberately malformed field-face context
+        // before a constructor can be selected.
+        assert!(
+            std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                super::made_instance::ConstructorMemo::new(&face_context).of(child)
+            }))
+            .is_err()
+        );
+    } else {
+        assert_eq!(
+            face_context.represent(parent_ty),
+            Some(super::HirType::Erased)
+        );
+        assert!(
+            super::made_instance::ConstructorMemo::new(&face_context)
+                .of(child)
+                .is_none(),
+            "same parent identity, contextual erased storage"
+        );
+    }
+    assert!(
+        super::made_instance::ConstructorMemo::new(&probe)
+            .of(child)
+            .is_some(),
+        "a failed context must not poison the original one"
+    );
 }

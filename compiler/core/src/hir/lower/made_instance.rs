@@ -31,9 +31,76 @@ pub(super) enum MadeBy {
 
 /// What builds a native-storage instance: the nearest constructor a class in
 /// the chain declares, or the builtin at its root when none does.
+#[derive(Clone)]
 pub(super) enum NativeConstructor {
     Source { class: NodeId, constructor: NodeId },
     Builtin(CheckedGlobalReference),
+}
+
+enum NativeParent {
+    Source(NodeId),
+    Builtin(CheckedGlobalReference),
+}
+
+/// The collector's repeated questions, in one fixed representation context.
+/// Only this memo owns its answers. Generic instance/projection contexts cannot
+/// reuse them through the snapshot, and binding readiness remains the caller's.
+pub(super) struct ConstructorMemo<'a, 'snapshot> {
+    probe: &'a FuncBuilder<'snapshot>,
+    above: rustc_hash::FxHashMap<NodeId, Option<NativeConstructor>>,
+}
+
+impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
+    pub(super) fn new(probe: &'a FuncBuilder<'snapshot>) -> Self {
+        Self {
+            probe,
+            above: rustc_hash::FxHashMap::default(),
+        }
+    }
+
+    pub(super) fn of(&mut self, class: NodeId) -> Option<NativeConstructor> {
+        if !self.probe.is_native_storage(class) {
+            return None;
+        }
+        if let Some(constructor) = the_constructor_declared_by(self.probe, class) {
+            return Some(NativeConstructor::Source { class, constructor });
+        }
+        self.above(class)
+    }
+
+    pub(super) fn above(&mut self, class: NodeId) -> Option<NativeConstructor> {
+        let mut at = class;
+        let mut path = Vec::new();
+        let mut seen = rustc_hash::FxHashSet::default();
+        let answer = loop {
+            if let Some(answer) = self.above.get(&at) {
+                break answer.clone();
+            }
+            if !seen.insert(at) {
+                break None;
+            }
+            path.push(at);
+            match self.probe.native_constructor_parent(at) {
+                Some(NativeParent::Builtin(global)) => {
+                    break Some(NativeConstructor::Builtin(global));
+                }
+                Some(NativeParent::Source(parent)) => {
+                    if let Some(constructor) = the_constructor_declared_by(self.probe, parent) {
+                        break Some(NativeConstructor::Source {
+                            class: parent,
+                            constructor,
+                        });
+                    }
+                    at = parent;
+                }
+                None => break None,
+            }
+        };
+        for at in path {
+            self.above.insert(at, answer.clone());
+        }
+        answer
+    }
 }
 
 /// `this` on the paths through an `if`: a `super(...)` in an arm binds it there
@@ -222,24 +289,36 @@ impl FuncBuilder<'_> {
     /// not a subclass of the builtin (a cast as a base), answers `None`.
     pub(super) fn native_constructor_above(&self, class: NodeId) -> Option<NativeConstructor> {
         let mut class = class;
-        for _ in 0..self.snapshot.nodes.len() {
-            #[cfg(test)]
-            super::view_class_tests::note_ancestor();
-            let base = self.extends_operand(class)?;
-            if let Some(global) = self.checked_global_reference(base) {
-                return (global.library == Library::Es)
-                    .then_some(NativeConstructor::Builtin(global));
-            }
-            let reference = self.referenced_value(base)?;
-            class = self
-                .referenced_declaration(reference.symbol)
-                .filter(|declaration| self.kind_of(*declaration).is_some_and(declares_a_class))
-                .filter(|declaration| self.is_native_storage(*declaration))?;
-            if let Some(constructor) = the_constructor_declared_by(self, class) {
-                return Some(NativeConstructor::Source { class, constructor });
+        let mut seen = rustc_hash::FxHashSet::default();
+        while seen.insert(class) {
+            match self.native_constructor_parent(class)? {
+                NativeParent::Builtin(global) => return Some(NativeConstructor::Builtin(global)),
+                NativeParent::Source(parent) => {
+                    class = parent;
+                    if let Some(constructor) = the_constructor_declared_by(self, class) {
+                        return Some(NativeConstructor::Source { class, constructor });
+                    }
+                }
             }
         }
         None
+    }
+
+    /// One authenticated parent step. Both the ordinary reader and the
+    /// whole-program collector's memo consume this exact identity authority.
+    fn native_constructor_parent(&self, class: NodeId) -> Option<NativeParent> {
+        #[cfg(test)]
+        super::view_class_tests::note_ancestor();
+        let base = self.extends_operand(class)?;
+        if let Some(global) = self.checked_global_reference(base) {
+            return (global.library == Library::Es).then_some(NativeParent::Builtin(global));
+        }
+        let reference = self.referenced_value(base)?;
+        let parent = self
+            .referenced_declaration(reference.symbol)
+            .filter(|declaration| self.kind_of(*declaration).is_some_and(declares_a_class))
+            .filter(|declaration| self.is_native_storage(*declaration))?;
+        Some(NativeParent::Source(parent))
     }
 
     /// The expression a class `extends`, never one it `implements`.

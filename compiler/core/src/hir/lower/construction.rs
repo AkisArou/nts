@@ -23,6 +23,7 @@ const BASE_THROUGH_A_CAST: &str =
 const SITE_HOLDS_OTHERWISE: &str =
     "a `new` whose constructor builds something other than the type its site holds";
 
+#[derive(Clone)]
 pub(super) struct CheckedGlobalReference {
     pub(super) symbol: SymbolId,
     pub(super) name: String,

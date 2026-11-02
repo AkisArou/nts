@@ -12800,6 +12800,7 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
     built.sort_unstable_by_key(|class| class.0);
     built.dedup();
     let mut targets = ConstructorTargets::default();
+    let mut constructors = made_instance::ConstructorMemo::new(probe);
     for class in built {
         if !probe.kind_of(class).is_some_and(declares_a_class) {
             continue;
@@ -12807,7 +12808,7 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
         let Some(target) = instance_type_of(probe.snapshot, class) else {
             continue;
         };
-        let mut next = probe.native_constructor_of(class);
+        let mut next = constructors.of(class);
         while let Some(NativeConstructor::Source {
             class: owner,
             constructor,
@@ -12816,7 +12817,7 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
             if owner != class {
                 targets.insert(constructor, target);
             }
-            next = probe.native_constructor_above(owner);
+            next = constructors.above(owner);
         }
     }
     targets.finish()
