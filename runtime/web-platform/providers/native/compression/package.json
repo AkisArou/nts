@@ -2,5 +2,10 @@
   "name": "@nts/native-compression",
   "private": true,
   "type": "module",
-  "exports": { ".": "./provider.ts" }
+  "exports": {
+    ".": "./provider.ts"
+  },
+  "dependencies": {
+    "@nts/config": "workspace:*"
+  }
 }

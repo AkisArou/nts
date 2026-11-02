@@ -1,5 +1,6 @@
 packages:
   - tooling/*
+  - runtime/web-platform/providers/native/*
   - benchmarks
   - libraries/*
   - tests/programs/library

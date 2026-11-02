@@ -39,6 +39,12 @@ importers:
         specifier: 'catalog:'
         version: 0.28.20
 
+  runtime/web-platform/providers/native/compression:
+    dependencies:
+      '@nts/config':
+        specifier: workspace:*
+        version: link:../../../../../tooling/config
+
   tests/interop:
     dependencies:
       '@nts/config':
