@@ -3400,73 +3400,8 @@ impl<'p> Builder<'p> {
             for position in 0..count {
                 let context = self.contexts_of[function_index][position];
                 self.context_membership_visits += 1;
-                for (block_index, block) in function.blocks.iter().enumerate() {
-                    let block_id = BlockId(u32::try_from(block_index).unwrap_or(u32::MAX));
-                    let operands = super::super::operands_of_terminator(&block.terminator);
-                    if !self.graph.charge_many(
-                        live.live_out(block_id)
-                            .len()
-                            .saturating_add(operands.len())
-                            .saturating_add(1),
-                    ) {
-                        return reports;
-                    }
-                    let mut before: BTreeSet<_> = live
-                        .live_out(block_id)
-                        .iter()
-                        .copied()
-                        .chain(operands)
-                        // Identity carriers can have an uncounted machine type.
-                        // The solved graph, not that type, owns their aliases.
-                        .filter(|id| {
-                            !self.graph.values[self.value(context, *id)]
-                                .objects
-                                .is_empty()
-                        })
-                        .collect();
-                    for &id in block.ops.iter().rev() {
-                        let operands = verify::operands(&function.value(id).kind);
-                        if !self.graph.charge_many(operands.len().saturating_add(1)) {
-                            return reports;
-                        }
-                        before.remove(&id);
-                        for operand in operands {
-                            if !self.graph.values[self.value(context, operand)]
-                                .objects
-                                .is_empty()
-                            {
-                                before.insert(operand);
-                            }
-                        }
-                        let Some(reason) = unsealed.get(&id) else {
-                            continue;
-                        };
-                        if !self.graph.charge_many(before.len().saturating_add(1)) {
-                            return reports;
-                        }
-                        let root = self.graph.node();
-                        for &value in &before {
-                            self.graph.copy(self.value(context, value), root);
-                        }
-                        let payload = self.graph.node();
-                        let payload_label = format!(
-                            "{}:%{}:unknown-raised-payload",
-                            self.contexts[context].key, id.0
-                        );
-                        self.outside(context, payload, payload_label.clone());
-                        self.graph.copy(payload, root);
-                        let witness = format!("{}:%{}: {reason}", self.contexts[context].key, id.0);
-                        self.roots
-                            .push((root, Exposure::Unknown(Reason::MissingOutcome(witness))));
-                        reports.push(Outcome {
-                            function: function.name.clone(),
-                            context: self.contexts[context].key.clone(),
-                            value: id.0,
-                            reason: reason.clone(),
-                            live: before.iter().map(|value| value.0).collect(),
-                            payload: payload_label,
-                        });
-                    }
+                if !self.outcome_context(context, &live, &unsealed, &mut reports) {
+                    return reports;
                 }
             }
         }
@@ -3475,6 +3410,85 @@ impl<'p> Builder<'p> {
             (&a.function, &a.context, a.value).cmp(&(&b.function, &b.context, b.value))
         });
         reports
+    }
+
+    fn outcome_context(
+        &mut self,
+        context: usize,
+        live: &super::super::liveness::Liveness,
+        unsealed: &BTreeMap<ValueId, String>,
+        reports: &mut Vec<Outcome>,
+    ) -> bool {
+        let function = &self.program.funcs[self.contexts[context].function];
+        for (block_index, block) in function.blocks.iter().enumerate() {
+            let block_id = BlockId(u32::try_from(block_index).unwrap_or(u32::MAX));
+            let operands = super::super::operands_of_terminator(&block.terminator);
+            if !self.graph.charge_many(
+                live.live_out(block_id)
+                    .len()
+                    .saturating_add(operands.len())
+                    .saturating_add(1),
+            ) {
+                return false;
+            }
+            let mut before: BTreeSet<_> = live
+                .live_out(block_id)
+                .iter()
+                .copied()
+                .chain(operands)
+                // Identity carriers can have an uncounted machine type.
+                // The solved graph, not that type, owns their aliases.
+                .filter(|id| {
+                    !self.graph.values[self.value(context, *id)]
+                        .objects
+                        .is_empty()
+                })
+                .collect();
+            for &id in block.ops.iter().rev() {
+                let operands = verify::operands(&function.value(id).kind);
+                if !self.graph.charge_many(operands.len().saturating_add(1)) {
+                    return false;
+                }
+                before.remove(&id);
+                for operand in operands {
+                    if !self.graph.values[self.value(context, operand)]
+                        .objects
+                        .is_empty()
+                    {
+                        before.insert(operand);
+                    }
+                }
+                let Some(reason) = unsealed.get(&id) else {
+                    continue;
+                };
+                if !self.graph.charge_many(before.len().saturating_add(1)) {
+                    return false;
+                }
+                let root = self.graph.node();
+                for &value in &before {
+                    self.graph.copy(self.value(context, value), root);
+                }
+                let payload = self.graph.node();
+                let payload_label = format!(
+                    "{}:%{}:unknown-raised-payload",
+                    self.contexts[context].key, id.0
+                );
+                self.outside(context, payload, payload_label.clone());
+                self.graph.copy(payload, root);
+                let witness = format!("{}:%{}: {reason}", self.contexts[context].key, id.0);
+                self.roots
+                    .push((root, Exposure::Unknown(Reason::MissingOutcome(witness))));
+                reports.push(Outcome {
+                    function: function.name.clone(),
+                    context: self.contexts[context].key.clone(),
+                    value: id.0,
+                    reason: reason.clone(),
+                    live: before.iter().map(|value| value.0).collect(),
+                    payload: payload_label,
+                });
+            }
+        }
+        true
     }
 
     /// Order the same writes recorded by `Graph::store`, including summary and

@@ -239,9 +239,9 @@ fn an_uncounted_identity_carrier_keeps_its_owner_and_child_at_an_outcome() {
                     terminator: Terminator::Return(Some(ValueId(8))),
                 });
             }
-            let callee = &mut program.funcs[1];
-            callee.params.clear();
-            callee.values[0].kind = OpKind::ConstUndefined;
+            let target_body = &mut program.funcs[1];
+            target_body.params.clear();
+            target_body.values[0].kind = OpKind::ConstUndefined;
             let report = memory::Analysis::of(&program).into_report();
             assert!(report.failure.is_none(), "{:?}", report.failure);
             for value in [0, 1] {
