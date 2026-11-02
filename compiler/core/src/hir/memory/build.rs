@@ -863,7 +863,7 @@ mod tests {
                 .find(|v| v.function == "edge#init" && v.value == id)
                 .expect("both definitions are in the complete inventory")
         };
-        assert!(!value(0).aliases.is_empty());
+        assert_ne!(value(0).aliases, Vec::<String>::new());
         assert_eq!(value(0).aliases, value(1).aliases);
     }
 
