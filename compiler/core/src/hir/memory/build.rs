@@ -1050,7 +1050,7 @@ mod tests {
                 .iter()
                 .find(|value| value.value == 6)
                 .expect("loaded global");
-            assert!(!stored.aliases.is_empty());
+            assert_ne!(stored.aliases, Vec::<String>::new());
             assert!(
                 stored
                     .aliases
