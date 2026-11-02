@@ -24,7 +24,7 @@ use super::{
 use closure_context::SharedClosures;
 use implementations::LoweringSnapshot;
 use layout_collection::{BuilderLayouts, LayoutCollector};
-use made_instance::{MadeBy, NativeConstructor, ThisPaths};
+use made_instance::{CollectedConstructor, MadeBy, ThisPaths};
 use numeric_arguments::Builtin as NumericBuiltin;
 
 /// A table walk's cursor: `nts_map_next`'s `int32_t`, below `NTS_MAX_LENGTH`
@@ -12810,9 +12810,9 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
         };
         let mut next = constructors.of(class);
         while let Some(proof) = next {
-            let (owner, constructor) = match proof.as_ref() {
-                NativeConstructor::Source { class, constructor } => (*class, *constructor),
-                NativeConstructor::Builtin(_) => break,
+            let (owner, constructor) = match proof {
+                CollectedConstructor::Source { class, constructor } => (class, constructor),
+                CollectedConstructor::Builtin => break,
             };
             if owner != class {
                 targets.insert(constructor, target);
@@ -89538,6 +89538,7 @@ mod parameter_entries;
 mod printed;
 mod project_semantics;
 mod property_keys;
+mod reference_index;
 mod scopes;
 mod string_positions;
 mod typed_signatures;

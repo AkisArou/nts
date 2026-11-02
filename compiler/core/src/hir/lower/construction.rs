@@ -32,7 +32,40 @@ pub(super) struct CheckedGlobalReference {
 
 pub(super) struct ReferencedValue {
     pub(super) symbol: SymbolId,
-    bindings: Vec<u32>,
+    pub(super) bindings: Vec<u32>,
+}
+
+/// Global identity is separate from the ordered bindings that authorize an
+/// executable read. The collector may retain the former without the latter.
+pub(super) struct CheckedGlobalIdentity {
+    pub(super) symbol: SymbolId,
+    pub(super) name: String,
+    pub(super) library: Library,
+}
+
+impl CheckedGlobalIdentity {
+    pub(super) fn with_bindings(self, bindings: Vec<u32>) -> CheckedGlobalReference {
+        CheckedGlobalReference {
+            symbol: self.symbol,
+            name: self.name,
+            library: self.library,
+            bindings,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub(super) enum ReferenceStep {
+    Terminal(SymbolId),
+    Alias { symbol: SymbolId, next: SymbolId },
+}
+
+impl ReferenceStep {
+    pub(super) const fn symbol(self) -> SymbolId {
+        match self {
+            Self::Terminal(symbol) | Self::Alias { symbol, .. } => symbol,
+        }
+    }
 }
 
 impl FuncBuilder<'_> {
@@ -41,40 +74,74 @@ impl FuncBuilder<'_> {
     /// owe the ordinary initialization checks when lowering consumes this proof.
     pub(super) fn checked_global_reference(&self, at: NodeId) -> Option<CheckedGlobalReference> {
         let reference = self.referenced_value(at)?;
+        Some(
+            self.checked_global_identity(reference.symbol)?
+                .with_bindings(reference.bindings),
+        )
+    }
+
+    /// The same checked global membership authority used by executable reads,
+    /// without claiming that any source binding has been initialized yet.
+    pub(super) fn checked_global_identity(
+        &self,
+        symbol: SymbolId,
+    ) -> Option<CheckedGlobalIdentity> {
         let binding = super::super::features::global_binding(
             &self.snapshot.symbols,
-            reference.symbol,
+            symbol,
             super::super::features::GlobalMeaning::Value,
         )
         .ok()??;
-        Some(CheckedGlobalReference {
+        Some(CheckedGlobalIdentity {
             symbol: binding.symbol(),
             name: binding.name().to_owned(),
             library: binding.library().clone(),
-            bindings: reference.bindings,
+        })
+    }
+
+    pub(super) fn reference_start(&self, at: NodeId) -> Option<SymbolId> {
+        let at = self.through_assertions(at);
+        (self.kind_of(at) == Some(syntax::IDENTIFIER))
+            .then(|| self.node(at).symbol)
+            .flatten()
+    }
+
+    /// One existing const-alias step: checked import identity first, then the
+    /// same declaration/const-initializer rule as the ordinary value reader.
+    pub(super) fn reference_step(&self, symbol: SymbolId) -> Option<ReferenceStep> {
+        self.snapshot.symbols.get(symbol.0 as usize)?;
+        let symbol = self.denoted_symbol(symbol);
+        let record = self.snapshot.symbols.get(symbol.0 as usize)?;
+        let [declaration] = record.declarations.as_slice() else {
+            return Some(ReferenceStep::Terminal(symbol));
+        };
+        let Some(target) = const_alias_of(self, *declaration) else {
+            return Some(ReferenceStep::Terminal(symbol));
+        };
+        Some(ReferenceStep::Alias {
+            symbol,
+            next: SymbolId(target),
         })
     }
 
     pub(super) fn referenced_value(&self, at: NodeId) -> Option<ReferencedValue> {
-        let at = self.through_assertions(at);
-        if self.kind_of(at) != Some(syntax::IDENTIFIER) {
-            return None;
-        }
-        let mut symbol = self.node(at).symbol?;
+        let mut symbol = self.reference_start(at)?;
         let mut bindings = Vec::new();
         for _ in 0..self.snapshot.symbols.len() {
-            symbol = self.denoted_symbol(symbol);
-            let record = self.snapshot.symbols.get(symbol.0 as usize)?;
-            let [declaration] = record.declarations.as_slice() else {
-                return Some(ReferencedValue { symbol, bindings });
-            };
-            let Some(target) = const_alias_of(self, *declaration) else {
-                return Some(ReferencedValue { symbol, bindings });
-            };
-            #[cfg(test)]
-            super::view_class_tests::note_alias_link();
-            bindings.push(symbol.0);
-            symbol = SymbolId(target);
+            match self.reference_step(symbol)? {
+                ReferenceStep::Terminal(symbol) => {
+                    return Some(ReferencedValue { symbol, bindings });
+                }
+                ReferenceStep::Alias {
+                    symbol: binding,
+                    next,
+                } => {
+                    #[cfg(test)]
+                    super::view_class_tests::note_alias_link();
+                    bindings.push(binding.0);
+                    symbol = next;
+                }
+            }
         }
         None
     }

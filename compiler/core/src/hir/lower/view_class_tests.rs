@@ -189,7 +189,7 @@ fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
     let child_ty = super::instance_type_of(&snapshot, child).unwrap();
     let valid = super::made_instance::ConstructorMemo::new(&probe).of(child);
     assert!(
-        matches!(valid.as_deref(), Some(super::NativeConstructor::Source { class, .. }) if *class == parent)
+        matches!(valid, Some(super::CollectedConstructor::Source { class, .. }) if class == parent)
     );
     let mut instance_context = super::FuncBuilder::probe(&snapshot);
     instance_context
@@ -236,12 +236,12 @@ fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
     );
 }
 
-fn alias_proof_population(siblings: bool) -> Vec<(usize, usize, usize, usize)> {
+fn alias_proof_population(siblings: bool, prefixes: bool) -> Vec<(usize, usize, usize, usize)> {
     let mut reports = Vec::new();
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
     for count in [16, 64, 256] {
         let dir = std::env::temp_dir().join(format!(
-            "nts-view-alias-proof-{}-{siblings}-{count}",
+            "nts-view-alias-proof-{}-{siblings}-{prefixes}-{count}",
             std::process::id()
         ));
         std::fs::create_dir_all(&dir).unwrap();
@@ -250,7 +250,9 @@ fn alias_proof_population(siblings: bool) -> Vec<(usize, usize, usize, usize)> {
             writeln!(source, "const Alias{at} = Alias{};", at - 1).unwrap();
         }
         for at in 0..count {
-            let base = if siblings || at == 0 {
+            let base = if prefixes {
+                format!("Alias{at}")
+            } else if siblings || at == 0 {
                 format!("Alias{}", count - 1)
             } else {
                 format!("View{}", at - 1)
@@ -285,17 +287,28 @@ fn alias_proof_population(siblings: bool) -> Vec<(usize, usize, usize, usize)> {
         ALIAS_LINKS.with(|n| n.set(0));
         let mut constructors = super::made_instance::ConstructorMemo::new(&probe);
         // Deepest first: one cold path fills every memo row, then all hits.
-        for class in classes.into_iter().rev() {
-            assert!(matches!(constructors.of(class).as_deref(),
-                Some(super::NativeConstructor::Builtin(global)) if global.name == "Uint8Array"));
+        for class in classes.iter().copied().rev() {
+            assert!(matches!(
+                constructors.of(class),
+                Some(super::CollectedConstructor::Builtin)
+            ));
         }
         let ancestry = ANCESTRY.with(Cell::get);
         let owned = constructors.owned_binding_elements();
         let alias_links = ALIAS_LINKS.with(Cell::get);
         eprintln!(
-            "alias depth/classes {count} siblings={siblings}: ancestry {ancestry}, alias links {alias_links}, owned binding elements {owned}"
+            "alias depth/classes {count} siblings={siblings} prefixes={prefixes}: ancestry {ancestry}, alias links {alias_links}, owned binding elements {owned}"
         );
         reports.push((count, ancestry, alias_links, owned));
+        for class in &classes {
+            let base = probe.extends_operand(*class).unwrap();
+            let ordinary = probe.referenced_value(base).unwrap();
+            assert_eq!(
+                constructors.binding_path(*class),
+                ordinary.bindings,
+                "binding readiness order"
+            );
+        }
         std::fs::remove_dir_all(dir).unwrap();
     }
     reports
@@ -303,7 +316,7 @@ fn alias_proof_population(siblings: bool) -> Vec<(usize, usize, usize, usize)> {
 
 #[test]
 fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
-    for (count, ancestry, links, owned) in alias_proof_population(false) {
+    for (count, ancestry, links, owned) in alias_proof_population(false, false) {
         assert!(ancestry <= count + 1);
         assert!(
             links <= count * 2 + 2,
@@ -315,7 +328,7 @@ fn a_long_builtin_alias_proof_is_owned_once_across_an_implicit_chain() {
 
 #[test]
 fn a_long_builtin_alias_proof_is_shared_by_sibling_classes() {
-    for (count, ancestry, links, owned) in alias_proof_population(true) {
+    for (count, ancestry, links, owned) in alias_proof_population(true, false) {
         assert!(ancestry <= count + 1);
         assert!(
             links <= count * 2 + 2,
@@ -323,4 +336,105 @@ fn a_long_builtin_alias_proof_is_shared_by_sibling_classes() {
         );
         assert_eq!(owned, count, "one owned alias proof, not one per sibling");
     }
+}
+
+#[test]
+fn distinct_alias_prefixes_share_their_binding_suffixes() {
+    for (count, ancestry, links, owned) in alias_proof_population(true, true) {
+        assert!(ancestry <= count + 1);
+        assert!(
+            links <= count * 2 + 2,
+            "alias links {links} exceed input at {count}"
+        );
+        assert_eq!(owned, count, "all alias prefixes own each link once");
+    }
+}
+
+#[test]
+fn reference_index_reuses_ordered_paths_and_caches_cycles_and_missing_symbols() {
+    let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let dir = std::env::temp_dir().join(format!(
+        "nts-reference-index-negative-{}",
+        std::process::id()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    std::fs::write(dir.join("main.ts"), "const Alias0 = Uint8Array; const Alias1 = Alias0; const Alias2 = Alias1; class View extends Alias2 {} export function present(n: number): number { return n; }").unwrap();
+    let config = dir.join("tsconfig.json");
+    std::fs::write(
+        &config,
+        format!("{{\"extends\":\"{root}/tsconfig.fixtures.json\",\"files\":[\"main.ts\"]}}"),
+    )
+    .unwrap();
+    let semantic = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+        .with_checkers(std::num::NonZeroU16::MIN)
+        .snapshot(camino::Utf8Path::from_path(&config).unwrap())
+        .unwrap();
+    let snapshot = super::LoweringSnapshot::new(&semantic);
+    let probe = super::FuncBuilder::probe(&snapshot);
+    let class = (0..snapshot.nodes.len())
+        .map(|at| super::NodeId(u32::try_from(at).unwrap()))
+        .find(|at| {
+            probe.kind_of(*at).is_some_and(super::declares_a_class)
+                && probe.class_name(*at).as_deref() == Some("View")
+        })
+        .unwrap();
+    let base = probe.extends_operand(class).unwrap();
+    let ordinary = probe.referenced_value(base).unwrap();
+    let mut references = super::reference_index::References::new(&probe);
+    assert_eq!(references.of(base).unwrap().symbol, ordinary.symbol);
+    assert_eq!(references.binding_path(base), ordinary.bindings);
+    assert_eq!(references.owned_binding_elements(), 3);
+    let alias2_symbol = probe.node(base).symbol.unwrap();
+    let alias0 = (0..snapshot.nodes.len())
+        .map(|at| super::NodeId(u32::try_from(at).unwrap()))
+        .find(|at| {
+            probe.kind_of(*at) == Some(super::syntax::VARIABLE_DECLARATION)
+                && probe
+                    .name_node(*at)
+                    .and_then(|name| probe.node(name).text.as_ref())
+                    .and_then(|text| text.as_utf8())
+                    == Some("Alias0")
+        })
+        .unwrap();
+    let initializer = super::declaration_initializer(
+        &probe.children(alias0),
+        probe.name_node(alias0).unwrap(),
+        |at| probe.kind_of(at),
+    )
+    .unwrap();
+    for missing in [false, true] {
+        let mut changed = semantic.clone();
+        changed.nodes[initializer.0 as usize].symbol = Some(if missing {
+            super::SymbolId(u32::MAX)
+        } else {
+            alias2_symbol
+        });
+        let indexed = super::LoweringSnapshot::new(&changed);
+        let changed_probe = super::FuncBuilder::probe(&indexed);
+        let mut references = super::reference_index::References::new(&changed_probe);
+        ALIAS_LINKS.with(|n| n.set(0));
+        assert!(
+            references.of(base).is_none(),
+            "invalid alias path missing={missing}"
+        );
+        let first = ALIAS_LINKS.with(Cell::get);
+        for _ in 0..256 {
+            assert!(references.of(base).is_none());
+        }
+        assert_eq!(
+            ALIAS_LINKS.with(Cell::get),
+            first,
+            "negative cache must reuse the same conservative answer"
+        );
+    }
+    let mut changed = semantic.clone();
+    changed.nodes[base.0 as usize].symbol = Some(super::SymbolId(u32::MAX));
+    let indexed = super::LoweringSnapshot::new(&changed);
+    let changed_probe = super::FuncBuilder::probe(&indexed);
+    assert!(
+        super::reference_index::References::new(&changed_probe)
+            .of(base)
+            .is_none()
+    );
+    std::fs::remove_dir_all(dir).unwrap();
 }

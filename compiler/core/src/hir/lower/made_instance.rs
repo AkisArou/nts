@@ -41,80 +41,109 @@ enum NativeParent {
     Builtin(CheckedGlobalReference),
 }
 
-/// The collector's repeated questions, in one fixed representation context.
-/// Only this memo owns its answers. Generic instance/projection contexts cannot
-/// reuse them through the snapshot, and binding readiness remains the caller's.
+/// An identity read in one fixed representation context, before readiness.
+enum ParentIdentity {
+    Source(NodeId),
+    Builtin(super::construction::CheckedGlobalIdentity),
+}
+
+/// Analysis facts consumed only by the collector. A builtin identity is not
+/// an executable `NativeConstructor` and cannot authorize a call without bindings.
+#[derive(Debug, Clone, Copy)]
+pub(super) enum CollectedConstructor {
+    Source { class: NodeId, constructor: NodeId },
+    Builtin,
+}
+
+/// Repeated questions in the collector's one fixed builder context. Alias
+/// links and their terminal classification are indexed as well as classes.
 pub(super) struct ConstructorMemo<'a, 'snapshot> {
     probe: &'a FuncBuilder<'snapshot>,
-    above: rustc_hash::FxHashMap<NodeId, Option<std::sync::Arc<NativeConstructor>>>,
+    references: super::reference_index::References<'a, 'snapshot>,
+    parents: rustc_hash::FxHashMap<nts_semantic_schema::SymbolId, Option<ParentIdentity>>,
+    above: rustc_hash::FxHashMap<NodeId, Option<CollectedConstructor>>,
 }
 
 impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
     pub(super) fn new(probe: &'a FuncBuilder<'snapshot>) -> Self {
         Self {
             probe,
+            references: super::reference_index::References::new(probe),
+            parents: rustc_hash::FxHashMap::default(),
             above: rustc_hash::FxHashMap::default(),
         }
     }
 
-    pub(super) fn of(&mut self, class: NodeId) -> Option<std::sync::Arc<NativeConstructor>> {
+    pub(super) fn of(&mut self, class: NodeId) -> Option<CollectedConstructor> {
         if !self.probe.is_native_storage(class) {
             return None;
         }
         if let Some(constructor) = the_constructor_declared_by(self.probe, class) {
-            return Some(std::sync::Arc::new(NativeConstructor::Source {
-                class,
-                constructor,
-            }));
+            return Some(CollectedConstructor::Source { class, constructor });
         }
         self.above(class)
     }
 
-    pub(super) fn above(&mut self, class: NodeId) -> Option<std::sync::Arc<NativeConstructor>> {
+    pub(super) fn above(&mut self, class: NodeId) -> Option<CollectedConstructor> {
         let mut at = class;
         let mut path = Vec::new();
         let mut seen = rustc_hash::FxHashSet::default();
         let answer = loop {
             if let Some(answer) = self.above.get(&at) {
-                break answer.clone();
+                break *answer;
             }
             if !seen.insert(at) {
                 break None;
             }
             path.push(at);
-            match self.probe.native_constructor_parent(at) {
-                Some(NativeParent::Builtin(global)) => {
-                    break Some(std::sync::Arc::new(NativeConstructor::Builtin(global)));
-                }
-                Some(NativeParent::Source(parent)) => {
-                    if let Some(constructor) = the_constructor_declared_by(self.probe, parent) {
-                        break Some(std::sync::Arc::new(NativeConstructor::Source {
-                            class: parent,
+            #[cfg(test)]
+            super::view_class_tests::note_ancestor();
+            let Some(base) = self.probe.extends_operand(at) else {
+                break None;
+            };
+            let Some(reference) = self.references.of(base) else {
+                break None;
+            };
+            let parent = self
+                .parents
+                .entry(reference.symbol)
+                .or_insert_with(|| self.probe.native_parent_identity(reference.symbol));
+            match parent {
+                Some(ParentIdentity::Builtin(_)) => break Some(CollectedConstructor::Builtin),
+                Some(ParentIdentity::Source(parent)) => {
+                    if let Some(constructor) = the_constructor_declared_by(self.probe, *parent) {
+                        break Some(CollectedConstructor::Source {
+                            class: *parent,
                             constructor,
-                        }));
+                        });
                     }
-                    at = parent;
+                    at = *parent;
                 }
                 None => break None,
             }
         };
         for at in path {
-            self.above.insert(at, answer.clone());
+            self.above.insert(at, answer);
         }
         answer
     }
+
     #[cfg(test)]
     pub(super) fn owned_binding_elements(&self) -> usize {
-        let mut proofs = rustc_hash::FxHashSet::default();
-        self.above
-            .values()
-            .flatten()
-            .filter(|proof| proofs.insert(std::sync::Arc::as_ptr(proof)))
-            .map(|proof| match proof.as_ref() {
-                NativeConstructor::Builtin(global) => global.bindings.len(),
-                NativeConstructor::Source { .. } => 0,
-            })
-            .sum()
+        self.references.owned_binding_elements()
+    }
+
+    #[cfg(test)]
+    #[allow(
+        clippy::expect_used,
+        reason = "the owned alias fixture declares an extends operand"
+    )]
+    pub(super) fn binding_path(&self, class: NodeId) -> Vec<u32> {
+        self.references.binding_path(
+            self.probe
+                .extends_operand(class)
+                .expect("class has an extends operand"),
+        )
     }
 }
 
@@ -325,15 +354,29 @@ impl FuncBuilder<'_> {
         #[cfg(test)]
         super::view_class_tests::note_ancestor();
         let base = self.extends_operand(class)?;
-        if let Some(global) = self.checked_global_reference(base) {
-            return (global.library == Library::Es).then_some(NativeParent::Builtin(global));
-        }
         let reference = self.referenced_value(base)?;
+        match self.native_parent_identity(reference.symbol)? {
+            ParentIdentity::Builtin(global) => Some(NativeParent::Builtin(
+                global.with_bindings(reference.bindings),
+            )),
+            ParentIdentity::Source(parent) => Some(NativeParent::Source(parent)),
+        }
+    }
+
+    /// The same parent/value/storage authority for ordinary calls and the
+    /// collector. Its answer belongs to this representation context.
+    fn native_parent_identity(
+        &self,
+        symbol: nts_semantic_schema::SymbolId,
+    ) -> Option<ParentIdentity> {
+        if let Some(global) = self.checked_global_identity(symbol) {
+            return (global.library == Library::Es).then_some(ParentIdentity::Builtin(global));
+        }
         let parent = self
-            .referenced_declaration(reference.symbol)
+            .referenced_declaration(symbol)
             .filter(|declaration| self.kind_of(*declaration).is_some_and(declares_a_class))
             .filter(|declaration| self.is_native_storage(*declaration))?;
-        Some(NativeParent::Source(parent))
+        Some(ParentIdentity::Source(parent))
     }
 
     /// The expression a class `extends`, never one it `implements`.
