@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 29,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "probe 0 str 6,110,117,109,98,101,114",
+        "node": "probe 0 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 1 str 6,110,117,109,98,101,114",
+        "node": "probe 1 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 2 str 6,110,117,109,98,101,114",
+        "node": "probe 2 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 3 str 6,110,117,109,98,101,114",
+        "node": "probe 3 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 4 str 6,110,117,109,98,101,114",
+        "node": "probe 4 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 5 str 6,110,117,109,98,101,114",
+        "node": "probe 5 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 6 str 6,110,117,109,98,101,114",
+        "node": "probe 6 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 7 str 6,110,117,109,98,101,114",
+        "node": "probe 7 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 8 str 6,110,117,109,98,101,114",
+        "node": "probe 8 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 9 str 6,110,117,109,98,101,114",
+        "node": "probe 9 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 10 str 6,110,117,109,98,101,114",
+        "node": "probe 10 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 11 str 6,110,117,109,98,101,114",
+        "node": "probe 11 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 12 str 6,110,117,109,98,101,114",
+        "node": "probe 12 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 13 str 6,110,117,109,98,101,114",
+        "node": "probe 13 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 14 str 6,110,117,109,98,101,114",
+        "node": "probe 14 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 15 str 6,110,117,109,98,101,114",
+        "node": "probe 15 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 16 str 6,110,117,109,98,101,114",
+        "node": "probe 16 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 17 str 6,110,117,109,98,101,114",
+        "node": "probe 17 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 18 str 6,110,117,109,98,101,114",
+        "node": "probe 18 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 19 str 6,110,117,109,98,101,114",
+        "node": "probe 19 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 20 str 6,110,117,109,98,101,114",
+        "node": "probe 20 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 21 str 6,110,117,109,98,101,114",
+        "node": "probe 21 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 22 str 6,110,117,109,98,101,114",
+        "node": "probe 22 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 23 str 6,110,117,109,98,101,114",
+        "node": "probe 23 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 24 str 6,110,117,109,98,101,114",
+        "node": "probe 24 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 25 str 6,110,117,109,98,101,114",
+        "node": "probe 25 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 26 str 6,110,117,109,98,101,114",
+        "node": "probe 26 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 27 str 6,110,117,109,98,101,114",
+        "node": "probe 27 str 6,115,116,114,105,110,103"
+      },
+      {
+        "compiled": "probe 28 str 6,110,117,109,98,101,114",
+        "node": "probe 28 str 6,115,116,114,105,110,103"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 29 disagreements",
+  "node": null,
+  "measured_with": "ec7ce5bfc20a5848",
+  "source": "measured"
+}
