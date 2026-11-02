@@ -1,4 +1,4 @@
-//! A no-raise helper must not reach the C pending-raise producer.
+//! A no-raise helper must not reach a pending raise or an outer landing.
 
 use nts_core::hir::runtime::{self, Raising};
 use std::collections::{BTreeMap, BTreeSet};
@@ -82,7 +82,7 @@ fn no_raise_contracts_cannot_reach_the_c_raise_producer() {
         graph.indirect.len() > 20,
         "indirect calls must be inspected"
     );
-    let mut roots = vec!["nts_raise"];
+    let mut roots = vec!["nts_raise", "nts_uncaught"];
     let mut unknown = Vec::new();
     for (owner, target) in &graph.indirect {
         match callback_raises(owner, target) {

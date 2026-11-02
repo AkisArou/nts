@@ -122,8 +122,11 @@ fn check_transfer(transfers: bool) {
             site.home, site.retention_frontier, site.witness
         );
         if transfers {
+            assert!(matches!(site.home, Home::Heap(_)), "{site:?}");
             assert!(
-                matches!(site.home, Home::Heap(Reason::MissingOutcome(_))),
+                site.obligations
+                    .iter()
+                    .any(|reason| matches!(reason, Reason::MissingOutcome(_))),
                 "{site:?}"
             );
             assert!(site.retention_frontier.contains("MissingOutcome"));
