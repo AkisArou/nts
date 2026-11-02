@@ -71,7 +71,7 @@ pub(super) fn escaping(
     program: &Program,
     edges: &[Vec<usize>],
     by_name: &BTreeMap<&str, usize>,
-) -> (Vec<bool>, usize) {
+) -> (Vec<bool>, Vec<bool>, usize) {
     let mut work = edges.len();
     let mut callers = vec![Vec::new(); edges.len()];
     for (from, targets) in edges.iter().enumerate() {
@@ -81,32 +81,58 @@ pub(super) fn escaping(
         }
     }
     let mut raises = vec![false; edges.len()];
+    let mut reenters = vec![false; edges.len()];
     let mut pending = VecDeque::new();
     for (at, function) in program.funcs.iter().enumerate() {
         let mut unknown = function.abstract_declaration || function.blocks.is_empty();
+        let mut reentry = unknown;
         for &id in function.blocks.iter().flat_map(|block| &block.ops) {
             work += 1;
-            unknown |= function
-                .values
-                .get(id.0 as usize)
-                .is_none_or(|op| intrinsic(op, by_name));
+            let op = function.values.get(id.0 as usize);
+            unknown |= op.is_none_or(|op| intrinsic(op, by_name));
+            reentry |= op.is_none_or(|op| match &op.kind {
+                OpKind::Call {
+                    callee: Callee::Direct(name),
+                    ..
+                } => !by_name.contains_key(name.as_str()),
+                OpKind::Call {
+                    callee: Callee::External(name),
+                    ..
+                } => {
+                    super::super::regions::helper(name).is_none()
+                        || matches!(
+                            runtime::raising(name),
+                            Some(runtime::Raising::MayRaise) | None
+                        )
+                }
+                OpKind::Call { .. }
+                | OpKind::Await { .. }
+                | OpKind::Suspend { .. }
+                | OpKind::PromiseSubscribe { .. } => true,
+                _ => intrinsic(op, by_name),
+            });
         }
-        if unknown {
-            raises[at] = true;
+        raises[at] = unknown;
+        reenters[at] = reentry;
+        if unknown || reentry {
             pending.push_back(at);
         }
     }
     while let Some(child) = pending.pop_front() {
         for &parent in &callers[child] {
             work += 1;
-            if !raises[parent] {
-                raises[parent] = true;
+            let changed =
+                (raises[child] && !raises[parent]) || (reenters[child] && !reenters[parent]);
+            raises[parent] |= raises[child];
+            reenters[parent] |= reenters[child];
+            if changed {
                 pending.push_back(parent);
             }
         }
     }
     raises.truncate(program.funcs.len());
-    (raises, work)
+    reenters.truncate(program.funcs.len());
+    (raises, reenters, work)
 }
 
 pub(super) fn unsealed(

@@ -88,10 +88,11 @@ pub enum Reason {
     InvalidControlFlow(String),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Multiplicity {
-    One,
-    Many,
+    One { witness: String },
+    Bounded { limit: usize, witness: String },
+    Unbounded { witness: String },
 }
 
 /// Facts are borrowed from exactly this immutable program revision. Mutation

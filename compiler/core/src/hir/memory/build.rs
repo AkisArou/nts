@@ -84,6 +84,7 @@ mod tests {
             values: BTreeMap::new(),
             result: 0,
             fallback: false,
+            repeated: false,
             effects,
         }
     }
@@ -283,6 +284,167 @@ mod tests {
     }
 
     #[test]
+    fn recursive_activations_keep_recent_and_older_instances() {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let init = function(
+            "root#init".to_owned(),
+            vec![OpKind::Call {
+                callee: Callee::Direct("recursive".to_owned()),
+                args: Vec::new(),
+                frame: None,
+            }],
+        );
+        let mut recursive = function(
+            "recursive".to_owned(),
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::Call {
+                    callee: Callee::Direct("recursive".to_owned()),
+                    args: Vec::new(),
+                    frame: None,
+                },
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0,
+                },
+            ],
+        );
+        recursive.values[0].ty = object;
+        let report = analyze(
+            &Program {
+                funcs: vec![init, recursive],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none());
+        assert!(matches!(
+            report.sites[0].multiplicity,
+            Multiplicity::Unbounded { .. }
+        ));
+        let value = report
+            .values
+            .iter()
+            .find(|value| value.function == "recursive" && value.value == 0)
+            .unwrap();
+        assert!(value.aliases.iter().any(|alias| alias.ends_with(":recent")));
+        assert!(value.aliases.iter().any(|alias| alias.ends_with(":older")));
+    }
+
+    #[test]
+    fn a_loop_call_reexecutes_an_acyclic_callee_site() {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let mut init = function(
+            "root#init".to_owned(),
+            vec![
+                OpKind::ConstBool(true),
+                OpKind::Call {
+                    callee: Callee::Direct("factory".to_owned()),
+                    args: Vec::new(),
+                    frame: None,
+                },
+            ],
+        );
+        init.values[0].ty = HirType::Bool;
+        init.values[1].ty = object.clone();
+        init.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0)],
+                terminator: Terminator::Jump {
+                    target: BlockId(1),
+                    args: Vec::new(),
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(1)],
+                terminator: Terminator::Branch {
+                    cond: ValueId(0),
+                    then_target: BlockId(1),
+                    then_args: Vec::new(),
+                    else_target: BlockId(2),
+                    else_args: Vec::new(),
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Return(Some(ValueId(1))),
+            },
+        ];
+        let mut factory = function(
+            "factory".to_owned(),
+            vec![OpKind::ObjectNew { frame: false }],
+        );
+        factory.values[0].ty = object.clone();
+        factory.return_type = object;
+        factory.blocks[0].terminator = Terminator::Return(Some(ValueId(0)));
+        let report = analyze(
+            &Program {
+                funcs: vec![init, factory],
+                ..Program::default()
+            },
+            Limits::default(),
+        );
+        assert!(report.failure.is_none());
+        assert!(
+            report
+                .sites
+                .iter()
+                .all(|site| matches!(site.multiplicity, Multiplicity::Unbounded { .. }))
+        );
+        assert!(report.sites.iter().all(|site| site.home != Home::Frame));
+    }
+
+    #[test]
+    fn retained_reactions_and_suspended_frames_publish_unbounded_multiplicity() {
+        for suspension in [false, true] {
+            let mut body = function(
+                "root#init".to_owned(),
+                vec![
+                    OpKind::ObjectNew { frame: false },
+                    OpKind::ObjectNew { frame: false },
+                    if suspension {
+                        OpKind::Suspend {
+                            promise: ValueId(0),
+                            frame: ValueId(1),
+                            resume: "resume".to_owned(),
+                        }
+                    } else {
+                        OpKind::PromiseSubscribe {
+                            promise: ValueId(0),
+                            reaction: ValueId(1),
+                            slot: 0,
+                        }
+                    },
+                ],
+            );
+            for at in [0, 1] {
+                body.values[at].ty =
+                    HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+            }
+            let report = analyze(
+                &Program {
+                    funcs: vec![body],
+                    ..Program::default()
+                },
+                Limits::default(),
+            );
+            assert!(report.failure.is_none());
+            assert_eq!(report.sites.len(), 2);
+            assert!(
+                report
+                    .sites
+                    .iter()
+                    .all(|site| matches!(site.multiplicity, Multiplicity::Unbounded { .. }))
+            );
+            assert!(report.sites.iter().all(|site| site.home != Home::Frame));
+            assert!(!report.outcomes.is_empty());
+        }
+    }
+
+    #[test]
     fn a_shared_dispatch_slot_has_one_target_index_and_preserves_first_seen_order() {
         for n in [16, 64, 256] {
             for closure in [false, true] {
@@ -403,6 +565,7 @@ struct Context {
     values: BTreeMap<ValueId, Node>,
     result: Node,
     fallback: bool,
+    repeated: bool,
     effects: Effects,
 }
 
@@ -431,6 +594,7 @@ struct Builder<'p> {
     components: Vec<usize>,
     recursive: BTreeSet<usize>,
     raises: Vec<bool>,
+    reenters: Vec<bool>,
     globals: Vec<Node>,
     globals_opened: bool,
     parameters: Vec<Vec<(ValueId, u32)>>,
@@ -440,6 +604,7 @@ struct Builder<'p> {
     operations: usize,
     stages: Vec<(String, usize)>,
     cycles: Vec<Result<cfg::CyclicBlocks<'p>, cfg::CfgError>>,
+    value_blocks: Vec<BTreeMap<ValueId, BlockId>>,
     summaries: Vec<Option<Summary>>,
     summary_used: Vec<bool>,
 }
@@ -494,6 +659,7 @@ struct CallGraph<'p> {
     components: Vec<usize>,
     recursive: BTreeSet<usize>,
     raises: Vec<bool>,
+    reenters: Vec<bool>,
     work: usize,
     #[cfg(test)]
     index_edges: usize,
@@ -562,7 +728,7 @@ impl<'p> CallGraph<'p> {
                 .sum::<usize>()
             + edges.len()
             + index_edges;
-        let (raises, outcome_work) = outcomes::escaping(program, &edges, &by_name);
+        let (raises, reenters, outcome_work) = outcomes::escaping(program, &edges, &by_name);
         let work = work.saturating_add(outcome_work);
         let components = super::super::strongly_connected(&edges);
         let recursive = edges
@@ -582,6 +748,7 @@ impl<'p> CallGraph<'p> {
             components,
             recursive,
             raises,
+            reenters,
             work,
             #[cfg(test)]
             index_edges,
@@ -667,6 +834,23 @@ impl<'p> Builder<'p> {
                         .sum::<usize>()
             })
             .sum::<usize>();
+        let value_blocks = program
+            .funcs
+            .iter()
+            .map(|function| {
+                function
+                    .blocks
+                    .iter()
+                    .enumerate()
+                    .flat_map(|(at, block)| {
+                        block
+                            .ops
+                            .iter()
+                            .map(move |id| (*id, BlockId(u32::try_from(at).unwrap_or(u32::MAX))))
+                    })
+                    .collect()
+            })
+            .collect();
         let calls = CallGraph::of(program);
         let operations = program
             .funcs
@@ -716,6 +900,7 @@ impl<'p> Builder<'p> {
             components: calls.components,
             recursive: calls.recursive,
             raises: calls.raises,
+            reenters: calls.reenters,
             globals,
             globals_opened: false,
             parameters,
@@ -728,6 +913,7 @@ impl<'p> Builder<'p> {
                 calls.work.saturating_add(cfg_work),
             )],
             cycles,
+            value_blocks,
             summaries: Vec::new(),
             summary_used: vec![false; program.funcs.len()],
         };
@@ -760,6 +946,27 @@ impl<'p> Builder<'p> {
             return at;
         }
         let name = &self.program.funcs[function].name;
+        let repeated = fallback
+            || self.recursive.contains(&function)
+            || self.reenters[function]
+            || match (parent, call) {
+                (Some(parent), Some(call)) => {
+                    let owner = &self.contexts[parent];
+                    owner.repeated
+                        || self.value_blocks[owner.function]
+                            .get(&call)
+                            .and_then(|block| {
+                                self.cycles[owner.function]
+                                    .as_ref()
+                                    .ok()
+                                    .and_then(|cycle| cycle.is_cyclic(*block))
+                            })
+                            != Some(false)
+                }
+                // An opaque or host entry has no bound on simultaneous
+                // invocations. A module's initialization activation is unique.
+                _ => !name.ends_with("#init"),
+            };
         let key = if fallback {
             format!("{name}:merged")
         } else if let (Some(parent), Some(call)) = (parent, call) {
@@ -795,6 +1002,7 @@ impl<'p> Builder<'p> {
             values,
             result,
             fallback,
+            repeated,
             effects: Effects::default(),
         });
         self.counts[function] += 1;
@@ -1825,9 +2033,13 @@ impl<'p> Builder<'p> {
                     .clone(),
                 context: context.key.clone(),
                 multiplicity: if allocation.repeated {
-                    Multiplicity::Many
+                    Multiplicity::Unbounded { witness: format!(
+                        "{}:%{}: loop, recursive/reentrant/suspended or externally repeated activation; older instance retained",
+                        context.key, allocation.id.value) }
                 } else {
-                    Multiplicity::One
+                    Multiplicity::One { witness: format!(
+                        "{}:%{}: acyclic placed producer in a unique nonreentrant activation",
+                        context.key, allocation.id.value) }
                 },
                 home,
                 obligations: reasons.into_iter().collect(),

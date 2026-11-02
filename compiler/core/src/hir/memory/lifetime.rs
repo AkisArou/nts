@@ -39,6 +39,14 @@ fn joined(old: &Bound, incoming: &Bound, contexts: &[Context<'_>]) -> Option<Bou
     match (old, incoming) {
         // The first deterministic witness suffices. Improving a diagnostic
         // must not add another lattice dimension or requeue an outside node.
+        // Missing outcome is a separate, sticky lack of proof. Preserve it
+        // even when an earlier known outside root already forbids a home.
+        // This adds one promotion, not one dimension per call-site witness.
+        (Bound::Outside(old), Bound::Outside(Reason::MissingOutcome(_)))
+            if !matches!(old, Reason::MissingOutcome(_)) =>
+        {
+            Some(incoming.clone())
+        }
         (Bound::Outside(_), _) => None,
         (_, Bound::Outside(_)) => Some(incoming.clone()),
         (Bound::Frame(a), Bound::Frame(b)) if a == b => None,
