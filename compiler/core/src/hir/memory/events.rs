@@ -62,7 +62,7 @@ enum Delta {
 }
 
 impl Events {
-    pub fn node(&mut self) -> EventId {
+    pub(super) fn node(&mut self) -> EventId {
         let at = self.events.len();
         self.events.push(Event::default());
         self.facts.push(Facts::Empty);
@@ -70,21 +70,21 @@ impl Events {
         at
     }
 
-    pub fn edge(&mut self, from: EventId, to: EventId, graph: &mut Graph) {
+    pub(super) fn edge(&mut self, from: EventId, to: EventId, graph: &mut Graph) {
         if graph.charge() {
             self.events[to].previous.insert(from);
         }
     }
 
-    pub fn fresh(&mut self, at: EventId, object: Object) {
+    pub(super) fn fresh(&mut self, at: EventId, object: Object) {
         self.events[at].fresh.insert(object);
     }
 
-    pub fn write(&mut self, at: EventId, key: Key) {
+    pub(super) fn write(&mut self, at: EventId, key: Key) {
         self.events[at].writes.insert(key);
     }
 
-    pub fn unknown(&mut self, at: EventId, reason: Reason) {
+    pub(super) fn unknown(&mut self, at: EventId, reason: Reason) {
         self.events[at].unknown.get_or_insert(reason);
     }
 
@@ -126,7 +126,7 @@ impl Events {
         Some(incoming)
     }
 
-    pub fn solve(&mut self, graph: &mut Graph) {
+    pub(super) fn solve(&mut self, graph: &mut Graph) {
         let limit = graph.alias_limit.max(1);
         let mut pending = VecDeque::new();
         for (at, event) in self.events.iter().enumerate() {
@@ -159,7 +159,7 @@ impl Events {
         }
     }
 
-    pub fn query(&self, at: EventId, key: &Key, graph: &Graph) -> LaterWrite {
+    pub(super) fn query(&self, at: EventId, key: &Key, graph: &Graph) -> LaterWrite {
         if let Some(failure) = &graph.failure {
             return LaterWrite::Unknown(failure.clone());
         }
@@ -179,10 +179,10 @@ impl Events {
         }
     }
 
-    pub fn changes(&self) -> &[usize] {
+    pub(super) fn changes(&self) -> &[usize] {
         &self.changes
     }
-    pub fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.events.len()
     }
 }
