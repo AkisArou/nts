@@ -95,7 +95,7 @@ class NodeCompressionContext implements CompressionContext {
     flush: CompressionFlush,
     maxOutputBytes: number,
   ): CompressionResult | CompressionFailure {
-    if (this.closed || this.finished) return { failure: "operation" };
+    if (this.closed || this.finished) return this.fail({ failure: "operation" });
     if (maxOutputBytes !== Infinity &&
         (!Number.isSafeInteger(maxOutputBytes) || maxOutputBytes < 0)) {
       return this.fail({ failure: "operation" });

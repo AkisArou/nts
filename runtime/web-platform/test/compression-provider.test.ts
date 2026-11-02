@@ -145,12 +145,27 @@ for (const format of formats) {
       assert.equal(buffers.has(chunk.buffer), false);
       buffers.add(chunk.buffer);
     }
-    failure(compressor.process(empty, "none", Infinity), "operation");
     assert.equal(compressor.reset(), undefined);
     const next = success(compressor.process(original, "finish", Infinity));
     for (const chunk of next.chunks) assert.equal(buffers.has(chunk.buffer), false);
     compressor.close();
     assert.deepEqual(chunks, saved);
+  });
+
+  test(`${format}: failure after finish is terminal while finish alone permits reset`, () => {
+    for (const illegalProcess of [false, true]) {
+      const compressor = context(provider.createCompressor(format, 15));
+      success(compressor.process(empty, "finish", Infinity));
+      if (illegalProcess) {
+        failure(compressor.process(empty, "none", Infinity), "operation");
+        failure(compressor.reset(), "operation");
+      } else {
+        assert.equal(compressor.reset(), undefined);
+        success(compressor.process(empty, "finish", Infinity));
+      }
+      compressor.close();
+      compressor.close();
+    }
   });
 
   test(`${format}: invalid output budgets are terminal failure values`, () => {
