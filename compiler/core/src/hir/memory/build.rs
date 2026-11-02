@@ -739,6 +739,92 @@ mod tests {
         );
     }
 
+    fn review_abi_program(invalid_neighbor: bool) -> Program {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let mut body = function(
+            "abi-frame".to_owned(),
+            vec![
+                OpKind::Param(0),
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 0,
+                },
+            ],
+        );
+        body.values[0].ty = object.clone();
+        body.values[1].ty = HirType::NUMBER;
+        body.params = vec![super::super::super::Param {
+            name: "frame".to_owned(),
+            ty: object,
+            origin: origin(),
+            shape: super::super::super::ParamShape::Required,
+            known: facts::Facts::TOP,
+            written: None,
+        }];
+        body.blocks[0].ops = vec![ValueId(1)];
+        body.blocks[0].terminator = Terminator::Return(Some(ValueId(1)));
+        body.return_type = HirType::NUMBER;
+        let mut funcs = vec![body];
+        if invalid_neighbor {
+            let mut invalid = function("invalid#init".to_owned(), Vec::new());
+            invalid.blocks[0].ops.push(ValueId(99));
+            funcs.push(invalid);
+        }
+        Program {
+            funcs,
+            layouts: vec![Layout {
+                types: vec![super::super::super::TypeId(7)],
+                name: "frame".to_owned(),
+                fields: vec![super::super::super::Field {
+                    name: "value".into(),
+                    ty: HirType::NUMBER,
+                    readonly: false,
+                    written: None,
+                    declared_by: None,
+                }],
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..Program::default()
+        }
+    }
+
+    #[test]
+    fn review_valid_abi_parameter_control_is_published_without_placed_op() {
+        let program = review_abi_program(false);
+        let report = crate::hir::memory::Analysis::of(&program).into_report();
+        assert!(report.failure.is_none());
+        assert!(
+            report
+                .values
+                .iter()
+                .any(|value| value.function == "abi-frame" && value.value == 0)
+        );
+    }
+
+    #[test]
+    fn review_invalid_neighbor_preserves_valid_abi_inventory_without_panicking() {
+        let program = review_abi_program(true);
+        let report = crate::hir::memory::Analysis::of(&program).into_report();
+        assert!(matches!(
+            report.failure,
+            Some(Reason::InvalidControlFlow(_))
+        ));
+        assert!(
+            report
+                .values
+                .iter()
+                .any(|value| value.function == "abi-frame" && value.value == 0)
+        );
+        assert!(
+            report
+                .proofs
+                .iter()
+                .all(|proof| proof.bound.starts_with("outside "))
+        );
+    }
+
     #[test]
     fn review_unsealed_functions_visit_only_their_indexed_contexts() {
         let mut counts = Vec::new();
