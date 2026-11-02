@@ -1944,9 +1944,17 @@ fn metadata_work(program: &Program) -> usize {
 /// enumeration, including terminators and actual unplaced ABI parameters.
 /// A valid arena entry alone is not a definition after DCE removed its producer.
 fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
-    let mut work = function.values.len();
-    let mut definitions: BTreeSet<_> = function.parameter_values().into_iter().collect();
-    let mut failure = None;
+    let mut work = function.values.len().saturating_add(function.params.len());
+    let (mut failure, mut definitions): (_, BTreeSet<_>) = match function.parameter_values() {
+        Some(values) => (None, values.into_iter().flatten().collect()),
+        None => (
+            Some(Reason::InvalidControlFlow(format!(
+                "{}: invalid ABI parameter definitions",
+                function.name
+            ))),
+            BTreeSet::new(),
+        ),
+    };
     for (at, block) in function.blocks.iter().enumerate() {
         for &id in block.params.iter().chain(&block.ops) {
             work += 1;
