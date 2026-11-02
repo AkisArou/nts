@@ -2256,7 +2256,7 @@ impl<'p> Builder<'p> {
                     self.roots.push((value, Exposure::Returned(context)));
                 }
                 Terminator::Jump { target, args } => {
-                    self.edge(context, block_id, "jump", *target, args)
+                    self.edge(context, block_id, "jump", *target, args);
                 }
                 Terminator::Branch {
                     then_target,
