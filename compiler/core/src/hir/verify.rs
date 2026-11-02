@@ -1811,26 +1811,16 @@ fn verify_func(func: &Func, problems: &mut Vec<Invalid>) {
         });
     }
 
-    // Edges first: dominance is meaningless over a graph with dangling successors.
+    // Check every edge before dominance: a dangling target, absent argument or
+    // incompatible contribution cannot supply a valid predecessor state.
     let mut edges_sound = true;
     for (at, block) in func.blocks.iter().enumerate() {
-        for target in block.terminator.successors() {
-            if (target.0 as usize) >= func.blocks.len() {
-                problems.push(Invalid::DanglingSuccessor {
-                    func: func.name.clone(),
-                    target,
-                });
-                edges_sound = false;
-            }
-        }
-        if edges_sound {
-            check_arguments(
-                func,
-                BlockId(u32::try_from(at).unwrap_or(u32::MAX)),
-                block,
-                problems,
-            );
-        }
+        edges_sound &= check_arguments(
+            func,
+            BlockId(u32::try_from(at).unwrap_or(u32::MAX)),
+            block,
+            problems,
+        );
     }
     if !edges_sound {
         return;
@@ -2147,9 +2137,10 @@ pub(super) fn check_edge_arguments(
     problems.len() == before
 }
 
-fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<Invalid>) {
+fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<Invalid>) -> bool {
+    let mut edges_sound = true;
     let mut check = |edge, target: BlockId, args: &[ValueId]| {
-        check_edge_arguments(func, id, edge, target, args, problems);
+        edges_sound &= check_edge_arguments(func, id, edge, target, args, problems);
     };
 
     match &block.terminator {
@@ -2194,6 +2185,7 @@ fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<I
         }
         Terminator::Unreachable | Terminator::FellThrough => {}
     }
+    edges_sound
 }
 
 pub(super) fn reachable_blocks(func: &Func) -> FxHashSet<BlockId> {
