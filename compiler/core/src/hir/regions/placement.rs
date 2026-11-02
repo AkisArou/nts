@@ -50,7 +50,7 @@ pub enum Placement {
 /// What a site can allocate. `CallResult` may later prove to be an alias, and
 /// `CallStorage` may prove to allocate nothing. A backing growth is kept apart
 /// from its header's creation: their instances can have different lifetimes.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum Storage {
     Object,
     Array,

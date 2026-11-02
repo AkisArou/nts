@@ -80,7 +80,7 @@ pub struct Refusal {
 /// that keeps what it is given somewhere -- an intern table, a registry, a
 /// timer -- would hold region memory past the reset.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-enum Helper {
+pub(super) enum Helper {
     /// Reads its arguments and keeps none of them. A reference it answers is
     /// borrowed from one of them.
     Reads,
@@ -108,7 +108,7 @@ enum Helper {
     Raises,
 }
 
-fn helper(name: &str) -> Option<Helper> {
+pub(super) fn helper(name: &str) -> Option<Helper> {
     if super::runtime::reads_only(name) {
         return Some(Helper::Reads);
     }
@@ -1308,7 +1308,7 @@ fn judge(program: &Program) -> (Report, Vec<Site>) {
 
 /// A caller's liveness and dominators, for where a served call's handle is
 /// held.
-struct Flow {
+pub(super) struct Flow {
     live: super::liveness::Liveness,
     idom: Vec<Option<BlockId>>,
     block_of: FxHashMap<ValueId, usize>,
@@ -1319,7 +1319,7 @@ struct Flow {
 
 /// Where a served call's handle is held.
 #[derive(Debug, Clone, Copy)]
-enum Hold {
+pub(super) enum Hold {
     /// After the block's last operation reading the result.
     After(usize),
     /// First thing in the block, where the result died on the edge in.
@@ -1327,7 +1327,7 @@ enum Hold {
 }
 
 impl Flow {
-    fn of(func: &Func) -> Result<Self, super::liveness::Failure> {
+    pub(super) fn of(func: &Func) -> Result<Self, super::liveness::Failure> {
         let reachable = super::verify::reachable_blocks(func);
         let mut block_of = FxHashMap::default();
         for (index, block) in func.blocks.iter().enumerate() {
@@ -1385,7 +1385,7 @@ impl Flow {
     /// of it, or on entry where it died along the edge in. Refused unless the
     /// call dominates every block such a value is in, so the handle is defined
     /// on every path to a hold, and unless the values die somewhere.
-    fn holds(&self, call: ValueId, read: &[ValueId]) -> Result<Vec<Hold>, &'static str> {
+    pub(super) fn holds(&self, call: ValueId, read: &[ValueId]) -> Result<Vec<Hold>, &'static str> {
         let Some(home) = self.block_of.get(&call).copied() else {
             return Err("the call is in no block");
         };

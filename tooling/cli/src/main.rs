@@ -2764,7 +2764,7 @@ fn prepare_for_listing(
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
-    prepare_as(hir_preparation()?, tsconfig, snapshot)
+    prepare_as(hir_preparation()?, tsconfig, snapshot, false)
 }
 
 /// [`prepare_for_listing`] for a backend the caller names, which is how
@@ -2773,6 +2773,7 @@ fn prepare_as(
     (backend, provider): (nts_codegen_common::Backend, hir::Memory),
     tsconfig: &Utf8Path,
     snapshot: &nts_semantic_schema::SemanticSnapshot,
+    observe_memory: bool,
 ) -> Result<(String, hir::Prepared, Option<String>)> {
     let header = format!(
         "preparation: backend={} provider={provider:?}",
@@ -2837,7 +2838,13 @@ fn prepare_as(
     };
     // An invalid program is exactly the one worth reading, so the
     // complaints are returned beside the program rather than in its place.
-    let prepared = hir::prepare_unverified(snapshot, &options);
+    let raw = hir::RawProgram::lower(snapshot, options.entry_files, options.foreign);
+    let preparation = hir::PreparationOptions::from(&options);
+    let prepared = if observe_memory {
+        raw.into_unverified_with_memory(&preparation)
+    } else {
+        raw.into_unverified(&preparation)
+    };
     let invalid = prepared
         .check()
         .err()
@@ -2872,8 +2879,12 @@ fn check_expectations(tsconfig: &Utf8Path) -> Result<()> {
     // One preparation per backend, shared by every fact that names it.
     let mut programs = Vec::new();
     for backend in expect_ir::backends_named(&expectations) {
-        let (_, prepared, invalid) =
-            prepare_as((backend, provider_for(backend)?), tsconfig, &snapshot)?;
+        let (_, prepared, invalid) = prepare_as(
+            (backend, provider_for(backend)?),
+            tsconfig,
+            &snapshot,
+            false,
+        )?;
         if let Some(invalid) = invalid {
             bail!(
                 "the program {} receives does not verify:\n{invalid}",
@@ -3056,8 +3067,11 @@ fn dump_stats(tsconfig: &Utf8Path) -> Result<()> {
 fn dump_regions(tsconfig: &Utf8Path) -> Result<()> {
     let snapshot = typechecked_snapshot(tsconfig)?;
     let mut locations = SourceLocations::new(&snapshot.sources);
-    let (header, prepared, invalid) = prepare_for_listing(tsconfig, &snapshot)?;
+    let (header, prepared, invalid) = prepare_as(hir_preparation()?, tsconfig, &snapshot, true)?;
     println!("{header}");
+    if let Some(memory) = &prepared.memory {
+        print!("{}", memory.render());
+    }
     if !matches!(prepared.program.provider, hir::Memory::ReferenceCounting) {
         println!("regions are for the counting provider: pass --rc");
         return Ok(());

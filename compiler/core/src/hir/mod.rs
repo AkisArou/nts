@@ -29,6 +29,7 @@ mod appended_results;
 pub mod bounds;
 mod boxing;
 pub mod builtin;
+pub mod cfg;
 mod class_sets;
 pub mod contents;
 pub mod dce;
@@ -57,6 +58,7 @@ pub mod linearize;
 pub mod liveness;
 pub mod loops;
 mod member_key;
+pub mod memory;
 pub mod obligations;
 pub mod possibly_undefined;
 pub mod presence;
@@ -3980,15 +3982,18 @@ impl Program {
             .collect();
 
         let mut targets: rustc_hash::FxHashMap<u32, Vec<usize>> = rustc_hash::FxHashMap::default();
+        let mut seen: rustc_hash::FxHashMap<u32, rustc_hash::FxHashSet<usize>> =
+            rustc_hash::FxHashMap::default();
         for layout in &self.layouts {
             for (slot, method) in layout.methods.iter().enumerate() {
                 let Some(target) = method.as_deref().and_then(|name| by_name.get(name)) else {
                     continue;
                 };
-                let entry = targets
-                    .entry(u32::try_from(slot).unwrap_or(u32::MAX))
-                    .or_default();
-                if !entry.contains(target) {
+                let slot = u32::try_from(slot).unwrap_or(u32::MAX);
+                let entry = targets.entry(slot).or_default();
+                // Keep first-seen target order, without rescanning the growing
+                // vector for every implementation of a widely shared slot.
+                if seen.entry(slot).or_default().insert(*target) {
                     entry.push(*target);
                 }
             }
@@ -5278,6 +5283,9 @@ pub fn operands_of_terminator(terminator: &Terminator) -> Vec<ValueId> {
 /// checked. Both have happened; neither is visible in the output.
 #[derive(Debug)]
 pub struct Prepared {
+    /// Requested pre-counting memory diagnostics. Ordinary preparation does
+    /// not run this analysis while no build consumes it.
+    pub memory: Option<memory::Report>,
     /// Fixed-i32 truncating arithmetic, licensed by coupled runtime facts.
     pub accumulators: accumulators::Report,
     /// Identity-based payload proofs and inert cleanup elisions, independent
@@ -5896,7 +5904,16 @@ impl RawProgram {
 
     #[must_use]
     pub fn into_unverified(self, options: &PreparationOptions<'_>) -> Prepared {
-        prepare_lowered(self.lowered, self.foreign, options)
+        prepare_lowered(self.lowered, self.foreign, options, false)
+    }
+
+    /// Prepare with observational memory diagnostics for a reader or test.
+    /// The report is detached before native placement mutates the program;
+    /// requesting it changes no allocation, counting or emission decision.
+    /// Host-managed preparation has no native placement report.
+    #[must_use]
+    pub fn into_unverified_with_memory(self, options: &PreparationOptions<'_>) -> Prepared {
+        prepare_lowered(self.lowered, self.foreign, options, true)
     }
 }
 
@@ -8003,6 +8020,7 @@ fn prepare_lowered(
     mut lowered: lower::Lowered,
     foreign: rustc_hash::FxHashMap<String, runtime::ForeignCall>,
     options: &PreparationOptions<'_>,
+    observe_memory: bool,
 ) -> Prepared {
     let specialize_numbers = options.specialize_numbers;
     // First: whether this backend provides each helper a `typeof` asks about,
@@ -8172,6 +8190,11 @@ fn prepare_lowered(
     // and counting, which have to see the variants and the calls sent to them.
     destinations::pass(&mut program, options.provider, options.roots);
 
+    // Stage 2 has diagnostic readers only. Pay for it on explicit demand,
+    // detaching the report before legacy placement mutates this revision.
+    let mut memory = (observe_memory && options.provider != Memory::HostGc)
+        .then(|| memory::Analysis::of(&program).into_report());
+
     // Escape analysis before reference counting, because an object that stays
     // in the frame should not be counted at all -- and after dead-code
     // elimination, because an allocation nothing reads is not evidence of
@@ -8258,6 +8281,10 @@ fn prepare_lowered(
 
     native_dispatch::plan(&mut program);
 
+    if let Some(memory) = &mut memory {
+        memory.compare_legacy(&program, options.provider);
+    }
+
     // Report against final value/function identities. This inventory only
     // records Unknown facts; it changes no operation or allocation decision.
     if options.provider == Memory::ReferenceCounting {
@@ -8265,6 +8292,7 @@ fn prepare_lowered(
     }
 
     Prepared {
+        memory,
         accumulators,
         contents,
         cloned,
