@@ -199,6 +199,11 @@ one; add a row here in the same commit as the first case that uses it.
     [Math route contracts](#math-route-contracts) name the sources;
     `ts-math-route-*` identifies each area.
 
+41. **Number formatting and parsing across typed routes:** binary-value rounding,
+    shortest text, radix conversion, complete numeric strings and partial parsers.
+    [Number-format route contracts](#number-format-route-contracts) name the sources;
+    `ts-number-format-route-*` identifies each area.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -270,6 +275,8 @@ flows through it.
 | `math-routes-controls/` | identical typed carriers and observations with position-indexed result tables replacing Math calls and bitwise operations |
 | `modules-and-exports/` | module code in one file (`flags: [module]`) |
 | `namespaces/` | namespaces, their objects, merging and aliases |
+| `number-format-routes/` | specification-fixed numeric text, parsing values, signed zeros and range failures across typed inputs, held to node |
+| `number-format-routes-controls/` | identical typed routes, input observations and assertions with position-indexed result or error tables replacing formatting and parsing |
 | `number-routes/` | exact numeric values, zero signs, NaN, results and text across typed carriers, held to node |
 | `number-routes-controls/` | the same inputs and computations with plain local number carriers and the same observations |
 | `object-routes/` | exact key order, getter/setter histories, copies, integrity and presence through typed objects, held to node |
@@ -967,6 +974,16 @@ input position. Controls contain no Math calls or bitwise operations. Every
 numeric result is checked with Object.is, so NaN and zero signs remain visible.
 Each file is checked as a strict script with library diagnostics included, and
 runs through the unchanged TypeScript-suite oracle with the pinned Node.
+
+`number-format-routes/` carries numbers and strings through declared fields,
+parameters, returns, elements, tuples, generics, interfaces and narrowed unions
+before formatting or parsing. Exact string checks and Object.is numeric checks
+retain signs, NaN, padding, exponents and ordered observations. Range failures
+use assert.throws(RangeError). Controls preserve each route and replace only
+the operation with a position-indexed result table or explicit error sentinel;
+they perform no formatting or parsing on the inputs. Every file is checked as
+an independent strict script with library diagnostics and run by the unchanged
+TypeScript-suite oracle at the repository's pinned Node version.
 
 ## Coverage, source by source
 
@@ -1863,6 +1880,36 @@ record backend outcomes separately; no compiler result is predicted.
 | `integer-conversions` | 10 | 10 | wrapped integer operands, masked shift counts, low-word products and comparisons with truncation across typed carriers |
 | `trigonometry` | 13 | 13 | prescribed signed zeros, infinities, NaN and domain errors through unary trigonometric functions and exact atan2 branches |
 
+### Number-format route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [toFixed](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-number.prototype.tofixed), [toPrecision](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-number.prototype.toprecision) and [toExponential](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-number.prototype.toexponential) | exact binary-value rounding, ties, padding, notation changes, omitted digits and range-check ordering |
+| [Number::toString](https://tc39.es/ecma262/multipage/ecmascript-data-types-and-values.html#sec-numeric-types-number-tostring) and [Number.prototype.toString](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-number.prototype.tostring) | shortest round-trip representations, decimal thresholds, integer radices and radix validation |
+| [StringToNumber](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-stringtonumber), [StringNumericValue](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-runtime-semantics-stringnumericvalue) and [RoundMVResult](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-roundmvresult) | complete numeric-string grammar, Unicode whitespace, prefix/sign rules and rounded binary64 values |
+| [parseInt](https://tc39.es/ecma262/multipage/global-object.html#sec-parseint-string-radix) and [parseFloat](https://tc39.es/ecma262/multipage/global-object.html#sec-parsefloat-string) | longest usable prefixes, optional radix inference, ToInt32 radix conversion and signed zero |
+| TypeScript [functions](https://www.typescriptlang.org/docs/handbook/2/functions.html), [generics](https://www.typescriptlang.org/docs/handbook/2/generics.html) and [narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) | typed operands and returns, callable interfaces, stored text, tuples and narrowed unions |
+
+Only uniquely specification-fixed outputs receive exact assertions. Shortest
+decimal text and omitted-digit exponential text can permit multiple final
+digits; those ambiguous observations are excluded. Nondecimal fractional
+formatting is excluded. Exact successful parseInt results use radices 2, 4,
+8, 10, 16 and 32; the other radices permit implementation-approximated integer
+results and are covered at their fixed rejection paths. Decimal inputs beyond
+20 significant digits are excluded where permitted rounding choices differ.
+
+Direct non-string parser arguments and binary arithmetic on typed strings
+are omitted with their strict TypeScript diagnostics in the pull requests.
+Explicit String(number) parser pipelines and legal unary arithmetic conversion
+remain covered. A pinned-node observation that conflicts with the normative
+algorithm is left unasserted and documented with its reproducer in the PR.
+The existing number-routes, integer-routes and math-routes files are unchanged;
+maintainers measure and record every backend outcome.
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `fixed-notation` | 9 | 9 | binary-value rounding and ties, exact fixed digits, signed zero, exponent fallback and digit-count validation through typed numbers |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -1885,7 +1932,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-array-representation` | concrete element storage crosses a wider reader with exact payloads, identities and slot presence | Language, Types, A type is a layout; Objects, Arrays | 24 | 0 |
 | `ts-array-widening` | one array crosses wider, readonly, generic, holder or tuple views without changing stored values | Language, Types, Decisions; Array contents contracts | 34 | 0 |
 | `ts-array-writes` | writes and array construction through widened routes preserve values, length, order and holes | Objects, Arrays; ECMAScript, Array prototype methods | 40 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 4177 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 4195 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 757 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 4 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
@@ -1915,9 +1962,9 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-capture-route-suspension` | across await and yield across typed captures with exact node values, order and state | Capture route contracts: Functions, Objects and Async | 18 | 0 |
 | `ts-capture-route-writes` | writes after capture across typed captures with exact node values, order and state | Capture route contracts: Functions, Objects and Async | 24 | 0 |
 | `ts-class-expression` | a class expression, named or anonymous | conformance/classes/classExpressions; conformance/es6/classExpressions | 33 | 0 |
-| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 1170 | 4 |
+| `ts-class-fields` | instance and static field declarations, with define semantics (`useDefineForClassFields`) | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition | 1174 | 4 |
 | `ts-class-static-block` | a `static { }` block | conformance/classes/classStaticBlock; ts-eslint StaticBlock | 8 | 0 |
-| `ts-class` | a class declaration or expression | conformance/classes | 1869 | 29 |
+| `ts-class` | a class declaration or expression | conformance/classes | 1873 | 29 |
 | `ts-class-value-route-exposure` | constructor metadata and new.target with exact construction, static observations and identities | Class value route contracts; typed paths | 18 | 0 |
 | `ts-class-value-route-factories` | class factories and mixins with exact construction, static observations and identities | Class value route contracts; typed paths | 12 | 0 |
 | `ts-class-value-route-selection` | classes selected at runtime with exact construction, static observations and identities | Class value route contracts; typed paths | 14 | 0 |
@@ -1941,7 +1988,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-contents-representation` | concrete stored values retain their payloads, identities and live contents through wider readers | Language, Types, A type is a layout; typed paths | 44 | 0 |
 | `ts-contents-set-methods` | typed Set algebra and predicates observe widened contents and the set-like protocol | Map and Set contents contracts; typed paths | 28 | 0 |
 | `ts-contents-widening` | one collection is written and read through different declared, generic or readonly views | Language, Types, Decisions; typed paths | 44 | 0 |
-| `ts-conversions` | implicit and explicit conversions of typed values: ToPrimitive, ToNumber, ToString, ToBoolean | conformance/expressions/binaryOperators; conformance/expressions/unaryOperators; typed paths | 860 | 0 |
+| `ts-conversions` | implicit and explicit conversions of typed values: ToPrimitive, ToNumber, ToString, ToBoolean | conformance/expressions/binaryOperators; conformance/expressions/unaryOperators; typed paths | 878 | 0 |
 | `ts-control-flow-route-finally` | typed completions preserve cleanup order, saved values, overrides and writes observed afterwards | Control-flow route contracts; typed paths | 18 | 0 |
 | `ts-control-flow-route-labels` | typed labeled exits preserve loop updates, tests, tails and captured bindings | Control-flow route contracts; typed paths | 18 | 0 |
 | `ts-control-flow-route-narrowing` | typed control-flow joins and exits preserve current member kinds, payloads and identities after guards and mutations | Control-flow route contracts; typed paths | 26 | 0 |
@@ -1987,14 +2034,14 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-equality-route-searching` | SameValueZero and searching with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 18 | 0 |
 | `ts-equality-route-sorting` | sorting and ordering with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 14 | 0 |
 | `ts-equality-route-strict` | strict equality and SameValue with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 16 | 0 |
-| `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 810 | 0 |
+| `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 812 | 0 |
 | `ts-expando` | properties assigned to a function declaration (an expando) | conformance/functions (expando assignments, TypeScript 3.1) | 1 | 0 |
 | `ts-exponent` | the `**` operator and `**=` | conformance/es7/exponentiationOperator | 3 | 0 |
 | `ts-export-equals` | `export =` | conformance/externalModules; ts-eslint TSExportAssignment | 0 | 4 |
 | `ts-exports` | export declarations, lists, renames and defaults, read back within the module | conformance/externalModules; conformance/es6/modules; ts-eslint ExportNamedDeclaration | 10 | 3 |
 | `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 413 | 0 |
 | `ts-function-types` | a function type (`(x: T) => U`) for a parameter, field or type argument | conformance/types/members; ts-eslint TSFunctionType | 887 | 0 |
-| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 4808 | 4 |
+| `ts-functions` | function declarations, expressions and calls in typed code | conformance/functions; conformance/es6/functionDeclarations | 4826 | 4 |
 | `ts-generators` | a generator function or method, typed `Generator<T, TReturn, TNext>` | conformance/generators; conformance/es6/yieldExpressions | 135 | 0 |
 | `ts-generic-constraints` | a type parameter's constraint (`<T extends C>`) | conformance/types/typeParameters/typeArgumentLists; ts-eslint TSTypeParameter.constraint | 276 | 0 |
 | `ts-generic-defaults` | a type parameter's default (`<T = number>`) | conformance/types/typeParameters/typeParameterLists | 10 | 0 |
@@ -2027,7 +2074,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-integer-route-rounding` | rounding and division with exact numeric stages and representations | Integer route contracts; typed paths | 18 | 0 |
 | `ts-integer-route-typed-arrays` | typed-array storage with exact numeric stages and representations | Integer route contracts; typed paths | 10 | 0 |
 | `ts-interface-extends` | an interface extending interfaces or a class | conformance/interfaces/interfaceDeclarations; conformance/interfaces/interfacesExtendingClasses; ts-eslint TSInterfaceHeritage | 6 | 0 |
-| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1515 | 0 |
+| `ts-interfaces` | an interface, implemented by a class or satisfied by a literal | conformance/interfaces; ts-eslint TSInterfaceDeclaration | 1517 | 0 |
 | `ts-intersections` | an intersection type (`A & B`) and values of it | conformance/types/intersection; ts-eslint TSIntersectionType | 16 | 0 |
 | `ts-iteration` | the iteration protocols in typed code: Iterable, Iterator, for-of, spread, destructuring | conformance/es6/for-ofStatements; conformance/types/forAwait; lib.es2015.iterable.d.ts | 4488 | 0 |
 | `ts-json-replacers` | typed replacers, toJSON methods and space arguments preserve callback observations, selected keys and exact formatting | JSON.stringify; SerializeJSONProperty; SerializeJSONObject; SerializeJSONArray | 20 | 0 |
@@ -2080,8 +2127,10 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 15 | 0 |
 | `ts-new-target` | `new.target` | conformance/es6/newTarget | 83 | 0 |
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 5 | 0 |
-| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 1517 | 0 |
-| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 3276 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 1523 | 0 |
+| `ts-number-format-route-fixed-notation` | binary-value rounding and ties, exact fixed digits, signed zero, exponent fallback and digit-count validation through typed numbers with exact values and observations | Number-format route contracts; typed paths | 18 | 0 |
+| `ts-number-format-routes` | specification-fixed formatting and parsing across typed inputs beside operation-free table controls | Number-format route contracts; typed paths | 18 | 0 |
+| `ts-numbers` | IEEE doubles in typed code: fractions, -0, NaN, int32 operators, formatting | conformance/types/primitives/number; typed paths | 3294 | 0 |
 | `ts-object-type` | the non-primitive `object` type | conformance/types/nonPrimitive; ts-eslint TSObjectKeyword | 20 | 0 |
 | `ts-objects` | object literals and object types: properties, methods, keys, copies | conformance/expressions/objectLiterals; conformance/types/objectTypeLiteral; ts-eslint TSTypeLiteral | 2634 | 0 |
 | `ts-object-route-key-order` | typed object enumeration preserves numeric ordering, string insertion histories, getter effects and symbol omission | Object route contracts; typed paths | 14 | 0 |
@@ -2111,7 +2160,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-proof-negative-zero` | a zero sign becomes observable after a route invalidates its omission | proof contracts: Numbers, Integers proved from doubles; Language, Numbers | 63 | 0 |
 | `ts-proof-whole-number` | a whole finite value in range loses its integer representation proof | proof contracts: Numbers, Integers proved from doubles; Language, Numbers | 89 | 0 |
 | `ts-protected` | the `protected` modifier | conformance/classes/members/accessibility; ts-eslint TSProtectedKeyword | 1 | 0 |
-| `ts-readonly` | `readonly` properties, arrays and tuples, which are not frozen | conformance/types/tuple/readonlyArraysAndTuples; ts-eslint TSReadonlyKeyword | 254 | 0 |
+| `ts-readonly` | `readonly` properties, arrays and tuples, which are not frozen | conformance/types/tuple/readonlyArraysAndTuples; ts-eslint TSReadonlyKeyword | 256 | 0 |
 | `ts-record` | `Record<K, V>` | conformance/types/mapped; lib | 232 | 0 |
 | `ts-rest-parameters` | a rest parameter, typed as an array or a tuple | conformance/es6/restParameters | 52 | 0 |
 | `ts-regexp-route-match-results` | typed nullable match results preserve exact captures, named groups, indices, metadata and retained values | RegExp route contracts; typed paths | 18 | 0 |
@@ -2149,7 +2198,7 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-satisfies` | the `satisfies` operator, which leaves its value and the value's type alone | conformance/expressions/typeSatisfaction; ts-eslint TSSatisfiesExpression | 5 | 0 |
 | `ts-spread` | spread and rest of objects and arrays in typed code | conformance/types/spread; conformance/es6/spread | 435 | 1 |
 | `ts-static` | static fields, methods and accessors | conformance/classes/propertyMemberDeclarations; ts-eslint TSStaticKeyword | 184 | 4 |
-| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 2247 | 0 |
+| `ts-strings` | strings in typed code: UTF-16 length and indexing against code points | conformance/types/primitives/string; typed paths | 2265 | 0 |
 | `ts-sort-route-comparators` | typed comparator routes preserve sign, NaN equality and stable order through captures, methods, generic factories and stored functions | Sort route contracts; typed paths | 18 | 0 |
 | `ts-sort-route-default` | typed arrays of values preserve UTF-16 default order, stable equal string forms, undefined, holes and copy identity | Sort route contracts; typed paths | 12 | 0 |
 | `ts-sort-route-edges` | typed sort routes preserve exception identity, unchanged sources on comparator throws, aliases, frozen write failures and readonly copies | Sort route contracts; typed paths | 10 | 0 |
@@ -2184,12 +2233,12 @@ record backend outcomes separately; no compiler result is predicted.
 | `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 14 | 0 |
 | `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 21 | 0 |
 | `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 12 | 0 |
-| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 1137 | 0 |
+| `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 1155 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 1015 | 0 |
 | `ts-type-assertions` | a type assertion (`x as T`, `<T>x`), erased, never a conversion | conformance/expressions/asOperator; conformance/expressions/typeAssertions; ts-eslint TSAsExpression, TSTypeAssertion | 81 | 0 |
 | `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 146 | 0 |
 | `ts-type-operators` | values flowing through type-level operators: keyof, typeof, indexed access, mapped and conditional types | conformance/types (keyof, typeQueries, mapped, conditional) | 35 | 0 |
-| `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 2215 | 0 |
+| `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 2233 | 0 |
 | `ts-tuple-route-calls` | tuple parameters, results, argument lists, destructuring and variadic instantiations preserve every argument and returned slot | TypeScript Tuple Types; Variadic Tuple Types; rest arguments | 16 | 0 |
 | `ts-tuple-route-conversion` | tuple iteration, copying, spreads and serialization preserve slot order, reference identity, independent copies and exact JSON | TypeScript Tuple Types; Array prototype methods; SerializeJSONArray | 20 | 0 |
 | `ts-tuple-route-elements` | optional, rest and labeled tuples retain every slot, exact count, presence and inner identity through six storage routes | TypeScript Tuple Types; Labeled Tuple Elements | 36 | 0 |
