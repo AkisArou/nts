@@ -180,78 +180,116 @@ fn closed_body_no_raise_keeps_the_same_roots_confined() {
     check_transfer(false);
 }
 
-#[test]
-fn an_uncounted_identity_carrier_keeps_its_owner_and_child_at_an_outcome() {
+fn raw_loan_program(transfers: bool, through_block_loop: bool) -> Program {
     use crate::hir::{Block, native};
+    let mut program = transfer_program(transfers);
+    let caller = &mut program.funcs[0];
+    let string = HirType::Managed(ManagedType::String);
+    let raw = native::Encoding::View.c_type().representation();
+    caller.values.extend([
+        Op {
+            kind: OpKind::ConstString("left".into()),
+            ty: string.clone(),
+            origin: origin(),
+        },
+        Op {
+            kind: OpKind::ConstString("right".into()),
+            ty: string.clone(),
+            origin: origin(),
+        },
+        Op {
+            kind: OpKind::Call {
+                callee: Callee::External("nts_concat".into()),
+                args: vec![ValueId(9), ValueId(10)],
+                frame: None,
+            },
+            ty: string,
+            origin: origin(),
+        },
+        Op {
+            kind: OpKind::Erase {
+                value: ValueId(0),
+                absent: Absent::Impossible,
+                slots: Absent::Impossible,
+            },
+            ty: HirType::Erased,
+            origin: origin(),
+        },
+    ]);
+    // The actual licensed loan producer, not a managed FieldView given an
+    // invented raw result type. The owner/held child are also the raised payload.
+    caller.values[6].kind = OpKind::NativeStringView {
+        string: ValueId(11),
+    };
+    caller.values[6].ty = raw.clone();
+    let OpKind::Call { args, .. } = &mut caller.values[7].kind else {
+        unreachable!()
+    };
+    *args = vec![ValueId(12)];
+    caller.values[8].kind = OpKind::Binary {
+        op: BinOp::Eq,
+        lhs: ValueId(6),
+        rhs: ValueId(6),
+    };
+    caller.values[8].ty = HirType::Bool;
+    caller.return_type = HirType::Bool;
+    caller.blocks[0].ops = [9, 10, 11, 0, 1, 2, 3, 4, 5, 6, 12, 7, 8]
+        .map(ValueId)
+        .to_vec();
+    caller.blocks[0].terminator = Terminator::Return(Some(ValueId(8)));
+    if through_block_loop {
+        caller.values.push(Op {
+            kind: OpKind::BlockParam(0),
+            ty: raw,
+            origin: origin(),
+        });
+        caller.blocks[0].ops.pop();
+        caller.blocks[0].terminator = Terminator::Jump {
+            target: BlockId(1),
+            args: vec![ValueId(6)],
+        };
+        caller.values[8].kind = OpKind::Binary {
+            op: BinOp::Eq,
+            lhs: ValueId(13),
+            rhs: ValueId(13),
+        };
+        caller.blocks.push(Block {
+            params: vec![ValueId(13)],
+            ops: vec![ValueId(8)],
+            terminator: Terminator::Branch {
+                cond: ValueId(8),
+                then_target: BlockId(1),
+                then_args: vec![ValueId(13)],
+                else_target: BlockId(2),
+                else_args: Vec::new(),
+            },
+        });
+        caller.blocks.push(Block {
+            params: Vec::new(),
+            ops: Vec::new(),
+            terminator: Terminator::Return(Some(ValueId(8))),
+        });
+    }
+    program
+}
+
+#[test]
+fn a_verified_string_loan_carrier_and_held_payload_survive_an_outcome() {
     for transfers in [false, true] {
         for through_block_loop in [false, true] {
-            let mut program = transfer_program(transfers);
-            let caller = &mut program.funcs[0];
-            caller.values[6].kind = OpKind::FieldView {
-                value: ValueId(0),
-                source: TypeId(SYNTHETIC_CELLS),
-                face: TypeId(SYNTHETIC_CELLS),
-            };
-            let raw = HirType::NativePointer(native::Pointee::Void);
-            caller.values[6].ty = raw.clone();
-            let OpKind::Call { args, .. } = &mut caller.values[7].kind else {
-                unreachable!()
-            };
-            args.clear();
-            caller.values[8].kind = OpKind::Binary {
-                op: BinOp::Eq,
-                lhs: ValueId(6),
-                rhs: ValueId(6),
-            };
-            caller.values[8].ty = HirType::Bool;
-            caller.return_type = HirType::Bool;
-            caller.blocks[0].terminator = Terminator::Return(Some(ValueId(8)));
-            if through_block_loop {
-                caller.values.push(Op {
-                    kind: OpKind::BlockParam(0),
-                    ty: raw,
-                    origin: origin(),
-                });
-                caller.blocks[0].ops.pop();
-                caller.blocks[0].terminator = Terminator::Jump {
-                    target: BlockId(1),
-                    args: vec![ValueId(6)],
-                };
-                caller.values[8].kind = OpKind::Binary {
-                    op: BinOp::Eq,
-                    lhs: ValueId(9),
-                    rhs: ValueId(9),
-                };
-                caller.blocks.push(Block {
-                    params: vec![ValueId(9)],
-                    ops: vec![ValueId(8)],
-                    terminator: Terminator::Branch {
-                        cond: ValueId(8),
-                        then_target: BlockId(1),
-                        then_args: vec![ValueId(9)],
-                        else_target: BlockId(2),
-                        else_args: Vec::new(),
-                    },
-                });
-                caller.blocks.push(Block {
-                    params: Vec::new(),
-                    ops: Vec::new(),
-                    terminator: Terminator::Return(Some(ValueId(8))),
-                });
-            }
-            let target_body = &mut program.funcs[1];
-            target_body.params.clear();
-            target_body.values[0].kind = OpKind::ConstUndefined;
+            let program = raw_loan_program(transfers, through_block_loop);
+            verify::verify(&program)
+                .expect("the positive and control use verifier-licensed producers");
             let report = memory::Analysis::of(&program).into_report();
             assert!(report.failure.is_none(), "{:?}", report.failure);
-            for value in [0, 1] {
+            for value in [0, 1, 11] {
                 let site = report
                     .sites
                     .iter()
                     .find(|site| site.id.function == "root#init" && site.id.value == value)
-                    .expect("owner and held child inventoried");
+                    .expect("owner, child and loaned string inventoried");
                 println!(
-                    "raw-carrier\ttransfers={transfers}\tloop={through_block_loop}\tvalue={value}\thome={:?}\tfrontier={}",
+                    "verified-raw-carrier\ttransfers={transfers}\tloop={through_block_loop}\tvalue={value}\thome={:?}\tfrontier={}",
                     site.home, site.retention_frontier
                 );
                 if transfers {
@@ -261,7 +299,7 @@ fn an_uncounted_identity_carrier_keeps_its_owner_and_child_at_an_outcome() {
                             .any(|reason| matches!(reason, Reason::MissingOutcome(_))),
                         "{site:?}"
                     );
-                } else {
+                } else if value != 11 {
                     assert_eq!(site.home, Home::Frame);
                 }
             }
@@ -273,9 +311,52 @@ fn an_uncounted_identity_carrier_keeps_its_owner_and_child_at_an_outcome() {
                     .expect("missing outcome");
                 assert!(
                     fence.live.contains(&6),
-                    "the raw carrier's own type does not erase its graph aliases"
+                    "the licensed raw loan remains a graph carrier"
                 );
+            } else {
+                assert!(report.outcomes.is_empty());
             }
+        }
+    }
+}
+
+#[test]
+fn unused_invalid_view_operands_do_not_enter_the_memory_input_domain() {
+    for bad in [false, true] {
+        for field_view in [false, true] {
+            let mut program = transfer_program(true);
+            let body = &mut program.funcs[0];
+            body.values.push(Op {
+                kind: if field_view {
+                    OpKind::FieldView {
+                        value: ValueId(if bad { 99 } else { 0 }),
+                        source: TypeId(SYNTHETIC_CELLS),
+                        face: TypeId(SYNTHETIC_CELLS),
+                    }
+                } else {
+                    OpKind::Convert(ValueId(if bad { 99 } else { 0 }))
+                },
+                ty: body.values[0].ty.clone(),
+                origin: origin(),
+            });
+            let report = memory::Analysis::of(&program).into_report();
+            assert!(
+                report.failure.is_none(),
+                "unused metadata changes no executed operand domain: {:?}",
+                report.failure
+            );
+            assert_eq!(report.sites.len(), 4);
+            assert!(
+                report
+                    .sites
+                    .iter()
+                    .filter(|site| site.id.function == "root#init"
+                        && [0, 1, 5].contains(&site.id.value))
+                    .all(|site| site
+                        .obligations
+                        .iter()
+                        .any(|reason| matches!(reason, Reason::MissingOutcome(_))))
+            );
         }
     }
 }
