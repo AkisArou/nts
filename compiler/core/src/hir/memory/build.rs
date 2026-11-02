@@ -1439,7 +1439,11 @@ mod tests {
                 });
             }
             let report = super::super::Analysis::of(&program).into_report();
-            assert!(report.failure.is_none());
+            if n == 256 {
+                assert_eq!(report.failure, Some(Reason::WorkBudget));
+            } else {
+                assert!(report.failure.is_none(), "{:?}", report.failure);
+            }
             assert_eq!(report.values.len(), 2, "orphan producers are not facts");
             let work = report
                 .stages
@@ -1455,8 +1459,8 @@ mod tests {
         }
         let base = counts[0].1;
         assert!(
-            counts.into_iter().all(|(n, work)| work - base >= 3 * n),
-            "the ABI arena scan and both layout-field scans must be charged"
+            counts.into_iter().all(|(n, work)| work - base >= 5 * n),
+            "both ABI arena scans, the bitmap initialization and both layout-field scans must be charged"
         );
     }
 
