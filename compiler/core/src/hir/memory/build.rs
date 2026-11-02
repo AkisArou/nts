@@ -77,6 +77,21 @@ mod tests {
         }
     }
 
+    fn context_values(&mut self, function: usize) -> BTreeMap<ValueId, Node> {
+        let live: BTreeSet<_> = self.program.funcs[function]
+            .blocks
+            .iter()
+            .flat_map(|block| block.params.iter().chain(&block.ops))
+            .chain(self.parameters[function].iter().map(|(id, _)| id))
+            .copied()
+            .collect();
+        let arena_len = self.program.funcs[function].values.len();
+        live.into_iter()
+            .filter(|id| (id.0 as usize) < arena_len)
+            .map(|id| (id, self.graph.node()))
+            .collect()
+    }
+
     fn context(effects: Effects) -> Context {
         Context {
             function: 0,
@@ -2263,19 +2278,7 @@ impl<'p> Builder<'p> {
         if fallback {
             ancestors.clear();
         }
-        let live: BTreeSet<_> = self.program.funcs[function]
-            .blocks
-            .iter()
-            .flat_map(|block| block.params.iter().chain(&block.ops))
-            .chain(self.parameters[function].iter().map(|(id, _)| id))
-            .copied()
-            .collect();
-        let arena_len = self.program.funcs[function].values.len();
-        let values = live
-            .into_iter()
-            .filter(|id| (id.0 as usize) < arena_len)
-            .map(|id| (id, self.graph.node()))
-            .collect();
+        let values = self.context_values(function);
         let result = self.graph.node();
         let at = self.contexts.len();
         self.contexts.push(Context {
