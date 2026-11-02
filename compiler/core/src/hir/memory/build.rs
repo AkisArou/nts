@@ -668,6 +668,20 @@ mod tests {
             report.failure
         );
         assert!(
+            report
+                .proofs
+                .iter()
+                .all(|proof| proof.bound.starts_with("outside ")),
+            "failed input cannot publish a positive unfinished lifetime proof: {:?}",
+            report.proofs
+        );
+        for site in &report.sites {
+            for witness in &site.witness {
+                let at: usize = witness.strip_prefix("proof ").unwrap().parse().unwrap();
+                assert!(report.proofs[at].bound.starts_with("outside "));
+            }
+        }
+        assert!(
             matches!(report.failure, Some(Reason::UnsupportedPhase(_))),
             "untransformed input must be named Unknown"
         );
@@ -756,6 +770,43 @@ mod tests {
         assert!(
             counts.iter().all(|(n, visits)| *visits <= 2 * n),
             "actual context visits must be linear: {counts:?}"
+        );
+    }
+
+    #[test]
+    fn review_late_budget_failure_cannot_publish_completed_frame_witnesses() {
+        let mut body = function(
+            "budget#init".to_owned(),
+            vec![OpKind::ObjectNew { frame: false }],
+        );
+        body.values[0].ty = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let program = Program {
+            funcs: vec![body],
+            ..Program::default()
+        };
+        let mut build = Builder::new(&program, Limits::default());
+        let context = build.context(0, None, None);
+        build.body(context);
+        build.graph.solve();
+        // Enough to finish lifetime propagation, not the later event index.
+        build.graph.work_limit = build.graph.work + 3;
+        let report = build.finish();
+        println!(
+            "review-late-budget\tfailure={:?}\tstages={:?}\tproofs={:?}",
+            report.failure, report.stages, report.proofs
+        );
+        assert!(matches!(report.failure, Some(Reason::WorkBudget)));
+        assert!(
+            report
+                .stages
+                .iter()
+                .any(|(stage, work)| stage == "exposure" && *work > 0)
+        );
+        assert!(
+            report
+                .proofs
+                .iter()
+                .all(|proof| proof.bound.starts_with("outside "))
         );
     }
 
