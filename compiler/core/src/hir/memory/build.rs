@@ -778,6 +778,14 @@ mod tests {
         ];
         Program {
             funcs: vec![body],
+            layouts: vec![Layout {
+                types: vec![super::super::super::TypeId(7)],
+                name: "edge-object".to_owned(),
+                fields: Vec::new(),
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            }],
             ..Program::default()
         }
     }
@@ -841,6 +849,7 @@ mod tests {
     #[test]
     fn review_edge_matching_argument_control_keeps_the_returned_alias() {
         let program = review_edge_program(vec![ValueId(0)]);
+        verify::verify(&program).expect("the canonical matching edge verifies");
         let report = super::super::Analysis::of(&program).into_report();
         assert!(report.failure.is_none());
         let value = |id| {
@@ -852,6 +861,20 @@ mod tests {
         };
         assert!(!value(0).aliases.is_empty());
         assert_eq!(value(0).aliases, value(1).aliases);
+    }
+
+    #[test]
+    fn review_edge_main_verifier_rejects_both_short_and_long_edges() {
+        for args in [Vec::new(), vec![ValueId(0), ValueId(0)]] {
+            let found = args.len();
+            let program = review_edge_program(args);
+            let errors =
+                verify::verify(&program).expect_err("an edge must supply exactly one value");
+            println!("main-edge-verifier\tfound={found}\terrors={errors:?}");
+            assert!(errors.iter().any(|error| matches!(error,
+                verify::Invalid::ArgumentCount { target: BlockId(1), expected: 1, found: actual, .. }
+                    if *actual == found)));
+        }
     }
 
     fn review_dispatch_body(name: &str, writes: bool, raises: bool) -> Func {
