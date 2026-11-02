@@ -130,6 +130,8 @@ impl FuncBuilder<'_> {
         for _ in 0..self.snapshot.symbols.len() {
             match self.reference_step(symbol)? {
                 ReferenceStep::Terminal(symbol) => {
+                    #[cfg(test)]
+                    super::view_class_tests::note_discovery_bindings(bindings.len());
                     return Some(ReferencedValue { symbol, bindings });
                 }
                 ReferenceStep::Alias {

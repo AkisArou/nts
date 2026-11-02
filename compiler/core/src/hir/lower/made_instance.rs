@@ -74,6 +74,12 @@ impl<'a, 'snapshot> ConstructorMemo<'a, 'snapshot> {
         }
     }
 
+    /// Declaration identity for discovery, without an executable binding path.
+    pub(super) fn declaration(&mut self, value: NodeId) -> Option<NodeId> {
+        let reference = self.references.of(value)?;
+        self.probe.referenced_declaration(reference.symbol)
+    }
+
     pub(super) fn of(&mut self, class: NodeId) -> Option<CollectedConstructor> {
         if !self.probe.is_native_storage(class) {
             return None;

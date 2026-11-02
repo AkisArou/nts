@@ -12772,6 +12772,7 @@ fn target_suffix(target: TypeId) -> String {
 /// for it), every constructor its construction runs that another class
 /// declares, keyed on it. A constructor no subclass inherits has no copy.
 fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId, Vec<TypeId>> {
+    let mut constructors = made_instance::ConstructorMemo::new(probe);
     let mut built: Vec<NodeId> = Vec::new();
     for index in 0..probe.snapshot.nodes.len() {
         let Ok(at) = u32::try_from(index).map(NodeId) else {
@@ -12782,12 +12783,7 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
                 let Some(class) = probe
                     .children(at)
                     .first()
-                    .and_then(|callee| probe.referenced_value(*callee))
-                    .and_then(|reference| {
-                        #[cfg(test)]
-                        view_class_tests::note_discovery_bindings(reference.bindings.len());
-                        probe.referenced_declaration(reference.symbol)
-                    })
+                    .and_then(|callee| constructors.declaration(*callee))
                 else {
                     continue;
                 };
@@ -12804,7 +12800,6 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
     built.sort_unstable_by_key(|class| class.0);
     built.dedup();
     let mut targets = ConstructorTargets::default();
-    let mut constructors = made_instance::ConstructorMemo::new(probe);
     for class in built {
         if !probe.kind_of(class).is_some_and(declares_a_class) {
             continue;
