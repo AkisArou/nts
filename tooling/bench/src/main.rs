@@ -2407,7 +2407,8 @@ const SPREAD_WORTH_SAYING: f64 = 1.10;
 /// celebrate and record, and either way the run says so rather than printing a
 /// table with four quiet `--`s in it.
 ///
-/// Empty since 2026-10-15. `json-stringify-doc`, the last entry, was refused
+/// The list currently contains `utf8-encode` and `clbg-reverse-complement`.
+/// `json-stringify-doc`, an earlier entry, was refused
 /// from `c9f3d3a09` (2026-09-10): a structural-to-subclass pointer cast, from
 /// `stringifyJsonValue(DOCUMENT, { gap: "" })` reading `options.replacer` off
 /// an anonymous type. Every surviving pinned compiler from `f35a873b4`
@@ -2421,10 +2422,25 @@ const SPREAD_WORTH_SAYING: f64 = 1.10;
 /// `runtime/web-platform`'s `TextEncoder` -- the same gap as `JSON.stringify`.
 /// The case calls the global, as a program does, and comes off this list in
 /// the commit that wires it.
-const REFUSES_TODAY: &[(&str, &str)] = &[(
-    "utf8-encode",
-    "`new TextEncoder()`: the global is not wired to runtime/web-platform's class",
-)];
+///
+/// `clbg-reverse-complement` arrived refused at its 2026-10-28 port:
+/// `tests/refusals/spreading-byte-elements-into-from-char-code` and
+/// `tests/refusals/index-of-on-a-byte-array` record its gaps, with
+/// `tests/programs/clbg-reverse-complement-controls` as the control, and it
+/// comes off this list in the commit that compiles it.
+const REFUSES_TODAY: &[(&str, &str)] = &[
+    (
+        "utf8-encode",
+        "`new TextEncoder()`: the global is not wired to runtime/web-platform's class",
+    ),
+    (
+        "clbg-reverse-complement",
+        "a spread element in `ascii` and `indexOf` on a typed array: \
+         tests/refusals/spreading-byte-elements-into-from-char-code and \
+         tests/refusals/index-of-on-a-byte-array; \
+         control: tests/programs/clbg-reverse-complement-controls",
+    ),
+];
 
 /// Whether the cases that refused are the cases expected to refuse.
 ///
