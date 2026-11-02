@@ -1,0 +1,34 @@
+/*---
+description: WeakMap methods accept widened union arguments through a declared interface and enforce weak-key eligibility.
+features: [ts-weak-collection-routes, ts-weak-collection-route-refused, ts-map-set, ts-unions, ts-symbols, ts-errors, ts-arrays, ts-tuples, ts-iteration, ts-objects, ts-functions, ts-null-undefined, ts-unknown, ts-typeof-operator, ts-interfaces, ts-unsound-bivariance, ts-class, ts-class-fields, ts-numbers, ts-bigint]
+---*/
+// WeakMap through a method-bivariant interface and runtime union checks: node throws TypeError only on refused writes and gives quiet absent reads and deletions.
+type Input = object | symbol | string | number | boolean | bigint | null | undefined;
+function eligible(value: Input): boolean { return typeof value === "symbol" ? Symbol.keyFor(value) === undefined : typeof value === "function" || typeof value === "object" && value !== null; }
+class Token { id: number; constructor(id: number) { this.id = id; } }
+const rows: [Input, Input, boolean][] = [
+  [{ id: 1 }, { id: 1 }, true], [[1], [1], true], [() => 1, () => 1, true], [new Token(1), new Token(1), true],
+  [Symbol("same"), Symbol("same"), true], [Symbol.iterator, Symbol.toStringTag, true], [Symbol.for(""), Symbol.for(""), false], [Symbol.for("weak"), Symbol.for("weak"), false],
+  [null, null, false], [undefined, undefined, false], [false, false, false], [true, true, false], ["", "", false], ["1", "1", false],
+  [0, 0, false], [-0, -0, false], [NaN, NaN, false], [Infinity, Infinity, false], [-Infinity, -Infinity, false], [0n, 0n, false], [1n, 1n, false],
+];
+interface MapPort { get(key: Input): unknown; has(key: Input): boolean; delete(key: Input): boolean; set(key: Input, value: unknown): MapPort; }
+const payloads: unknown[] = [undefined, null, false, -0, NaN, 0n, "", Symbol("value"), { value: 1 }, [1], () => 1];
+for (const [key, peer, accepted] of rows) for (const value of payloads) {
+  const raw: WeakMap<object | symbol, unknown> = new WeakMap<object | symbol, unknown>(); const table: MapPort = raw;
+  const anchor = {}, marker = {}; const alias: Input = key;
+  assert.sameValue(table, raw); assert.sameValue(eligible(key), accepted); assert.sameValue(table.set(anchor, marker), table);
+  assert.sameValue(table.get(key), undefined); assert.sameValue(table.has(key), false); assert.sameValue(table.delete(key), false);
+  if (eligible(key)) {
+    assert.sameValue(table.set(key, value), table); assert.sameValue(table.get(alias), value); assert.sameValue(table.has(alias), true);
+    assert.sameValue(table.get(peer), undefined); assert.sameValue(table.has(peer), false); assert.sameValue(table.delete(peer), false);
+    assert.sameValue(table.set(peer, marker), table); assert.sameValue(table.get(peer), marker); assert.sameValue(table.get(key), value);
+    assert.sameValue(table.delete(alias), true); assert.sameValue(table.delete(key), false); assert.sameValue(table.has(key), false); assert.sameValue(table.get(key), undefined);
+    assert.sameValue(table.get(peer), marker); assert.sameValue(table.has(peer), true); assert.sameValue(table.delete(peer), true); assert.sameValue(table.delete(peer), false);
+    assert.sameValue(table.has(peer), false); assert.sameValue(table.get(peer), undefined);
+  } else {
+    assert.throws(TypeError, () => table.set(key, value)); assert.sameValue(table.get(alias), undefined); assert.sameValue(table.has(alias), false); assert.sameValue(table.delete(alias), false);
+  }
+  assert.sameValue(table.get(anchor), marker); assert.sameValue(table.has(anchor), true); assert.sameValue(table.delete(anchor), true); assert.sameValue(table.delete(anchor), false);
+  assert.sameValue(table.get(anchor), undefined); assert.sameValue(table.has(anchor), false);
+}
