@@ -20,13 +20,32 @@ fn listing(dir: &std::path::Path, class: &str) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-fn allocations(body: &str) -> usize {
+fn allocations(body: &str, views: &[String]) -> usize {
     body.lines()
         .filter(|line| {
             line.split_once(':')
                 .is_some_and(|(_, op)| op.trim_start().starts_with("new "))
+                && line
+                    .split_once("// class ")
+                    .is_some_and(|(_, class)| views.iter().any(|view| class.trim() == view))
         })
         .count()
+}
+
+fn variants<'a>(listing: &'a str, name: &str) -> Vec<&'a str> {
+    let found: Vec<_> = listing
+        .split("\n\n")
+        .filter(|body| {
+            body.lines().any(|line| {
+                line.starts_with("  ")
+                    && !line.starts_with("   ")
+                    && line.ends_with(");")
+                    && (line.contains(&format!(" {name}(")) || line.contains(&format!(" {name}$")))
+            })
+        })
+        .collect();
+    assert!(!found.is_empty(), "missing {name} variants in {listing}");
+    found
 }
 
 fn method<'a>(listing: &'a str, name: &str) -> &'a str {
@@ -87,24 +106,45 @@ export function deep(n: number): number {
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, &class.bytes).unwrap();
     }
+    let mut views: Vec<_> = program
+        .view_classes
+        .iter()
+        .map(|view| {
+            emitted
+                .classes
+                .iter()
+                .find(|class| class.binary_name.contains(&view.name))
+                .unwrap()
+                .binary_name
+                .clone()
+        })
+        .collect();
+    views.push("nts/rt/NtsViewU8".to_owned());
     let body = listing(&dir, "nts.gen.Program");
-    assert_eq!(
-        allocations(method(&body, "plain")),
-        0,
-        "builtin creation uses its runtime factory"
-    );
-    for name in ["single", "deep"] {
-        let body = method(&body, name);
+    for plain in variants(&body, "plain") {
         assert_eq!(
-            allocations(body),
-            1,
-            "one original requested allocation: {body}"
+            allocations(plain, &views),
+            0,
+            "builtin creation uses its runtime factory"
         );
         assert!(
-            !body.contains("NtsViewU8.create:"),
-            "no discarded base view: {body}"
+            plain.contains("NtsViewU8.create:"),
+            "the creation must be present: {plain}"
         );
-        assert!(body.contains("(Lnts/rt/NtsBuffer;DDDZ)V"));
+    }
+    for name in ["single", "deep"] {
+        for body in variants(&body, name) {
+            assert_eq!(
+                allocations(body, &views),
+                1,
+                "one original requested view allocation: {body}"
+            );
+            assert!(
+                !body.contains("NtsViewU8.create:"),
+                "no discarded base view: {body}"
+            );
+            assert!(body.contains("(Lnts/rt/NtsBuffer;DDDZ)V"));
+        }
     }
     for view in &program.view_classes {
         let class = emitted
@@ -115,7 +155,7 @@ export function deep(n: number): number {
         let body = listing(&dir, &class.binary_name.replace('/', "."));
         let like = method(&body, "like");
         assert_eq!(
-            allocations(like),
+            allocations(like, &views),
             1,
             "exactly the requested species: {like}"
         );
@@ -125,20 +165,23 @@ export function deep(n: number): number {
         );
         // Two delegating constructors plus one like; neither constructor allocates.
         assert_eq!(
-            allocations(&body),
+            allocations(&body, &views),
             1,
             "constructors delegate without new: {body}"
         );
     }
     let runtime = root.join("runtime/jvm/nts-runtime.jar");
     let runtime_body = listing(&runtime, "nts.rt.NtsViewU8");
-    assert_eq!(allocations(method(&runtime_body, "create")), 1);
+    assert_eq!(allocations(method(&runtime_body, "create"), &views), 1);
     let driver = dir.join("ViewAllocationDriver.java");
     std::fs::write(&driver, r#"
 public class ViewAllocationDriver {
   public static void main(String[] args) {
-    for (int n = 0; n < 4; n++) {
-      if (nts.gen.Program.plain(n) != n + 3 || nts.gen.Program.single(n) != n + 114 || nts.gen.Program.deep(n) != n + 114)
+    double[] inputs = {0, 1, 2, 3, 0.5, -0.5, 3.5, Double.NaN, Double.POSITIVE_INFINITY, -1.5};
+    int[] low = {0, 1, 2, 3, 0, 0, 3, 0, 0, 3};
+    for (int at = 0; at < inputs.length; at++) {
+      double n = inputs[at];
+      if (nts.gen.Program.plain(n) != low[at] + 3 || nts.gen.Program.single(n) != low[at] + 114 || nts.gen.Program.deep(n) != low[at] + 114)
         throw new AssertionError(n);
     }
     System.out.println("view allocations and species values checked");
