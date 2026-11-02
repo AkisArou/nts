@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 28,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "probe 0 nan",
+        "node": "probe 0 401c000000000000"
+      },
+      {
+        "compiled": "probe 1 nan",
+        "node": "probe 1 401c000000000000"
+      },
+      {
+        "compiled": "probe 2 nan",
+        "node": "probe 2 4020000000000000"
+      },
+      {
+        "compiled": "probe 3 nan",
+        "node": "probe 3 4018000000000000"
+      },
+      {
+        "compiled": "probe 4 nan",
+        "node": "probe 4 4022000000000000"
+      },
+      {
+        "compiled": "probe 5 nan",
+        "node": "probe 5 4024000000000000"
+      },
+      {
+        "compiled": "probe 6 nan",
+        "node": "probe 6 401e000000000000"
+      },
+      {
+        "compiled": "probe 7 nan",
+        "node": "probe 7 401a000000000000"
+      },
+      {
+        "compiled": "probe 8 nan",
+        "node": "probe 8 4021000000000000"
+      },
+      {
+        "compiled": "probe 9 nan",
+        "node": "probe 9 4016000000000000"
+      },
+      {
+        "compiled": "probe 10 nan",
+        "node": "probe 10 4025666666666666"
+      },
+      {
+        "compiled": "probe 11 nan",
+        "node": "probe 11 400a666666666666"
+      },
+      {
+        "compiled": "probe 12 nan",
+        "node": "probe 12 402c000000000000"
+      },
+      {
+        "compiled": "probe 13 nan",
+        "node": "probe 13 4041000000000000"
+      },
+      {
+        "compiled": "probe 14 nan",
+        "node": "probe 14 405ac00000000000"
+      },
+      {
+        "compiled": "probe 15 nan",
+        "node": "probe 15 4070600000000000"
+      },
+      {
+        "compiled": "probe 16 nan",
+        "node": "probe 16 4070700000000000"
+      },
+      {
+        "compiled": "probe 17 nan",
+        "node": "probe 17 408f780000000000"
+      },
+      {
+        "compiled": "probe 18 nan",
+        "node": "probe 18 40b0070000000000"
+      },
+      {
+        "compiled": "probe 19 nan",
+        "node": "probe 19 40f0006000000000"
+      },
+      {
+        "compiled": "probe 20 nan",
+        "node": "probe 20 41e0000000c00000"
+      },
+      {
+        "compiled": "probe 21 nan",
+        "node": "probe 21 c1dffffffe400000"
+      },
+      {
+        "compiled": "probe 22 nan",
+        "node": "probe 22 41e0000000e00000"
+      },
+      {
+        "compiled": "probe 23 nan",
+        "node": "probe 23 41f0000000600000"
+      },
+      {
+        "compiled": "probe 24 nan",
+        "node": "probe 24 4340000000000003"
+      },
+      {
+        "compiled": "probe 25 nan",
+        "node": "probe 25 c33ffffffffffff8"
+      },
+      {
+        "compiled": "probe 26 nan",
+        "node": "probe 26 401c000000abcc77"
+      },
+      {
+        "compiled": "probe 27 nan",
+        "node": "probe 27 40c8200000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 28 disagreements",
+  "node": null,
+  "measured_with": "c8b424f379662011",
+  "source": "measured"
+}

@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: parseInt after U+3000=NaN;parseFloat after U+2028=NaN;parseInt after U+1680=NaN;",
+  "node": "exit 1; nts: uncaught Observed: parseInt after U+3000=-7;parseFloat after U+2028=0.5;parseInt after U+1680=7;",
+  "measured_with": "c8b424f379662011",
+  "source": "measured"
+}

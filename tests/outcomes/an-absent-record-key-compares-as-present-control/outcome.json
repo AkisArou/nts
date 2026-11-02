@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: first lookup made=true;second lookup made=true;",
+  "node": "exit 1; nts: uncaught Observed: first lookup made=true;second lookup made=true;",
+  "measured_with": "c8b424f379662011",
+  "source": "measured"
+}

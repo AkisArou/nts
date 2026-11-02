@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 29,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "probe 0 0000000000000000",
+        "node": "probe 0 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 1 0000000000000000",
+        "node": "probe 1 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 2 0000000000000000",
+        "node": "probe 2 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 3 0000000000000000",
+        "node": "probe 3 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 4 0000000000000000",
+        "node": "probe 4 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 5 0000000000000000",
+        "node": "probe 5 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 6 0000000000000000",
+        "node": "probe 6 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 7 0000000000000000",
+        "node": "probe 7 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 8 0000000000000000",
+        "node": "probe 8 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 9 0000000000000000",
+        "node": "probe 9 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 10 0000000000000000",
+        "node": "probe 10 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 11 0000000000000000",
+        "node": "probe 11 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 12 0000000000000000",
+        "node": "probe 12 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 13 0000000000000000",
+        "node": "probe 13 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 14 0000000000000000",
+        "node": "probe 14 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 15 0000000000000000",
+        "node": "probe 15 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 16 0000000000000000",
+        "node": "probe 16 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 17 0000000000000000",
+        "node": "probe 17 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 18 0000000000000000",
+        "node": "probe 18 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 19 0000000000000000",
+        "node": "probe 19 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 20 0000000000000000",
+        "node": "probe 20 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 21 0000000000000000",
+        "node": "probe 21 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 22 0000000000000000",
+        "node": "probe 22 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 23 0000000000000000",
+        "node": "probe 23 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 24 0000000000000000",
+        "node": "probe 24 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 25 0000000000000000",
+        "node": "probe 25 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 26 0000000000000000",
+        "node": "probe 26 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 27 0000000000000000",
+        "node": "probe 27 3ff0000000000000"
+      },
+      {
+        "compiled": "probe 28 0000000000000000",
+        "node": "probe 28 3ff0000000000000"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 29 compared, 29 expected, 29 disagreements",
+  "node": null,
+  "measured_with": "c8b424f379662011",
+  "source": "measured"
+}
