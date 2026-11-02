@@ -134,6 +134,39 @@ fn checks(report: &str) -> usize {
 }
 
 #[test]
+fn nonreturning_helper_outcomes_match_the_shared_contract() {
+    use nts_core::hir::runtime::{self, Raising};
+    use std::collections::BTreeSet;
+
+    for flags in [vec![], vec!["-DNTS_PROVIDER_RC"]] {
+        let report = run_suite("helper_outcomes", &flags);
+        let mut observed = BTreeSet::new();
+        for row in report.lines() {
+            let columns: Vec<_> = row.split('\t').collect();
+            assert_eq!(columns.len(), 3, "{row}");
+            let name = columns[0];
+            assert!(observed.insert(name));
+            assert_eq!(
+                columns[1] == "transfer",
+                !matches!(
+                    runtime::raising(name),
+                    Some(Raising::NoRaise | Raising::Diverges)
+                ),
+                "actual runtime observation disagrees with {name}: {row}"
+            );
+        }
+        let declared: BTreeSet<_> = runtime::helper_names()
+            .filter(|name| runtime::raising(name) == Some(Raising::Diverges))
+            .collect();
+        assert_eq!(
+            observed, declared,
+            "every nonreturning helper must be observed"
+        );
+        println!("provider={flags:?}\n{report}");
+    }
+}
+
+#[test]
 fn typed_tracing_preserves_collector_and_holder_protocols() {
     for flags in [
         vec!["-DNTS_PROVIDER_RC"],

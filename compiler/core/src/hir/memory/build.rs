@@ -15,6 +15,10 @@ use super::report::{
 use super::summary::Summary;
 use super::{Home, Limits, Multiplicity, Reason, SiteId, Storage};
 
+#[cfg(test)]
+#[path = "build/outcome_tests.rs"]
+mod outcome_tests;
+
 #[derive(Debug, Default)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -34,14 +38,14 @@ mod tests {
     use crate::hir::{Absent, Block, Func, Layout, Op};
     use nts_diagnostics::{Location, SourceId, Span};
 
-    fn origin() -> nts_semantic_schema::Origin {
+    pub(super) fn origin() -> nts_semantic_schema::Origin {
         nts_semantic_schema::Origin::source(Location {
             file: SourceId(0),
             span: Span::new(0, 1),
         })
     }
 
-    fn function(name: String, kinds: Vec<OpKind>) -> Func {
+    pub(super) fn function(name: String, kinds: Vec<OpKind>) -> Func {
         let ops = (0..kinds.len())
             .map(|at| ValueId(u32::try_from(at).expect("test value")))
             .collect();
