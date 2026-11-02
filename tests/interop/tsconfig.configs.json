@@ -21,6 +21,7 @@
     "native-bigint-constants/nts.config.ts",
     "native-buffer/nts.config.ts",
     "native-callback/nts.config.ts",
+    "native-compression/nts.config.ts",
     "native-copy/nts.config.ts",
     "native-byvalue/nts.config.ts",
     "native-given/nts.config.ts",

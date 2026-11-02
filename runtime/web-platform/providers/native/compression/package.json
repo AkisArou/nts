@@ -1,0 +1,6 @@
+{
+  "name": "@nts/native-compression",
+  "private": true,
+  "type": "module",
+  "exports": { ".": "./provider.ts" }
+}
