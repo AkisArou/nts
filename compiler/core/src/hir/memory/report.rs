@@ -135,6 +135,7 @@ pub struct Report {
     pub captures: Vec<CaptureWrite>,
     pub retentions: Vec<Retention>,
     pub memory_events: usize,
+    pub context_membership_visits: usize,
     pub event_changes: Vec<usize>,
     pub proofs: Vec<Proof>,
     pub alias_classes: Vec<(String, Vec<String>)>,
@@ -183,6 +184,11 @@ impl Report {
             self.memory_events,
             self.event_changes.iter().max().unwrap_or(&0),
             self.state_change_limit
+        );
+        let _ = writeln!(
+            out,
+            "fence-context-visits\t{}",
+            self.context_membership_visits
         );
         for (node, changes) in self.state_changes.iter().enumerate() {
             let _ = writeln!(out, "node-changes\t{node}\t{changes}");

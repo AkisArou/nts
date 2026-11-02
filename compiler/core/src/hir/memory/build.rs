@@ -568,6 +568,165 @@ mod tests {
         }
     }
 
+    fn review_await_program(ordinary_handler_edge: bool) -> Program {
+        let mut body = function(
+            "review#init".to_owned(),
+            vec![
+                OpKind::Call {
+                    callee: Callee::External("nts_promise_new".to_owned()),
+                    args: Vec::new(),
+                    frame: None,
+                },
+                OpKind::Await {
+                    promise: ValueId(0),
+                    rejects_to: Some(super::super::super::Rejection {
+                        handler: BlockId(2),
+                        args: Vec::new(),
+                        reason_at: 0,
+                    }),
+                },
+                OpKind::BlockParam(0),
+                OpKind::ObjectNew { frame: false },
+                OpKind::ConstInt(3),
+                OpKind::FieldSet {
+                    object: ValueId(3),
+                    field: 0,
+                    value: ValueId(4),
+                },
+                OpKind::ConstUndefined,
+            ],
+        );
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        body.values[0].ty = HirType::Managed(ManagedType::Promise(Box::new(HirType::NUMBER)));
+        body.values[2].ty = HirType::Erased;
+        body.values[3].ty = object;
+        body.values[4].ty = HirType::NUMBER;
+        body.values[6].ty = HirType::Erased;
+        body.blocks = vec![
+            Block {
+                params: Vec::new(),
+                ops: vec![ValueId(0), ValueId(6), ValueId(1)],
+                terminator: Terminator::Jump {
+                    target: if ordinary_handler_edge {
+                        BlockId(2)
+                    } else {
+                        BlockId(1)
+                    },
+                    args: if ordinary_handler_edge {
+                        vec![ValueId(6)]
+                    } else {
+                        Vec::new()
+                    },
+                },
+            },
+            Block {
+                params: Vec::new(),
+                ops: Vec::new(),
+                terminator: Terminator::Return(None),
+            },
+            Block {
+                params: vec![ValueId(2)],
+                ops: vec![ValueId(3), ValueId(4), ValueId(5)],
+                terminator: Terminator::Return(None),
+            },
+        ];
+        Program {
+            funcs: vec![body],
+            layouts: vec![Layout {
+                types: vec![super::super::super::TypeId(7)],
+                name: "handler".to_owned(),
+                fields: vec![super::super::super::Field {
+                    name: "value".into(),
+                    ty: HirType::NUMBER,
+                    readonly: false,
+                    written: None,
+                    declared_by: None,
+                }],
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..Program::default()
+        }
+    }
+
+    fn review_await_inventory(ordinary_handler_edge: bool) {
+        let program = review_await_program(ordinary_handler_edge);
+        let report = crate::hir::memory::Analysis::of(&program).into_report();
+        println!(
+            "review-await\tordinary={ordinary_handler_edge}\tsites={:?}\tstores={:?}\tfailure={:?}",
+            report
+                .sites
+                .iter()
+                .map(|site| site.id.value)
+                .collect::<Vec<_>>(),
+            report
+                .store_versions
+                .iter()
+                .map(|store| store.value)
+                .collect::<Vec<_>>(),
+            report.failure
+        );
+        assert!(
+            report
+                .sites
+                .iter()
+                .any(|site| site.id.function == "review#init" && site.id.value == 3),
+            "the accepted public endpoint cannot omit a placed handler allocation"
+        );
+        assert!(
+            report
+                .store_versions
+                .iter()
+                .any(|store| store.function == "review#init" && store.value == 5),
+            "the accepted public endpoint cannot omit its handler write"
+        );
+    }
+
+    #[test]
+    fn review_await_only_handler_subject_keeps_complete_inventory() {
+        review_await_inventory(false);
+    }
+
+    #[test]
+    fn review_ordinary_handler_edge_control_keeps_complete_inventory() {
+        review_await_inventory(true);
+    }
+
+    #[test]
+    fn review_unsealed_functions_visit_only_their_indexed_contexts() {
+        let mut counts = Vec::new();
+        for n in [16, 64, 256] {
+            let program = Program {
+                funcs: (0..n)
+                    .map(|at| {
+                        function(
+                            format!("unsealed-{at}"),
+                            vec![OpKind::Call {
+                                callee: Callee::External("nts_raise".to_owned()),
+                                args: Vec::new(),
+                                frame: None,
+                            }],
+                        )
+                    })
+                    .collect(),
+                ..Program::default()
+            };
+            let report = crate::hir::memory::Analysis::of(&program).into_report();
+            assert!(report.failure.is_none(), "n={n}: {:?}", report.failure);
+            assert_eq!(report.contexts, n);
+            println!(
+                "review-fence-contexts\tn={n}\tvisits={}\twork={}",
+                report.context_membership_visits, report.work
+            );
+            counts.push((n, report.context_membership_visits));
+        }
+        assert!(
+            counts.iter().all(|(n, visits)| *visits <= 2 * n),
+            "actual context visits must be linear: {counts:?}"
+        );
+    }
+
     #[test]
     fn a_shared_dispatch_slot_has_one_target_index_and_preserves_first_seen_order() {
         for n in [16, 64, 256] {
@@ -731,6 +890,7 @@ struct Builder<'p> {
     value_blocks: Vec<BTreeMap<ValueId, BlockId>>,
     summaries: Vec<Option<Summary>>,
     summary_used: Vec<bool>,
+    context_membership_visits: usize,
 }
 
 pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
@@ -1040,6 +1200,7 @@ impl<'p> Builder<'p> {
             value_blocks,
             summaries: Vec::new(),
             summary_used: vec![false; program.funcs.len()],
+            context_membership_visits: 0,
         };
         build.summaries = program
             .funcs
@@ -1925,6 +2086,7 @@ impl<'p> Builder<'p> {
                 }
             };
             for context in 0..self.contexts.len() {
+                self.context_membership_visits += 1;
                 if self.contexts[context].function != function_index {
                     continue;
                 }
@@ -2583,6 +2745,7 @@ impl<'p> Builder<'p> {
             retentions,
             event_changes,
             memory_events,
+            context_membership_visits: self.context_membership_visits,
             proofs: lifetimes.proofs,
             alias_classes: self.graph.classes(),
             operations: self.operations,
