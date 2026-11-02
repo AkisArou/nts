@@ -89,6 +89,7 @@ mod work {
 
     #[test]
     fn distinct_view_class_work_is_linear_and_metadata_is_not_copied() {
+        let mut reports = Vec::new();
         for size in [16, 64, 256] {
             VISITS.with(|visits| visits.set(0));
             let mut classes: ViewClasses = (0..size)
@@ -109,9 +110,12 @@ mod work {
             }
             let visits = VISITS.with(Cell::get);
             eprintln!("distinct view classes {size}: index+lookup visits {visits}");
-            assert_eq!(visits, size as usize * 3);
+            reports.push((size, visits));
             classes[0].element = HirType::Bool;
             assert_eq!(classes.get(TypeId(0)).unwrap().element, HirType::Bool);
+        }
+        for (size, visits) in reports {
+            assert_eq!(visits, size as usize * 3);
         }
     }
 }

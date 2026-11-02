@@ -97,6 +97,7 @@ fn distinct_and_sibling_view_classes_have_linear_collection_work() {
 
 #[test]
 fn constructor_target_membership_is_unique_and_published_in_order() {
+    let mut reports = Vec::new();
     for count in [16, 64, 256] {
         TARGETS.with(|n| n.set(0));
         let mut targets = super::ConstructorTargets::default();
@@ -109,13 +110,19 @@ fn constructor_target_membership_is_unique_and_published_in_order() {
             rows[&super::NodeId(1)],
             (0..count).map(super::TypeId).collect::<Vec<_>>()
         );
-        assert_eq!(TARGETS.with(Cell::get), count as usize * 2);
+        let memberships = TARGETS.with(Cell::get);
+        eprintln!("constructor target set {count}: membership work {memberships}");
+        reports.push((count, memberships));
+    }
+    for (count, memberships) in reports {
+        assert_eq!(memberships, count as usize * 2);
     }
 }
 
 #[test]
 fn deep_implicit_constructor_ancestry_is_resolved_once() {
     let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut reports = Vec::new();
     for count in [16, 64, 256] {
         let dir =
             std::env::temp_dir().join(format!("nts-view-implicit-{}-{count}", std::process::id()));
@@ -149,10 +156,7 @@ fn deep_implicit_constructor_ancestry_is_resolved_once() {
         assert_eq!(targets.values().map(Vec::len).sum::<usize>(), count);
         let ancestry = ANCESTRY.with(Cell::get);
         eprintln!("implicit constructor depth {count}: actual collector ancestry steps {ancestry}");
-        assert!(
-            ancestry <= count * 4 + 4,
-            "collector ancestry repeats across implicit subclasses"
-        );
+        reports.push((count, ancestry));
         let lowered = super::lower(&snapshot);
         assert!(
             lowered.program.uncompiled.is_empty(),
@@ -161,6 +165,12 @@ fn deep_implicit_constructor_ancestry_is_resolved_once() {
         );
         assert_eq!(lowered.program.constructed_as.len(), count);
         std::fs::remove_dir_all(dir).unwrap();
+    }
+    for (count, ancestry) in reports {
+        assert!(
+            ancestry <= count * 4 + 4,
+            "collector ancestry repeats across implicit subclasses"
+        );
     }
 }
 

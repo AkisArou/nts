@@ -24582,7 +24582,12 @@ impl<'a> FuncBuilder<'a> {
     fn denoted_symbol(&self, symbol: SymbolId) -> SymbolId {
         let mut at = symbol;
         for _ in 0..8 {
-            match self.snapshot.symbols[at.0 as usize].aliased {
+            match self
+                .snapshot
+                .symbols
+                .get(at.0 as usize)
+                .and_then(|record| record.aliased)
+            {
                 Some(next) => at = next,
                 None => return at,
             }
