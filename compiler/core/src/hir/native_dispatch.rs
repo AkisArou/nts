@@ -65,10 +65,25 @@ impl Program {
     /// default reached through no row had its return narrowed to `i32` under a
     /// selector declared `f64`.
     pub fn dispatch_targets(&self) -> impl Iterator<Item = &str> {
+        self.dispatch_entries().map(|(_, body)| body)
+    }
+
+    /// The same complete dispatch authority, retaining each logical selector.
+    /// Rows precede interface defaults; source order and duplicates are kept.
+    pub fn dispatch_entries(&self) -> impl Iterator<Item = (u32, &str)> {
         self.layouts
             .iter()
-            .flat_map(|layout| layout.methods.iter().flatten().map(String::as_str))
-            .chain(self.interface_access.defaults().map(|(_, body)| body))
+            .flat_map(|layout| {
+                layout
+                    .methods
+                    .iter()
+                    .enumerate()
+                    .filter_map(|(slot, body)| {
+                        body.as_deref()
+                            .map(|body| (u32::try_from(slot).unwrap_or(u32::MAX), body))
+                    })
+            })
+            .chain(self.interface_access.defaults())
     }
 
     /// Native code, without bodies made unreferenced by table projection.
@@ -436,6 +451,27 @@ mod tests {
             base: None,
             methods,
         }
+    }
+
+    #[test]
+    fn complete_dispatch_entries_preserve_target_order_and_duplicates() {
+        let mut program = Program {
+            layouts: vec![
+                row("first", &[(3, "a"), (7, "b")]),
+                row("second", &[(2, "c"), (7, "b")]),
+            ],
+            ..Program::default()
+        };
+        program.interface_access.note_default(0, "d".to_owned());
+        program.interface_access.note_default(3, "a".to_owned());
+        assert_eq!(
+            program.dispatch_entries().collect::<Vec<_>>(),
+            [(3, "a"), (7, "b"), (2, "c"), (7, "b"), (0, "d"), (3, "a")]
+        );
+        assert_eq!(
+            program.dispatch_targets().collect::<Vec<_>>(),
+            ["a", "b", "c", "b", "d", "a"]
+        );
     }
 
     #[test]
