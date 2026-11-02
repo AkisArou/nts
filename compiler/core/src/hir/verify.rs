@@ -236,9 +236,21 @@ pub enum Invalid {
     /// a mismatch means some parameter has no value on that path.
     ArgumentCount {
         func: String,
+        from: BlockId,
+        edge: &'static str,
         target: BlockId,
         expected: usize,
         found: usize,
+    },
+    /// An edge names an argument or parameter outside the value arena.
+    EdgeValue {
+        func: String,
+        from: BlockId,
+        edge: &'static str,
+        target: BlockId,
+        at: usize,
+        which: &'static str,
+        value: ValueId,
     },
     /// A value was used somewhere its definition does not reach.
     ///
@@ -2074,39 +2086,74 @@ fn check_operands(func: &Func, problems: &mut Vec<Invalid>) {
 /// disagreeing. It reached the backend as C assigning a `double` to an
 /// `NtsValue` -- caught, but by the C compiler, with no source location and
 /// nothing naming the join.
-fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<Invalid>) {
-    let mut check = |target: BlockId, args: &[ValueId]| {
-        let expected = func.blocks[target.0 as usize].params.len();
-        if args.len() != expected {
-            problems.push(Invalid::ArgumentCount {
-                func: func.name.clone(),
-                target,
-                expected,
-                found: args.len(),
-            });
-            return;
-        }
-        for (at, (argument, parameter)) in args
-            .iter()
-            .zip(&func.blocks[target.0 as usize].params)
-            .enumerate()
-        {
-            let found = &func.values[argument.0 as usize].ty;
-            let want = &func.values[parameter.0 as usize].ty;
-            if !compatible(found, want) {
-                problems.push(Invalid::EdgeType {
+pub(super) fn check_edge_arguments(
+    func: &Func,
+    from: BlockId,
+    edge: &'static str,
+    target: BlockId,
+    args: &[ValueId],
+    problems: &mut Vec<Invalid>,
+) -> bool {
+    let Some(block) = func.blocks.get(target.0 as usize) else {
+        problems.push(Invalid::DanglingSuccessor {
+            func: func.name.clone(),
+            target,
+        });
+        return false;
+    };
+    let expected = block.params.len();
+    if args.len() != expected {
+        problems.push(Invalid::ArgumentCount {
+            func: func.name.clone(),
+            from,
+            edge,
+            target,
+            expected,
+            found: args.len(),
+        });
+        return false;
+    }
+    let before = problems.len();
+    for (at, (argument, parameter)) in args.iter().zip(&block.params).enumerate() {
+        let mut value_type = |value: ValueId, which| {
+            let op = func.values.get(value.0 as usize);
+            if op.is_none() {
+                problems.push(Invalid::EdgeValue {
                     func: func.name.clone(),
+                    from,
+                    edge,
                     target,
                     at,
-                    expected: want.clone(),
-                    found: found.clone(),
+                    which,
+                    value,
                 });
             }
+            op.map(|op| &op.ty)
+        };
+        let found = value_type(*argument, "argument");
+        let want = value_type(*parameter, "parameter");
+        if let (Some(found), Some(want)) = (found, want)
+            && !compatible(found, want)
+        {
+            problems.push(Invalid::EdgeType {
+                func: func.name.clone(),
+                target,
+                at,
+                expected: want.clone(),
+                found: found.clone(),
+            });
         }
+    }
+    problems.len() == before
+}
+
+fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<Invalid>) {
+    let mut check = |edge, target: BlockId, args: &[ValueId]| {
+        check_edge_arguments(func, id, edge, target, args, problems);
     };
 
     match &block.terminator {
-        Terminator::Jump { target, args } => check(*target, args),
+        Terminator::Jump { target, args } => check("jump", *target, args),
         Terminator::Branch {
             then_target,
             then_args,
@@ -2114,8 +2161,8 @@ fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<I
             else_args,
             ..
         } => {
-            check(*then_target, then_args);
-            check(*else_target, else_args);
+            check("then", *then_target, then_args);
+            check("else", *else_target, else_args);
         }
         Terminator::Return(value) => {
             // `never` is what a function that does not come back returns, and

@@ -2190,27 +2190,29 @@ impl<'p> Builder<'p> {
         } else {
             verify::reverse_postorder(function)
         };
-        for block in blocks {
+        for block_id in blocks {
             let repeated = self.contexts[context].repeated
                 || self.cycles[function_index]
                     .as_ref()
                     .ok()
-                    .and_then(|cycle| cycle.is_cyclic(block))
+                    .and_then(|cycle| cycle.is_cyclic(block_id))
                     != Some(false);
-            for &id in &function.blocks[block.0 as usize].ops {
+            for &id in &function.blocks[block_id.0 as usize].ops {
                 // Inventory still completes after exhaustion. Graph mutations
                 // stop charging/publishing facts, and every home becomes Heap.
                 self.graph.charge();
                 self.operation(context, id, repeated);
             }
-            let block = &function.blocks[block.0 as usize];
+            let block = &function.blocks[block_id.0 as usize];
             match &block.terminator {
                 Terminator::Return(Some(id)) => {
                     let value = self.value(context, *id);
                     self.graph.copy(value, self.contexts[context].result);
                     self.roots.push((value, Exposure::Returned(context)));
                 }
-                Terminator::Jump { target, args } => self.edge(context, *target, args),
+                Terminator::Jump { target, args } => {
+                    self.edge(context, block_id, "jump", *target, args)
+                }
                 Terminator::Branch {
                     then_target,
                     then_args,
@@ -2218,19 +2220,45 @@ impl<'p> Builder<'p> {
                     else_args,
                     ..
                 } => {
-                    self.edge(context, *then_target, then_args);
-                    self.edge(context, *else_target, else_args);
+                    self.edge(context, block_id, "then", *then_target, then_args);
+                    self.edge(context, block_id, "else", *else_target, else_args);
                 }
                 _ => {}
             }
         }
     }
 
-    fn edge(&mut self, context: usize, target: BlockId, args: &[ValueId]) {
+    fn edge(
+        &mut self,
+        context: usize,
+        from: BlockId,
+        edge: &'static str,
+        target: BlockId,
+        args: &[ValueId],
+    ) {
         let function = &self.program.funcs[self.contexts[context].function];
-        for (&arg, &parameter) in args.iter().zip(&function.blocks[target.0 as usize].params) {
+        if !self.graph.charge_many(args.len().saturating_add(1)) {
+            return;
+        }
+        let mut problems = Vec::new();
+        if !verify::check_edge_arguments(function, from, edge, target, args, &mut problems) {
             self.graph
-                .copy(self.value(context, arg), self.value(context, parameter));
+                .failure
+                .get_or_insert_with(|| Reason::InvalidControlFlow(format!("{problems:?}")));
+            return;
+        }
+        for (&arg, &parameter) in args.iter().zip(&function.blocks[target.0 as usize].params) {
+            let values = &self.contexts[context].values;
+            let Some((&argument, &parameter)) = values.get(&arg).zip(values.get(&parameter)) else {
+                self.graph.failure.get_or_insert_with(|| {
+                    Reason::InvalidControlFlow(format!(
+                        "{}: block {} {edge} edge to {} uses an unplaced definition",
+                        function.name, from.0, target.0
+                    ))
+                });
+                return;
+            };
+            self.graph.copy(argument, parameter);
         }
     }
 
