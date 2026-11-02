@@ -2950,6 +2950,7 @@ impl<'p> Builder<'p> {
             OpKind::Erase { value, .. }
             | OpKind::Unerase { value, .. }
             | OpKind::FieldView { value, .. }
+            | OpKind::NativeStringView { string: value }
             | OpKind::OptionalPayload(value) => self.graph.copy(self.value(context, *value), into),
             OpKind::Convert(value)
                 if op.ty.may_hold_a_reference()

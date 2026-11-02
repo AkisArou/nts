@@ -395,17 +395,21 @@ fn counted_views(
     control: &mut Control<'_>,
 ) -> Result<FxHashMap<ValueId, ValueId>, Failure> {
     let mut viewed = FxHashMap::default();
-    // This really scans the complete arena, including orphan entries.
-    control.take(func.values.len())?;
-    for (at, op) in func.values.iter().enumerate() {
-        match op.kind {
-            OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }
-                if func.values[operand.0 as usize].ty.counting().is_some() =>
-            {
-                control.take(1)?;
-                viewed.insert(ValueId(u32::try_from(at).unwrap_or(u32::MAX)), operand);
+    // Only placed definitions participate in liveness. An unused arena entry
+    // has no validated operand domain and cannot justify an ownership fact.
+    for block in &func.blocks {
+        control.take(block.ops.len().saturating_add(1))?;
+        for &id in &block.ops {
+            let op = &func.values[id.0 as usize];
+            match op.kind {
+                OpKind::Convert(operand) | OpKind::FieldView { value: operand, .. }
+                    if func.values[operand.0 as usize].ty.counting().is_some() =>
+                {
+                    control.take(1)?;
+                    viewed.insert(id, operand);
+                }
+                _ => {}
             }
-            _ => {}
         }
     }
     Ok(viewed)

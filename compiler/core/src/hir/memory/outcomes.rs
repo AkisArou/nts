@@ -35,6 +35,7 @@ fn intrinsic(op: &Op, by_name: &BTreeMap<&str, usize>) -> bool {
         | OpKind::Unerase { .. }
         | OpKind::Convert(_)
         | OpKind::FieldView { .. }
+        | OpKind::NativeStringView { .. }
         | OpKind::OptionalPayload(_)
         | OpKind::Optional { .. }
         | OpKind::OptionalDefined(_)

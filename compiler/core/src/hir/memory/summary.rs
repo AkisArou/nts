@@ -73,6 +73,7 @@ impl Summary {
                 OpKind::Erase { value, .. }
                 | OpKind::Unerase { value, .. }
                 | OpKind::FieldView { value, .. }
+                | OpKind::NativeStringView { string: value }
                 | OpKind::OptionalPayload(value) => {
                     names.insert(id, name(*value)?);
                     Step::Copy(*value)
