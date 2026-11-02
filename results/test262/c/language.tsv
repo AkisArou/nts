@@ -1,6 +1,7 @@
 # Test262 test/language cases that ran, and what each did. Written by
 # tooling/census/conformance262.ts --record; compared by --check.
-# compiler ff292defb2ef3b3f, commit 94184f2b39ec68fa90c5ca0e0ec857cc7b5fe0b7, backend c, harness bbd3d84004e74dad; machine at start: 18.6 GB available, swap 9/31.5 GB, load 23.6/21.4 (1m/5m), 30 cores; 8 worker(s)
+# compiler e71242a74d0d558a, commit 7e18d0845b23865d056c5dc7cdbb368a7a280c3c, backend c, harness bbd3d84004e74dad; machine at start: 19.9 GB available, swap 10.8/31.5 GB, load 15.9/11.7 (1m/5m), 30 cores; 8 worker(s)
+# Registered inventory selected from the complete measured directory; parent 276e7b1c881be351eb02186b209dc343abe0f81d.
 test/language/arguments-object/10.5-1gs.js	pass	
 test/language/asi/S7.9.2_A1_T1.js	pass	
 test/language/asi/S7.9.2_A1_T2.js	pass	
