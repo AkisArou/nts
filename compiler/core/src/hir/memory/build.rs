@@ -907,6 +907,203 @@ mod tests {
         review_operand("unplaced", false);
     }
 
+    fn review_global_program(write: bool, invalid: bool) -> Program {
+        let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let global = if invalid { 99 } else { 0 };
+        let mut body = function(
+            "global#init".to_owned(),
+            vec![
+                OpKind::Param(0),
+                OpKind::ObjectNew { frame: false },
+                OpKind::ObjectNew { frame: false },
+                OpKind::FieldSet {
+                    object: ValueId(1),
+                    field: 0,
+                    value: ValueId(2),
+                },
+                OpKind::FieldSet {
+                    object: ValueId(2),
+                    field: 0,
+                    value: ValueId(0),
+                },
+                OpKind::GlobalSet {
+                    global: if write { global } else { 0 },
+                    value: ValueId(1),
+                },
+                OpKind::GlobalGet(if write { 0 } else { global }),
+            ],
+        );
+        for at in [0, 1, 2, 6] {
+            body.values[at].ty = object.clone();
+        }
+        body.params.push(super::super::super::Param {
+            name: "unplaced-abi".to_owned(),
+            ty: object.clone(),
+            origin: origin(),
+            shape: super::super::super::ParamShape::Ordinary,
+            known: facts::Facts::TOP,
+            written: None,
+        });
+        body.blocks[0].ops.remove(0);
+        body.blocks[0].terminator = Terminator::Return(Some(ValueId(6)));
+        body.return_type = object.clone();
+        Program {
+            funcs: vec![body],
+            globals: vec![super::super::super::Global {
+                name: "slot".to_owned(),
+                ty: object.clone(),
+                written: None,
+                constant: false,
+                initial: 0.0,
+                exported: false,
+                deferred: true,
+                origin: origin(),
+            }],
+            layouts: vec![Layout {
+                types: vec![super::super::super::TypeId(7)],
+                name: "global-object".to_owned(),
+                fields: vec![super::super::super::Field {
+                    name: "child".into(),
+                    ty: object,
+                    readonly: false,
+                    written: None,
+                    declared_by: None,
+                }],
+                methods: Vec::new(),
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..Program::default()
+        }
+    }
+
+    fn review_global(write: bool, invalid: bool) {
+        let program = review_global_program(write, invalid);
+        let report = super::super::Analysis::of(&program).into_report();
+        println!(
+            "review-global\twrite={write}\tinvalid={invalid}\tfailure={:?}\tsites={}\tvalues={}",
+            report.failure,
+            report.sites.len(),
+            report.values.len()
+        );
+        assert_eq!(
+            report.sites.len(),
+            2,
+            "both placed allocations remain inventoried"
+        );
+        assert!(
+            report.values.iter().any(|value| value.value == 0),
+            "the actual unplaced ABI definition remains inventoried"
+        );
+        if invalid {
+            assert!(matches!(
+                report.failure,
+                Some(Reason::InvalidControlFlow(_))
+            ));
+            assert!(
+                report
+                    .sites
+                    .iter()
+                    .all(|site| matches!(site.home, Home::Heap(Reason::InvalidControlFlow(_))))
+            );
+            assert!(
+                report
+                    .proofs
+                    .iter()
+                    .all(|proof| proof.bound.starts_with("outside "))
+            );
+            assert!(
+                report
+                    .values
+                    .iter()
+                    .all(|value| matches!(value.payload, ValueFact::Unknown(_)))
+            );
+            assert!(
+                report
+                    .functions
+                    .iter()
+                    .all(|function| function.unknown_effects
+                        && function.may_change_length
+                        && function.may_suspend
+                        && function.may_reenter)
+            );
+            assert!(report.captures.iter().all(|capture| matches!(
+                capture.later_write,
+                super::super::LaterWrite::Unknown(_)
+            )));
+            assert!(
+                report
+                    .frontiers
+                    .iter()
+                    .all(|frontier| frontier.ends.is_err())
+            );
+        } else {
+            verify::verify(&program).expect("the one-difference global control verifies");
+            assert!(report.failure.is_none(), "{:?}", report.failure);
+            let stored = report
+                .values
+                .iter()
+                .find(|value| value.value == 1)
+                .expect("stored allocation");
+            let loaded = report
+                .values
+                .iter()
+                .find(|value| value.value == 6)
+                .expect("loaded global");
+            assert!(!stored.aliases.is_empty());
+            assert!(
+                stored
+                    .aliases
+                    .iter()
+                    .all(|alias| loaded.aliases.contains(alias)),
+                "the actual global retains the stored alias"
+            );
+        }
+    }
+
+    #[test]
+    fn review_global_missing_get_is_unknown_not_a_panic() {
+        review_global(false, true);
+    }
+    #[test]
+    fn review_global_get_control_keeps_the_actual_alias() {
+        review_global(false, false);
+    }
+    #[test]
+    fn review_global_missing_set_is_unknown_not_a_panic() {
+        review_global(true, true);
+    }
+    #[test]
+    fn review_global_set_control_keeps_the_actual_alias() {
+        review_global(true, false);
+    }
+    #[test]
+    fn review_global_verifier_rejects_missing_get_before_type_reads() {
+        assert!(verify::verify(&review_global_program(false, true)).is_err());
+    }
+    #[test]
+    fn review_global_verifier_rejects_missing_set_before_type_reads() {
+        assert!(verify::verify(&review_global_program(true, true)).is_err());
+    }
+    #[test]
+    fn review_global_orphan_metadata_is_not_a_live_operand() {
+        let mut program = review_global_program(false, false);
+        program.funcs[0].values.push(Op {
+            kind: OpKind::GlobalGet(99),
+            ty: HirType::Erased,
+            origin: origin(),
+        });
+        let report = super::super::Analysis::of(&program).into_report();
+        assert!(report.failure.is_none(), "{:?}", report.failure);
+        assert_eq!(report.sites.len(), 2);
+        assert_eq!(
+            report.values.len(),
+            7,
+            "the orphan global read is not a fact"
+        );
+        verify::verify(&program).expect("unplaced metadata is not executed");
+    }
+
     #[test]
     fn review_operand_domain_charges_actual_wide_call_operands_once() {
         for n in [16, 64, 256] {
