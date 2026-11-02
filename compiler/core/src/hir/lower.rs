@@ -12783,7 +12783,11 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
                     .children(at)
                     .first()
                     .and_then(|callee| probe.referenced_value(*callee))
-                    .and_then(|reference| probe.referenced_declaration(reference.symbol))
+                    .and_then(|reference| {
+                        #[cfg(test)]
+                        view_class_tests::note_discovery_bindings(reference.bindings.len());
+                        probe.referenced_declaration(reference.symbol)
+                    })
                 else {
                     continue;
                 };
@@ -12820,6 +12824,8 @@ fn constructor_targets(probe: &FuncBuilder<'_>) -> rustc_hash::FxHashMap<NodeId,
             next = constructors.above(owner);
         }
     }
+    #[cfg(test)]
+    view_class_tests::note_discovery_retained(constructors.owned_binding_elements());
     targets.finish()
 }
 

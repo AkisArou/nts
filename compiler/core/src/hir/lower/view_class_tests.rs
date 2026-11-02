@@ -9,6 +9,8 @@ thread_local! {
     static TARGETS: Cell<usize> = const { Cell::new(0) };
     static ANCESTRY: Cell<usize> = const { Cell::new(0) };
     static ALIAS_LINKS: Cell<usize> = const { Cell::new(0) };
+    static DISCOVERY_BINDINGS: Cell<(usize, usize)> = const { Cell::new((0, 0)) };
+    static DISCOVERY_RETAINED: Cell<usize> = const { Cell::new(0) };
 }
 pub(super) fn note_class() {
     CLASSES.with(|n| n.set(n.get() + 1));
@@ -21,6 +23,93 @@ pub(super) fn note_ancestor() {
 }
 pub(super) fn note_alias_link() {
     ALIAS_LINKS.with(|n| n.set(n.get() + 1));
+}
+pub(super) fn note_discovery_bindings(count: usize) {
+    DISCOVERY_BINDINGS.with(|n| {
+        let (total, peak) = n.get();
+        n.set((total + count, peak.max(count)));
+    });
+}
+pub(super) fn note_discovery_retained(count: usize) {
+    DISCOVERY_RETAINED.with(|n| n.set(count));
+}
+
+#[test]
+fn new_callee_alias_discovery_is_shared_by_the_constructor_collector() {
+    let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    let mut reports = Vec::new();
+    for aliases in [false, true] {
+        for count in [16, 64, 256] {
+            let dir = std::env::temp_dir().join(format!(
+                "nts-constructor-discovery-{}-{aliases}-{count}",
+                std::process::id()
+            ));
+            std::fs::create_dir_all(&dir).unwrap();
+            let mut source = String::from(
+                "class Base extends Uint8Array { constructor(n: number) { super(n); } }\nclass View extends Base {}\nconst Alias0 = View;\n",
+            );
+            for at in 1..count {
+                writeln!(source, "const Alias{at} = Alias{};", at - 1).unwrap();
+            }
+            let callee = if aliases {
+                format!("Alias{}", count - 1)
+            } else {
+                "View".to_owned()
+            };
+            for at in 0..count {
+                writeln!(source, "export function probe{at}(n: number): number {{ return new {callee}((n & 3) + 1).length; }}").unwrap();
+            }
+            std::fs::write(dir.join("main.ts"), source).unwrap();
+            let config = dir.join("tsconfig.json");
+            std::fs::write(
+                &config,
+                format!(
+                    "{{\"extends\":\"{root}/tsconfig.fixtures.json\",\"files\":[\"main.ts\"]}}"
+                ),
+            )
+            .unwrap();
+            let semantic = nts_frontend_ts::Frontend::new(env!("CARGO_MANIFEST_DIR"))
+                .with_checkers(std::num::NonZeroU16::MIN)
+                .snapshot(camino::Utf8Path::from_path(&config).unwrap())
+                .unwrap();
+            let snapshot = super::LoweringSnapshot::new(&semantic);
+            let probe = super::FuncBuilder::probe(&snapshot);
+            let class = (0..snapshot.nodes.len())
+                .map(|at| super::NodeId(u32::try_from(at).unwrap()))
+                .find(|at| {
+                    probe.kind_of(*at).is_some_and(super::declares_a_class)
+                        && probe.class_name(*at).as_deref() == Some("View")
+                })
+                .unwrap();
+            let target = super::instance_type_of(&snapshot, class).unwrap();
+            ALIAS_LINKS.with(|n| n.set(0));
+            DISCOVERY_BINDINGS.with(|n| n.set((0, 0)));
+            DISCOVERY_RETAINED.with(|n| n.set(0));
+            let targets = super::constructor_targets(&probe);
+            assert_eq!(targets.len(), 1);
+            assert_eq!(targets.values().next().unwrap(), &[target]);
+            let links = ALIAS_LINKS.with(Cell::get);
+            let (materialized, peak) = DISCOVERY_BINDINGS.with(Cell::get);
+            let retained = DISCOVERY_RETAINED.with(Cell::get);
+            eprintln!(
+                "new callee population {count} aliases={aliases}: alias links {links}, materialized bindings {materialized}, peak temporary bindings {peak}, retained index bindings {retained}"
+            );
+            reports.push((count, aliases, links, materialized, peak, retained));
+            std::fs::remove_dir_all(dir).unwrap();
+        }
+    }
+    for (count, aliases, links, materialized, peak, retained) in reports {
+        assert!(
+            links <= count * 2 + 2,
+            "collector discovery repeats alias links at {count}"
+        );
+        assert_eq!(
+            materialized, 0,
+            "discovery needs identity, not a binding Vec"
+        );
+        assert_eq!(peak, 0, "no transient executable proof at discovery");
+        assert_eq!(retained, if aliases { count } else { 0 });
+    }
 }
 
 #[test]
