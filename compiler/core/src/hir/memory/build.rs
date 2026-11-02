@@ -1116,9 +1116,9 @@ mod tests {
                 frame: None,
             });
             let body = function("operand-cost".to_owned(), kinds);
-            let (failure, work) = operand_domain(&body);
+            let (failure, work) = operand_domain(&Program::default(), &body);
             assert!(failure.is_none());
-            assert_eq!(work, 4 * n + 3);
+            assert_eq!(work, 5 * n + 4);
             println!("review-operand-domain\tn={n}\twork={work}");
         }
     }
@@ -1899,12 +1899,12 @@ struct Builder<'p> {
     context_membership_visits: usize,
     contexts_of: Vec<Vec<usize>>,
     unsupported_phase: bool,
-    invalid_values: bool,
+    invalid_input: bool,
 }
 
 pub(super) fn analyze(program: &Program, limits: Limits) -> Report {
     let mut build = Builder::new(program, limits);
-    let outside = if build.invalid_values {
+    let outside = if build.invalid_input {
         // Invalid input cannot enter a root resolver that reads its operands.
         // The unseen-body walk below still inventories every actual function.
         rustc_hash::FxHashSet::default()
@@ -2138,7 +2138,7 @@ struct FunctionIndex<'p> {
     cycles: Vec<Result<cfg::CyclicBlocks<'p>, cfg::CfgError>>,
     failure: Option<Reason>,
     unsupported_phase: bool,
-    invalid_values: bool,
+    invalid_input: bool,
     work: usize,
     value_blocks: Vec<BTreeMap<ValueId, BlockId>>,
 }
@@ -2163,7 +2163,7 @@ fn metadata_work(program: &Program) -> usize {
 /// Validate the domain consumed by memory using the verifier's operand
 /// enumeration, including terminators and actual unplaced ABI parameters.
 /// A valid arena entry alone is not a definition after DCE removed its producer.
-fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
+fn operand_domain(program: &Program, function: &super::super::Func) -> (Option<Reason>, usize) {
     // One arena scan for actual ABI definitions, and one dense bitmap initialization.
     let mut work = function
         .values
@@ -2201,8 +2201,11 @@ fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
         }
     }
     for (at, block) in function.blocks.iter().enumerate() {
-        let mut check = |value: ValueId, user: Option<ValueId>| {
-            work += 1;
+        let check = |value: ValueId,
+                     user: Option<ValueId>,
+                     failure: &mut Option<Reason>,
+                     work: &mut usize| {
+            *work += 1;
             if definitions.get(value.0 as usize) != Some(&true) {
                 failure.get_or_insert_with(|| {
                     let user = user.map_or_else(
@@ -2217,15 +2220,21 @@ fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
             }
         };
         for &id in &block.ops {
+            // Charge the placed program-operand check even when no raw table
+            // index is present. Valid metadata checks allocate nothing.
+            work += 1;
             let Some(op) = function.values.get(id.0 as usize) else {
                 continue;
             };
+            if let Some(problem) = verify::check_program_operand(program, function, id, &op.kind) {
+                failure.get_or_insert_with(|| Reason::InvalidControlFlow(format!("{problem:?}")));
+            }
             for operand in verify::operands(&op.kind) {
-                check(operand, Some(id));
+                check(operand, Some(id), &mut failure, &mut work);
             }
         }
         for operand in verify::terminator_operands(&block.terminator) {
-            check(operand, None);
+            check(operand, None, &mut failure, &mut work);
         }
     }
     (failure, work)
@@ -2234,9 +2243,13 @@ fn operand_domain(function: &super::super::Func) -> (Option<Reason>, usize) {
 impl<'p> FunctionIndex<'p> {
     fn of(program: &'p Program) -> Self {
         let cycles: Vec<_> = program.funcs.iter().map(cfg::cyclic_blocks).collect();
-        let domains: Vec<_> = program.funcs.iter().map(operand_domain).collect();
+        let domains: Vec<_> = program
+            .funcs
+            .iter()
+            .map(|function| operand_domain(program, function))
+            .collect();
         let domain_failure = domains.iter().find_map(|(failure, _)| failure.clone());
-        let invalid_values = domain_failure.is_some();
+        let invalid_input = domain_failure.is_some();
         let domain_work = domains.iter().map(|(_, work)| work).sum::<usize>();
         let cfg_failure = cycles
             .iter()
@@ -2308,7 +2321,7 @@ impl<'p> FunctionIndex<'p> {
             cycles,
             failure: cfg_failure.or(domain_failure).or(phase_failure),
             unsupported_phase,
-            invalid_values,
+            invalid_input,
             work: cfg_work
                 .saturating_add(domain_work)
                 .saturating_add(metadata_work(program)),
@@ -2389,14 +2402,14 @@ impl<'p> Builder<'p> {
             context_membership_visits: 0,
             contexts_of: vec![Vec::new(); program.funcs.len()],
             unsupported_phase: index.unsupported_phase,
-            invalid_values: index.invalid_values,
+            invalid_input: index.invalid_input,
         };
         build.summaries = program
             .funcs
             .iter()
             .enumerate()
             .map(|(at, function)| {
-                if build.cycles[at].is_err() || build.unsupported_phase || build.invalid_values {
+                if build.cycles[at].is_err() || build.unsupported_phase || build.invalid_input {
                     None
                 } else {
                     Summary::of(function, |ty, index| build.field(ty, index))
@@ -2697,10 +2710,10 @@ impl<'p> Builder<'p> {
             };
             return;
         }
-        if self.cycles[function_index].is_err() && !self.invalid_values {
+        if self.cycles[function_index].is_err() && !self.invalid_input {
             return;
         }
-        if self.invalid_values {
+        if self.invalid_input {
             self.contexts[context].effects = Effects {
                 length: true,
                 suspension: true,
@@ -2712,7 +2725,7 @@ impl<'p> Builder<'p> {
         // Unsupported pre-suspend input still gets a complete placed-site
         // inventory. No liveness/alias/lifetime fact from that phase publishes
         // a proof; ordinary preparation observes only transformed input.
-        let blocks = if self.unsupported_phase || self.invalid_values {
+        let blocks = if self.unsupported_phase || self.invalid_input {
             (0..function.blocks.len())
                 .map(|at| BlockId(u32::try_from(at).unwrap_or(u32::MAX)))
                 .collect()
@@ -2734,7 +2747,7 @@ impl<'p> Builder<'p> {
                     self.operation(context, id, repeated);
                 }
             }
-            if self.invalid_values {
+            if self.invalid_input {
                 continue;
             }
             let block = &function.blocks[block_id.0 as usize];
@@ -2802,7 +2815,7 @@ impl<'p> Builder<'p> {
         let function = &self.program.funcs[self.contexts[context].function];
         let op = function.value(id);
         let into = self.value(context, id);
-        if self.invalid_values {
+        if self.invalid_input {
             match &op.kind {
                 // These existing allocation arms need no operand values.
                 OpKind::ObjectNew { .. }
@@ -2812,7 +2825,7 @@ impl<'p> Builder<'p> {
                     op: BinOp::Concat, ..
                 } => {}
                 OpKind::Call { .. } => {
-                    self.opaque(context, id, &[], "invalid value domain");
+                    self.opaque(context, id, &[], "invalid input domain");
                     return;
                 }
                 _ => return,
@@ -3705,7 +3718,7 @@ impl<'p> Builder<'p> {
             let function = &self.program.funcs[context.function];
             for &value in function.blocks.iter().flat_map(|block| &block.ops) {
                 let Some(&node) = context.values.get(&value) else {
-                    debug_assert!(self.invalid_values);
+                    debug_assert!(self.invalid_input);
                     continue;
                 };
                 let objects: Vec<_> = self.graph.values[node].objects.iter().copied().collect();

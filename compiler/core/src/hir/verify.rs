@@ -21,6 +21,13 @@ use super::{
 /// A way the IR was malformed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Invalid {
+    /// An executed operation names a module slot outside the program table.
+    GlobalOperand {
+        func: String,
+        value: ValueId,
+        global: u32,
+        available: usize,
+    },
     /// An optional value lost definedness or exposed an unproved payload.
     OptionalValue {
         func: String,
@@ -372,6 +379,20 @@ pub enum Invalid {
 /// whole picture.
 pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     let mut problems = Vec::new();
+    // Validate program-table operands before store/type checks consume them.
+    // Orphan arena operations do not execute and grant no metadata authority.
+    for func in &program.funcs {
+        for &value in func.blocks.iter().flat_map(|block| &block.ops) {
+            if let Some(op) = func.values.get(value.0 as usize)
+                && let Some(problem) = check_program_operand(program, func, value, &op.kind)
+            {
+                problems.push(problem);
+            }
+        }
+    }
+    if !problems.is_empty() {
+        return Err(problems);
+    }
     for func in &program.funcs {
         verify_func(func, &mut problems);
     }
@@ -394,6 +415,33 @@ pub fn verify(program: &Program) -> Result<(), Vec<Invalid>> {
     } else {
         Err(problems)
     }
+}
+
+/// A program-table operand must name an actual entry before a consumer reads
+/// its representation or storage. Function/layout indices are derived from
+/// enumerated checked maps; global operands carry raw indices in the HIR.
+/// Successful checks allocate nothing. The verifier and memory input domain
+/// share this relation rather than imposing separate global-ID preconditions.
+pub(super) fn check_program_operand(
+    program: &Program,
+    func: &Func,
+    value: ValueId,
+    kind: &OpKind,
+) -> Option<Invalid> {
+    let global = match kind {
+        OpKind::GlobalGet(global) | OpKind::GlobalSet { global, .. } => *global,
+        _ => return None,
+    };
+    program
+        .globals
+        .get(global as usize)
+        .is_none()
+        .then(|| Invalid::GlobalOperand {
+            func: func.name.clone(),
+            value,
+            global,
+            available: program.globals.len(),
+        })
 }
 
 /// Every operation marked exact is still the arithmetic, at the type, its
