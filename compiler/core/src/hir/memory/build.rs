@@ -757,7 +757,7 @@ mod tests {
             name: "frame".to_owned(),
             ty: object,
             origin: origin(),
-            shape: super::super::super::ParamShape::Required,
+            shape: super::super::super::ParamShape::Ordinary,
             known: facts::Facts::TOP,
             written: None,
         }];
