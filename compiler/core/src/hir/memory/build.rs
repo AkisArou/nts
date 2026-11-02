@@ -1066,6 +1066,47 @@ mod tests {
     }
 
     #[test]
+    fn review_initial_metadata_scans_are_charged_but_orphans_are_not_facts() {
+        let mut counts = Vec::new();
+        for n in [0, 16, 64, 256] {
+            let mut program = review_abi_program(false);
+            for at in 0..n {
+                program.funcs[0].values.push(Op {
+                    kind: OpKind::ConstInt(7),
+                    ty: HirType::NUMBER,
+                    origin: origin(),
+                });
+                program.layouts[0].fields.push(super::super::super::Field {
+                    name: format!("unused{at}").into(),
+                    ty: HirType::NUMBER,
+                    readonly: false,
+                    written: None,
+                    declared_by: None,
+                });
+            }
+            let report = super::super::Analysis::of(&program).into_report();
+            assert!(report.failure.is_none());
+            assert_eq!(report.values.len(), 2, "orphan producers are not facts");
+            let work = report
+                .stages
+                .iter()
+                .find(|(stage, _)| stage == "call-and-cfg-index")
+                .expect("initial scan has its own work column")
+                .1;
+            println!(
+                "review-metadata\tn={n}\twork={work}\tvalues={}",
+                report.values.len()
+            );
+            counts.push((n, work));
+        }
+        let base = counts[0].1;
+        assert!(
+            counts.into_iter().all(|(n, work)| work - base >= 3 * n),
+            "the ABI arena scan and both layout-field scans must be charged"
+        );
+    }
+
+    #[test]
     fn review_unsealed_functions_visit_only_their_indexed_contexts() {
         let mut counts = Vec::new();
         for n in [16, 64, 256] {
