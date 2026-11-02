@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: String calls toString=false;template calls toString=false;",
+  "node": "exit 1; nts: uncaught Observed: String calls toString=true;template calls toString=true;",
+  "measured_with": "c8b424f379662011",
+  "source": "measured"
+}

@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "error",
+    "counts": null,
+    "oracle": null,
+    "refusals": [
+      {
+        "stage": "backend",
+        "code": "NTS4001",
+        "message": "storing a `Ctor_First` where a `Fn2__1` is declared, and the first does not extend the second here -- the IR relates them and `Layout.base` does not, so the JVM would refuse the class (in `probe`)"
+      }
+    ],
+    "disagreements": [],
+    "aborts": [],
+    "error": {
+      "kind": "backend_declined",
+      "source": null,
+      "message": "the backend declined 1 function(s), listed above; nothing can be checked until they are removed or supported"
+    }
+  },
+  "run": "check",
+  "category": "refused",
+  "nts": "the backend declined 1 function(s), listed above; nothing can be checked until they are removed or supported",
+  "node": null,
+  "measured_with": "c8b424f379662011",
+  "source": "measured"
+}
