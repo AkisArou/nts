@@ -739,6 +739,214 @@ mod tests {
         );
     }
 
+    fn review_dispatch_body(name: &str, writes: bool, raises: bool) -> Func {
+        let receiver = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let child = HirType::Managed(ManagedType::Object(super::super::super::TypeId(9)));
+        let mut body = function(
+            name.to_owned(),
+            vec![
+                OpKind::Param(0),
+                OpKind::Param(1),
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: u32::from(!writes),
+                },
+            ],
+        );
+        body.values[0].ty = receiver.clone();
+        body.values[1].ty = child.clone();
+        body.values[2].ty = child.clone();
+        body.params = [receiver, child.clone()]
+            .into_iter()
+            .enumerate()
+            .map(|(at, ty)| super::super::super::Param {
+                name: format!("arg{at}"),
+                ty,
+                origin: origin(),
+                shape: super::super::super::ParamShape::Ordinary,
+                known: facts::Facts::TOP,
+                written: None,
+            })
+            .collect();
+        if writes {
+            body.values.push(Op {
+                kind: OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 2,
+                    value: ValueId(1),
+                },
+                ty: HirType::Void,
+                origin: origin(),
+            });
+            body.blocks[0].ops.push(ValueId(3));
+        }
+        if raises {
+            let id = ValueId(u32::try_from(body.values.len()).unwrap());
+            body.values.push(Op {
+                kind: OpKind::Call {
+                    callee: Callee::External("nts_raise".to_owned()),
+                    args: Vec::new(),
+                    frame: None,
+                },
+                ty: HirType::Void,
+                origin: origin(),
+            });
+            body.blocks[0].ops.push(id);
+        }
+        body.return_type = child;
+        body.blocks[0].terminator = Terminator::Return(Some(ValueId(2)));
+        body
+    }
+
+    fn review_dispatch_program(explicit_row: bool, other_row: bool, raises: bool) -> Program {
+        let receiver = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
+        let child = HirType::Managed(ManagedType::Object(super::super::super::TypeId(9)));
+        let mut root = function(
+            "root#init".to_owned(),
+            vec![
+                OpKind::ObjectNew { frame: false },
+                OpKind::ObjectNew { frame: false },
+                OpKind::ObjectNew { frame: false },
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 0,
+                    value: ValueId(1),
+                },
+                OpKind::FieldSet {
+                    object: ValueId(0),
+                    field: 1,
+                    value: ValueId(2),
+                },
+                OpKind::Call {
+                    callee: Callee::Virtual {
+                        slot: 0,
+                        declared: "default".to_owned(),
+                    },
+                    args: vec![ValueId(0), ValueId(2)],
+                    frame: None,
+                },
+                OpKind::FieldGet {
+                    object: ValueId(0),
+                    field: 2,
+                },
+            ],
+        );
+        root.values[0].ty = receiver;
+        for at in [1, 2, 5, 6] {
+            root.values[at].ty = child.clone();
+        }
+        root.return_type = child.clone();
+        root.blocks[0].terminator = Terminator::Return(Some(ValueId(5)));
+        let mut program = Program {
+            funcs: vec![root, review_dispatch_body("default", true, raises)],
+            layouts: vec![Layout {
+                types: vec![super::super::super::TypeId(7)],
+                name: "receiver".to_owned(),
+                fields: ["left", "right", "stored"]
+                    .into_iter()
+                    .map(|name| super::super::super::Field {
+                        name: name.into(),
+                        ty: child.clone(),
+                        readonly: false,
+                        written: None,
+                        declared_by: None,
+                    })
+                    .collect(),
+                methods: vec![explicit_row.then(|| "default".to_owned())],
+                interfaces: Vec::new(),
+                base: None,
+            }],
+            ..Program::default()
+        };
+        if other_row {
+            program
+                .funcs
+                .push(review_dispatch_body("concrete", false, false));
+            program.layouts.push(Layout {
+                types: vec![super::super::super::TypeId(8)],
+                name: "other".to_owned(),
+                fields: Vec::new(),
+                methods: vec![Some("concrete".to_owned())],
+                interfaces: Vec::new(),
+                base: None,
+            });
+        }
+        program
+            .interface_access
+            .note_default(0, "default".to_owned());
+        program
+    }
+
+    fn review_dispatch_facts(explicit_row: bool, other_row: bool) {
+        for raises in [false, true] {
+            let program = review_dispatch_program(explicit_row, other_row, raises);
+            let analysis = super::super::Analysis::of(&program);
+            let report = analysis.report();
+            assert!(report.failure.is_none(), "{:?}", report.failure);
+            let value = |id| {
+                report
+                    .values
+                    .iter()
+                    .find(|v| v.function == "root#init" && v.value == id)
+                    .unwrap()
+            };
+            println!(
+                "dispatch-default\texplicit={explicit_row}\tother={other_row}\traises={raises}\tcall={:?}\tstored={:?}",
+                value(5).aliases,
+                value(6).aliases
+            );
+            assert!(
+                value(5)
+                    .aliases
+                    .iter()
+                    .any(|alias| value(1).aliases.contains(alias)),
+                "actual default's returned child is missing"
+            );
+            assert!(
+                value(6)
+                    .aliases
+                    .iter()
+                    .any(|alias| value(2).aliases.contains(alias)),
+                "actual default's stored child is missing"
+            );
+            assert!(
+                report.functions.iter().any(|f| f.function == "root#init"
+                    && f.writes.iter().any(|field| field.contains("stored"))),
+                "actual default's writer effect is missing"
+            );
+            assert_eq!(
+                report.outcomes.iter().any(|o| o.function == "default"),
+                raises,
+                "actual default's body outcomes are missing"
+            );
+            if raises {
+                assert!(
+                    report
+                        .sites
+                        .iter()
+                        .filter(|site| site.id.function == "root#init")
+                        .all(|site| matches!(site.home, Home::Heap(_))),
+                    "the raised default must root the actual held graph"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn review_default_dispatch_subject_keeps_actual_body_facts() {
+        review_dispatch_facts(false, true);
+    }
+
+    #[test]
+    fn review_explicit_dispatch_row_control_keeps_actual_body_facts() {
+        review_dispatch_facts(true, true);
+    }
+
+    #[test]
+    fn review_default_dispatch_without_rows_keeps_actual_body_facts() {
+        review_dispatch_facts(false, false);
+    }
+
     fn review_abi_program(invalid_neighbor: bool) -> Program {
         let object = HirType::Managed(ManagedType::Object(super::super::super::TypeId(7)));
         let mut body = function(
