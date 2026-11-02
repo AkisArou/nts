@@ -1,0 +1,54 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "agrees",
+    "counts": {
+      "functions": 1,
+      "expected": 29,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 29,
+      "received": 29,
+      "complete": true
+    },
+    "refusals": [
+      {
+        "stage": "lowering",
+        "code": "NTS1001",
+        "message": "a function returning the type parameter `T` is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "`Closure0#call` cannot be compiled because it calls `Picker#pick`, and a function returning the type parameter `T` is not supported by this lowering yet"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "the initializer of `unrelated` was not compiled because it calls `Closure0#call`, which was refused above; the rest of the module's evaluation still runs"
+      },
+      {
+        "stage": "lowering",
+        "code": "NTS1003",
+        "message": "`Closure0#erased_call` cannot be compiled because it calls `Closure0#call`, and it calls `Picker#pick`, and a function returning the type parameter `T` is not supported by this lowering yet"
+      }
+    ],
+    "disagreements": [],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "agrees",
+  "nts": "agrees: 29 compared, 29 expected, 0 disagreements",
+  "node": null,
+  "measured_with": "96d65f1948f8c0bf",
+  "source": "measured"
+}
