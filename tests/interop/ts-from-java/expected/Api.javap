@@ -4,13 +4,13 @@
 
 Compiled from "nts"
 public final class nts.gen.Cell0 implements nts.rt.NtsPrintable {
-  double ¢nts$field$0;
+  double ¢nts$field$n$3a$value$payload;
   public java.lang.String ¢nts$print();
   public nts.gen.Cell0();
 }
 Compiled from "nts"
 public final class nts.gen.Closure0 extends nts.gen.Fn6__44 implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable,nts.rt.NtsNamed {
-  nts.gen.Cell0 ¢nts$field$0;
+  nts.gen.Cell0 ¢nts$field$n$3a$total$payload;
   public void call(double);
   public nts.rt.NtsValue ¢nts$call(nts.rt.NtsValue, nts.rt.NtsValue);
   public java.lang.String ¢nts$print();
@@ -45,21 +45,21 @@ public final class nts.gen.Program {
   public static nts.rt.NtsSet<java.lang.String> labels();
   public static void eachUpTo(double, nts.gen.erased.Callable);
   public static double triangle(double);
-  public static int ¢nts$body$11();
+  public static int ¢nts$body$answer();
   public static long answer();
-  public static double ¢nts$body$12(int);
+  public static double ¢nts$body$echoed(int);
   public static double echoed(long);
   public static int below();
   public static int negated(int);
-  public static nts.rt.NtsValue ¢nts$body$15(nts.gen.Closure0, nts.rt.NtsValue, nts.rt.NtsValue);
-  public static void ¢nts$body$16(nts.gen.Closure0, double);
-  public static void ¢nts$body$18(double, nts.gen.Closure0);
-  public static void ¢nts$body$19(int, nts.gen.erased.Callable);
+  public static nts.rt.NtsValue ¢nts$body$Closure0$23$erased_call(nts.gen.Closure0, nts.rt.NtsValue, nts.rt.NtsValue);
+  public static void ¢nts$body$Closure0$23$call(nts.gen.Closure0, double);
+  public static void ¢nts$body$eachUpTo$23$Closure0(double, nts.gen.Closure0);
+  public static void ¢nts$body$eachUpTo$23$whole(int, nts.gen.erased.Callable);
   public static void eachUpTo(double, nts.rt.NtsNumberCallback);
 }
 Compiled from "nts"
 public final class nts.gen.Session implements nts.rt.NtsPrintable {
-  double ¢nts$field$0;
+  double ¢nts$field$p$3a$$23$hits$payload;
   public double bump();
   public double hits();
   public java.lang.String ¢nts$print();
