@@ -5,12 +5,12 @@ import { assertLandingEnvironment, reportLauncherDrops } from "../gate/canonical
 // Queue an immutable submission in a systemd user unit with the gate's environment.
 // Run from a login shell: node tooling/lanes/land-unit.ts <commit> <name>
 import { spawnSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { systemdEnvironment } from "../gate/environment.ts";
 import { gateCommand } from "../gate/affinity.ts";
-import { cleanupSubmission, type SubmissionManifest } from "./submission-cleanup.ts";
+import { cleanupSubmission, stageCleanup, type SubmissionManifest } from "./submission-cleanup.ts";
 
 function checked(command: string, args: string[], cwd: string): string {
   const result = spawnSync(command, args, { cwd, encoding: "utf8" });
@@ -38,8 +38,7 @@ try {
   const manifest:SubmissionManifest={version:1,repo,tree,sha,unit,preparingPid:process.pid};
   const recordManifest=()=>writeFileSync(join(submission,"submission.json"),JSON.stringify(manifest,null,2)+"\n");
   recordManifest();
-  const cleanup=join(submission,"cleanup.ts");
-  writeFileSync(cleanup,readFileSync(new URL("./submission-cleanup.ts",import.meta.url)));
+  const cleanup=stageCleanup(submission);
   checked("git", ["worktree", "add", "--detach", tree, sha], root);
   // Owed's language lexers and tree checks use this commit's workspace links,
   // just like a lane tree. Prepare them before the pre-queue dry run.

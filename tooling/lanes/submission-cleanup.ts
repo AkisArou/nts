@@ -6,8 +6,11 @@ import {appendFileSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,r
 import {homedir} from "node:os";
 import {basename,dirname,join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
-import {LAND_SUBMISSION_ARCHIVES} from "./archive.ts";
 
+// Every finished submission's head stays reachable under this namespace. The
+// catalogue of parked work imports it from here, since this copy cannot
+// import anything beside it.
+export const LAND_SUBMISSION_ARCHIVES="refs/archive/land-submissions/";
 export type SubmissionManifest={version:1;repo:string;tree:string;sha:string;unit:string;preparingPid:number|null};
 export type CleanupResult={name:string;state:"removed"|"kept"|"gone";reason?:string;head?:string;archive?:string};
 type Options={home?:string;postStopUnit?:string;unitState?:(unit:string)=>string;now?:()=>number};
@@ -122,6 +125,12 @@ export function collectRangeTrees(repo:string,options:Options={}):CleanupResult[
    return {name,state:"removed"};
   }catch(error){return kept(String(error));}
  });
+}
+// The copy ExecStopPost runs, written beside the submission's land.log.
+export function stageCleanup(submission:string):string {
+  const copy=join(submission,"cleanup.ts");
+  writeFileSync(copy,readFileSync(new URL(import.meta.url)));
+  return copy;
 }
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url) {
   try {

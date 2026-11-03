@@ -1,11 +1,12 @@
 // The tracked catalogue describes refs; this module never creates or deletes one.
 import { readFileSync } from "node:fs";
+import { LAND_SUBMISSION_ARCHIVES } from "./submission-cleanup.ts";
+export { LAND_SUBMISSION_ARCHIVES };
 export type ArchiveRow = { ref: string; lane: string; what: string; why: string; resume: string };
 export const ARCHIVE_HEADER = "ref\tlane\twhat\twhy parked\twhat resuming needs";
 // The lander keeps every submission's and every train's exact commit reachable
 // under these namespaces and records each one in its own queue and runs, so
 // the catalogue of parked work neither lists nor requires them.
-export const LAND_SUBMISSION_ARCHIVES = "refs/archive/land-submissions/";
 export const LAND_TRAIN_ARCHIVES = "refs/archive/land-trains/";
 export const isLanderArchive = (ref: string) => ref.startsWith(LAND_SUBMISSION_ARCHIVES) || ref.startsWith(LAND_TRAIN_ARCHIVES);
 export function parseArchives(text: string): ArchiveRow[] {

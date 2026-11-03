@@ -1,10 +1,10 @@
 import {test} from "node:test";
 import assert from "node:assert/strict";
-import {execFileSync} from "node:child_process";
+import {execFileSync,spawnSync} from "node:child_process";
 import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
 import {tmpdir} from "node:os";
 import {join} from "node:path";
-import {cleanupSubmission,collectSubmissions,collectRangeTrees,type SubmissionManifest} from "./submission-cleanup.ts";
+import {cleanupSubmission,collectSubmissions,collectRangeTrees,stageCleanup,type SubmissionManifest} from "./submission-cleanup.ts";
 
 function fixture(t:{after(fn:()=>void):void}) {
  const home=mkdtempSync(join(tmpdir(),"submission-cleanup-"));t.after(()=>rmSync(home,{recursive:true,force:true}));
@@ -94,4 +94,13 @@ test("range collection removes only dead recorded owners older than one hour",t=
  assert.match(results.find(r=>r.name==="range-young")!.reason!,/younger/);
  assert.match(results.find(r=>r.name==="range-live")!.reason!,/still alive/);
  assert.match(results.find(r=>r.name==="range-unknown")!.reason!,/unknown/);
+});
+
+test("the staged copy runs alone beside its log, with only Node's modules",t=>{
+ const submission=mkdtempSync(join(tmpdir(),"submission-stage-"));t.after(()=>rmSync(submission,{recursive:true,force:true}));
+ const copy=stageCleanup(submission);
+ const run=spawnSync(process.execPath,[copy],{encoding:"utf8"});
+ assert.doesNotMatch(run.stderr,/ERR_MODULE_NOT_FOUND|Cannot find module/,run.stderr);
+ assert.match(run.stderr,/usage: submission-cleanup\.ts --repo/,run.stderr);
+ assert.equal(run.status,1);
 });
