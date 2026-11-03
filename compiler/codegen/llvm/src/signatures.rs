@@ -1752,7 +1752,7 @@ pub const SIGNATURES: &[Signature] = &[
     Signature {
         name: "nts_parse_int",
         returns: "double",
-        params: &["ptr", "double"],
+        params: &["ptr", "i32"],
         attributes: &[],
     },
     Signature {

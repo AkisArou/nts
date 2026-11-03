@@ -453,7 +453,7 @@ fn global_external(name: &str) -> Option<(&'static str, &'static str, &'static s
         // `Integer.parseInt` is not this function -- it throws where this
         // answers `NaN`, refuses a trailing non-digit, and cannot exceed a
         // `long`. Transliterated; see the method.
-        "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;D)D"),
+        "nts_parse_int" => (RUNTIME, "parseInt", "(Ljava/lang/String;I)D"),
         // A checked assertion an input fails with no handler for its TypeError:
         // a decline (`nts: refused: `, exit 1), not `nts_refused`'s defect abort.
         "nts_assertion_failed" => (RUNTIME, "assertionFailed", "(Ljava/lang/String;)V"),

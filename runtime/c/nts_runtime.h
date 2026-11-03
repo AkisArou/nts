@@ -2150,7 +2150,8 @@ double nts_str_to_number(const NtsString *s);
  * accumulator -- the value is past 2^80, so neither `uint64_t` nor a long
  * double reaches it -- and no call site in this tree parses a sixteen-digit
  * base-36 number. Named rather than hidden. */
-double nts_parse_int(const NtsString *s, double radix);
+/* The caller applies ToNumber and ToInt32 before this integer ABI. */
+double nts_parse_int(const NtsString *s, int32_t base);
 double nts_parse_float(const NtsString *s);
 /* `NULL` is a `URIError`; a runtime function here cannot throw, so the
  * lowering raises it. `component` picks between the pair. */

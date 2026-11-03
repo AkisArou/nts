@@ -8427,7 +8427,7 @@ double nts_parse_float(const NtsString *s) {
   return value;
 }
 
-double nts_parse_int(const NtsString *s, double radix) {
+double nts_parse_int(const NtsString *s, int32_t base) {
   if (!s) {
     return (double)NAN;
   }
@@ -8446,10 +8446,6 @@ double nts_parse_int(const NtsString *s, double radix) {
   if (at < units && (nts_unit(s, at) == '+' || nts_unit(s, at) == '-')) {
     negative = nts_unit(s, at) == '-';
     at++;
-  }
-  int32_t base = (int32_t)radix;
-  if (radix != radix || base == 0) {
-    base = 0;
   }
   if (base != 0 && (base < 2 || base > 36)) {
     return (double)NAN;

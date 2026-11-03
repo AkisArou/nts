@@ -1519,7 +1519,18 @@ static SIGNATURES: &[Declared] = &[
     ("nts_object_new", None, None, Raising::NoRaise),
     ("nts_object_to_string", None, None, Raising::NoRaise),
     ("nts_parse_float", None, None, Raising::NoRaise),
-    ("nts_parse_int", None, None, Raising::NoRaise),
+    (
+        "nts_parse_int",
+        Some(&[
+            None,
+            Some(HirType::Int {
+                bits: 32,
+                signed: true,
+            }),
+        ]),
+        Some(HirType::Float { bits: 64 }),
+        Raising::NoRaise,
+    ),
     ("nts_pending_begin", None, None, Raising::NoRaise),
     ("nts_pending_count", None, None, Raising::NoRaise),
     ("nts_pending_end", None, None, Raising::NoRaise),

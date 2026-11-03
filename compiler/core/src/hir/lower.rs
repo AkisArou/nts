@@ -79690,12 +79690,10 @@ impl<'a> FuncBuilder<'a> {
         let value = self.coerce(value, &HirType::Managed(ManagedType::String), *text)?;
         let origin = self.origin(id);
         let radix = match arguments.get(1) {
-            // `ToInt32(radix)` in the specification, which is `ToNumber`
-            // first: unchecked JavaScript passes anything, and test262 passes
-            // `false`, which is 0 -- "decide from the text". Coerced alone,
-            // a boolean reached `nts_parse_int`'s `double` as a `bool`, which
-            // C promoted to the right number by luck and the JVM's stack
-            // accounting refused.
+            // ToNumber precedes ToInt32: unchecked JavaScript can pass a
+            // boolean or undefined. Normalize it before the shared integer
+            // operation, whose constant folding and int32 identity apply at
+            // the call site instead of inside an out-of-line parser.
             Some(node) => {
                 let number = self.builtin_number_argument(
                     (id, *node),
@@ -79707,6 +79705,14 @@ impl<'a> FuncBuilder<'a> {
             }
             None => self.push(OpKind::ConstFloat(0.0), HirType::NUMBER, origin.clone()),
         };
+        let radix = self.push(
+            OpKind::Unary {
+                op: UnOp::ToInt32,
+                operand: radix,
+            },
+            HirType::NUMBER,
+            origin.clone(),
+        );
         Ok(self.runtime_call("nts_parse_int", vec![value, radix], HirType::NUMBER, origin))
     }
 

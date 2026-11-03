@@ -701,7 +701,7 @@ public final class NtsRuntime {
         return Double.parseDouble(text.substring(start, at));
     }
 
-    public static double parseInt(String text, double radix) {
+    public static double parseInt(String text, int base) {
         if (text == null) {
             return Double.NaN;
         }
@@ -719,10 +719,6 @@ public final class NtsRuntime {
         if (at < units && (text.charAt(at) == '+' || text.charAt(at) == '-')) {
             negative = text.charAt(at) == '-';
             at++;
-        }
-        int base = (int) radix;
-        if (Double.isNaN(radix) || base == 0) {
-            base = 0;
         }
         if (base != 0 && (base < 2 || base > 36)) {
             return Double.NaN;

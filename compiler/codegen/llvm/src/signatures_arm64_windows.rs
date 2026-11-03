@@ -1900,7 +1900,7 @@ pub const SIGNATURES_ARM64_WINDOWS: &[Signature] = &[
     Signature {
         name: "nts_parse_int",
         returns: "double",
-        params: &["ptr", "double"],
+        params: &["ptr", "i32"],
         attributes: &[],
     },
     Signature {
