@@ -269,6 +269,15 @@ pub enum Invalid {
         which: &'static str,
         value: ValueId,
     },
+    /// An edge requests a value unavailable on that completion.
+    OutcomeValue {
+        func: String,
+        from: BlockId,
+        operation: ValueId,
+        edge: &'static str,
+        at: usize,
+        reason: &'static str,
+    },
     /// A value was used somewhere its definition does not reach.
     ///
     /// The failure this module exists for. Perfectly plausible-looking IR.
@@ -2325,57 +2334,157 @@ pub(super) fn check_edge_arguments(
     args: &[ValueId],
     problems: &mut Vec<Invalid>,
 ) -> bool {
-    let Some(block) = func.blocks.get(target.0 as usize) else {
-        problems.push(Invalid::DanglingSuccessor {
-            func: func.name.clone(),
-            target,
-        });
+    let check = EdgeCheck {
+        func,
+        from,
+        edge,
+        target,
+    };
+    check.arguments(
+        args.len(),
+        |at, problems| check.value_type(args[at], at, "argument", problems),
+        problems,
+    )
+}
+
+/// Check the value contract of one logical outcome edge.
+///
+/// This relation does not by itself establish operation ownership, placement
+/// or dominance. Whole-function verification must establish those before a
+/// consumer treats this edge as executable control flow.
+#[must_use]
+pub fn check_outcome_edge(
+    func: &Func,
+    from: BlockId,
+    operation: ValueId,
+    kind: super::outcomes::EdgeKind,
+    outcome: &super::outcomes::OutcomeEdge,
+    problems: &mut Vec<Invalid>,
+) -> bool {
+    use super::outcomes::{EdgeKind, OutcomeValue};
+    let Some(op) = checked_arena_value(func, from, operation, "outcome operation", problems) else {
         return false;
     };
-    let expected = block.params.len();
-    if args.len() != expected {
-        problems.push(Invalid::ArgumentCount {
-            func: func.name.clone(),
-            from,
-            edge,
-            target,
-            expected,
-            found: args.len(),
-        });
-        return false;
-    }
-    let before = problems.len();
-    for (at, (argument, parameter)) in args.iter().zip(&block.params).enumerate() {
-        let mut value_type = |value: ValueId, which| {
-            let op = func.values.get(value.0 as usize);
-            if op.is_none() {
-                problems.push(Invalid::EdgeValue {
-                    func: func.name.clone(),
-                    from,
-                    edge,
-                    target,
-                    at,
-                    which,
-                    value,
-                });
-            }
-            op.map(|op| &op.ty)
-        };
-        let found = value_type(*argument, "argument");
-        let want = value_type(*parameter, "parameter");
-        if let (Some(found), Some(want)) = (found, want)
-            && !compatible(found, want)
-        {
-            problems.push(Invalid::EdgeType {
+    let check = EdgeCheck {
+        func,
+        from,
+        edge: kind.label(),
+        target: outcome.target,
+    };
+    check.arguments(
+        outcome.args.len(),
+        |at, problems| {
+            let reason = match outcome.args[at] {
+                OutcomeValue::Existing(value) if value == operation => {
+                    "the invoked operation is not an existing SSA result"
+                }
+                OutcomeValue::Existing(value) => {
+                    return check.value_type(value, at, "argument", problems);
+                }
+                OutcomeValue::Result if kind != EdgeKind::Normal => {
+                    "the normal result is unavailable on a raised edge"
+                }
+                OutcomeValue::Result if matches!(op.ty, HirType::Void | HirType::Never) => {
+                    "a void or never operation has no normal result"
+                }
+                OutcomeValue::Result => return Some(&op.ty),
+                OutcomeValue::Thrown if kind == EdgeKind::Raised => return Some(&HirType::Erased),
+                OutcomeValue::Detail if kind == EdgeKind::Raised => {
+                    return Some(&HirType::Managed(ManagedType::String));
+                }
+                OutcomeValue::Thrown | OutcomeValue::Detail => {
+                    "exceptional payload and detail are unavailable on a normal edge"
+                }
+            };
+            problems.push(Invalid::OutcomeValue {
                 func: func.name.clone(),
-                target,
+                from,
+                operation,
+                edge: kind.label(),
                 at,
-                expected: want.clone(),
-                found: found.clone(),
+                reason,
+            });
+            None
+        },
+        problems,
+    )
+}
+
+/// The source edge owns the count, checked arena and compatibility authority
+/// for ordinary and outcome arguments alike. Valid operands allocate nothing.
+struct EdgeCheck<'func> {
+    func: &'func Func,
+    from: BlockId,
+    edge: &'static str,
+    target: BlockId,
+}
+
+impl<'func> EdgeCheck<'func> {
+    fn value_type(
+        &self,
+        value: ValueId,
+        at: usize,
+        which: &'static str,
+        problems: &mut Vec<Invalid>,
+    ) -> Option<&'func HirType> {
+        let op = self.func.values.get(value.0 as usize);
+        if op.is_none() {
+            problems.push(Invalid::EdgeValue {
+                func: self.func.name.clone(),
+                from: self.from,
+                edge: self.edge,
+                target: self.target,
+                at,
+                which,
+                value,
             });
         }
+        op.map(|op| &op.ty)
     }
-    problems.len() == before
+
+    fn arguments(
+        &self,
+        count: usize,
+        mut argument_type: impl FnMut(usize, &mut Vec<Invalid>) -> Option<&'func HirType>,
+        problems: &mut Vec<Invalid>,
+    ) -> bool {
+        let Some(block) = self.func.blocks.get(self.target.0 as usize) else {
+            problems.push(Invalid::DanglingSuccessor {
+                func: self.func.name.clone(),
+                target: self.target,
+            });
+            return false;
+        };
+        let expected = block.params.len();
+        if count != expected {
+            problems.push(Invalid::ArgumentCount {
+                func: self.func.name.clone(),
+                from: self.from,
+                edge: self.edge,
+                target: self.target,
+                expected,
+                found: count,
+            });
+            return false;
+        }
+        let before = problems.len();
+        for (at, parameter) in block.params.iter().enumerate() {
+            let found = argument_type(at, problems);
+            let want = self.value_type(*parameter, at, "parameter", problems);
+            if let (Some(found), Some(want)) = (found, want)
+                && !compatible(found, want)
+            {
+                problems.push(Invalid::EdgeType {
+                    func: self.func.name.clone(),
+                    target: self.target,
+                    at,
+                    expected: want.clone(),
+                    found: found.clone(),
+                });
+            }
+        }
+        problems.len() == before
+    }
 }
 
 fn check_arguments(func: &Func, id: BlockId, block: &Block, problems: &mut Vec<Invalid>) -> bool {

@@ -62,6 +62,7 @@ pub mod loops;
 mod member_key;
 pub mod memory;
 pub mod obligations;
+pub mod outcomes;
 pub mod possibly_undefined;
 pub mod presence;
 mod small_dispatch;
