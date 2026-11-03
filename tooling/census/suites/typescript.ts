@@ -60,6 +60,14 @@ export function selectTypescript(root: string, under: string): Selected[] {
   });
 }
 
+/** The selected suite is authored as .ts; its harness supplies ESM scope. */
+export function materialiseTypeScriptOracle(source: string, scratch: string): string {
+  const file = join(scratch, "oracle.ts");
+  writeFileSync(join(scratch, "package.json"), JSON.stringify({type: "module"}) + "\n");
+  writeFileSync(file, `${harnessFor(source)}\n${bodyOf(source)}\nexport {};\n`);
+  return file;
+}
+
 /**
  * Whether node passes a case: the oracle a TypeScript case is admitted by.
  * A case node fails is wrong, whatever nts does with it, and is reported as
@@ -74,9 +82,8 @@ export function oracle(source: string, scratch: string, printed?: (output: strin
   // **A module, so strict.** nts compiles every case strict, and node ran an
   // `oracle.ts` with no import as a sloppy script: `this` in a plain function
   // was `globalThis` there, so a case could pass the oracle on an answer nts
-  // is right not to give.
-  const file = join(scratch, "oracle.mts");
-  writeFileSync(file, `${harnessFor(source)}\n${bodyOf(source)}\n`);
+  // is right not to give. Preserve .ts grammar and give the harness ESM scope.
+  const file = materialiseTypeScriptOracle(source, scratch);
   const run = spawnSync(process.execPath, ["--experimental-transform-types", "--no-warnings", file], {
     encoding: "utf8",
     timeout: 30_000,
