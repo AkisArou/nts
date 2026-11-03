@@ -204,3 +204,42 @@ decided ([JVM and Wasm](../foundations/jvm-and-wasm.md#where-they-stand)).
   its work drains with status zero, instead of calling `System.exit` (11-02,
   [log](../records/notebooks/decisions-log.md#jvm-class-archive-11-02)).
   Not built.
+- **Generated member names have one authority.** The
+  [member catalogue](../../compiler/codegen/jvm/member-names.json) owns the
+  reserved `¢nts$` namespace. `¢` is legal in Java identifiers and JVM and dex
+  member names, but not in a TypeScript identifier. The mangler for source names
+  keeps authored identifiers and quoted property names outside that namespace;
+  authored `nts$` members remain legal. The catalogue generates the Rust and
+  Java protocol bindings and the bindings used by tooling and launchers.
+  Callers select a role and its owned key, never hand-spell or remangle a
+  generated name. Freshness and exclusivity checks enforce this across the
+  compiler, JVM runtime and tooling. Explicit Java contracts keep their
+  contracted names
+  ([log](../records/notebooks/decisions-log.md#jvm-generated-names-11-03)).
+- **Source identities give generated members readable, stable names.** Body
+  and global roles encode their actual function and global names injectively.
+  Storage, presence and accessor roles share an encoded property identity
+  with separate role suffixes; ordinary names, private names and symbols
+  occupy distinct domains. A named symbol uses its declaring binding and
+  module, never its description. Dispatch uses the hierarchy's owned member
+  and instantiation facts. Closure caches, class tokens and module namespaces
+  use their producer's declaration facts; template sites use module, line and
+  column. Counters based on encounter order never replace available source identity.
+  Anonymous symbols and roots without a source position keep explicit anonymous
+  identities; synthetic frame and spill slots use a domain private to the
+  compiler.
+  Missing required identity is a named refusal before publication.
+- **Class naming has a separate authority.** Class identities tied to declarations
+  carry their declaring module and source scopes, together with the physical
+  instantiation. An anonymous shape without a source name may use its anonymous identity.
+  The class publisher reserves each binary name for its actual owner before
+  generating bytes: a repeated request from the same owner reuses the first
+  publication; a different owner claiming that name is a named error and no
+  program is emitted. Member spelling is never used to recover class ownership.
+- **Observers consume identities, not spelling conventions.** Verifier method
+  names are opaque tokens from structured fields. The compiler publishes the
+  ordinary/raising relation and the emitted class population, including an
+  explicit empty entry for a class with no raising members. Missing metadata
+  cannot count as a passing check. Generated names do not grant Java access:
+  internal implementation methods are synthetic, and storage keeps its
+  declared visibility; exported Java facades retain their public contracts.

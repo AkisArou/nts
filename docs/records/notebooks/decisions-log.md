@@ -1284,3 +1284,26 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   runtime3 reviews it as the JVM's owner, and the launcher is qualified on
   each platform it ships for. The design note goes into `docs/records/` with
   the change.
+
+## JVM generated names (11-03)
+
+- **The decision.** On the coordinator's review, generated JVM members use
+  `¢nts$`, a namespace outside TypeScript identifier syntax and outside the
+  mangler's image for authored names. Authored `nts$` members remain valid. One
+  closed member catalogue generates the compiler, runtime and tooling
+  bindings; freshness and exclusivity checks prevent a second naming producer.
+- **Identity and spelling.** Available source identity is encoded readably and
+  injectively, rather than replaced by encounter-order ordinals. Property-key
+  domains remain separate, dispatch retains its hierarchy-owned relation, and
+  static values retain their producer-owned declaration. Anonymous identities
+  are explicit. The catalogue covers members only. Generated classes retain a
+  separate authority for declarations and instantiations and one publisher,
+  which reuses a request from the same owner and rejects a different owner
+  under the same name
+  before generation.
+- **Why.** Compiler protocols must not override an authored member or hide an
+  inherited Java facade. Readable source identities also keep stack traces and
+  verifier records useful when unrelated declarations are inserted. Observers
+  consume structured method identities and compiler-owned raising relations,
+  so a rename cannot silently disable their checks. The contract is in
+  [JVM and Android](../../targets/jvm.md#decisions).
