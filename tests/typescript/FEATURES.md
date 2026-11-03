@@ -2681,6 +2681,7 @@ the requested control operation and observable property-state checks.
 | area | files | cases | controls | coverage |
 | --- | --- | ---: | ---: | --- |
 | `methods` | `methods-*` | 8 | 8 | Overrides through interfaces, base views, generics and stored methods; multi-level chains, fixed home versus current receiver, virtual dispatch, extracted super methods and arrows |
+| `properties` | `properties-*` | 15 | 15 | Getter, prototype-data, farther and missing reads; setter, prototype-data, missing and runtime getter-only writes; typed string and symbol keys, compound, postfix and nullish order, own/prototype state and abrupt completion |
 
 ## Tags
 
@@ -2773,7 +2774,7 @@ the requested control operation and observable property-state checks.
 | `ts-date-route-text` | exact ISO and JSON text, explicit-offset parsing, extended years and shared JSON traversal effects through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 14 | 0 |
 | `ts-date-route-time-values` | numeric reads, clipping, fractions, signed zero, comparisons, arithmetic and stable equal-time ordering through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 16 | 0 |
 | `ts-date-routes` | fixed UTC Date values, mutation, text and identity across typed routes beside independent numeric controls | Date route contracts; typed paths | 82 | 0 |
-| `ts-declaration-merging` | two declarations of one name merged into one entity | conformance/internalModules/DeclarationMerging; conformance/interfaces/declarationMerging | 15 | 5 |
+| `ts-declaration-merging` | two declarations of one name merged into one entity | conformance/internalModules/DeclarationMerging; conformance/interfaces/declarationMerging | 23 | 5 |
 | `ts-declare-field` | a `declare` class field, which emits nothing | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition.declare | 25 | 0 |
 | `ts-decorators` | standard (TC39) decorators on classes, methods, fields, accessors; context, addInitializer, metadata | conformance/esDecorators; ts-eslint Decorator | 0 | 12 |
 | `ts-default-parameters` | a parameter with a default value | conformance/es6/defaultParameters | 85 | 0 |
@@ -2822,7 +2823,7 @@ the requested control operation and observable property-state checks.
 | `ts-exponent` | the `**` operator and `**=` | conformance/es7/exponentiationOperator | 7 | 0 |
 | `ts-export-equals` | `export =` | conformance/externalModules; ts-eslint TSExportAssignment | 0 | 4 |
 | `ts-exports` | export declarations, lists, renames and defaults, read back within the module | conformance/externalModules; conformance/es6/modules; ts-eslint ExportNamedDeclaration | 10 | 3 |
-| `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 415 | 0 |
+| `ts-expressions` | ordinary operators in typed code: increments, comma, void, delete, in | conformance/expressions | 423 | 0 |
 | `ts-function-object-route-arguments` | typed non-arrow functions preserve argument counts and values, independent parameter writes, retained objects and forwarded argument lists | Function object route contracts; typed paths | 18 | 0 |
 | `ts-function-object-route-bind` | typed bound functions retain the first receiver, prepend arguments in order, reduce arity to zero and preserve bound names and constructor behavior | Function object route contracts; typed paths | 16 | 0 |
 | `ts-function-object-route-call-apply` | typed call and apply routes preserve receiver identity, complete argument order, return values and caught errors | Function object route contracts; typed paths | 18 | 0 |
@@ -3024,7 +3025,8 @@ the requested control operation and observable property-state checks.
 | `ts-structuredclone-route-errors` | typed unsupported values throw DataCloneError while supported values and errors preserve specified clone state | Structured clone route contracts; typed paths | 18 | 0 |
 | `ts-structuredclone-route-plain-data` | typed plain clones preserve SameValue payloads, key order, holes, fresh nodes, shared references and cycles | Structured clone route contracts; typed paths | 14 | 0 |
 | `ts-super-route-methods` | super method calls and extracted method values retain fixed home lookup, current receiver state, override dispatch and order through typed routes | Super route contracts; typed paths | 16 | 0 |
-| `ts-super-routes` | super operations preserve home-object lookup, current receivers, exact values, write locations, evaluation order and errors through declared carriers beside explicit controls | Super route contracts; typed paths | 16 | 0 |
+| `ts-super-route-properties` | super reads and writes retain getter/setter receivers, prototype-versus-own storage, computed keys, update results, short-circuiting and strict errors | Super route contracts; typed paths | 30 | 0 |
+| `ts-super-routes` | super operations preserve home-object lookup, current receivers, exact values, write locations, evaluation order and errors through declared carriers beside explicit controls | Super route contracts; typed paths | 46 | 0 |
 | `ts-symbol-route-copying` | typed spread and assign copy own enumerable symbol identities, retain overwrite positions and keep later writes independent | Symbol route contracts; typed paths | 14 | 0 |
 | `ts-symbol-route-keys` | typed symbol keys preserve identity, independent reads and writes, presence and own versus inherited membership | Symbol route contracts; typed paths | 16 | 0 |
 | `ts-symbol-route-listing` | typed mixed-key listings preserve order, exclude symbols from string enumeration and JSON, and include hidden own symbols | Symbol route contracts; typed paths | 16 | 0 |
