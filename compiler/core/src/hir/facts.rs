@@ -709,42 +709,69 @@ const _: () = assert!(
 /// how integer intent is written in JavaScript. It is a proof, not a hint.
 #[must_use]
 pub fn to_int32(a: Facts) -> Facts {
-    // Only NaN, and `ToInt32(NaN)` is `0`.
-    if !a.has_numeric() {
-        return Facts::constant(0.0);
-    }
-    truncated_within(a, I32_MIN, I32_MAX)
-        .unwrap_or_else(|| Facts::new(I32_MIN, I32_MAX, true, false, false))
+    coercion_32_image(a, true)
 }
 
 /// JavaScript's `ToUint32`: as [`to_int32`], modulo 2^32 into `[0, 2^32)`.
 #[must_use]
 pub fn to_uint32(a: Facts) -> Facts {
+    coercion_32_image(a, false)
+}
+
+const WORD_MODULUS: f64 = U32_MAX + 1.0;
+
+/// The truncated interval has a tight image if it stays in one signed or
+/// unsigned modulo window. A distance below 2^32 between integer-valued f64
+/// endpoints is exact; ordered wrapped endpoints then prove no boundary was
+/// crossed. This avoids a rounded window quotient at magnitudes above 2^53.
+fn coercion_32_image(a: Facts, signed: bool) -> Facts {
     if !a.has_numeric() {
         return Facts::constant(0.0);
     }
-    truncated_within(a, 0.0, U32_MAX)
-        .unwrap_or_else(|| Facts::new(0.0, U32_MAX, true, false, false))
+    let (lo, hi) = if signed {
+        (I32_MIN, I32_MAX)
+    } else {
+        (0.0, U32_MAX)
+    };
+    let full = Facts::new(lo, hi, true, false, false);
+    let (low, high) = (a.lo.trunc(), a.hi.trunc());
+    let image = if low >= lo && high <= hi {
+        // The ordinary window is the identity: no remainder is needed.
+        Facts::new(low, high, true, false, false)
+    } else if low == high {
+        // A single infinity maps to zero, just as a finite singleton wraps.
+        Facts::constant(wrapped_integer(low, signed))
+    } else if low.is_finite() && high.is_finite() && high - low < WORD_MODULUS {
+        let lower = wrapped_integer(low, signed);
+        let upper = wrapped_integer(high, signed);
+        if lower <= upper {
+            Facts::new(lower, upper, true, false, false)
+        } else {
+            full
+        }
+    } else {
+        full
+    };
+    if a.maybe_nan {
+        image.join(Facts::constant(0.0))
+    } else {
+        image
+    }
 }
 
-/// What a 32-bit coercion makes of `a` when every finite member truncates
-/// into `[lo, hi]`, the coercion's own range: there the wrap modulo 2^32 moves
-/// nothing, so the coercion is truncation toward zero, and the bound the
-/// caller proved survives it. `n | 0` under `0 <= n && n < 1000` is in
-/// `[0, 999]`, not anywhere in int32. A NaN member becomes `0`, and so does
-/// `-0`. An infinite bound truncates to itself and is never inside, which is
-/// right: an infinity becomes `0` and its neighbours wrap.
-fn truncated_within(a: Facts, lo: f64, hi: f64) -> Option<Facts> {
-    let (low, high) = (a.lo.trunc(), a.hi.trunc());
-    if low < lo || high > hi {
-        return None;
+/// A truncated endpoint, reduced to the chosen 32-bit interpretation.
+fn wrapped_integer(value: f64, signed: bool) -> f64 {
+    if !value.is_finite() {
+        return 0.0;
     }
-    let range = Facts::new(low, high, true, false, false);
-    Some(if a.maybe_nan {
-        range.join(Facts::constant(0.0))
+    let wrapped = value.rem_euclid(WORD_MODULUS);
+    let result = if signed && wrapped > I32_MAX {
+        wrapped - WORD_MODULUS
     } else {
-        range
-    })
+        wrapped
+    };
+    // Both coercions turn negative zero into positive zero.
+    result + 0.0
 }
 
 /// The exact value of a set that holds exactly one whole number.
@@ -1360,6 +1387,101 @@ mod tests {
         } else {
             wrapped
         }) + 0.0
+    }
+
+    include!(concat!(
+        env!("CARGO_MANIFEST_DIR"),
+        "/tests/support/int32_images_cases.rs"
+    ));
+
+    #[test]
+    fn exact_32_bit_images_match_the_node_constant_oracle() {
+        for &(name, input, signed, unsigned) in COERCION_CASES {
+            assert_eq!(
+                to_int32(Facts::constant(input)),
+                Facts::constant(f64::from(signed)),
+                "signed {name}"
+            );
+            assert_eq!(
+                to_uint32(Facts::constant(input)),
+                Facts::constant(f64::from(unsigned)),
+                "unsigned {name}"
+            );
+        }
+    }
+
+    #[test]
+    fn shifted_32_bit_images_preserve_one_window_and_the_nan_alternative() {
+        let modulus = 4_294_967_296.0;
+        for (input, expected) in [
+            (
+                Facts::new(modulus + 16.25, modulus + 31.75, false, false, false),
+                Facts::new(16.0, 31.0, true, false, false),
+            ),
+            (
+                Facts::new(-modulus - 31.75, -modulus - 16.25, false, false, false),
+                Facts::new(-31.0, -16.0, true, false, false),
+            ),
+            (
+                Facts::new(modulus - 7.0, modulus + 9.0, true, false, false),
+                Facts::new(-7.0, 9.0, true, false, false),
+            ),
+            (
+                Facts::new(modulus + 16.0, modulus + 31.0, true, true, false),
+                Facts::new(0.0, 31.0, true, false, false),
+            ),
+            (
+                Facts::new(-modulus - 31.0, -modulus - 16.0, true, true, false),
+                Facts::new(-31.0, 0.0, true, false, false),
+            ),
+        ] {
+            assert_eq!(to_int32(input), expected, "{input:?}");
+        }
+        assert_eq!(
+            to_uint32(Facts::new(
+                modulus + 16.25,
+                modulus + 31.75,
+                false,
+                false,
+                false
+            )),
+            Facts::new(16.0, 31.0, true, false, false)
+        );
+        assert_eq!(
+            to_uint32(Facts::new(
+                -modulus - 31.0,
+                -modulus - 16.0,
+                true,
+                true,
+                false
+            )),
+            Facts::new(0.0, modulus - 16.0, true, false, false)
+        );
+        assert_eq!(
+            to_uint32(Facts::new(I32_MAX, I32_MAX + 2.0, true, false, false)),
+            Facts::new(I32_MAX, I32_MAX + 2.0, true, false, false)
+        );
+    }
+
+    #[test]
+    fn crossing_32_bit_windows_keep_the_full_range() {
+        let signed = Facts::new(I32_MIN, I32_MAX, true, false, false);
+        let unsigned = Facts::new(0.0, U32_MAX, true, false, false);
+        for input in [
+            Facts::new(I32_MAX, I32_MAX + 2.0, true, false, false),
+            Facts::new(I32_MIN - 1.0, I32_MIN + 1.0, true, false, false),
+            Facts::new(4_294_967_312.0, 8_589_934_608.0, true, false, false),
+            Facts::new(16.0, f64::INFINITY, false, false, false),
+        ] {
+            assert_eq!(to_int32(input), signed, "{input:?}");
+        }
+        for input in [
+            Facts::new(U32_MAX, U32_MAX + 2.0, true, false, false),
+            Facts::new(-1.0, 1.0, true, false, false),
+            Facts::new(4_294_967_312.0, 8_589_934_608.0, true, false, false),
+        ] {
+            assert_eq!(to_uint32(input), unsigned, "{input:?}");
+        }
     }
 
     /// The 32-bit coercions contain the real answer for every member of every
