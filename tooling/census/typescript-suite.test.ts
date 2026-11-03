@@ -7,9 +7,9 @@
 // does not -- whatever nts would make of either.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { extname, join } from "node:path";
 
 import { oracle, selectTypescript } from "./suites/typescript.ts";
 
@@ -75,4 +75,24 @@ test("the selection reads every case under a directory, with its features, sorte
   } finally {
     rmSync(root, { recursive: true, force: true });
   }
+});
+
+test("the TypeScript oracle preserves its authored extension and ESM goal", () => {
+  const root = scratch();
+  try {
+    const cases = join(root, "tests/typescript");
+    const execution = join(root, "execution");
+    mkdirSync(cases, {recursive: true});
+    mkdirSync(execution);
+    const source = RIGHT + "\nassert.sameValue(this === undefined, true);\n";
+    writeFileSync(join(cases, "control.ts"), source);
+    const selected = selectTypescript(root, "tests/typescript");
+    assert.equal(selected.length, 1);
+    assert.deepEqual(oracle(source, execution), {ok: true});
+    const entries = readdirSync(execution).filter(name => /^oracle\.(?:ts|mts|cts|tsx)$/.test(name));
+    assert.equal(entries.length, 1);
+    assert.equal(extname(entries[0]!), extname(selected[0]!.path), "the oracle must not change the authored grammar");
+    assert.equal(JSON.parse(readFileSync(join(execution, "package.json"), "utf8")).type, "module");
+    assert.match(readFileSync(join(execution, entries[0]!), "utf8"), /export \{\};\s*$/);
+  } finally { rmSync(root, {recursive: true, force: true}); }
 });
