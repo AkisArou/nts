@@ -17,7 +17,7 @@ import {
   createScanner,
   LanguageVariant,
   SyntaxKind,
-} from "typescript/unstable/ast";
+} from "typescript/ast";
 
 const ROOT = resolve(import.meta.dirname, "../..");
 const PROFILE = join(ROOT, "runtime/node");

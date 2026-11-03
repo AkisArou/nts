@@ -78,7 +78,7 @@ function withoutComments(text: string, ranges: Range[]): string {
 function typescript(text: string): string | null {
   // A new/unprepared worktree may lack this tool. That is unknown, never a
   // reason to omit the ordinary gate, and must not break owed for other files.
-  const { createScanner, LanguageVariant, SyntaxKind } = createRequire(import.meta.url)("typescript/unstable/ast");
+  const { createScanner, LanguageVariant, SyntaxKind } = createRequire(import.meta.url)("typescript/ast");
   const scanner = createScanner(false, LanguageVariant.Standard, text);
   const ranges: Range[] = [];
   let end = 0;

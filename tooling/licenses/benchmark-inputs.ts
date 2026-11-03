@@ -7,8 +7,8 @@ import {createHash} from "node:crypto";
 import {existsSync, lstatSync, readFileSync, realpathSync} from "node:fs";
 import {basename, dirname, isAbsolute, relative, resolve, sep} from "node:path";
 import {fileURLToPath} from "node:url";
-import {API, type Project} from "typescript/unstable/sync";
-import {SyntaxKind, isImportDeclaration, isExportDeclaration, isImportEqualsDeclaration, isExternalModuleReference, isStringLiteralLikeNode, isCallExpression, isIdentifier, isPropertyAccessExpression, type Node} from "typescript/unstable/ast";
+import {API, type Project} from "typescript/sync";
+import {SyntaxKind, isImportDeclaration, isExportDeclaration, isImportEqualsDeclaration, isExternalModuleReference, isStringLiteralLikeNode, isCallExpression, isIdentifier, isPropertyAccessExpression, type Node} from "typescript/ast";
 
 export const INPUT_MANIFEST = "input-licenses.json";
 type File = {path: string; sha256: string};
@@ -223,16 +223,14 @@ export function checkBenchmarkInputs(root: string, paths = trackedFiles(root)): 
     for (const path of sources) reject(owner, path, "enter the resolved compilation graph");
   };
   const api = new API({cwd: root});
-  let previous: string | undefined;
   try {
     for (const config of paths.filter(path => /(?:^|\/)tsconfig[^/]*\.json$/.test(path))) {
       const absolute = resolve(root, config);
       const parsed = api.parseConfigFile(absolute);
       for (const path of parsed.fileNames) reject(config, path, "be a compiled project root");
-      const snapshot = api.updateSnapshot({openProjects: [absolute], closeProjects: previous ? [previous] : []});
-      previous = absolute;
+      const snapshot = api.createSnapshot({openProjects: [absolute]});
       try {
-        const project = snapshot.getProject(absolute);
+        const project = snapshot.getConfiguredProject(absolute);
         if (!project) throw new Error(`cannot audit project graph: ${config}`);
         // parseConfigFile's response omits diagnostics and can be empty after
         // malformed JSON or a missing extends. Empty solution/root sets are
@@ -245,12 +243,10 @@ export function checkBenchmarkInputs(root: string, paths = trackedFiles(root)): 
     // Direct-file consumers have no committed config to enumerate. Ask the
     // same resolver for their inferred/default project instead of inventing
     // Node package/conditions or TypeScript paths resolution here.
-    let previousFile: string | undefined;
     for (const relativePath of scripts) {
       const path = resolve(root, relativePath);
       if (audited.has(path)) continue;
-      const snapshot = api.updateSnapshot({openFiles: [path], closeFiles: previousFile ? [previousFile] : [], closeProjects: previous ? [previous] : []});
-      previous = undefined; previousFile = path;
+      const snapshot = api.createSnapshot({openFiles: [path]});
       try {
         const project = snapshot.getDefaultProjectForFile(path);
         if (!project) throw new Error(`cannot audit direct-file graph: ${path}`);
