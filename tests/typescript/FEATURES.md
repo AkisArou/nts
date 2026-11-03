@@ -2683,6 +2683,7 @@ the requested control operation and observable property-state checks.
 | `methods` | `methods-*` | 8 | 8 | Overrides through interfaces, base views, generics and stored methods; multi-level chains, fixed home versus current receiver, virtual dispatch, extracted super methods and arrows |
 | `properties` | `properties-*` | 15 | 15 | Getter, prototype-data, farther and missing reads; setter, prototype-data, missing and runtime getter-only writes; typed string and symbol keys, compound, postfix and nullish order, own/prototype state and abrupt completion |
 | `static` | `static-*` | 10 | 10 | Static methods and accessors, field and block reads/writes through constructor routes, current-constructor receiver identity, shadowing chains and initialization order |
+| `home` | `home-*` | 12 | 12 | Object literal super methods, prototype assignment and later rewiring, copied and extracted methods retaining their original home, lexical arrows and exact receiver/order/error observations |
 
 ## Tags
 
@@ -3025,10 +3026,11 @@ the requested control operation and observable property-state checks.
 | `ts-structuredclone-route-collections` | typed collection clones preserve order, times, deep identities, shared parts and cycles | Structured clone route contracts; typed paths | 10 | 0 |
 | `ts-structuredclone-route-errors` | typed unsupported values throw DataCloneError while supported values and errors preserve specified clone state | Structured clone route contracts; typed paths | 18 | 0 |
 | `ts-structuredclone-route-plain-data` | typed plain clones preserve SameValue payloads, key order, holes, fresh nodes, shared references and cycles | Structured clone route contracts; typed paths | 14 | 0 |
+| `ts-super-route-home` | literal super methods retain their original home across copying, observe later home-prototype changes and preserve lexical arrows and receivers | Super route contracts; typed paths | 24 | 0 |
 | `ts-super-route-methods` | super method calls and extracted method values retain fixed home lookup, current receiver state, override dispatch and order through typed routes | Super route contracts; typed paths | 16 | 0 |
 | `ts-super-route-properties` | super reads and writes retain getter/setter receivers, prototype-versus-own storage, computed keys, update results, short-circuiting and strict errors | Super route contracts; typed paths | 30 | 0 |
 | `ts-super-route-static` | static super methods, accessors, fields and blocks resolve from the home constructor while preserving the current constructor receiver and initialization order | Super route contracts; typed paths | 20 | 0 |
-| `ts-super-routes` | super operations preserve home-object lookup, current receivers, exact values, write locations, evaluation order and errors through declared carriers beside explicit controls | Super route contracts; typed paths | 66 | 0 |
+| `ts-super-routes` | super operations preserve home-object lookup, current receivers, exact values, write locations, evaluation order and errors through declared carriers beside explicit controls | Super route contracts; typed paths | 90 | 0 |
 | `ts-symbol-route-copying` | typed spread and assign copy own enumerable symbol identities, retain overwrite positions and keep later writes independent | Symbol route contracts; typed paths | 14 | 0 |
 | `ts-symbol-route-keys` | typed symbol keys preserve identity, independent reads and writes, presence and own versus inherited membership | Symbol route contracts; typed paths | 16 | 0 |
 | `ts-symbol-route-listing` | typed mixed-key listings preserve order, exclude symbols from string enumeration and JSON, and include hidden own symbols | Symbol route contracts; typed paths | 16 | 0 |
