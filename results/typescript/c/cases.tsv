@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":3,"backend":"c","commit":"0a588711a4c1a2e074884442c0e4d44b65827afb","compiler":"7cca4c3ac33ccdef","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":3,"backend":"c","commit":"35be2d8d04f54112e6aeb472011cc1e8a06bf606","compiler":"fedcf86c89f423a4","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/absent-routes-controls/bounds-array-generic-relative-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-array-index-signature-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-generic-grown-holes-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -3936,7 +3936,7 @@ tests/typescript/number-format-routes/partial-int-all-radix-rejection.ts	{"kind"
 tests/typescript/number-format-routes/partial-int-decimal-parameter.ts	{"kind":"pass"}
 tests/typescript/number-format-routes/partial-int-fixed-radix-digits.ts	{"kind":"pass"}
 tests/typescript/number-format-routes/partial-int-optional-radix.ts	{"kind":"pass"}
-tests/typescript/number-format-routes/partial-int-radix-int32-generic.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/number-format-routes/partial-int-radix-int32-generic.ts	{"kind":"pass"}
 tests/typescript/number-format-routes/partial-leading-whitespace-interface.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/number-format-routes/partial-number-string-pipeline.ts	{"kind":"pass"}
 tests/typescript/number-format-routes/precision-exponential-carry-method.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}

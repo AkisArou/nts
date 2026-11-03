@@ -3,6 +3,6 @@
   "category": "agrees",
   "nts": "exit 1; nts: uncaught Observed: radix 16=16;radix 2=2;radix 0=16;",
   "node": "exit 1; nts: uncaught Observed: radix 16=16;radix 2=2;radix 0=16;",
-  "measured_with": "c8b424f379662011",
+  "measured_with": "fedcf86c89f423a4",
   "source": "measured"
 }
