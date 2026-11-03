@@ -73,6 +73,7 @@ import { VerificationLedger, declaredShadowSteps, unionChecks, type Author, type
 import { GateResource, supportsResourceHandoff } from "./gate-resource.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import {compose} from "./composition.ts";
+import {LAND_TRAIN_ARCHIVES} from "./archive.ts";
 import {rootTrial} from "./root-trial.ts";
 import {publishReady,removeReady,snapshotReady,type ReadyEntry,type ReadyProof} from "./ready.ts";
 import {admitted} from "./admission-hold.ts";
@@ -994,7 +995,7 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
   const frozen = {base,tip,members,generation:resume?.generation??randomUUID()};
   if (process.env.NTS_LAND_TRAIN_UNIT) {
     durableRecord(FROZEN,{version:1,phase:"running",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum});
-    const ref=`refs/archive/land-trains/${process.env.NTS_LAND_TRAIN_UNIT}/frozen-${tip}`;
+    const ref=`${LAND_TRAIN_ARCHIVES}${process.env.NTS_LAND_TRAIN_UNIT}/frozen-${tip}`;
     const present=spawnSync("git",["rev-parse","--verify",ref],{cwd:root,encoding:"utf8"});
     if(present.status!==0)git(["update-ref",ref,tip,"0".repeat(tip.length)],root);
     else if(present.stdout.trim()!==tip)fail("frozen train archive changed");

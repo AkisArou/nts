@@ -6,6 +6,7 @@ import {appendFileSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,r
 import {homedir} from "node:os";
 import {basename,dirname,join,resolve} from "node:path";
 import {pathToFileURL} from "node:url";
+import {LAND_SUBMISSION_ARCHIVES} from "./archive.ts";
 
 export type SubmissionManifest={version:1;repo:string;tree:string;sha:string;unit:string;preparingPid:number|null};
 export type CleanupResult={name:string;state:"removed"|"kept"|"gone";reason?:string;head?:string;archive?:string};
@@ -65,7 +66,7 @@ export function cleanupSubmission(repo:string,directory:string,options:Options={
     const referenced=references(join(home,".cache/nts-land"),tree,head);if(referenced)return kept(referenced);
     if(realpathSync(tree)!==resolve(tree))return kept("worktree resolves elsewhere");
     if(git(tree,["status","--porcelain","--untracked-files=normal","--ignore-submodules=all"]))return kept("submission contains uncommitted work");
-    const archive=`refs/archive/land-submissions/${name}`;
+    const archive=`${LAND_SUBMISSION_ARCHIVES}${name}`;
     const probe=spawnSync("git",["-C",repo,"rev-parse","--verify",archive],{encoding:"utf8"});
     if(probe.status===0&&probe.stdout.trim()!==head)return kept("archive already names a different head");
     if(probe.status!==0)git(repo,["update-ref",archive,head,"0".repeat(head.length)]);

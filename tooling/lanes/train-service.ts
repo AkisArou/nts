@@ -10,6 +10,7 @@ import { systemdEnvironment } from "../gate/environment.ts";
 import { gateCommand } from "../gate/affinity.ts";
 import { toolingSliceArgs } from "../gate/tooling-slice.ts";
 import { GateResource } from "./gate-resource.ts";
+import { LAND_TRAIN_ARCHIVES } from "./archive.ts";
 export type TrainOwner = { version: 1; id: string; unit: string; root: string; directory: string; tree: string; sha: string; bootstrap?: string; phase: "starting" | "running" | "retiring"; archive?: string; log: string; trace: string };
 function checked(command: string, args: string[], cwd?: string): string {
   const r = spawnSync(command, args, { cwd, encoding: "utf8" });
@@ -55,7 +56,7 @@ export async function ensureTrain(root: string, state: string, sourceTree: strin
     checked("git",["cat-file","-e",`${sha}:tooling/lanes/train-service.ts`],root);
     const owner: TrainOwner = { version: 1, id, unit: `${process.env.NTS_LAND_HOME ? "nts-test-land-train" : "nts-land-train"}-${id}`, root, directory, tree, sha, ...(current.status===0?{}:{bootstrap:sha}), phase: "starting", log: join(directory, "unit.log"), trace: join(directory, "train.log") };
     // Archive before creating the worktree; cleanup can never lose its code.
-    checked("git", ["update-ref", `refs/archive/land-trains/${id}`, sha, "0".repeat(sha.length)], root);
+    checked("git", ["update-ref", `${LAND_TRAIN_ARCHIVES}${id}`, sha, "0".repeat(sha.length)], root);
     checked("git", ["worktree", "add", "--detach", tree, sha], root);
     checked("sh", [join(tree, "tooling/lanes/inputs.sh"), "lane", root, tree], root);
     save(join(directory, "owner.json"), owner);
@@ -112,7 +113,7 @@ export function refreshController(state: string): boolean {
   // Production upgrades always contain this entry point on main.
   const entry = spawnSync("git",["cat-file","-e",`${main}:tooling/lanes/train-service.ts`],{cwd:owner.root});
   if (entry.status !== 0) return false;
-  const archive=`refs/archive/land-trains/${owner.id}-${main}`;
+  const archive=`${LAND_TRAIN_ARCHIVES}${owner.id}-${main}`;
   const existing=spawnSync("git",["rev-parse","--verify",archive],{cwd:owner.root,encoding:"utf8"});
   if(existing.status!==0)checked("git", ["update-ref", archive, main, "0".repeat(main.length)], owner.root);
   else if(existing.stdout.trim()!==main)throw new Error(`controller archive ${archive} changed`);
@@ -135,7 +136,7 @@ export function cleanupTrain(directory: string): void {
   const state = trainUnitState(owner.unit);
   if (!["inactive", "failed", "deactivating"].includes(state)) throw new Error(`train controller ${owner.unit} is still ${state}`);
   if (!existsSync(owner.tree)) return;
-  if (checked("git", ["rev-parse", "HEAD"], owner.tree) !== owner.sha || checked("git", ["rev-parse", owner.archive ?? `refs/archive/land-trains/${owner.id}`], owner.root) !== owner.sha) throw new Error("train controller head or archive changed");
+  if (checked("git", ["rev-parse", "HEAD"], owner.tree) !== owner.sha || checked("git", ["rev-parse", owner.archive ?? `${LAND_TRAIN_ARCHIVES}${owner.id}`], owner.root) !== owner.sha) throw new Error("train controller head or archive changed");
   if (checked("git", ["status", "--porcelain", "--ignore-submodules=all"], owner.tree)) throw new Error("train controller is dirty");
   checked("git", ["worktree", "remove", owner.tree], owner.root);
 }

@@ -7,7 +7,7 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { classifyHistory } from "./history.ts";
-import { requireArchiveCoverage } from "./archive.ts";
+import { isLanderArchive, requireArchiveCoverage } from "./archive.ts";
 
 type LaneState = "ACTIVE" | "PAUSED" | "CLOSED" | "INACTIVE" | "UNKNOWN";
 type Landed = "ANCESTOR" | "LANDED" | "PROBABLY-LANDED" | "UNLANDED" | "UNKNOWN";
@@ -510,7 +510,7 @@ export async function inventory(options: Options) {
     // Legacy flat apple-foo / wasm-foo archive names are not prefix matches.
     // Keep their provenance unknown rather than quietly inventing ownership.
     archiveCounts[lane.lane] = (archiveCounts[lane.lane] ?? 0) + 1;
-    return { ...r, ...lane, registry: archiveRegistry.find(a => a.ref === r.ref)!, proposal: { action: "keep", reason: "Archive refs preserve history; no cleanup proposed" } };
+    return { ...r, ...lane, registry: isLanderArchive(r.ref) ? null : archiveRegistry.find(a => a.ref === r.ref)!, proposal: { action: "keep", reason: "Archive refs preserve history; no cleanup proposed" } };
   });
   const sameRefs = (a: Ref[], b: Ref[]) => JSON.stringify(a) === JSON.stringify(b);
   if (!sameRefs(heads, refs(repo, "refs/heads/")) || !sameRefs(archives, refs(repo, "refs/archive/"))) warnings.push("Refs changed during the inventory; rerun before any cleanup approval.");
