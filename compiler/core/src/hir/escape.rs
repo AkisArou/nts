@@ -81,94 +81,18 @@ const CARRY_BUDGET: usize = 100_000;
 /// know -- not which loop, not how many iterations. It is used only to *refuse*
 /// confinement, so an over-approximation costs a heap allocation and never an
 /// answer.
-fn repeats(func: &Func) -> FxHashSet<ValueId> {
-    let count = func.blocks.len();
-    // A block can reach itself exactly when it belongs to a cyclic strongly
-    // connected component. Compute those components once instead of building
-    // the graph's transitive closure (which takes quadratic space and can take
-    // quadratic rounds on a long chain).
-    let mut successors = vec![Vec::new(); count];
-    let mut predecessors = vec![Vec::new(); count];
-    for (at, block) in func.blocks.iter().enumerate() {
-        for target in block.terminator.successors() {
-            let target = target.0 as usize;
-            if target < count {
-                successors[at].push(target);
-                predecessors[target].push(at);
-            }
-        }
-    }
-    let cyclic = cycle_members(&successors, &predecessors);
+fn repeats(func: &Func) -> Result<FxHashSet<ValueId>, super::cfg::CfgError> {
+    let cyclic = super::cfg::cyclic_blocks(func)?;
     let mut repeated = FxHashSet::default();
     for (at, block) in func.blocks.iter().enumerate() {
-        if cyclic[at] {
+        let block_id = BlockId(u32::try_from(at).unwrap_or(u32::MAX));
+        if cyclic.is_cyclic(block_id) == Some(true) {
+            // Only placed operations can execute; Func::values may also hold
+            // dead values left behind by a rewrite.
             repeated.extend(block.ops.iter().copied());
         }
     }
-    repeated
-}
-
-/// Return the nodes that belong to a directed cycle, in O(V + E) time and
-/// space. Both depth-first traversals are iterative so generated functions
-/// with very deep control-flow graphs do not consume the Rust call stack.
-fn cycle_members(successors: &[Vec<usize>], predecessors: &[Vec<usize>]) -> Vec<bool> {
-    let count = successors.len();
-    debug_assert_eq!(predecessors.len(), count);
-
-    // Iterative first pass of Kosaraju's algorithm: record finish order.
-    let mut visited = vec![false; count];
-    let mut finish = Vec::with_capacity(count);
-    for root in 0..count {
-        if visited[root] {
-            continue;
-        }
-        visited[root] = true;
-        let mut stack = vec![(root, 0_usize)];
-        while let Some(&(node, edge)) = stack.last() {
-            if edge < successors[node].len() {
-                let next = successors[node][edge];
-                stack.last_mut().expect("nonempty DFS stack").1 += 1;
-                if !visited[next] {
-                    visited[next] = true;
-                    stack.push((next, 0));
-                }
-            } else {
-                stack.pop();
-                finish.push(node);
-            }
-        }
-    }
-
-    // The reverse pass identifies each component. A component is cyclic when
-    // it has multiple nodes, or its sole node has a self-edge.
-    let mut component = vec![usize::MAX; count];
-    let mut cyclic = vec![false; count];
-    let mut next_component = 0;
-    for root in finish.into_iter().rev() {
-        if component[root] != usize::MAX {
-            continue;
-        }
-        component[root] = next_component;
-        let mut members = vec![root];
-        let mut stack = vec![root];
-        while let Some(node) = stack.pop() {
-            for &next in &predecessors[node] {
-                if component[next] == usize::MAX {
-                    component[next] = next_component;
-                    members.push(next);
-                    stack.push(next);
-                }
-            }
-        }
-        let is_cycle = members.len() > 1 || successors[root].contains(&root);
-        if is_cycle {
-            for node in members {
-                cyclic[node] = true;
-            }
-        }
-        next_component += 1;
-    }
-    cyclic
+    Ok(repeated)
 }
 
 /// What escapes, per function.
@@ -653,6 +577,19 @@ struct Summaries<'a> {
 
 // One walk over every operation, each arm a different way a value escapes;
 // splitting it would scatter the state the arms share (as in `rc::insert_into`).
+fn all_escaping(func: &Func) -> Escapes {
+    let all: FxHashSet<_> = (0..func.values.len())
+        .filter_map(|at| u32::try_from(at).ok().map(ValueId))
+        .collect();
+    Escapes {
+        values: all.clone(),
+        contents_leave: all,
+        contents_returned: (0..func.params.len())
+            .filter_map(|slot| u32::try_from(slot).ok())
+            .collect(),
+    }
+}
+
 #[allow(clippy::too_many_lines)]
 fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     let mut escapes = Escapes::default();
@@ -676,20 +613,13 @@ fn analyze(func: &Func, of: &Summaries<'_>) -> Escapes {
     let mut contents_read_by: Vec<(ValueId, ValueId)> = Vec::new();
     // Which allocations can run more than once with an earlier result still
     // reachable. See `repeats`.
-    let repeated = repeats(func);
+    let Ok(repeated) = repeats(func) else {
+        return all_escaping(func);
+    };
     let Ok(live) = liveness::analyze(func).map_err(liveness::Failure::for_optional) else {
         // No unfinished lifetime proof may place an allocation in the frame
         // or publish a held-contents/return summary.
-        let all: FxHashSet<_> = (0..func.values.len())
-            .filter_map(|at| u32::try_from(at).ok().map(ValueId))
-            .collect();
-        return Escapes {
-            values: all.clone(),
-            contents_leave: all,
-            contents_returned: (0..func.params.len())
-                .filter_map(|slot| u32::try_from(slot).ok())
-                .collect(),
-        };
+        return all_escaping(func);
     };
 
     for block in &func.blocks {
@@ -1539,52 +1469,6 @@ fn escape_into(
 mod tests {
     use super::*;
 
-    #[test]
-    fn repetition_marks_only_nodes_inside_cycles() {
-        let successors = vec![
-            vec![1], // leads into a cycle, but is not in one
-            vec![2],
-            vec![3],
-            vec![2, 4], // cycle 2 <-> 3, then a one-way connector
-            vec![5],
-            vec![6],
-            vec![5, 7], // cycle 5 <-> 6, then a node leading into a cycle
-            vec![8],
-            vec![8], // self-cycle
-        ];
-        let mut predecessors = vec![Vec::new(); successors.len()];
-        for (source, targets) in successors.iter().enumerate() {
-            for &target in targets {
-                predecessors[target].push(source);
-            }
-        }
-
-        assert_eq!(
-            cycle_members(&successors, &predecessors),
-            [false, false, true, true, false, true, true, false, true]
-        );
-    }
-
-    #[test]
-    fn repetition_walk_is_iterative_for_deep_control_flow() {
-        let count = 20_000;
-        let mut successors = vec![Vec::new(); count];
-        for (at, edges) in successors.iter_mut().enumerate().take(count - 1) {
-            edges.push(at + 1);
-        }
-        let mut predecessors = vec![Vec::new(); count];
-        for (source, targets) in successors.iter().enumerate() {
-            for &target in targets {
-                predecessors[target].push(source);
-            }
-        }
-
-        assert!(
-            cycle_members(&successors, &predecessors)
-                .into_iter()
-                .all(|member| !member)
-        );
-    }
     use crate::hir::{ArrayFill, Block, Field, HirType, Layout, ManagedType, Op, Param, TypeId};
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
@@ -2207,7 +2091,7 @@ mod tests {
         body.values
             .push(op(OpKind::ObjectNew { frame: false }, object()));
         body.blocks[0].ops.push(initial);
-        let repeated = repeats(&body);
+        let repeated = repeats(&body).expect("the control has a valid CFG");
         let live = liveness::analyze(&body).expect("complete liveness");
         let carried = [(ValueId(1), ValueId(0)), (ValueId(1), ValueId(0))];
         let mut normal = Escapes::default();

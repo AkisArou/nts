@@ -86,6 +86,7 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 unsafe_code = "forbid"
 missing_debug_implementations = "warn"
 unreachable_pub = "warn"
+unexpected_cfgs = { level = "warn", check-cfg = ['cfg(flow_measure)'] }
 
 [workspace.lints.clippy]
 # Pedantic minus the noise that fights domain vocabulary.

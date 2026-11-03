@@ -26,6 +26,7 @@
 #![allow(clippy::float_cmp)]
 
 use rustc_hash::FxHashMap;
+use std::collections::BTreeSet;
 
 use super::facts::{self, Facts};
 use super::{BinOp, BlockId, Callee, Func, OpKind, Terminator, UnOp, ValueId};
@@ -37,8 +38,9 @@ use super::{BinOp, BlockId, Callee, Func, OpKind, Terminator, UnOp, ValueId};
 /// still moving without giving up on one that was going to settle.
 const WIDEN_AFTER: u32 = 3;
 
-/// A hard bound on the whole fixpoint. A long reverse-ordered graph can need
-/// more rounds even without a loop; exhaustion discards its unfinished facts.
+/// A hard bound on worklist epochs. Forward edges propagate in one epoch in
+/// reverse-postorder; backedges and invalidated dependents advance the epoch.
+/// Exhaustion discards every unfinished fact.
 const ROUND_CAP: u32 = 64;
 
 /// Blocks a back edge returns to.
@@ -80,6 +82,39 @@ fn loop_headers(func: &Func) -> rustc_hash::FxHashSet<BlockId> {
         }
     }
     headers
+}
+
+/// A deterministic reverse-postorder of the function CFG. Unreachable blocks
+/// follow the entry component and are never queued by the analysis.
+fn reverse_postorder(func: &Func) -> Vec<BlockId> {
+    let mut visited = vec![false; func.blocks.len()];
+    let mut postorder = Vec::with_capacity(func.blocks.len());
+    let mut stack = vec![(BlockId(0), 0_usize)];
+    visited[0] = true;
+    while let Some(&mut (block, ref mut next)) = stack.last_mut() {
+        let successors = func.blocks[block.0 as usize].terminator.successors();
+        let Some(successor) = successors.get(*next).copied() else {
+            postorder.push(block);
+            stack.pop();
+            continue;
+        };
+        *next += 1;
+        if !visited[successor.0 as usize] {
+            visited[successor.0 as usize] = true;
+            stack.push((successor, 0));
+        }
+    }
+    postorder.reverse();
+    postorder.extend(
+        visited
+            .iter()
+            .enumerate()
+            .filter(|(_, seen)| !**seen)
+            .map(|(index, _)| {
+                BlockId(u32::try_from(index).expect("function block count fits BlockId"))
+            }),
+    );
+    postorder
 }
 
 /// What was proven about each value in one function.
@@ -241,6 +276,505 @@ impl Analysis {
 
 /// Values whose facts an edge refined, relative to their own definitions.
 type Refinements = FxHashMap<ValueId, Facts>;
+
+/// Path facts can equal the current SSA-global fact. Keep those facts on CFG
+/// edges: the global may broaden later while the path-specific fact remains
+/// valid. Published `Analysis::refined` maps are normalized sparse overrides.
+type PathFacts = FxHashMap<ValueId, Facts>;
+
+/// One predecessor's current contribution to its successor. Parameter facts
+/// are edge arguments, kept independently of the sparse non-parameter map.
+#[derive(Debug, Clone, PartialEq)]
+struct EdgeState {
+    path_facts: PathFacts,
+    params: Vec<Facts>,
+}
+
+#[derive(Debug, Clone, Copy)]
+struct ChangedValue {
+    value: ValueId,
+    read_before_change: bool,
+}
+
+#[derive(Debug, Default)]
+struct TransferResult {
+    changed_values: Vec<ChangedValue>,
+    changed_positions: FxHashMap<ValueId, usize>,
+    global_reads: rustc_hash::FxHashSet<ValueId>,
+    changed_blocks: rustc_hash::FxHashSet<BlockId>,
+}
+
+impl TransferResult {
+    fn note_global_read(&mut self, value: ValueId) {
+        self.global_reads.insert(value);
+    }
+
+    fn note_changed(&mut self, value: ValueId) {
+        if let Some(index) = self.changed_positions.get(&value).copied() {
+            self.changed_values[index].read_before_change |= self.global_reads.contains(&value);
+        } else {
+            self.changed_positions
+                .insert(value, self.changed_values.len());
+            self.changed_values.push(ChangedValue {
+                value,
+                read_before_change: self.global_reads.contains(&value),
+            });
+        }
+    }
+}
+
+/// The only read authority for SSA-global facts during a transfer. Keeping the
+/// slice private means an analysis helper cannot read a fallback without
+/// registering the block dependency that makes sparse requeue sound.
+struct FactView<'a> {
+    values: &'a [Facts],
+    dependencies: &'a mut TransferResult,
+}
+
+impl FactView<'_> {
+    fn get(&mut self, refinements: &PathFacts, value: ValueId) -> Facts {
+        lookup_recorded(refinements, self, value)
+    }
+
+    #[cfg(any(test, debug_assertions))]
+    fn global(&mut self, value: ValueId) -> Facts {
+        self.dependencies.note_global_read(value);
+        self.values[value.0 as usize]
+    }
+}
+
+impl<'a> FactView<'a> {
+    fn new(values: &'a [Facts], dependencies: &'a mut TransferResult) -> Self {
+        Self {
+            values,
+            dependencies,
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq)]
+struct HeaderFact {
+    raw: Facts,
+    effective: Facts,
+    changes: u32,
+}
+
+/// Test-only counters for work that used to grow quadratically in joins and
+/// edge construction. The production type is zero-sized and all increments
+/// compile away.
+#[derive(Default)]
+struct WorkCounts {
+    #[cfg(any(test, flow_measure))]
+    parameter_index_entries: usize,
+    #[cfg(any(test, flow_measure))]
+    entry_keys_visited: usize,
+    #[cfg(any(test, flow_measure))]
+    parameter_position_queries: usize,
+    #[cfg(any(test, flow_measure))]
+    sparse_refinement_visits: usize,
+    #[cfg(any(test, flow_measure))]
+    live_in_membership_probes: usize,
+    #[cfg(any(test, flow_measure))]
+    query_length_entries: usize,
+    #[cfg(flow_measure)]
+    path_fact_entries_built: usize,
+}
+
+fn parameter_positions(func: &Func, work: &mut WorkCounts) -> Vec<FxHashMap<ValueId, usize>> {
+    #[cfg(not(any(test, flow_measure)))]
+    let _ = work;
+    func.blocks
+        .iter()
+        .map(|block| {
+            block
+                .params
+                .iter()
+                .enumerate()
+                .map(|(slot, value)| {
+                    #[cfg(any(test, flow_measure))]
+                    {
+                        work.parameter_index_entries += 1;
+                    }
+                    (*value, slot)
+                })
+                .collect()
+        })
+        .collect()
+}
+
+fn value_readers(
+    func: &Func,
+    live_in: &[rustc_hash::FxHashSet<ValueId>],
+) -> Vec<rustc_hash::FxHashSet<BlockId>> {
+    let mut readers = vec![rustc_hash::FxHashSet::default(); func.values.len()];
+    for (index, block) in func.blocks.iter().enumerate() {
+        let block_id = BlockId(u32::try_from(index).expect("function block count fits BlockId"));
+        for value in &live_in[index] {
+            readers[value.0 as usize].insert(block_id);
+        }
+        // This block also republishes the facts its successors need. A value
+        // can be absent from this block's own live-in/uses, yet its edge
+        // snapshot must be refreshed when the SSA-global fact broadens.
+        for successor in block.terminator.successors() {
+            for value in &live_in[successor.0 as usize] {
+                readers[value.0 as usize].insert(block_id);
+            }
+        }
+        // A defining block is also a reader of its result: if the global fact
+        // changes during this transfer, rerun it at the same epoch to publish
+        // the path-specific edge state against that broader global.
+        for value in block
+            .ops
+            .iter()
+            .flat_map(|value| {
+                std::iter::once(*value)
+                    .chain(super::operands_of(&func.values[value.0 as usize].kind))
+            })
+            .chain(super::operands_of_terminator(&block.terminator))
+        {
+            readers[value.0 as usize].insert(block_id);
+        }
+    }
+    readers
+}
+
+/// Values whose path facts a downstream analysis queries at a block even
+/// though no placed operation in that block reads them. Query uses are
+/// collected while walking the dominator tree, so only definitions that
+/// actually dominate the query become live there.
+#[allow(clippy::too_many_lines)] // One dominator walk owns all query-use rules.
+fn analysis_query_inputs(
+    func: &Func,
+    growable: bool,
+    work: &mut WorkCounts,
+) -> Vec<rustc_hash::FxHashSet<ValueId>> {
+    #[cfg(not(any(test, flow_measure)))]
+    let _ = work;
+    if func.blocks.is_empty() {
+        return Vec::new();
+    }
+
+    let reachable = super::verify::reachable_blocks(func);
+    let idom = super::verify::dominators(func, &reachable);
+    let mut children = vec![Vec::new(); func.blocks.len()];
+    for (index, parent) in idom.iter().enumerate() {
+        if let Some(parent) = parent
+            && parent.0 as usize != index
+        {
+            children[parent.0 as usize].push(BlockId(
+                u32::try_from(index).expect("function block count fits BlockId"),
+            ));
+        }
+    }
+
+    let mut queried = vec![rustc_hash::FxHashSet::default(); func.blocks.len()];
+    let mut active_lengths = FxHashMap::<ValueId, Vec<ValueId>>::default();
+    let mut expanded_lengths =
+        vec![FxHashMap::<ValueId, rustc_hash::FxHashSet<ValueId>>::default(); func.blocks.len()];
+    let mut exact_allocations = FxHashMap::<ValueId, bool>::default();
+    // Exit events undo only the length definitions added by their block.
+    // This iterative dominator-tree walk avoids copying a growing map down
+    // every arm of a large switch.
+    let mut events = vec![(BlockId(0), false, Vec::<ValueId>::new())];
+    while let Some((block_id, exiting, added)) = events.pop() {
+        let index = block_id.0 as usize;
+        if exiting {
+            for array in added.into_iter().rev() {
+                let stack = active_lengths
+                    .get_mut(&array)
+                    .expect("entered length definition has an active source");
+                stack.pop();
+                if stack.is_empty() {
+                    active_lengths.remove(&array);
+                }
+            }
+            continue;
+        }
+
+        let block = &func.blocks[index];
+        let mut added_here = Vec::new();
+        for &operation in &block.ops {
+            let op = &func.values[operation.0 as usize];
+            if let OpKind::Length(array) = op.kind {
+                active_lengths.entry(array).or_default().push(operation);
+                added_here.push(array);
+                continue;
+            }
+
+            let queried_array = match op.kind {
+                OpKind::StringUnitAt {
+                    string,
+                    checked: true,
+                    ..
+                } if matches!(
+                    func.values[string.0 as usize].ty,
+                    super::HirType::Managed(super::ManagedType::String)
+                ) =>
+                {
+                    if let Some(lengths) = active_lengths.get(&string) {
+                        for length in lengths {
+                            if !expanded_lengths[index]
+                                .entry(string)
+                                .or_default()
+                                .insert(*length)
+                            {
+                                continue;
+                            }
+                            #[cfg(any(test, flow_measure))]
+                            {
+                                work.query_length_entries += 1;
+                            }
+                            queried[index].insert(*length);
+                        }
+                    }
+                    None
+                }
+                OpKind::ArrayGet {
+                    array,
+                    checked: true,
+                    ..
+                }
+                | OpKind::ArraySet {
+                    array,
+                    checked: true,
+                    ..
+                } => Some(array),
+                _ => None,
+            };
+
+            let Some(array) = queried_array else {
+                continue;
+            };
+            match &func.values[array.0 as usize].kind {
+                OpKind::ArrayNew { length, .. }
+                    if *exact_allocations.entry(array).or_insert_with(|| {
+                        super::allocated_length_is_exact(func, array, growable)
+                    }) =>
+                {
+                    if queried[index].insert(*length) {
+                        #[cfg(any(test, flow_measure))]
+                        {
+                            work.query_length_entries += 1;
+                        }
+                    }
+                }
+                OpKind::Call {
+                    callee: Callee::External(name),
+                    args,
+                    ..
+                } if name == "nts_view_new" => {
+                    if let [_, _, length, _, tracking] = args[..]
+                        && matches!(
+                            func.values[tracking.0 as usize].kind,
+                            OpKind::ConstBool(false)
+                        )
+                        && queried[index].insert(length)
+                    {
+                        #[cfg(any(test, flow_measure))]
+                        {
+                            work.query_length_entries += 1;
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+
+        events.push((block_id, true, added_here));
+        for child in children[index].iter().rev() {
+            events.push((*child, false, Vec::new()));
+        }
+    }
+    queried
+}
+
+fn enqueue(
+    block: BlockId,
+    source: BlockId,
+    epoch: u32,
+    rank: &[usize],
+    work: &mut BTreeSet<(u32, usize)>,
+    scheduled: &mut [Option<u32>],
+) {
+    let index = block.0 as usize;
+    // Following the CFG's reverse-postorder: a fact sent to a later block can
+    // be consumed in this epoch; a backward edge and a changed value read by
+    // its defining block wait for the next epoch. The latter reruns a transfer
+    // after its global output changed, so equal-to-global edge facts can be
+    // derived again against the broader global. The worklist skips unchanged
+    // blocks.
+    let next = epoch.saturating_add(u32::from(rank[index] <= rank[source.0 as usize]));
+    if scheduled[index].is_some_and(|current| current <= next) {
+        return;
+    }
+    if let Some(current) = scheduled[index] {
+        work.remove(&(current, rank[index]));
+    }
+    scheduled[index] = Some(next);
+    work.insert((next, rank[index]));
+}
+
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the join consumes one coherent snapshot of solver state and records work"
+)]
+fn recompute_entry_recorded(
+    func: &Func,
+    block: BlockId,
+    incoming: &[Vec<(BlockId, usize)>],
+    edges: &[Vec<Option<EdgeState>>],
+    caps: &FxHashMap<ValueId, Facts>,
+    parameter_positions: &FxHashMap<ValueId, usize>,
+    work: &mut WorkCounts,
+    facts: &mut FactView<'_>,
+) -> Option<PathFacts> {
+    #[cfg(not(test))]
+    let _ = work;
+    let index = block.0 as usize;
+    let states: Vec<_> = incoming[index]
+        .iter()
+        .filter_map(|(source, slot)| {
+            edges[source.0 as usize][*slot]
+                .as_ref()
+                .map(|state| (*source, state))
+        })
+        .collect();
+    let _ = states.first()?;
+
+    let mut keys: rustc_hash::FxHashSet<_> = states
+        .iter()
+        .flat_map(|(_, state)| state.path_facts.keys().copied())
+        .collect();
+    let params = &func.blocks[index].params;
+    // Every incoming edge has a positional argument fact, even when it equals
+    // the parameter's global fact. Keeping it here is what lets a later global
+    // widening re-derive a narrow preheader contribution such as constant 0.
+    keys.extend(params.iter().copied());
+
+    let mut refinements = PathFacts::default();
+    for value in keys {
+        #[cfg(any(test, flow_measure))]
+        {
+            work.entry_keys_visited += 1;
+            work.parameter_position_queries += 1;
+        }
+        let param_slot = parameter_positions.get(&value).copied();
+        let mut joined = None;
+        for (_, state) in &states {
+            let contribution = param_slot
+                .and_then(|slot| state.params.get(slot).copied())
+                .unwrap_or_else(|| lookup_recorded(&state.path_facts, facts, value));
+            joined = Some(joined.map_or(contribution, |now: Facts| now.join(contribution)));
+        }
+        set_path_fact(
+            &mut refinements,
+            value,
+            capped(
+                caps,
+                value,
+                joined.expect("an incoming edge contributes every entry key"),
+            ),
+        );
+    }
+    #[cfg(flow_measure)]
+    {
+        work.path_fact_entries_built += refinements.len();
+    }
+    Some(refinements)
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "test helper mirrors the solver join inputs"
+)]
+fn recompute_entry(
+    func: &Func,
+    block: BlockId,
+    incoming: &[Vec<(BlockId, usize)>],
+    edges: &[Vec<Option<EdgeState>>],
+    values: &[Facts],
+    caps: &FxHashMap<ValueId, Facts>,
+    parameter_positions: &FxHashMap<ValueId, usize>,
+    work: &mut WorkCounts,
+) -> Option<PathFacts> {
+    recompute_entry_recorded(
+        func,
+        block,
+        incoming,
+        edges,
+        caps,
+        parameter_positions,
+        work,
+        &mut FactView::new(values, &mut TransferResult::default()),
+    )
+}
+
+fn apply_header_widening_recorded(
+    func: &Func,
+    block: BlockId,
+    refinements: &mut PathFacts,
+    caps: &FxHashMap<ValueId, Facts>,
+    widen_after: u32,
+    history: &mut Option<Vec<HeaderFact>>,
+    facts: &mut FactView<'_>,
+) {
+    let params = &func.blocks[block.0 as usize].params;
+    let previous = history.get_or_insert_with(|| {
+        params
+            .iter()
+            .map(|param| {
+                let fact = lookup_recorded(refinements, facts, *param);
+                HeaderFact {
+                    raw: fact,
+                    effective: fact,
+                    changes: 0,
+                }
+            })
+            .collect()
+    });
+    for (slot, param) in params.iter().enumerate() {
+        let now = lookup_recorded(refinements, facts, *param);
+        let before = previous[slot];
+        let mut next = before;
+        if now != before.raw {
+            next.changes = next.changes.saturating_add(1);
+            next.raw = now;
+            next.effective = if next.changes >= widen_after {
+                before.effective.join(facts::widen(before.effective, now))
+            } else {
+                before.effective.join(now)
+            };
+        }
+        next.effective = capped(caps, *param, next.effective);
+        previous[slot] = next;
+        // Preserve the header's recomputed path fact even when it currently
+        // equals the SSA-global value. A later global broadening must not erase
+        // the loop's incoming contribution from the outgoing edge snapshot.
+        set_path_fact(refinements, *param, next.effective);
+    }
+}
+
+#[cfg(test)]
+fn apply_header_widening(
+    func: &Func,
+    block: BlockId,
+    refinements: &mut PathFacts,
+    values: &[Facts],
+    caps: &FxHashMap<ValueId, Facts>,
+    widen_after: u32,
+    history: &mut Option<Vec<HeaderFact>>,
+) {
+    apply_header_widening_recorded(
+        func,
+        block,
+        refinements,
+        caps,
+        widen_after,
+        history,
+        &mut FactView::new(values, &mut TransferResult::default()),
+    );
+}
 
 /// What a field holds now, on one path through a function: what it is worth,
 /// and the value that last stored or read it, so that a guard on that value
@@ -458,10 +992,112 @@ pub fn analyze_with(func: &Func, context: &Context) -> Analysis {
     solve(func, context).0
 }
 
-/// The round count is retained for solver controls; consumers receive only the
+/// The epoch count is retained for solver controls; consumers receive only the
 /// completed analysis (or the conservative exhaustion result).
 fn solve(func: &Func, context: &Context) -> (Analysis, u32) {
+    solve_with_limits(func, context, ROUND_CAP, WIDEN_AFTER)
+}
+
+#[cfg(flow_measure)]
+fn report_work_stats(
+    func: &Func,
+    work: &WorkCounts,
+    live_in: &[rustc_hash::FxHashSet<ValueId>],
+    entry: &[Option<PathFacts>],
+    edges: &[Vec<Option<EdgeState>>],
+    rounds: u32,
+    converged: bool,
+) {
+    if std::env::var_os("NTS_FLOW_WORK_STATS").is_none() || func.values.len() < 512 {
+        return;
+    }
+    let live_value_spans: usize = live_in.iter().map(std::collections::HashSet::len).sum();
+    let retained_entry_path_facts: usize = entry.iter().flatten().map(FxHashMap::len).sum();
+    let retained_edge_path_facts: usize = edges
+        .iter()
+        .flatten()
+        .flatten()
+        .map(|state| state.path_facts.len())
+        .sum();
+    eprintln!(
+        "NTS_FLOW_WORK_STATS {{\"function\":{:?},\"blocks\":{},\"values\":{},\"live_value_spans\":{},\"parameter_index_entries\":{},\"entry_keys_visited\":{},\"parameter_position_queries\":{},\"sparse_refinement_visits\":{},\"live_in_membership_probes\":{},\"query_length_entries\":{},\"path_fact_entries_built\":{},\"retained_entry_path_facts\":{},\"retained_edge_path_facts\":{},\"rounds\":{},\"converged\":{}}}",
+        func.name,
+        func.blocks.len(),
+        func.values.len(),
+        live_value_spans,
+        work.parameter_index_entries,
+        work.entry_keys_visited,
+        work.parameter_position_queries,
+        work.sparse_refinement_visits,
+        work.live_in_membership_probes,
+        work.query_length_entries,
+        work.path_fact_entries_built,
+        retained_entry_path_facts,
+        retained_edge_path_facts,
+        rounds,
+        converged,
+    );
+}
+
+#[allow(
+    clippy::too_many_lines,
+    reason = "the epoch scheduler and its convergence fallback form one solver invariant"
+)]
+fn solve_with_limits(
+    func: &Func,
+    context: &Context,
+    round_cap: u32,
+    widen_after: u32,
+) -> (Analysis, u32) {
     let tuples = local_tuples(func);
+    let mut work_counts = WorkCounts::default();
+    let parameter_positions = parameter_positions(func, &mut work_counts);
+    let query_uses = analysis_query_inputs(func, context.whole.growable, &mut work_counts);
+    let liveness = super::liveness::analyze_with_additional_uses(func, &query_uses)
+        .expect("complete flow liveness");
+    let live_in: Vec<_> = func
+        .blocks
+        .iter()
+        .enumerate()
+        .map(|(index, block)| {
+            let mut live = liveness
+                .live_in(BlockId(u32::try_from(index).unwrap_or(0)))
+                .clone();
+            live.extend(block.params.iter().copied());
+            live
+        })
+        .collect();
+
+    // Requeue blocks whose live input or local operations read a changed
+    // global fact. The liveness edge cases and operation operands are both
+    // included: a value may be passed through several blocks before its next
+    // operation use.
+    let mut readers = value_readers(func, &live_in);
+    // Transfer-time global fallbacks are dependencies even when they are
+    // reached indirectly through a value's definition (for example, the
+    // operands of a comparison used by a later branch). Remember each once.
+    let mut block_global_reads = vec![rustc_hash::FxHashSet::default(); func.blocks.len()];
+
+    let edge_targets: Vec<Vec<BlockId>> = func
+        .blocks
+        .iter()
+        .map(|block| block.terminator.successors())
+        .collect();
+    let order = reverse_postorder(func);
+    let mut rank = vec![0; func.blocks.len()];
+    for (at, block) in order.iter().enumerate() {
+        rank[block.0 as usize] = at;
+    }
+    let mut incoming = vec![Vec::<(BlockId, usize)>::new(); func.blocks.len()];
+    for (source, targets) in edge_targets.iter().enumerate() {
+        for (slot, target) in targets.iter().copied().enumerate() {
+            incoming[target.0 as usize].push((
+                BlockId(u32::try_from(source).expect("function block count fits BlockId")),
+                slot,
+            ));
+        }
+    }
+
     // Start at BOTTOM and grow. A value's fact only ever widens as more paths
     // are discovered, so the fixpoint is the least one.
     let mut values = vec![Facts::BOTTOM; func.values.len()];
@@ -476,77 +1112,108 @@ fn solve(func: &Func, context: &Context) -> (Analysis, u32) {
         }
     }
 
-    let mut entry: Vec<Option<Refinements>> = vec![None; func.blocks.len()];
+    // Entries are derived from the current incoming edge states every time a
+    // block is dequeued. They are never the sole record of a path fact.
+    let mut entry: Vec<Option<PathFacts>> = vec![None; func.blocks.len()];
+    let mut edges: Vec<Vec<Option<EdgeState>>> = edge_targets
+        .iter()
+        .map(|targets| vec![None; targets.len()])
+        .collect();
     entry[0] = Some(Refinements::default());
-    // What each block was handed last time, so that widening compares against
-    // the previous round rather than against one predecessor's contribution.
-    let mut previous: Vec<Option<Refinements>> = vec![None; func.blocks.len()];
-    let mut visits = vec![0_u32; func.blocks.len()];
+
+    // Widening history belongs to loop parameters, not to incoming edges.
+    // Keep both the last raw join and the effective widened fact so replacing
+    // an edge can never erase the loop's convergence state.
+    let mut header_previous: Vec<Option<Vec<HeaderFact>>> = vec![None; func.blocks.len()];
     let headers = loop_headers(func);
     // The fields each block is entered knowing, and what was observed of them.
     let mut fields: Vec<Option<Fields>> = vec![None; func.blocks.len()];
     fields[0] = Some(Fields::default());
     let mut observed = Observed::default();
 
-    let mut converged = false;
-    let mut rounds = 0;
-    for _ in 0..ROUND_CAP {
-        rounds += 1;
-        let mut changed = false;
-        for index in 0..func.blocks.len() {
-            let Some(mut refinements) = entry[index].clone() else {
-                // Not yet reached by any path.
-                continue;
-            };
-            visits[index] += 1;
+    let mut scheduled = vec![None; func.blocks.len()];
+    let mut work = BTreeSet::new();
+    work.insert((0_u32, rank[0]));
+    scheduled[0] = Some(0);
+    let mut converged = true;
+    let mut rounds = 0_u32;
+    while let Some((epoch, at)) = work.pop_first() {
+        let index = order[at].0 as usize;
+        scheduled[index] = None;
+        if epoch >= round_cap {
+            converged = false;
+            rounds = round_cap;
+            break;
+        }
+        rounds = rounds.max(epoch.saturating_add(1));
+        let block = BlockId(u32::try_from(index).expect("function block count fits BlockId"));
 
-            // Widening, once per header per round and only on the parameters
-            // that actually accumulate across iterations. Two restrictions, each
-            // of which was a bug without it:
-            //
-            // - once per *block*, not once per incoming edge, or a header with
-            //   two predecessors takes two threshold jumps per round of growth;
-            // - only at a *header*, or a loop body widens the value its guard
-            //   just narrowed, and the loop stops being provable at all.
-            let block = BlockId(u32::try_from(index).unwrap_or(0));
-            if visits[index] > WIDEN_AFTER
-                && headers.contains(&block)
-                && let Some(before) = &previous[index]
-            {
-                for param in &func.blocks[index].params {
-                    if let (Some(earlier), Some(now)) =
-                        (before.get(param).copied(), refinements.get(param).copied())
-                    {
-                        refinements.insert(
-                            *param,
-                            capped(context.caps, *param, facts::widen(earlier, now)),
-                        );
-                    }
-                }
-                // Persist widening in the same capped domain as incoming
-                // joins. A back edge must not undo the certified bound and
-                // manufacture the same transient change on every round.
-                if entry[index].as_ref() != Some(&refinements) {
-                    entry[index] = Some(refinements.clone());
-                    changed = true;
-                }
-            }
-
-            previous[index] = Some(refinements.clone());
-
-            changed |= transfer_block(
+        let mut result = TransferResult::default();
+        let mut refinements = if index == 0 {
+            Some(Refinements::default())
+        } else {
+            recompute_entry_recorded(
                 func,
-                (context, &tuples),
-                BlockId(u32::try_from(index).unwrap_or(0)),
-                &refinements,
-                &mut values,
-                &mut entry,
-                (&mut fields, &mut observed, &headers),
+                block,
+                &incoming,
+                &edges,
+                context.caps,
+                &parameter_positions[index],
+                &mut work_counts,
+                &mut FactView::new(&values, &mut result),
+            )
+        };
+        let Some(mut refinements_now) = refinements.take() else {
+            // Every current incoming edge was withdrawn; the block is no
+            // longer reachable in the current graph state.
+            entry[index] = None;
+            continue;
+        };
+
+        if headers.contains(&block) {
+            apply_header_widening_recorded(
+                func,
+                block,
+                &mut refinements_now,
+                context.caps,
+                widen_after,
+                &mut header_previous[index],
+                &mut FactView::new(&values, &mut result),
             );
         }
-        if !changed {
-            converged = true;
-            break;
+        entry[index] = Some(refinements_now.clone());
+
+        // New block entry facts affect its operations even if neither an edge
+        // nor a global value changed.
+        transfer_block(
+            func,
+            (context, &tuples),
+            block,
+            &refinements_now,
+            &mut values,
+            &mut edges,
+            &live_in,
+            &parameter_positions,
+            &mut work_counts,
+            (&mut fields, &mut observed, &headers),
+            &mut result,
+        );
+
+        for value in result.global_reads.iter().copied() {
+            if block_global_reads[index].insert(value) {
+                readers[value.0 as usize].insert(block);
+            }
+        }
+        for change in result.changed_values {
+            let value = change.value;
+            for reader in &readers[value.0 as usize] {
+                if *reader != block || change.read_before_change {
+                    enqueue(*reader, block, epoch, &rank, &mut work, &mut scheduled);
+                }
+            }
+        }
+        for target in result.changed_blocks {
+            enqueue(target, block, epoch, &rank, &mut work, &mut scheduled);
         }
     }
 
@@ -554,13 +1221,49 @@ fn solve(func: &Func, context: &Context) -> (Analysis, u32) {
     // the paths seen so far. None of those partial facts may license a fold,
     // a bounds-check removal or a storage width in any consumer.
     if !converged {
+        #[cfg(flow_measure)]
+        report_work_stats(func, &work_counts, &live_in, &entry, &edges, rounds, false);
         return (unknown(func, context, observed), rounds);
     }
 
+    #[cfg(any(test, debug_assertions))]
+    assert_one_full_sweep_is_stable(
+        func,
+        context,
+        &tuples,
+        widen_after,
+        &order,
+        &incoming,
+        &live_in,
+        &parameter_positions,
+        &headers,
+        &values,
+        &entry,
+        &edges,
+        &header_previous,
+        &fields,
+        &observed,
+    );
+
+    // A transfer can grow a phi's global fact after its entry was derived.
+    // Drop any now-redundant published override before exposing the fixpoint.
+    for refinements in entry.iter_mut().flatten() {
+        refinements.retain(|value, facts| *facts != values[value.0 as usize]);
+        #[cfg(any(test, debug_assertions))]
+        debug_assert_sparse(
+            refinements,
+            &mut FactView::new(&values, &mut TransferResult::default()),
+        );
+    }
+
+    #[cfg(flow_measure)]
+    report_work_stats(func, &work_counts, &live_in, &entry, &edges, rounds, true);
+
+    let less_than = relations(func, &entry);
     (
         Analysis {
             values,
-            less_than: relations(func, &entry),
+            less_than,
             refined: entry.into_iter().map(Option::unwrap_or_default).collect(),
             growable: context.whole.growable,
             param_lengths: context.param_lengths.to_vec(),
@@ -568,6 +1271,112 @@ fn solve(func: &Func, context: &Context) -> (Analysis, u32) {
         },
         rounds,
     )
+}
+
+/// A final full RPO sweep is an expensive diagnostic assertion, not part of
+/// the release solver. It catches missing sparse-reader dependencies: if a
+/// transfer still changes any global, edge, entry, or field fact, the worklist
+/// stopped before reaching the dense solver's fixpoint.
+#[cfg(any(test, debug_assertions))]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "the assertion compares one coherent solver snapshot"
+)]
+fn assert_one_full_sweep_is_stable(
+    func: &Func,
+    context: &Context,
+    tuples: &LocalTuples,
+    widen_after: u32,
+    order: &[BlockId],
+    incoming: &[Vec<(BlockId, usize)>],
+    live_in: &[rustc_hash::FxHashSet<ValueId>],
+    parameter_positions: &[FxHashMap<ValueId, usize>],
+    headers: &rustc_hash::FxHashSet<BlockId>,
+    values: &[Facts],
+    entry: &[Option<PathFacts>],
+    edges: &[Vec<Option<EdgeState>>],
+    header_previous: &[Option<Vec<HeaderFact>>],
+    fields: &[Option<Fields>],
+    observed: &Observed,
+) {
+    let mut checked_values = values.to_vec();
+    let mut checked_entry = entry.to_vec();
+    let mut checked_edges = edges.to_vec();
+    let mut checked_headers = header_previous.to_vec();
+    let mut checked_fields = fields.to_vec();
+    let mut checked_observed = observed.clone();
+    let mut work = WorkCounts::default();
+
+    for block in order {
+        let index = block.0 as usize;
+        if checked_entry[index].is_none() {
+            continue;
+        }
+        let mut dependencies = TransferResult::default();
+        let mut refinements = if index == 0 {
+            Some(PathFacts::default())
+        } else {
+            recompute_entry_recorded(
+                func,
+                *block,
+                incoming,
+                &checked_edges,
+                context.caps,
+                &parameter_positions[index],
+                &mut work,
+                &mut FactView::new(&checked_values, &mut dependencies),
+            )
+        };
+        let Some(mut refinements) = refinements.take() else {
+            checked_entry[index] = None;
+            continue;
+        };
+        if headers.contains(block) {
+            apply_header_widening_recorded(
+                func,
+                *block,
+                &mut refinements,
+                context.caps,
+                widen_after,
+                &mut checked_headers[index],
+                &mut FactView::new(&checked_values, &mut dependencies),
+            );
+        }
+        checked_entry[index] = Some(refinements.clone());
+        transfer_block(
+            func,
+            (context, tuples),
+            *block,
+            &refinements,
+            &mut checked_values,
+            &mut checked_edges,
+            live_in,
+            parameter_positions,
+            &mut work,
+            (&mut checked_fields, &mut checked_observed, headers),
+            &mut dependencies,
+        );
+    }
+
+    assert_eq!(
+        checked_values, values,
+        "flow fixpoint changed on a full sweep"
+    );
+    assert_eq!(checked_entry, entry, "flow entries changed on a full sweep");
+    assert_eq!(checked_edges, edges, "flow edges changed on a full sweep");
+    assert_eq!(
+        checked_headers, header_previous,
+        "flow widening changed on a full sweep"
+    );
+    assert_eq!(
+        checked_fields, fields,
+        "flow fields changed on a full sweep"
+    );
+    assert_eq!(
+        checked_observed,
+        observed.clone(),
+        "flow observations changed on a full sweep"
+    );
 }
 
 /// Exhaustion discards every authority, including field observations whose
@@ -775,12 +1584,12 @@ fn awaited(func: &Func, context: &Context, promise: ValueId) -> Facts {
 fn operand_result(
     callee: &Callee,
     args: &[ValueId],
-    refinements: &Refinements,
-    values: &[Facts],
+    refinements: &PathFacts,
+    facts: &mut FactView<'_>,
 ) -> Option<Facts> {
     match (callee, args) {
         (Callee::External(name), [argument]) if name == "nts_math_sign" => {
-            Some(facts::sign(lookup(refinements, values, *argument)))
+            Some(facts::sign(facts.get(refinements, *argument)))
         }
         // ToIndex, which the lowering calls only once it has refused what is
         // out of range: a whole number at or above zero is itself. Without it
@@ -788,7 +1597,7 @@ fn operand_result(
         // call's result, `[0, 2^53)`, and no read of it could be proven in
         // bounds against the 8 its source says.
         (Callee::External(name), [argument]) if name == "nts_to_index" => {
-            let index = lookup(refinements, values, *argument);
+            let index = facts.get(refinements, *argument);
             (index.integral() && !index.maybe_nan && index.lo >= 0.0).then_some(index)
         }
         _ => None,
@@ -1105,20 +1914,20 @@ fn local_tuple_read(
     tuples: &LocalTuples,
     kind: &OpKind,
     refinements: &Refinements,
-    values: &[Facts],
+    facts: &mut FactView<'_>,
 ) -> Option<Facts> {
     let OpKind::ArrayGet { array, index, .. } = kind else {
         return None;
     };
     let slots = tuples.get(array)?;
-    let at = lookup(refinements, values, *index);
+    let at = facts.get(refinements, *index);
     if !(at.is_singleton() && at.integral()) {
         return None;
     }
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let stored = slots.get(at.lo as usize)?;
     Some(stored.iter().fold(Facts::BOTTOM, |joined, value| {
-        joined.join(lookup(refinements, values, *value))
+        joined.join(facts.get(refinements, *value))
     }))
 }
 
@@ -1219,7 +2028,7 @@ fn transfer_op(
     context: &Context,
     op: &super::Op,
     refinements: &Refinements,
-    values: &[Facts],
+    facts: &mut FactView<'_>,
 ) -> Facts {
     // Every fact in this lattice is a fact about a *double*: a range, whether the
     // value is whole, whether it could be `-0`. A `bigint` is none of those. It
@@ -1236,32 +2045,32 @@ fn transfer_op(
         OpKind::ConstInt(v) => Facts::constant(*v as f64),
         OpKind::Binary { op: bin, lhs, rhs } => facts::transfer_binary(
             *bin,
-            lookup(refinements, values, *lhs),
-            lookup(refinements, values, *rhs),
+            facts.get(refinements, *lhs),
+            facts.get(refinements, *rhs),
         )
         .unwrap_or(Facts::TOP),
         OpKind::Unary {
             op: UnOp::Neg,
             operand,
-        } => facts::neg(lookup(refinements, values, *operand)),
+        } => facts::neg(facts.get(refinements, *operand)),
         // The coercions are where an unconstrained value becomes a known
         // integer. Everything about `x | 0` depends on this arm.
         OpKind::Unary {
             op: UnOp::ToInt32,
             operand,
-        } => facts::to_int32(lookup(refinements, values, *operand)),
+        } => facts::to_int32(facts.get(refinements, *operand)),
         OpKind::Unary {
             op: UnOp::ToUint32,
             operand,
-        } => facts::to_uint32(lookup(refinements, values, *operand)),
+        } => facts::to_uint32(facts.get(refinements, *operand)),
         OpKind::Unary {
             op: rounding @ (UnOp::Floor | UnOp::Ceil | UnOp::Trunc | UnOp::Round),
             operand,
-        } => facts::round_to_integer(*rounding, lookup(refinements, values, *operand)),
+        } => facts::round_to_integer(*rounding, facts.get(refinements, *operand)),
         OpKind::Unary {
             op: UnOp::Abs,
             operand,
-        } => facts::abs(lookup(refinements, values, *operand)),
+        } => facts::abs(facts.get(refinements, *operand)),
         // A length is a `uint32`, always. Where the array was allocated
         // here with a known size, it is that size exactly — which is what
         // lets an index into an array literal be proven in bounds by the
@@ -1297,7 +2106,7 @@ fn transfer_op(
                 OpKind::ArrayNew { length, .. }
                     if super::allocated_length_is_exact(func, *array, context.whole.growable) =>
                 {
-                    lookup(refinements, values, *length).narrow(bound)
+                    facts.get(refinements, *length).narrow(bound)
                 }
                 // A string's length is bounded by the string it was made
                 // from, however many slices back that is.
@@ -1312,7 +2121,7 @@ fn transfer_op(
         // What the callee was proven to return. Without this every call is
         // a wall: an unanalyzed result poisons everything downstream of it,
         // which for a program made of small functions is everything.
-        OpKind::Call { callee, args, .. } => operand_result(callee, args, refinements, values)
+        OpKind::Call { callee, args, .. } => operand_result(callee, args, refinements, facts)
             .unwrap_or_else(|| call_result(context, callee)),
         // What was stored into this field, anywhere in the program.
         OpKind::FieldGet { object, field } => {
@@ -1355,7 +2164,7 @@ fn transfer_op(
                 ..
             } = &func.values[array.0 as usize].kind
                 && let Some(elements) = context.written.return_elements.get(name)
-                && let position = lookup(refinements, values, *index)
+                && let position = facts.get(refinements, *index)
                 && position.is_singleton()
                 && position.integral() =>
         {
@@ -1422,7 +2231,7 @@ fn transfer_op(
                 super::HirType::Int { .. } | super::HirType::Float { .. }
             ) =>
         {
-            lookup(refinements, values, *value)
+            facts.get(refinements, *value)
         }
         // A conversion keeps the value it was given, as far as it fits.
         //
@@ -1432,13 +2241,13 @@ fn transfer_op(
         // `bytes` compiled its two `% 65521` to `fmod`, a library call, two
         // per byte, and ran at 2.36x the C++ reference.
         OpKind::Convert(operand) => {
-            let incoming = lookup(refinements, values, *operand);
+            let incoming = facts.get(refinements, *operand);
             match held_by(&op.ty) {
                 Some(width) => incoming.narrow(width),
                 None => incoming,
             }
         }
-        OpKind::FieldView { value, .. } => lookup(refinements, values, *value),
+        OpKind::FieldView { value, .. } => facts.get(refinements, *value),
         // A bool is not a number, and a call's result needs the callee
         // analyzed — neither is a claim this pass can make.
         // DispatchSlot belongs here: its native value is decided after analysis.
@@ -1467,41 +2276,44 @@ fn transfer_op(
 
 /// Run one block, then hand its successors what it proved.
 ///
-/// **A value's own result is not recorded here.** It used to be: every
-/// operation in the block inserted its fact into the path's refinements, which
-/// each outgoing edge then copied into its target and every later round joined
-/// again -- so the map a block carried grew to the whole function, and the work
-/// of an edge grew with it.
-///
-/// The insertion never said anything: what it recorded was `values[value]`
-/// itself, which is what [`lookup`] falls back to when the value is absent. The
-/// two differ only in staleness -- a pinned fact is the one the value had when
-/// the edge was taken, and `values` only ever grows -- so reading through the
-/// fall-back is the *fresher* answer, and at the fixpoint the two agree by
-/// construction. What a refinement map holds now is what only an edge can say:
-/// a guard's narrowing and a block parameter's argument.
+/// Operation results are kept as sparse block-local facts when they differ
+/// from the global SSA fact. An edge may need that result after a later global
+/// broadening; the defining block is rerun when its global output changes.
+#[allow(
+    clippy::too_many_arguments,
+    clippy::too_many_lines,
+    reason = "one block transfer updates coupled abstract domains and emits edge deltas"
+)]
 fn transfer_block(
     func: &Func,
     (context, tuples): (&Context, &LocalTuples),
     block: BlockId,
     refinements: &Refinements,
     values: &mut [Facts],
-    entry: &mut [Option<Refinements>],
+    edges: &mut [Vec<Option<EdgeState>>],
+    live_in: &[rustc_hash::FxHashSet<ValueId>],
+    parameter_positions: &[FxHashMap<ValueId, usize>],
+    work: &mut WorkCounts,
     (fields, observed, headers): (
         &mut [Option<Fields>],
         &mut Observed,
         &rustc_hash::FxHashSet<BlockId>,
     ),
-) -> bool {
+    result: &mut TransferResult,
+) {
     let record = &func.blocks[block.0 as usize];
-    let mut changed = false;
+    // Keep the path's SSA results alongside its incoming edge refinements.
+    // A result can be narrower than the global fact after another path has
+    // widened that SSA value; outgoing edges must retain that local result.
+    let mut local = refinements.clone();
     let mut held = fields[block.0 as usize].clone().unwrap_or_default();
 
     // A block parameter's fact is whatever its predecessors passed, which the
     // edges recorded here.
     for param in &record.params {
-        if let Some(passed) = refinements.get(param) {
-            changed |= widen_into(&mut values[param.0 as usize], *passed);
+        let passed = FactView::new(values, result).get(refinements, *param);
+        if widen_into(&mut values[param.0 as usize], passed) {
+            result.note_changed(*param);
         }
     }
 
@@ -1519,12 +2331,14 @@ fn transfer_block(
             }),
             _ => None,
         };
-        let computed = match known {
-            Some(facts) => facts,
-            None => match local_tuple_read(tuples, &op.kind, refinements, values) {
+        let computed = if let Some(facts) = known {
+            facts
+        } else {
+            let mut facts = FactView::new(values, result);
+            match local_tuple_read(tuples, &op.kind, &local, &mut facts) {
                 Some(stored) => stored,
-                None => transfer_op(func, context, op, refinements, values),
-            },
+                None => transfer_op(func, context, op, &local, &mut facts),
+            }
         };
         // Monotone: a value's fact only grows as more paths reach it, so joining
         // rather than assigning keeps the iteration from oscillating.
@@ -1532,26 +2346,46 @@ fn transfer_block(
         let joined = slot.join(computed);
         if joined != *slot {
             *slot = joined;
-            changed = true;
+            result.note_changed(value);
         }
-        changed |= track(func, value, &mut held, observed, refinements, values);
+        set_override(&mut local, value, computed, values[value.0 as usize]);
+        if track(
+            func,
+            value,
+            &mut held,
+            observed,
+            &local,
+            &mut FactView::new(values, result),
+        ) {
+            // Observed field changes affect later interprocedural rounds, but
+            // do not alter this function's block queue.
+        }
     }
 
     match &record.terminator {
         Terminator::Return(_) | Terminator::Unreachable | Terminator::FellThrough => {
-            changed |= observe_all(func, &held, observed);
+            observe_all(func, &held, observed);
         }
         Terminator::Jump { target, args } => {
-            changed |= send(
+            if record_edge_recorded(
                 func,
+                block,
+                0,
                 *target,
                 args,
-                refinements,
-                values,
-                entry,
+                &local,
+                &mut FactView::new(values, result),
+                edges,
+                live_in,
+                parameter_positions,
                 context.caps,
-            );
-            changed |= send_fields(func, *target, held, fields, observed, headers);
+                work,
+            ) {
+                result.changed_blocks.insert(*target);
+            }
+            if send_fields(func, *target, held, fields, observed, headers) {
+                result.changed_blocks.insert(*target);
+            }
         }
         Terminator::Branch {
             cond,
@@ -1563,33 +2397,64 @@ fn transfer_block(
             // Each edge carries what taking it proves. This is the only place
             // a value learns something its definition did not say.
             let predicates = &context.written.predicates;
-            let on_then = refine_edge(func, predicates, refinements, values, *cond, true);
-            let on_else = refine_edge(func, predicates, refinements, values, *cond, false);
-            changed |= send(
+            let on_then = refine_edge(
                 func,
+                predicates,
+                &local,
+                *cond,
+                true,
+                &mut FactView::new(values, result),
+            );
+            let on_else = refine_edge(
+                func,
+                predicates,
+                &local,
+                *cond,
+                false,
+                &mut FactView::new(values, result),
+            );
+            if record_edge_recorded(
+                func,
+                block,
+                0,
                 *then_target,
                 then_args,
                 &on_then,
-                values,
-                entry,
+                &mut FactView::new(values, result),
+                edges,
+                live_in,
+                parameter_positions,
                 context.caps,
-            );
-            changed |= send(
+                work,
+            ) {
+                result.changed_blocks.insert(*then_target);
+            }
+            if record_edge_recorded(
                 func,
+                block,
+                1,
                 *else_target,
                 else_args,
                 &on_else,
-                values,
-                entry,
+                &mut FactView::new(values, result),
+                edges,
+                live_in,
+                parameter_positions,
                 context.caps,
-            );
+                work,
+            ) {
+                result.changed_blocks.insert(*else_target);
+            }
             let then_held = narrowed_by(&held, &on_then);
             let else_held = narrowed_by(&held, &on_else);
-            changed |= send_fields(func, *then_target, then_held, fields, observed, headers);
-            changed |= send_fields(func, *else_target, else_held, fields, observed, headers);
+            if send_fields(func, *then_target, then_held, fields, observed, headers) {
+                result.changed_blocks.insert(*then_target);
+            }
+            if send_fields(func, *else_target, else_held, fields, observed, headers) {
+                result.changed_blocks.insert(*else_target);
+            }
         }
     }
-    changed
 }
 
 /// What one operation does to the fields a path knows.
@@ -1606,7 +2471,7 @@ fn track(
     held: &mut Fields,
     observed: &mut Observed,
     refinements: &Refinements,
-    values: &[Facts],
+    facts: &mut FactView<'_>,
 ) -> bool {
     match &func.values[value.0 as usize].kind {
         OpKind::FieldSet {
@@ -1619,7 +2484,7 @@ fn track(
                 (*object, *field),
                 Held {
                     by: Some(*stored),
-                    facts: lookup(refinements, values, *stored),
+                    facts: facts.get(refinements, *stored),
                 },
             );
             changed
@@ -1630,7 +2495,7 @@ fn track(
                 (*object, *field),
                 Held {
                     by: Some(value),
-                    facts: values[value.0 as usize],
+                    facts: facts.get(refinements, value),
                 },
             );
             changed
@@ -1808,94 +2673,101 @@ fn send_fields(
 
 /// Hand an edge's facts to its target, binding the target's parameters to the
 /// arguments this edge passes.
-fn send(
+#[allow(
+    clippy::too_many_arguments,
+    reason = "edge recording updates one target from a single solver snapshot"
+)]
+fn record_edge_recorded(
     func: &Func,
+    source: BlockId,
+    edge_slot: usize,
+    target: BlockId,
+    args: &[ValueId],
+    refinements: &Refinements,
+    facts: &mut FactView<'_>,
+    edges: &mut [Vec<Option<EdgeState>>],
+    live_in: &[rustc_hash::FxHashSet<ValueId>],
+    parameter_positions: &[FxHashMap<ValueId, usize>],
+    caps: &FxHashMap<ValueId, Facts>,
+    work: &mut WorkCounts,
+) -> bool {
+    #[cfg(not(test))]
+    let _ = work;
+    let target_params = &func.blocks[target.0 as usize].params;
+    let target_positions = &parameter_positions[target.0 as usize];
+    let mut path_facts = PathFacts::default();
+    for (&value, &facts) in refinements {
+        #[cfg(any(test, flow_measure))]
+        {
+            work.sparse_refinement_visits += 1;
+        }
+        if target_positions.contains_key(&value) {
+            continue;
+        }
+        #[cfg(any(test, flow_measure))]
+        {
+            work.live_in_membership_probes += 1;
+        }
+        if live_in[target.0 as usize].contains(&value) {
+            path_facts.insert(value, facts);
+        }
+    }
+    let params = target_params
+        .iter()
+        .zip(args)
+        .map(|(param, arg)| capped(caps, *param, facts.get(refinements, *arg)))
+        .collect();
+    #[cfg(flow_measure)]
+    {
+        work.path_fact_entries_built += path_facts.len();
+    }
+    let next = EdgeState { path_facts, params };
+    debug_assert_eq!(
+        func.blocks[source.0 as usize].terminator.successors()[edge_slot],
+        target
+    );
+    let slot = &mut edges[source.0 as usize][edge_slot];
+    if slot.as_ref() == Some(&next) {
+        return false;
+    }
+    *slot = Some(next);
+    true
+}
+
+#[cfg(test)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "test helper mirrors one edge transfer"
+)]
+fn record_edge(
+    func: &Func,
+    source: BlockId,
+    edge_slot: usize,
     target: BlockId,
     args: &[ValueId],
     refinements: &Refinements,
     values: &[Facts],
-    entry: &mut [Option<Refinements>],
+    edges: &mut [Vec<Option<EdgeState>>],
+    live_in: &[rustc_hash::FxHashSet<ValueId>],
+    parameter_positions: &[FxHashMap<ValueId, usize>],
     caps: &FxHashMap<ValueId, Facts>,
+    work: &mut WorkCounts,
 ) -> bool {
-    let params = &func.blocks[target.0 as usize].params;
-    let slot = &mut entry[target.0 as usize];
-    let Some(existing) = slot else {
-        // The first edge to arrive owns the map: nothing to join against, so
-        // this is the one path that builds one.
-        let mut outgoing = refinements.clone();
-        for (param, arg) in params.iter().zip(args) {
-            outgoing.insert(*param, lookup(refinements, values, *arg));
-        }
-        for (value, facts) in &mut outgoing {
-            *facts = capped(caps, *value, *facts);
-        }
-        *slot = Some(outgoing);
-        return true;
-    };
-
-    // **Joined from the caller's map rather than from a copy of it.** This
-    // built `outgoing` -- a clone of every refinement on the path -- for every
-    // edge of every block on every round, and then read it once. The
-    // arithmetic below is the same; what is gone is one map allocation per
-    // edge, which on a module of three thousand functions was the largest
-    // single cost of the whole compile.
-    //
-    // The target's own parameters are handled after, and skipped here, because
-    // an argument overrides whatever a back edge refined the parameter to --
-    // which is what the copy expressed by inserting over it.
-    let mut changed = false;
-    // Absence on this predecessor means the value's global fact, not the
-    // bound retained from a different predecessor. Visit that half of the
-    // key union too. Target parameters are rebound from args below instead.
-    for (&value, existing_fact) in existing.iter_mut() {
-        if params.contains(&value) || refinements.contains_key(&value) {
-            continue;
-        }
-        let joined = capped(caps, value, existing_fact.join(values[value.0 as usize]));
-        if joined != *existing_fact {
-            *existing_fact = joined;
-            changed = true;
-        }
-    }
-    for (value, incoming) in refinements {
-        if params.contains(value) {
-            continue;
-        }
-        changed |= join_into(existing, *value, *incoming, values, caps);
-    }
-    for (param, arg) in params.iter().zip(args) {
-        changed |= join_into(
-            existing,
-            *param,
-            lookup(refinements, values, *arg),
-            values,
-            caps,
-        );
-    }
-    changed
-}
-
-/// Join one value's fact into a block's entry state, reporting whether it moved.
-///
-/// An absent entry means the value has only its own definition so far, which is
-/// what `values` holds.
-fn join_into(
-    existing: &mut Refinements,
-    value: ValueId,
-    incoming: Facts,
-    values: &[Facts],
-    caps: &FxHashMap<ValueId, Facts>,
-) -> bool {
-    let previous = existing
-        .get(&value)
-        .copied()
-        .unwrap_or(values[value.0 as usize]);
-    let joined = capped(caps, value, previous.join(incoming));
-    if joined == previous {
-        return false;
-    }
-    existing.insert(value, joined);
-    true
+    let mut dependencies = TransferResult::default();
+    record_edge_recorded(
+        func,
+        source,
+        edge_slot,
+        target,
+        args,
+        refinements,
+        &mut FactView::new(values, &mut dependencies),
+        edges,
+        live_in,
+        parameter_positions,
+        caps,
+        work,
+    )
 }
 
 /// A cap belongs to the destination SSA key. In particular, the source
@@ -1904,12 +2776,44 @@ fn capped(caps: &FxHashMap<ValueId, Facts>, key: ValueId, facts: Facts) -> Facts
     caps.get(&key).map_or(facts, |cap| facts.narrow(*cap))
 }
 
-/// What a value holds here: what an edge refined it to, or its own definition.
-fn lookup(refinements: &Refinements, values: &[Facts], value: ValueId) -> Facts {
-    refinements
-        .get(&value)
-        .copied()
-        .unwrap_or_else(|| values[value.0 as usize])
+/// Read a path fact while recording any SSA-global fallback dependency.
+///
+/// The raw slice is private to this type. Analysis helpers receive only a
+/// `FactView`, so an indirect read cannot silently bypass sparse requeue.
+fn lookup_recorded(refinements: &PathFacts, facts: &mut FactView<'_>, value: ValueId) -> Facts {
+    if let Some(facts) = refinements.get(&value).copied() {
+        facts
+    } else {
+        facts.dependencies.note_global_read(value);
+        facts.values[value.0 as usize]
+    }
+}
+
+/// Store only a fact that differs from the value's SSA-global fact.
+fn set_override(refinements: &mut Refinements, value: ValueId, facts: Facts, global: Facts) {
+    if facts == global {
+        refinements.remove(&value);
+    } else {
+        refinements.insert(value, facts);
+    }
+    debug_assert!(
+        refinements
+            .get(&value)
+            .is_none_or(|stored| *stored != global)
+    );
+}
+
+fn set_path_fact(path: &mut PathFacts, value: ValueId, facts: Facts) {
+    path.insert(value, facts);
+}
+
+#[cfg(any(test, debug_assertions))]
+fn debug_assert_sparse(refinements: &Refinements, facts: &mut FactView<'_>) {
+    debug_assert!(
+        refinements
+            .iter()
+            .all(|(value, refined)| *refined != facts.global(*value))
+    );
 }
 
 fn widen_into(slot: &mut Facts, incoming: Facts) -> bool {
@@ -1949,11 +2853,11 @@ const fn negate(op: BinOp) -> BinOp {
 fn refine_edge(
     func: &Func,
     predicates: &FxHashMap<String, Vec<bool>>,
-    refinements: &Refinements,
-    values: &[Facts],
+    refinements: &PathFacts,
     cond: ValueId,
     taken: bool,
-) -> Refinements {
+    facts: &mut FactView<'_>,
+) -> PathFacts {
     // `!c` taken is `c` not taken, and the other way round. Without this a
     // negated comparison narrowed nothing: `while (!(at > top))` let `at`
     // count up with no upper bound, so it widened to infinity and stayed a
@@ -1965,7 +2869,7 @@ fn refine_edge(
         operand,
     } = func.values[cond.0 as usize].kind
     {
-        return refine_edge(func, predicates, refinements, values, operand, !taken);
+        return refine_edge(func, predicates, refinements, operand, !taken, facts);
     }
     let mut refined = refinements.clone();
     // A predicate of the program's whose `true` proves an argument not NaN
@@ -1982,15 +2886,16 @@ fn refine_edge(
         && let Some(slots) = predicates.get(name)
     {
         for (arg, _) in args.iter().zip(slots).filter(|(_, proves)| **proves) {
-            let facts = lookup(&refined, values, *arg);
-            refined.insert(
+            let current = facts.get(&refined, *arg);
+            set_path_fact(
+                &mut refined,
                 *arg,
                 Facts {
                     maybe_nan: false,
-                    ..facts
+                    ..current
                 },
             );
-            answered_in_range(func, values, &mut refined, *arg);
+            answered_in_range(func, &mut refined, *arg, facts);
         }
         return refined;
     }
@@ -2005,10 +2910,11 @@ fn refine_edge(
         && let [tested] = args[..]
     {
         if taken {
-            let facts = lookup(refinements, values, tested);
-            refined.insert(
+            let current = facts.get(refinements, tested);
+            set_path_fact(
+                &mut refined,
                 tested,
-                facts.narrow(Facts::new(
+                current.narrow(Facts::new(
                     f64::NEG_INFINITY,
                     f64::INFINITY,
                     true,
@@ -2049,10 +2955,10 @@ fn refine_edge(
             BinOp::Lt | BinOp::Le | BinOp::Gt | BinOp::Ge | BinOp::Eq
         );
 
-    let a = lookup(refinements, values, *lhs);
-    let b = lookup(refinements, values, *rhs);
-    refined.insert(*lhs, refine(holds, a, b, excludes_nan));
-    refined.insert(*rhs, refine(flip(holds), b, a, excludes_nan));
+    let a = facts.get(refinements, *lhs);
+    let b = facts.get(refinements, *rhs);
+    set_path_fact(&mut refined, *lhs, refine(holds, a, b, excludes_nan));
+    set_path_fact(&mut refined, *rhs, refine(flip(holds), b, a, excludes_nan));
     // **A checked read that answered was in range.** `charCodeAt` answers NaN
     // past either end, so on the edge where its result passed a comparison
     // that rules NaN out, the index it read at is a position of the string --
@@ -2064,7 +2970,7 @@ fn refine_edge(
     // position 1, so a fractional one that answered proves less.
     if excludes_nan {
         for side in [*lhs, *rhs] {
-            answered_in_range(func, values, &mut refined, side);
+            answered_in_range(func, &mut refined, side, facts);
         }
     }
     refined
@@ -2073,13 +2979,19 @@ fn refine_edge(
 /// Where `value` is a checked string read that answered -- proven not NaN on
 /// this edge -- its index is a position of the string: below the longest a
 /// string can be. Only a whole index; see [`refine_edge`].
-fn answered_in_range(func: &Func, values: &[Facts], refined: &mut Refinements, value: ValueId) {
+fn answered_in_range(
+    func: &Func,
+    refined: &mut PathFacts,
+    value: ValueId,
+    facts: &mut FactView<'_>,
+) {
     let Some(index) = unit_read_index(func, value) else {
         return;
     };
-    let facts = lookup(refined, values, index);
+    let facts = facts.get(refined, index);
     if facts.whole {
-        refined.insert(
+        set_path_fact(
+            refined,
             index,
             facts.narrow(Facts::new(
                 0.0,
@@ -2343,6 +3255,20 @@ mod tests {
         }
     }
 
+    fn test_value_id(index: usize) -> ValueId {
+        ValueId(u32::try_from(index).expect("test value count fits u32"))
+    }
+
+    fn test_number(index: usize) -> f64 {
+        f64::from(u32::try_from(index).expect("test number fits u32"))
+    }
+
+    fn test_path_fact(path: &PathFacts, values: &[Facts], value: ValueId) -> Facts {
+        path.get(&value)
+            .copied()
+            .unwrap_or(values[value.0 as usize])
+    }
+
     fn func(values: Vec<Op>, blocks: Vec<Block>, params: usize) -> Func {
         Func {
             name: "f".to_owned(),
@@ -2382,8 +3308,403 @@ mod tests {
         }
     }
 
-    /// Each round reaches just one more reverse-numbered block. The false
-    /// branch reaches the return immediately; the true branch arrives later.
+    /// A reverse-numbered DAG that took one more full sweep per block in the
+    /// old scheduler. RPO should finish it in epoch 0.
+    #[test]
+    fn retains_a_guarded_length_queried_by_a_later_checked_read() {
+        let mut values = vec![
+            op(OpKind::Param(0)),
+            op(OpKind::Length(ValueId(0))),
+            op(OpKind::ConstInt(0)),
+            op(Op_binary(BinOp::Eq, 1, 2)),
+            op(OpKind::ConstFloat(-1.0)),
+            op(OpKind::StringUnitAt {
+                string: ValueId(0),
+                index: ValueId(2),
+                checked: true,
+            }),
+        ];
+        values[0].ty = HirType::Managed(super::super::ManagedType::String);
+        values[1].ty = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        values[2].ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        values[3].ty = HirType::Bool;
+        let mut body = func(
+            values,
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(1), ValueId(2), ValueId(3)],
+                    Terminator::Branch {
+                        cond: ValueId(3),
+                        then_target: BlockId(1),
+                        then_args: Vec::new(),
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(4)))),
+                block(
+                    Vec::new(),
+                    vec![ValueId(5)],
+                    Terminator::Return(Some(ValueId(5))),
+                ),
+            ],
+            1,
+        );
+        body.params[0].ty = HirType::Managed(super::super::ManagedType::String);
+
+        let analysis = analyze(&body);
+        let length_on_nonempty_arm = analysis.get_at(BlockId(2), ValueId(1));
+        assert_eq!(length_on_nonempty_arm.lo, 1.0);
+        assert!(length_on_nonempty_arm.hi > 1.0);
+    }
+
+    fn repeated_checked_string_queries(length_count: usize, read_count: usize) -> Func {
+        let string = ValueId(0);
+        let index = ValueId(1);
+        let mut values = vec![op(OpKind::Param(0)), op(OpKind::ConstInt(0))];
+        values[string.0 as usize].ty = HirType::Managed(super::super::ManagedType::String);
+        values[index.0 as usize].ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let mut placed = vec![string, index];
+        for _ in 0..length_count {
+            let id = test_value_id(values.len());
+            let mut length = op(OpKind::Length(string));
+            length.ty = HirType::Int {
+                bits: 32,
+                signed: false,
+            };
+            values.push(length);
+            placed.push(id);
+        }
+        for _ in 0..read_count {
+            let id = test_value_id(values.len());
+            values.push(op(OpKind::StringUnitAt {
+                string,
+                index,
+                checked: true,
+            }));
+            placed.push(id);
+        }
+        let mut body = func(
+            values,
+            vec![block(Vec::new(), placed, Terminator::Return(None))],
+            1,
+        );
+        body.params[0].ty = HirType::Managed(super::super::ManagedType::String);
+        body
+    }
+
+    #[test]
+    fn repeated_checked_reads_expand_each_strings_lengths_once() {
+        let body = repeated_checked_string_queries(32, 32);
+        let mut work = WorkCounts::default();
+        let queried = analysis_query_inputs(&body, false, &mut work);
+        assert_eq!(queried[0].len(), 32);
+        assert_eq!(work.query_length_entries, 32);
+    }
+
+    #[test]
+    fn repeated_checked_reads_with_one_length_expand_one_entry() {
+        let body = repeated_checked_string_queries(1, 32);
+        let mut work = WorkCounts::default();
+        let queried = analysis_query_inputs(&body, false, &mut work);
+        assert_eq!(queried[0].len(), 1);
+        assert_eq!(work.query_length_entries, 1);
+    }
+
+    #[test]
+    fn string_query_does_not_keep_lengths_from_sibling_arms_live() {
+        let mut values = vec![
+            op(OpKind::Param(0)),
+            op(OpKind::Param(1)),
+            op(OpKind::Length(ValueId(0))),
+            op(OpKind::Length(ValueId(0))),
+            op(OpKind::ConstInt(0)),
+            op(OpKind::StringUnitAt {
+                string: ValueId(0),
+                index: ValueId(4),
+                checked: true,
+            }),
+        ];
+        values[0].ty = HirType::Managed(super::super::ManagedType::String);
+        values[1].ty = HirType::Bool;
+        values[2].ty = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        values[3].ty = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        values[4].ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let mut body = func(
+            values,
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1)],
+                    Terminator::Branch {
+                        cond: ValueId(1),
+                        then_target: BlockId(1),
+                        then_args: Vec::new(),
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(2)],
+                    Terminator::Jump {
+                        target: BlockId(3),
+                        args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(3)],
+                    Terminator::Jump {
+                        target: BlockId(3),
+                        args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(4), ValueId(5)],
+                    Terminator::Return(Some(ValueId(5))),
+                ),
+            ],
+            2,
+        );
+        body.params[0].ty = HirType::Managed(super::super::ManagedType::String);
+        let queried = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        assert!(queried[3].is_empty());
+    }
+
+    #[test]
+    fn queried_string_length_is_live_across_its_guard_edge() {
+        let mut values = vec![
+            op(OpKind::Param(0)),
+            op(OpKind::Length(ValueId(0))),
+            op(OpKind::ConstInt(0)),
+            op(Op_binary(BinOp::Gt, 1, 2)),
+            op(OpKind::StringUnitAt {
+                string: ValueId(0),
+                index: ValueId(2),
+                checked: true,
+            }),
+        ];
+        values[0].ty = HirType::Managed(super::super::ManagedType::String);
+        values[1].ty = HirType::Int {
+            bits: 32,
+            signed: false,
+        };
+        values[2].ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        values[3].ty = HirType::Bool;
+        let mut body = func(
+            values,
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                    Terminator::Branch {
+                        cond: ValueId(3),
+                        then_target: BlockId(1),
+                        then_args: Vec::new(),
+                        else_target: BlockId(2),
+                        else_args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(4)],
+                    Terminator::Return(Some(ValueId(4))),
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(None)),
+            ],
+            1,
+        );
+        body.params[0].ty = HirType::Managed(super::super::ManagedType::String);
+        let query_uses = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        assert!(query_uses[1].contains(&ValueId(1)));
+        let liveness = super::super::liveness::analyze_with_additional_uses(&body, &query_uses)
+            .expect("query-use liveness is complete");
+        assert!(liveness.live_in(BlockId(1)).contains(&ValueId(1)));
+        assert!(!liveness.live_in(BlockId(0)).contains(&ValueId(1)));
+    }
+
+    #[test]
+    fn branch_refinement_records_indirect_comparison_reads() {
+        let mut lhs = op(OpKind::Param(0));
+        lhs.ty = HirType::NUMBER;
+        let mut rhs = op(OpKind::ConstInt(5));
+        rhs.ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let mut comparison = op(OpKind::Binary {
+            op: BinOp::Lt,
+            lhs: ValueId(0),
+            rhs: ValueId(1),
+        });
+        comparison.ty = HirType::Bool;
+        let body = func(
+            vec![lhs, rhs, comparison],
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0), ValueId(1), ValueId(2)],
+                Terminator::Return(Some(ValueId(2))),
+            )],
+            1,
+        );
+        let recorded_reads = {
+            let mut dependencies = TransferResult::default();
+            let global_facts = [
+                Facts::new(0.0, 10.0, true, false, false),
+                Facts::constant(5.0),
+                Facts::TOP,
+            ];
+            let mut view = FactView::new(&global_facts, &mut dependencies);
+            let _ = refine_edge(
+                &body,
+                &FxHashMap::default(),
+                &PathFacts::default(),
+                ValueId(2),
+                true,
+                &mut view,
+            );
+            dependencies.global_reads.clone()
+        };
+        assert_eq!(
+            recorded_reads,
+            [ValueId(0), ValueId(1)].into_iter().collect()
+        );
+    }
+
+    #[test]
+    #[allow(clippy::expect_used, clippy::unwrap_used)]
+    fn stale_indirect_compare_keeps_the_array_check_after_the_fixpoint() {
+        use nts_frontend_ts::Frontend;
+
+        let root = camino::Utf8Path::new(env!("CARGO_MANIFEST_DIR"));
+        let config =
+            root.join("../../tests/outcomes/stale-sparse-flow-out-of-bounds-c/tsconfig.json");
+        let snapshot = Frontend::new(env!("CARGO_MANIFEST_DIR"))
+            .with_checkers(std::num::NonZeroU16::MIN)
+            .snapshot(&config)
+            .expect("the stale-compare fixture snapshots");
+        assert!(!snapshot.has_errors());
+        let prepared =
+            super::super::prepare(&snapshot).expect("the stale-compare fixture prepares");
+        let function = prepared
+            .program
+            .funcs
+            .iter()
+            .find(|function| function.name.contains("pick"))
+            .expect("the fixture function is present in prepared HIR");
+        assert!(
+            function
+                .values
+                .iter()
+                .any(|op| matches!(op.kind, OpKind::ArrayGet { checked: true, .. })),
+            "an indirect comparison read that went stale once must not remove the array check"
+        );
+    }
+
+    #[test]
+    fn checked_array_queries_keep_all_lengths_consumed_by_bounds() {
+        let mut length = op(OpKind::ConstInt(4));
+        length.ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let mut array = op(OpKind::ArrayNew {
+            length: ValueId(0),
+            fill: super::super::ArrayFill::Holes,
+        });
+        array.ty = HirType::Managed(super::super::ManagedType::Array(Box::new(HirType::NUMBER)));
+        let mut index = op(OpKind::ConstInt(0));
+        index.ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let body = func(
+            vec![
+                length,
+                array,
+                index,
+                op(OpKind::ArrayGet {
+                    array: ValueId(1),
+                    index: ValueId(2),
+                    checked: true,
+                }),
+            ],
+            vec![block(
+                Vec::new(),
+                vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3)],
+                Terminator::Return(Some(ValueId(3))),
+            )],
+            0,
+        );
+        let queried = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        assert!(queried[0].contains(&ValueId(0)));
+    }
+
+    #[test]
+    fn checked_view_queries_keep_the_constructor_length_live() {
+        let mut tracking = op(OpKind::ConstBool(false));
+        tracking.ty = HirType::Bool;
+        let mut view = op(OpKind::Call {
+            callee: Callee::External("nts_view_new".to_owned()),
+            args: vec![ValueId(0), ValueId(1), ValueId(2), ValueId(3), ValueId(4)],
+            frame: None,
+        });
+        view.ty = HirType::Managed(super::super::ManagedType::View(Box::new(HirType::NUMBER)));
+        let mut index = op(OpKind::ConstInt(0));
+        index.ty = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        let body = func(
+            vec![
+                op(OpKind::Param(0)),
+                op(OpKind::ConstInt(0)),
+                op(OpKind::ConstInt(8)),
+                op(OpKind::ConstInt(8)),
+                tracking,
+                view,
+                index,
+                op(OpKind::ArrayGet {
+                    array: ValueId(5),
+                    index: ValueId(6),
+                    checked: true,
+                }),
+            ],
+            vec![block(
+                Vec::new(),
+                (0..8).map(ValueId).collect(),
+                Terminator::Return(Some(ValueId(7))),
+            )],
+            1,
+        );
+        let queried = analysis_query_inputs(&body, false, &mut WorkCounts::default());
+        assert!(queried[0].contains(&ValueId(2)));
+    }
+
     fn reverse_merge(depth: u32) -> Func {
         let mut blocks = vec![
             block(
@@ -2421,7 +3742,7 @@ mod tests {
     }
 
     #[test]
-    fn fixpoint_exhaustion_discards_scalar_and_guard_authority() {
+    fn rpo_completes_deep_reverse_merge_with_precise_scalar_and_guard_facts() {
         let params = [Facts::constant(0.0).join(Facts::constant(10.0))];
         let whole = Whole::default();
         let written = Written::default();
@@ -2434,35 +3755,78 @@ mod tests {
         };
         for depth in [8, 70] {
             let body = reverse_merge(depth);
-            let analysis = analyze_with(&body, &context);
-            if depth == 8 {
-                assert_eq!(analysis.get(ValueId(1)), Facts::constant(7.0));
-                assert_eq!(analysis.get_at(BlockId(1), ValueId(0)), params[0]);
-                assert!(analysis.get_at(BlockId(depth - 1), ValueId(0)).hi < 7.0);
-                assert!(analysis.guarded_by(BlockId(depth - 1), ValueId(0), |v| v == ValueId(1)));
-                assert!(!analysis.growable());
-                assert_eq!(analysis.param_length(0), Facts::constant(3.0));
-                continue;
-            }
-            assert!(
-                analysis.growable(),
-                "an unfinished graph cannot close length writers"
-            );
-            assert_eq!(analysis.param_length(0), Facts::TOP);
-            for value in [ValueId(0), ValueId(1), ValueId(2)] {
-                assert_eq!(analysis.get(value), Facts::TOP, "{value:?}");
-                assert!(!analysis.is_integral_within(value, -100.0, 100.0));
+            let (analysis, rounds) = solve(&body, &context);
+            assert_eq!(rounds, 1, "RPO should finish this DAG in epoch 0");
+            assert_eq!(analysis.get(ValueId(1)), Facts::constant(7.0));
+            assert_eq!(analysis.get_at(BlockId(1), ValueId(0)), params[0]);
+            assert!(analysis.get_at(BlockId(depth - 1), ValueId(0)).hi < 7.0);
+            assert!(analysis.guarded_by(BlockId(depth - 1), ValueId(0), |v| v == ValueId(1)));
+            assert!(!analysis.growable());
+            assert_eq!(analysis.param_length(0), Facts::constant(3.0));
+            for value in [ValueId(0), ValueId(1)] {
+                assert_ne!(analysis.get(value), Facts::TOP, "{value:?}");
+                assert!(analysis.is_integral_within(value, -100.0, 100.0));
                 for at in 0..depth {
-                    assert_eq!(analysis.get_at(BlockId(at), value), Facts::TOP);
-                    assert!(!analysis.guarded_by(BlockId(at), value, |_| true));
+                    assert_ne!(analysis.get_at(BlockId(at), value), Facts::TOP);
                 }
             }
-            assert!(analysis.refined.iter().all(Refinements::is_empty));
         }
     }
 
     #[test]
-    fn fixpoint_exhaustion_publishes_unknown_field_observations() {
+    fn rpo_completes_deep_reverse_merge_with_field_observations() {
+        use crate::hir::{ManagedType, TypeId};
+        let object = |ty| HirType::Managed(ManagedType::Object(TypeId(ty)));
+        let mut body = reverse_merge(70);
+        let mut receiver = op(OpKind::Param(1));
+        receiver.ty = object(123);
+        body.params.push(Param {
+            ty: object(123),
+            ..body.params[0].clone()
+        });
+        let mut second_receiver = op(OpKind::Param(2));
+        second_receiver.ty = object(123);
+        body.params.push(Param {
+            ty: object(123),
+            ..body.params[0].clone()
+        });
+        body.values.extend([
+            receiver,
+            op(OpKind::FieldSet {
+                object: ValueId(3),
+                field: 0,
+                value: ValueId(1),
+            }),
+            second_receiver,
+            op(OpKind::FieldSet {
+                object: ValueId(5),
+                field: 0,
+                value: ValueId(1),
+            }),
+        ]);
+        body.blocks[0].ops.extend([ValueId(3), ValueId(4)]);
+        // A second alias stores the same slot later in the forward chain,
+        // forcing the first known value into the observation summary.
+        body.blocks[2].ops.extend([ValueId(5), ValueId(6)]);
+        let whole = Whole::default();
+        let written = Written::default();
+        let context = Context {
+            params: &[],
+            caps: &FxHashMap::default(),
+            param_lengths: &[],
+            whole: &whole,
+            written: &written,
+        };
+        let (analysis, rounds) = solve(&body, &context);
+        assert_eq!(rounds, 1, "RPO should finish this DAG in epoch 0");
+        assert_eq!(
+            analysis.observed().get(&(object(123), 0)),
+            Some(&Facts::constant(7.0))
+        );
+    }
+
+    #[test]
+    fn round_cap_discards_all_unobserved_field_authorities() {
         use crate::hir::{FieldArm, ManagedType, TypeId};
         let object = |ty| HirType::Managed(ManagedType::Object(TypeId(ty)));
         let mut body = reverse_merge(70);
@@ -2505,9 +3869,14 @@ mod tests {
             }),
         ]);
         body.blocks[0].ops.extend([ValueId(3), ValueId(4)]);
-        // These accesses have not run when the round cap is reached. Their
-        // absent observations must not mean that the fields only held zero.
+        // These accesses are not reached before this deliberately tiny cap.
         body.blocks[2].ops.extend((5..9).map(ValueId));
+        // The cycle forces one successor into epoch 1, so cap 1 exercises the
+        // actual exhaustion path after a partial transfer has run.
+        body.blocks[69].terminator = Terminator::Jump {
+            target: BlockId(69),
+            args: Vec::new(),
+        };
         let whole = Whole {
             field_facts: [((TypeId(127), 5), Facts::constant(2.0))]
                 .into_iter()
@@ -2520,16 +3889,16 @@ mod tests {
                 .collect(),
             ..Written::default()
         };
-        let analysis = analyze_with(
-            &body,
-            &Context {
-                params: &[],
-                caps: &FxHashMap::default(),
-                param_lengths: &[],
-                whole: &whole,
-                written: &written,
-            },
-        );
+        let context = Context {
+            params: &[],
+            caps: &FxHashMap::default(),
+            param_lengths: &[],
+            whole: &whole,
+            written: &written,
+        };
+        let (analysis, epochs) = solve_with_limits(&body, &context, 1, WIDEN_AFTER);
+        assert_eq!(epochs, 1);
+        assert!(analysis.growable());
         for (ty, field) in [
             (123, 0),
             (123, 1),
@@ -2546,6 +3915,88 @@ mod tests {
             );
         }
         assert!(analysis.observed().values().all(|fact| *fact == Facts::TOP));
+    }
+
+    #[test]
+    fn cyclic_counter_exercises_epoch_cap_and_converges_when_raised() {
+        // The production widening threshold is deliberately raised only for
+        // this solver control. The counter then advances its interval one
+        // epoch at a time to 100, proving the 64-epoch exhaustion path rather
+        // than merely testing a large CFG that quickly widens.
+        use crate::hir::ManagedType;
+        let mut body = counted_loop(100.0);
+        let object_type = HirType::Managed(ManagedType::Object(crate::hir::TypeId(500)));
+        for slot in 0..2 {
+            body.params.push(Param {
+                name: format!("object{slot}"),
+                ty: object_type.clone(),
+                origin: origin(),
+                known: Facts::TOP,
+                written: None,
+                shape: crate::hir::ParamShape::Ordinary,
+            });
+        }
+        let mut first_object = op(OpKind::Param(0));
+        first_object.ty = object_type.clone();
+        let mut second_object = op(OpKind::Param(1));
+        second_object.ty = object_type.clone();
+        body.values.extend([
+            first_object,
+            op(OpKind::FieldSet {
+                object: ValueId(6),
+                field: 0,
+                value: ValueId(0),
+            }),
+            second_object,
+            op(OpKind::FieldSet {
+                object: ValueId(8),
+                field: 0,
+                value: ValueId(0),
+            }),
+        ]);
+        body.blocks[0].ops.extend([ValueId(6), ValueId(7)]);
+        body.blocks[2].ops.extend([ValueId(8), ValueId(9)]);
+        let whole = Whole::default();
+        let written = Written::default();
+        let context = Context {
+            params: &[],
+            caps: &FxHashMap::default(),
+            param_lengths: &[Facts::constant(3.0)],
+            whole: &whole,
+            written: &written,
+        };
+
+        let (capped, capped_epochs) = solve_with_limits(&body, &context, ROUND_CAP, 128);
+        assert_eq!(capped_epochs, ROUND_CAP);
+        assert!(capped.values.iter().all(|facts| *facts == Facts::TOP));
+        assert!(capped.less_than.iter().all(Vec::is_empty));
+        assert!(
+            capped
+                .param_lengths
+                .iter()
+                .all(|facts| *facts == Facts::TOP)
+        );
+        assert_eq!(capped.param_length(0), Facts::TOP);
+        assert!(capped.refined.iter().all(Refinements::is_empty));
+        assert_eq!(
+            capped.observed.get(&(object_type.clone(), 0)),
+            Some(&Facts::TOP)
+        );
+
+        let (complete, complete_epochs) = solve_with_limits(&body, &context, 256, 128);
+        assert!(
+            complete_epochs > ROUND_CAP,
+            "completed in only {complete_epochs} epochs"
+        );
+        assert!(complete_epochs <= 256, "took {complete_epochs} epochs");
+        assert_eq!(complete.param_length(0), Facts::constant(3.0));
+        assert_ne!(complete.get(ValueId(1)), Facts::TOP);
+        assert!(complete.guarded_by(BlockId(2), ValueId(1), |value| value == ValueId(2)));
+        assert_eq!(
+            complete.observed.get(&(object_type, 0)),
+            Some(&Facts::constant(0.0))
+        );
+        eprintln!("cap control: capped at {capped_epochs}, converged at {complete_epochs} epochs");
     }
 
     #[test]
@@ -2740,128 +4191,472 @@ mod tests {
             analysis.get(ValueId(7)),
             Facts::new(1.0, 11.0, true, false, false)
         );
+        assert_eq!(
+            analysis.get(ValueId(5)),
+            Facts::new(1.0, 10.0, true, false, false),
+            "the body reader must be revisited as the loop phi grows"
+        );
     }
 
     #[test]
-    fn edge_caps_follow_the_rebound_target_and_keep_their_flags() {
+    #[allow(
+        clippy::too_many_lines,
+        reason = "this control exercises branch-edge rescheduling after a global broadening"
+    )]
+    fn loop_counter_definition_republishes_its_local_fact_after_global_broadening() {
+        // The body computes `next = counter + 1` and branches on `next < 10`.
+        // The true edge keeps `next` live through a forwarding block back to
+        // the loop header, so its branch fact is an ordinary edge override,
+        // not a target-parameter fact.
+        let mut body = counted_loop(10.0);
+        body.values.push(op(OpKind::Binary {
+            op: BinOp::Lt,
+            lhs: ValueId(5),
+            rhs: ValueId(2),
+        }));
+        body.blocks[2].ops.push(ValueId(6));
+        body.blocks[2].terminator = Terminator::Branch {
+            cond: ValueId(6),
+            then_target: BlockId(4),
+            then_args: Vec::new(),
+            else_target: BlockId(3),
+            else_args: Vec::new(),
+        };
+        body.blocks.push(block(
+            Vec::new(),
+            Vec::new(),
+            Terminator::Jump {
+                target: BlockId(1),
+                args: vec![ValueId(5)],
+            },
+        ));
+        let mut values = vec![Facts::BOTTOM; body.values.len()];
+        values[0] = Facts::constant(0.0);
+        values[1] = Facts::new(0.0, 10.0, true, false, false);
+        values[2] = Facts::constant(10.0);
+        values[3] = Facts::new(0.0, 1.0, true, false, false);
+        values[4] = Facts::constant(1.0);
+        // The global result starts narrower than this loop-local transfer.
+        values[5] = Facts::new(1.0, 2.0, true, false, false);
+        let refinements = [(ValueId(1), Facts::new(0.0, 9.0, true, false, false))]
+            .into_iter()
+            .collect();
+        let whole = Whole::default();
+        let written = Written::default();
+        let context = Context {
+            params: &[],
+            caps: &FxHashMap::default(),
+            param_lengths: &[],
+            whole: &whole,
+            written: &written,
+        };
+        let mut edges = vec![
+            vec![None],
+            vec![None, None],
+            vec![None, None],
+            vec![],
+            vec![None],
+        ];
+        let live_in = vec![
+            rustc_hash::FxHashSet::default(),
+            rustc_hash::FxHashSet::default(),
+            rustc_hash::FxHashSet::default(),
+            [ValueId(1)].into_iter().collect(),
+            [ValueId(5)].into_iter().collect(),
+        ];
+        let mut work = WorkCounts::default();
+        let positions = parameter_positions(&body, &mut work);
+        let mut fields = vec![None; body.blocks.len()];
+        let mut observed = Observed::default();
+        let headers = loop_headers(&body);
+        let mut result = TransferResult::default();
+
+        transfer_block(
+            &body,
+            (&context, &local_tuples(&body)),
+            BlockId(2),
+            &refinements,
+            &mut values,
+            &mut edges,
+            &live_in,
+            &positions,
+            &mut work,
+            (&mut fields, &mut observed, &headers),
+            &mut result,
+        );
+
+        let branch_edge = edges[2][0]
+            .as_ref()
+            .expect("the loop body records its true edge");
+        assert_eq!(
+            branch_edge.path_facts.get(&ValueId(5)),
+            Some(&Facts::new(1.0, 9.0, true, false, false))
+        );
+        assert_eq!(values[5], Facts::new(1.0, 10.0, true, false, false));
+        assert!(
+            result
+                .changed_values
+                .iter()
+                .any(|change| change.value == ValueId(5) && !change.read_before_change)
+        );
+
+        let readers = value_readers(&body, &live_in);
+        assert!(
+            readers[5].contains(&BlockId(2)),
+            "the defining body is rescheduled"
+        );
+        let rank = [0, 1, 2, 3, 4];
+        let mut scheduled = vec![None; body.blocks.len()];
+        let mut pending = BTreeSet::new();
+        enqueue(
+            BlockId(2),
+            BlockId(2),
+            4,
+            &rank,
+            &mut pending,
+            &mut scheduled,
+        );
+        assert_eq!(pending.first(), Some(&(5, 2)));
+
+        // If a later path broadens the global result, the definition block is
+        // run again and republishes the edge's local loop fact. A block entry
+        // refinement alone cannot recover this: the edge argument is the
+        // source of truth for the next recomputation.
+        values[5] = Facts::TOP;
+        result = TransferResult::default();
+        transfer_block(
+            &body,
+            (&context, &local_tuples(&body)),
+            BlockId(2),
+            &refinements,
+            &mut values,
+            &mut edges,
+            &live_in,
+            &positions,
+            &mut work,
+            (&mut fields, &mut observed, &headers),
+            &mut result,
+        );
+        assert_eq!(
+            edges[2][0]
+                .as_ref()
+                .expect("the rerun records the loop's true edge")
+                .path_facts
+                .get(&ValueId(5)),
+            Some(&Facts::new(1.0, 9.0, true, false, false))
+        );
+
+        let incoming = vec![
+            Vec::new(),
+            vec![(BlockId(0), 0), (BlockId(4), 0)],
+            vec![(BlockId(1), 0)],
+            vec![(BlockId(1), 1), (BlockId(2), 1)],
+            vec![(BlockId(2), 0)],
+        ];
+        let entry = recompute_entry(
+            &body,
+            BlockId(4),
+            &incoming,
+            &edges,
+            &values,
+            &FxHashMap::default(),
+            &positions[4],
+            &mut work,
+        )
+        .expect("the refreshed branch edge reaches the forwarding block");
+        assert_eq!(
+            test_path_fact(&entry, &values, ValueId(5)),
+            Facts::new(1.0, 9.0, true, false, false)
+        );
+
+        let analysis = analyze(&body);
+        assert_eq!(
+            analysis.get_at(BlockId(4), ValueId(5)),
+            Facts::new(1.0, 9.0, true, false, false),
+            "the solved loop keeps the branch fact at the forwarding block"
+        );
+    }
+
+    #[test]
+    #[allow(
+        clippy::too_many_lines,
+        reason = "the nested-loop control pins a path fact across an inner backedge"
+    )]
+    fn outer_loop_fact_survives_inner_loop_global_broadening() {
+        // The outer counter is narrowed by `counter < n`, then carried through
+        // an inner loop whose backedge does not mention it. Its path fact can
+        // equal the global fact at one point in solving, but must survive if
+        // the inner loop later broadens that global.
+        let body = func(
+            vec![
+                op(OpKind::Param(0)),             // %0 n
+                op(OpKind::ConstFloat(0.0)),      // %1 outer result
+                op(OpKind::ConstFloat(0.0)),      // %2 outer counter
+                op(OpKind::BlockParam(0)),        // %3 outer result phi
+                op(OpKind::BlockParam(1)),        // %4 outer counter phi
+                op(Op_binary(BinOp::Lt, 4, 0)),   // %5 outer condition
+                op(OpKind::BlockParam(0)),        // %6 return value
+                op(OpKind::ConstFloat(0.0)),      // %7 inner counter
+                op(OpKind::BlockParam(0)),        // %8 inner result phi
+                op(OpKind::BlockParam(1)),        // %9 inner counter phi
+                op(Op_binary(BinOp::Lt, 9, 0)),   // %10 inner condition
+                op(OpKind::ConstFloat(1.0)),      // %11
+                op(Op_binary(BinOp::Add, 8, 11)), // %12 inner result + 1
+                op(Op_binary(BinOp::Add, 9, 11)), // %13 inner counter + 1
+                op(OpKind::BlockParam(0)),        // %14 inner exit result
+                op(OpKind::ConstFloat(1.0)),      // %15
+                op(Op_binary(BinOp::Add, 4, 15)), // %16 outer counter + 1
+            ],
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1), ValueId(2)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(1), ValueId(2)],
+                    },
+                ),
+                block(
+                    vec![ValueId(3), ValueId(4)],
+                    vec![ValueId(5)],
+                    Terminator::Branch {
+                        cond: ValueId(5),
+                        then_target: BlockId(2),
+                        then_args: Vec::new(),
+                        else_target: BlockId(3),
+                        else_args: vec![ValueId(3)],
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(7)],
+                    Terminator::Jump {
+                        target: BlockId(4),
+                        args: vec![ValueId(3), ValueId(7)],
+                    },
+                ),
+                block(
+                    vec![ValueId(6)],
+                    Vec::new(),
+                    Terminator::Return(Some(ValueId(6))),
+                ),
+                block(
+                    vec![ValueId(8), ValueId(9)],
+                    vec![ValueId(10)],
+                    Terminator::Branch {
+                        cond: ValueId(10),
+                        then_target: BlockId(5),
+                        then_args: Vec::new(),
+                        else_target: BlockId(6),
+                        else_args: vec![ValueId(8)],
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    vec![ValueId(11), ValueId(12), ValueId(13)],
+                    Terminator::Jump {
+                        target: BlockId(4),
+                        args: vec![ValueId(12), ValueId(13)],
+                    },
+                ),
+                block(
+                    vec![ValueId(14)],
+                    vec![ValueId(15), ValueId(16)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(14), ValueId(16)],
+                    },
+                ),
+            ],
+            1,
+        );
+        let whole = Whole::default();
+        let written = Written::default();
+        let params = [Facts::new(0.0, f64::from(i32::MAX), true, false, false)];
+        let context = Context {
+            params: &params,
+            caps: &FxHashMap::default(),
+            param_lengths: &[],
+            whole: &whole,
+            written: &written,
+        };
+        let analysis = analyze_with(&body, &context);
+        assert_eq!(
+            analysis.get_at(BlockId(4), ValueId(4)).hi,
+            f64::from(i32::MAX - 1),
+            "the outer guard remains available at the inner-loop header"
+        );
+        assert_eq!(
+            analysis.get_at(BlockId(6), ValueId(4)).hi,
+            f64::from(i32::MAX - 1)
+        );
+        assert_eq!(analysis.get(ValueId(16)).hi, f64::from(i32::MAX));
+    }
+
+    #[test]
+    fn equal_global_edge_fact_survives_a_later_broadening() {
+        let body = func(
+            vec![op(OpKind::Param(0))],
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: Vec::new(),
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(0)))),
+            ],
+            1,
+        );
+        let constrained = Facts::new(0.0, 9.0, true, false, false);
+        let mut values = [constrained];
+        let path = [(ValueId(0), constrained)].into_iter().collect();
+        let mut edges = vec![vec![None], Vec::new()];
+        let live_in = vec![
+            rustc_hash::FxHashSet::default(),
+            [ValueId(0)].into_iter().collect(),
+        ];
+        let positions = parameter_positions(&body, &mut WorkCounts::default());
+        assert!(record_edge(
+            &body,
+            BlockId(0),
+            0,
+            BlockId(1),
+            &[],
+            &path,
+            &values,
+            &mut edges,
+            &live_in,
+            &positions,
+            &FxHashMap::default(),
+            &mut WorkCounts::default(),
+        ));
+        assert_eq!(
+            edges[0][0]
+                .as_ref()
+                .expect("the edge is recorded")
+                .path_facts
+                .get(&ValueId(0)),
+            Some(&constrained),
+            "an explicit path fact is kept even when it currently equals global"
+        );
+
+        values[0] = Facts::new(0.0, 100.0, true, false, false);
+        let incoming = vec![Vec::new(), vec![(BlockId(0), 0)]];
+        let entry = recompute_entry(
+            &body,
+            BlockId(1),
+            &incoming,
+            &edges,
+            &values,
+            &FxHashMap::default(),
+            &positions[1],
+            &mut WorkCounts::default(),
+        )
+        .expect("the edge still reaches its destination");
+        assert_eq!(test_path_fact(&entry, &values, ValueId(0)), constrained);
+    }
+
+    #[test]
+    fn forwarding_block_reads_facts_needed_by_its_successor() {
+        let body = func(
+            vec![op(OpKind::ConstFloat(7.0))],
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(2),
+                        args: Vec::new(),
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(0)))),
+            ],
+            0,
+        );
+        let live_in = vec![
+            rustc_hash::FxHashSet::default(),
+            rustc_hash::FxHashSet::default(),
+            [ValueId(0)].into_iter().collect(),
+        ];
+        let readers = value_readers(&body, &live_in);
+        assert!(
+            readers[0].contains(&BlockId(1)),
+            "the forwarding edge must be refreshed when its successor's live value broadens"
+        );
+    }
+
+    #[test]
+    fn edge_caps_rebind_to_target_parameters_and_preserve_flags() {
         let body = counted_loop(10.0);
         let cap = Facts::new(0.0, 10.0, false, true, true);
         let caps = [(ValueId(1), cap)].into_iter().collect();
         let mut values = vec![Facts::TOP; body.values.len()];
         values[5] = Facts::new(-1.0, 11.0, false, true, true);
         let before = values.clone();
-        let mut entry = vec![None; body.blocks.len()];
+        let mut edges = vec![vec![None], vec![None, None], vec![None], vec![]];
+        let live_in = vec![rustc_hash::FxHashSet::default(); body.blocks.len()];
+        let mut work = WorkCounts::default();
+        let positions = parameter_positions(&body, &mut work);
         let refinements = Refinements::default();
-        assert!(send(
+
+        assert!(record_edge(
             &body,
+            BlockId(2),
+            0,
             BlockId(1),
             &[ValueId(5)],
             &refinements,
             &values,
-            &mut entry,
-            &caps
+            &mut edges,
+            &live_in,
+            &positions,
+            &caps,
+            &mut work,
         ));
         assert_eq!(
-            entry[1]
+            edges[2][0]
                 .as_ref()
-                .expect("the incoming edge created its target entry")[&ValueId(1)],
-            cap
+                .expect("record_edge publishes its new state")
+                .params,
+            [cap]
         );
-        assert!(!send(
+        assert!(!record_edge(
             &body,
+            BlockId(2),
+            0,
             BlockId(1),
             &[ValueId(5)],
             &refinements,
             &values,
-            &mut entry,
-            &caps
+            &mut edges,
+            &live_in,
+            &positions,
+            &caps,
+            &mut work,
         ));
         assert_eq!(
-            entry[1]
+            edges[2][0]
                 .as_ref()
-                .expect("the incoming edge created its target entry")[&ValueId(1)],
-            cap
+                .expect("record_edge retains the equivalent state")
+                .params,
+            [cap]
         );
-        assert_eq!(
-            values, before,
-            "a phi cap is not a licence to narrow its argument"
-        );
+        assert_eq!(values, before, "a target cap never narrows its source");
     }
 
     #[test]
-    fn a_missing_incoming_refinement_joins_the_global_fact_in_both_orders() {
-        let body = func(
-            vec![op(OpKind::Param(0))],
-            vec![block(
-                Vec::new(),
-                vec![ValueId(0)],
-                Terminator::Return(Some(ValueId(0))),
-            )],
-            1,
-        );
-        let global = Facts::new(0.0, 10.0, true, false, false);
-        let values = [global];
-        let refined = [(ValueId(0), Facts::new(0.0, 6.0, true, false, false))]
-            .into_iter()
-            .collect();
-        let unrefined = Refinements::default();
-        for with_cap in [false, true] {
-            let caps = if with_cap {
-                [(ValueId(0), Facts::new(0.0, 9.0, false, true, true))]
-                    .into_iter()
-                    .collect()
-            } else {
-                FxHashMap::default()
-            };
-            let expected = capped(&caps, ValueId(0), global);
-            for refined_first in [false, true] {
-                let mut entry = vec![None];
-                let (first, second) = if refined_first {
-                    (&refined, &unrefined)
-                } else {
-                    (&unrefined, &refined)
-                };
-                assert!(send(
-                    &body,
-                    BlockId(0),
-                    &[],
-                    first,
-                    &values,
-                    &mut entry,
-                    &caps
-                ));
-                send(&body, BlockId(0), &[], second, &values, &mut entry, &caps);
-                assert_eq!(
-                    lookup(
-                        entry[0]
-                            .as_ref()
-                            .expect("the incoming edge created its target entry"),
-                        &values,
-                        ValueId(0)
-                    ),
-                    expected,
-                    "with_cap={with_cap}, refined_first={refined_first}"
-                );
-                assert!(!send(
-                    &body,
-                    BlockId(0),
-                    &[],
-                    &unrefined,
-                    &values,
-                    &mut entry,
-                    &caps
-                ));
-                assert_eq!(
-                    values,
-                    [global],
-                    "a missing refinement cannot change its source fact"
-                );
-            }
-        }
-    }
-
-    #[test]
-    fn a_repeated_target_param_uses_its_argument_instead_of_the_global_phi() {
+    fn published_block_entries_drop_overrides_equal_to_final_globals() {
         let body = func(
             vec![op(OpKind::ConstFloat(7.0)), op(OpKind::BlockParam(0))],
             vec![
@@ -2881,41 +4676,501 @@ mod tests {
             ],
             0,
         );
-        let values = [Facts::constant(7.0), Facts::TOP];
-        let refinements = Refinements::default();
+        let analysis = analyze(&body);
+        assert_eq!(analysis.get(ValueId(1)), Facts::constant(7.0));
+        assert!(!analysis.refined[1].contains_key(&ValueId(1)));
+        assert!(analysis.refined.iter().all(|refinements| {
+            refinements
+                .iter()
+                .all(|(value, facts)| *facts != analysis.get(*value))
+        }));
+    }
+
+    #[test]
+    fn multi_phi_transfer_normalizes_all_changed_globals_before_asserting() {
+        let body = func(
+            vec![
+                op(OpKind::ConstFloat(7.0)),
+                op(OpKind::ConstFloat(8.0)),
+                op(OpKind::BlockParam(0)),
+                op(OpKind::BlockParam(1)),
+                op(OpKind::Binary {
+                    op: BinOp::Add,
+                    lhs: ValueId(2),
+                    rhs: ValueId(3),
+                }),
+            ],
+            vec![
+                block(
+                    Vec::new(),
+                    vec![ValueId(0), ValueId(1)],
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(0), ValueId(1)],
+                    },
+                ),
+                block(
+                    vec![ValueId(2), ValueId(3)],
+                    vec![ValueId(4)],
+                    Terminator::Return(Some(ValueId(4))),
+                ),
+            ],
+            0,
+        );
+        let analysis = analyze(&body);
+        assert_eq!(analysis.get(ValueId(2)), Facts::constant(7.0));
+        assert_eq!(analysis.get(ValueId(3)), Facts::constant(8.0));
+        assert_eq!(analysis.get(ValueId(4)), Facts::constant(15.0));
+        assert!(!analysis.refined[1].contains_key(&ValueId(2)));
+        assert!(!analysis.refined[1].contains_key(&ValueId(3)));
+        assert!(analysis.refined.iter().all(|refinements| {
+            refinements
+                .iter()
+                .all(|(value, facts)| *facts != analysis.get(*value))
+        }));
+    }
+
+    #[test]
+    fn edge_parameter_fact_survives_global_widening_and_is_rederived() {
+        let body = func(
+            vec![op(OpKind::ConstFloat(0.0)), op(OpKind::BlockParam(0))],
+            vec![
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(0)],
+                    },
+                ),
+                block(
+                    vec![ValueId(1)],
+                    Vec::new(),
+                    Terminator::Return(Some(ValueId(1))),
+                ),
+            ],
+            0,
+        );
+        let mut values = [Facts::constant(0.0), Facts::TOP];
+        let edges = vec![
+            vec![Some(EdgeState {
+                path_facts: PathFacts::default(),
+                params: vec![Facts::constant(0.0)],
+            })],
+            vec![],
+        ];
+        let incoming = vec![vec![], vec![(BlockId(0), 0)]];
         let caps = FxHashMap::default();
-        let mut entry = vec![None; 2];
-        assert!(send(
+        let mut work = WorkCounts::default();
+        let positions = parameter_positions(&body, &mut work);
+
+        let first = recompute_entry(
             &body,
             BlockId(1),
-            &[ValueId(0)],
-            &refinements,
+            &incoming,
+            &edges,
             &values,
-            &mut entry,
-            &caps
-        ));
+            &caps,
+            &positions[1],
+            &mut work,
+        )
+        .expect("the edge reaches the block");
         assert_eq!(
-            entry[1]
-                .as_ref()
-                .expect("the incoming edge created its target entry")[&ValueId(1)],
-            Facts::constant(7.0)
+            test_path_fact(&first, &values, ValueId(1)),
+            Facts::constant(0.0)
         );
-        assert!(!send(
+        assert!(first.contains_key(&ValueId(1)));
+
+        values[1] = Facts::new(0.0, f64::INFINITY, true, false, false);
+        let second = recompute_entry(
             &body,
             BlockId(1),
-            &[ValueId(0)],
-            &refinements,
+            &incoming,
+            &edges,
             &values,
-            &mut entry,
-            &caps
-        ));
+            &caps,
+            &positions[1],
+            &mut work,
+        )
+        .expect("the edge remains available after global growth");
         assert_eq!(
-            entry[1]
-                .as_ref()
-                .expect("the incoming edge created its target entry")[&ValueId(1)],
-            Facts::constant(7.0)
+            test_path_fact(&second, &values, ValueId(1)),
+            Facts::constant(0.0)
         );
-        assert_eq!(values[1], Facts::TOP);
+    }
+
+    #[test]
+    fn equal_global_header_fact_survives_a_later_broadening() {
+        let body = func(
+            vec![op(OpKind::BlockParam(0))],
+            vec![
+                block(Vec::new(), Vec::new(), Terminator::Unreachable),
+                block(
+                    vec![ValueId(0)],
+                    Vec::new(),
+                    Terminator::Return(Some(ValueId(0))),
+                ),
+            ],
+            0,
+        );
+        let narrow = Facts::new(0.0, 4.0, true, false, false);
+        let mut values = [narrow];
+        let mut path = [(ValueId(0), narrow)].into_iter().collect();
+        let mut history = Some(vec![HeaderFact {
+            raw: narrow,
+            effective: narrow,
+            changes: 0,
+        }]);
+
+        apply_header_widening(
+            &body,
+            BlockId(1),
+            &mut path,
+            &values,
+            &FxHashMap::default(),
+            WIDEN_AFTER,
+            &mut history,
+        );
+        assert_eq!(path.get(&ValueId(0)), Some(&narrow));
+
+        values[0] = Facts::new(0.0, 20.0, true, false, false);
+        assert_eq!(
+            test_path_fact(&path, &values, ValueId(0)),
+            narrow,
+            "header widening keeps the path fact after its global value grows"
+        );
+    }
+
+    #[test]
+    fn recomputed_join_uses_global_for_missing_edge_keys() {
+        let body = func(
+            vec![op(OpKind::Param(0))],
+            vec![
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(2),
+                        args: vec![],
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(2),
+                        args: vec![],
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(0)))),
+            ],
+            1,
+        );
+        let edges = vec![
+            vec![Some(EdgeState {
+                path_facts: [(ValueId(0), Facts::new(0.0, 6.0, true, false, false))]
+                    .into_iter()
+                    .collect(),
+                params: vec![],
+            })],
+            vec![Some(EdgeState {
+                path_facts: PathFacts::default(),
+                params: vec![],
+            })],
+            vec![],
+        ];
+        let values = [Facts::new(0.0, 10.0, true, false, false)];
+        let positions = parameter_positions(&body, &mut WorkCounts::default());
+        let global = values[0];
+        for with_cap in [false, true] {
+            let caps = if with_cap {
+                [(ValueId(0), Facts::new(0.0, 9.0, false, true, true))]
+                    .into_iter()
+                    .collect()
+            } else {
+                FxHashMap::default()
+            };
+            let expected = capped(&caps, ValueId(0), global);
+            for refined_first in [false, true] {
+                let incoming = if refined_first {
+                    vec![vec![], vec![], vec![(BlockId(0), 0), (BlockId(1), 0)]]
+                } else {
+                    vec![vec![], vec![], vec![(BlockId(1), 0), (BlockId(0), 0)]]
+                };
+                let entry = recompute_entry(
+                    &body,
+                    BlockId(2),
+                    &incoming,
+                    &edges,
+                    &values,
+                    &caps,
+                    &positions[2],
+                    &mut WorkCounts::default(),
+                )
+                .expect("both predecessor edges reach the block");
+                assert_eq!(test_path_fact(&entry, &values, ValueId(0)), expected);
+                assert!(
+                    entry.contains_key(&ValueId(0)),
+                    "edge path facts remain explicit even when equal to global"
+                );
+                assert_eq!(values, [global], "joining never mutates a source fact");
+            }
+        }
+    }
+
+    #[test]
+    fn retracting_an_edge_override_recomputes_the_join_from_current_sources() {
+        let body = func(
+            vec![op(OpKind::Param(0))],
+            vec![
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(2),
+                        args: Vec::new(),
+                    },
+                ),
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(2),
+                        args: Vec::new(),
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(Some(ValueId(0)))),
+            ],
+            1,
+        );
+        let narrow = Facts::new(0.0, 6.0, true, false, false);
+        let values = [Facts::new(0.0, 10.0, true, false, false)];
+        let positions = parameter_positions(&body, &mut WorkCounts::default());
+        let incoming = vec![vec![], vec![], vec![(BlockId(0), 0), (BlockId(1), 0)]];
+        let mut edges = vec![
+            vec![Some(EdgeState {
+                path_facts: [(ValueId(0), narrow)].into_iter().collect(),
+                params: Vec::new(),
+            })],
+            vec![Some(EdgeState {
+                path_facts: [(ValueId(0), narrow)].into_iter().collect(),
+                params: Vec::new(),
+            })],
+            Vec::new(),
+        ];
+        let first = recompute_entry(
+            &body,
+            BlockId(2),
+            &incoming,
+            &edges,
+            &values,
+            &FxHashMap::default(),
+            &positions[2],
+            &mut WorkCounts::default(),
+        )
+        .expect("both narrow predecessor states reach the block");
+        assert_eq!(test_path_fact(&first, &values, ValueId(0)), narrow);
+
+        edges[0][0]
+            .as_mut()
+            .expect("the incoming edge remains present")
+            .path_facts
+            .clear();
+        let retracted = recompute_entry(
+            &body,
+            BlockId(2),
+            &incoming,
+            &edges,
+            &values,
+            &FxHashMap::default(),
+            &positions[2],
+            &mut WorkCounts::default(),
+        )
+        .expect("the edge remains reachable after retracting its override");
+        assert_eq!(test_path_fact(&retracted, &values, ValueId(0)), values[0]);
+        assert!(retracted.contains_key(&ValueId(0)));
+
+        edges[1][0]
+            .as_mut()
+            .expect("the second incoming edge remains present")
+            .path_facts
+            .clear();
+        let fully_retracted = recompute_entry(
+            &body,
+            BlockId(2),
+            &incoming,
+            &edges,
+            &values,
+            &FxHashMap::default(),
+            &positions[2],
+            &mut WorkCounts::default(),
+        )
+        .expect("both edges remain reachable after retracting their facts");
+        assert_eq!(
+            test_path_fact(&fully_retracted, &values, ValueId(0)),
+            values[0]
+        );
+        assert!(!fully_retracted.contains_key(&ValueId(0)));
+    }
+
+    #[test]
+    fn many_phi_parameter_join_work_is_linear_in_parameter_count() {
+        for count in [16_usize, 64, 256] {
+            let source_values: Vec<_> = (0..count)
+                .map(|index| op(OpKind::ConstFloat(test_number(index))))
+                .collect();
+            let target_params: Vec<_> = (count..count * 2).map(test_value_id).collect();
+            let values = source_values
+                .into_iter()
+                .chain((0..count).map(|slot| op(OpKind::BlockParam(test_value_id(slot).0))))
+                .collect();
+            let args = (0..count).map(test_value_id).collect();
+            let body = func(
+                values,
+                vec![
+                    block(
+                        Vec::new(),
+                        (0..count).map(test_value_id).collect(),
+                        Terminator::Jump {
+                            target: BlockId(1),
+                            args,
+                        },
+                    ),
+                    block(target_params.clone(), Vec::new(), Terminator::Return(None)),
+                ],
+                0,
+            );
+            let mut work = WorkCounts::default();
+            let positions = parameter_positions(&body, &mut work);
+            let incoming = vec![vec![], vec![(BlockId(0), 0)]];
+            let edge = EdgeState {
+                path_facts: PathFacts::default(),
+                params: (0..count)
+                    .map(|index| Facts::constant(test_number(index)))
+                    .collect(),
+            };
+            let edges = vec![vec![Some(edge)], vec![]];
+            let globals = vec![Facts::TOP; body.values.len()];
+            let entry = recompute_entry(
+                &body,
+                BlockId(1),
+                &incoming,
+                &edges,
+                &globals,
+                &FxHashMap::default(),
+                &positions[1],
+                &mut work,
+            )
+            .expect("the parameter edge reaches the join");
+            #[cfg(test)]
+            {
+                assert_eq!(work.parameter_index_entries, count);
+                assert_eq!(work.entry_keys_visited, count);
+                assert_eq!(work.parameter_position_queries, count);
+            }
+            assert_eq!(entry.len(), count);
+            assert_eq!(
+                entry[&target_params[count - 1]],
+                Facts::constant(test_number(count - 1))
+            );
+        }
+    }
+
+    #[test]
+    fn edge_record_work_tracks_sparse_refinements_not_live_in_size() {
+        let value_count = 4096_usize;
+        let body = func(
+            (0..value_count)
+                .map(|index| op(OpKind::ConstFloat(test_number(index))))
+                .collect(),
+            vec![
+                block(
+                    Vec::new(),
+                    Vec::new(),
+                    Terminator::Jump {
+                        target: BlockId(1),
+                        args: Vec::new(),
+                    },
+                ),
+                block(Vec::new(), Vec::new(), Terminator::Return(None)),
+            ],
+            0,
+        );
+        let positions = parameter_positions(&body, &mut WorkCounts::default());
+        let values = vec![Facts::constant(0.0); value_count];
+        let mut large_live_in: Vec<rustc_hash::FxHashSet<ValueId>> =
+            vec![rustc_hash::FxHashSet::default(); body.blocks.len()];
+        large_live_in[1].extend((0..value_count).map(test_value_id));
+        let small_live_in: Vec<_> = vec![
+            rustc_hash::FxHashSet::default(),
+            [ValueId(0), ValueId(1)].into_iter().collect(),
+        ];
+        let small_refinements = [
+            (ValueId(0), Facts::constant(1.0)),
+            (ValueId(1), Facts::constant(2.0)),
+            (ValueId(2), Facts::constant(3.0)),
+        ]
+        .into_iter()
+        .collect();
+        let mut large_edges = vec![vec![None], vec![]];
+        let mut large_work = WorkCounts::default();
+        assert!(record_edge(
+            &body,
+            BlockId(0),
+            0,
+            BlockId(1),
+            &[],
+            &small_refinements,
+            &values,
+            &mut large_edges,
+            &large_live_in,
+            &positions,
+            &FxHashMap::default(),
+            &mut large_work,
+        ));
+        #[cfg(test)]
+        {
+            assert_eq!(large_work.sparse_refinement_visits, 3);
+            assert_eq!(large_work.live_in_membership_probes, 3);
+        }
+        assert_eq!(
+            large_edges[0][0]
+                .as_ref()
+                .expect("record_edge publishes the sparse edge")
+                .path_facts
+                .len(),
+            3
+        );
+
+        let mut small_edges = vec![vec![None], vec![]];
+        let mut small_work = WorkCounts::default();
+        assert!(record_edge(
+            &body,
+            BlockId(0),
+            0,
+            BlockId(1),
+            &[],
+            &small_refinements,
+            &values,
+            &mut small_edges,
+            &small_live_in,
+            &positions,
+            &FxHashMap::default(),
+            &mut small_work,
+        ));
+        #[cfg(test)]
+        {
+            assert_eq!(small_work.sparse_refinement_visits, 3);
+            assert_eq!(small_work.live_in_membership_probes, 3);
+        }
+        assert_eq!(
+            small_edges[0][0]
+                .as_ref()
+                .expect("record_edge publishes the small edge")
+                .path_facts
+                .len(),
+            2
+        );
     }
 
     #[test]

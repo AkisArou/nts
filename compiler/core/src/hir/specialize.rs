@@ -110,6 +110,7 @@ fn dispatched(kind: &OpKind) -> bool {
     )
 }
 
+#[expect(clippy::too_many_lines, reason = "over 100 lines once formatted")]
 pub fn specialize(
     func: &mut Func,
     analysis: &Analysis,
@@ -186,6 +187,16 @@ pub fn specialize(
     // representation any member asked for.
     let mut verdict: FxHashMap<u32, Option<u8>> = FxHashMap::default();
     for (index, own) in eligible.iter().enumerate() {
+        // An infeasible predecessor contributes no runtime value and cannot
+        // constrain the representation of reachable members in its phi class.
+        // Sparse flow proves these parameters BOTTOM; treating that as an
+        // unprovable float made an unreachable exit de-specialize its loop.
+        if analysis
+            .get(ValueId(u32::try_from(index).unwrap_or(0)))
+            .is_bottom()
+        {
+            continue;
+        }
         let root = classes.find(u32::try_from(index).unwrap_or(0));
         let slot = verdict.entry(root).or_insert(Some(32));
         *slot = match (*slot, own) {
@@ -236,7 +247,17 @@ pub fn specialize(
     let unsigned = unsigned_classes(func, analysis, &mut classes, count);
 
     let mut report = Report::default();
-    for index in 0..count {
+    for (index, member_eligible) in eligible.iter().enumerate().take(count) {
+        let id = ValueId(u32::try_from(index).unwrap_or(0));
+        // An infeasible member may share a representation class with a live
+        // block parameter through a control-flow edge. It does not constrain
+        // the class verdict, so it must not inherit that verdict either: its
+        // value never exists at runtime, and its storage operation may have a
+        // different fixed representation (for example an ArrayGet from a
+        // Float64 array in a zero-iteration loop).
+        if analysis.get(id).is_bottom() || member_eligible.is_none() {
+            continue;
+        }
         let root = classes.find(u32::try_from(index).unwrap_or(0));
         let Some(Some(bits)) = verdict.get(&root).copied() else {
             continue;
@@ -1952,7 +1973,9 @@ impl BinOp {
 
 #[cfg(test)]
 mod tests {
-    use crate::hir::{Block, Callee, Func, HirType, Op, OpKind, Param, Terminator, ValueId};
+    use crate::hir::{
+        Block, BlockId, Callee, Func, HirType, Op, OpKind, Param, Terminator, ValueId,
+    };
     use nts_diagnostics::{Location, SourceId, Span};
     use nts_semantic_schema::Origin;
 
@@ -2037,6 +2060,102 @@ mod tests {
         };
         let second = &func.values[args[1].0 as usize];
         (second.kind.clone(), second.ty.clone())
+    }
+
+    #[test]
+    fn unreachable_phi_arrival_does_not_widen_a_reachable_integer_class() {
+        let origin = Origin::source(Location {
+            file: SourceId(0),
+            span: Span::new(0, 1),
+        });
+        let float = HirType::Float { bits: 64 };
+        let mut func = Func {
+            name: "unreachable_phi_arrival".to_owned(),
+            params: Vec::new(),
+            return_type: float.clone(),
+            values: vec![
+                op(OpKind::ConstFloat(0.0), float.clone()),
+                op(OpKind::ConstFloat(5.0), float.clone()),
+                op(OpKind::BlockParam(0), float.clone()),
+                op(OpKind::ConstFloat(1.0), float.clone()),
+                op(
+                    OpKind::Binary {
+                        op: crate::hir::BinOp::Add,
+                        lhs: ValueId(2),
+                        rhs: ValueId(3),
+                    },
+                    float.clone(),
+                ),
+                op(
+                    OpKind::Binary {
+                        op: crate::hir::BinOp::Lt,
+                        lhs: ValueId(2),
+                        rhs: ValueId(1),
+                    },
+                    HirType::Bool,
+                ),
+                op(OpKind::BlockParam(0), float.clone()),
+                op(OpKind::BlockParam(0), float.clone()),
+            ],
+            blocks: vec![
+                Block {
+                    params: Vec::new(),
+                    ops: vec![ValueId(0), ValueId(1)],
+                    terminator: Terminator::Jump {
+                        target: BlockId(1),
+                        args: vec![ValueId(0)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(2)],
+                    ops: vec![ValueId(3), ValueId(4), ValueId(5)],
+                    terminator: Terminator::Branch {
+                        cond: ValueId(5),
+                        then_target: BlockId(2),
+                        then_args: vec![ValueId(2)],
+                        else_target: BlockId(3),
+                        else_args: vec![ValueId(2)],
+                    },
+                },
+                Block {
+                    params: vec![ValueId(6)],
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(Some(ValueId(6))),
+                },
+                Block {
+                    params: vec![ValueId(7)],
+                    ops: Vec::new(),
+                    terminator: Terminator::Return(Some(ValueId(7))),
+                },
+            ],
+            origin,
+            exported: false,
+            initializes_receiver: false,
+            async_result: None,
+            frame: None,
+            abstract_declaration: false,
+            obligations: Vec::new(),
+            exact: rustc_hash::FxHashMap::default(),
+            written_return: None,
+            result_absent: crate::hir::Absent::Impossible,
+            validation: None,
+            written_return_elements: Vec::new(),
+        };
+        let analysis = crate::hir::flow::analyze(&func);
+        assert!(analysis.get(ValueId(7)).is_bottom());
+
+        super::specialize(
+            &mut func,
+            &analysis,
+            &crate::hir::signatures::Expected::default(),
+        );
+
+        let integer = HirType::Int {
+            bits: 32,
+            signed: true,
+        };
+        assert_eq!(func.values[2].ty, integer);
+        assert_eq!(func.values[4].ty, integer);
     }
 
     /// An `i32` compared with `1.5` and with `2^31`, each way round, and with

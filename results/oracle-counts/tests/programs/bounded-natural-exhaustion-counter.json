@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/bounded-natural-exhaustion-counter",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/bounded-natural-exhaustion-counter/src/main.ts",
+      "signature": "a20a43f2e37d329feb3077e93bf62bad77bac8cb0bc5560eb7949a4172382f1e",
+      "keys": {
+        "c": "92923a9f327451b0c6a7152d392ec9bf",
+        "jvm": "98ea3e024c09ca6cbe1bb688d801f238",
+        "llvm": "4b2a3d5d7a53168541f0e361bc6667ac"
+      },
+      "cases_sha256": "b97288c05d97b34cd497827b3ac3e16c1ca399586e9fed1e42a4929f2f39f91e",
+      "driver_sha256": "72c35ac7c7e686b1c7f3854dade5e571ba2d08f205be5694ae010199909710ab",
+      "populations": {
+        "boundedCount": {
+          "count": 1,
+          "cases_sha256": "ca4a5efe7bfbd48b76a57ab1447c24c761febe56e4780173d194c789b5116218"
+        },
+        "dynamicCount": {
+          "count": 29,
+          "cases_sha256": "dcafaef212b38f3fe73c28b84a1f9aefbb68962e0d0978177a1472ebdd5f3d42"
+        }
+      },
+      "complete": true,
+      "count": 30
+    }
+  ]
+}

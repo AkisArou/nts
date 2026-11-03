@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/base64url-bit-counters",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/base64url-bit-counters/src/main.ts",
+      "signature": "67c03d011e33426265483d83029cfc45342295f95b8daffaffafe1c76c6b263c",
+      "keys": {
+        "c": "975a2c2fceb48efac5875670268dbbb2",
+        "jvm": "6eaa0984078bb6aaaebc8b35ed9b9997",
+        "llvm": "7603b3a6852ea8026b28ae4be0ced774"
+      },
+      "cases_sha256": "1f530b536c0acaaca3f7f273d1ea0b557a05ffdee24f7ebdedccf94412083742",
+      "driver_sha256": "764ed915daec476a4f047b3dbfa03d7a48009caf4a387ca388c4348e9545a3d3",
+      "populations": {
+        "allAlphabetBoundaries": {
+          "count": 1,
+          "cases_sha256": "5f07b816f080d4111359bc7cbe32b3ab26e0f9c9c7a5bef281a7512cd35c5fee"
+        },
+        "dynamicWrapControl": {
+          "count": 34,
+          "cases_sha256": "50d90cd6ddbdb9768aaf113a07231f2c3537441746df8700cb317e6bc988f720"
+        }
+      },
+      "complete": true,
+      "count": 35
+    }
+  ]
+}

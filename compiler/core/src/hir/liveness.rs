@@ -123,7 +123,24 @@ impl Liveness {
 
 /// Compute liveness for a function.
 pub fn analyze(func: &Func) -> Result<Liveness, Failure> {
-    analyze_with(func, &|_| None)
+    analyze_using(func, &|_| None, None, &mut Control { charge: None })
+}
+
+/// Compute liveness with additional semantic uses at the named blocks.
+///
+/// These uses participate in the same backward dataflow as placed operations,
+/// so their values stay live across every predecessor edge, not only at the
+/// query block itself.
+pub(super) fn analyze_with_additional_uses(
+    func: &Func,
+    additional_uses: &[FxHashSet<ValueId>],
+) -> Result<Liveness, Failure> {
+    analyze_using(
+        func,
+        &|_| None,
+        Some(additional_uses),
+        &mut Control { charge: None },
+    )
 }
 
 /// What a call's callee stores of its arguments into its other arguments, as
@@ -136,7 +153,7 @@ pub(super) type CalleeStores<'a> = dyn Fn(&Callee) -> Option<Vec<(u32, u32)>> + 
 /// to a call is named by the argument it goes into rather than by all of them.
 /// See [`object_names_with`].
 pub(super) fn analyze_with(func: &Func, stores: &CalleeStores<'_>) -> Result<Liveness, Failure> {
-    analyze_using(func, stores, &mut Control { charge: None })
+    analyze_using(func, stores, None, &mut Control { charge: None })
 }
 
 /// The same solver, with caller charges for optional work only. Exhaustion
@@ -149,6 +166,7 @@ pub fn analyze_limited(
     analyze_using(
         func,
         &|_| None,
+        None,
         &mut Control {
             charge: Some(charge),
         },
@@ -217,6 +235,7 @@ fn step(remaining: &mut u128, phase: &'static str) -> Result<(), Failure> {
 fn analyze_using(
     func: &Func,
     stores: &CalleeStores<'_>,
+    additional_uses: Option<&[FxHashSet<ValueId>]>,
     control: &mut Control<'_>,
 ) -> Result<Liveness, Failure> {
     let count = func.blocks.len();
@@ -226,9 +245,18 @@ fn analyze_using(
     let mut live_out: Vec<FxHashSet<ValueId>> = vec![FxHashSet::default(); count];
 
     // Precomputed per block, since the fixpoint revisits them.
-    let used: Vec<_> = (0..count)
+    let mut used: Vec<_> = (0..count)
         .map(|index| reads(func, index, control))
         .collect::<Result<_, _>>()?;
+    if let Some(additional_uses) = additional_uses {
+        if additional_uses.len() != count {
+            return Err(Failure::StructuralInvariant("additional-use block count"));
+        }
+        for (block_uses, extra) in used.iter_mut().zip(additional_uses) {
+            control.take(extra.len())?;
+            block_uses.extend(extra.iter().copied());
+        }
+    }
     let defined: Vec<_> = (0..count)
         .map(|index| writes(func, index, control))
         .collect::<Result<_, _>>()?;
