@@ -1,0 +1,146 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/parse-int-radix-toint32",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/parse-int-radix-toint32/src/main.ts",
+      "signature": "080187625952cd459543876b52a7d0001b3745c630d36399901990f5afd6ff5b",
+      "keys": {
+        "c": "ba3d6e89bb058dc3f903c49cf706d723",
+        "jvm": "2bbdf874d805b9c909eda61480071e6c",
+        "llvm": "d38111b84cc6476a7e76e4b26e21bb4f"
+      },
+      "cases_sha256": "1939c9757ffea7307846b5a486c35e698402cec94df90e4da62089132191bbe6",
+      "driver_sha256": "d448ffd731a69ba4d1527fa6bb6bd29d2e657291c3c9e48fe2bb40e99850b9e9",
+      "populations": {
+        "decimalLiteral": {
+          "count": 1,
+          "cases_sha256": "d4e11ca5293627d2041becfdab0346f7fa320662f1531f497f5bdc518c1d8748"
+        },
+        "explicitUndefined": {
+          "count": 1,
+          "cases_sha256": "058533067cc8bccc93936bb7968e65625c4133e55f5312c872cee235c89fac0e"
+        },
+        "fractionalNegativeWrap": {
+          "count": 1,
+          "cases_sha256": "7e4c9fdcea4d966007ac5871caeaa1292a0ed946bb77608cbe46b1bee57e3c76"
+        },
+        "fractionalSixteen": {
+          "count": 1,
+          "cases_sha256": "dd7b5dead004406f6793d4541aa89300b667a9e904b7fa47ab48deb6f541c2cf"
+        },
+        "fractionalTen": {
+          "count": 1,
+          "cases_sha256": "41488e1c761f9e3e051623b39dba69e98270951685e1b60d9f9e9969b50ccb6b"
+        },
+        "fractionalTwo": {
+          "count": 1,
+          "cases_sha256": "3274fea0e96f05804090bfb24dcbcfad93889f115d7ea1af773f0607f9e77cbd"
+        },
+        "fractionToDefault": {
+          "count": 1,
+          "cases_sha256": "d3c9e7e6c44902c065c1a29d9a35c7a24ed53f2c98a9ed4f8a85dc9b00dd52ea"
+        },
+        "largeInteger": {
+          "count": 1,
+          "cases_sha256": "d9610ceb394244de550f8a639fb21f141f8c3b3d2369a0f711eb2f1ead150f63"
+        },
+        "largestNumber": {
+          "count": 1,
+          "cases_sha256": "3433f73d1044331dbac31dc107065fd5bb9b4b1ad497445287e0a5b238151be2"
+        },
+        "nan": {
+          "count": 1,
+          "cases_sha256": "9a88d56ce61b02348273b165c559e096f37ed73dd656b89418695043277b3a6e"
+        },
+        "negativeFractionToDefault": {
+          "count": 1,
+          "cases_sha256": "09b7174ce80bd28ac345595bbcf03954819fab1427dd1d9bfd73b805b1c534bd"
+        },
+        "negativeInfinity": {
+          "count": 1,
+          "cases_sha256": "80284196825ea97b36e721436645e4b0fff4cfa0ee13b2a9188eb4666896690d"
+        },
+        "negativeLargestNumber": {
+          "count": 1,
+          "cases_sha256": "dff9cd640443d34aa44e2b3a876e63fd057f70c2ef9a0dd0933907d1bc2ce367"
+        },
+        "negativeRadix": {
+          "count": 1,
+          "cases_sha256": "92d36eb23a2fb9bae75335f9acb0f92417758b6e4d8db17bbef1748b77cd2b37"
+        },
+        "negativeUnsignedMaximum": {
+          "count": 1,
+          "cases_sha256": "46c858c1c88bbc73615bc6372de7ec320b91c7c7102133036809293e084b79a4"
+        },
+        "negativeWrap": {
+          "count": 1,
+          "cases_sha256": "b79bfecc65959b3b82dbcfe83256b597d5ed3961487b779c4ab89b97b6b97683"
+        },
+        "negativeWrapSixteen": {
+          "count": 1,
+          "cases_sha256": "a4680ef902213f8a0c0758c706ecf2e2696e2a3c8c7e6d0f0087bab302609e62"
+        },
+        "negativeWrapTwo": {
+          "count": 1,
+          "cases_sha256": "80071bc3198dc2744100bedb4d047f8244cbf18dca7145fc8ce235acaefaab04"
+        },
+        "negativeZero": {
+          "count": 1,
+          "cases_sha256": "ae55544fb045d8852c5ee695f2b969b476d0b162f76da37fb30f87ffa0da19b2"
+        },
+        "omitted": {
+          "count": 1,
+          "cases_sha256": "c5bfe23768163b97745d567ad48a33a35f480c298ddf9d2be52063a668724be4"
+        },
+        "positiveInfinity": {
+          "count": 1,
+          "cases_sha256": "a0f13c386082b473db4982ff44522ddd194af760028deb23b088b9be6407fee6"
+        },
+        "positiveWrap": {
+          "count": 1,
+          "cases_sha256": "97eb1fe31e3d3c8e3db059cf1a6b347f3f18e4bed4d64ecdb7c63640c846eb02"
+        },
+        "positiveWrapSixteen": {
+          "count": 1,
+          "cases_sha256": "e67d6c8924d7e4059f7baaae392caf06a875d21d93df4fcd3d15b0710b6c957a"
+        },
+        "positiveWrapTwo": {
+          "count": 1,
+          "cases_sha256": "b3f109a9a4e06e3bf66e884bcfb5fad2a56cfdfbc8c15a9b56331629668d1a58"
+        },
+        "positiveZero": {
+          "count": 1,
+          "cases_sha256": "473262819f567b90ab6d68cb753c83d28edf3233eef51e92e0b81912979ab7cc"
+        },
+        "radixOne": {
+          "count": 1,
+          "cases_sha256": "44757b9b29837ef8575d6024d80d8c9aa3fe3faa9c087c24c3554e2526b6ae7f"
+        },
+        "radixTooLarge": {
+          "count": 1,
+          "cases_sha256": "ea4b98a3c18716b34e66e081499276fec345269643edc7b2844d22f837fcd6b0"
+        },
+        "signedMaximum": {
+          "count": 1,
+          "cases_sha256": "da069ac70026349fad4390fcfb95610748e0e0d5aa3cb7a51ac2aa9817d6af4f"
+        },
+        "signedMinimum": {
+          "count": 1,
+          "cases_sha256": "61e8d863abdce2a1adcf068ffe83c2712b85f63353f827bdeb18e4ffcd2e1f87"
+        },
+        "unsignedMaximum": {
+          "count": 1,
+          "cases_sha256": "019bf570585429fa1b72103959f3ca795169be65b85859b628e42ca4ab5ff51b"
+        },
+        "wrapToInvalid": {
+          "count": 1,
+          "cases_sha256": "d1e163bfae4a600c1d244cee35c859a43a3443d27a0aa2b500d85e42761630fe"
+        }
+      },
+      "complete": true,
+      "count": 31
+    }
+  ]
+}
