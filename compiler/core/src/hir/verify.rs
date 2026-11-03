@@ -3608,6 +3608,17 @@ mod tests {
                 values,
                 vec![block(Vec::new(), ops, Terminator::Return(None))],
             );
+            program.funcs[0].return_type = HirType::Void;
+            program.globals.push(crate::hir::Global {
+                name: "saved_view".to_owned(),
+                ty: view.clone(),
+                written: None,
+                constant: false,
+                initial: 0.0,
+                exported: false,
+                deferred: true,
+                origin: origin(),
+            });
             program.view_classes = vec![ViewClass {
                 class: TypeId(1),
                 name: "Bytes".to_owned(),
@@ -3625,7 +3636,7 @@ mod tests {
                 .iter()
                 .any(|problem| matches!(problem, Invalid::MisplacedViewClass { .. }))
         };
-        assert!(!misplaced(&program(None)), "the control must verify");
+        verify(&program(None)).expect("the control must verify");
         let mut mismatched = program(None);
         mismatched.view_classes[0].element = HirType::Bool;
         assert!(
