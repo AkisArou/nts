@@ -1478,6 +1478,15 @@ pub fn is_clone(name: &str) -> bool {
 ///
 /// Returns the report the sites were chosen from.
 pub fn rewrite(program: &mut Program) -> Report {
+    rewrite_observing(program, |_, _| {})
+}
+
+/// Observe actual clone creation only when a diagnostic caller requests it.
+/// Ordinary rewriting keeps no lineage table or memory-analysis entries.
+pub(super) fn rewrite_observing(
+    program: &mut Program,
+    mut cloned_body: impl FnMut(&str, &str),
+) -> Report {
     let (report, sites) = judge(program);
     if sites.is_empty() {
         return report;
@@ -1498,6 +1507,7 @@ pub fn rewrite(program: &mut Program) -> Report {
     for member in &cloned {
         let mut clone = program.funcs[*member].clone();
         clone.name.push_str(CLONE_SUFFIX);
+        cloned_body(&program.funcs[*member].name, &clone.name);
         clone.exported = false;
         for op in &mut clone.values {
             if let OpKind::Call {

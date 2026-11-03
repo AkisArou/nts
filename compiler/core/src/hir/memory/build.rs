@@ -19,6 +19,10 @@ use super::{Home, Limits, Multiplicity, Reason, SiteId, Storage};
 #[path = "build/outcome_tests.rs"]
 mod outcome_tests;
 
+#[cfg(test)]
+#[path = "build/comparison_tests.rs"]
+mod comparison_tests;
+
 #[derive(Debug, Default)]
 #[expect(
     clippy::struct_excessive_bools,
@@ -3902,7 +3906,9 @@ impl<'p> Builder<'p> {
                     })
                     .sum::<usize>(),
             )
-            .saturating_add(lifetimes.proofs.len());
+            .saturating_add(lifetimes.proofs.len())
+            .saturating_add(self.contexts.len())
+            .saturating_add(self.calls.len());
         self.graph.charge_many(report_cost);
         self.stages
             .push(("report".to_owned(), self.graph.work - report_start));
@@ -4022,6 +4028,7 @@ impl<'p> Builder<'p> {
                     .origin
                     .clone(),
                 context: context.key.clone(),
+                context_id: super::ContextId(allocation.context),
                 multiplicity: if let Some(failure) = &self.graph.failure {
                     Multiplicity::Unbounded { witness: format!("no finite-instance proof: {failure:?}") }
                 } else if allocation.repeated {
@@ -4040,6 +4047,8 @@ impl<'p> Builder<'p> {
                 candidate_owner,
                 witness: witnesses,
                 legacy: Vec::new(),
+                legacy_variants: Vec::new(),
+                legacy_unknown: None,
             });
         }
         sites.sort_by(|a, b| (&a.id, &a.context).cmp(&(&b.id, &b.context)));
@@ -4140,7 +4149,33 @@ impl<'p> Builder<'p> {
             frontier, sites: sites.into_iter().collect(),
             bytes: RetainedBytes::Unknown { witness: "complete target footprint, live-instance and held-graph bound is not sealed".to_owned() },
         }).collect();
+        let comparison_inputs = super::comparison::Inputs {
+            contexts: self
+                .contexts
+                .iter()
+                .map(|context| super::comparison::Context {
+                    function: self.program.funcs[context.function].name.clone(),
+                    key: context.key.clone(),
+                    root: context.parent.is_none(),
+                    merged: context.fallback,
+                })
+                .collect(),
+            calls: self
+                .calls
+                .iter()
+                .map(|&(parent, child, operation)| super::comparison::Call {
+                    parent,
+                    child,
+                    operation,
+                })
+                .collect(),
+            complete: self.graph.failure.is_none(),
+        };
         Report {
+            comparison_inputs,
+            comparison_work: 0,
+            comparison_failure: None,
+            legacy_clones: Vec::new(),
             sites,
             values,
             slots,

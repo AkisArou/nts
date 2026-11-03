@@ -8273,8 +8273,13 @@ fn prepare_lowered(
     // which decides what lives in a frame, and before counting, which places
     // the reset (the region's handle dies after its last hold) and passes the
     // uncounted clones by.
+    let mut region_lineage = rustc_hash::FxHashMap::default();
     let mut regions = if options.provider == Memory::ReferenceCounting {
-        let report = regions::rewrite(&mut program);
+        let report = regions::rewrite_observing(&mut program, |original, variant| {
+            if memory.is_some() {
+                region_lineage.insert(variant.to_owned(), original.to_owned());
+            }
+        });
         // A function every call of which a region now serves is called only as
         // its clone, and a function nothing calls is a C `static` its compiler
         // warns about: `-Werror` refused json-parse's `ascendingByIndex`.
@@ -8346,7 +8351,7 @@ fn prepare_lowered(
     native_dispatch::plan(&mut program);
 
     if let Some(memory) = &mut memory {
-        memory.compare_legacy(&program, options.provider);
+        memory.compare_legacy(&program, options.provider, &region_lineage);
     }
 
     // Report against final value/function identities. This inventory only

@@ -8,6 +8,7 @@ pub struct Site {
     pub id: SiteId,
     pub origin: nts_semantic_schema::Origin,
     pub context: String,
+    pub context_id: super::ContextId,
     pub multiplicity: Multiplicity,
     pub retention_frontier: String,
     pub bytes_held_to_frontier: RetainedBytes,
@@ -17,7 +18,10 @@ pub struct Site {
     /// Caller interval awaiting independent retention/runtime reset proofs.
     pub candidate_owner: Option<String>,
     pub witness: Vec<String>,
+    /// Homes of the actual variants reached by this context, not other callers.
     pub legacy: Vec<String>,
+    pub legacy_variants: Vec<super::LegacyVariant>,
+    pub legacy_unknown: Option<String>,
 }
 
 #[derive(Debug, Clone)]
@@ -125,6 +129,10 @@ pub struct Proof {
 
 #[derive(Debug, Default)]
 pub struct Report {
+    pub(super) comparison_inputs: super::comparison::Inputs,
+    pub comparison_work: usize,
+    pub comparison_failure: Option<String>,
+    pub legacy_clones: Vec<(String, String)>,
     pub sites: Vec<Site>,
     pub values: Vec<Value>,
     pub slots: Vec<SlotFact>,
@@ -153,6 +161,94 @@ pub struct Report {
 }
 
 impl Report {
+    /// Read the producer's context identity without parsing a display label.
+    #[must_use]
+    pub fn context(&self, id: super::ContextId) -> Option<super::ContextView<'_>> {
+        self.comparison_inputs
+            .contexts
+            .get(id.0)
+            .map(|context| super::ContextView {
+                id,
+                function: &context.function,
+                key: &context.key,
+                root: context.root,
+                merged: context.merged,
+            })
+    }
+
+    pub fn context_views(&self) -> impl Iterator<Item = super::ContextView<'_>> {
+        self.comparison_inputs
+            .contexts
+            .iter()
+            .enumerate()
+            .map(|(at, context)| super::ContextView {
+                id: super::ContextId(at),
+                function: &context.function,
+                key: &context.key,
+                root: context.root,
+                merged: context.merged,
+            })
+    }
+
+    pub fn context_arrivals(&self) -> impl Iterator<Item = super::ContextArrival> + '_ {
+        self.comparison_inputs
+            .calls
+            .iter()
+            .map(|call| super::ContextArrival {
+                parent: super::ContextId(call.parent),
+                child: super::ContextId(call.child),
+                operation: call.operation,
+            })
+    }
+
+    fn render_legacy_contexts(&self, out: &mut String) {
+        let _ = writeln!(
+            out,
+            "legacy-comparison\twork={}\tfailure={:?}\tcomplete-inputs={}",
+            self.comparison_work, self.comparison_failure, self.comparison_inputs.complete
+        );
+        for (at, context) in self.comparison_inputs.contexts.iter().enumerate() {
+            let _ = writeln!(
+                out,
+                "context-lineage\t{at}\t{:?}\t{:?}\troot={}\tmerged={}",
+                context.function, context.key, context.root, context.merged
+            );
+        }
+        for call in &self.comparison_inputs.calls {
+            let _ = writeln!(
+                out,
+                "context-call\t{}\t%{}\t{}",
+                call.parent, call.operation.0, call.child
+            );
+        }
+        for (variant, original) in &self.legacy_clones {
+            let _ = writeln!(out, "legacy-clone\t{variant:?}\t{original:?}");
+        }
+    }
+
+    fn render_legacy_site(out: &mut String, site: &Site) {
+        for variant in &site.legacy_variants {
+            let _ = writeln!(
+                out,
+                "legacy-variant\t{:?}\t%{}\t{}\t{:?}\t{:?}\t{:?}\t{:?}",
+                site.id.function,
+                site.id.value,
+                site.context_id.0,
+                site.context,
+                site.id.storage,
+                variant.function,
+                variant.home
+            );
+        }
+        if let Some(reason) = &site.legacy_unknown {
+            let _ = writeln!(
+                out,
+                "legacy-unknown\t{:?}\t%{}\t{}\t{:?}\t{reason:?}",
+                site.id.function, site.id.value, site.context_id.0, site.context
+            );
+        }
+    }
+
     /// Stable, escaped TSV; never includes wall time, addresses or hash order.
     /// BTree-backed graph construction and canonical row sorts make this useful
     /// for byte-for-byte three-run comparisons, not just normalized totals.
@@ -161,7 +257,7 @@ impl Report {
         let mut out = String::new();
         let _ = writeln!(
             out,
-            "memory-v2\tops={}\tcontexts={}\tnodes={}\twork={}/{}\tedges={}/{}\tfailure={:?}",
+            "memory-v3\tops={}\tcontexts={}\tnodes={}\twork={}/{}\tedges={}/{}\tfailure={:?}",
             self.operations,
             self.contexts,
             self.nodes,
@@ -171,6 +267,7 @@ impl Report {
             self.edge_limit,
             self.failure
         );
+        self.render_legacy_contexts(&mut out);
         let _ = writeln!(out, "work-stages\t{:?}", self.stages);
         let _ = writeln!(
             out,
@@ -197,6 +294,7 @@ impl Report {
             let _ = writeln!(out, "alias-class\t{class:?}\t{members:?}");
         }
         for site in &self.sites {
+            Self::render_legacy_site(&mut out, site);
             let _ = writeln!(
                 out,
                 "site\t{:?}\t%{}\t{:?}\t{:?}\t{:?}\t{:?}\tlegacy={:?}\towner={:?}\tobligations={:?}\twitness={:?}\torigin={:?}\tretention={:?}\theld-bytes={:?}",

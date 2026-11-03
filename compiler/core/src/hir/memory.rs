@@ -5,11 +5,10 @@
 //! identity and semantic field identity, and weakly join all possible writes.
 //! In particular, a singleton *site* is never treated as a singleton instance.
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use super::{Memory, OpKind, Program};
+use super::{Memory, Program};
 
 mod build;
+mod comparison;
 mod events;
 mod graph;
 mod lifetime;
@@ -18,6 +17,7 @@ mod report;
 mod summary;
 
 pub use super::regions::placement::Storage;
+pub use comparison::{ContextArrival, ContextId, ContextView, Variant as LegacyVariant};
 pub use events::LaterWrite;
 pub use report::{
     CaptureWrite, Frontier, FunctionSummary, Outcome, Proof, Report, RetainedBytes, Retention,
@@ -146,43 +146,16 @@ impl<'p> Analysis<'p> {
     }
 }
 
-/// The legacy answer is observed after its rewrites. Names and value IDs are
-/// preserved by these rewrites; region clones add an explicit lineage suffix.
-/// Report-only operations introduced by counting are not source allocations.
+/// The legacy answer is observed along actual post-rewrite call edges. Clone
+/// identity comes from the writer that made the clone, never its printed name.
 impl Report {
-    pub(super) fn compare_legacy(&mut self, program: &Program, provider: Memory) {
-        let mut observed: BTreeMap<(String, u32), BTreeSet<String>> = BTreeMap::new();
-        for function in &program.funcs {
-            let region = super::regions::is_clone(&function.name);
-            let name = function
-                .name
-                .strip_suffix(super::regions::CLONE_SUFFIX)
-                .unwrap_or(&function.name);
-            for &id in function.blocks.iter().flat_map(|block| &block.ops) {
-                let kind = &function.value(id).kind;
-                let home = if region {
-                    "call-region"
-                } else if matches!(kind, OpKind::ObjectNew { frame: true })
-                    || matches!(kind, OpKind::Call { frame: Some(_), .. })
-                {
-                    "frame"
-                } else if matches!(provider, Memory::HostGc) {
-                    "host"
-                } else {
-                    "heap"
-                };
-                observed
-                    .entry((name.to_owned(), id.0))
-                    .or_default()
-                    .insert(home.to_owned());
-            }
-        }
-        for site in &mut self.sites {
-            site.legacy = observed
-                .get(&(site.id.function.clone(), site.id.value))
-                .map(|homes| homes.iter().cloned().collect())
-                .unwrap_or_default();
-        }
+    pub(super) fn compare_legacy(
+        &mut self,
+        program: &Program,
+        provider: Memory,
+        clones: &rustc_hash::FxHashMap<String, String>,
+    ) {
+        comparison::compare(self, program, provider, clones);
     }
 }
 
