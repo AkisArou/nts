@@ -4,17 +4,17 @@
 //! The flag is internal to the generated package, as are ordinary payload
 //! fields: source bodies live in Program, not in the class holding the field.
 use nts_core::hir::{HirType, Layout};
-use rustc_hash::{FxHashMap, FxHashSet};
+use rustc_hash::FxHashMap;
 
 use crate::{hierarchy, optional, program::JvmProgram, types};
 use nts_diagnostics::Diagnostic;
 use nts_jvm_emitter::{Kind, Pool, VType, code::Code};
 use nts_semantic_schema::Origin;
 
-/// Physical names are allocated once, against all user fields of the owner.
+/// Physical names use the same source property identity as the payload.
 /// An inherited field always asks its declaring owner for these names.
 #[derive(Debug, Default)]
-pub(crate) struct Names(FxHashMap<(usize, usize), String>);
+pub(crate) struct Names(FxHashMap<(usize, usize), Result<String, String>>);
 
 impl Names {
     pub(crate) fn new(program: &JvmProgram<'_>) -> Self {
@@ -29,25 +29,26 @@ impl Names {
             {
                 continue;
             }
-            let mut occupied: FxHashSet<_> = hierarchy::declared_names(program, layout)
-                .into_iter()
-                .collect();
             for (at, field) in layout.fields.iter().enumerate().skip(inherited) {
                 if !optional::split(&field.ty) {
                     continue;
                 }
-                let mut name = format!("n$nts$defined${at}");
-                while !occupied.insert(name.clone()) {
-                    name.push('$');
-                }
-                flags.insert((layout_at, at), name);
+                flags.insert(
+                    (layout_at, at),
+                    crate::member_identity::property(program, &field.name)
+                        .map(|identity| crate::generated_members::defined(&identity)),
+                );
             }
         }
         Self(flags)
     }
 
     pub(crate) fn flag(&self, program: &JvmProgram<'_>, owner: &Layout, at: usize) -> Option<&str> {
-        self.0.get(&(program.index(owner)?, at)).map(String::as_str)
+        self.0
+            .get(&(program.index(owner)?, at))?
+            .as_ref()
+            .ok()
+            .map(String::as_str)
     }
 }
 

@@ -179,11 +179,9 @@ JSON
     printf "%-24s %s\n" "$case" "the backend declined it"
     continue
   fi
-  if javap $nts_jdk_flags -p -cp "$out/nts/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
-    init='static { nts.gen.Program.module$init(); }'
-  else
-    init=''
-  fi
+  # nts-module-initializer: begin
+  init=$(sh "$root/tooling/android/module-initializer.sh" "$out/nts/classes")
+  # nts-module-initializer: end
   if [ -f "$dir/driver.java" ]; then
     # A case whose workload is not one call with one scalar ships its own, and
     # it is taken verbatim -- the same file `tooling/bench` compiles.

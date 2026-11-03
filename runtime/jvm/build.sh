@@ -31,7 +31,7 @@ jar_path=${1:-$root/nts-runtime.jar}
 out=$(mktemp -d "${TMPDIR:-/tmp}/nts-jvm-classes.XXXXXX")
 trap 'rm -rf "$out" "$out.list"' EXIT
 find "$root/src" -name '*.java' | sort > "$out/sources.txt"
-javac $nts_jdk_flags --release 8 -Xlint:-options -d "$out" @"$out/sources.txt"
+javac $nts_jdk_flags --release 8 -encoding UTF-8 -Xlint:-options -d "$out" @"$out/sources.txt"
 rm -f "$out/sources.txt"
 (
   cd "$out"

@@ -3582,6 +3582,7 @@ mod tests {
         program.view_classes = vec![ViewClass {
             class: TypeId(1),
             name: "Bytes".to_owned(),
+            source: None,
             element: HirType::NUMBER,
             base: None,
             species: None,
@@ -3731,6 +3732,7 @@ mod tests {
             program.view_classes = vec![ViewClass {
                 class: TypeId(1),
                 name: "Bytes".to_owned(),
+                source: None,
                 element: HirType::NUMBER,
                 base: None,
                 species: None,

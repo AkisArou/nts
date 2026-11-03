@@ -1618,7 +1618,7 @@ fn jvm_case(
         let _ = writeln!(
             driver,
             "    static {{ nts.gen.Program.{}(); }}",
-            nts_codegen_jvm::body::method_name(hir::lower::MODULE_INIT)
+            nts_codegen_jvm::module_init_method()
         );
     }
     let mut passed = Vec::new();

@@ -1,6 +1,7 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 public final class CalendarDrive {
     public static void main(String[] args) {
-        nts.gen.Program.module$init();
+        nts.gen.Program.¢nts$moduleInit();
         for (CalendarCases.Case sample : CalendarCases.CASES) {
             String text = nts.gen.Program.snapshot(sample.calendar, sample.day);
             if (!text.equals(sample.expected))

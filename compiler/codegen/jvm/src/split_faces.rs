@@ -125,9 +125,9 @@ pub(crate) fn interface_name(package: &str, layout: &Layout) -> String {
 
 /// The accessor a positional access to field `at` of a split face calls: one
 /// name, a getter `()T` and a setter `(T)V`.
-#[must_use]
-pub(crate) fn accessor(at: u32) -> String {
-    format!("nts$field${at}")
+pub(crate) fn accessor(program: &JvmProgram<'_>, face: &Layout, at: u32) -> Result<String, String> {
+    crate::member_identity::property(program, &face.fields[at as usize].name)
+        .map(|key| crate::generated_members::face_field(&key))
 }
 
 /// Whether split face `face` can hold a value of `layout`.
@@ -283,7 +283,7 @@ fn held(
     at: usize,
 ) -> Option<String> {
     let field = owner.fields.get(at)?;
-    let name = hierarchy::field_name(program, owner, at);
+    let name = hierarchy::field_name(program, owner, at)?;
     let ty = if plan.field(&types::class_name(package, owner), &name) {
         HirType::Float { bits: 64 }
     } else {
@@ -368,16 +368,13 @@ pub(crate) fn members<'a>(
                 face.name
             ));
         };
-        let member = program.selector(slot).map_or_else(
-            || {
-                hierarchy::declared_member(program, face, slot)
-                    .unwrap_or_else(|| hierarchy::member_name(&name))
-            },
-            hierarchy::member_name,
-        );
-        let compatibility = program
-            .guarded_member(slot)
-            .and_then(|_| hierarchy::original_declared_member(program, face, slot));
+        let member = hierarchy::declared_member(program, face, slot)?
+            .unwrap_or_else(|| hierarchy::member_name(&name));
+        let compatibility = program.guarded_member(slot).and_then(|_| {
+            hierarchy::original_declared_member(program, face, slot)
+                .ok()
+                .flatten()
+        });
         push_slot(&mut out, slot, member, descriptor, compatibility);
     }
 
@@ -402,7 +399,7 @@ pub(crate) fn members<'a>(
                     )
                 })?;
                 out.push(Declared {
-                    member: accessor(at),
+                    member: accessor(program, face, at)?,
                     descriptor,
                     kind: Member::Field { at, writes },
                     compatibility: None,
@@ -417,13 +414,13 @@ pub(crate) fn members<'a>(
             ));
         };
         out.push(Declared {
-            member: accessor(at),
+            member: accessor(program, face, at)?,
             descriptor: format!("(){held}"),
             kind: Member::Field { at, writes: false },
             compatibility: None,
         });
         out.push(Declared {
-            member: accessor(at),
+            member: accessor(program, face, at)?,
             descriptor: format!("({held})V"),
             kind: Member::Field { at, writes: true },
             compatibility: None,
@@ -841,7 +838,12 @@ fn plain_field_body(
             );
         }
     };
-    let name = hierarchy::field_name(program, owner, at as usize);
+    let name = hierarchy::field_name(program, owner, at as usize).ok_or_else(|| {
+        crate::name_refusal(
+            program,
+            "a split field has unavailable source identity".into(),
+        )
+    })?;
     let owner_class = types::class_name(package, owner);
     let mut locals = vec![VType::Object(class)];
     if writes {

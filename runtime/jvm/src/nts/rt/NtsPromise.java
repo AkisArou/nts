@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /** Single-threaded promise state with FIFO, asynchronous resumptions. */
@@ -147,7 +148,7 @@ public final class NtsPromise {
         }
 
         @Override
-        public void resume() {
+        public void ¢nts$resume() {
             subscribe(inner, new AdoptionSettled(outer, inner));
         }
     }
@@ -163,7 +164,7 @@ public final class NtsPromise {
         }
 
         @Override
-        public void resume() {
+        public void ¢nts$resume() {
             settle(outer, inner.state, inner.settled);
         }
     }
@@ -294,7 +295,7 @@ public final class NtsPromise {
             this.group = group;
             this.index = index;
         }
-        @Override public void resume() {
+        @Override public void ¢nts$resume() {
             if (group == null) {
                 settle(result, element.state == REJECTED ? REJECTED : FULFILLED, element.settled);
             } else if (element.state == REJECTED) {

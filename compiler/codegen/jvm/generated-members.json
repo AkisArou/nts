@@ -1,0 +1,19 @@
+{
+  "version": 1,
+  "fixed": {
+    "PRINT": "¢nts$print",
+    "NAME": "¢nts$name",
+    "CLASS_NAME": "¢nts$class",
+    "PRESENCE": "¢nts$presence",
+    "PRESENCE_MEMBER": "¢nts$presenceGet",
+    "ENV_MEMBER": "¢nts$env",
+    "BIND_LANE": "¢nts$bindLane",
+    "LANE": "¢nts$lane",
+    "RESUME": "¢nts$resume",
+    "ERASED_CALL": "¢nts$call",
+    "RAISING_CALL": "¢nts$callRaises",
+    "MODULE_INIT": "¢nts$moduleInit",
+    "INTERFACE_HELD": "¢nts$interface",
+    "RAISING_PAIRS": "¢nts$raisingPairs"
+  }
+}

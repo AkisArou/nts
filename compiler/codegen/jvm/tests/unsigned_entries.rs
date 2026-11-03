@@ -72,10 +72,7 @@ fn function(name: &str, signed: bool, forward: bool) -> hir::Func {
 
 #[test]
 fn unsigned_entries_use_long_and_internal_forwarding_uses_int() {
-    for (authored, implementation) in [
-        ("unsigned$nts$uint32", "unsigned$nts$uint32$1"),
-        ("unsigned$nts$control", "unsigned$nts$uint32"),
-    ] {
+    for authored in ["unsigned$nts$uint32", "unsigned$nts$control"] {
         let program = hir::Program {
             funcs: vec![
                 function("unsigned", false, false),
@@ -94,12 +91,14 @@ fn unsigned_entries_use_long_and_internal_forwarding_uses_int() {
             .map(|class| nts_jvm_emitter::read::class_file(&class.bytes).unwrap())
             .find(|class| class.binary_name == "nts/gen/Program")
             .unwrap();
+        let implementation = common::implementation_name(&program, "unsigned");
+        let forwarded = common::implementation_name(&program, "forward");
         for (name, descriptor) in [
             ("unsigned", "(J)J"),
-            (implementation, "(I)I"),
+            (implementation.as_str(), "(I)I"),
             (authored, "(I)I"),
             ("forward", "(J)J"),
-            ("forward$nts$uint32", "(I)I"),
+            (forwarded.as_str(), "(I)I"),
             ("signed", "(I)I"),
         ] {
             assert!(
@@ -131,7 +130,7 @@ public class Drive {
   public static void main(String[] args) { Program.INTERNAL(0); }
 }
 "
-            .replace("INTERNAL", implementation),
+            .replace("INTERNAL", &implementation),
             false,
         );
     }
@@ -216,7 +215,7 @@ fn public_slot_limit_preserves_internal_bodies_and_refusal_stubs() {
     for (name, count) in [("many127", 127), ("many128", 128), ("declined128", 128)] {
         assert!(
             class.methods.iter().any(|method| {
-                method.name == format!("{name}$nts$uint32")
+                method.name == common::implementation_name(&program, name)
                     && method.descriptor == format!("({})I", "I".repeat(count))
             }),
             "missing internal {name}"

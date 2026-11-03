@@ -71,6 +71,7 @@ pub(crate) fn of(package: &str, program: &JvmProgram<'_>, layout: &Layout) -> Op
     let func = program.funcs.iter().find(|f| &f.name == name)?;
     let erased = crate::instance_descriptor(package, program, func)?;
     let member = hierarchy::declared_member(program, layout, slot as usize)
+        .ok()?
         .unwrap_or_else(|| hierarchy::member_name(name));
     // Every value the typed face boxes and a lambda unboxes has to be one of
     // the two this file can convert; anything else publishes no face.

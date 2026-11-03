@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 import java.lang.ref.ReferenceQueue;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
@@ -77,7 +78,7 @@ public final class EnvTest {
         check(NtsEnv.launch(env) == null, "the ceiling did not hold");
 
         final boolean[] ran = { false };
-        NtsInbox.post(delivered, new NtsResumable() { public void resume() { ran[0] = true; } });
+        NtsInbox.post(delivered, new NtsResumable() { public void ¢nts$resume() { ran[0] = true; } });
         check(NtsEnv.deliver(env) == 1.0, "delivery did not run exactly one completion");
         check(ran[0], "the completion did not run");
         NtsEnv.cancel(env, cancelled);
@@ -127,7 +128,7 @@ public final class EnvTest {
             Thread worker = new Thread(new Runnable() {
                 public void run() {
                     try { Thread.sleep(60); } catch (InterruptedException e) { Thread.currentThread().interrupt(); }
-                    NtsInbox.post(slot, new NtsResumable() { public void resume() { arrived[0] = true; } });
+                    NtsInbox.post(slot, new NtsResumable() { public void ¢nts$resume() { arrived[0] = true; } });
                 }
             });
             long start = System.nanoTime();
@@ -266,7 +267,7 @@ public final class EnvTest {
         Object token = new Object();
         final Object[] captured = { token };
         NtsEnv.postDelayed(env, new NtsCallback() { public void call() { captured[0].hashCode(); } }, 1000, true);
-        NtsEnv.microtask(env, new NtsResumable() { public void resume() { captured[0].hashCode(); } });
+        NtsEnv.microtask(env, new NtsResumable() { public void ¢nts$resume() { captured[0].hashCode(); } });
         Named callbackRef = new Named(token, "its callbacks");
         Named envRef = new Named(env, "the closed environment itself");
         NtsEnv.close(env);

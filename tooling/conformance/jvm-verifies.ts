@@ -1,4 +1,6 @@
 import { vmToolFlags } from "../jvm/vm-flags.ts";
+import memberCatalogue from "../../compiler/codegen/jvm/member-names.json" with {type: "json"};
+import {sourceName, withoutRecordedMethods} from "../../compiler/codegen/jvm/member-grammar.ts";
 // Does what `emit-jvm` emits for the runtime pass the JVM's verifier?
 //
 //   node tooling/conformance/jvm-verifies.ts [project ...]   (default: runtime/node/*, runtime/web-platform)
@@ -76,8 +78,9 @@ import { vmToolFlags } from "../jvm/vm-flags.ts";
 // prints "remove it".
 //
 // **A pin, for a fix nothing else guards:** `project<TAB>why<TAB>pin:
-// invalid=<site>[,<site>...]`, or `pin: invalid=none`. A site is
-// `Class.method` from the verifier's `Location:`. The module's INVALID sites
+// invalid=<site>[,<site>...]`, `pin: invalid=[["Class","opaque method"]]`,
+// or `pin: invalid=none`. Legacy sites use `Class.method`; opaque method fields
+// come from the actual definition selected by the verifier's `Location:`. The module's INVALID sites
 // must be exactly that set, order-free: one the pin does not name fails, a
 // pinned one gone fails, and a pinned module that verifies whole fails rather
 // than printing "remove it" -- the guard is gone with it, which is the
@@ -282,7 +285,13 @@ function readVerify(text) {
   const summary = /^VERIFIED (\d+) OF (\d+)$/m.exec(text);
   if (!summary) return null;
   const lines = (kind) => text.split("\n").filter((l) => l.startsWith(`${kind} `)).map((l) => l.slice(kind.length + 1));
-  return { invalid: lines("INVALID"), missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), shadowed: [...lines("SHADOWED"), ...lines("UNFILLED").map((l) => `unfilled ${l}`)], verified: Number(summary[1]), total: Number(summary[2]) };
+  const invalid = lines("INVALID");
+  const unpaired = lines("UNPAIRED");
+  for (const line of invalid) {
+    try { siteOf(line); }
+    catch (error) { unpaired.push(error.message); }
+  }
+  return { invalid, unpaired, missing: lines("MISSING"), unresolved: lines("UNRESOLVED"), shadowed: [...lines("SHADOWED"), ...lines("UNFILLED").map((l) => `unfilled ${l}`)], verified: Number(summary[1]), total: Number(summary[2]) };
 }
 
 /**
@@ -297,20 +306,48 @@ function parseKnown(text) {
     const [project, why = "", field, ...rest] = line.split("\t");
     let pin = null;
     if (field !== undefined || rest.length > 0) {
-      const m = /^pin: invalid=(none|[\w$]+\.[\w$<>]+(?:,[\w$]+\.[\w$<>]+)*)$/.exec(field ?? "");
-      if (!m || rest.length > 0) throw new Error(`cannot read the pin on ${project}: \`${[field, ...rest].join("\t")}\``);
-      pin = new Set(m[1] === "none" ? [] : m[1].split(","));
+      try {
+        if (rest.length > 0 || !field?.startsWith("pin: invalid=")) throw new Error("bad pin field");
+        const value = field.slice("pin: invalid=".length);
+        let sites;
+        if (value === "none") sites = [];
+        else if (value.startsWith("[")) sites = JSON.parse(value);
+        else sites = value.split(",").map((site) => site.split("."));
+        if (!Array.isArray(sites) || (value !== "none" && sites.length === 0)) throw new Error("no pinned site");
+        for (const site of sites) {
+          if (!Array.isArray(site) || site.length !== 2 || !site.every((part) => typeof part === "string" && part.length > 0)) throw new Error("bad pinned site");
+          if (site[1].includes(memberCatalogue.prefix)) {
+            const decoded = sourceName(memberCatalogue, site[1]);
+            if (decoded?.role !== "body" || decoded.key.length === 0) throw new Error("pin is not a canonical source-body identity");
+          }
+        }
+        pin = new Set(sites.map((site) => JSON.stringify(site)));
+      } catch {
+        throw new Error(`cannot read the pin on ${project}: \`${[field, ...rest].join("\t")}\``);
+      }
     }
     entries.set(project, { why, pin });
   }
   return entries;
 }
 
-/** An INVALID line's site: `Class.method` from the verifier's `Location:`, else the class. */
+/** Identity fields are opaque class-file values; no method-name grammar belongs here. */
 function siteOf(line) {
-  const at = /Location: (?:[\w$]+\/)*([\w$]+)\.([\w$<>]+)\(/.exec(line);
-  return at ? `${at[1]}.${at[2]}` : (line.split(" ")[0] ?? "").split(".").pop();
+  let value;
+  try { value = JSON.parse(line); }
+  catch { throw new Error("unreadable structured INVALID finding"); }
+  if (!value || typeof value.class !== "string" || value.class.length === 0
+      || !(value.method === null || typeof value.method === "string" && value.method.length > 0)
+      || !(value.descriptor === null || typeof value.descriptor === "string" && value.descriptor.length > 0)
+      || !(value.offset === null || Number.isInteger(value.offset) && value.offset >= 0)
+      || typeof value.kind !== "string" || typeof value.message !== "string"
+      || ((value.method === null) !== (value.descriptor === null))) {
+    throw new Error("incomplete structured INVALID identity");
+  }
+  return JSON.stringify([value.class.split("/").pop(), value.method]);
 }
+
+function displaySite(site) { return JSON.parse(site).join("."); }
 
 /** Why a pinned module's INVALID lines break its pin, or null when they match it. */
 function pinBroken(pin, invalid) {
@@ -318,8 +355,8 @@ function pinBroken(pin, invalid) {
   const extra = [...sites].filter((s) => !pin.has(s));
   const gone = [...pin].filter((s) => !sites.has(s));
   const why = [];
-  if (extra.length > 0) why.push(`INVALID at ${extra.join(", ")}, which the pin does not name`);
-  if (gone.length > 0) why.push(`the pinned INVALID at ${gone.join(", ")} is gone`);
+  if (extra.length > 0) why.push(`INVALID at ${extra.map(displaySite).join(", ")}, which the pin does not name`);
+  if (gone.length > 0) why.push(`the pinned INVALID at ${gone.map(displaySite).join(", ")} is gone`);
   return why.length > 0 ? why.join("; ") : null;
 }
 
@@ -363,7 +400,10 @@ function selfTest(printing) {
     if (verifierFailure(result, summary) !== expected) throw new Error("verifier status self-test failed");
   }
 
-  const site = (s) => `nts.gen.Program VerifyError: Bad type on operand stack Exception Details: Location: nts/gen/${s}(Lnts/rt/NtsValue;)V @16: invokestatic`;
+  const site = (s) => {
+    const at = s.indexOf(".");
+    return JSON.stringify({ class: `nts/gen/${s.slice(0, at)}`, method: s.slice(at + 1), descriptor: "(Lnts/rt/NtsValue;)V", offset: 16, kind: "VerifyError", message: "Bad type on operand stack" });
+  };
   const known = parseKnown([
     "m/pinned\t(A) held\tpin: invalid=Program.convertQueuingStrategyHighWaterMark",
     "m/none\t(E) only missing\tpin: invalid=none",
@@ -397,11 +437,43 @@ function selfTest(printing) {
     ["a pin misspelt", "m/x\twhy\tpin: invalid-none"],
     ["a site with no method", "m/x\twhy\tpin: invalid=Program"],
     ["a fourth field", "m/x\twhy\tpin: invalid=none\textra"],
+    ["an empty identity list", "m/x\twhy\tpin: invalid=[]"],
+    ["an incomplete opaque identity", 'm/x\twhy\tpin: invalid=[["Program"]]'],
   ]) {
     let refused = false;
     try { parseKnown(text); } catch (error) { refused = error.message.startsWith("cannot read the pin on m/x"); }
     if (!refused) bad++;
     if (printing) console.log(`  ${refused ? "ok  " : "FAIL"}  ${name}: ${refused ? "cannot read the pin" : "read, and should not have been"}`);
+  }
+  const opaque = memberCatalogue.prefix + "body$東京$23$parse$2e$";
+  const opaquePin = parseKnown(`m/opaque\twhy\tpin: invalid=${JSON.stringify([["Program", opaque]])}`).get("m/opaque").pin;
+  const opaqueHeld = pinBroken(opaquePin, [site(`Program.${opaque}`)]) === null;
+  if (!opaqueHeld) bad++;
+  if (printing) console.log(`  ${opaqueHeld ? "ok  " : "FAIL"}  opaque Unicode and punctuation method identity holds`);
+  const invented = memberCatalogue.prefix + "body$invented";
+  const inventedPin = parseKnown(`m/invented\twhy\tpin: invalid=${JSON.stringify([["Program", invented]])}`).get("m/invented").pin;
+  const inventedRejected = pinBroken(inventedPin, [site(`Program.${opaque}`)]) !== null;
+  if (!inventedRejected) bad++;
+  if (printing) console.log(`  ${inventedRejected ? "ok  " : "FAIL"}  a valid-grammar invented function cannot replace the actual definition`);
+  const record = `m/record\twhy\tpin: invalid=${JSON.stringify([["Program", opaque]])}`;
+  const recordMasked = !withoutRecordedMethods(memberCatalogue, record).includes(memberCatalogue.prefix);
+  const reasonScanned = withoutRecordedMethods(memberCatalogue, record.replace("why", opaque)).includes(memberCatalogue.prefix);
+  let badEscapeRejected = false;
+  try { withoutRecordedMethods(memberCatalogue, record.replace("$23$", "$023$")); }
+  catch { badEscapeRejected = true; }
+  const recordSchema = recordMasked && reasonScanned && badEscapeRejected
+    && sourceName(memberCatalogue, opaque)?.key === "東京#parse.";
+  if (!recordSchema) bad++;
+  if (printing) console.log(`  ${recordSchema ? "ok  " : "FAIL"}  only canonical measured-method fields escape the producer-prefix scan`);
+  for (const [name, output, expected] of [
+    ["an unrecognized catalogue pair", "UNPAIRED Program missing catalogue pair attribute\nVERIFIED 1 OF 1\n", 1],
+    ["a malformed structured identity", 'INVALID {"class":"Program"}\nVERIFIED 0 OF 1\n', 1],
+    ["an unstructured invalid finding", "INVALID Program VerifyError: legacy diagnostic\nVERIFIED 0 OF 1\n", 1],
+    ["a complete structured identity", `INVALID ${site(`Program.${opaque}`)}\nVERIFIED 0 OF 1\n`, 0],
+  ]) {
+    const fired = readVerify(output).unpaired.length === expected;
+    if (!fired) bad++;
+    if (printing) console.log(`  ${fired ? "ok  " : "FAIL"}  ${name}: observer availability remains explicit`);
   }
   const conflict = "NTS4001 `EchoInput` needs distinct dispatch bodies `EchoInput#feed@NullInput` and `EchoInput#feed@UndefinedInput` for JVM member `feed(Ljava/lang/String;)Lnts/rt/NtsValue;`; one member name and descriptor cannot distinguish these interface slots";
   const classified = declineShape(conflict) === "dispatch conflict <any>.feed(Ljava/lang/String;)Lnts/rt/NtsValue;"
@@ -542,6 +614,11 @@ async function check(project, slot) {
   if (read.total === 0) {
     unmeasured.push(`${project}: emit-jvm wrote no class`);
     retainFailure(project, out, emit, v, "zero classes measured");
+    return;
+  }
+  if (read.unpaired.length > 0) {
+    const saved = retainFailure(project, out, emit, v, "unreadable compiler/verifier identity relation");
+    unmeasured.push(`${project}: ${read.unpaired.join("; ")}; full evidence ${saved}`);
     return;
   }
   classes += read.total;

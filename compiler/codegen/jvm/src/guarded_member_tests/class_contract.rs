@@ -122,6 +122,13 @@ fn stateful(program: &mut Program) {
 }
 
 fn remap(program: &mut Program) {
+    crate::member_identity::remap_rows(
+        program,
+        &[
+            (0, u32::try_from(CONTRACT).unwrap()),
+            (1, u32::try_from(CLASS).unwrap()),
+        ],
+    );
     for layout in &mut program.layouts {
         let old = std::mem::take(&mut layout.methods);
         layout.methods = vec![None; CONTRACT + 1];
@@ -210,7 +217,9 @@ fn assert_actual_conflict(facts: &JvmProgram<'_>) {
     assert_eq!(bad.methods[CLASS].as_deref(), Some(super::CLASS_STOP));
     for slot in [CLASS, CONTRACT] {
         assert_eq!(
-            hierarchy::original_declared_member(facts, bad, slot).as_deref(),
+            hierarchy::original_declared_member(facts, bad, slot)
+                .unwrap()
+                .as_deref(),
             Some("step")
         );
         assert!(
@@ -300,7 +309,8 @@ fn owned_class_contract_has_class_receiver_calls_and_two_distinct_entries() {
         assert_ne!(face.access & access::ABSTRACT, 0);
         assert_eq!(face.fields.len(), 4);
         assert_ne!(method(&face, "step", ABI).access & access::ABSTRACT, 0);
-        let internal = guarded_members::internal_name(CONTRACT);
+        let internal =
+            guarded_members::internal_name(&JvmProgram::new(&subject), CONTRACT).unwrap();
         let wrapper = method(&face, &internal, ABI);
         assert_eq!(wrapper.access & access::ABSTRACT, 0);
         assert!(wrapper.code.as_ref().unwrap().bytes.contains(&0xb6));
@@ -438,6 +448,7 @@ fn class_contract_requires_unique_owned_abstract_interface_identity() {
     nominal.classes.push(ClassIdentity {
         symbol: 99,
         name: "Face".into(),
+        source: None,
         types: vec![TypeId(2)],
     });
     refused("nominal", &nominal);

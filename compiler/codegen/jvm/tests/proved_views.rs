@@ -14,22 +14,6 @@ use nts_frontend_ts::Frontend;
 
 mod common;
 
-/// The bytecode of `name` and every specialization made of it.
-fn method(listing: &str, name: &str) -> String {
-    let mut body = String::new();
-    let mut inside = false;
-    for line in listing.lines() {
-        if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(");") {
-            inside = line.contains(&format!(" {name}(")) || line.contains(&format!(" {name}$"));
-        } else if inside {
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    assert!(!body.is_empty(), "no `{name}` in:\n{listing}");
-    body
-}
-
 #[test]
 fn a_proven_view_access_takes_the_proved_accessor() {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -76,13 +60,13 @@ fn a_proven_view_access_takes_the_proved_accessor() {
     );
     let listing = String::from_utf8_lossy(&listed.stdout);
 
-    let sum = method(&listing, "sumGuarded");
+    let sum = common::implementation_bodies(&listing, &program, "sumGuarded");
     assert!(
         sum.contains("nts/rt/NtsViewU8.getProved:(Lnts/rt/NtsViewU8;I)I")
             && !sum.contains("nts/rt/NtsViewU8.getInt:"),
         "the proven read went through the checking accessor:\n{sum}"
     );
-    let scale = method(&listing, "scaleGuarded");
+    let scale = common::implementation_bodies(&listing, &program, "scaleGuarded");
     assert!(
         scale.contains("nts/rt/NtsViewF64.setProved:(Lnts/rt/NtsViewF64;ID)V")
             && scale.contains("nts/rt/NtsViewF64.getProved:(Lnts/rt/NtsViewF64;I)D")
@@ -96,7 +80,7 @@ fn a_proven_view_access_takes_the_proved_accessor() {
         "readAfterAResize",
         "scan",
     ] {
-        let body = method(&listing, name);
+        let body = common::implementation_bodies(&listing, &program, name);
         assert!(
             body.contains("nts/rt/NtsViewU8.getInt:") && !body.contains("getProved"),
             "`{name}` reads after a call that can move the buffer, unchecked:\n{body}"

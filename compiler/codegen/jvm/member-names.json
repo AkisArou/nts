@@ -1,0 +1,241 @@
+{
+  "version": 1,
+  "scope": "JVM member names only; generated class names and class-file paths keep their existing authority.",
+  "prefix": "¢nts$",
+  "roles": [
+    {
+      "rust": "PRINT",
+      "stem": "print",
+      "key": "none"
+    },
+    {
+      "rust": "NAME",
+      "stem": "name",
+      "key": "none"
+    },
+    {
+      "rust": "CLASS_NAME",
+      "stem": "class",
+      "key": "none"
+    },
+    {
+      "rust": "PRESENCE",
+      "stem": "presence",
+      "key": "none"
+    },
+    {
+      "rust": "PRESENCE_MEMBER",
+      "stem": "presenceGet",
+      "key": "none"
+    },
+    {
+      "rust": "ENV_MEMBER",
+      "stem": "env",
+      "key": "none"
+    },
+    {
+      "rust": "BIND_LANE",
+      "stem": "bindLane",
+      "key": "none"
+    },
+    {
+      "rust": "LANE",
+      "stem": "lane",
+      "key": "none"
+    },
+    {
+      "rust": "RESUME",
+      "stem": "resume",
+      "key": "none"
+    },
+    {
+      "rust": "ERASED_CALL",
+      "stem": "call",
+      "key": "none"
+    },
+    {
+      "rust": "RAISING_CALL",
+      "stem": "callRaises",
+      "key": "none"
+    },
+    {
+      "rust": "MODULE_INIT",
+      "stem": "moduleInit",
+      "key": "none"
+    },
+    {
+      "rust": "INTERFACE_HELD",
+      "stem": "interface",
+      "key": "none"
+    },
+    {
+      "rust": "storage_field",
+      "stem": "field",
+      "key": "name",
+      "suffix": "payload"
+    },
+    {
+      "rust": "defined",
+      "stem": "field",
+      "key": "name",
+      "suffix": "defined"
+    },
+    {
+      "rust": "global",
+      "stem": "global",
+      "key": "name"
+    },
+    {
+      "rust": "body",
+      "stem": "body",
+      "key": "name"
+    },
+    {
+      "rust": "guarded_dispatch",
+      "stem": "dispatch",
+      "key": "name"
+    },
+    {
+      "rust": "face_field",
+      "stem": "field",
+      "key": "name",
+      "suffix": "accessor"
+    },
+    {
+      "rust": "template",
+      "stem": "template",
+      "key": "name"
+    },
+    {
+      "rust": "closure",
+      "stem": "closure",
+      "key": "name"
+    },
+    {
+      "rust": "erased_closure",
+      "stem": "erasedClosure",
+      "key": "name"
+    },
+    {
+      "rust": "RAISING_PAIRS",
+      "stem": "raisingPairs",
+      "key": "none"
+    }
+  ],
+  "java_templates": [
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsClassNamed.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsClassNamed.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsEnv.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsEnv.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsForeign.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsForeign.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsInbox.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsInbox.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsLaneBound.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsLaneBound.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsNamed.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsNamed.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsPresence.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsPresence.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsPrintable.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsPrintable.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsPromise.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsPromise.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsResumable.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsResumable.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsRuntime.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsRuntime.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsSocket.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsSocket.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsValue.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsValue.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/tests/nts/rt/RuntimeRegression.java.in",
+      "output": "runtime/jvm/tests/nts/rt/RuntimeRegression.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/NtsMain.java.in",
+      "output": "runtime/jvm/src/nts/rt/NtsMain.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/src/nts/rt/Check.java.in",
+      "output": "runtime/jvm/src/nts/rt/Check.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/compiler/codegen/jvm/tests/intrinsics/Drive.java.in",
+      "output": "compiler/codegen/jvm/tests/intrinsics/Drive.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/compiler/codegen/jvm/tests/inbox/Stress.java.in",
+      "output": "compiler/codegen/jvm/tests/inbox/Stress.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/compiler/codegen/jvm/tests/inbox/CloseParkWindowTest.java.in",
+      "output": "compiler/codegen/jvm/tests/inbox/CloseParkWindowTest.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/compiler/codegen/jvm/tests/env/CloseDelayTest.java.in",
+      "output": "compiler/codegen/jvm/tests/env/CloseDelayTest.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/compiler/codegen/jvm/tests/env/CloseRaceTest.java.in",
+      "output": "compiler/codegen/jvm/tests/env/CloseRaceTest.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/compiler/codegen/jvm/tests/env/EnvTest.java.in",
+      "output": "compiler/codegen/jvm/tests/env/EnvTest.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/tooling/conformance/ecmascript/icu-compiled/DurationDrive.java.in",
+      "output": "tooling/conformance/ecmascript/icu-compiled/DurationDrive.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/tooling/conformance/ecmascript/icu-compiled/Drive.java.in",
+      "output": "tooling/conformance/ecmascript/icu-compiled/Drive.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/tooling/conformance/ecmascript/icu-compiled/CalendarDrive.java.in",
+      "output": "tooling/conformance/ecmascript/icu-compiled/CalendarDrive.java"
+    },
+    {
+      "template": "runtime/jvm/member-templates/tooling/conformance/JvmVerify.java.in",
+      "output": "tooling/conformance/JvmVerify.java"
+    }
+  ],
+  "observer": {
+    "legacy_raising_suffix": "$raises"
+  },
+  "name_escape": {
+    "ascii_literal": "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_-",
+    "escaped_non_ascii": [
+      8204,
+      8205
+    ]
+  }
+}

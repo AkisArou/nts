@@ -35,13 +35,13 @@ type Group<'a> = Vec<Row<'a>>;
 // Source names always double a literal currency marker, or introduce it with
 // the existing u200c/u200d escape. This single-marker namespace is disjoint;
 // currency letters are also valid DEX member characters. Never re-mangle it.
-pub(super) fn internal_name(slot: usize) -> String {
-    format!("¢nts$dispatch${slot}")
+pub(super) fn internal_name(program: &JvmProgram<'_>, slot: usize) -> Result<String, String> {
+    program.dispatch_name(slot)
 }
 
 #[derive(Debug)]
 pub(super) struct Member {
-    pub name: String,
+    pub name: Result<String, String>,
     pub default_owner: usize,
     pub kind: ContractKind,
 }
@@ -111,7 +111,7 @@ pub(super) fn plan(program: &JvmProgram<'_>) -> FxHashMap<usize, Member> {
             Some((
                 slot,
                 Member {
-                    name: internal_name(slot),
+                    name: internal_name(program, slot),
                     default_owner,
                     kind,
                 },
@@ -220,7 +220,10 @@ fn conflicts<'a>(
             let Some(descriptor) = descriptor.as_ref() else {
                 continue;
             };
-            let Some(member) = hierarchy::original_declared_member(program, layout, slot) else {
+            let Some(member) = hierarchy::original_declared_member(program, layout, slot)
+                .ok()
+                .flatten()
+            else {
                 continue;
             };
             let contract = if contracts.reaches(program, layout, slot) {

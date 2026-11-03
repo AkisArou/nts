@@ -35,6 +35,9 @@ pub struct JvmProgram<'a> {
     /// Each field family slot's declared accessor, which is what a call
     /// through the slot names; see [`Self::selector`].
     selectors: FxHashMap<u32, (&'a str, Option<TypeId>)>,
+    /// Existing field-family and provided-generator slots are implementation
+    /// protocols, distinct from authored Java method contracts.
+    protocol_slots: FxHashSet<usize>,
     /// Actual first-parameter types of source-published missing-field defaults
     /// installed at field-family slots. Source faces and row receivers differ.
     selector_receivers: FxHashMap<&'a str, TypeId>,
@@ -48,6 +51,8 @@ pub struct JvmProgram<'a> {
     global_fields: Vec<String>,
     /// One method namespace for public names and allocated internal bodies.
     implementation_names: FxHashMap<&'a str, String>,
+    /// The exact existing alias/namespace Java publication population.
+    published: FxHashSet<&'a str>,
     /// Per layout, its proved declared interface parents and whether its
     /// whole declared chain is proved; see [`Self::declared_parents`].
     declared: DeclaredAncestry,
@@ -224,6 +229,7 @@ impl<'a> JvmProgram<'a> {
             .map(|func| (func.name.as_str(), func))
             .collect();
         let mut live = FxHashSet::default();
+        let protocol_slots = protocol_slots(program, selectors.keys().copied());
         let mut selector_receivers = FxHashMap::default();
         for layout in &program.layouts {
             for (slot, entry) in layout.methods.iter().enumerate() {
@@ -244,6 +250,8 @@ impl<'a> JvmProgram<'a> {
                 }
             }
         }
+        let published = crate::entry::published(program);
+        let implementation_names = crate::entry::implementation_names(program, &published);
         let mut facts = Self {
             program,
             by_type,
@@ -254,11 +262,13 @@ impl<'a> JvmProgram<'a> {
             members: FxHashMap::default(),
             implemented: FxHashMap::default(),
             selectors,
+            protocol_slots,
             selector_receivers,
             live,
             positional: FxHashSet::default(),
             global_fields: global_fields(program),
-            implementation_names: crate::entry::implementation_names(program),
+            implementation_names,
+            published,
             declared: DeclaredAncestry::default(),
             field_components: crate::field_storage::Names::default(),
             fields: crate::hierarchy::Fields::default(),
@@ -296,7 +306,7 @@ impl<'a> JvmProgram<'a> {
         self.fields.name(self.index(owner)?, at)
     }
 
-    pub(crate) fn field_names(&self, owner: &Layout) -> Option<&[String]> {
+    pub(crate) fn field_names(&self, owner: &Layout) -> Option<&[Result<String, String>]> {
         self.fields.names(self.index(owner)?)
     }
 
@@ -309,15 +319,25 @@ impl<'a> JvmProgram<'a> {
     }
 
     /// `func` belongs to this program; every body and overload shares this plan.
-    pub(crate) fn implementation_name(&self, func: &nts_core::hir::Func) -> &str {
+    /// The actual entry name used by publication and every compiled call.
+    #[must_use]
+    pub fn implementation_name(&self, func: &nts_core::hir::Func) -> &str {
         &self.implementation_names[func.name.as_str()]
+    }
+
+    pub(crate) fn public_entry(&self, func: &nts_core::hir::Func) -> bool {
+        func.exported || self.published.contains(func.name.as_str())
     }
 
     /// An additional internal selector, never the public ordinary spelling.
     pub(crate) fn guarded_member(&self, slot: usize) -> Option<&str> {
+        self.guarded_spelling(slot).ok().flatten()
+    }
+    pub(crate) fn guarded_spelling(&self, slot: usize) -> Result<Option<&str>, String> {
         self.guarded_members
             .get(&slot)
-            .map(|member| member.name.as_str())
+            .map(|member| member.name.as_deref().map_err(Clone::clone))
+            .transpose()
     }
 
     /// The sole owner introducing this internal contract. Interface descendants
@@ -678,14 +698,8 @@ impl<'a> JvmProgram<'a> {
     /// a method after that was a member the call never reached.
     /// The static field module global `index` is stored in.
     ///
-    /// Its name mangled for the JVM (`body::method_name`), except where an
-    /// earlier global mangles alike: then `<name>_<index>`, the rule properties
-    /// are told apart by (`hierarchy::field_name`), with the index bumped past
-    /// any global's own spelling. The mangling is not one-to-one -- every
-    /// character DEX forbids becomes `$`, and so do ZWNJ and ZWJ, which an
-    /// ECMAScript identifier may contain -- so test262's
-    /// `identifiers/part-zwj-zwnj-escaped`, three globals `$`, `$‍` and
-    /// `$‌`, declared one field three times and the class was refused.
+    /// Public globals retain the authored mangler's name. Private storage uses
+    /// the catalogue role and actual global index, outside the mangler's image.
     #[must_use]
     pub fn global_field(&self, index: usize) -> &str {
         &self.global_fields[index]
@@ -696,6 +710,31 @@ impl<'a> JvmProgram<'a> {
         u32::try_from(slot)
             .ok()
             .and_then(|slot| self.selectors.get(&slot).map(|(declared, _)| *declared))
+    }
+
+    /// The owned family declaration on this face, whether or not allocation
+    /// supplied a concrete row in the face's method table.
+    pub(crate) fn declared_selector(&self, layout: &Layout, slot: usize) -> Option<&'a str> {
+        let (declared, face) = self.selectors.get(&u32::try_from(slot).ok()?)?;
+        face.is_some_and(|face| layout.types.contains(&face))
+            .then_some(*declared)
+    }
+
+    /// Render the actual semantic row, independent of table population.
+    pub fn dispatch_name(&self, slot: usize) -> Result<String, String> {
+        crate::member_identity::dispatch(self, slot)
+    }
+
+    pub(crate) fn protocol_slots(&self) -> impl Iterator<Item = usize> + '_ {
+        self.protocol_slots.iter().copied()
+    }
+
+    pub(crate) fn protocol_member(&self, slot: usize) -> Result<Option<String>, String> {
+        if self.protocol_slots.contains(&slot) {
+            self.dispatch_name(slot).map(Some)
+        } else {
+            Ok(None)
+        }
     }
 
     /// The owned receiver of the actual missing-field default at a recognized
@@ -720,14 +759,49 @@ impl Deref for JvmProgram<'_> {
     }
 }
 
-/// [`JvmProgram::global_field`] for every global, in index order.
+/// Read protocol membership from existing owned slot and generator facts once.
+fn protocol_slots(program: &Program, selectors: impl Iterator<Item = u32>) -> FxHashSet<usize> {
+    let mut slots: FxHashSet<usize> = selectors
+        .chain(program.raising_members.keys().copied())
+        .map(|slot| slot as usize)
+        .collect();
+    slots.extend(
+        program
+            .member_origins
+            .generator_resume
+            .map(|slot| slot as usize),
+    );
+    slots
+}
+
+/// Private storage uses indexed roles; public fields keep their existing names.
 ///
-/// **Every global's own spelling is reserved first**, so a generated name never
-/// takes one -- not even a later global's. `$‍` and `$‌` both mangle
-/// to `$$`, and the second became `$$_1`, which a third global spelled `$$_1`
-/// then declared again. A generated name bumps its index until it is free.
-/// Linear in the globals, with sets, since a runtime module has thousands.
+/// Public collision allocation includes every original source spelling and its
+/// original position, including private globals. Moving private storage must not
+/// change a field name that an existing Java caller can reach.
 fn global_fields(program: &Program) -> Vec<String> {
+    let public = program
+        .globals
+        .iter()
+        .any(|global| global.exported)
+        .then(|| public_global_spellings(program));
+    program
+        .globals
+        .iter()
+        .enumerate()
+        .map(|(at, global)| {
+            if global.exported {
+                public.as_ref().expect("public global spellings")[at].clone()
+            } else {
+                crate::generated_members::global(&global.name)
+            }
+        })
+        .collect()
+}
+
+/// The original source-name allocation, retained for public Java contracts.
+/// Every source spelling is reserved before collisions receive a free suffix.
+fn public_global_spellings(program: &Program) -> Vec<String> {
     let spelled: Vec<String> = program
         .globals
         .iter()
@@ -755,4 +829,115 @@ fn global_fields(program: &Program) -> Vec<String> {
             free
         })
         .collect()
+}
+
+#[cfg(test)]
+mod member_contract_tests {
+    use super::*;
+
+    #[test]
+    fn private_global_names_keep_identity_across_order_and_insertion() {
+        let make = |names: &[&str]| Program {
+            globals: names
+                .iter()
+                .map(|name| nts_core::hir::Global {
+                    name: (*name).to_owned(),
+                    ty: nts_core::hir::HirType::NUMBER,
+                    written: None,
+                    constant: false,
+                    initial: 0.0,
+                    exported: false,
+                    deferred: false,
+                    origin: nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+                        file: nts_diagnostics::SourceId(0),
+                        span: nts_diagnostics::Span::new(0, 1),
+                    }),
+                })
+                .collect(),
+            ..Program::default()
+        };
+        let original = make(&["Parser#state", "Parser$23$state"]);
+        let reference = global_fields(&original);
+        assert_ne!(
+            reference[0], reference[1],
+            "an escape lookalike is distinct"
+        );
+        for program in [
+            make(&["Parser$23$state", "Parser#state"]),
+            make(&["unrelated", "Parser#state", "Parser$23$state"]),
+        ] {
+            nts_core::hir::verify::verify(&program).expect("valid unique source globals");
+            let names = global_fields(&program);
+            for (original_at, global) in original.globals.iter().enumerate() {
+                let at = program
+                    .globals
+                    .iter()
+                    .position(|other| other.name == global.name)
+                    .expect("the same named global remains in each reordered program");
+                assert_eq!(names[at], reference[original_at]);
+            }
+            let emitted = crate::emit(&program);
+            assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+            let class = emitted
+                .classes
+                .iter()
+                .find(|class| class.binary_name == "nts/gen/Program")
+                .expect("the emitted program class");
+            let class = nts_jvm_emitter::read::class_file(&class.bytes)
+                .expect("the emitted program class is readable");
+            for name in &reference {
+                assert!(
+                    class
+                        .fields
+                        .iter()
+                        .any(|field| &field.name == name && field.descriptor == "D")
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn public_globals_keep_the_existing_collision_allocation() {
+        let program = Program {
+            globals: ["value@dep", "value$dep", "value$dep_1"]
+                .into_iter()
+                .enumerate()
+                .map(|(index, name)| nts_core::hir::Global {
+                    name: name.to_owned(),
+                    ty: nts_core::hir::HirType::NUMBER,
+                    written: None,
+                    constant: false,
+                    initial: 0.0,
+                    exported: index != 0,
+                    deferred: false,
+                    origin: nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+                        file: nts_diagnostics::SourceId(0),
+                        span: nts_diagnostics::Span::new(0, 1),
+                    }),
+                })
+                .collect(),
+            ..Program::default()
+        };
+        nts_core::hir::verify::verify(&program).expect("valid distinct semantic global names");
+        let facts = JvmProgram::new(&program);
+        assert_eq!(
+            facts.global_field(0),
+            crate::generated_members::global("value@dep")
+        );
+        assert_eq!(facts.global_field(1), "value$dep_2");
+        assert_eq!(facts.global_field(2), "value$dep_1");
+        let emitted = crate::emit(&program);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        let class = emitted
+            .classes
+            .iter()
+            .find(|class| class.binary_name == "nts/gen/Program")
+            .expect("actual global declarations");
+        let class = nts_jvm_emitter::read::class_file(&class.bytes).expect("actual class bytes");
+        for name in ["value$dep_2", "value$dep_1"] {
+            assert!(class.fields.iter().any(|field| field.name == name
+                && field.descriptor == "D"
+                && field.access & nts_jvm_emitter::class::access::PUBLIC != 0));
+        }
+    }
 }

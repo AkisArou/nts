@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /**
@@ -12,5 +13,5 @@ package nts.rt;
  * it by name.
  */
 public interface NtsNamed {
-    String nts$name();
+    String ¢nts$name();
 }

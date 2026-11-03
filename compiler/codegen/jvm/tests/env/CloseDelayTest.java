@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -59,7 +60,7 @@ public final class CloseDelayTest {
                 try { settle.await(); }
                 catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
                 NtsInbox.post(held.get(), new NtsResumable() {
-                    @Override public void resume() { callbacks.incrementAndGet(); }
+                    @Override public void ¢nts$resume() { callbacks.incrementAndGet(); }
                 });
             }
         }, "close-delay-producer");

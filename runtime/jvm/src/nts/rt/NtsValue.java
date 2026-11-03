@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /** Immutable erased value. Tag numbers and field descriptors are compiler ABI. */
@@ -358,7 +359,7 @@ public final class NtsValue {
         // Everything the program made: its class's answer, from the
         // compiler's table, as `runtime/c` reads a descriptor's `to_string`.
         if (ref instanceof NtsPrintable) {
-            return ((NtsPrintable) ref).nts$print();
+            return ((NtsPrintable) ref).¢nts$print();
         }
         if (ref.getClass().isArray() || ref instanceof NtsArrayD || ref instanceof NtsArrayL
             || ref instanceof NtsArrayZ || ref instanceof NtsTemplate) {
@@ -399,7 +400,7 @@ public final class NtsValue {
     }
 
     /** What a generated class whose type says nothing about how it prints
-     *  answers from `nts$print`: a refusal naming it. */
+     *  answers from `¢nts$print`: a refusal naming it. */
     public static String unprintable(String layout) {
         throw new NtsRefusal("String() of `" + layout + "`, whose type says nothing about how "
             + "it prints");
@@ -414,7 +415,7 @@ public final class NtsValue {
     /** What a function object is called, as {@link #functionName} answers. */
     public static String nameOf(Object function) {
         if (function instanceof NtsNamed) {
-            return ((NtsNamed) function).nts$name();
+            return ((NtsNamed) function).¢nts$name();
         }
         throw new NtsRefusal("the name of `" + (function == null ? "?"
             : function.getClass().getSimpleName()) + "`, whose type does not say what it "

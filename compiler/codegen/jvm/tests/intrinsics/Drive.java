@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 import java.io.IOException;
 import java.lang.reflect.Method;
 import java.net.ServerSocket;
@@ -217,7 +218,7 @@ public final class Drive {
         // the scalar globals to their constants; anything that has to be
         // *built* is in here, and a driver that does not call it reads null --
         // which is what the differential's harness does and this did not.
-        Class.forName("nts.gen.Program").getMethod("module$init").invoke(null);
+        Class.forName("nts.gen.Program").getMethod("¢nts$moduleInit").invoke(null);
 
         Listener server = new Listener();
         Thread thread = new Thread(server, "intrinsic-listener");

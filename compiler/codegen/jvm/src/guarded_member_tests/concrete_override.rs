@@ -5,7 +5,7 @@ use nts_core::hir::{GuardedDispatch, HirType, ManagedType, Program};
 use nts_jvm_emitter::class::access;
 use nts_semantic_schema::TypeId;
 
-use super::{add_bad, command, fixture, parsed};
+use super::{add_bad, command, fixture, parsed, storage_members};
 
 fn pair() -> (Program, Program) {
     let mut control = fixture(false);
@@ -93,12 +93,12 @@ fn preserve(path: &Path, program: &Program, qualified: bool) {
     std::fs::write(path.join("nts-runtime.jar"), crate::runtime_jar().as_ref()).unwrap();
 }
 
-const IMPLEMENTER: &str = "package nts.gen; public final class OldConcreteSubclass extends Good { @Override public void step(double n) { n$count += 100 * n; } }";
+const IMPLEMENTER: &str = "package nts.gen; public final class OldConcreteSubclass extends Good { @Override public void step(double n) { @@COUNT_FIELD@@ += 100 * n; } }";
 const DRIVER: &str = r#"package nts.gen; public final class ConcreteOverrideDriver {
   public static void main(String[] args) {
     OldConcreteSubclass value = new OldConcreteSubclass(); value.step(3);
     Program.invoke_iface(value, 7);
-    if (value.n$count != 1000) throw new AssertionError("old plain override bypassed: " + value.n$count);
+    if (value.@@COUNT_FIELD@@ != 1000) throw new AssertionError("old plain override bypassed: " + value.@@COUNT_FIELD@@);
     System.out.println("CONCRETE_OVERRIDE_OLD_BINARIES_PASS");
   }
 }"#;
@@ -111,8 +111,16 @@ fn old_binaries(control: &Program, subject: &Program) {
     let new = path.join("new");
     preserve(&old, control, false);
     preserve(&new, subject, true);
-    std::fs::write(old.join("OldConcreteSubclass.java"), IMPLEMENTER).unwrap();
-    std::fs::write(old.join("ConcreteOverrideDriver.java"), DRIVER).unwrap();
+    std::fs::write(
+        old.join("OldConcreteSubclass.java"),
+        storage_members(IMPLEMENTER),
+    )
+    .unwrap();
+    std::fs::write(
+        old.join("ConcreteOverrideDriver.java"),
+        storage_members(DRIVER),
+    )
+    .unwrap();
     command(
         &javac,
         &[

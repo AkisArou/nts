@@ -37,6 +37,8 @@
 //! backend nobody can trust the output of.
 
 pub mod body;
+#[cfg(test)]
+extern crate self as nts_codegen_jvm;
 mod builder;
 pub mod closures;
 mod entry;
@@ -45,10 +47,14 @@ mod face;
 mod field_cost_tests;
 mod field_storage;
 mod fuse;
+pub mod generated_members;
 mod guarded_members;
 pub mod hierarchy;
+mod member_identity;
+mod member_pairs;
 mod optional;
 mod program;
+mod publication;
 pub use program::JvmProgram;
 mod intcall;
 pub mod ops;
@@ -77,17 +83,17 @@ use rustc_hash::{FxHashMap, FxHashSet};
 pub use body::{PROGRAM, RUNTIME, program_class};
 pub use types::DEFAULT_PACKAGE;
 
+fn name_refusal(program: &JvmProgram<'_>, reason: String) -> Diagnostic {
+    Diagnostic::error("NTS4004", reason, program_origin(program).location)
+}
+
 /// The static a standalone program's launcher calls.
 ///
-/// **Named here rather than spelled at the caller.** Module evaluation is what
-/// an executable's entry *is* -- `write_standalone` says so for the C lane, and
-/// this is the same fact one mangling away. A launcher that wrote
-/// `module$init` as a literal would be a second derivation of
-/// `symbols::jvm_member_name`, and the failure is a `NoSuchMethodError` at
-/// launch rather than anything a build reports.
+/// Module evaluation has one catalogue role, shared by the actual function
+/// publication and the standalone launcher. It is never source-mangled.
 #[must_use]
 pub fn module_init_method() -> String {
-    nts_codegen_common::symbols::jvm_member_name(nts_core::hir::lower::MODULE_INIT)
+    generated_members::MODULE_INIT.to_owned()
 }
 
 /// The runtime, as a jar.
@@ -243,6 +249,21 @@ fn emit_program(
     helpers: &FxHashSet<String>,
 ) -> (Emitted, Vec<String>) {
     let mut too_long = Vec::new();
+    let naming = member_identity::errors(program);
+    if !naming.is_empty() {
+        return (
+            Emitted {
+                classes: Vec::new(),
+                diagnostics: naming
+                    .into_iter()
+                    .map(|reason| {
+                        Diagnostic::error("NTS4004", reason, program_origin(program).location)
+                    })
+                    .collect(),
+            },
+            too_long,
+        );
+    }
     let mut pool = Pool::new();
     let mut diagnostics = foreign_classes_refused(program);
     // An array that grows is a wrapper rather than a bare `double[]`, chosen
@@ -327,17 +348,6 @@ fn emit_program(
     let mut declined: Vec<(&nts_core::hir::Func, Diagnostic)> = Vec::new();
     // An alias or namespace can publish a function whose own declaration has
     // no export modifier. Preserve those entries using the recorded surface.
-    let published: rustc_hash::FxHashSet<&str> = program
-        .public_api
-        .iter()
-        .map(|(emitted, _)| emitted.as_str())
-        .chain(
-            program
-                .public_namespaces
-                .iter()
-                .flat_map(|(_, members)| members.iter().map(|(_, emitted)| emitted.as_str())),
-        )
-        .collect();
 
     for func in &program.funcs {
         // An abstract declaration is carried in `program.funcs` so that a call
@@ -360,8 +370,7 @@ fn emit_program(
                 // javac cannot reference synthetic methods, while generated
                 // bytecode can. Public free functions keep their source entry;
                 // member_forwarders publishes instance methods on their class.
-                let synthetic = if (!func.exported && !published.contains(func.name.as_str()))
-                    || method_of(program, func).is_some()
+                let synthetic = if !program.public_entry(func) || method_of(program, func).is_some()
                 {
                     access::SYNTHETIC
                 } else {
@@ -422,106 +431,59 @@ fn emit_program(
     // Which bound interfaces each closure is handed to; see
     // `closure_interfaces`. Computed once rather than per layout, because it
     // is a walk of every operation in the program.
-    let (handed_to, reactions, mut classes) = (
-        closure_interfaces(program),
-        reaction_types(program),
-        Vec::new(),
-    );
-    for layout in &program.layouts {
-        // **A bound class is in somebody's jar and we must not write one.**
-        // Emitting `com/conv/Conv.class` beside the real one puts a stub with
-        // nothing but a default constructor on the classpath, and whichever
-        // entry comes first wins: with the emitted directory ahead of the jar
-        // -- the order a user would naturally write -- every call into the
-        // bound class becomes `NoSuchMethodError` at runtime.
-        //
-        // Loud rather than silent, so it is not the worst kind of defect. It
-        // is still a class this compiler had no business writing.
-        // A layout no value can have is not written either; see `shadowed_layout`.
-        if nts_core::hir::runtime::is_foreign_layout_name(&layout.name)
-            || shadowed_layout(program, layout)
-        {
-            continue;
-        }
-        collect(
-            &mut classes,
-            &mut diagnostics,
-            object_class(package, program, layout, &plan, &handed_to, &reactions),
-        );
-        // A split face's companion interface, beside its class; see
-        // `split_faces`.
-        if program.is_split(layout) {
-            collect(
-                &mut classes,
-                &mut diagnostics,
-                split_faces::interface_class(
-                    program,
-                    package,
-                    &plan,
-                    layout,
-                    &program_origin(program),
-                )
-                .map(Some),
-            );
-        }
-        // One empty subclass per class sharing this layout, or one
-        // implementation of it where it is an interface; see
-        // `hierarchy::identities`. The fields stay on the layout's own class,
-        // so an object is not a byte larger and a parameter declared as either
-        // class still takes the base -- only `new` and `instanceof` name these.
-        for class in hierarchy::identities(program, layout) {
-            match identity_class(package, program, layout, class) {
-                Ok(emitted) => classes.push(emitted),
-                Err(diagnostic) => diagnostics.push(diagnostic),
-            }
-        }
-    }
-
-    // A class extending a typed array: a subclass of its element's view.
-    for view in &program.view_classes {
-        collect(
-            &mut classes,
-            &mut diagnostics,
-            view_subclass(package, program, view).map(Some),
-        );
-    }
-
-    collect(
-        &mut classes,
-        &mut diagnostics,
-        callable_root(package, program),
-    );
+    let (handed_to, reactions) = (closure_interfaces(program), reaction_types(program));
+    let mut publications = publication::Plan::new(package, program);
 
     // **Lambda overloads, last**, because they add methods to the program class
     // and read every exported signature to decide which. Doing it inside the
     // loop above would ask the same question once per function.
-    let (adapters, complaints) = lambda_overloads(
+    diagnostics.extend(lambda_overloads(
         package,
         program,
         &mut builder,
         &mut pool,
         &program_origin(program),
-    );
-    classes.extend(adapters);
-    diagnostics.extend(complaints);
+        &mut publications,
+    ));
+    let published = match publications.materialize(&plan, &handed_to, &reactions, &mut diagnostics)
+    {
+        Ok(published) => published,
+        Err(conflicts) => {
+            diagnostics.extend(conflicts);
+            return (
+                Emitted {
+                    classes: Vec::new(),
+                    diagnostics,
+                },
+                too_long,
+            );
+        }
+    };
 
     finish_classes(
         package,
         program,
         declined,
-        &mut classes,
+        published.classes(),
         &mut diagnostics,
         &mut builder,
         &mut pool,
     );
+    match member_pairs::attribute(program, published.classes(), &builder) {
+        Ok(attribute) => builder
+            .attributes
+            .push((generated_members::RAISING_PAIRS.to_owned(), attribute)),
+        Err(message) => diagnostics.push(Diagnostic::error(
+            "NTS4004",
+            message,
+            program_origin(program).location,
+        )),
+    }
     let emitted = match builder.build(pool) {
-        Ok(class) => {
-            classes.push(class);
-            Emitted {
-                classes,
-                diagnostics,
-            }
-        }
+        Ok(class) => Emitted {
+            classes: published.finish(class),
+            diagnostics,
+        },
         Err(error) => {
             diagnostics.push(Diagnostic::error(
                 "NTS4004",
@@ -595,7 +557,8 @@ fn declare_fields(
     // suffix, `"a$b_1"` beside `"a b"` and `"a-b"`, which no rule of this
     // shape can tell apart; the refusals fixture holds both.
     let mut spelled: FxHashMap<String, String> = FxHashMap::default();
-    let names = hierarchy::declared_names(program, layout);
+    let names = hierarchy::declared_names(program, layout)
+        .map_err(|reason| name_refusal(program, reason))?;
     for (offset, (field, name)) in hierarchy::declared(program, layout)
         .iter()
         .zip(&names)
@@ -687,7 +650,10 @@ fn declare_presence(
     }
     if let Some(clash) = hierarchy::declared(program, layout)
         .iter()
-        .zip(hierarchy::declared_names(program, layout))
+        .zip(
+            hierarchy::declared_names(program, layout)
+                .map_err(|reason| name_refusal(program, reason))?,
+        )
         .find(|(_, name)| name == types::PRESENCE)
         .map(|(field, _)| field)
     {
@@ -837,13 +803,8 @@ fn view_subclass(
     };
     let element =
         types::view_class(&view.element).ok_or_else(|| failed("its element has no view class"))?;
-    let base = view
-        .base
-        .and_then(|base| program.view_classes.get(base))
-        .map_or_else(
-            || element.to_owned(),
-            |base| types::view_class_name(package, base),
-        );
+    let base = types::view_parent_class(package, program, view)
+        .ok_or_else(|| failed("its element has no view class"))?;
     let name = types::view_class_name(package, view);
     let mut pool = Pool::new();
     let mut builder = ClassBuilder::new(&name, base.clone());
@@ -919,19 +880,6 @@ fn view_subclass(
     builder
         .build(pool)
         .map_err(|error| failed(&error.to_string()))
-}
-
-/// One emitted class, or the reason it was not: pushed where it belongs.
-fn collect(
-    classes: &mut Vec<Class>,
-    diagnostics: &mut Vec<Diagnostic>,
-    emitted: Result<Option<Class>, Diagnostic>,
-) {
-    match emitted {
-        Ok(Some(class)) => classes.push(class),
-        Ok(None) => {}
-        Err(diagnostic) => diagnostics.push(diagnostic),
-    }
 }
 
 /// What a layout's class extends: its base's class, or -- for callable storage
@@ -1128,18 +1076,11 @@ fn finish_classes(
     package: &str,
     program: &JvmProgram<'_>,
     declined: Vec<(&nts_core::hir::Func, Diagnostic)>,
-    classes: &mut Vec<Class>,
+    classes: &[Class],
     diagnostics: &mut Vec<Diagnostic>,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
 ) {
-    for layout in constructed_interfaces(program) {
-        collect(
-            classes,
-            diagnostics,
-            interface_instance(package, program, layout).map(Some),
-        );
-    }
     let written: rustc_hash::FxHashSet<&str> = classes
         .iter()
         .map(|class| class.binary_name.as_str())
@@ -1161,12 +1102,15 @@ fn finish_classes(
 /// Layouts this backend emits as interfaces that some operation allocates; see
 /// `types::instance_class`. Not where every allocation is of a class with an
 /// identity, which allocates its own (`identity_class`).
-fn constructed_interfaces<'a>(program: &'a JvmProgram<'_>) -> Vec<&'a nts_core::hir::Layout> {
+fn constructed_interfaces<'a>(
+    program: &'a JvmProgram<'_>,
+) -> Vec<(usize, &'a nts_core::hir::Layout)> {
     program
         .layouts
         .iter()
-        .filter(|layout| hierarchy::is_interface(program, layout))
-        .filter(|layout| {
+        .enumerate()
+        .filter(|(_, layout)| hierarchy::is_interface(program, layout))
+        .filter(|(_, layout)| {
             program.funcs.iter().flat_map(|func| &func.values).any(|op| {
                 matches!(op.kind, nts_core::hir::OpKind::ObjectNew { .. })
                     && matches!(&op.ty, nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id))
@@ -1243,6 +1187,7 @@ fn uniform_entries(package: &str, program: &JvmProgram<'_>) -> Vec<(String, Stri
             let name = layout.methods.get(slot as usize)?.as_ref()?;
             let func = program.funcs.iter().find(|f| &f.name == name)?;
             let member = hierarchy::declared_member(program, layout, slot as usize)
+                .ok()?
                 .unwrap_or_else(|| hierarchy::member_name(name));
             Some((member, instance_descriptor(package, program, func)?))
         })
@@ -1364,20 +1309,16 @@ fn typed_entry(
         .map(|param| types::vtype(shape, &param.ty))
         .collect::<Option<Vec<_>>>()?;
     let member = hierarchy::declared_member(program, signature, slot)
+        .ok()?
         .unwrap_or_else(|| hierarchy::member_name(name));
     Some((member, descriptor, params))
 }
 
-fn callable_root(package: &str, program: &JvmProgram<'_>) -> Result<Option<Class>, Diagnostic> {
-    let entries = uniform_entries(package, program);
-    if entries.is_empty()
-        && !program
-            .layouts
-            .iter()
-            .any(|layout| types::is_callable_storage(program, layout))
-    {
-        return Ok(None);
-    }
+fn callable_root(
+    package: &str,
+    program: &JvmProgram<'_>,
+    entries: Vec<(String, String)>,
+) -> Result<Class, Diagnostic> {
     let origin = program_origin(program);
     let mut pool = Pool::new();
     let mut builder = ClassBuilder::new(
@@ -1398,7 +1339,7 @@ fn callable_root(package: &str, program: &JvmProgram<'_>) -> Result<Option<Class
                 origin.location,
             )
         })?;
-    builder.build(pool).map(Some).map_err(|error| {
+    builder.build(pool).map_err(|error| {
         Diagnostic::error(
             "NTS4004",
             format!("the callable root could not be written: {error}"),
@@ -1451,6 +1392,7 @@ fn reaction_resume(
         let name = layout.methods.get(slot)?.as_ref()?;
         let func = program.funcs.iter().find(|f| &f.name == name)?;
         let member = hierarchy::declared_member(program, layout, slot)
+            .ok()?
             .unwrap_or_else(|| hierarchy::member_name(name));
         Some((
             member,
@@ -1508,7 +1450,7 @@ fn reaction_resume(
         )
     })?;
     builder.interfaces.push(types::RESUMABLE.to_owned());
-    builder.method(access::PUBLIC, "resume", "()V", Some(body));
+    builder.method(access::PUBLIC, generated_members::RESUME, "()V", Some(body));
     Ok(())
 }
 
@@ -1699,7 +1641,18 @@ fn object_class(
     if nts_core::hir::is_tuple_layout_name(&layout.name) {
         builder.interfaces.push(types::TUPLE.to_owned());
     }
-    if let Some(resume) = resumes(package, program, layout) {
+    let suspended_entry = if let Some(resume) = resumes(package, program, layout) {
+        let target = program
+            .funcs
+            .iter()
+            .find(|func| func.name == resume)
+            .ok_or_else(|| {
+                Diagnostic::error(
+                    "NTS4008",
+                    "a suspension resume body absent from the program",
+                    origin.location,
+                )
+            })?;
         builder.interfaces.push(types::RESUMABLE.to_owned());
         let origin = program_origin(program);
         let mut code = Code::new(vec![VType::Object(types::class_name(package, layout))], 1);
@@ -1708,7 +1661,7 @@ fn object_class(
             &origin,
             &mut pool,
             &body::program_class(package),
-            &body::method_name(&resume),
+            entry::implementation_name(program, target),
             &format!("(L{};)V", types::class_name(package, layout)),
         );
         code.ret(&origin, None);
@@ -1722,10 +1675,19 @@ fn object_class(
                 program_origin(program).location,
             )
         })?;
-        builder.method(access::PUBLIC, "resume", "()V", Some(rendered));
-    } else if layout.types.iter().any(|id| reactions.contains(id)) {
-        reaction_resume(package, program, layout, &mut builder, &mut pool, &origin)?;
-    }
+        builder.method(
+            access::PUBLIC,
+            generated_members::RESUME,
+            "()V",
+            Some(rendered),
+        );
+        Some(target)
+    } else {
+        if layout.types.iter().any(|id| reactions.contains(id)) {
+            reaction_resume(package, program, layout, &mut builder, &mut pool, &origin)?;
+        }
+        None
+    };
 
     // **Dispatch first, and the order is load-bearing rather than tidy.**
     // Both of these declare instance methods on this class, and for a method
@@ -1739,7 +1701,14 @@ fn object_class(
     // Asking the builder what it already holds, rather than re-deriving which
     // functions occupy a slot, because two derivations of one fact disagree
     // eventually and the disagreement here is a class that does not load.
-    dispatch_forwarders(package, program, layout, &mut builder, &mut pool)?;
+    dispatch_forwarders(
+        package,
+        program,
+        layout,
+        suspended_entry,
+        &mut builder,
+        &mut pool,
+    )?;
     member_forwarders(package, program, layout, &mut builder, &mut pool)?;
     // What a split face's companion interface asks of this class and no
     // forwarder above answered: family defaults and field accessors.
@@ -1767,7 +1736,7 @@ fn object_class(
         &origin,
     )?;
     // How an object of this layout prints. After every member is declared, so
-    // that a member the program itself names `nts$print` is seen and refused.
+    // that an actual duplicate generated protocol is reported at publication.
     // Not on an interface: its implementers carry it.
     if !interface {
         printing_method(package, program, layout, &mut builder, &mut pool, &origin)?;
@@ -1795,7 +1764,7 @@ fn object_class(
     // zeroed and this is what keeping that promise costs on this platform.
     let initial_fields: Vec<_> = hierarchy::declared(program, layout)
         .iter()
-        .zip(hierarchy::declared_names(program, layout))
+        .zip(hierarchy::declared_names(program, layout).map_err(|reason| name_refusal(program, reason))?)
         .filter_map(|(field, name)| {
             if matches!(field.ty, nts_core::hir::HirType::Erased) {
                 Some((name, types::VALUE, "UNDEFINED_VALUE", types::VALUE_DESCRIPTOR))
@@ -2038,7 +2007,12 @@ fn naming_method(
             origin.location,
         ));
     };
-    let field = hierarchy::field_name(program, layout, 0);
+    let field = hierarchy::field_name(program, layout, 0).ok_or_else(|| {
+        name_refusal(
+            program,
+            "a bound name field has unavailable source identity".to_owned(),
+        )
+    })?;
     let mut code = Code::new(vec![VType::Object(class.clone())], 1);
     code.load(origin, Kind::Ref, 0);
     code.get_field(origin, pool, &class, &field, &descriptor);
@@ -2562,7 +2536,7 @@ fn lane_accessors(
     })?;
     builder.method(
         access::PUBLIC,
-        "bindLane".to_owned(),
+        generated_members::BIND_LANE.to_owned(),
         format!("({}){}", types::ENV_DESCRIPTOR, "V"),
         Some(body),
     );
@@ -2592,7 +2566,7 @@ fn lane_accessors(
     })?;
     builder.method(
         access::PUBLIC,
-        "lane".to_owned(),
+        generated_members::LANE.to_owned(),
         format!("(){}", types::ENV_DESCRIPTOR),
         Some(body),
     );
@@ -2683,8 +2657,9 @@ fn lambda_overloads(
     builder: &mut ClassBuilder,
     pool: &mut Pool,
     origin: &nts_semantic_schema::Origin,
-) -> (Vec<nts_jvm_emitter::Class>, Vec<Diagnostic>) {
-    let (mut classes, mut diagnostics) = (Vec::new(), Vec::new());
+    publications: &mut publication::Plan<'_, '_>,
+) -> Vec<Diagnostic> {
+    let mut diagnostics = Vec::new();
     let mut adapters: std::collections::BTreeMap<String, (&'static str, String)> =
         std::collections::BTreeMap::new();
 
@@ -2742,12 +2717,9 @@ fn lambda_overloads(
     }
 
     for (base, (interface, call)) in adapters {
-        match lambda_adapter(package, program, &base, interface, &call, origin) {
-            Ok(class) => classes.push(class),
-            Err(diagnostic) => diagnostics.push(diagnostic),
-        }
+        publications.lambda(base, interface, call);
     }
-    (classes, diagnostics)
+    diagnostics
 }
 
 /// The lambda-accepting overload's descriptor and body.
@@ -2890,6 +2862,7 @@ fn lambda_adapter(
 ) -> Result<nts_jvm_emitter::Class, Diagnostic> {
     let name = format!("{base}$Lambda");
     let held = format!("L{interface};");
+    let held_field = generated_members::INTERFACE_HELD;
     let mut pool = Pool::new();
     let mut builder = ClassBuilder::new(name.clone(), base.to_owned());
     // `final` because nothing may extend an adapter, and `SourceFile` because
@@ -2897,7 +2870,7 @@ fn lambda_adapter(
     // no source name is the one that stops a reader.
     builder.access |= access::FINAL;
     builder.source_file = Some("nts".to_owned());
-    builder.field(access::PACKAGE, "it", held.clone());
+    builder.field(access::PACKAGE, held_field, held.clone());
 
     // `<init>(I)V`: super(), then store the interface.
     let mut code = Code::new(
@@ -2912,7 +2885,7 @@ fn lambda_adapter(
     code.invoke_special(origin, &mut pool, base, "<init>", "()V");
     code.load(origin, Kind::Ref, 0);
     code.load(origin, Kind::Ref, 1);
-    code.put_field(origin, &mut pool, &name, "it", &held);
+    code.put_field(origin, &mut pool, &name, held_field, &held);
     code.ret(origin, None);
     let body = code.finish(&pool).map_err(|error| {
         Diagnostic::error(
@@ -2961,7 +2934,7 @@ fn lambda_adapter(
         let slots = u16::try_from(locals.len()).unwrap_or(u16::MAX);
         let mut code = Code::new(locals, slots);
         code.load(origin, Kind::Ref, 0);
-        code.get_field(origin, &mut pool, &name, "it", &held);
+        code.get_field(origin, &mut pool, &name, held_field, &held);
         // Local `n` is the entry's parameter `n`, every one a reference: the
         // closure, the call's `this`, which a Java lambda has no use for, and
         // then the arguments.
@@ -3303,6 +3276,7 @@ fn dispatch_forwarders(
     package: &str,
     program: &JvmProgram<'_>,
     layout: &nts_core::hir::Layout,
+    suspended_entry: Option<&nts_core::hir::Func>,
     builder: &mut ClassBuilder,
     pool: &mut Pool,
 ) -> Result<(), Diagnostic> {
@@ -3319,6 +3293,15 @@ fn dispatch_forwarders(
     // Include inherited entries: a newly declared method must not silently
     // replace an inherited interface's different absence conversion.
     let mut forwarded: FxHashMap<(String, String), &nts_core::hir::Func> = FxHashMap::default();
+    // An async-generator resume can also be the already-published suspension
+    // callback. Both requests must join by their actual implementation owner,
+    // before another body is rendered. A different owner still conflicts.
+    if let Some(target) = suspended_entry {
+        forwarded.insert(
+            (generated_members::RESUME.to_owned(), "()V".to_owned()),
+            target,
+        );
+    }
     let mut planned = Vec::new();
     for (slot, entry) in layout.methods.iter().enumerate() {
         let selector =
@@ -3361,6 +3344,7 @@ fn dispatch_forwarders(
         // naming the forwarder after the implementer is an `AbstractMethodError`
         // the verifier cannot catch.
         let member = hierarchy::declared_member(program, layout, slot)
+            .map_err(|reason| name_refusal(program, reason))?
             .unwrap_or_else(|| hierarchy::member_name(func_name));
         let descriptor = instance_descriptor(package, program, target).ok_or_else(|| {
             Diagnostic::error(
@@ -3471,9 +3455,11 @@ fn dispatch_forwarders(
             member,
             descriptor,
             bridge,
-            compatibility: program
-                .guarded_member(slot)
-                .and_then(|_| hierarchy::original_declared_member(program, layout, slot)),
+            compatibility: program.guarded_member(slot).and_then(|_| {
+                hierarchy::original_declared_member(program, layout, slot)
+                    .ok()
+                    .flatten()
+            }),
         });
     }
 
@@ -4147,53 +4133,26 @@ fn resumes(
 /// Identity is not the reason to do this, but it is a reason it is safe: two
 /// erasures of one closure are now the same `NtsValue` where they were equal
 /// ones.
-fn erased_closures(
+/// The cache key is the producer-owned source value, independent of the class
+/// that physically represents it. Ordinary and erased caches share that key.
+pub(crate) fn erased_field(
+    program: &JvmProgram<'_>,
+    id: nts_semantic_schema::TypeId,
+) -> Result<String, String> {
+    member_identity::static_value(program, id).map(|key| generated_members::erased_closure(&key))
+}
+pub(crate) fn closure_field(
+    program: &JvmProgram<'_>,
+    id: nts_semantic_schema::TypeId,
+) -> Result<String, String> {
+    member_identity::static_value(program, id).map(|key| generated_members::closure(&key))
+}
+
+pub(crate) fn closure_instances(
     package: &str,
     program: &JvmProgram<'_>,
     skipped: &rustc_hash::FxHashSet<&str>,
-) -> Vec<(String, String)> {
-    // **One per closure singleton, whether or not an `Erase` names it.**
-    //
-    // This scanned for `Erase { value }` over a `ClosureStatic` and declared a
-    // field for each, and the emitter reached for the same field from a second
-    // place the scan did not know about: a comparison between an erased value
-    // and a bare closure pushes *both* sides erased, so
-    //
-    //     %2 = erase %1 : erased
-    //     %4 = eq %2, %3 : bool     <- %3 a ClosureStatic, never an `Erase`
-    //
-    // emits `getstatic erased$Ctor_RangeError` for a field nothing declared.
-    // `tests/programs/class-values` does exactly that and the JVM said so:
-    // `NoSuchFieldError`, loudly, at link time rather than as a wrong answer.
-    //
-    // The precise repair is to enumerate the implicit-erase sites too, and it
-    // is the wrong one: it is a third walk that has to stay in step with the
-    // emitter, and its failure mode is the `NoSuchFieldError` above. Deriving
-    // the set from `closure_singletons` makes the two identical *by
-    // construction* -- `erased$X` exists exactly when `closure$X` does -- and
-    // its failure mode is an unused static field holding a constant.
-    closure_singletons(package, program, skipped)
-        .into_iter()
-        .map(|(_, class)| (erased_field(&class), class))
-        .collect()
-}
-
-/// The field an erased closure singleton gets, in one place because the scan
-/// and the emitter both have to agree about it.
-pub(crate) fn erased_field(class: &str) -> String {
-    format!("erased${}", class.rsplit('/').next().unwrap_or(class))
-}
-
-/// The field a closure singleton gets, for the same reason.
-pub(crate) fn closure_field(class: &str) -> String {
-    format!("closure${}", class.rsplit('/').next().unwrap_or(class))
-}
-
-fn closure_singletons(
-    package: &str,
-    program: &JvmProgram<'_>,
-    skipped: &rustc_hash::FxHashSet<&str>,
-) -> Vec<(String, String)> {
+) -> Vec<(nts_semantic_schema::TypeId, String)> {
     let mut found = std::collections::BTreeSet::new();
     for func in program
         .funcs
@@ -4233,14 +4192,11 @@ fn closure_singletons(
             if let nts_core::hir::HirType::Managed(nts_core::hir::ManagedType::Object(id)) = op.ty
                 && let Some(layout) = program.layout(id)
             {
-                found.insert(types::class_name(package, layout));
+                found.insert((id, types::class_name(package, layout)));
             }
         }
     }
-    found
-        .into_iter()
-        .map(|class| (closure_field(&class), class))
-        .collect()
+    found.into_iter().collect()
 }
 
 /// Declare and initialize source-site caches and closure singletons.
@@ -4251,7 +4207,12 @@ fn initialize_statics(
     builder: &mut ClassBuilder,
     pool: &mut Pool,
 ) -> Result<(), Diagnostic> {
-    let singletons = closure_singletons(package, program, skipped);
+    let instances = closure_instances(package, program, skipped);
+    let singletons: Vec<_> = instances
+        .iter()
+        .map(|(id, class)| closure_field(program, *id).map(|field| (field, class.clone())))
+        .collect::<Result<_, _>>()
+        .map_err(|reason| name_refusal(program, reason))?;
     for (field, class) in &singletons {
         builder.field(
             access::PRIVATE | access::STATIC | access::FINAL,
@@ -4259,8 +4220,18 @@ fn initialize_statics(
             format!("L{class};"),
         );
     }
-    let erased = erased_closures(package, program, skipped);
-    for (field, _) in &erased {
+    let erased: Vec<_> = instances
+        .iter()
+        .map(|(id, class)| {
+            Ok((
+                erased_field(program, *id)?,
+                closure_field(program, *id)?,
+                class.clone(),
+            ))
+        })
+        .collect::<Result<_, String>>()
+        .map_err(|reason| name_refusal(program, reason))?;
+    for (field, _, _) in &erased {
         builder.field(
             access::PRIVATE | access::STATIC | access::FINAL,
             field.clone(),
@@ -4271,7 +4242,7 @@ fn initialize_statics(
     for object in nts_core::hir::templates::objects(program) {
         builder.field(
             access::PRIVATE | access::STATIC | access::FINAL,
-            template_field(object.site),
+            template_field(program, object.site).map_err(|reason| name_refusal(program, reason))?,
             types::TEMPLATE_DESCRIPTOR.to_owned(),
         );
     }
@@ -4281,8 +4252,8 @@ fn initialize_statics(
     Ok(())
 }
 
-pub(crate) fn template_field(site: u32) -> String {
-    format!("template${site}")
+pub(crate) fn template_field(program: &JvmProgram<'_>, site: u32) -> Result<String, String> {
+    member_identity::template(program, site)
 }
 
 /// `<clinit>` for nonzero globals, erased globals and immutable singleton
@@ -4291,7 +4262,7 @@ fn class_initializer(
     package: &str,
     program: &JvmProgram<'_>,
     singletons: &[(String, String)],
-    erased: &[(String, String)],
+    erased: &[(String, String, String)],
     pool: &mut Pool,
 ) -> Result<Option<nts_jvm_emitter::Body>, Diagnostic> {
     let (interesting, undefined) = globals_to_write(package, program);
@@ -4320,7 +4291,7 @@ fn class_initializer(
     }
     // After the instances they wrap, and in the same method, so an erased form
     // cannot be read before the closure it names exists.
-    for (field, class) in erased {
+    for (field, ordinary, class) in erased {
         code.const_int(
             &origin,
             pool,
@@ -4330,7 +4301,7 @@ fn class_initializer(
             &origin,
             pool,
             &body::program_class(package),
-            &closure_field(class),
+            ordinary,
             &format!("L{class};"),
         );
         code.invoke_static(
@@ -4502,7 +4473,8 @@ fn initialize_templates(
             origin,
             pool,
             &body::program_class(package),
-            &template_field(object.site),
+            &template_field(program, object.site)
+                .map_err(|reason| name_refusal(program, reason))?,
             types::TEMPLATE_DESCRIPTOR,
         );
     }
@@ -4537,3 +4509,7 @@ mod guarded_member_tests;
 
 /// Shared JDK launch policy for tests and tooling.
 pub use nts_jvm_emitter::toolchain;
+
+#[cfg(test)]
+#[path = "../tests/common/mod.rs"]
+mod test_common;

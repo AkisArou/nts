@@ -114,7 +114,8 @@ fn each_specialization_is_root_typed_on_its_own_facts() {
 
 #[test]
 fn a_store_into_an_empty_face_is_a_verified_upcast() {
-    let emitted = nts_codegen_jvm::emit(&prepared("empty-face"));
+    let program = prepared("empty-face");
+    let emitted = nts_codegen_jvm::emit(&program);
     assert!(
         emitted.diagnostics.is_empty(),
         "{:?}",
@@ -138,11 +139,17 @@ fn a_store_into_an_empty_face_is_a_verified_upcast() {
 
     let answer = disassembled(&disassembler, &classpath, "public static double answer()");
     for call in [
-        "C$method:(Lnts/gen/C;Ljava/lang/Object;)I",
-        "C$other:(Lnts/gen/C;Ljava/lang/Object;)I",
+        format!(
+            "{}:(Lnts/gen/C;Ljava/lang/Object;)I",
+            common::implementation_name(&program, "C#method")
+        ),
+        format!(
+            "{}:(Lnts/gen/C;Ljava/lang/Object;)I",
+            common::implementation_name(&program, "C#other")
+        ),
     ] {
         assert!(
-            answer.contains(call),
+            answer.contains(&call),
             "`answer` does not call {call}:\n{answer}"
         );
     }
@@ -151,16 +158,21 @@ fn a_store_into_an_empty_face_is_a_verified_upcast() {
         "a cast where an upcast was owed:\n{answer}"
     );
     assert!(
-        answer.contains("read:(Lnts/gen/Named;)"),
+        answer.contains(&format!(
+            "{}:(Lnts/gen/Named;)",
+            common::implementation_name(&program, "read")
+        )),
         "the control lost its class:\n{answer}"
     );
 
     std::fs::write(
         dir.join("Drive.java"),
-        "public class Drive { public static void main(String[] a) {\n\
-           nts.gen.Program.module$init();\n\
+        common::java_members(
+            "public class Drive { public static void main(String[] a) {\n\
+           nts.gen.Program.@@MODULE_INIT@@();\n\
            System.out.println(nts.gen.Program.answer());\n\
          } }\n",
+        ),
     )
     .unwrap();
     let built = nts_codegen_jvm::toolchain::command(&compiler)
@@ -226,10 +238,12 @@ fn a_store_out_of_an_empty_face_into_a_class_declines() {
     let classpath = written(&emitted, &dir);
     std::fs::write(
         dir.join("Drive.java"),
-        "public class Drive { public static void main(String[] a) {\n\
-           nts.gen.Program.module$init();\n\
+        common::java_members(
+            "public class Drive { public static void main(String[] a) {\n\
+           nts.gen.Program.@@MODULE_INIT@@();\n\
            System.out.println(nts.gen.Program.stores());\n\
          } }\n",
+        ),
     )
     .unwrap();
     let built = nts_codegen_jvm::toolchain::command(&compiler)

@@ -46,6 +46,76 @@ pub fn repository() -> PathBuf {
     Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..")
 }
 
+pub fn implementation_name(program: &nts_core::hir::Program, name: &str) -> String {
+    let function = program
+        .funcs
+        .iter()
+        .find(|function| function.name == name)
+        .expect("the actual source function");
+    nts_codegen_jvm::JvmProgram::new(program)
+        .implementation_name(function)
+        .to_owned()
+}
+
+/// Every prepared implementation belonging to the actual source declaration.
+/// Specializations retain its source location; their member names come from
+/// `JvmProgram` rather than from a suffix convention in the test.
+pub fn implementation_names(program: &nts_core::hir::Program, name: &str) -> Vec<String> {
+    let declaration = program
+        .funcs
+        .iter()
+        .find(|func| func.name == name)
+        .expect("the actual source declaration");
+    let facts = nts_codegen_jvm::JvmProgram::new(program);
+    program
+        .funcs
+        .iter()
+        .filter(|func| func.origin.location == declaration.origin.location)
+        .map(|func| facts.implementation_name(func).to_owned())
+        .collect()
+}
+
+/// One complete javap method block, matching its opaque identity exactly.
+/// Quoting is a presentation detail; no generated-name grammar is parsed here.
+pub fn method_listing<'a>(listing: &'a str, name: &str) -> &'a str {
+    listing
+        .split("\n\n")
+        .find(|body| {
+            body.lines().any(|line| {
+                let head = line.trim();
+                line.starts_with("  ")
+                    && !line.starts_with("   ")
+                    && head.ends_with(");")
+                    && head
+                        .split('(')
+                        .next()
+                        .and_then(|head| head.split_whitespace().last())
+                        .is_some_and(|actual| actual.trim_matches('"') == name)
+            })
+        })
+        .unwrap_or_else(|| panic!("missing actual method {name}: {listing}"))
+}
+
+pub fn implementation_bodies(
+    listing: &str,
+    program: &nts_core::hir::Program,
+    name: &str,
+) -> String {
+    implementation_names(program, name)
+        .iter()
+        .map(|name| method_listing(listing, name))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+pub fn java_members(template: &str) -> String {
+    nts_codegen_jvm::generated_members::JAVA_TOKENS
+        .iter()
+        .fold(template.to_owned(), |source, (token, name)| {
+            source.replace(token, name)
+        })
+}
+
 pub fn tool(name: &str) -> Option<PathBuf> {
     if let Ok(home) = std::env::var("JAVA_HOME") {
         let path = PathBuf::from(home).join("bin").join(name);

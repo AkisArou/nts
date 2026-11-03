@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.math.BigDecimal;
@@ -284,7 +285,7 @@ public final class NtsRuntime {
      */
     public static String className(Object ref) {
         return ref instanceof NtsClassNamed
-            ? ((NtsClassNamed) ref).nts$class()
+            ? ((NtsClassNamed) ref).¢nts$class()
             : ref.getClass().getSimpleName();
     }
     /**
@@ -315,7 +316,7 @@ public final class NtsRuntime {
         }
 
         @Override
-        public void resume() {
+        public void ¢nts$resume() {
             callback.call();
         }
     }
@@ -2015,6 +2016,6 @@ public final class NtsRuntime {
      */
     public static boolean presenceHas(Object ref, int index) {
         return ref instanceof NtsPresence
-            && ((((NtsPresence) ref).ntsPresence() >>> index) & 1) != 0;
+            && ((((NtsPresence) ref).¢nts$presenceGet() >>> index) & 1) != 0;
     }
 }

@@ -577,6 +577,142 @@ pub struct BlockId(pub u32);
 /// operation and the type the proof was made at ([`Func::exact`]).
 pub type ExactArithmetic = rustc_hash::FxHashMap<ValueId, HirType>;
 
+/// Source identities needed after semantic collection has finished.
+#[derive(Debug, Clone, Default)]
+pub struct MemberOrigins {
+    /// The fixed resumption protocol, assigned by Hierarchy alongside closure slots.
+    pub generator_resume: Option<u32>,
+    pub values: std::collections::BTreeMap<TypeId, StaticValueSource>,
+    pub symbols: std::collections::BTreeMap<TypeId, SymbolSource>,
+    pub dispatch: std::collections::BTreeMap<u32, DispatchMember>,
+    pub templates: std::collections::BTreeMap<u32, Option<SourcePosition>>,
+}
+
+/// The source owner of a closure/constructor singleton, before JVM spelling.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct StaticValueSource {
+    pub declaration: StaticDeclaration,
+    pub kind: StaticValueKind,
+    pub variant: StaticValueVariant,
+}
+/// Instantiation facts retained before copy suffixes become emitted spellings.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StaticValueVariant {
+    Original,
+    Instantiation {
+        owner: StaticDeclaration,
+        instance: Option<TypeIdentity>,
+        arguments: Vec<(StaticDeclaration, TypeIdentity)>,
+    },
+    /// Structural closure variants retain retyped captures and are instantiated
+    /// per evaluation. They cannot be published as a static singleton.
+    Captured,
+}
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum StaticDeclaration {
+    Named(NamedClassSource),
+    Site(SourcePosition),
+    Provided(String),
+    Unavailable,
+}
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StaticValueKind {
+    Authored,
+    Function,
+    Method,
+    ThenMethod,
+    ThenFunction,
+    Resolve,
+    Reject,
+    Reaction,
+    ModuleJob,
+    /// The singleton namespace owned by a module job's imported module.
+    ModuleNamespace,
+    Bound,
+    ClassToken,
+    ProvidedConstructor,
+}
+
+/// A named binding is distinct from its display description. Anonymous
+/// symbols carry their actual source site where available, never a description.
+#[derive(Debug, Clone)]
+pub enum SymbolSource {
+    Named(NamedClassSource),
+    WellKnown(nts_semantic_schema::WellKnownSymbol),
+    Anonymous(Option<SourcePosition>),
+    Unavailable,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SourcePosition {
+    pub module: String,
+    pub line: usize,
+    pub column: usize,
+}
+
+/// The semantic instantiation a dispatch root actually carries. Source-owned
+/// declarations and structural type facts survive arena renumbering; no layout
+/// or backend-rendered spelling participates in this identity.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TypeIdentity {
+    Intrinsic(&'static str),
+    Named(NamedClassSource, Vec<Self>),
+    Recursive(NamedClassSource),
+    Site(SourcePosition),
+    Array(Box<Self>),
+    Tuple(Vec<(nts_semantic_schema::TupleElementKind, Self)>),
+    Union(Vec<Self>),
+    Intersection(Vec<Self>),
+    Literal(nts_semantic_schema::LiteralValue),
+    Unavailable(TypeId),
+}
+
+/// The actual Hierarchy key, independent of implementation bodies and pruning.
+#[derive(Debug, Clone)]
+pub struct DispatchMember {
+    pub root: DispatchRoot,
+    pub key: PropertyKey,
+    pub accessor: MemberAccessor,
+    pub raising: bool,
+    pub ordinary_slot: Option<u32>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum MemberAccessor {
+    Method,
+    Get,
+    Set,
+}
+
+#[derive(Debug, Clone)]
+pub enum DispatchRoot {
+    /// Runtime-provided language classes have a fixed, producer-owned name.
+    Provided(String),
+    Named {
+        source: NamedClassSource,
+        arguments: Vec<TypeIdentity>,
+    },
+    /// No named declaration exists (for example an anonymous structural face).
+    Anonymous {
+        id: TypeId,
+        source: Option<SourcePosition>,
+    },
+    /// A named declaration exists, but its source locator is unavailable.
+    Unavailable(TypeId),
+}
+
+/// A raising semantic member's declaration, published before choosing bodies.
+/// Missing or pruned physical table rows do not erase this declaration fact.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RaisingMember {
+    /// The encoded semantic member key, without a raising suffix. This comes
+    /// from `MemberKey`, never from an implementation body's name.
+    pub member: String,
+    /// The exact ordinary key's slot in the same owned Hierarchy. `None`
+    /// preserves an unavailable relation rather than inventing a counterpart.
+    pub ordinary_slot: Option<u32>,
+}
+
 /// One function.
 #[derive(Debug, Clone)]
 pub struct Func {
@@ -2230,8 +2366,21 @@ pub struct ClassIdentity {
     /// The declared name, for a descriptor's symbol and for what it reports
     /// itself as.
     pub name: String,
+    /// A named declaration's machine-independent source identity. This stays
+    /// distinct from its display name and its physical instantiation.
+    pub source: Option<NamedClassSource>,
     /// Every schema type that is an instance of this class.
     pub types: Vec<TypeId>,
+}
+
+/// The source identity of a named class, before layouts or backend spelling.
+/// Anonymous expressions and compiler-provided classes have no named source.
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub struct NamedClassSource {
+    /// Semantic owner, for publication equality only; never rendered in names.
+    pub symbol: u32,
+    pub module: String,
+    pub scopes: Vec<String>,
 }
 
 /// One published constructor's semantic identity and actual emitted owner.
@@ -2351,6 +2500,7 @@ pub struct ViewClass {
     pub class: TypeId,
     /// The source name, for the descriptor's and the emitted class's name.
     pub name: String,
+    pub source: Option<NamedClassSource>,
     /// The view's element type, which says which of the nine it is.
     pub element: HirType,
     /// The view class it extends, or `None` where it extends the builtin.
@@ -3189,6 +3339,8 @@ pub struct GuardedDispatch {
 /// A lowered program.
 #[derive(Debug, Clone, Default)]
 pub struct Program {
+    /// Source identities published by the semantic member/site producers.
+    pub member_origins: MemberOrigins,
     pub funcs: Vec<Func>,
     pub interface_access: interface_access::Plan,
     /// Native table columns for the logical selectors that native code reads.
@@ -3233,7 +3385,7 @@ pub struct Program {
     /// slot member, and their absence keeps its existing conflict refusal.
     pub guarded_dispatch: std::collections::BTreeMap<String, GuardedDispatch>,
     /// Each member slot whose semantic `Hierarchy` key has its raising bit set,
-    /// mapped to that key's encoded member spelling with the raising suffix.
+    /// with its producer-owned member identity and ordinary-slot relation.
     ///
     /// A quiet base fills both ordinary and raising slots with the same body;
     /// its body name therefore cannot identify the slot. Backends that name
@@ -3241,7 +3393,7 @@ pub struct Program {
     /// and invocation. Values are produced from `MemberKey` before it is lost,
     /// never decoded from an implementation name. Slot indices remain stable
     /// through preparation; removing an entry does not renumber its slot.
-    pub raising_members: std::collections::BTreeMap<u32, String>,
+    pub raising_members: std::collections::BTreeMap<u32, RaisingMember>,
     /// How an object of each layout prints, by layout name: what `String(o)`,
     /// `${o}` and an array's text read off its descriptor
     /// (`NtsDescriptor.to_string`). Decided once, after lowering, for every

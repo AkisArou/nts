@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /**
@@ -64,7 +65,7 @@ public final class NtsForeign {
      */
     public static void bind(Object closure) {
         if (closure instanceof NtsLaneBound) {
-            ((NtsLaneBound) closure).bindLane(NtsEnv.current());
+            ((NtsLaneBound) closure).¢nts$bindLane(NtsEnv.current());
         }
     }
 
@@ -151,7 +152,7 @@ public final class NtsForeign {
      * so.
      */
     private static NtsEnv laneOf(NtsLaneBound closure) {
-        NtsEnv lane = closure.lane();
+        NtsEnv lane = closure.¢nts$lane();
         if (lane == null) {
             throw new NtsRefusal(
                 "a callback reached Java without a lane recorded, so there is nowhere to "
@@ -169,7 +170,7 @@ public final class NtsForeign {
         if (slot == null) { return false; }
         NtsInbox.post(slot, new NtsResumable() {
             @Override
-            public void resume() { work.call(); }
+            public void ¢nts$resume() { work.call(); }
         });
         return true;
     }
@@ -189,7 +190,7 @@ public final class NtsForeign {
         if (slot == null) { return false; }
         NtsInbox.post(slot, new NtsResumable() {
             @Override
-            public void resume() { work.call(data, offset, length); }
+            public void ¢nts$resume() { work.call(data, offset, length); }
         });
         return true;
     }
@@ -201,7 +202,7 @@ public final class NtsForeign {
         if (slot == null) { return false; }
         NtsInbox.post(slot, new NtsResumable() {
             @Override
-            public void resume() { work.call(value); }
+            public void ¢nts$resume() { work.call(value); }
         });
         return true;
     }
@@ -213,7 +214,7 @@ public final class NtsForeign {
         if (slot == null) { return false; }
         NtsInbox.post(slot, new NtsResumable() {
             @Override
-            public void resume() { work.call(value); }
+            public void ¢nts$resume() { work.call(value); }
         });
         return true;
     }

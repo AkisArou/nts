@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import nts.rt.NtsInbox;
@@ -51,7 +52,7 @@ public final class Stress {
                         // Plain writes. Their visibility is the inbox's job.
                         for (int i = 0; i < region; i++) { shared[base + i] = (byte) (stamp + who + i); }
                         NtsInbox.post(slot, new NtsResumable() {
-                            @Override public void resume() {
+                            @Override public void ¢nts$resume() {
                                 for (int i = 0; i < region; i++) {
                                     if (shared[base + i] != (byte) (stamp + who + i)) { torn.incrementAndGet(); return; }
                                 }
@@ -184,7 +185,7 @@ public final class Stress {
         owner.setDaemon(true);
         owner.start();
         Thread.sleep(400);           // long enough for C2 to compile the spin
-        NtsInbox.post(slot, new NtsResumable() { @Override public void resume() { } });
+        NtsInbox.post(slot, new NtsResumable() { @Override public void ¢nts$resume() { } });
         owner.join(2000);
         boolean stuck = owner.isAlive();
         if (stuck || seen[0] != 1) {

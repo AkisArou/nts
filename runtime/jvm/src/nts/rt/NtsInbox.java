@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -251,7 +252,7 @@ public final class NtsInbox {
             next.owner = null;
             it.credits.incrementAndGet();
             ran++;
-            if (work != null) { work.resume(); }
+            if (work != null) { work.¢nts$resume(); }
         }
     }
 

@@ -13,22 +13,6 @@ use nts_frontend_ts::Frontend;
 
 mod common;
 
-/// The bytecode of `name` and every specialization made of it.
-fn method(listing: &str, name: &str) -> String {
-    let mut body = String::new();
-    let mut inside = false;
-    for line in listing.lines() {
-        if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(");") {
-            inside = line.contains(&format!(" {name}(")) || line.contains(&format!(" {name}$"));
-        } else if inside {
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    assert!(!body.is_empty(), "no `{name}` in:\n{listing}");
-    body
-}
-
 #[test]
 fn an_answer_read_only_as_a_float_is_never_boxed() {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -78,12 +62,12 @@ fn an_answer_read_only_as_a_float_is_never_boxed() {
     let listing = String::from_utf8_lossy(&listed.stdout);
     let scalar = "nts/rt/NtsRuntime.arrayAt:([DD)D";
     let boxing = "nts/rt/NtsRuntime.arrayAtValue:";
-    let read = method(&listing, "fromTheEnd");
+    let read = common::implementation_bodies(&listing, &program, "fromTheEnd");
     assert!(
         read.matches(scalar).count() == 2 && !read.contains(boxing),
         "an answer read only as a float was boxed:\n{read}"
     );
-    let tested = method(&listing, "boxed");
+    let tested = common::implementation_bodies(&listing, &program, "boxed");
     assert!(
         tested.contains(boxing) && !tested.contains(scalar),
         "an answer whose tag is tested lost its box:\n{tested}"

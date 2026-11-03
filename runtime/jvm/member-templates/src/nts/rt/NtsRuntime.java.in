@@ -1,0 +1,2020 @@
+package nts.rt;
+
+import java.math.BigDecimal;
+import java.math.MathContext;
+import java.math.RoundingMode;
+import java.util.Arrays;
+import java.util.Locale;
+
+/** JavaScript operations not directly provided by JVM instructions. Java 8 ABI. */
+public final class NtsRuntime {
+    private NtsRuntime() {}
+
+    /**
+     * ToInt32 via significand bits: truncation modulo 2^32, not a saturating cast.
+     *
+     * <p>One fast path, through `long`, and the width was chosen by measurement
+     * after an `int` one shipped and moved a row the wrong way. `user-iterable`
+     * went **1.10x to 1.25x** on it: `this.seed = (this.seed * 31 + this.at)
+     * | 0` reaches about 6.6e10 before the wrap, so every value that row hands
+     * this function is integral and *outside* int range, and an `int` guard
+     * rejects all of them after paying a `d2i`, an `i2d` and a compare.
+     *
+     * <p>For any integral `x` with `|x| < 2^63`, `(long) x` is exact and
+     * narrowing it to an `int` discards the high bits -- which is wrapping
+     * modulo 2^32, which is ToInt32's definition. `wide == x` is false for a
+     * fraction, for NaN and beyond `long` range, because `d2l` saturates there
+     * and the clamped value is not the input.
+     *
+     * <p>Trying `int` first and falling back to `long` was measured and is
+     * **worse than either**: `user-iterable` 1.11x and `generic-classes` 1.50x
+     * against this version's 0.91x and 1.15x. Paying the first guard and then
+     * the second costs more than the second alone, and the rows that would have
+     * wanted the `int` guard do not gain enough to cover it.
+     *
+     * <p>Only `Long.MAX_VALUE` is excluded, and it is not superstition:
+     * `(double) Long.MAX_VALUE` rounds *up* to 2^63, so `x == 2^63` would pass
+     * the guard and answer -1 where ToInt32 answers 0 -- checked by removing the
+     * exclusion and watching that one input fail. `Long.MIN_VALUE` needs no
+     * exclusion: -2^63 is exactly representable, `(int) Long.MIN_VALUE` is 0,
+     * and ToInt32(-2^63) is 0.
+     *
+     * <p>`wide == x` is false for a fraction, for NaN, and for anything beyond
+     * `long` range, because `d2l` saturates there and the clamped value is not
+     * the input. The two saturation values are excluded by name because the
+     * comparison cannot see one of them: `(double) Long.MAX_VALUE` rounds *up*
+     * to 2^63, so `x == 2^63` would pass the guard and answer -1 where ToInt32
+     * answers 0. `Long.MIN_VALUE` is genuinely exact and would answer
+     * correctly; it is excluded anyway rather than leaving one saturation value
+     * trusted and the other not.
+     *
+     * <p>Worth the two lines because this is not a string or an array helper
+     * and it was 17.6% of `node-utf8` -- the largest single entry in that
+     * row's profile, ahead of the copies. Every `&`, `|`, `^`, `<<` and `>>`
+     * on a `number` arrives here, and a UTF-8 state machine is nothing else.
+     * `toUint32`, `toInt8`, `toUint8`, `toInt16` and `toUint16` all route
+     * through it, so they get the same path without their own copy of it.
+     *
+     * <p>`-0.0` returns 0 through the fast path: `(int) -0.0` is 0 and
+     * `0 == -0.0` holds, which is ToInt32's answer.
+     */
+    public static int toInt32(double x) {
+        long wide = (long) x;
+        if (wide == x && wide != Long.MAX_VALUE) { return (int) wide; }
+        long bits = Double.doubleToRawLongBits(x);
+        int exponent = (int) ((bits >>> 52) & 0x7ff) - 1023;
+        // Fractions smaller than one, and integral multiples of 2^32 (also NaN/Inf).
+        if (exponent < 0 || exponent >= 84) { return 0; }
+        long significand = (bits & 0x000fffffffffffffL) | 0x0010000000000000L;
+        int low = exponent >= 52 ? (int) (significand << (exponent - 52))
+            : (int) (significand >>> (52 - exponent));
+        return bits < 0 ? -low : low;
+    }
+    public static int toUint32(double x) { return toInt32(x); }
+    public static int toInt8(double x) { return (byte) toInt32(x); }
+    public static int toUint8(double x) { return toInt32(x) & 0xff; }
+    public static int toInt16(double x) { return (short) toInt32(x); }
+    public static int toUint16(double x) { return toInt32(x) & 0xffff; }
+    public static double round(double x) {
+        if (Double.isNaN(x) || Double.isInfinite(x) || x == 0.0) { return x; }
+        if (x > 0.0 && x < 0.5) { return 0.0; }
+        if (x < 0.0 && x >= -0.5) { return -0.0; }
+        double below = Math.floor(x);
+        return x - below >= 0.5 ? below + 1.0 : below;
+    }
+    public static double trunc(double x) { return x < 0 ? Math.ceil(x) : Math.floor(x); }
+    public static int idiv(int left, int right) {
+        if (right == 0) { throw new NtsRefusal("an integer division by zero"); }
+        return left / right;
+    }
+    public static int irem(int left, int right) {
+        if (right == 0) { throw new NtsRefusal("an integer remainder by zero"); }
+        return left % right;
+    }
+    /**
+     * JavaScript `%` over two `int`s, answered as a number: the JVM's form of
+     * `specialize::integral_remainder`. A zero divisor is NaN and a zero
+     * remainder of a negative dividend is -0. `MIN_VALUE % -1` needs no guard
+     * here, unlike C and LLVM: Java defines it as 0, and the sign test makes it
+     * the -0 JavaScript answers.
+     */
+    public static double remI32(int left, int right) {
+        if (right == 0) { return Double.NaN; }
+        int r = left % right;
+        return r == 0 && left < 0 ? -0.0 : r;
+    }
+
+    /**
+     * The unsigned forms, which are a *correctness* requirement rather than a
+     * width choice.
+     *
+     * <p>A `u32` is held in an `int` slot here, raw, because the JVM has no
+     * unsigned type -- and every value above 2^31 is a negative `int`. `idiv`
+     * and `irem` then answer with the sign of a dividend that has no sign.
+     * `benches/cases/absences` reached it with `i % 3` where the loop counter
+     * passes 2^31: **2,046,179,082 against node's 2,046,179,137**, and the C
+     * lane agreed with node because C has the type.
+     *
+     * <p>`divideUnsigned` and `remainderUnsigned` are Java 8 and Android 24,
+     * inside both floors this jar keeps.
+     */
+    /**
+     * **Signed where signed is the same answer, because C2 strength-reduces one
+     * and not the other.**
+     *
+     * <p>`Integer.remainderUnsigned` compiles to a 64-bit hardware division;
+     * `%` by a constant divisor is turned into a multiply and a shift. C2 does
+     * that for the signed form and cannot see through the JDK method, so
+     * `benches/cases/instanceof` -- two `i % 3` per iteration -- ran at 3.80x
+     * hand-written Java, and the whole gap was this. The `instanceof` tests it
+     * is named for cost nothing.
+     *
+     * <p>`(left | right) >= 0` is true exactly when neither operand has its
+     * high bit set, and there signed and unsigned agree by definition. One
+     * comparison covers both, and the branch is perfectly predicted wherever a
+     * program is counting up from zero. Checked at `-1`, `Integer.MIN_VALUE`,
+     * `-7` and `0x80000001`, which all still take the unsigned arm.
+     *
+     * <p>Measured by swapping the jar under the emitted classes, so the program
+     * was byte-identical and the checksum unchanged: **176.1 us to 51.9 us**,
+     * 3.39x, which takes the row to 1.12x Java and 18.8x faster than node.
+     * The C and LLVM lanes never had this -- they emit `urem` on a `uint32_t`
+     * and clang and LLVM strength-reduce it for free.
+     */
+    public static int uidiv(int left, int right) {
+        if (right == 0) { throw new NtsRefusal("an integer division by zero"); }
+        return (left | right) >= 0 ? left / right : Integer.divideUnsigned(left, right);
+    }
+    public static int uirem(int left, int right) {
+        if (right == 0) { throw new NtsRefusal("an integer remainder by zero"); }
+        return (left | right) >= 0 ? left % right : Integer.remainderUnsigned(left, right);
+    }
+    public static long uldiv(long left, long right) {
+        if (right == 0L) { throw new NtsRefusal("an integer division by zero"); }
+        return (left | right) >= 0L ? left / right : Long.divideUnsigned(left, right);
+    }
+    public static long ulrem(long left, long right) {
+        if (right == 0L) { throw new NtsRefusal("an integer remainder by zero"); }
+        return (left | right) >= 0L ? left % right : Long.remainderUnsigned(left, right);
+    }
+    // A `u64` is held in a `long` raw, so `l2d` and `l2f` read its top bit as a
+    // sign: 2^64 - 1 became -1. Above 2^63 it is halved, keeping the low bit so
+    // the rounding is still to nearest (the bit that would be shifted out is
+    // "sticky"), and doubled back, which is exact.
+    public static double u64ToDouble(long value) {
+        return value >= 0L ? (double) value : (double) ((value >>> 1) | (value & 1L)) * 2.0;
+    }
+    public static float u64ToFloat(long value) {
+        return value >= 0L ? (float) value : (float) ((value >>> 1) | (value & 1L)) * 2.0f;
+    }
+    public static long ldiv(long left, long right) {
+        if (right == 0L) { throw new NtsRefusal("an integer division by zero"); }
+        return left / right;
+    }
+    public static long lrem(long left, long right) {
+        if (right == 0L) { throw new NtsRefusal("an integer remainder by zero"); }
+        return left % right;
+    }
+    public static double charCodeAt(String text, double index) {
+        int at = (int) index;
+        return at < 0 || at >= text.length() ? Double.NaN : text.charAt(at);
+    }
+    /** A held string accumulator can be read without a String copy. */
+    public static double charCodeAt(CharSequence text, double index) {
+        int at = (int) index;
+        return at < 0 || at >= text.length() ? Double.NaN : text.charAt(at);
+    }
+    public static boolean stringEq(String left, String right) { return java.util.Objects.equals(left, right); }
+    public static boolean stringTruthy(String text) { return text != null && !text.isEmpty(); }
+    public static Error unreachable() { return new NtsRefusal("control reached a block the compiler proved unreachable"); }
+    /**
+     * A method call on an erased receiver that no arm of its chain recognised.
+     *
+     * <p>The chain is a test per class the receiver's union names, and its arm
+     * set over-approximates by construction -- so this cannot be reached by a
+     * correct compilation, and it exists so that an incorrect one says which
+     * member and which value rather than calling through whatever the next arm
+     * would have been. The C and LLVM lanes reach the same place through
+     * {@code nts_no_arm_of}.
+     *
+     * <p>Throws rather than returning the error for {@code athrow}, unlike
+     * {@link #unreachable}: the call is emitted by lowering as an ordinary
+     * runtime call, so there is no emitter here to add the throw.
+     */
+    /** A refusal reached at run time; see {@code nts_refused}. */
+    public static void refused(String what) {
+        throw NtsRefusal.missing(what);
+    }
+    /**
+     * `nts_assertion_failed`: a checked assertion an input fails, with no handler to raise its TypeError to.
+     * A legitimate decline, not a defect -- `nts: refused: <what>` -- and, as C's helper does, the process
+     * exits 1 rather than aborting.
+     */
+    public static void assertionFailed(String what) {
+        throw NtsRefusal.decline(what, 1);
+    }
+    public static void noArm(NtsValue subject, String member) {
+        /* `-source 8`, as `uncaught` above is written for: no switch
+           expressions, so this is a statement and a local. */
+        String was;
+        switch (subject.tag) {
+            case NtsValue.UNDEFINED: was = "undefined"; break;
+            case NtsValue.NULL: was = "null"; break;
+            case NtsValue.NUMBER: was = numberText(subject.num); break;
+            case NtsValue.BOOLEAN: was = subject.num != 0 ? "true" : "false"; break;
+            case NtsValue.STRING: was = "a string"; break;
+            default:
+                was = subject.ref == null ? "a null reference" : subject.ref.getClass().getName();
+                break;
+        }
+        throw new NtsRefusal("calling `" + member + "` on a value no arm of its chain recognised -- it is "
+            + was + ", tag " + subject.tag + ", and the set of inhabiting classes did not list it");
+    }
+    /**
+     * A raise in flight: the other way a throw leaves a function.
+     *
+     * <p>{@code uncaught} ends the process. This records the value and
+     * returns, the compiled method returns immediately after, and its caller
+     * tests {@link #raising} and returns too -- so the whole path out is
+     * ordinary returns. One slot rather than a stack: a raise is in flight
+     * between the {@code raise} and the check that takes it, and nothing runs
+     * in between that could raise again.
+     *
+     * <p>Not a Java exception, deliberately. The C lane cannot throw one and
+     * the three lanes have to agree about control flow, not merely about
+     * answers -- a lane that unwound where another returned would diverge on
+     * which releases ran.
+     */
+    private static boolean raising = false;
+    private static NtsValue raised = NtsValue.UNDEFINED_VALUE;
+
+    public static void raise(NtsValue value) {
+        raised = value;
+        raising = true;
+    }
+
+    public static int raising() { return raising ? 1 : 0; }
+
+    public static NtsValue raiseTake() {
+        NtsValue value = raised;
+        raised = NtsValue.UNDEFINED_VALUE;
+        raising = false;
+        return value;
+    }
+
+    public static void uncaught(NtsValue value, String detail) {
+        StringBuilder line = new StringBuilder("nts: uncaught ");
+        switch (value.tag) {
+            case NtsValue.STRING: line.append((String) value.ref); break;
+            case NtsValue.NUMBER: line.append(numberText(value.num)); break;
+            case NtsValue.BOOLEAN: line.append(value.num != 0 ? "true" : "false"); break;
+            case NtsValue.UNDEFINED: line.append("undefined"); break;
+            case NtsValue.NULL: line.append("null"); break;
+            default:
+                line.append(value.ref == null ? "[object]" : className(value.ref));
+                if (detail != null) { line.append(": ").append(detail); }
+        }
+        System.out.flush(); System.err.println(line); System.err.flush(); System.exit(1);
+    }
+
+    /**
+     * What an object's class is called in the program -- C's descriptor name:
+     * the generated class's own where it says ({@link NtsClassNamed}), else its
+     * JVM simple name, which is the program's name for every other class.
+     */
+    public static String className(Object ref) {
+        return ref instanceof NtsClassNamed
+            ? ((NtsClassNamed) ref).@@CLASS_NAME@@()
+            : ref.getClass().getSimpleName();
+    }
+    /**
+     * The callback arrives typed, so there is nothing here to check.
+     *
+     * <p>This took an `Object` and asked `instanceof`, killing the process when
+     * the answer was no -- a check that can only run once a wrong program is
+     * already running, and one that existed because the descriptor promised
+     * nothing. The backend now refuses at build time and the parameter says
+     * what it takes, which is the same guarantee arriving early enough to be
+     * useful.
+     */
+    /** A closure as a microtask; see {@code nts_enqueue_job}. */
+    public static void enqueueJob(NtsCallback callback, double slot) {
+        NtsEnv.microtask(NtsEnv.current(), new Job(callback));
+    }
+
+    /**
+     * The queued closure. A class rather than a method reference, because the
+     * runtime compiles to no {@code invokedynamic}: see
+     * {@code nothing_in_the_runtime_needs_a_feature_android_lacks}.
+     */
+    private static final class Job implements NtsResumable {
+        private final NtsCallback callback;
+
+        Job(NtsCallback callback) {
+            this.callback = callback;
+        }
+
+        @Override
+        public void @@RESUME@@() {
+            callback.call();
+        }
+    }
+    public static double setTimeout(NtsCallback callback, double slot, double delayMs, boolean repeating) {
+        return NtsEnv.postDelayed(NtsEnv.current(), callback, delayMs, repeating);
+    }
+    public static void clearTimeout(double id) { NtsEnv.cancelDelayed(NtsEnv.current(), id); }
+    public static void cellReady(boolean ready, String name) {
+        if (ready) { return; }
+        System.out.flush(); System.err.println("nts: `" + name + "` was read before its declaration ran");
+        System.err.flush(); System.exit(1);
+    }
+    /** Package-visible: the buffer and view classes report lengths the same way. */
+    /**
+     * How a number is spelled, which is {@link #numberToString} and nothing
+     * else.
+     *
+     * <p>**This was a second implementation and it disagreed.** It answered
+     * `String.format("%g", value)` for anything not a whole number, which is C's
+     * six-significant-digit default: `1.5` printed as `1.50000` and `0.1` as
+     * `0.100000`, where node gives `1.5` and `0.1`. Whole numbers agreed, so
+     * every test that happened to use one passed.
+     *
+     * <p>The comment on {@code NtsValue.valueToString} already said the number
+     * must not go through `Double.toString` "because the two disagree -- `1e21`
+     * against `1.0E21` -- and node's spelling is the one this has to match". The
+     * intent was right and the implementation was a third spelling that matched
+     * neither. `numberToString` is the one that is tested against node, and a
+     * conversion with two implementations has two answers.
+     *
+     * <p>Kept as a name rather than deleted because diagnostics call it -- an
+     * index in a refusal message reads better as `1.5` than `1.50000` too.
+     */
+    static String numberText(double value) {
+        return numberToString(value);
+    }
+    public static double[] arrayFill(double[] array, double value) { Arrays.fill(array, value); return array; }
+    public static boolean[] arrayFillBool(boolean[] array, boolean value) { Arrays.fill(array, value); return array; }
+    public static Object[] arrayFillRef(Object[] array, Object value) { Arrays.fill(array, value); return array; }
+
+    /**
+     * ECMAScript's exponentiation, which {@link Math#pow} <b>already is</b>.
+     *
+     * <p>The C runtime's {@code nts_math_pow} corrects two cases where C99
+     * answers 1 and the specification answers NaN. Java answers NaN for both,
+     * so this forwards unguarded by measurement rather than by omission:
+     *
+     * <pre>
+     *                    glibc   Java   ECMAScript
+     *   pow(1, NaN)      1.0     NaN    NaN
+     *   pow(-1, NaN)     NaN     NaN    NaN
+     *   pow(1, +inf)     1.0     NaN    NaN
+     *   pow(NaN, 0)      1.0     1.0    1
+     * </pre>
+     *
+     * <p>A guard was written here first, on the assumption that a platform
+     * following IEEE 754 follows C99 -- and the sabotage that should have
+     * proved it was live passed instead, because there was nothing for it to
+     * fix. Left as a note so the next reader of the C helper does not add one
+     * either: duplicating a rule the platform already has is a second
+     * derivation of it, and the redundant copy is the one that goes stale.
+     */
+    public static double mathPow(double base, double exponent) { return Math.pow(base, exponent); }
+    public static double mathSinh(double x) { return Math.sinh(x); }
+    public static boolean isFinite(double x) { return !Double.isNaN(x) && !Double.isInfinite(x); }
+    public static double mathSin(double x) { return StrictMath.sin(x); }
+    public static double mathCos(double x) { return StrictMath.cos(x); }
+    public static double mathTan(double x) { return StrictMath.tan(x); }
+    public static double mathAsin(double x) { return StrictMath.asin(x); }
+    public static double mathAcos(double x) { return StrictMath.acos(x); }
+    public static double mathAtan(double x) { return StrictMath.atan(x); }
+    public static double mathAtan2(double y, double x) { return StrictMath.atan2(y, x); }
+    /**
+     * fdlibm's `exp`, which is V8's, with V8's one exception: `exp(1)` is `E`.
+     * V8's `base/ieee754.cc` returns `E` there because fdlibm's reduction gets
+     * the last bit wrong, so node answers `Math.exp(1) === Math.E` and
+     * `StrictMath.exp(1)` did not (test262's staging `sm/Math/exp-exact`).
+     * Elsewhere the two agree to the bit: 200,000 random inputs over
+     * [-700, 700] and [-10, 10] matched node on every one, where `Math.exp`
+     * (HotSpot's intrinsic) differed on 19,610 (2026-10-15).
+     */
+    public static double mathExp(double x) { return x == 1.0 ? Math.E : StrictMath.exp(x); }
+    public static double mathLog(double x) { return StrictMath.log(x); }
+    private static final double LN_2 = StrictMath.log(2.0);
+    public static double mathLog2(double x) { return StrictMath.log(x) / LN_2; }
+    public static double mathLog10(double x) { return StrictMath.log10(x); }
+    public static double mathCosh(double x) { return StrictMath.cosh(x); }
+    public static double mathTanh(double x) { return StrictMath.tanh(x); }
+    public static double mathCbrt(double x) { return StrictMath.cbrt(x); }
+    /**
+     * `Math.hypot` as V8 computes it, not fdlibm's: each magnitude divided by
+     * the largest, the squares summed (with Kahan's compensation, which for two
+     * terms is exactly zero), the root scaled back. `StrictMath.hypot`
+     * differed from node in the last bit on 37,062 of 100,000 random pairs;
+     * this differs on none (2026-10-15). An infinity wins over a NaN, as the
+     * specification orders them.
+     */
+    public static double mathHypot(double x, double y) {
+        double a = Math.abs(x), b = Math.abs(y);
+        if (a == Double.POSITIVE_INFINITY || b == Double.POSITIVE_INFINITY) { return Double.POSITIVE_INFINITY; }
+        if (Double.isNaN(a) || Double.isNaN(b)) { return Double.NaN; }
+        double max = Math.max(a, b);
+        if (max == 0.0) { return 0.0; }
+        double first = a / max, second = b / max;
+        return Math.sqrt(first * first + second * second) * max;
+    }
+    /** `Math.imul`: an `int` product wraps, which is exactly the low 32 bits. */
+    public static double mathImul(double x, double y) { return toInt32(x) * toInt32(y); }
+    public static double mathSign(double x) { return Math.signum(x); }
+    public static double mathFround(double x) { return (float) x; }
+    public static double mathExpm1(double x) { return StrictMath.expm1(x); }
+    public static double mathLog1p(double x) { return StrictMath.log1p(x); }
+    public static boolean isInteger(double x) { return isFinite(x) && x == Math.floor(x); }
+    public static boolean isSafeInteger(double x) { return isInteger(x) && Math.abs(x) <= 9007199254740991.0; }
+    public static String boolToString(boolean value) { return value ? "true" : "false"; }
+    public static String tagName(int tag) { return NtsValue.tagName(tag); }
+    public static boolean isPresent(Object value) { return value != null; }
+
+    private static double toInteger(double x) { return NtsArrays.toInteger(x); }
+    private static int clamp(double index, int length, boolean relative) {
+        return relative ? NtsArrays.clamp(index, length) : Math.max(0, Math.min((int) index, length));
+    }
+    public static double strIndexOf(String s, String needle) { return s.indexOf(needle); }
+    public static double strLastIndexOf(String s, String needle) { return s.lastIndexOf(needle); }
+    public static boolean strIncludes(String s, String needle) { return s.contains(needle); }
+    public static boolean strStartsWith(String s, String prefix) { return s.startsWith(prefix); }
+    public static boolean strEndsWith(String s, String suffix) { return s.endsWith(suffix); }
+    public static double strPointWidth(String s, double at) {
+        int index = (int) at;
+        return index < 0 || index >= s.length() ? 1.0 : Character.charCount(s.codePointAt(index));
+    }
+    /**
+     * {@code parseInt(text, radix)}.
+     *
+     * <p>Transliterated from `nts_parse_int` rather than reached for in the
+     * JDK, because nothing there is this function. {@code Integer.parseInt}
+     * throws where this returns {@code NaN}, refuses a trailing non-digit where
+     * this stops at one, knows nothing about the {@code 0x} prefix, and cannot
+     * answer above {@code long}. {@code parseInt("99999999999999999999")} is a
+     * double here and an exception there.
+     *
+     * <p>The accumulator is a {@code double} for that last reason: the value is
+     * allowed to exceed every integer type, and precision loss past 2^53 is the
+     * specified answer rather than an error.
+     *
+     * <p>Three rules that a version written from the description gets wrong:
+     * the whitespace set is the specification's {@code StrWhiteSpaceChar} and
+     * includes {@code U+00A0} and {@code U+FEFF}; a radix outside 2..36 that is
+     * not zero is {@code NaN} and not a default; and the {@code 0x} prefix is
+     * consumed for radix 16 as well as for an absent radix, so
+     * {@code parseInt("0x1f", 16)} is 31.
+     */
+    /**
+     * {@code parseFloat(text)}.
+     *
+     * <p>**The longest prefix the grammar admits, then a parse of that** -- not
+     * a parse of the whole string. {@code Double.parseDouble} on the input
+     * would read {@code "0x10"} as 16 where JavaScript answers 0, accept
+     * {@code "inf"} and {@code "NaN"}, take a {@code d} or {@code f} suffix
+     * Java allows and JavaScript does not, and reject a trailing {@code "abc"}
+     * that JavaScript simply stops before.
+     *
+     * <p>So the scan decides what is admitted and {@code parseDouble} only
+     * converts it. Every unit in the prefix is a digit, a sign, a dot or an
+     * {@code e} by construction, which is the subset the two agree about
+     * exactly.
+     *
+     * <p>Three rules a version written from the description gets wrong, all
+     * transcribed from `nts_parse_float`: {@code "Infinity"} is spelled out and
+     * is the only word form admitted, so it is checked before the digits; a
+     * lone {@code "."} with no digit on either side is {@code NaN} rather than
+     * zero; and an exponent counts **only if a digit follows it**, so
+     * {@code "1e"} is 1 and the scan backs up over the {@code e} rather than
+     * failing.
+     */
+    /** `uriReserved`: kept as written by the bare pair, escaped by the component pair. */
+    private static final String URI_RESERVED = ";/?:@&=+$,#";
+
+    /** `uriUnescaped`: never escaped by either pair. */
+    private static boolean uriUnescaped(int point) {
+        return (point >= 'A' && point <= 'Z') || (point >= 'a' && point <= 'z')
+            || (point >= '0' && point <= '9')
+            || (point < 0x80 && "-_.!~*'()".indexOf(point) >= 0);
+    }
+
+    private static int uriHex(char unit) {
+        if (unit >= '0' && unit <= '9') { return unit - '0'; }
+        if (unit >= 'A' && unit <= 'F') { return unit - 'A' + 10; }
+        if (unit >= 'a' && unit <= 'f') { return unit - 'a' + 10; }
+        return -1;
+    }
+
+    /**
+     * {@code encodeURI} and {@code encodeURIComponent}, by the flag.
+     *
+     * <p>**`null` is a `URIError` and the lowering raises it** -- the HIR
+     * already carries the null test and the throw block, the same split
+     * `repeat` uses for its `RangeError`. Nothing here throws.
+     *
+     * <p>An unpaired surrogate is an error rather than a replacement
+     * character: a lead with nothing after it, a lead followed by a non-trail,
+     * or a trail with no lead. That is the one case `String.getBytes(UTF_8)`
+     * would silently answer for, writing `?` or `U+FFFD` where the
+     * specification refuses.
+     */
+    public static String encodeURI(String text, double component) {
+        if (text == null) { return null; }
+        final String digits = "0123456789ABCDEF";
+        int units = text.length();
+        StringBuilder out = new StringBuilder(units + 16);
+        int at = 0;
+        while (at < units) {
+            int point = text.charAt(at);
+            at++;
+            if (point >= 0xD800 && point <= 0xDBFF) {
+                if (at >= units) { return null; }
+                int trail = text.charAt(at);
+                if (trail < 0xDC00 || trail > 0xDFFF) { return null; }
+                point = 0x10000 + ((point - 0xD800) << 10) + (trail - 0xDC00);
+                at++;
+            } else if (point >= 0xDC00 && point <= 0xDFFF) {
+                return null;
+            }
+            if (uriUnescaped(point)
+                    || (component == 0.0 && point < 0x80 && URI_RESERVED.indexOf(point) >= 0)) {
+                out.append((char) point);
+                continue;
+            }
+            int[] bytes = new int[4];
+            int count;
+            if (point < 0x80) {
+                bytes[0] = point; count = 1;
+            } else if (point < 0x800) {
+                bytes[0] = 0xC0 | (point >> 6);
+                bytes[1] = 0x80 | (point & 0x3F); count = 2;
+            } else if (point < 0x10000) {
+                bytes[0] = 0xE0 | (point >> 12);
+                bytes[1] = 0x80 | ((point >> 6) & 0x3F);
+                bytes[2] = 0x80 | (point & 0x3F); count = 3;
+            } else {
+                bytes[0] = 0xF0 | (point >> 18);
+                bytes[1] = 0x80 | ((point >> 12) & 0x3F);
+                bytes[2] = 0x80 | ((point >> 6) & 0x3F);
+                bytes[3] = 0x80 | (point & 0x3F); count = 4;
+            }
+            for (int byteAt = 0; byteAt < count; byteAt++) {
+                out.append('%')
+                   .append(digits.charAt(bytes[byteAt] >> 4))
+                   .append(digits.charAt(bytes[byteAt] & 0x0F));
+            }
+        }
+        return out.toString();
+    }
+
+    /**
+     * {@code decodeURI} and {@code decodeURIComponent}, by the flag.
+     *
+     * <p>**`java.net.URLDecoder` is not this function.** It decodes `+` as a
+     * space, which this must not, and it is lenient about malformed input --
+     * so it passes every easy case and answers where the specification throws.
+     *
+     * <p>**Overlong, surrogate and out-of-range are all errors**, and that is
+     * not pedantry: an overlong encoding is a *second spelling* of a
+     * character, which is how a check on the decoded text gets bypassed.
+     * `%C0%80` is a second spelling of NUL, `%ED%A0%80` is a surrogate that
+     * UTF-8 excludes, and `%F4%90%80%80` is past `U+10FFFF`. Each is refused
+     * by name.
+     *
+     * <p>A reserved character stays **as the three units it arrived as** for
+     * the bare pair, not as itself: `decodeURI("%2F")` is `"%2F"`.
+     */
+    public static String decodeURI(String text, double component) {
+        if (text == null) { return null; }
+        int units = text.length();
+        StringBuilder out = new StringBuilder(units);
+        int at = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            if (unit != '%') { out.append(unit); at++; continue; }
+            int start = at;
+            if (at + 2 >= units) { return null; }
+            int high = uriHex(text.charAt(at + 1));
+            int low = uriHex(text.charAt(at + 2));
+            if (high < 0 || low < 0) { return null; }
+            int leading = high * 16 + low;
+            at += 3;
+            if (leading < 0x80) {
+                if (component == 0.0 && URI_RESERVED.indexOf(leading) >= 0) {
+                    out.append(text, start, start + 3);
+                } else {
+                    out.append((char) leading);
+                }
+                continue;
+            }
+            int extra;
+            int point;
+            if ((leading & 0xE0) == 0xC0) { extra = 1; point = leading & 0x1F; }
+            else if ((leading & 0xF0) == 0xE0) { extra = 2; point = leading & 0x0F; }
+            else if ((leading & 0xF8) == 0xF0) { extra = 3; point = leading & 0x07; }
+            else { return null; }
+            for (int more = 0; more < extra; more++) {
+                if (at + 2 >= units || text.charAt(at) != '%') { return null; }
+                int h = uriHex(text.charAt(at + 1));
+                int l = uriHex(text.charAt(at + 2));
+                if (h < 0 || l < 0) { return null; }
+                int next = h * 16 + l;
+                if ((next & 0xC0) != 0x80) { return null; }
+                point = (point << 6) | (next & 0x3F);
+                at += 3;
+            }
+            int least = extra == 1 ? 0x80 : (extra == 2 ? 0x800 : 0x10000);
+            if (point < least || point > 0x10FFFF || (point >= 0xD800 && point <= 0xDFFF)) {
+                return null;
+            }
+            if (point > 0xFFFF) {
+                point -= 0x10000;
+                out.append((char) (0xD800 + (point >> 10)));
+                out.append((char) (0xDC00 + (point & 0x3FF)));
+            } else {
+                out.append((char) point);
+            }
+        }
+        return out.toString();
+    }
+
+    public static double parseFloat(String text) {
+        if (text == null) {
+            return Double.NaN;
+        }
+        int units = text.length();
+        int at = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            if (unit != 0x20 && unit != 0x09 && unit != 0x0a && unit != 0x0d
+                    && unit != 0x0b && unit != 0x0c && unit != 0xa0 && unit != 0xfeff) {
+                break;
+            }
+            at++;
+        }
+        int start = at;
+        boolean negative = false;
+        if (at < units && (text.charAt(at) == '+' || text.charAt(at) == '-')) {
+            negative = text.charAt(at) == '-';
+            at++;
+        }
+        final String infinity = "Infinity";
+        int spelled = 0;
+        while (spelled < 8 && at + spelled < units
+                && text.charAt(at + spelled) == infinity.charAt(spelled)) {
+            spelled++;
+        }
+        if (spelled == 8) {
+            return negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+        }
+        int digits = at;
+        while (at < units && text.charAt(at) >= '0' && text.charAt(at) <= '9') {
+            at++;
+        }
+        boolean any = at > digits;
+        if (at < units && text.charAt(at) == '.') {
+            at++;
+            while (at < units && text.charAt(at) >= '0' && text.charAt(at) <= '9') {
+                at++;
+                any = true;
+            }
+        }
+        if (!any) {
+            return Double.NaN;
+        }
+        if (at < units && (text.charAt(at) == 'e' || text.charAt(at) == 'E')) {
+            int after = at + 1;
+            if (after < units && (text.charAt(after) == '+' || text.charAt(after) == '-')) {
+                after++;
+            }
+            int exponent = after;
+            while (after < units && text.charAt(after) >= '0' && text.charAt(after) <= '9') {
+                after++;
+            }
+            if (after > exponent) {
+                at = after;
+            }
+        }
+        return Double.parseDouble(text.substring(start, at));
+    }
+
+    public static double parseInt(String text, double radix) {
+        if (text == null) {
+            return Double.NaN;
+        }
+        int units = text.length();
+        int at = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            if (unit != 0x20 && unit != 0x09 && unit != 0x0a && unit != 0x0d
+                    && unit != 0x0b && unit != 0x0c && unit != 0xa0 && unit != 0xfeff) {
+                break;
+            }
+            at++;
+        }
+        boolean negative = false;
+        if (at < units && (text.charAt(at) == '+' || text.charAt(at) == '-')) {
+            negative = text.charAt(at) == '-';
+            at++;
+        }
+        int base = (int) radix;
+        if (Double.isNaN(radix) || base == 0) {
+            base = 0;
+        }
+        if (base != 0 && (base < 2 || base > 36)) {
+            return Double.NaN;
+        }
+        if ((base == 0 || base == 16) && at + 1 < units && text.charAt(at) == '0'
+                && (text.charAt(at + 1) == 'x' || text.charAt(at + 1) == 'X')) {
+            at += 2;
+            base = 16;
+        }
+        if (base == 0) {
+            base = 10;
+        }
+        double value = 0.0;
+        int digits = 0;
+        while (at < units) {
+            char unit = text.charAt(at);
+            int digit;
+            if (unit >= '0' && unit <= '9') {
+                digit = unit - '0';
+            } else if (unit >= 'a' && unit <= 'z') {
+                digit = unit - 'a' + 10;
+            } else if (unit >= 'A' && unit <= 'Z') {
+                digit = unit - 'A' + 10;
+            } else {
+                break;
+            }
+            if (digit >= base) {
+                break;
+            }
+            value = value * base + digit;
+            digits++;
+            at++;
+        }
+        if (digits == 0) {
+            return Double.NaN;
+        }
+        return negative ? -value : value;
+    }
+
+    public static String stringFromCharCode(double code) { return String.valueOf((char) toUint16(code)); }
+
+    /**
+     * {@code sb += String.fromCharCode(code)}, without the string.
+     *
+     * <p>The backend emits this where an accumulator held as a builder appends
+     * a single code unit and nothing else reads the one-character string --
+     * which in `node-utf8` is every character of the ASCII and BMP paths, about
+     * a hundred allocations a decode. It calls {@link #toUint16} rather than
+     * casting so that the conversion is the same one {@link
+     * #stringFromCharCode} makes: two spellings of a coercion are two chances
+     * to disagree, and the one thing this may not do is answer differently.
+     */
+    public static StringBuilder appendCharCode(StringBuilder into, double code) {
+        return into.append((char) toUint16(code));
+    }
+    public static String stringFromCodePoint(double code) { return new String(Character.toChars((int) toInteger(code))); }
+    /**
+     * {@code console.log} and {@code console.error}: the line the lowering
+     * spelled and joined, as UTF-8, and a newline, written through at once as
+     * node writes it. A lone surrogate is U+FFFD, as node's stream makes it;
+     * Java's own encoder would write {@code ?}.
+     */
+    public static void consoleWrite(String line, boolean toStderr) {
+        standardWrite(line, toStderr, true);
+    }
+    /** One encoder, stream and flush point for console and raw stream writes. */
+    private static boolean standardWrite(String line, boolean toStderr, boolean newline) {
+        java.io.PrintStream stream = toStderr ? System.err : System.out;
+        byte[] bytes = strToWellFormed(line).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+        stream.write(bytes, 0, bytes.length);
+        if (newline) { stream.write('\n'); }
+        // checkError flushes the PrintStream, including an empty raw write.
+        return !stream.checkError();
+    }
+    public static double writeStdout(String text) {
+        if (!standardWrite(text, false, false)) {
+            refused("writing standard output failed; the JVM does not expose its errno");
+        }
+        return 0;
+    }
+    public static double writeStderr(String text) {
+        if (!standardWrite(text, true, false)) {
+            refused("writing standard error failed; the JVM does not expose its errno");
+        }
+        return 0;
+    }
+    public static String strRepeat(String s, double times) {
+        int count = (int) toInteger(times);
+        if (count <= 0 || s.isEmpty()) { return ""; }
+        if (count == 1) { return s; }
+        int length = NtsArrays.checkedLength((long) s.length() * count);
+        StringBuilder out = new StringBuilder(length);
+        for (int i = 0; i < count; ++i) { out.append(s); }
+        return out.toString();
+    }
+    private static void appendPad(StringBuilder out, String pad, int amount) {
+        int step = pad.length();
+        while (amount >= step) { out.append(pad); amount -= step; }
+        if (amount != 0) { out.append(pad, 0, amount); }
+    }
+    public static String strPadStart(String s, double target, String pad) {
+        int want = (int) toInteger(target);
+        if (want <= s.length() || pad.isEmpty()) { return s; }
+        StringBuilder out = new StringBuilder(want);
+        appendPad(out, pad, want - s.length());
+        return out.append(s).toString();
+    }
+    public static String strPadEnd(String s, double target, String pad) {
+        int want = (int) toInteger(target);
+        if (want <= s.length() || pad.isEmpty()) { return s; }
+        StringBuilder out = new StringBuilder(want).append(s);
+        appendPad(out, pad, want - s.length());
+        return out.toString();
+    }
+    /**
+     * Two strings joined, which on this platform is what {@code +} already is.
+     *
+     * <p>A static here rather than a {@code String.concat} emitted at the call
+     * site: the external table maps every {@code nts_} name to a static on this
+     * class, and one entry spelled differently is the asymmetry that goes wrong
+     * the next time somebody adds a name.
+     *
+     * <p>{@code --release 8} compiles {@code +} to a {@code StringBuilder}
+     * rather than to {@code invokedynamic makeConcatWithConstants}, which is
+     * what keeps the no-{@code invokedynamic} ratchet green here. That ratchet
+     * is no longer about the Android floor, which is 29 and would dex an
+     * {@code invoke-custom} happily; {@code runtime_jar.rs} says what it does
+     * still catch.
+     */
+    public static String concat(String a, String b) {
+        return a + b;
+    }
+
+    public static String strSubstring(String s, double from, double to) {
+        int start = clamp(from, s.length(), false), end = clamp(to, s.length(), false);
+        return start <= end ? s.substring(start, end) : s.substring(end, start);
+    }
+    public static String strSlice(String s, double from, double to) {
+        int start = clamp(from, s.length(), true), end = clamp(to, s.length(), true);
+        return start >= end ? "" : s.substring(start, end);
+    }
+    private static boolean isJsWhitespace(char c) {
+        switch (c) {
+            case '\t': case '\n': case '\u000B': case '\f': case '\r': case ' ':
+            case '\u00A0': case '\u1680': case '\u2028': case '\u2029':
+            case '\u202F': case '\u205F': case '\u3000': case '\uFEFF': return true;
+            default: return c >= '\u2000' && c <= '\u200A';
+        }
+    }
+    public static String strTrim(String s) {
+        int start = 0, end = s.length();
+        while (start < end && isJsWhitespace(s.charAt(start))) { ++start; }
+        while (end > start && isJsWhitespace(s.charAt(end - 1))) { --end; }
+        return s.substring(start, end);
+    }
+    /**
+     * `Number(s)` -- ECMAScript StringToNumber, and **deliberately not
+     * {@link Double#parseDouble}**, which differs from JavaScript in both
+     * directions.
+     *
+     * <p>Java accepts a trailing `d` or `f`, its own definition of surrounding
+     * whitespace, and `0x1p3` hex floats. JavaScript accepts `0b`, `0o` and
+     * `0x` integers, a bare leading `.`, and a signed `Infinity`. Java
+     * *throws* where JavaScript answers `NaN`, and `parseDouble("")` throws
+     * where `Number("")` is **+0**.
+     *
+     * <p>So the grammar is checked by hand first and `parseDouble` is reached
+     * only once the span is known to be a decimal literal -- at which point the
+     * two agree, because the grammar admits exactly what both read the same
+     * way. That is the same arrangement as the C runtime's, where the check
+     * guards a `strtod`, and it is a transliteration of it rather than a second
+     * design: `nts_str_to_number`, `nts_number_radix` and
+     * `nts_number_span_is_decimal` are the three pieces and these are the same
+     * three.
+     *
+     * <p>`examples/number-from-string` compares 48 spellings against node,
+     * including `-0`'s sign, both infinities, `nan`, `inf`, `1e309` and
+     * `9007199254740993`.
+     */
+    public static double strToNumber(String s) {
+        if (s == null) { return 0.0; }
+        int from = 0, to = s.length();
+        while (from < to && isJsWhitespace(s.charAt(from))) { ++from; }
+        while (to > from && isJsWhitespace(s.charAt(to - 1))) { --to; }
+        // Empty or all space is +0, which is the case `parseDouble` throws on.
+        if (from == to) { return 0.0; }
+
+        // Non-ASCII anywhere in the body is `NaN`: no digit, sign, point or
+        // exponent marker is above 0x7F, so a unit that is cannot be part of
+        // any literal. Checked before the grammar rather than inside it, as
+        // the C does, so the two cannot disagree about a stray unit.
+        for (int at = from; at < to; ++at) {
+            if (s.charAt(at) > 0x7F) { return Double.NaN; }
+        }
+        String text = s.substring(from, to);
+
+        int body = 0;
+        boolean negative = false;
+        if (text.charAt(0) == '+' || text.charAt(0) == '-') {
+            negative = text.charAt(0) == '-';
+            body = 1;
+        }
+        // `Infinity` with an optional sign, and the only thing spelled with
+        // letters that is not `NaN`. `parseDouble` also accepts "NaN", "inf"
+        // and "Infinityd"; JavaScript accepts none of them.
+        if (text.length() - body == 8 && text.startsWith("Infinity", body)) {
+            return negative ? Double.NEGATIVE_INFINITY : Double.POSITIVE_INFINITY;
+        }
+        // The whole string, sign included: a radix literal cannot carry one,
+        // so `-0x10` is `NaN` rather than -16.
+        double radix = radixLiteral(text);
+        if (!Double.isNaN(radix)) { return radix; }
+        return isDecimalSpan(text) ? Double.parseDouble(text) : Double.NaN;
+    }
+
+    /** `0x`, `0o` and `0b`, unsigned by grammar. `NaN` when it is not one. */
+    private static double radixLiteral(String text) {
+        if (text.length() < 3 || text.charAt(0) != '0') { return Double.NaN; }
+        final int base;
+        switch (text.charAt(1)) {
+            case 'x': case 'X': base = 16; break;
+            case 'o': case 'O': base = 8; break;
+            case 'b': case 'B': base = 2; break;
+            default: return Double.NaN;
+        }
+        // Accumulated in a `double` rather than a `long`, because the result is
+        // a `double` and a literal past 2^53 has to round the way the arithmetic
+        // rounds rather than wrap the way a `long` would.
+        double value = 0.0;
+        for (int at = 2; at < text.length(); ++at) {
+            char unit = text.charAt(at);
+            final int digit;
+            if (unit >= '0' && unit <= '9') { digit = unit - '0'; }
+            else if (unit >= 'a' && unit <= 'f') { digit = unit - 'a' + 10; }
+            else if (unit >= 'A' && unit <= 'F') { digit = unit - 'A' + 10; }
+            else { return Double.NaN; }
+            if (digit >= base) { return Double.NaN; }
+            value = value * base + digit;
+        }
+        return value;
+    }
+
+    /** Whether the whole span is a decimal literal `parseDouble` reads as JS does. */
+    private static boolean isDecimalSpan(String text) {
+        int at = 0, length = text.length();
+        if (at < length && (text.charAt(at) == '+' || text.charAt(at) == '-')) { ++at; }
+        int before = at;
+        while (at < length && text.charAt(at) >= '0' && text.charAt(at) <= '9') { ++at; }
+        int integral = at - before;
+        int fractional = 0;
+        if (at < length && text.charAt(at) == '.') {
+            ++at;
+            int start = at;
+            while (at < length && text.charAt(at) >= '0' && text.charAt(at) <= '9') { ++at; }
+            fractional = at - start;
+        }
+        // `.` alone, `+.` and `-` are not literals. One digit somewhere is the
+        // whole requirement and it may be on either side of the point: `1.`,
+        // `.5` and `1` are all numbers and `.` is not.
+        if (integral == 0 && fractional == 0) { return false; }
+        if (at < length && (text.charAt(at) == 'e' || text.charAt(at) == 'E')) {
+            ++at;
+            if (at < length && (text.charAt(at) == '+' || text.charAt(at) == '-')) { ++at; }
+            int start = at;
+            while (at < length && text.charAt(at) >= '0' && text.charAt(at) <= '9') { ++at; }
+            if (at == start) { return false; }
+        }
+        return at == length;
+    }
+
+    public static String strTrimStart(String s) {
+        int start = 0;
+        while (start < s.length() && isJsWhitespace(s.charAt(start))) { ++start; }
+        return s.substring(start);
+    }
+    public static String strTrimEnd(String s) {
+        int end = s.length();
+        while (end > 0 && isJsWhitespace(s.charAt(end - 1))) { --end; }
+        return s.substring(0, end);
+    }
+    /** Two scans exchange extra searching for an exact-sized result and no list backing array. */
+    public static String[] strSplit(String s, String separator) {
+        if (separator.isEmpty()) {
+            String[] units = new String[s.length()];
+            for (int i = 0; i < units.length; ++i) { units[i] = String.valueOf(s.charAt(i)); }
+            return units;
+        }
+        int step = separator.length(), first = s.indexOf(separator);
+        if (first < 0) { return new String[] {s}; }
+        int count = 2;
+        for (int at = s.indexOf(separator, first + step); at >= 0; at = s.indexOf(separator, at + step)) { ++count; }
+        String[] parts = new String[count];
+        int from = 0, i = 0;
+        for (int at = first; at >= 0; at = s.indexOf(separator, from)) {
+            parts[i++] = s.substring(from, at);
+            from = at + step;
+        }
+        parts[i] = s.substring(from);
+        return parts;
+    }
+    private static void substitution(StringBuilder out, String matched, String whole, int at, String replacement) {
+        if (replacement.indexOf('$') < 0) { out.append(replacement); return; }
+        for (int i = 0; i < replacement.length(); ++i) {
+            char c = replacement.charAt(i);
+            if (c != '$' || i + 1 == replacement.length()) { out.append(c); continue; }
+            char next = replacement.charAt(i + 1);
+            switch (next) {
+                case '$': out.append('$'); break;
+                case '&': out.append(matched); break;
+                case '`': out.append(whole, 0, at); break;
+                case '\'': out.append(whole, at + matched.length(), whole.length()); break;
+                default: out.append('$'); continue;
+            }
+            ++i;
+        }
+    }
+    public static String strReplace(String s, String pattern, String with) {
+        int at = s.indexOf(pattern);
+        if (at < 0) { return s; }
+        StringBuilder out = new StringBuilder(s.length());
+        out.append(s, 0, at); substitution(out, pattern, s, at, with);
+        return out.append(s, at + pattern.length(), s.length()).toString();
+    }
+    public static String strReplaceAll(String s, String pattern, String with) {
+        int first = s.indexOf(pattern);
+        if (first < 0) { return s; }
+        StringBuilder out = new StringBuilder(s.length());
+        if (pattern.isEmpty()) {
+            substitution(out, "", s, 0, with);
+            for (int i = 0; i < s.length(); ++i) {
+                out.append(s.charAt(i)); substitution(out, "", s, i + 1, with);
+            }
+            return out.toString();
+        }
+        int from = 0, at = first;
+        do {
+            out.append(s, from, at); substitution(out, pattern, s, at, with);
+            from = at + pattern.length(); at = s.indexOf(pattern, from);
+        } while (at >= 0);
+        return out.append(s, from, s.length()).toString();
+    }
+    /**
+     * `s[i]` -- a subscript, which stops outside the string.
+     *
+     * <p>Not {@link #strAt}, which is `String.prototype.at`: relative indexing
+     * and `undefined` outside. `ops.rs` pointed `nts_str_at` at that one, so
+     * `"abc"[5]` returned `null` on this backend, the null reached
+     * `String.length()`, and the program died with a `NullPointerException`
+     * where C and LLVM declined the case. One HIR name meaning two things.
+     *
+     * <p>C's `nts_str_at_into` is the contract, and it moved: it converted with
+     * `nts_to_integer` first and then tested the bounds, so `ToInteger(1.7)` was
+     * 1 and `ToInteger(NaN)` was 0 and both landed *inside* the string --
+     * `"abc"[1.7]` answered `"b"`, `"abc"[NaN]` answered `"a"`. Wrong answers
+     * rather than stops. It now tests the **unconverted** value, which is what
+     * the array path has always done.
+     *
+     * <p>So this drops the conversion rather than adding a test: {@link
+     * #bounds} already is that rule. `(int) index == index` rejects a fraction,
+     * and `(int) NaN` is 0 which fails it, while `-0.0` casts to 0 and compares
+     * equal so it still indexes element zero -- which is what JavaScript does.
+     * The array helper and the string helper are one rule again because they
+     * are one call.
+     *
+     * <p>`charAt` and `at` keep converting and must: both are
+     * `ToIntegerOrInfinity`, so `"abc".charAt(1.7)` and `"abc".at(1.7)` are
+     * `"b"`. Three methods, three rules, and only the subscript is strict about
+     * what an index is.
+     */
+    public static String strIndex(String s, double index) {
+        return String.valueOf(s.charAt(bounds(s.length(), index)));
+    }
+
+    /** `String.prototype.at`: relative, and `null` -- undefined -- outside. */
+    public static String strAt(String s, double index) {
+        int at = NtsArrays.offset(index, s.length());
+        return at < 0 ? null : String.valueOf(s.charAt(at));
+    }
+    public static String strCharAt(String s, double index) {
+        int at = (int) index;
+        return at < 0 || at >= s.length() ? "" : String.valueOf(s.charAt(at));
+    }
+    public static double strCodePointAt(String s, double index) {
+        int at = (int) index;
+        return at < 0 || at >= s.length() ? Double.NaN : s.codePointAt(at);
+    }
+    public static double strIndexOfFrom(String s, String needle, double from) {
+        return s.indexOf(needle, clamp(from, s.length(), false));
+    }
+    public static double strLastIndexOfFrom(String s, String needle, double from) {
+        int start = Double.isNaN(from) ? s.length() : clamp(from, s.length(), false);
+        return s.lastIndexOf(needle, start);
+    }
+    public static boolean strIncludesFrom(String s, String needle, double from) {
+        return strIndexOfFrom(s, needle, from) >= 0;
+    }
+    public static boolean strStartsWithAt(String s, String needle, double at) {
+        return s.startsWith(needle, clamp(at, s.length(), false));
+    }
+    public static boolean strEndsWithAt(String s, String needle, double at) {
+        int end = clamp(at, s.length(), false);
+        return needle.length() <= end && s.startsWith(needle, end - needle.length());
+    }
+    public static String strToLowerCase(String s) { return s.toLowerCase(Locale.ROOT); }
+    public static String strToUpperCase(String s) { return s.toUpperCase(Locale.ROOT); }
+    public static boolean strIsWellFormed(String s) {
+        for (int at = 0; at < s.length(); ++at) {
+            char c = s.charAt(at);
+            if (Character.isHighSurrogate(c)) {
+                if (at + 1 >= s.length() || !Character.isLowSurrogate(s.charAt(at + 1))) { return false; }
+                ++at;
+            } else if (Character.isLowSurrogate(c)) { return false; }
+        }
+        return true;
+    }
+    public static String strToWellFormed(String s) {
+        StringBuilder out = null;
+        for (int at = 0; at < s.length(); ++at) {
+            char c = s.charAt(at);
+            if (Character.isHighSurrogate(c) && at + 1 < s.length() && Character.isLowSurrogate(s.charAt(at + 1))) {
+                if (out != null) { out.append(c).append(s.charAt(at + 1)); }
+                ++at;
+                continue;
+            }
+            boolean lone = Character.isSurrogate(c);
+            if (lone && out == null) { out = new StringBuilder(s.length()).append(s, 0, at); }
+            if (out != null) { out.append(lone ? '\uFFFD' : c); }
+        }
+        return out == null ? s : out.toString();
+    }
+
+    // ---- Number::toString --------------------------------------------------
+    //
+    // The shortest decimal that reads back as this double, which is what
+    // JavaScript specifies and what node prints.
+    //
+    // **Not `Double.toString`.** An audit of this runtime proposed exactly
+    // that, gated on `java.specification.version >= 21` because only JDK 19+
+    // produces the shortest form. It was 5.2x faster and correct on this JDK,
+    // and it fails in the one place that matters: ART does not report 21, so
+    // Android -- the platform this backend exists for -- would take a fallback
+    // that is both slower and wrong, and no test here would ever run it. A
+    // number formatter that depends on the JRE is a program whose output
+    // depends on the JRE.
+    //
+    // The `MathContext` cache below is the half of that audit worth keeping:
+    // one object per precision, made once, rather than a `new MathContext` on
+    // every rounding.
+    private static final class DecimalContexts {
+        static final java.math.MathContext[] ALL = make();
+
+        private static java.math.MathContext[] make() {
+            java.math.MathContext[] all = new java.math.MathContext[18];
+            for (int p = 1; p <= 17; p++) {
+                all[p] = new java.math.MathContext(p, java.math.RoundingMode.HALF_EVEN);
+            }
+            return all;
+        }
+    }
+
+    /**
+     * Scratch for the digit generator and the placement pass.
+     *
+     * <p>Reused rather than allocated per call, on the same confinement
+     * `NtsMap` states: this collection, like the event loop, runs on one
+     * thread. Two arrays a conversion was 25,072 bytes/op on
+     * `number-format-double`, which is 131 bytes to print one number.
+     *
+     * <p>Neither escapes: the digits are consumed by `layoutDigits`, and the
+     * placement buffer is copied by the `String` constructor before either is
+     * touched again.
+     */
+    private static final byte[] SHORTEST_DIGITS = new byte[24];
+    /** Forty covers every placement; see {@link #layoutDigits}. */
+    private static final char[] LAYOUT = new char[40];
+
+    /**
+     * {@code n.toString(radix)}, for a radix other than ten.
+     *
+     * <p>V8's {@code DoubleToRadixCString}, transliterated from the C runtime
+     * so that the three lanes answer the same thing. {@code Long.toString(long,
+     * int)} is not this function: it handles integers, and the fraction is the
+     * whole difficulty.
+     *
+     * <p>The buffer is 2200 chars because that is what V8 uses and the bound is
+     * real rather than generous -- the smallest denormal in radix 2 has about
+     * 1075 fractional digits and the largest double about 1024 integer ones. It
+     * is allocated per call rather than shared, unlike {@link #SHORTEST_DIGITS}
+     * above: this is not a hot path, and a shared 4400-byte buffer would make
+     * the method unusable from two threads for a saving nothing has asked for.
+     *
+     * <p>{@code delta} is the termination argument. It starts at half the
+     * distance to the next representable double and is scaled by the radix
+     * alongside the fraction, so the loop stops as soon as the digits remaining
+     * could not change which double this is.
+     */
+    /**
+     * {@code n.toFixed(d)}.
+     *
+     * <p>Not {@code String.format("%.2f", x)}: the specification picks the
+     * integer {@code n} for which {@code n / 10^f - x} is closest to zero and,
+     * on a tie, the <em>larger</em> n -- half away from zero. Java's formatter
+     * and C's {@code printf} both round half to even, so the two disagree on
+     * every exact tie: {@code (0.5).toFixed(0)} is {@code "1"} and
+     * {@code (2.5).toFixed(0)} is {@code "3"}.
+     *
+     * <p>{@code new BigDecimal(double)} takes the double's <em>exact</em>
+     * value, which is what the specification's "closest n" operates on, so
+     * {@code HALF_UP} over it is correct by construction rather than by
+     * approximation. {@code 1.005} is really 1.00499999999999989..., so it
+     * rounds down and agrees with node for the reason node does.
+     *
+     * <p>At or above 1e21 the specification defers to {@code ToString}, which
+     * is why the exponential form comes back rather than twenty-one zeroes.
+     */
+    public static String numberToFixed(double x, double digits) {
+        int d = (int) digits;
+        if (Double.isNaN(x)) {
+            return "NaN";
+        }
+        if (Double.isInfinite(x)) {
+            return x > 0 ? "Infinity" : "-Infinity";
+        }
+        if (Math.abs(x) >= 1e21) {
+            return numberToString(x);
+        }
+        String body = new BigDecimal(Math.abs(x))
+                .setScale(d, RoundingMode.HALF_UP)
+                .toPlainString();
+        /* `x < 0`, as the specification says. `(-0.4).toFixed(0)` is `"-0"`
+         * because -0.4 < 0 -- the sign survives a magnitude that rounded
+         * away -- and `(-0).toFixed(2)` is `"0.00"` because -0 < 0 is false.
+         * The sign bit, which this read until 2026-09-22, answers both with a
+         * `-`; `fuzz-statements.mjs` found the difference at seed 35. */
+        return (x < 0 ? "-" : "") + body;
+    }
+
+    public static String numberToStringRadix(double x, double radix) {
+        // `ToIntegerOrInfinity(radix)` first, and nothing reads `radix` after
+        // it: the radix is truncated toward zero, so `(15).toString(2.5)` is
+        // base 2 and `10.9` is base 10, which is `ToString`. This truncated it
+        // into `base` and went on dividing by the raw double, so 2.5 wrote
+        // `210` for 15 where node writes `1111`; and it tested for ten before
+        // truncating, so 10.9 took the digit loop. Outside 2..36 is the
+        // lowering's `RangeError` and never arrives.
+        final int base = (int) radix;
+        if (base == 10) {
+            return numberToString(x);
+        }
+        if (Double.isNaN(x)) {
+            return "NaN";
+        }
+        if (x == 0.0) {
+            return "0";
+        }
+        if (Double.isInfinite(x)) {
+            return x > 0 ? "Infinity" : "-Infinity";
+        }
+
+        final String digits = "0123456789abcdefghijklmnopqrstuvwxyz";
+        final char[] buffer = new char[2200];
+        int integerCursor = buffer.length / 2;
+        int fractionCursor = integerCursor;
+
+        final boolean negative = x < 0.0;
+        if (negative) {
+            x = -x;
+        }
+
+        double integer = Math.floor(x);
+        double fraction = x - integer;
+
+        // Half the gap to the next double, and never zero: the step up from
+        // zero is the smallest denormal, which is the floor a fraction can be
+        // compared against.
+        double delta = 0.5 * (Math.nextUp(x) - x);
+        if (delta < Double.MIN_VALUE) {
+            delta = Double.MIN_VALUE;
+        }
+
+        if (fraction >= delta) {
+            buffer[fractionCursor++] = '.';
+            do {
+                fraction *= base;
+                delta *= base;
+                final int digit = (int) fraction;
+                buffer[fractionCursor++] = digits.charAt(digit);
+                fraction -= digit;
+                if ((fraction > 0.5 || (fraction == 0.5 && (digit & 1) != 0))
+                        && fraction + delta > 1.0) {
+                    // Round up, carrying back through the digits already
+                    // written. A carry off the front of the fraction lands on
+                    // the integer part, which is why that is computed after.
+                    while (true) {
+                        if (fractionCursor == integerCursor) {
+                            integer += 1.0;
+                            break;
+                        }
+                        final char c = buffer[--fractionCursor];
+                        if (c == '.') {
+                            continue;
+                        }
+                        final int at = c > '9' ? c - 'a' + 10 : c - '0';
+                        if (at + 1 < base) {
+                            buffer[fractionCursor++] = digits.charAt(at + 1);
+                            break;
+                        }
+                    }
+                    break;
+                }
+            } while (fraction >= delta && fractionCursor + 1 < buffer.length);
+        }
+
+        // A double whose ULP exceeds one cannot represent consecutive integers,
+        // so every digit below that point is a zero node writes and this must
+        // not invent. `%` on such a value returns a remainder built from bits
+        // the double does not have, and `1e21` in radix 3 came out
+        // `...2022201202222111` where node writes `...20222` and eleven zeros.
+        //
+        // `Math.getExponent(v) > 52` is V8's `Double::Exponent() > 0`: the
+        // significand is 53 bits, so an exponent above 52 puts the unit in the
+        // last place above one. Divide the exponent out first, writing the
+        // zeros it stands for. Subnormals answer -1023 here where C's `ilogb`
+        // answers the true exponent, and the difference cannot be reached: a
+        // subnormal is never above 52.
+        while (integerCursor > 0 && integer > 0.0 && Math.getExponent(integer / base) > 52) {
+            integer /= base;
+            buffer[--integerCursor] = '0';
+        }
+        while (integer > 0.0 && integerCursor > 0) {
+            final double remainder = integer % base;
+            integer = (integer - remainder) / base;
+            buffer[--integerCursor] = digits.charAt((int) remainder);
+        }
+        // Against the buffer's middle, not against `fractionCursor`: the
+        // fraction has already moved that one past the '.', so the two are
+        // never equal when there is a fraction.
+        if (integerCursor == buffer.length / 2) {
+            buffer[--integerCursor] = '0';
+        }
+        if (negative) {
+            buffer[--integerCursor] = '-';
+        }
+        return new String(buffer, integerCursor, fractionCursor - integerCursor);
+    }
+
+    public static String numberToString(double x) {
+        if (Double.isNaN(x)) {
+            return "NaN";
+        }
+        if (Double.isInfinite(x)) {
+            return x > 0 ? "Infinity" : "-Infinity";
+        }
+        if (x == 0.0) {
+            // Both zeroes print as "0": the sign of zero is observable through
+            // `Object.is` and `1/x`, and not through `String`.
+            return "0";
+        }
+        // Whole numbers a `long` can hold, which is most of what is printed.
+        // The bound is 2^53 rather than `Long.MAX_VALUE`: above it a double's
+        // neighbours are more than one apart, so the shortest representation is
+        // not necessarily every digit of the integer.
+        if (x == Math.floor(x) && Math.abs(x) < 9007199254740992.0) {
+            return Long.toString((long) x);
+        }
+
+        boolean negative = x < 0;
+        double magnitude = Math.abs(x);
+
+        // Grisu2 first, which answers with integer arithmetic and one 128-bit
+        // multiply, and declines rather than guessing when the interval does
+        // not close. The exact path below is what it declines *to* -- the same
+        // arrangement `runtime/c` has, so the two lanes agree by construction
+        // rather than by both being careful.
+        long packed = NtsGrisu.shortest(magnitude, SHORTEST_DIGITS);
+        if (packed != NtsGrisu.UNPROVEN) {
+            int length = (int) (packed & 0xFFFFFFFFL);
+            int point = (int) (packed >> 32);
+            // Grisu can leave a trailing zero where the shortest form does not
+            // need it; `stripTrailingZeros` is what the exact path calls, and
+            // the decimal point does not move when one goes.
+            while (length > 1 && SHORTEST_DIGITS[length - 1] == '0') {
+                length--;
+            }
+            return layoutDigits(SHORTEST_DIGITS, length, point, negative);
+        }
+
+        java.math.BigDecimal exact = new java.math.BigDecimal(magnitude);
+
+        // Start from a guess rather than scanning 1..17. `Double.toString` is
+        // not trusted for the *answer* -- see above -- but it is a good guess
+        // at how many digits there are, and the read-back check decides. A
+        // wrong guess costs a step in one direction; scanning from one cost
+        // seventeen roundings on every call.
+        int precision = Math.max(1, Math.min(17, significantDigits(Double.toString(magnitude))));
+        java.math.BigDecimal shortest = readableAt(exact, precision, magnitude);
+        if (shortest == null) {
+            while (precision < 17) {
+                precision++;
+                shortest = readableAt(exact, precision, magnitude);
+                if (shortest != null) {
+                    break;
+                }
+            }
+        } else {
+            while (precision > 1) {
+                java.math.BigDecimal shorter = readableAt(exact, precision - 1, magnitude);
+                if (shorter == null) {
+                    break;
+                }
+                shortest = shorter;
+                precision--;
+            }
+        }
+        shortest = shortest.stripTrailingZeros();
+
+        String digits = shortest.unscaledValue().toString();
+        // `n` in the specification: the position of the decimal point, so that
+        // the value is `0.digits * 10^n`.
+        int n = digits.length() - shortest.scale();
+        return layout(digits, n, negative);
+    }
+
+    /**
+     * The shortest `precision`-digit decimal that reads back as `magnitude`,
+     * or `null` when none does at that width.
+     *
+     * <p>**Rounding the exact value is not the algorithm.** Two ways it fails,
+     * both found by sweeping every power of two against node:
+     *
+     * <p>`2^-24` is exactly `...5390625`. Rounding to sixteen digits is a
+     * perfect tie, `HALF_EVEN` breaks it to `...539062`, and that is a
+     * different double. `...539063` is the same one and is what node prints.
+     *
+     * <p>`7.1202363472230444e-307` rounds to `...223044` at sixteen digits and
+     * that is also a different double, while `...223045` is not -- and this is
+     * not a tie at all. The rounding interval of a binary value is not centred
+     * on its decimal rounding, so **"nearest" and "reads back" are different
+     * questions** and only the second one is being asked here.
+     *
+     * <p>So all three candidates at each width are tried. Before this, 46 of
+     * 2,098 powers of two printed with one digit too many, and the 100,000
+     * random doubles in `number_to_string.rs` found none of them: a random bit
+     * pattern essentially never has a short binary representation, and a
+     * program produces almost nothing else.
+     */
+    private static java.math.BigDecimal readableAt(
+        java.math.BigDecimal exact, int precision, double magnitude) {
+        java.math.BigDecimal nearest = roundTo(exact, precision);
+        if (nearest.doubleValue() == magnitude) {
+            return nearest;
+        }
+        java.math.BigDecimal step =
+            java.math.BigDecimal.ONE.scaleByPowerOfTen(-nearest.scale());
+        java.math.BigDecimal up = nearest.add(step);
+        if (up.doubleValue() == magnitude) {
+            return up;
+        }
+        java.math.BigDecimal down = nearest.subtract(step);
+        return down.doubleValue() == magnitude ? down : null;
+    }
+
+    private static java.math.BigDecimal roundTo(java.math.BigDecimal exact, int precision) {
+        return exact.round(DecimalContexts.ALL[precision]);
+    }
+
+    /**
+     * How many significant digits a `Double.toString` result carries.
+     *
+     * <p>Used only as a starting point, never as the answer: `1.0E21` is two
+     * characters of digits and one significant one.
+     */
+    private static int significantDigits(String text) {
+        int digits = 0;
+        int trailingZeroes = 0;
+        boolean seen = false;
+        for (int at = 0; at < text.length(); at++) {
+            char c = text.charAt(at);
+            if (c == 'E' || c == 'e') {
+                break;
+            }
+            if (c < '0' || c > '9' || (c == '0' && !seen)) {
+                continue;
+            }
+            seen = true;
+            digits++;
+            trailingZeroes = c == '0' ? trailingZeroes + 1 : 0;
+        }
+        return Math.max(1, digits - trailingZeroes);
+    }
+
+    /**
+     * {@link #layout}, writing the digits straight out of Grisu's buffer.
+     *
+     * <p>The same placement rules, and the reason for a second copy of them is
+     * allocation rather than taste. Going through {@code layout} meant a
+     * {@code String} built from the byte buffer only to be handed to a
+     * {@code StringBuilder}, which copied it again and copied once more on
+     * {@code toString} -- about seven allocations and 185 bytes a conversion,
+     * measured, where two will do. The digits are ASCII by construction, so the
+     * output length is known and one pass fills it.
+     *
+     * <p>Forty bytes covers every case: 21 integral digits and a sign, or two
+     * for "0." plus six zeroes plus seventeen digits, or a mantissa with a
+     * three-digit exponent.
+     */
+    /**
+     * Copy ASCII digits into the {@code char} placement buffer.
+     *
+     * <p>Replaces the {@code System.arraycopy} this used when both sides were
+     * {@code byte[]}. At most 17 digits, and the cast is exact because Grisu
+     * writes only {@code '0'}-{@code '9'}.
+     */
+    private static int copyDigits(byte[] digits, int from, char[] out, int at, int count) {
+        for (int i = 0; i < count; ++i) {
+            out[at + i] = (char) digits[from + i];
+        }
+        return at + count;
+    }
+
+    private static String layoutDigits(byte[] digits, int k, int n, boolean negative) {
+        // A `char[]`, not the `byte[]` this used to be, and the difference is
+        // one object per formatted number on ART.
+        //
+        // `new String(byte[], 0, at, ISO_8859_1)` has to *decode*, and ART
+        // decodes into a fresh `char[]` before building the string. Measured on
+        // device, 17 characters, twenty thousand calls each:
+        //
+        //     byte[] + ISO_8859_1   objects/call 2.0   bytes/call 88
+        //     char[]                objects/call 1.0   bytes/call 40
+        //
+        // ART stores a string's characters inline in the object, so the
+        // `char[]` form is a single allocation and the `byte[]` form is the
+        // string plus the intermediate it was decoded through. `HotSpot` hides
+        // this too -- compact strings make the ISO-8859-1 path its *preferred*
+        // one, which is why the buffer was a `byte[]`.
+        //
+        // `SHORTEST_DIGITS` stays a `byte[]`: it is Grisu's output buffer and
+        // its contract is with `NtsGrisu`, which writes bytes.
+        char[] out = LAYOUT;
+        int at = 0;
+        if (negative) { out[at++] = '-'; }
+        if (k <= n && n <= 21) {
+            at = copyDigits(digits, 0, out, at, k);
+            for (int i = k; i < n; ++i) { out[at++] = '0'; }
+        } else if (0 < n && n <= 21) {
+            at = copyDigits(digits, 0, out, at, n);
+            out[at++] = '.';
+            at = copyDigits(digits, n, out, at, k - n);
+        } else if (-6 < n && n <= 0) {
+            out[at++] = '0';
+            out[at++] = '.';
+            for (int i = 0; i < -n; ++i) { out[at++] = '0'; }
+            at = copyDigits(digits, 0, out, at, k);
+        } else {
+            out[at++] = (char) digits[0];
+            if (k != 1) {
+                out[at++] = '.';
+                at = copyDigits(digits, 1, out, at, k - 1);
+            }
+            out[at++] = 'e';
+            int exponent = n - 1;
+            if (exponent >= 0) {
+                out[at++] = '+';
+            } else {
+                out[at++] = '-';
+                exponent = -exponent;
+            }
+            if (exponent >= 100) { out[at++] = (char) ('0' + exponent / 100); }
+            if (exponent >= 10) { out[at++] = (char) ('0' + (exponent / 10) % 10); }
+            out[at++] = (char) ('0' + exponent % 10);
+        }
+        return new String(out, 0, at);
+    }
+
+    private static String layout(CharSequence digits, int n, boolean negative) {
+        int k = digits.length();
+        StringBuilder out = new StringBuilder(25);
+        if (negative) { out.append('-'); }
+        if (k <= n && n <= 21) {
+            out.append(digits);
+            for (int i = k; i < n; ++i) { out.append('0'); }
+        } else if (0 < n && n <= 21) {
+            out.append(digits, 0, n).append('.').append(digits, n, k);
+        } else if (-6 < n && n <= 0) {
+            out.append("0.");
+            for (int i = 0; i < -n; ++i) { out.append('0'); }
+            out.append(digits);
+        } else {
+            out.append(digits.charAt(0));
+            if (k != 1) { out.append('.').append(digits, 1, k); }
+            out.append('e');
+            if (n - 1 >= 0) { out.append('+'); }
+            out.append(n - 1);
+        }
+        return out.toString();
+    }
+    static void appendNumber(StringBuilder out, double value) {
+        if (value == (long) value && Math.abs(value) < 0x1p53) { out.append((long) value); }
+        else { out.append(numberToString(value)); }
+    }
+    static void appendJoinElement(StringBuilder out, Object element) {
+        if (element == null) { return; }
+        if (element instanceof NtsValue) {
+            NtsValue value = (NtsValue) element;
+            if (value.tag == NtsValue.NULL || value.tag == NtsValue.UNDEFINED) { return; }
+            if (value.tag == NtsValue.NUMBER) { appendNumber(out, value.num); }
+            else { out.append(valueToString(value)); }
+        } else { out.append(element.toString()); }
+    }
+    public static String valueToString(NtsValue value) {
+        switch (value.tag) {
+            case NtsValue.UNDEFINED: return "undefined";
+            case NtsValue.NULL: return "null";
+            case NtsValue.BOOLEAN: return value.num != 0.0 ? "true" : "false";
+            case NtsValue.NUMBER: return numberToString(value.num);
+            case NtsValue.STRING: return (String) value.ref;
+            default: return String.valueOf(value.ref);
+        }
+    }
+
+    // ---- Bare arrays: results are fresh objects even for empty slices. ------
+    /**
+     * {@code a.concat(b)} over bare arrays, in the three element widths.
+     *
+     * <p>The growable path has had this since it existed -- `NtsArrayL.concat`
+     * and its siblings -- and the bare path never did, so `nts_array_concat`
+     * and `nts_array_concat_ref` were refused here for as long as both have
+     * existed. It surfaced only when `nts_array_concat_value` arrived with an
+     * example whose program grows no array, which sent it down this path.
+     *
+     * <p>{@code Object[]} covers the erased width as well as the reference one:
+     * an {@code NtsValue} is a reference here, and under {@code NoGc} there is
+     * nothing to retain, so the tag never has to be consulted. The C lane needs
+     * the width in the *name* precisely because it does have to retain, and has
+     * to know which elements are references to do it.
+     *
+     * <p>A fresh array, not a view: a rest parameter is a new array on every
+     * call in JavaScript, and returning either input would let
+     * {@code function f(...xs) { xs.push(1) }} reach into its caller's.
+     */
+    public static double[] arrayConcat(double[] a, double[] b) {
+        double[] out = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    public static boolean[] arrayConcat(boolean[] a, boolean[] b) {
+        boolean[] out = Arrays.copyOf(a, a.length + b.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    public static Object[] arrayConcat(Object[] a, Object[] b) {
+        // **The component type has to survive, and `new Object[]` does not
+        // carry it.** The first version allocated one to avoid an
+        // `ArrayStoreException` and got the mirror failure instead:
+        //
+        //     class [Ljava.lang.Object; cannot be cast to class [Lnts.rt.NtsValue;
+        //
+        // Java's array covariance is one-way. A `String[]` *is* an `Object[]`,
+        // so it can be passed here; an `Object[]` is not a `String[]`, so it
+        // cannot be handed back to a slot that wants one. `keysStr` cost this
+        // lane the same lesson and this is that lesson from the other end.
+        //
+        // The empty array is why neither input's type can simply win.
+        // `f(...rest)` concatenates an **empty leading array** with the rest,
+        // and that one is `Object[]` -- so taking `a`'s component type loses
+        // exactly the case the operation exists for. Take the non-empty one's,
+        // and the more specific of the two when both have elements.
+        Class<?> component;
+        if (a.length == 0) {
+            component = b.getClass().getComponentType();
+        } else if (b.length == 0) {
+            component = a.getClass().getComponentType();
+        } else {
+            Class<?> first = a.getClass().getComponentType();
+            Class<?> second = b.getClass().getComponentType();
+            component = first.isAssignableFrom(second) ? second : first;
+        }
+        Object[] out = (Object[]) java.lang.reflect.Array.newInstance(component, a.length + b.length);
+        System.arraycopy(a, 0, out, 0, a.length);
+        System.arraycopy(b, 0, out, a.length, b.length);
+        return out;
+    }
+
+    public static double[] arraySlice(double[] a, double from, double to) {
+        int start = NtsArrays.clamp(from, a.length), end = Math.max(start, NtsArrays.clamp(to, a.length));
+        return Arrays.copyOfRange(a, start, end);
+    }
+    public static boolean[] arraySlice(boolean[] a, double from, double to) {
+        int start = NtsArrays.clamp(from, a.length), end = Math.max(start, NtsArrays.clamp(to, a.length));
+        return Arrays.copyOfRange(a, start, end);
+    }
+    public static Object[] arraySlice(Object[] a, double from, double to) {
+        int start = NtsArrays.clamp(from, a.length), end = Math.max(start, NtsArrays.clamp(to, a.length));
+        return Arrays.copyOfRange(a, start, end);
+    }
+    public static double[] arrayReverse(double[] a) {
+        for (int i = 0, j = a.length - 1; i < j; ++i, --j) { double t = a[i]; a[i] = a[j]; a[j] = t; }
+        return a;
+    }
+    public static boolean[] arrayReverse(boolean[] a) {
+        for (int i = 0, j = a.length - 1; i < j; ++i, --j) { boolean t = a[i]; a[i] = a[j]; a[j] = t; }
+        return a;
+    }
+    public static Object[] arrayReverse(Object[] a) {
+        for (int i = 0, j = a.length - 1; i < j; ++i, --j) { Object t = a[i]; a[i] = a[j]; a[j] = t; }
+        return a;
+    }
+    /** `xs.sort()` on an array of strings, with no comparator.
+     *
+     * The default order is the specification's: every element converted to a
+     * string and compared by UTF-16 code unit. `String.compareTo` is exactly
+     * that order, and the place the two could disagree is a surrogate pair
+     * against U+E000 — code *point* order puts U+E000 first and code *unit*
+     * order puts the pair first, and Java and node both put the pair first.
+     *
+     * `Arrays.sort(Object[])` is TimSort, which is stable, so the requirement
+     * the specification has made since ES2019 is met by the library here; the C
+     * side writes its own merge sort for the same reason, since `qsort` leaves
+     * the order among equal elements to the libc.
+     *
+     * Elements are `String` because only a string array reaches this — the
+     * lowering refuses every other element type by name. A null slot is the
+     * absence `nullSlot` names, which the element type decides: `undefined`
+     * goes to the end in order *without being compared*, as JavaScript does,
+     * and `null` is compared as the string "null", as `String(null)` is. Both
+     * were a `compareTo` on null. */
+    public static Object[] arraySortStr(Object[] a, int nullSlot) {
+        sortStrings(a, a.length, nullSlot);
+        return a;
+    }
+
+    /**
+     * The default sort of the first `length` strings of `items`, a null slot
+     * being the absence `nullSlot` names -- shared by the fixed array above and
+     * the growable one (`NtsArrayL.sortStr`), so the two cannot answer
+     * differently.
+     */
+    static void sortStrings(Object[] items, int length, int nullSlot) {
+        /* Natural ordering, which for `String` is `compareTo`. A comparator
+         * written as a lambda is `invokedynamic` through `LambdaMetafactory` —
+         * which `runtime_jar.rs` rejects outright, because at the Android floor
+         * the bootstrap runs at first execution and one instance is not
+         * promised -- so the one comparator needed is a named class. */
+        if (nullSlot == NtsValue.NULL) {
+            Arrays.sort(items, 0, length, NULL_AS_TEXT);
+            return;
+        }
+        int present = 0;
+        for (int at = 0; at < length; at++) {
+            if (items[at] != null) {
+                items[present++] = items[at];
+            }
+        }
+        for (int at = present; at < length; at++) {
+            items[at] = null;
+        }
+        Arrays.sort(items, 0, present);
+    }
+
+    /** `null` compared as the string "null", every other element as itself. */
+    private static final class NullAsText implements java.util.Comparator<Object> {
+        @Override
+        public int compare(Object x, Object y) {
+            return text(x).compareTo(text(y));
+        }
+
+        private static String text(Object element) {
+            return element == null ? "null" : (String) element;
+        }
+    }
+
+    private static final NullAsText NULL_AS_TEXT = new NullAsText();
+    public static String arrayJoinStr(double[] a, String separator) {
+        StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(a.length, separator, 3));
+        for (int i = 0; i < a.length; ++i) { if (i != 0) { out.append(separator); } appendNumber(out, a[i]); }
+        return out.toString();
+    }
+    public static String arrayJoinStr(boolean[] a, String separator) {
+        StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(a.length, separator, 5));
+        for (int i = 0; i < a.length; ++i) { if (i != 0) { out.append(separator); } out.append(a[i] ? "true" : "false"); }
+        return out.toString();
+    }
+    public static String arrayJoinStr(Object[] a, String separator) {
+        StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(a.length, separator, 3));
+        for (int i = 0; i < a.length; ++i) { if (i != 0) { out.append(separator); } appendJoinElement(out, a[i]); }
+        return out.toString();
+    }
+    /**
+     * A subscript that may be fractional, out of range, or not a number at all.
+     *
+     * <p>The cast comes first and everything else is asked of the `int`, which
+     * is the same move `toInt32` makes and for the same reason. `d2i` saturates
+     * and gives 0 for NaN, so `i == index` is false for every input the range
+     * test would have had to reject on its own -- a fraction, a NaN, and
+     * anything beyond int range, where the clamped value cannot equal what
+     * produced it. What survives the equality is an exact integer, and `>= 0`
+     * and `< length` on it are ordinary `int` compares.
+     *
+     * <p>Written the other way round -- `index >= 0.0 && index < length &&
+     * index == (double) (int) index` -- it cost two `d2i`, two `i2d` and three
+     * `dcmp` per element against this version's one, one and one. It was 13.6%
+     * of `node-utf8`, whose eleven subscripts all take this overload because
+     * the index stays an `f64`.
+     *
+     * <p>`-0.0` indexes element zero, which is what JavaScript does: `(int)
+     * -0.0` is 0 and `0 == -0.0` holds.
+     */
+    public static int bounds(int length, double index) {
+        int i = (int) index;
+        if (i == index && i >= 0 && i < length) { return i; }
+        return outside(index, length);
+    }
+    public static int bounds(int length, int index) {
+        return index >= 0 && index < length ? index : outside(index, length);
+    }
+    /**
+     * An `i64` subscript, which cannot be fractional either, and must not be
+     * narrowed first: past the `int` range an `l2i` would wrap it into range.
+     *
+     * <p>Deleted once (a768b1fc8) when no subscript was wide any more, so that
+     * a wide one took the `double` form -- correct, and an `l2d` and two
+     * floating compares per element. A view's is wide again: `node-utf8`'s
+     * encoder writes through an `i64` cursor, ten stores a character.
+     */
+    public static int bounds(int length, long index) {
+        return index >= 0 && index < length ? (int) index : outside(index, length);
+    }    /**
+     * The refusal an out-of-range subscript raises, callable from the array
+     * classes so their reads need one call rather than two.
+     *
+     * <p>`NtsArrayD.get` was `a.items[bounds(a.length, (int) at)]`, and a
+     * profile of `array-predicates` put 25.6% in `get` and a further 9.6% in
+     * `bounds` -- a third of the row on element reads, where the reference
+     * indexes an array. The check is not the problem and cannot go: reading
+     * past `length` but inside the capacity returns a stale slot from an
+     * earlier grow. The second call level is the problem.
+     */
+    public static double outOfRange(double index, int length) {
+        return outside(index, length);
+    }
+
+    private static int outside(double index, int length) {
+        throw new NtsRefusal("index " + numberText(index) + " is outside [0, " + length + ")");
+    }
+    /**
+     * The `I` forms answer in an `int`, and the `double` forms are them widened.
+     *
+     * <p>A JavaScript `indexOf` answers a number, so `hir::runtime` types it
+     * `f64` and every backend agrees about that. On this one the answer is
+     * almost always converted straight back: `total + xs.indexOf(step) | 0`
+     * emits `d2l; l2i` at the call and `i2d` at the argument, and the loop
+     * inside returns an `int` it widened on the way out.
+     *
+     * <p>Measured on the reference rather than argued -- `benches/cases/
+     * array-methods`, `indexOf` and `lastIndexOf` returning `double` and the
+     * caller casting back, one file, same checksum: **1,426.7 ns to 1,751.2 ns,
+     * +22.8%**, which is more than the whole gap the row had.
+     *
+     * <p>The index is exact in an `int` by construction -- it is the loop
+     * counter, or -1 -- so the two forms answer the same number and the choice
+     * between them is a representation, which is the same latitude this backend
+     * takes deciding an array is a `double[]`.
+     */
+    public static int arrayIndexOfI(double[] a, double value) {
+        for (int i = 0; i < a.length; ++i) { if (a[i] == value) { return i; } } return -1;
+    }
+    public static int arrayLastIndexOfI(double[] a, double value) {
+        for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1;
+    }
+    /**
+     * `join` over a bare `double[]`, the ungrowable spelling of a `number[]`.
+     *
+     * <p>The same method as {@link NtsArrayD#joinStr} over the wrapped one, and
+     * both are needed for the reason `arrays_can_grow` is whole-program: one
+     * `push` anywhere puts every array in a wrapper, and a program without one
+     * has `[D` here instead. `examples/array-join`'s `negativeZero` and
+     * `extremes` reach this spelling and the wrapper's method cannot serve them.
+     *
+     * <p>Formatting is {@link #appendNumber}, which is the Grisu port, because
+     * `Array.prototype.join` says `String(x)` per element -- so `-0` prints as
+     * `0` and `1e21` keeps JavaScript's spelling rather than Java's.
+     */
+    public static String arrayJoinNum(double[] a, String separator) {
+        int n = a.length;
+        if (n == 0) {
+            return "";
+        }
+        StringBuilder out = new StringBuilder(NtsArrays.joinCapacity(n, separator, 8));
+        for (int i = 0; i < n; i++) {
+            if (i != 0) {
+                out.append(separator);
+            }
+            appendNumber(out, a[i]);
+        }
+        return out.toString();
+    }
+
+    public static double arrayIndexOf(double[] a, double value) { return arrayIndexOfI(a, value); }
+    public static double arrayLastIndexOf(double[] a, double value) {
+        return arrayLastIndexOfI(a, value);
+    }
+    public static boolean arrayIncludes(double[] a, double value) {
+        if (value == value) { return arrayIndexOf(a, value) >= 0; }
+        for (double x : a) { if (x != x) { return true; } } return false;
+    }
+    public static int arrayIndexOfI(Object[] a, Object value) {
+        for (int i = 0; i < a.length; ++i) { if (a[i] == value) { return i; } } return -1;
+    }
+    public static int arrayLastIndexOfI(Object[] a, Object value) {
+        for (int i = a.length - 1; i >= 0; --i) { if (a[i] == value) { return i; } } return -1;
+    }
+    public static double arrayIndexOf(Object[] a, Object value) { return arrayIndexOfI(a, value); }
+    public static double arrayLastIndexOf(Object[] a, Object value) {
+        return arrayLastIndexOfI(a, value);
+    }
+    public static boolean arrayIncludes(Object[] a, Object value) { return arrayIndexOf(a, value) >= 0; }
+    public static int arrayIndexOfStrI(Object[] a, Object value) {
+        for (int i = 0; i < a.length; ++i) { if (java.util.Objects.equals(a[i], value)) { return i; } } return -1;
+    }
+    public static int arrayLastIndexOfStrI(Object[] a, Object value) {
+        for (int i = a.length - 1; i >= 0; --i) { if (java.util.Objects.equals(a[i], value)) { return i; } } return -1;
+    }
+    public static double arrayIndexOfStr(Object[] a, Object value) {
+        return arrayIndexOfStrI(a, value);
+    }
+    public static double arrayLastIndexOfStr(Object[] a, Object value) {
+        return arrayLastIndexOfStrI(a, value);
+    }
+    public static boolean arrayIncludesStr(Object[] a, Object value) { return arrayIndexOfStr(a, value) >= 0; }
+    /**
+     * `includes` and `indexOf` over an array of strings with an **erased**
+     * needle, which is `validateOneOf(value: unknown, …, oneOf: string[])` --
+     * one of node's most-called validators.
+     *
+     * <p>The tag decides and a non-string answers "not found" rather than
+     * aborting: unerasing would be the wrong repair, because an `unknown` that
+     * is not a string is not an error here, it is a value SameValueZero says is
+     * absent from an array of strings. `nts_runtime.h` states it that way and
+     * this is the same rule, not a second one.
+     *
+     * <p>Two branches of different types in one local are what keep a needle
+     * erased -- a local `any` with a concrete initialiser narrows to it -- which
+     * is why no example in this tree had ever reached these and both backends
+     * beside this one have had them for longer.
+     */
+    public static double arrayIndexOfStrValue(Object[] a, NtsValue needle) {
+        return needle.tag == NtsValue.STRING ? arrayIndexOfStr(a, needle.ref) : -1.0;
+    }
+    public static boolean arrayIncludesStrValue(Object[] a, NtsValue needle) {
+        return needle.tag == NtsValue.STRING && arrayIncludesStr(a, needle.ref);
+    }
+    public static NtsValue arrayAtValue(double[] a, double index) {
+        int at = NtsArrays.offset(index, a.length);
+        return at < 0 ? NtsValue.ABSENT_NUMBER : NtsValue.ofNumber(a[at]);
+    }
+    public static NtsValue arrayAtValue(Object[] a, double index) {
+        int at = NtsArrays.offset(index, a.length);
+        if (at < 0) { return NtsValue.UNDEFINED_VALUE; }
+        Object element = a[at];
+        return element instanceof NtsValue ? (NtsValue) element : NtsValue.ofObject(element);
+    }
+    public static Object arrayAtRef(Object[] a, double index) {
+        int at = NtsArrays.offset(index, a.length); return at < 0 ? null : a[at];
+    }
+    /** {@link NtsArrayL#atElement} on a bare array. */
+    public static NtsValue arrayAtElement(Object[] a, double index, int nullSlot) {
+        int at = NtsArrays.offset(index, a.length);
+        return at < 0 ? NtsValue.UNDEFINED_VALUE : NtsValue.held(a[at], nullSlot);
+    }
+    public static double arrayAt(double[] a, double index) {
+        int at = NtsArrays.offset(index, a.length); return at < 0 ? Double.NaN : a[at];
+    }
+    /**
+     * {@code "k" in v} where {@code v}'s class is not known until run time and
+     * some type declares {@code k} optionally.
+     *
+     * <p>A call rather than an emitted sequence, which is the opposite of the
+     * other four presence helpers and for a reason: those name the receiver's
+     * declared type, so the backend knows which class owns the {@code
+     * $presence} field and reads it in six instructions. This one does not --
+     * see {@link NtsPresence}.
+     *
+     * <p><b>False for anything that is not a presence-carrying reference</b>,
+     * including {@code null} and every primitive, because {@code instanceof} is
+     * false for all of them. The caller pairs this with a class test and a
+     * value failing the first half must not fault in the second.
+     */
+    public static boolean presenceHas(Object ref, int index) {
+        return ref instanceof NtsPresence
+            && ((((NtsPresence) ref).@@PRESENCE_MEMBER@@() >>> index) & 1) != 0;
+    }
+}

@@ -12,8 +12,7 @@ use nts_semantic_schema::{GeneratedReason, Origin, PropertyKey, TypeId};
 
 use super::{JvmProgram, emit, guarded_members, hierarchy};
 
-#[path = "../tests/common/mod.rs"]
-mod common;
+use crate::test_common as common;
 
 const FACE_STOP: &str = "stop-interface";
 const CLASS_STOP: &str = "stop-class";
@@ -249,6 +248,10 @@ fn fixture(bad: bool) -> Program {
     solo.interfaces = vec![TypeId(2)];
     solo.fields[0].declared_by = Some(TypeId(6));
     program.layouts.push(solo);
+    crate::member_identity::synthetic_rows(
+        &mut program,
+        &[(0, 2, "step", false), (1, 0, "step", false)],
+    );
     if bad {
         add_bad(&mut program, &class_contract, &face_contract);
     }
@@ -340,10 +343,16 @@ fn both_slot_bodies_and_original_public_surface_survive_in_both_layout_orders() 
             program.funcs.reverse();
         }
         let facts = JvmProgram::new(&program);
-        let internal = guarded_members::internal_name(0);
+        let internal = guarded_members::internal_name(&facts, 0).unwrap();
         assert_eq!(facts.guarded_member(0), Some(internal.as_str()));
-        assert_eq!(hierarchy::slot_member(&facts, 0, "Face#step"), internal);
-        assert_eq!(hierarchy::slot_member(&facts, 1, "Base#step"), "step");
+        assert_eq!(
+            hierarchy::slot_member(&facts, 0, "Face#step").unwrap(),
+            internal
+        );
+        assert_eq!(
+            hierarchy::slot_member(&facts, 1, "Base#step").unwrap(),
+            "step"
+        );
         let output = emit(&program);
         assert!(output.is_complete(), "{:?}", output.diagnostics);
         let face = parsed(&output, "nts/gen/Face");
@@ -393,7 +402,11 @@ fn adding_a_refused_receiver_does_not_change_the_old_plain_public_surface() {
             let mut members: Vec<_> = class
                 .methods
                 .iter()
-                .filter(|method| !method.name.starts_with("¢nts$dispatch$"))
+                .filter(|method| {
+                    !method
+                        .name
+                        .starts_with(crate::generated_members::GUARDED_DISPATCH_PREFIX)
+                })
                 .map(|method| {
                     (
                         method.name.clone(),
@@ -519,15 +532,25 @@ fn an_unrelated_unlicensed_receiver_cannot_be_hidden_by_a_licensed_family() {
 
 #[test]
 fn reserved_names_do_not_capture_written_lookalikes_and_raising_names_stay_owned() {
-    let name = guarded_members::internal_name(0);
+    let name = crate::generated_members::guarded_dispatch("named:source:step");
     assert!(nts_codegen_common::symbols::dex_can_spell(&name));
     assert_ne!(nts_codegen_common::symbols::jvm_member_name(&name), name);
     let mut program = fixture(true);
-    program.raising_members.insert(1, "step@raises".into());
+    program.raising_members.insert(
+        1,
+        nts_core::hir::RaisingMember {
+            member: "step".to_owned(),
+            ordinary_slot: Some(0),
+        },
+    );
+    crate::member_identity::synthetic_rows(&mut program, &[(1, 2, "step", true)]);
     // Raising separates the public collision already: no additional selector.
     let facts = JvmProgram::new(&program);
     assert_eq!(facts.guarded_member(0), None);
-    assert_eq!(hierarchy::slot_member(&facts, 1, CLASS_STOP), "step$raises");
+    assert_eq!(
+        hierarchy::slot_member(&facts, 1, CLASS_STOP).unwrap(),
+        facts.dispatch_name(1).unwrap()
+    );
 }
 
 #[test]
@@ -552,19 +575,54 @@ fn field_family_and_uniform_runtime_slot_authorities_cannot_be_qualified() {
         pending: false,
         stored_dispatch: true,
     });
+    crate::member_identity::synthetic_rows(&mut program, &[(0, 7, "x", false), (1, 7, "x", true)]);
     let facts = JvmProgram::new(&program);
     assert_eq!(facts.guarded_member(0), None);
     assert_eq!(
-        hierarchy::slot_member(&facts, 0, FACE_STOP),
-        "get_x$interface7"
+        hierarchy::slot_member(&facts, 0, FACE_STOP).unwrap(),
+        facts.dispatch_name(0).unwrap()
     );
     assert_eq!(
-        hierarchy::slot_member(&facts, 1, CLASS_STOP),
-        "get_x$interface7$raises"
+        hierarchy::slot_member(&facts, 1, CLASS_STOP).unwrap(),
+        facts.dispatch_name(1).unwrap()
     );
     let mut uniform = fixture(true);
     uniform.erased_call_slot = Some(0);
     assert_eq!(JvmProgram::new(&uniform).guarded_member(0), None);
+}
+
+#[test]
+fn a_quiet_uniform_raising_row_keeps_the_same_catalogue_entry() {
+    let mut program = fixture(true);
+    program.erased_call_slot = Some(0);
+    program.raising_call_slot = Some(1);
+    assert!(
+        !program
+            .layouts
+            .iter()
+            .flat_map(|layout| &layout.methods)
+            .flatten()
+            .any(|name| name.ends_with("@raises"))
+    );
+    let facts = JvmProgram::new(&program);
+    for slot in [0, 1] {
+        assert_eq!(
+            hierarchy::slot_member(&facts, slot, "unrelated_spelling").unwrap(),
+            crate::generated_members::ERASED_CALL
+        );
+        for layout in &program.layouts {
+            assert_eq!(
+                hierarchy::declared_member(&facts, layout, slot)
+                    .unwrap()
+                    .as_deref(),
+                layout
+                    .methods
+                    .get(slot)
+                    .filter(|body| body.is_some())
+                    .map(|_| crate::generated_members::ERASED_CALL)
+            );
+        }
+    }
 }
 
 #[test]
@@ -659,8 +717,13 @@ fn dropped_tail_fixture(reverse: bool) -> Program {
         .into(),
         ..Program::default()
     };
+    crate::member_identity::synthetic_rows(
+        &mut program,
+        &[(0, 2, "step", false), (1, 0, "step", false)],
+    );
     add_bad(&mut program, &class, &face_contract);
     if reverse {
+        crate::member_identity::remap_rows(&mut program, &[(0, 1), (1, 0)]);
         for layout in &mut program.layouts {
             layout.methods.swap(0, 1);
         }
@@ -689,7 +752,9 @@ fn compatibility_and_dropped_tail_bridge_share_one_ownership_plan_in_both_slot_o
         let output = emit(&program);
         assert!(output.is_complete(), "{:?}", output.diagnostics);
         let class = parsed(&output, "nts/gen/Good");
-        let internal = guarded_members::internal_name(usize::from(reverse));
+        let internal =
+            guarded_members::internal_name(&JvmProgram::new(&program), usize::from(reverse))
+                .unwrap();
         for (name, descriptor) in [
             ("step", "(D)V"),
             ("step", "(DD)V"),
@@ -773,7 +838,11 @@ fn command(tool: &Path, args: &[&str], directory: &Path, label: &str) {
 fn old_binary_controls(java: &Path, javac: &Path, old: &Path, new: &Path) -> Vec<u8> {
     let source = "package nts.gen; public final class OldImpl implements Face { public double count; public void step(double n) { count += n; } }";
     std::fs::write(old.join("OldImpl.java"), source).unwrap();
-    std::fs::write(old.join("CompatibilityDriver.java"), COMPATIBILITY_DRIVER).unwrap();
+    std::fs::write(
+        old.join("CompatibilityDriver.java"),
+        storage_members(COMPATIBILITY_DRIVER),
+    )
+    .unwrap();
     command(
         javac,
         &[
@@ -898,9 +967,9 @@ public final class CompatibilityDriver {
     OldImpl external = new OldImpl(); external.step(3); Program.invoke_iface(external, 7);
     if (external.count != 10) throw new AssertionError("old binary/default hop");
     Good good = new Good(); good.step(3); Program.invoke_iface(good, 7);
-    if (good.n$count != 10) throw new AssertionError("unrelated generated implementer");
+    if (good.@@COUNT_FIELD@@ != 10) throw new AssertionError("unrelated generated implementer");
     Solo solo = new Solo(); solo.step(3); Program.invoke_iface(solo, 7);
-    if (solo.n$count != 10) throw new AssertionError("interface-only generated implementer");
+    if (solo.@@COUNT_FIELD@@ != 10) throw new AssertionError("interface-only generated implementer");
     System.out.println("UNCHANGED_IMPLEMENTERS_PASS");
   }
 }
@@ -914,3 +983,10 @@ mod concrete_override;
 
 mod class_contract;
 mod ordinary_abstract;
+
+fn storage_members(source: &str) -> String {
+    source.replace(
+        "@@COUNT_FIELD@@",
+        &crate::generated_members::storage_field("n:count"),
+    )
+}

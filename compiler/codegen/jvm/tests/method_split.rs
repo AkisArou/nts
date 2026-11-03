@@ -4,9 +4,8 @@
 //! The fixture is a module-scope literal of 2048 records -- test262's
 //! `Array/prototype/sort/stability-2048-elements.js` shape -- whose
 //! `module#init` was 94,835 bytes and declined (NTS4001). Beside it the
-//! program declares `module$init$split0`, the JVM spelling the first helper
-//! would take, so this also pins that a helper names around a declared
-//! function. What is asserted:
+//! program declares `module$init$split0`, an authored split-looking name.
+//! Its public facade stays separate from catalogue-owned helpers. What is asserted:
 //!
 //! - the program emits whole, every class verifies under `-Xverify:all`,
 //!   and it answers what node does;
@@ -36,39 +35,60 @@ fn prepared() -> Program {
     common::prepare(&snapshot).expect("valid HIR").program
 }
 
-/// How many helpers `javap -p -v`'s listing of the program class shows,
-/// asserting each is `private static` and `ACC_SYNTHETIC`, and that the
-/// declared `module$init$split0` is there, public, under its own name.
-///
-/// Read from method headers only: the lines ending `);` that are not
-/// constant-pool entries (`#49 = NameAndType ... // module$init$split1:...`).
-fn helpers_are_private(listing: &str) -> usize {
-    let mut helpers = 0;
-    let mut declared = false;
-    let lines: Vec<&str> = listing.lines().map(str::trim).collect();
-    for (at, head) in lines.iter().enumerate() {
-        if head.starts_with('#') || !head.ends_with(");") || !head.contains("module$init$split") {
+/// Actual helper declarations from the split producer, encoded by the catalogue.
+fn helpers_are_private(bytes: &[u8], program: &Program) -> usize {
+    let class = nts_jvm_emitter::read::class_file(bytes).expect("the actual program class");
+    let declared = class
+        .methods
+        .iter()
+        .find(|method| method.name == "module$init$split0")
+        .expect("the authored facade survives");
+    assert_ne!(declared.access & nts_jvm_emitter::class::access::PUBLIC, 0);
+    let mut taken: std::collections::HashSet<_> = program
+        .funcs
+        .iter()
+        .map(|func| nts_codegen_common::symbols::jvm_member_name(&func.name))
+        .collect();
+    let mut count = 0;
+    for declaration in &program.funcs {
+        let Some((_, helpers)) = nts_codegen_jvm::split::split_for_method_limit(
+            declaration,
+            nts_codegen_jvm::split::FIRST_BUDGET,
+            &mut taken,
+        ) else {
             continue;
-        }
-        let flags = lines[at..]
-            .iter()
-            .find(|next| next.starts_with("flags:"))
-            .copied()
-            .unwrap_or_default();
-        if head.contains("module$init$split0()") {
-            assert!(head.starts_with("public static"), "{head}");
-            declared = true;
-        } else {
-            assert!(head.starts_with("private static"), "{head}");
-            assert!(flags.contains("ACC_SYNTHETIC"), "{head}: {flags}");
-            helpers += 1;
+        };
+        for helper in helpers {
+            let member = nts_codegen_jvm::generated_members::body(&helper.name);
+            let method = class
+                .methods
+                .iter()
+                .find(|method| method.name == member)
+                .unwrap_or_else(|| {
+                    panic!("missing helper declaration {} as {member}", helper.name)
+                });
+            let required = nts_jvm_emitter::class::access::PRIVATE
+                | nts_jvm_emitter::class::access::STATIC
+                | nts_jvm_emitter::class::access::SYNTHETIC;
+            assert_eq!(
+                method.access, required,
+                "helper {} as {member}",
+                helper.name
+            );
+            assert!(
+                method
+                    .code
+                    .as_ref()
+                    .is_some_and(|code| !code.bytes.is_empty())
+            );
+            eprintln!(
+                "split helper declaration={} member={} descriptor={} flags={:#x}",
+                helper.name, member, method.descriptor, method.access
+            );
+            count += 1;
         }
     }
-    assert!(
-        declared,
-        "the declared `module$init$split0` is missing:\n{listing}"
-    );
-    helpers
+    count
 }
 
 #[test]
@@ -87,12 +107,8 @@ fn a_body_past_the_method_limit_is_split_into_private_helpers() {
             .collect::<Vec<_>>()
     );
 
-    let (Some(disassembler), Some(compiler), Some(vm)) = (
-        common::tool("javap"),
-        common::tool("javac"),
-        common::tool("java"),
-    ) else {
-        eprintln!("SKIP method_split: no JDK, so neither javap nor the verifier has been asked");
+    let (Some(compiler), Some(vm)) = (common::tool("javac"), common::tool("java")) else {
+        eprintln!("SKIP method_split: no JDK, so the Java driver has not run");
         return;
     };
     let dir = std::env::temp_dir().join(format!("nts-method-split-{}", std::process::id()));
@@ -106,17 +122,12 @@ fn a_body_past_the_method_limit_is_split_into_private_helpers() {
     std::fs::write(&jar, nts_codegen_jvm::runtime_jar().as_ref()).unwrap();
     let classpath = format!("{}:{}", dir.display(), jar.display());
 
-    // `-v` prints each method's flags beneath it.
-    let listed = nts_codegen_jvm::toolchain::command(&disassembler)
-        .args(["-p", "-v", "-cp", &classpath, "nts.gen.Program"])
-        .output()
-        .unwrap();
-    assert!(
-        listed.status.success(),
-        "{}",
-        String::from_utf8_lossy(&listed.stderr)
-    );
-    let helpers = helpers_are_private(&String::from_utf8_lossy(&listed.stdout));
+    let program_class = emitted
+        .classes
+        .iter()
+        .find(|class| class.binary_name == "nts/gen/Program")
+        .expect("Program class");
+    let helpers = helpers_are_private(&program_class.bytes, &program);
     assert!(
         helpers >= 2,
         "{helpers} helper(s): a 95 KB body needs at least two"
@@ -124,10 +135,10 @@ fn a_body_past_the_method_limit_is_split_into_private_helpers() {
 
     std::fs::write(
         dir.join("Drive.java"),
-        "public class Drive { public static void main(String[] a) {\n\
-           nts.gen.Program.module$init();\n\
+        common::java_members("public class Drive { public static void main(String[] a) {\n\
+           nts.gen.Program.@@MODULE_INIT@@();\n\
            System.out.println(nts.gen.Program.total(0) + \" \" + nts.gen.Program.module$init$split0());\n\
-         } }\n",
+         } }\n"),
     )
     .unwrap();
     let built = nts_codegen_jvm::toolchain::command(&compiler)

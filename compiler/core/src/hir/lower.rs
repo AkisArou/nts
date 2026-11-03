@@ -6748,6 +6748,12 @@ fn collect_view_classes(probe: &FuncBuilder<'_>, program: &Program) -> super::Vi
         views.push(ViewClass {
             class,
             name,
+            source: probe
+                .snapshot
+                .types
+                .get(class.0 as usize)
+                .and_then(|ty| ty.symbol)
+                .and_then(|symbol| named_class_source(probe.snapshot, declaration, symbol.0)),
             element: *element,
             base,
             species: None,
@@ -17674,6 +17680,13 @@ pub fn lower_with(
     // afterwards. Filled earlier it was the checker's answer to a question the
     // program had not finished answering.
     lowered.program.record_parents = record_parents(snapshot, &hierarchy, &lowered.program);
+    member_origins::sources(
+        snapshot,
+        &shared.closures,
+        &module.roles.namespace,
+        &shared.naming,
+        &mut lowered.program,
+    );
     // Which protocol each abstract generator speaks, from the derivation its
     // layout was built from, so `suspend` need not read it back out of the
     // layout's name. Here for the same reason as the line above: every id a
@@ -17708,7 +17721,8 @@ fn finish_dispatch_tables(
     // `Sink#take@raises` reachable from nothing for `reachable::prune` to remove. The
     // backend then said `NTS2006 no declaration for `Sink#take@raises` to take a signature
     // from`, which is the sentence `declare_interface_methods` exists to prevent.
-    fill_raising_member_slots(hierarchy, program);
+    member_origins::dispatch(snapshot, hierarchy, program);
+    fill_raising_member_slots(program);
     // After both: a slot's entries -- the interface declarations and the raising
     // copies among them -- are final, and every call through one is lowered.
     virtual_returns::bridge(snapshot, hierarchy, program);
@@ -18321,14 +18335,26 @@ fn collect_class_identities(program: &mut Program, snapshot: &SemanticSnapshot) 
     // library's and the synthetic alike (`provided_error_identities`); a
     // declared class of the same name is asked about first and stays itself.
     let provided = provided_error_identities(snapshot);
+    let mut sources = rustc_hash::FxHashMap::default();
     for layout in &program.layouts {
         let mut here: Vec<super::ClassIdentity> = Vec::new();
         for ty in &layout.types {
             let identity = match (class_symbol(snapshot, *ty), provided.get(ty)) {
-                (Some(symbol), _) => class_identity(snapshot, symbol, *ty),
+                (Some(symbol), _) => {
+                    let source = sources.entry(symbol).or_insert_with(|| {
+                        snapshot.symbols.get(symbol as usize)?.declarations.iter().find_map(|id| {
+                            let node = snapshot.nodes.get(id.0 as usize)?;
+                            matches!(node.kind, NodeKind::Syntax(kind) if declares_a_class(kind))
+                                .then(|| named_class_source(snapshot, *id, symbol))
+                                .flatten()
+                        })
+                    });
+                    class_identity(snapshot, symbol, *ty, source.clone())
+                }
                 (None, Some(index)) => super::ClassIdentity {
                     symbol: super::provided_error_symbol(*index),
                     name: super::PROVIDED_ERROR_NAMES[*index].to_owned(),
+                    source: None,
                     types: vec![*ty],
                 },
                 (None, None) => continue,
@@ -18384,13 +18410,84 @@ fn collect_plain_records(program: &mut Program) {
 /// A layout's name is the *first* declared name to reach it, so a merged layout
 /// reports one class's name for all of them -- a second, quieter wrongness of
 /// the same merge, and this is where it stops.
-fn class_identity(snapshot: &SemanticSnapshot, symbol: u32, ty: TypeId) -> super::ClassIdentity {
+fn class_identity(
+    snapshot: &SemanticSnapshot,
+    symbol: u32,
+    ty: TypeId,
+    source: Option<super::NamedClassSource>,
+) -> super::ClassIdentity {
     let name = nominal_or_stand_in(snapshot, ty);
     super::ClassIdentity {
         symbol,
         name,
+        source,
         types: vec![ty],
     }
+}
+
+fn declaration_identifier(snapshot: &SemanticSnapshot, declaration: NodeId) -> Option<&str> {
+    snapshot
+        .nodes
+        .get(declaration.0 as usize)?
+        .children
+        .iter()
+        .flat_map(|child| {
+            let node = &snapshot.nodes[child.0 as usize];
+            if node.kind == NodeKind::List {
+                node.children.as_slice()
+            } else {
+                std::slice::from_ref(child)
+            }
+        })
+        .find(|child| snapshot.nodes[child.0 as usize].kind == NodeKind::Syntax(syntax::IDENTIFIER))
+        .and_then(|child| {
+            snapshot
+                .nodes
+                .get(child.0 as usize)?
+                .text
+                .as_ref()?
+                .as_utf8()
+        })
+}
+
+fn named_class_source(
+    snapshot: &SemanticSnapshot,
+    declaration: NodeId,
+    symbol: u32,
+) -> Option<super::NamedClassSource> {
+    let name = declaration_identifier(snapshot, declaration)?;
+    let node = snapshot.nodes.get(declaration.0 as usize)?;
+    let module = snapshot
+        .sources
+        .get(node.origin.location.file.0 as usize)?
+        .uri
+        .clone();
+    let mut scopes = vec![name.to_owned()];
+    let mut at = node.parent;
+    while let Some(parent) = at {
+        let node = snapshot.nodes.get(parent.0 as usize)?;
+        if matches!(
+            node.kind,
+            NodeKind::Syntax(
+                syntax::CLASS_DECLARATION
+                    | syntax::CLASS_EXPRESSION
+                    | syntax::FUNCTION_DECLARATION
+                    | syntax::FUNCTION_EXPRESSION
+                    | syntax::METHOD_DECLARATION
+                    | syntax::MODULE_DECLARATION
+            )
+        ) && let Some(name) = declaration_identifier(snapshot, parent)
+        {
+            scopes.push(name.to_owned());
+        }
+        at = node.parent;
+    }
+    scopes.reverse();
+    Some(super::NamedClassSource {
+        symbol,
+        module,
+        scopes,
+    })
 }
 
 /// The symbol of the class a type is the instance of, if it is one.
@@ -19374,7 +19471,7 @@ fn declare_uniform_entries(
 /// [`declare_raising_entries`] makes for a closure whose variant is the same program: a
 /// body with nothing to raise cannot end anything, so running it is right and the flag
 /// the caller tests is simply never set.
-fn fill_raising_member_slots(hierarchy: &Hierarchy, program: &mut Program) {
+fn fill_raising_member_slots(program: &mut Program) {
     // Publish the semantic slot identity before choosing each receiver's body.
     // A fallback to a quiet ordinary entry must not erase this raising bit.
     program.raising_members.clear();
@@ -19398,20 +19495,31 @@ fn fill_raising_member_slots(hierarchy: &Hierarchy, program: &mut Program) {
     // `prune` removed it, and the backend said `NTS2006 no declaration for
     // `Sink#take@raises` to take a signature from`. Reading the layout's own entry is one
     // derivation, and it is the one the closure path has had since `ac1533ca4`.
-    let raising: Vec<(usize, usize)> = hierarchy
-        .slots
+    let raising: Vec<(usize, usize)> = program
+        .member_origins
+        .dispatch
         .iter()
-        .filter_map(|((root, member, raising), slot)| {
-            if !raising {
+        .filter_map(|(&slot, row)| {
+            if !row.raising {
                 return None;
             }
-            program
-                .raising_members
-                .insert(*slot, format!("{}{RAISING_SUFFIX}", member.emitted_name()));
-            Some((
-                *slot as usize,
-                *hierarchy.slots.get(&(*root, member.clone(), false))? as usize,
-            ))
+            let accessor = match row.accessor {
+                super::MemberAccessor::Method => MethodAccessor::Method,
+                super::MemberAccessor::Get => MethodAccessor::Get,
+                super::MemberAccessor::Set => MethodAccessor::Set,
+            };
+            let member = MemberKey {
+                key: row.key.clone(),
+                accessor,
+            };
+            program.raising_members.insert(
+                slot,
+                super::RaisingMember {
+                    member: member.emitted_name(),
+                    ordinary_slot: row.ordinary_slot,
+                },
+            );
+            Some((slot as usize, row.ordinary_slot? as usize))
         })
         .collect();
     if raising.is_empty() {
@@ -78188,16 +78296,7 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn declared_name(&self, declaration: NodeId) -> Option<String> {
-        self.children(declaration)
-            .into_iter()
-            .find(|child| self.kind_of(*child) == Some(syntax::IDENTIFIER))
-            .and_then(|child| {
-                self.node(child)
-                    .text
-                    .as_ref()
-                    .and_then(|text| text.as_utf8())
-                    .map(str::to_owned)
-            })
+        declaration_identifier(self.snapshot, declaration).map(str::to_owned)
     }
 
     /// The class a node sits inside, of either kind that declares one.
@@ -89538,6 +89637,7 @@ mod json;
 mod layout_collection;
 mod literal_methods;
 mod made_instance;
+mod member_origins;
 mod native_memory;
 mod numeric_arguments;
 mod parameter_entries;

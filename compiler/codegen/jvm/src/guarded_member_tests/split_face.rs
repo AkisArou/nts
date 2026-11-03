@@ -1,6 +1,8 @@
 //! The retained runtime failure uses a stateful class + companion interface,
 //! unlike the fieldless direct-interface control. No frontend capture here.
-use super::{CLASS_STOP, FACE_STOP, add_bad, command, fixture, parsed, push, write_classes};
+use super::{
+    CLASS_STOP, FACE_STOP, add_bad, command, fixture, parsed, push, storage_members, write_classes,
+};
 use crate::{JvmProgram, emit, guarded_members, hierarchy, instance_descriptor, types};
 use nts_core::hir::{
     Block, Callee, Field, Func, HirType, InterfaceIdentity, Layout, ManagedType, Op, OpKind,
@@ -35,6 +37,13 @@ fn stateful(program: &mut Program) {
 fn remap(program: &mut Program, reversed: bool) -> usize {
     let interface = if reversed { 88 } else { 83 };
     let class = if reversed { 83 } else { 88 };
+    crate::member_identity::remap_rows(
+        program,
+        &[
+            (0, u32::try_from(interface).unwrap()),
+            (1, u32::try_from(class).unwrap()),
+        ],
+    );
     for layout in &mut program.layouts {
         let old = std::mem::take(&mut layout.methods);
         layout.methods = vec![None; 89];
@@ -96,7 +105,7 @@ fn assert_split(program: &Program) {
 fn surfaces(program: &Program, interface_slot: usize, descriptor: &str) {
     assert_split(program);
     let facts = JvmProgram::new(program);
-    let internal = guarded_members::internal_name(interface_slot);
+    let internal = guarded_members::internal_name(&facts, interface_slot).unwrap();
     assert_eq!(
         facts.guarded_member(interface_slot),
         Some(internal.as_str())
@@ -356,11 +365,12 @@ fn an_uncovered_receiver_and_field_selector_cannot_gain_a_companion_alias() {
             pending: false,
             stored_dispatch: false,
         });
+    crate::member_identity::synthetic_rows(&mut fields, &[(83, 7, "x", false)]);
     let facts = JvmProgram::new(&fields);
     assert_eq!(facts.guarded_member(83), None);
     assert_eq!(
-        hierarchy::slot_member(&facts, 83, FACE_STOP),
-        "get$state$interface2"
+        hierarchy::slot_member(&facts, 83, FACE_STOP).unwrap(),
+        facts.dispatch_name(83).unwrap()
     );
 }
 
@@ -381,7 +391,11 @@ fn directory() -> PathBuf {
 fn old_binaries(java: &Path, javac: &Path, old: &Path, new: &Path) {
     std::fs::write(old.join("OldImpl.java"), OLD_IMPLEMENTER).unwrap();
     std::fs::write(old.join("OldExtender.java"), OLD_SUBCLASS).unwrap();
-    std::fs::write(old.join("SplitCompatibilityDriver.java"), OLD_DRIVER).unwrap();
+    std::fs::write(
+        old.join("SplitCompatibilityDriver.java"),
+        storage_members(OLD_DRIVER),
+    )
+    .unwrap();
     command(
         javac,
         &[
@@ -481,9 +495,9 @@ const OLD_DRIVER: &str = r#"package nts.gen; public final class SplitCompatibili
     OldExtender b = new OldExtender(); b.step(3); Program.invoke_iface(b, 7);
     if (b.count != 10) throw new AssertionError("old abstract-class subclass");
     Good good = new Good(); good.step(3); Program.invoke_iface(good, 7);
-    if (good.n$count != 10) throw new AssertionError("unrelated generated implementer");
+    if (good.@@COUNT_FIELD@@ != 10) throw new AssertionError("unrelated generated implementer");
     Solo solo = new Solo(); solo.step(3); Program.invoke_iface(solo, 7);
-    if (solo.n$count != 10) throw new AssertionError("interface-only generated implementer");
+    if (solo.@@COUNT_FIELD@@ != 10) throw new AssertionError("interface-only generated implementer");
     System.out.println("SPLIT_OLD_BINARIES_PASS");
   }
 }"#;
@@ -554,7 +568,7 @@ fn diamond_surfaces(program: &Program, transitive: bool) {
     assert!(facts.guarded_default(root, 83));
     let output = emit(program);
     assert!(output.is_complete(), "{:?}", output.diagnostics);
-    let internal = guarded_members::internal_name(83);
+    let internal = guarded_members::internal_name(&facts, 83).unwrap();
     for (id, name) in [(8, "LeftFace"), (9, "RightFace"), (10, "MiddleFace")] {
         if id == 10 && !transitive {
             continue;

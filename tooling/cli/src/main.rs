@@ -9477,7 +9477,7 @@ fn emit_jvm_prepared(
             class
                 .lines
                 .iter()
-                .any(|method| method.name == "module$init")
+                .any(|method| method.name == nts_codegen_jvm::module_init_method())
         });
     }
     Ok(JvmWrote {

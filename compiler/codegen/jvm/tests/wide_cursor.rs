@@ -61,17 +61,7 @@ fn a_wide_view_subscript_is_bounded_as_a_long() {
     );
     let listing = String::from_utf8_lossy(&listed.stdout);
     // `write` and every specialization made of it.
-    let mut writes = String::new();
-    let mut inside = false;
-    for line in listing.lines() {
-        if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(");") {
-            inside = line.contains(" write(") || line.contains(" write$");
-        } else if inside {
-            writes.push_str(line);
-            writes.push('\n');
-        }
-    }
-    assert!(!writes.is_empty(), "no `write` in:\n{listing}");
+    let writes = common::implementation_bodies(&listing, &program, "write");
     assert!(
         writes.contains("nts/rt/NtsRuntime.bounds:(IJ)I"),
         "the store is not bounded as a long:\n{writes}"

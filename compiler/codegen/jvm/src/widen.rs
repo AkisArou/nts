@@ -177,7 +177,7 @@ fn field_of<'a>(
     Some((
         (
             crate::types::class_name(package, owner),
-            crate::hierarchy::field_name(program, owner, index as usize),
+            crate::hierarchy::field_name(program, owner, index as usize)?,
         ),
         &field.ty,
     ))

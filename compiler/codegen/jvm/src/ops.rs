@@ -4170,9 +4170,10 @@ impl Emitter<'_> {
                     self.func.values[value.0 as usize].kind,
                     nts_core::hir::OpKind::ClosureStatic
                 ) && let HirType::Managed(ManagedType::Object(id)) = &from
-                    && let Some(layout) = self.program.layout(*id)
+                    && self.program.layout(*id).is_some()
                 {
-                    let field = crate::erased_field(&types::class_name(self.shape.package, layout));
+                    let field = crate::erased_field(self.program, *id)
+                        .map_err(|reason| crate::name_refusal(self.program, reason))?;
                     code.get_static(
                         origin,
                         pool,
@@ -4408,12 +4409,23 @@ impl Emitter<'_> {
     ) -> Result<Placed, Diagnostic> {
         let (field, descriptor) = if let OpKind::ConstTemplate { site, .. } = kind {
             (
-                crate::template_field(*site),
+                crate::template_field(self.shape.program, *site)
+                    .map_err(|reason| crate::name_refusal(self.program, reason))?,
                 types::TEMPLATE_DESCRIPTOR.to_owned(),
             )
         } else {
             let class = self.object_class(ty)?;
-            (crate::closure_field(&class), format!("L{class};"))
+            let HirType::Managed(ManagedType::Object(id)) = ty else {
+                return Err(refuse(
+                    self.func,
+                    "a closure cache without an owned object type",
+                ));
+            };
+            (
+                crate::closure_field(self.program, *id)
+                    .map_err(|reason| crate::name_refusal(self.program, reason))?,
+                format!("L{class};"),
+            )
         };
         code.get_static(
             origin,
@@ -6888,7 +6900,8 @@ impl Emitter<'_> {
         for &arg in args {
             self.load(code, pool, arg)?;
         }
-        let member = crate::hierarchy::slot_member(self.program, slot as usize, declared);
+        let member = crate::hierarchy::slot_member(self.program, slot as usize, declared)
+            .map_err(|reason| crate::name_refusal(self.program, reason))?;
         // Which instruction, decided by what the receiver's static type
         // is emitted as. The two are not interchangeable: they resolve
         // through different constant-pool tags, and the wrong one is an
@@ -7024,7 +7037,8 @@ impl Emitter<'_> {
                         origin,
                         pool,
                         &crate::split_faces::interface_name(self.shape.package, face),
-                        &crate::split_faces::accessor(*field),
+                        &crate::split_faces::accessor(self.shape.program, face, *field)
+                            .map_err(|reason| crate::name_refusal(self.program, reason))?,
                         &format!("(){descriptor}"),
                     );
                 } else {
@@ -7079,7 +7093,8 @@ impl Emitter<'_> {
                         origin,
                         pool,
                         &crate::split_faces::interface_name(self.shape.package, face),
-                        &crate::split_faces::accessor(*field),
+                        &crate::split_faces::accessor(self.shape.program, face, *field)
+                            .map_err(|reason| crate::name_refusal(self.program, reason))?,
                         &format!("({descriptor})V"),
                     );
                 } else {
@@ -7124,7 +7139,8 @@ impl Emitter<'_> {
                 origin,
                 pool,
                 &crate::split_faces::interface_name(self.shape.package, face),
-                &crate::split_faces::accessor(field),
+                &crate::split_faces::accessor(self.shape.program, face, field)
+                    .map_err(|reason| crate::name_refusal(self.program, reason))?,
                 &signature,
             );
             let HirType::PossiblyUndefined(payload) = &declared else {
@@ -7184,7 +7200,8 @@ impl Emitter<'_> {
                 origin,
                 pool,
                 &crate::split_faces::interface_name(self.shape.package, face),
-                &crate::split_faces::accessor(field),
+                &crate::split_faces::accessor(self.shape.program, face, field)
+                    .map_err(|reason| crate::name_refusal(self.program, reason))?,
                 &signature,
             );
         } else {
@@ -8010,7 +8027,8 @@ impl Emitter<'_> {
                         ),
                     ));
                 };
-                let member = crate::hierarchy::slot_member(self.program, slot as usize, declared);
+                let member = crate::hierarchy::slot_member(self.program, slot as usize, declared)
+                    .map_err(|reason| crate::name_refusal(self.program, reason))?;
                 // **Every argument against the parameter it lands in, as a
                 // direct call checks them.** The IR relates a class to a
                 // structural type the callback declares -- http's

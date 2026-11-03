@@ -213,6 +213,7 @@ fn fixture() -> Program {
         classes: vec![ClassIdentity {
             symbol: 3,
             name: "Nominal".into(),
+            source: None,
             types: vec![NOMINAL],
         }],
         interface_identities: vec![
@@ -220,6 +221,23 @@ fn fixture() -> Program {
             interface("Other", vec![FAMILY]),
         ],
         interface_access: access_plan(),
+        member_origins: nts_core::hir::MemberOrigins {
+            dispatch: [(
+                0,
+                nts_core::hir::DispatchMember {
+                    root: nts_core::hir::DispatchRoot::Anonymous {
+                        id: FAMILY,
+                        source: None,
+                    },
+                    key: "n".into(),
+                    accessor: nts_core::hir::MemberAccessor::Get,
+                    raising: false,
+                    ordinary_slot: None,
+                },
+            )]
+            .into(),
+            ..Default::default()
+        },
         ..Program::default()
     }
 }

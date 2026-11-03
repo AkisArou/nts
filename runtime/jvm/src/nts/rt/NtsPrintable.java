@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /**
@@ -21,5 +22,5 @@ public interface NtsPrintable {
      * flag and takes the payload. They must not invoke another printer while
      * that flag is set, or translate the throw into a Java exception.
      */
-    String nts$print();
+    String ¢nts$print();
 }

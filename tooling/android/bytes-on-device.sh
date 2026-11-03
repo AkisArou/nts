@@ -128,11 +128,9 @@ JSON
   # The flag is repeated rather than comma-joined: `named_entry()` collects
   # every `--entry` occurrence and does not split on commas, unlike
   # `requested_entry()` twenty lines above it, which does.
-  if javap $nts_jdk_flags -p -cp "$out/classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
-    init='static { nts.gen.Program.module$init(); }'
-  else
-    init=''
-  fi
+  # nts-module-initializer: begin
+  init=$(sh "$root/tooling/android/module-initializer.sh" "$out/classes")
+  # nts-module-initializer: end
   cat > "$out/H.java" <<JAVA
 import com.sun.management.ThreadMXBean;
 import java.lang.management.ManagementFactory;

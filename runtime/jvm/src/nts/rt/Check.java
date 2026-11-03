@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.io.BufferedReader;
@@ -120,7 +121,7 @@ public final class Check {
     }
     private static void run(String file, long from) throws Exception {
         Class<?> program = Class.forName(PROGRAM);
-        try { program.getMethod("module$init").invoke(null); }
+        try { program.getMethod("¢nts$moduleInit").invoke(null); }
         catch (NoSuchMethodException absent) { /* No module-scope initializer. */ }
         Map<String, Map<String, Plan>> plans = new HashMap<String, Map<String, Plan>>();
         try (BufferedReader reader = Files.newBufferedReader(Paths.get(file), StandardCharsets.UTF_8)) {

@@ -143,19 +143,18 @@ fn falling_off_the_end_settles_the_promise() {
 fn the_receiver_is_in_the_frame() {
     let program = machine("async-methods");
     let frame = layout(&program, "Counter#afterASuspension#frame");
-    let names: Vec<&str> = frame
+    let names: Vec<_> = frame
         .fields
         .iter()
-        .map(|field| {
-            field
-                .name
-                .public_name()
-                .expect("this fixture uses public fields")
-        })
+        .map(|field| field.name.clone())
         .collect();
     assert_eq!(
         &names[..3],
-        &["state", "result", "awaited"],
+        &[
+            hir::suspend::FrameField::State.key(),
+            hir::suspend::FrameField::Result.key(),
+            hir::suspend::FrameField::Awaited.key(),
+        ],
         "the three fixed fields come first",
     );
     assert!(

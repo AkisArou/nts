@@ -145,7 +145,10 @@ fn wide_optional_fields_count_actual_naming_and_owner_work() {
                 assert!(facts.field_defined_name(&absent, at).is_none());
                 let owner = hierarchy::declares_field(&facts, &program.layouts[1], at);
                 assert!(std::ptr::eq(owner, &raw const program.layouts[0]));
-                assert_eq!(hierarchy::field_name(&facts, owner, at), format!("n$f{at}"));
+                assert_eq!(
+                    hierarchy::field_name(&facts, owner, at).unwrap(),
+                    crate::generated_members::storage_field(&format!("n:f{at}"))
+                );
                 assert!(facts.field_defined_name(owner, at).is_some());
             }
         }
@@ -290,4 +293,106 @@ fn source_owner_and_fallback_are_independent_of_layout_order() {
             flattened
         ));
     }
+}
+
+#[test]
+fn named_field_components_keep_property_identity_when_an_unrelated_field_is_inserted() {
+    let mut original = program(2);
+    for layout in &mut original.layouts {
+        layout.fields[1].name = "registered".into();
+    }
+    let mut inserted = original.clone();
+    for layout in &mut inserted.layouts {
+        let mut unrelated = layout.fields[0].clone();
+        unrelated.name = "unrelated".into();
+        layout.fields.insert(0, unrelated);
+    }
+    for func in &mut inserted.funcs {
+        for op in &mut func.values {
+            match &mut op.kind {
+                OpKind::FieldGet { field, .. } | OpKind::FieldSet { field, .. } => *field += 1,
+                _ => {}
+            }
+        }
+    }
+    let mut observed = Vec::new();
+    for (variant, at) in [(&original, 1), (&inserted, 2)] {
+        assert_eq!(hir::verify::verify(variant), Ok(()));
+        let facts = JvmProgram::new(variant);
+        let owner = &variant.layouts[0];
+        let payload = hierarchy::field_name(&facts, owner, at).unwrap();
+        let defined = facts.field_defined_name(owner, at).unwrap().to_owned();
+        let emitted = crate::emit(variant);
+        assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
+        let class = emitted
+            .classes
+            .iter()
+            .find(|class| class.binary_name == "nts/gen/WideOwner")
+            .unwrap();
+        let class = nts_jvm_emitter::read::class_file(&class.bytes).unwrap();
+        for name in [&payload, &defined] {
+            assert!(
+                class.fields.iter().any(|field| field.name == *name),
+                "actual field definition {name}"
+            );
+        }
+        println!("FIELD_IDENTITY at={at} payload={payload:?} defined={defined:?}");
+        observed.push((payload, defined));
+    }
+    assert_eq!(
+        observed[0], observed[1],
+        "an unrelated field must not rename an existing source field or its definedness component"
+    );
+    assert!(
+        observed[0].0.contains("registered"),
+        "the payload preserves its readable source identity"
+    );
+    assert!(
+        observed[0].1.contains("registered"),
+        "definedness is a role of the same source field"
+    );
+}
+
+#[test]
+fn missing_symbol_source_is_refused_before_any_field_publication() {
+    let mut program = program(2);
+    for layout in &mut program.layouts {
+        layout.fields[0].name = nts_semantic_schema::PropertyKey::Symbol(TypeId(7));
+    }
+    let missing = crate::emit(&program);
+    assert!(
+        missing.classes.is_empty(),
+        "a missing source must publish no program"
+    );
+    assert!(
+        missing
+            .diagnostics
+            .iter()
+            .any(|error| error.code == "NTS4004" && error.message.contains("symbol field 7")),
+        "{:?}",
+        missing.diagnostics
+    );
+    program.member_origins.symbols.insert(
+        TypeId(7),
+        hir::SymbolSource::Named(hir::NamedClassSource {
+            symbol: 7,
+            module: "nts-workspace:///field.ts".into(),
+            scopes: vec!["registered".into()],
+        }),
+    );
+    let positive = crate::emit(&program);
+    assert!(positive.is_complete(), "{:?}", positive.diagnostics);
+    let owner = positive
+        .classes
+        .iter()
+        .find(|class| class.binary_name == "nts/gen/WideOwner")
+        .unwrap();
+    let parsed = nts_jvm_emitter::read::class_file(&owner.bytes).unwrap();
+    assert!(
+        parsed
+            .fields
+            .iter()
+            .any(|field| field.name.contains("registered")),
+        "the control must publish the named definition"
+    );
 }

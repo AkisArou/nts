@@ -20,41 +20,23 @@ fn listing(dir: &std::path::Path, class: &str) -> String {
     String::from_utf8(output.stdout).unwrap()
 }
 
-fn allocations(body: &str, views: &[String]) -> usize {
-    body.lines()
-        .filter(|line| {
-            line.split_once(':')
-                .is_some_and(|(_, op)| op.trim_start().starts_with("new "))
-                && line
-                    .split_once("// class ")
-                    .is_some_and(|(_, class)| views.iter().any(|view| class.trim() == view))
-        })
+fn allocation_count(method: &nts_jvm_emitter::read::MethodAllocations, views: &[String]) -> usize {
+    method
+        .classes
+        .iter()
+        .filter(|class| views.contains(class))
         .count()
 }
 
-fn variants<'a>(listing: &'a str, name: &str) -> Vec<&'a str> {
-    let found: Vec<_> = listing
-        .split("\n\n")
-        .filter(|body| {
-            body.lines().any(|line| {
-                line.starts_with("  ")
-                    && !line.starts_with("   ")
-                    && line.ends_with(");")
-                    && (line.contains(&format!(" {name}(")) || line.contains(&format!(" {name}$")))
-            })
-        })
-        .collect();
-    assert!(!found.is_empty(), "missing {name} variants in {listing}");
-    found
-}
-
-fn method<'a>(listing: &'a str, name: &str) -> &'a str {
-    let at = listing
-        .find(&format!(" {name}("))
-        .unwrap_or_else(|| panic!("missing {name}: {listing}"));
-    let rest = &listing[at..];
-    let end = rest.find("\n\n").unwrap_or(rest.len());
-    &rest[..end]
+fn variants<'a>(
+    listing: &'a str,
+    program: &nts_core::hir::Program,
+    name: &str,
+) -> Vec<(&'a str, String)> {
+    common::implementation_names(program, name)
+        .into_iter()
+        .map(|actual| (common::method_listing(listing, &actual), actual))
+        .collect()
 }
 
 #[test]
@@ -109,21 +91,25 @@ export function deep(n: number): number {
     let mut views: Vec<_> = program
         .view_classes
         .iter()
-        .map(|view| {
-            emitted
-                .classes
-                .iter()
-                .find(|class| class.binary_name.contains(&view.name))
-                .unwrap()
-                .binary_name
-                .clone()
-        })
+        .map(|view| nts_codegen_jvm::types::view_class_name(nts_codegen_jvm::DEFAULT_PACKAGE, view))
         .collect();
     views.push("nts/rt/NtsViewU8".to_owned());
+    let program_class = emitted
+        .classes
+        .iter()
+        .find(|class| class.binary_name == "nts/gen/Program")
+        .expect("actual Program class");
+    let allocations = nts_jvm_emitter::read::allocations(&program_class.bytes).unwrap();
+    let allocated = |name: &str| {
+        allocations
+            .iter()
+            .find(|method| method.name == name)
+            .unwrap_or_else(|| panic!("missing Code for actual method {name}"))
+    };
     let body = listing(&dir, "nts.gen.Program");
-    for plain in variants(&body, "plain") {
+    for (plain, name) in variants(&body, &program, "plain") {
         assert_eq!(
-            allocations(plain, &views),
+            allocation_count(allocated(&name), &views),
             0,
             "builtin creation uses its runtime factory"
         );
@@ -133,9 +119,9 @@ export function deep(n: number): number {
         );
     }
     for name in ["single", "deep"] {
-        for body in variants(&body, name) {
+        for (body, actual) in variants(&body, &program, name) {
             assert_eq!(
-                allocations(body, &views),
+                allocation_count(allocated(&actual), &views),
                 1,
                 "one original requested view allocation: {body}"
             );
@@ -150,12 +136,23 @@ export function deep(n: number): number {
         let class = emitted
             .classes
             .iter()
-            .find(|class| class.binary_name.contains(&view.name))
+            .find(|class| {
+                class.binary_name
+                    == nts_codegen_jvm::types::view_class_name(
+                        nts_codegen_jvm::DEFAULT_PACKAGE,
+                        view,
+                    )
+            })
             .unwrap();
+        let allocations = nts_jvm_emitter::read::allocations(&class.bytes).unwrap();
+        let species = allocations
+            .iter()
+            .find(|method| method.name == "like")
+            .expect("explicit runtime like contract");
         let body = listing(&dir, &class.binary_name.replace('/', "."));
-        let like = method(&body, "like");
+        let like = common::method_listing(&body, "like");
         assert_eq!(
-            allocations(like, &views),
+            allocation_count(species, &views),
             1,
             "exactly the requested species: {like}"
         );
@@ -165,14 +162,28 @@ export function deep(n: number): number {
         );
         // Two delegating constructors plus one like; neither constructor allocates.
         assert_eq!(
-            allocations(&body, &views),
+            allocations
+                .iter()
+                .map(|method| allocation_count(method, &views))
+                .sum::<usize>(),
             1,
             "constructors delegate without new: {body}"
         );
     }
     let runtime = root.join("runtime/jvm/nts-runtime.jar");
-    let runtime_body = listing(&runtime, "nts.rt.NtsViewU8");
-    assert_eq!(allocations(method(&runtime_body, "create"), &views), 1);
+    let output = nts_codegen_jvm::toolchain::command(common::tool("unzip").unwrap())
+        .args(["-p"])
+        .arg(&runtime)
+        .arg("nts/rt/NtsViewU8.class")
+        .output()
+        .unwrap();
+    assert!(output.status.success());
+    let runtime_allocations = nts_jvm_emitter::read::allocations(&output.stdout).unwrap();
+    let create = runtime_allocations
+        .iter()
+        .find(|method| method.name == "create")
+        .expect("runtime factory Code");
+    assert_eq!(allocation_count(create, &views), 1);
     let driver = dir.join("ViewAllocationDriver.java");
     std::fs::write(&driver, r#"
 public class ViewAllocationDriver {

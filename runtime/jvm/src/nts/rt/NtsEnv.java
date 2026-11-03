@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.util.ArrayDeque;
@@ -473,8 +474,8 @@ public final class NtsEnv {
         try {
             do {
                 NtsResumable task;
-                while ((task = env.ticks.pollFirst()) != null) { task.resume(); }
-                while ((task = env.microtasks.pollFirst()) != null) { task.resume(); }
+                while ((task = env.ticks.pollFirst()) != null) { task.¢nts$resume(); }
+                while ((task = env.microtasks.pollFirst()) != null) { task.¢nts$resume(); }
             } while (!env.ticks.isEmpty());
         } finally {
             env.checkpointing = previous;
@@ -494,7 +495,7 @@ public final class NtsEnv {
     public static boolean step(NtsEnv env) {
         NtsResumable next = env.ticks.pollFirst();
         if (next == null) { next = env.microtasks.pollFirst(); }
-        if (next != null) { next.resume(); return true; }
+        if (next != null) { next.¢nts$resume(); return true; }
         // `deliver` and not `NtsInbox.drain`, which is what this used to call
         // and which skipped **both** of the things delivery does besides
         // running the work: the liveness count is decremented there, and the

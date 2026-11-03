@@ -2130,3 +2130,58 @@ fn an_overload_set_of_mixed_visibility_stays_compilable() {
         "a renamed declaration must still name the real Java member:\n{body}"
     );
 }
+
+#[test]
+fn allocations_resolve_real_class_entries_and_skip_opcode_looking_operands() {
+    use nts_jvm_emitter::{
+        class::{ClassBuilder, access},
+        code::Code,
+        pool::Pool,
+    };
+    let origin = nts_semantic_schema::Origin::source(nts_diagnostics::Location {
+        file: nts_diagnostics::SourceId(0),
+        span: nts_diagnostics::Span::new(0, 1),
+    });
+    let mut pool = Pool::new();
+    let mut code = Code::new(Vec::new(), 0);
+    // The operand is 0xbb, the `new` opcode, and must never be counted.
+    code.const_int(&origin, &mut pool, -69);
+    code.pop(&origin, 1);
+    for class in ["pkg/Type-with-dash", "pkg/東京$24$"] {
+        code.new_object(&origin, &mut pool, class);
+        code.pop(&origin, 1);
+    }
+    code.ret(&origin, None);
+    let body = code.finish(&pool).unwrap();
+    let mut class = ClassBuilder::new("AllocationInput", "java/lang/Object");
+    class.method(
+        access::PUBLIC | access::STATIC,
+        "allocate",
+        "()V",
+        Some(body),
+    );
+    let mut empty = Code::new(Vec::new(), 0);
+    empty.ret(&origin, None);
+    class.method(
+        access::PUBLIC | access::STATIC,
+        "empty",
+        "()V",
+        Some(empty.finish(&pool).unwrap()),
+    );
+    let class = class.build(pool).unwrap();
+    let methods = read::allocations(&class.bytes).unwrap();
+    let actual = methods
+        .iter()
+        .find(|method| method.name == "allocate")
+        .unwrap();
+    assert_eq!(actual.descriptor, "()V");
+    assert_eq!(actual.classes, ["pkg/Type-with-dash", "pkg/東京$24$"]);
+    assert_eq!(
+        methods
+            .iter()
+            .find(|method| method.name == "empty")
+            .unwrap()
+            .classes,
+        [] as [String; 0]
+    );
+}

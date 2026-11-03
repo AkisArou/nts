@@ -1,0 +1,361 @@
+package nts.rt;
+
+/** Single-threaded promise state with FIFO, asynchronous resumptions. */
+public final class NtsPromise {
+    private static final int PENDING = 0, FULFILLED = 1, REJECTED = 2;
+    private int state;
+    /**
+     * How many times a pair of its resolving functions has been used: the
+     * specification's {@code alreadyResolved}, counted per promise. See
+     * {@link #claim} and {@code nts_promise_claim} in {@code runtime/c}.
+     */
+    private int resolutions;
+    private NtsValue settled = NtsValue.UNDEFINED_VALUE;
+    // Zero or one waiter needs no backing array; the common await case is inline.
+    private NtsResumable first;
+    private NtsResumable[] more;
+    private int waitingCount;
+    /**
+     * Whether anything ever subscribed to it, which is how an unhandled
+     * rejection is told from a handled one -- `runtime/c`'s field of the same
+     * name, set the same way: by {@link #subscribe}, whether the promise is
+     * pending or already settled. Until 2026-10-02 this lane had neither the
+     * field nor the report, so an `async` function that threw with nobody
+     * listening exited 0 where node and C exit 1 -- measured the day
+     * {@code NtsMain} first ran a program whole.
+     */
+    private boolean handled;
+
+    private NtsPromise() {}
+    public static NtsPromise newPromise() { return new NtsPromise(); }
+
+    private static void settle(NtsPromise promise, int state, NtsValue value) {
+        if (promise.state != PENDING) { return; }
+        promise.state = state;
+        promise.settled = value;
+        int n = promise.waitingCount;
+        // Asked before the waiters are queued, as `nts_promise_reject` asks
+        // before settling consumes its list.
+        if (state == REJECTED && n == 0 && !promise.handled) {
+            NtsEnv.rejectionCandidate(NtsEnv.current(), promise);
+        }
+        // One lookup for the whole settlement rather than one per waiter. The
+        // hidden-parameter calling convention would remove even this; until it
+        // is built and measured, hoisting is the honest version of the same
+        // saving and costs nothing to read.
+        NtsEnv env = NtsEnv.current();
+        NtsResumable first = promise.first;
+        NtsResumable[] more = promise.more;
+        promise.first = null;
+        promise.more = null;
+        promise.waitingCount = 0;
+        if (n != 0) {
+            NtsEnv.microtask(env, first);
+            for (int i = 0; i < n - 1; i++) {
+                NtsEnv.microtask(env, more[i]);
+                more[i] = null;
+            }
+        }
+    }
+
+    public static void fulfillVoid(NtsPromise promise) {
+        settle(promise, FULFILLED, NtsValue.UNDEFINED_VALUE);
+    }
+    public static void fulfillNumber(NtsPromise promise, double value) {
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofNumber(value)); }
+    }
+    public static void fulfillReference(NtsPromise promise, Object value) {
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofReference(value)); }
+    }
+    public static void fulfillTagged(NtsPromise promise, Object value, int tag) {
+        if (promise.state == PENDING) { settle(promise, FULFILLED, NtsValue.ofTagged(tag, value)); }
+    }
+    public static void fulfillValue(NtsPromise promise, NtsValue value) {
+        settle(promise, FULFILLED, value);
+    }
+    /**
+     * Resolve with a value whose kind is known only at run time: a promise is
+     * adopted, anything else fulfils. See {@code nts_promise_resolve_value}.
+     */
+    public static void resolveValue(NtsPromise promise, NtsValue value) {
+        if (NtsValue.isPromise(value)) {
+            adopt(promise, (NtsPromise) value.ref);
+            return;
+        }
+        fulfillValue(promise, value);
+    }
+    public static void reject(NtsPromise promise, Object reason) {
+        if (promise.state == PENDING) {
+            settle(promise, REJECTED, reason == null ? NtsValue.UNDEFINED_VALUE : NtsValue.ofReference(reason));
+        }
+    }
+    /**
+     * Reject with a reason that arrives already erased.
+     *
+     * <p>{@link #reject} takes an {@code Object} because a reason is normally a
+     * reference the compiler has in hand. A **rethrow** does not have one: a
+     * `finally` spanning an `await` has to re-reject with exactly what {@link
+     * #reason} handed back, and that is an {@code NtsValue} because `catch (e)`
+     * is `unknown`.
+     *
+     * <p>Stored as it arrives rather than re-tagged through {@link
+     * NtsValue#ofObject}. The value is already correctly tagged -- it came out
+     * of a rejection -- and `ofObject` tags every reference `OBJECT`, so a
+     * round trip through it would turn a rejected string into a rejected
+     * object. Primitive values and explicit null also keep their exact tags.
+     * The C runtime uses the same single tagged settlement slot.
+     */
+    public static void rejectValue(NtsPromise promise, NtsValue reason) {
+        if (promise.state == PENDING) { settle(promise, REJECTED, reason); }
+    }
+
+    public static void rejectWith(NtsPromise result, NtsPromise source) {
+        settle(result, REJECTED, source.settled);
+    }
+
+    /**
+     * Settle {@code outer} with whatever {@code inner} settles to, two
+     * microtasks later.
+     *
+     * <p>{@code async function f() { return g(); }}. The outer promise does not
+     * take the inner <em>promise</em> as its value; it takes the inner's
+     * eventual settlement, and it takes it two microtasks later. Both halves are
+     * observable through interleaving, which is why this is a runtime operation
+     * rather than a copy at the settle site.
+     *
+     * <p><b>Two hops, and the specification says which two.</b> Resolving a
+     * promise with a thenable enqueues {@code NewPromiseResolveThenableJob},
+     * which is the first; that job subscribes, and the subscription's reaction
+     * is the second. Measured against node before this was written: a
+     * {@code return g()} whose {@code g()} has already settled resolves one tick
+     * after a {@code return await g()} would. {@code runtime/c} carries the same
+     * note beside {@code nts_promise_adopt}, and the two must stay the same
+     * number of hops or the backends disagree about a tick.
+     */
+    public static void adopt(NtsPromise outer, NtsPromise inner) {
+        NtsEnv.microtask(NtsEnv.current(), new AdoptionBegin(outer, inner));
+    }
+
+    /** The first hop: subscribe. */
+    private static final class AdoptionBegin implements NtsResumable {
+        private final NtsPromise outer;
+        private final NtsPromise inner;
+
+        AdoptionBegin(NtsPromise outer, NtsPromise inner) {
+            this.outer = outer;
+            this.inner = inner;
+        }
+
+        @Override
+        public void @@RESUME@@() {
+            subscribe(inner, new AdoptionSettled(outer, inner));
+        }
+    }
+
+    /** The second hop: the inner settled, so copy it across. */
+    private static final class AdoptionSettled implements NtsResumable {
+        private final NtsPromise outer;
+        private final NtsPromise inner;
+
+        AdoptionSettled(NtsPromise outer, NtsPromise inner) {
+            this.outer = outer;
+            this.inner = inner;
+        }
+
+        @Override
+        public void @@RESUME@@() {
+            settle(outer, inner.state, inner.settled);
+        }
+    }
+    /** The resolving functions that may resolve it now; see {@code nts_promise_pair}. */
+    public static int pair(NtsPromise promise) { return promise.resolutions; }
+    /**
+     * Whether the resolving functions numbered {@code pair} may still resolve
+     * {@code promise}, spending them if so. {@code pair} is unsigned, as the
+     * C runtime's {@code uint32_t} is; see {@code nts_promise_claim} for why a
+     * count per promise is the spec's flag per pair.
+     */
+    public static boolean claim(NtsPromise promise, int pair) {
+        if (promise.resolutions != pair) { return false; }
+        if (pair == -1) {
+            throw new IllegalStateException(
+                "nts: a promise resolved through more than 4294967295 thenables");
+        }
+        promise.resolutions = pair + 1;
+        return true;
+    }
+    public static boolean isRejected(NtsPromise promise) { return promise.state == REJECTED; }
+    /** Rejected, and nothing ever subscribed: what the checkpoint reports. */
+    static boolean unhandled(NtsPromise promise) { return promise.state == REJECTED && !promise.handled; }
+    public static boolean isSettled(NtsPromise promise) { return promise.state != PENDING; }
+    public static double number(NtsPromise promise) { return promise.settled.num; }
+    public static Object reference(NtsPromise promise) { return promise.settled.ref; }
+    public static NtsValue value(NtsPromise promise) { return promise.settled; }
+
+    /**
+     * The reason a rejected promise carries, as an erased value.
+     *
+     * <p>The tag distinguishes a primitive, explicit null and undefined from
+     * a reference; a null reference field alone cannot decide the value.
+     */
+    public static NtsValue reason(NtsPromise promise) {
+        if (promise.state != REJECTED) { throw new IllegalStateException("promise has no rejection reason"); }
+        return promise.settled;
+    }
+
+    public static void subscribe(NtsPromise promise, NtsResumable frame) {
+        if (frame == null) { throw new NullPointerException("resumable frame"); }
+        // Before the settled test: subscribing to an *already rejected*
+        // promise handles it -- the `p.catch(...)` written on the line after
+        // the rejection, inside the same turn.
+        promise.handled = true;
+        if (promise.state != PENDING) {
+            NtsEnv.microtask(NtsEnv.current(), frame);
+            return;
+        }
+        int n = promise.waitingCount;
+        if (n == 0) {
+            promise.first = frame;
+        } else {
+            if (promise.more == null) {
+                promise.more = new NtsResumable[4];
+            } else if (n - 1 == promise.more.length) {
+                promise.more = java.util.Arrays.copyOf(promise.more,
+                    NtsArrays.growCapacity(promise.more.length, n));
+            }
+            promise.more[n - 1] = frame;
+        }
+        promise.waitingCount = n + 1;
+    }
+
+    /**
+     * One {@code Promise.all}: how many inputs are still pending, what it
+     * resolves with, and -- the one thing each kind supplies -- how a settled
+     * value is stored at its input's index. The kinds are the values array's
+     * element kinds, chosen statically by the emitter
+     * ({@code ops::promise_all_external}), the rule C's
+     * {@code nts_combinator_settled} stores by.
+     */
+    private abstract static class All {
+        int remaining;
+        /**
+         * What {@code Promise.all} resolves *with*: the values array as the
+         * program holds it, bare or in its growable wrapper.
+         *
+         * <p>Both settle paths used to answer {@code UNDEFINED_VALUE}, so
+         * {@code reference()} on the result was null. A caller holding the
+         * array it passed in never noticed; `allOfNone` awaits
+         * `Promise.all([])` and reads the resolved value, and got a
+         * {@code NullPointerException} on `arraylength`.
+         */
+        final Object values;
+        All(Object values) { this.values = values; }
+        abstract void store(int index, NtsValue value);
+    }
+    private static final class AllNumbers extends All {
+        private final double[] items;
+        AllNumbers(double[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value.num; }
+    }
+    /**
+     * A typed boolean settles through the number channel as 0 or 1, and
+     * {@link NtsValue#ofBoolean} carries 1.0 or 0.0: either way true is a
+     * nonzero {@code num}. There was no boolean entry at all, so every
+     * {@code Promise.all} over booleans was a {@code NoSuchMethodError}.
+     */
+    private static final class AllBooleans extends All {
+        private final boolean[] items;
+        AllBooleans(boolean[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value.num != 0; }
+    }
+    private static final class AllReferences extends All {
+        private final Object[] items;
+        AllReferences(Object[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value.ref; }
+    }
+    /**
+     * An erased array keeps the whole tagged value. Stored as a reference
+     * array's payload, a number was lost to null and a string was an
+     * {@code ArrayStoreException} on the {@code NtsValue[]}.
+     */
+    private static final class AllValues extends All {
+        private final Object[] items;
+        AllValues(Object[] items, Object values) { super(values); this.items = items; }
+        @Override void store(int index, NtsValue value) { items[index] = value; }
+    }
+    private static final class Waiting implements NtsResumable {
+        private final NtsPromise element;
+        private final NtsPromise result;
+        private final All group;
+        private final int index;
+        Waiting(NtsPromise element, NtsPromise result, All group, int index) {
+            this.element = element;
+            this.result = result;
+            this.group = group;
+            this.index = index;
+        }
+        @Override public void @@RESUME@@() {
+            if (group == null) {
+                settle(result, element.state == REJECTED ? REJECTED : FULFILLED, element.settled);
+            } else if (element.state == REJECTED) {
+                settle(result, REJECTED, element.settled);
+            } else {
+                // Input position, not settlement order. Duplicated inputs get distinct indices.
+                group.store(index, element.settled);
+                if (--group.remaining == 0) {
+                    settle(result, FULFILLED, NtsValue.ofObject(group.values));
+                }
+            }
+        }
+    }
+    private static NtsPromise combine(NtsPromise[] promises, All group) {
+        NtsPromise result = new NtsPromise();
+        if (group != null) { group.remaining = promises.length; }
+        if (promises.length == 0) {
+            // An empty `Promise.all` resolves immediately, and with the array
+            // rather than with nothing: `(await Promise.all([])).length` is 0,
+            // not a read of `undefined`.
+            if (group != null) { settle(result, FULFILLED, NtsValue.ofObject(group.values)); }
+            return result;
+        }
+        for (int i = 0; i < promises.length; i++) {
+            subscribe(promises[i], new Waiting(promises[i], result, group, i));
+        }
+        return result;
+    }
+    public static NtsPromise all(NtsPromise[] promises, double[] values) {
+        return combine(promises, new AllNumbers(values, values));
+    }
+    public static NtsPromise all(NtsPromise[] promises, boolean[] values) {
+        return combine(promises, new AllBooleans(values, values));
+    }
+    public static NtsPromise all(NtsPromise[] promises, Object[] values) {
+        return combine(promises, new AllReferences(values, values));
+    }
+    public static NtsPromise allValues(NtsPromise[] promises, NtsValue[] values) {
+        return combine(promises, new AllValues(values, values));
+    }
+    // A growable program's arrays are wrappers: the promises in an NtsArrayL,
+    // the values in the wrapper of their kind, which is what the program reads
+    // back. The wrapper's `items` are filled in place through the same groups:
+    // nothing else holds the values array until the group resolves with it, so
+    // nothing can grow it and replace them first.
+    public static NtsPromise all(NtsArrayL promises, NtsArrayD values) {
+        return combine(promisesOf(promises), new AllNumbers(values.items, values));
+    }
+    public static NtsPromise all(NtsArrayL promises, NtsArrayZ values) {
+        return combine(promisesOf(promises), new AllBooleans(values.items, values));
+    }
+    public static NtsPromise all(NtsArrayL promises, NtsArrayL values) {
+        return combine(promisesOf(promises), new AllReferences(values.items, values));
+    }
+    public static NtsPromise allValues(NtsArrayL promises, NtsArrayL values) {
+        return combine(promisesOf(promises), new AllValues(values.items, values));
+    }
+    private static NtsPromise[] promisesOf(NtsArrayL promises) {
+        NtsPromise[] out = new NtsPromise[promises.length];
+        for (int i = 0; i < out.length; i++) { out[i] = (NtsPromise) promises.items[i]; }
+        return out;
+    }
+    public static NtsPromise race(NtsPromise[] promises) { return combine(promises, null); }
+}

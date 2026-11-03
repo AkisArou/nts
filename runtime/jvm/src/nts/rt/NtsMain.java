@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /**
@@ -5,7 +6,7 @@ package nts.rt;
  * quiescence. {@code java -cp <out>:nts-runtime.jar nts.rt.NtsMain nts.gen.Program}.
  *
  * <p>Until this existed nothing on this lane could run a program as a program:
- * the emitted {@code Program} has {@code module$init()} and no {@code main},
+ * the emitted {@code Program} has {@code ¢nts$moduleInit()} and no {@code main},
  * and the differential drives exported functions. So every divergence that
  * only a whole program shows -- module-scope statements, an unhandled
  * rejection, what is printed between two callbacks -- was invisible here to
@@ -33,7 +34,7 @@ public final class NtsMain {
         }
         java.lang.reflect.Method init;
         try {
-            init = Class.forName(args[0]).getMethod("module$init");
+            init = Class.forName(args[0]).getMethod("¢nts$moduleInit");
         } catch (NoSuchMethodException nothing) {
             System.exit(0);
             return;

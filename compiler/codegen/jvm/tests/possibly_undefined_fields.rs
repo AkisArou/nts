@@ -282,6 +282,24 @@ fn optional_fields_preserve_components_owners_and_internal_names() {
     );
     let mut flags = 0;
     let mut collision_control = 0;
+    let facts = nts_codegen_jvm::JvmProgram::new(&program);
+    // The base and materialized face own storage; the child inherits it.
+    // Count actual declaring rows rather than interpreting a generated name.
+    let expected_flags = program
+        .layouts
+        .iter()
+        .flat_map(|layout| nts_codegen_jvm::hierarchy::declared(&facts, layout))
+        .filter(|field| {
+            matches!(&field.ty, HirType::PossiblyUndefined(payload)
+                if matches!(**payload, HirType::Bool | HirType::Int { .. } | HirType::Float { .. }))
+        })
+        .count();
+    let collision_name = nts_codegen_jvm::hierarchy::field_name(
+        &nts_codegen_jvm::JvmProgram::new(&program),
+        &program.layouts[0],
+        program.layouts[0].fields.len() - 1,
+    )
+    .unwrap();
     for class in emitted.classes {
         let parsed = read::class_file(&class.bytes).expect("read emitted class");
         if class.binary_name == "nts/gen/OptionalChild" {
@@ -296,24 +314,33 @@ fn optional_fields_preserve_components_owners_and_internal_names() {
                 0,
                 "an internal field became public"
             );
-            if field.name.starts_with("n$nts$defined$") {
-                if field.access & access::SYNTHETIC == 0 {
-                    collision_control += 1;
-                } else {
-                    flags += 1;
-                }
+            if field.access & access::SYNTHETIC != 0 {
+                assert_eq!(field.descriptor, "Z", "a presence flag is a boolean");
+                flags += 1;
+            }
+            if field.name == collision_name {
+                assert_eq!(field.access & access::SYNTHETIC, 0);
+                collision_control += 1;
             }
         }
         let path = dir.join(class.path());
         std::fs::create_dir_all(path.parent().unwrap()).unwrap();
         std::fs::write(path, class.bytes).unwrap();
     }
-    assert!(flags >= 5, "primitive optional fields were not emitted");
+    assert!(
+        expected_flags >= 5,
+        "the fixture must demand presence flags"
+    );
+    assert_eq!(flags, expected_flags, "primitive optional presence flags");
     assert!(
         collision_control >= 1,
         "the physical-name collision control disappeared"
     );
-    std::fs::write(dir.join("OptionalFieldsDriver.java"), DRIVER).unwrap();
+    std::fs::write(
+        dir.join("OptionalFieldsDriver.java"),
+        DRIVER.replace("@@COLLISION_FIELD@@", &collision_name),
+    )
+    .unwrap();
     let root = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
     let mut javac = nts_codegen_jvm::toolchain::command("javac");
     javac.current_dir(dir.as_std_path()).args([
@@ -387,7 +414,7 @@ public final class OptionalFieldsDriver {
     check(Program.readFaceReference(holder) == null, "defined null is not undefined");
     check(Program.snapshotReference(holder, false, "discarded") == null, "reference snapshot");
     check(Program.readReference(holder) == NtsUndefinedReference.INSTANCE, "reference overwritten to undefined");
-    java.lang.reflect.Field user = holder.getClass().getSuperclass().getDeclaredField("n$nts$defined$0");
+    java.lang.reflect.Field user = holder.getClass().getSuperclass().getDeclaredField("@@COLLISION_FIELD@@");
     user.setAccessible(true);
     check(user.getBoolean(holder), "synthetic flag never overwrites the colliding user field");
   }

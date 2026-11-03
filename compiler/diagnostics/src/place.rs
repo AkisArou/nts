@@ -117,6 +117,25 @@ impl<'a> SourceLocations<'a> {
         }
     }
 
+    /// Structured source position through the same rewrite/UTF-16 index used
+    /// by diagnostic printing. Missing text or rewrite provenance is explicit.
+    #[must_use]
+    pub fn source_position(&mut self, at: &Location) -> Option<(String, usize, usize)> {
+        let source = self.source(at.file)?;
+        let offset = if source.rewritten_by.is_some() {
+            original_offset(&source.rewritten_map, at.span.start)?.0
+        } else {
+            at.span.start
+        };
+        let module = source.uri.clone();
+        let file = self.file_locations(&source.display_path)?;
+        if offset as usize > file.units {
+            return None;
+        }
+        let (line, column) = file.position(offset);
+        Some((module, line, column))
+    }
+
     /// Both endpoints of a span, sharing the same source-file index.
     #[must_use]
     pub fn where_it_spans(&mut self, at: &Location) -> String {

@@ -47,6 +47,12 @@ pub enum Error {
     /// Past 65,535 constant pool entries. One class per module rather than one
     /// per program is the fix, and it is a real one for a large program.
     PoolOverflow,
+    /// An opaque class attribute exceeds its unsigned 32-bit length field.
+    AttributeTooLong(usize),
+    /// A class has more attributes than its unsigned 16-bit count can carry.
+    TooManyAttributes(usize),
+    /// The writer was asked to publish the same class attribute twice.
+    DuplicateAttribute(String),
     /// Past 65,534 bytes of code in one method.
     CodeTooLong(usize),
     /// A branch further than a signed 16-bit offset reaches.
@@ -90,6 +96,15 @@ impl std::fmt::Display for Error {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::PoolOverflow => write!(f, "the constant pool exceeded 65,535 entries"),
+            Self::AttributeTooLong(bytes) => write!(
+                f,
+                "a class attribute of {bytes} bytes exceeds its 32-bit length"
+            ),
+            Self::TooManyAttributes(count) => write!(
+                f,
+                "{count} class attributes exceed the 65,535-attribute limit"
+            ),
+            Self::DuplicateAttribute(name) => write!(f, "duplicate class attribute `{name}`"),
             Self::CodeTooLong(bytes) => {
                 write!(
                     f,

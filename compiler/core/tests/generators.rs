@@ -139,7 +139,7 @@ fn the_element_is_read_from_the_frame() {
     let yielded = layout
         .fields
         .iter()
-        .position(|field| field.name == "yielded".into())
+        .position(|field| field.name == hir::suspend::FrameField::Yielded.key())
         .expect("a generator's frame holds the element it stopped on");
 
     let total = func(&program, "total");
@@ -162,7 +162,7 @@ fn the_element_is_read_from_the_frame() {
         layout
             .fields
             .iter()
-            .position(|field| field.name == "state".into())
+            .position(|field| field.name == hir::suspend::FrameField::State.key())
             .expect("a frame holds its state"),
         "the element and the state are different slots",
     );
@@ -253,7 +253,7 @@ fn a_yield_is_a_return_with_the_element_in_the_frame() {
         layout
             .fields
             .iter()
-            .position(|field| field.name == "yielded".into())
+            .position(|field| field.name == hir::suspend::FrameField::Yielded.key())
             .expect("a generator's frame holds the element it stopped on"),
     )
     .expect("a frame has few enough fields to count");
@@ -287,19 +287,20 @@ fn the_frame_holds_what_survives_the_suspension() {
         .iter()
         .find(|layout| layout.name == "strided#frame")
         .expect("the frame's layout is built by `hir::suspend`");
-    let names: Vec<&str> = layout
+    let names: Vec<_> = layout
         .fields
         .iter()
-        .map(|field| {
-            field
-                .name
-                .public_name()
-                .expect("this fixture uses public fields")
-        })
+        .map(|field| field.name.clone())
         .collect();
     assert_eq!(
         &names[..5],
-        &["state", "yielded", "from", "step", "count"],
+        &[
+            hir::suspend::FrameField::State.key(),
+            hir::suspend::FrameField::Yielded.key(),
+            "from".into(),
+            "step".into(),
+            "count".into(),
+        ],
         "the two fixed fields, then the parameters in order",
     );
     assert!(

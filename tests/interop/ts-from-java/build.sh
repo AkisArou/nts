@@ -58,6 +58,13 @@ capture="$here/target/Api.javap"
   done
 } > "$capture"
 
+# The actual protocol definition must agree with the shared fixed-role binding.
+print_member=$(node "$root/tooling/jvm/member-name.ts" PRINT)
+if ! grep -F "public java.lang.String $print_member();" "$capture" > /dev/null; then
+  echo "ts-from-java: missing actual printable protocol definition $print_member"
+  exit 1
+fi
+
 if [ "${NTS_REGENERATE:-}" = "1" ]; then
   cp "$capture" "$here/expected/Api.javap"
   echo "regenerated expected/Api.javap"
@@ -73,11 +80,30 @@ java $nts_jvm_flags -Xverify:all -cp "$here/target/java:$classes:$classes/nts-ru
 
 # Public source entries remain usable above. Internal generated methods must
 # also be hidden from javac even when class-file inspection lists them.
-for member in 'answer$nts$uint32' 'echoed$nts$uint32' 'Closure0$erased_call'; do
-  case "$member" in
-    'answer$nts$uint32') expression="nts.gen.Program.$member()" ;;
-    'echoed$nts$uint32') expression="nts.gen.Program.$member(0)" ;;
-    'Closure0$erased_call') expression="nts.gen.Program.$member(null, null, null)" ;;
+# The negative must name a method that actually exists and is synthetic.
+# Otherwise a namespace migration turns it into a missing-name check.
+javap $nts_jdk_flags -p -v -cp "$classes" nts.gen.Program > "$here/target/Program.verbose"
+for descriptor in '()I' '(I)D' '(Lnts/gen/Closure0;Lnts/rt/NtsValue;Lnts/rt/NtsValue;)Lnts/rt/NtsValue;'; do
+  members=$(awk -v wanted="$descriptor" '
+    /^  public static / { declaration = $0 }
+    /^    descriptor:/ { signature = $2 }
+    /^    flags:/ && /ACC_SYNTHETIC/ && signature == wanted {
+      name = declaration
+      sub(/\(.*/, "", name)
+      sub(/.* /, "", name)
+      print name
+    }
+  ' "$here/target/Program.verbose")
+  count=$(printf '%s\n' "$members" | awk 'NF { n++ } END { print n+0 }')
+  if [ "$count" -ne 1 ]; then
+    echo "ts-from-java: expected one actual synthetic method for $descriptor, found $count"
+    exit 1
+  fi
+  member=$members
+  case "$descriptor" in
+    '()I') expression="nts.gen.Program.$member()" ;;
+    '(I)D') expression="nts.gen.Program.$member(0)" ;;
+    *) expression="nts.gen.Program.$member(null, null, null)" ;;
   esac
   cat > "$here/target/Forbidden.java" <<EOF
 public final class Forbidden {

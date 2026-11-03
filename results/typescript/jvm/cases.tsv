@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":3,"backend":"jvm","commit":"0a588711a4c1a2e074884442c0e4d44b65827afb","compiler":"7cca4c3ac33ccdef","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":3,"backend":"jvm","commit":"7be7cf92ffd688b78600f12072eb624e39f85ee9","compiler":"2dad6f666e642448","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/absent-routes-controls/bounds-array-generic-relative-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-array-index-signature-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-generic-grown-holes-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -6148,10 +6148,10 @@ tests/typescript/symbol-routes-controls/values-identity-tuple-field-control.ts	{
 tests/typescript/symbol-routes-controls/values-implicit-array-join-control.ts	{"kind":"pass"}
 tests/typescript/symbol-routes-controls/values-map-class-field-control.ts	{"kind":"pass"}
 tests/typescript/symbol-routes-controls/values-number-conversion-field-control.ts	{"kind":"pass"}
-tests/typescript/symbol-routes-controls/values-registry-typed-return-control.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.NullPointerException: Cannot read field \"n$registered\" because \"<local4>\" is null"}}
+tests/typescript/symbol-routes-controls/values-registry-typed-return-control.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.NullPointerException: Cannot read field \"¢nts$field$n$3a$registered$payload\" because \"<local4>\" is null"}}
 tests/typescript/symbol-routes-controls/values-set-interface-return-control.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"nts: refused: an erased value read as a boolean, which it is not"}}
 tests/typescript/symbol-routes-controls/values-string-generic-parameter-control.ts	{"kind":"pass"}
-tests/typescript/symbol-routes-controls/values-weakmap-symbol-parameter-control.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.NullPointerException: Cannot read field \"n$registered\" because \"<local6>\" is null"}}
+tests/typescript/symbol-routes-controls/values-weakmap-symbol-parameter-control.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.NullPointerException: Cannot read field \"¢nts$field$n$3a$registered$payload\" because \"<local6>\" is null"}}
 tests/typescript/symbol-routes-controls/wellknown-concat-array-return-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/symbol-routes-controls/wellknown-concat-arraylike-field-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/symbol-routes-controls/wellknown-concat-subclass-getter-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}

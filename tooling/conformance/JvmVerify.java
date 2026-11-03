@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 // Link every class under a directory, so the JVM verifies it: the driver
 // jvm-verifies.ts runs, as `java -Xverify:all -cp <dir>:<runtime jar>
 // JvmVerify.java <dir>` (the single-file launcher; nothing is compiled).
@@ -8,7 +9,7 @@
 // program does happens here), and reflecting over its declared members links
 // it. One line per class that fails, then a summary line the driver reads:
 //
-//   INVALID <class> <throwable>: <message>     VerifyError, ClassFormatError
+//   INVALID <JSON identity fields>           VerifyError, ClassFormatError
 //   MISSING <class> <throwable>: <message>     a reference that does not resolve
 //   UNRESOLVED <class> <owner>.<name><descriptor>
 //                                              a member ref no generated class holds
@@ -16,6 +17,7 @@
 //                                              left to the ancestor's
 //   UNFILLED <class> <name><descriptor>         an abstract raising entry a concrete
 //                                              class never implements
+//   UNPAIRED <class> <reason>                 absent/inconsistent producer binding
 //
 // **UNRESOLVED is the one the verifier cannot give.** Linkage of a member is
 // lazy: `invokevirtual Callable.erased_call$raises` verifies whatever
@@ -47,6 +49,13 @@
 //   VERIFIED <n> OF <m>
 import java.io.DataInputStream;
 import java.io.IOException;
+import java.io.ByteArrayInputStream;
+import java.nio.ByteBuffer;
+import java.nio.charset.StandardCharsets;
+import java.nio.charset.CodingErrorAction;
+import java.util.Map;
+import java.util.HashMap;
+import java.util.Collection;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Field;
 import java.lang.reflect.Method;
@@ -71,6 +80,9 @@ public class JvmVerify {
           .sorted()
           .toList();
     }
+    Map<String, ClassImage> images = new HashMap<>();
+    for (String name : names) images.put(name, image(root.resolve(name.replace('.', '/') + ".class")));
+    Bindings bindings = Bindings.read(images.values());
     ClassLoader loader = JvmVerify.class.getClassLoader();
     int verified = 0;
     Set<String> raisingCalls = new HashSet<>();
@@ -82,27 +94,27 @@ public class JvmVerify {
         c.getDeclaredMethods();
         c.getDeclaredFields();
         verified += 1;
-        unresolved(root, name, names, loader, raisingCalls, instantiated);
+        unresolved(images.get(name), name, names, loader, raisingCalls, instantiated, bindings);
         loaded.add(c);
       } catch (VerifyError | ClassFormatError e) {
-        System.out.println("INVALID " + name + " " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
+        invalid(images.get(name), e);
       } catch (LinkageError | ClassNotFoundException e) {
         System.out.println("MISSING " + name + " " + e.getClass().getSimpleName() + ": " + oneLine(e.getMessage()));
       }
     }
     for (Class<?> c : loaded) {
-      shadowed(c, raisingCalls);
-      if (instantiated.contains(c.getName())) unfilled(c, raisingCalls);
+      shadowed(c, raisingCalls, bindings);
+      if (instantiated.contains(c.getName())) unfilled(c, raisingCalls, bindings);
     }
     System.out.println("VERIFIED " + verified + " OF " + names.size());
   }
 
   /** Print one UNRESOLVED line per member ref of `name` that no output class holds. */
   private static void unresolved(
-      Path root, String name, List<String> names, ClassLoader loader, Set<String> raisingCalls, Set<String> instantiated)
+      ClassImage image, String name, List<String> names, ClassLoader loader, Set<String> raisingCalls, Set<String> instantiated, Bindings bindings)
       throws IOException {
     Set<String> ours = new HashSet<>(names);
-    for (String[] ref : memberRefs(root.resolve(name.replace('.', '/') + ".class"))) {
+    for (String[] ref : image.refs()) {
       String owner = ref[0].replace('/', '.');
       if (ref[3].equals("N")) {
         instantiated.add(owner);
@@ -110,7 +122,11 @@ public class JvmVerify {
       }
       if (!ours.contains(owner)) continue;
       boolean method = ref[3].equals("M");
-      if (method && ref[1].endsWith("$raises")) raisingCalls.add(owner + "." + ref[1] + ref[2]);
+      if (method && bindings.isRaised(ref[1])) {
+        raisingCalls.add(owner + "." + ref[1] + ref[2]);
+        if (bindings.unavailable.contains(ref[1]))
+          System.out.println("UNPAIRED " + owner + " " + ref[1] + ref[2] + " has no owned ordinary relation");
+      }
       try {
         Class<?> c = Class.forName(owner, false, loader);
         if (!(method ? hasMethod(c, ref[1], ref[2]) : hasField(c, ref[1], ref[2]))) {
@@ -127,11 +143,11 @@ public class JvmVerify {
    * ancestor declares concretely, where an instruction calls that copy on an
    * owner `c` is or descends from.
    */
-  private static void shadowed(Class<?> c, Set<String> raisingCalls) {
+  private static void shadowed(Class<?> c, Set<String> raisingCalls, Bindings bindings) {
     List<Class<?>> lineage = ancestry(c);
     for (Method m : c.getDeclaredMethods()) {
-      if (Modifier.isStatic(m.getModifiers()) || m.getName().endsWith("$raises")) continue;
-      String copy = m.getName() + "$raises";
+      if (Modifier.isStatic(m.getModifiers()) || bindings.isRaised(m.getName())) continue;
+      for (String copy : bindings.raisingFor(m.getName())) {
       Class<?>[] params = m.getParameterTypes();
       if (declared(c, copy, params) != null) continue;
       for (Class<?> at : lineage) {
@@ -143,6 +159,7 @@ public class JvmVerify {
         if (reached) System.out.println("SHADOWED " + c.getName() + " " + copy + descriptor + " runs " + at.getName() + "'s");
         break;
       }
+      }
     }
   }
 
@@ -153,13 +170,13 @@ public class JvmVerify {
    * `c` is or descends from -- an `AbstractMethodError` when that call reaches a
    * `c`, which neither the verifier nor linkage reports.
    */
-  private static void unfilled(Class<?> c, Set<String> raisingCalls) {
+  private static void unfilled(Class<?> c, Set<String> raisingCalls, Bindings bindings) {
     if (c.isInterface() || Modifier.isAbstract(c.getModifiers())) return;
     List<Class<?>> lineage = ancestry(c);
     Set<String> seen = new HashSet<>();
     for (Class<?> at : lineage) {
       for (Method m : at.getDeclaredMethods()) {
-        if (!Modifier.isAbstract(m.getModifiers()) || !m.getName().endsWith("$raises")) continue;
+        if (!Modifier.isAbstract(m.getModifiers()) || !bindings.isRaised(m.getName())) continue;
         String descriptor = MethodType.methodType(m.getReturnType(), m.getParameterTypes()).toMethodDescriptorString();
         if (!seen.add(m.getName() + descriptor)) continue;
         boolean filled = false;
@@ -192,8 +209,13 @@ public class JvmVerify {
    * code uses (the emitter renders a function, then declines it and its
    * callers, and the entries stay), and a ref nothing executes links nothing.
    */
-  private static List<String[]> memberRefs(Path file) throws IOException {
+  private record ClassImage(String owner, List<String[]> refs, List<String[]> definitions, Map<String, byte[]> attributes) {}
+
+  private static ClassImage image(Path file) throws IOException {
     List<String[]> refs = new ArrayList<>();
+    List<String[]> definitions = new ArrayList<>();
+    Map<String, byte[]> classAttributes = new HashMap<>();
+    String ownerName;
     try (DataInputStream in = new DataInputStream(Files.newInputStream(file))) {
       in.readInt();
       in.readUnsignedShort();
@@ -223,7 +245,7 @@ public class JvmVerify {
         }
       }
       in.readUnsignedShort();
-      in.readUnsignedShort();
+      ownerName = utf8[classAt[in.readUnsignedShort()]];
       in.readUnsignedShort();
       in.skipNBytes(2L * in.readUnsignedShort());
       int fields = in.readUnsignedShort();
@@ -234,7 +256,10 @@ public class JvmVerify {
       Set<Integer> used = new HashSet<>();
       int methods = in.readUnsignedShort();
       for (int m = 0; m < methods; m++) {
-        in.skipNBytes(6);
+        int flags = in.readUnsignedShort();
+        String methodName = utf8[in.readUnsignedShort()];
+        String descriptor = utf8[in.readUnsignedShort()];
+        definitions.add(new String[] {methodName, descriptor, Integer.toString(flags)});
         int attributes = in.readUnsignedShort();
         for (int a = 0; a < attributes; a++) {
           String attribute = utf8[in.readUnsignedShort()];
@@ -249,6 +274,15 @@ public class JvmVerify {
           operands(code, used);
         }
       }
+      int attributes = in.readUnsignedShort();
+      for (int a = 0; a < attributes; a++) {
+        String attribute = utf8[in.readUnsignedShort()];
+        int length = in.readInt();
+        if (length < 0) throw new IOException("class attribute length exceeds supported input");
+        byte[] bytes = in.readNBytes(length);
+        if (bytes.length != length || classAttributes.put(attribute, bytes) != null)
+          throw new IOException("truncated or duplicate class attribute " + attribute);
+      }
       for (int i : used) {
         if (i > 0 && i < count && member[i] == null && classAt[i] != 0) {
           refs.add(new String[] {utf8[classAt[i]], "", "", "N"});
@@ -260,7 +294,7 @@ public class JvmVerify {
         refs.add(new String[] {owner, utf8[nt[0]], utf8[nt[1]], String.valueOf(kind[i])});
       }
     }
-    return refs;
+    return new ClassImage(ownerName, refs, definitions, classAttributes);
   }
 
   private static void skipAttributes(DataInputStream in) throws IOException {
@@ -370,6 +404,142 @@ public class JvmVerify {
       todo.addAll(List.of(at.getInterfaces()));
     }
     return out;
+  }
+
+  /** All physical pair names come from the catalogue and owned slot relations. */
+  private static final class Bindings {
+    private static final String PREFIX = "¢nts$";
+    private static final String ATTRIBUTE = "¢nts$raisingPairs";
+    private static final String LEGACY_SUFFIX = "$raises";
+    final boolean legacy;
+    final Set<String> raised = new HashSet<>();
+    final Set<String> unavailable = new HashSet<>();
+    final Map<String, Set<String>> pairs = new HashMap<>();
+    Bindings(boolean legacy) { this.legacy = legacy; }
+    boolean isRaised(String name) { return legacy ? name.endsWith(LEGACY_SUFFIX) : raised.contains(name); }
+    Set<String> raisingFor(String name) { return legacy ? Set.of(name + LEGACY_SUFFIX) : pairs.getOrDefault(name, Set.of()); }
+
+    static Bindings read(Collection<ClassImage> images) throws IOException {
+      byte[] data = null;
+      boolean namespace = false;
+      Map<String, Set<String>> actual = new HashMap<>();
+      for (ClassImage image : images) {
+        for (String[] method : image.definitions()) {
+          namespace |= method[0].startsWith(PREFIX);
+          if ((Integer.parseInt(method[2]) & Modifier.STATIC) == 0)
+            actual.computeIfAbsent(method[0], key -> new HashSet<>()).add(method[1]);
+        }
+        byte[] found = image.attributes().get(ATTRIBUTE);
+        if (found != null) {
+          if (data != null) throw new IOException("duplicate catalogue pair attribute");
+          data = found;
+        }
+      }
+      if (data == null) {
+        if (namespace) for (ClassImage image : images)
+          System.out.println("UNPAIRED " + image.owner() + " missing Program catalogue pair attribute");
+        return new Bindings(!namespace);
+      }
+      Bindings result = new Bindings(false);
+      try (DataInputStream in = new DataInputStream(new ByteArrayInputStream(data))) {
+        if (in.readUnsignedShort() != 1) throw new IOException("unknown catalogue pair version");
+        int count = bounded(in);
+        Set<Integer> slots = new HashSet<>();
+        for (int n = 0; n < count; n++) {
+          int raisedSlot = in.readInt();
+          if (!slots.add(raisedSlot)) throw new IOException("duplicate raising slot");
+          boolean hasOrdinary = in.readBoolean();
+          if (hasOrdinary) in.readInt();
+          String raised = text(in);
+          boolean hasName = in.readBoolean();
+          if (hasOrdinary != hasName) throw new IOException("inconsistent ordinary relation");
+          String ordinary = hasName ? text(in) : null;
+          Set<String> raisedDescriptors = texts(in), ordinaryDescriptors = texts(in);
+          if (!raisedDescriptors.equals(actual.getOrDefault(raised, Set.of()))
+              || (ordinary != null && !ordinaryDescriptors.equals(actual.getOrDefault(ordinary, Set.of())))
+              || (ordinary == null && !ordinaryDescriptors.isEmpty()))
+            throw new IOException("catalogue pair declarations differ from actual class files for " + raised);
+          result.raised.add(raised);
+          if (ordinary == null) result.unavailable.add(raised);
+          else result.pairs.computeIfAbsent(ordinary, key -> new HashSet<>()).add(raised);
+        }
+        int classes = bounded(in);
+        Map<String, ClassImage> population = new HashMap<>();
+        for (ClassImage image : images) population.put(image.owner(), image);
+        Set<String> accounted = new HashSet<>();
+        for (int n = 0; n < classes; n++) {
+          String owner = text(in);
+          Set<String> stated = texts(in);
+          ClassImage image = population.get(owner);
+          if (image == null || !accounted.add(owner)) throw new IOException("invalid or repeated class in pair population: " + owner);
+          Set<String> found = new HashSet<>();
+          for (String[] method : image.definitions())
+            if ((Integer.parseInt(method[2]) & Modifier.STATIC) == 0 && result.isRaised(method[0])) found.add(method[0]);
+          if (!stated.equals(found)) throw new IOException("raising inventory differs from actual declarations: " + owner);
+        }
+        for (String owner : population.keySet()) if (!accounted.contains(owner))
+          System.out.println("UNPAIRED " + owner + " missing producer raising inventory");
+        if (in.available() != 0) throw new IOException("trailing catalogue pair bytes");
+      }
+      return result;
+    }
+    private static int bounded(DataInputStream in) throws IOException {
+      int value = in.readInt();
+      if (value < 0 || value > in.available()) throw new IOException("invalid catalogue pair length/count");
+      return value;
+    }
+    private static String text(DataInputStream in) throws IOException {
+      byte[] value = in.readNBytes(bounded(in));
+      return StandardCharsets.UTF_8.newDecoder().onMalformedInput(CodingErrorAction.REPORT)
+          .onUnmappableCharacter(CodingErrorAction.REPORT).decode(ByteBuffer.wrap(value)).toString();
+    }
+    private static Set<String> texts(DataInputStream in) throws IOException {
+      int count = bounded(in);
+      Set<String> values = new HashSet<>();
+      for (int i = 0; i < count; i++) if (!values.add(text(in))) throw new IOException("duplicate pair descriptor");
+      return values;
+    }
+  }
+
+  /** Method identity is an actual class-file field, never a character-class match. */
+  private static void invalid(ClassImage image, LinkageError error) {
+    String location = null;
+    List<String> fields = error.getMessage() == null ? List.of() : error.getMessage().lines().map(String::strip).toList();
+    for (int i = 0; i + 1 < fields.size(); i++) if (fields.get(i).equals("Location:")) location = fields.get(i + 1);
+    String method = null, descriptor = null;
+    Integer offset = null;
+    int matches = 0;
+    if (location != null) {
+      for (String[] declaration : image.definitions()) {
+        String start = image.owner() + "." + declaration[0] + declaration[1] + " @";
+        if (!location.startsWith(start)) continue;
+        int colon = location.indexOf(':', start.length());
+        if (colon < 0) continue;
+        try {
+          offset = Integer.valueOf(location.substring(start.length(), colon));
+          method = declaration[0];
+          descriptor = declaration[1];
+          matches++;
+        } catch (NumberFormatException ignored) { /* not a structured bytecode offset */ }
+      }
+      if (matches != 1) System.out.println("UNPAIRED " + image.owner() + " verifier Location has no unique actual method definition");
+    }
+    System.out.println("INVALID {\"class\":" + quote(image.owner())
+        + ",\"method\":" + (method == null ? "null" : quote(method))
+        + ",\"descriptor\":" + (descriptor == null ? "null" : quote(descriptor))
+        + ",\"offset\":" + (offset == null ? "null" : offset)
+        + ",\"kind\":" + quote(error.getClass().getSimpleName())
+        + ",\"message\":" + quote(oneLine(error.getMessage())) + "}");
+  }
+  private static String quote(String value) {
+    StringBuilder out = new StringBuilder("\"");
+    for (int i = 0; i < value.length(); i++) {
+      char ch = value.charAt(i);
+      if (ch == '\\' || ch == '"') out.append('\\').append(ch);
+      else if (ch < 32) out.append(String.format("\\u%04x", (int)ch));
+      else out.append(ch);
+    }
+    return out.append('"').toString();
   }
 
   private static String oneLine(String message) {

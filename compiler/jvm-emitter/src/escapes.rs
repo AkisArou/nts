@@ -125,7 +125,7 @@ fn parameter_slots(descriptor: &str, is_static: bool) -> Option<Vec<u16>> {
 /// `None` for an opcode this table does not know, which makes the caller
 /// abandon the method rather than resynchronise on a byte that is really an
 /// operand -- a misparse that kept walking would produce confident nonsense.
-fn width(code: &[u8], at: usize) -> Option<usize> {
+pub(crate) fn width(code: &[u8], at: usize) -> Option<usize> {
     let op = *code.get(at)?;
     Some(match op {
         // No operands: the constants, loads/stores by index, stack ops,

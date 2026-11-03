@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /**
@@ -19,7 +20,7 @@ package nts.rt;
  */
 public interface NtsLaneBound {
     /** Remember the lane; called at the crossing, on that lane. */
-    void bindLane(NtsEnv lane);
+    void ¢nts$bindLane(NtsEnv lane);
 
     /**
      * The lane remembered, or {@code null} if this closure never crossed on one.
@@ -29,5 +30,5 @@ public interface NtsLaneBound {
      * bytecode, which puts the policy -- is this our lane, is the inbox full,
      * what does a refusal say -- in the one place it cannot be read or tested.
      */
-    NtsEnv lane();
+    NtsEnv ¢nts$lane();
 }

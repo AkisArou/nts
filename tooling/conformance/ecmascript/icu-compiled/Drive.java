@@ -1,6 +1,7 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 public final class Drive {
     public static void main(String[] args) {
-        nts.gen.Program.module$init();
+        nts.gen.Program.¢nts$moduleInit();
         if (args.length > 0) {
             double iterations = Double.parseDouble(args[0]);
             if (args.length > 1 && args[1].equals("zoned-time")) {

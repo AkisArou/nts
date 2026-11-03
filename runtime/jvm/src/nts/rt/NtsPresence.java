@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 /**
@@ -47,5 +48,5 @@ package nts.rt;
  */
 public interface NtsPresence {
     /** This object's presence word, one bit per optional property, base-first. */
-    int ntsPresence();
+    int ¢nts$presenceGet();
 }

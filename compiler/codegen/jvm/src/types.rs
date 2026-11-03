@@ -308,7 +308,35 @@ pub fn identity_class_name(
     layout: &Layout,
     class: &nts_core::hir::ClassIdentity,
 ) -> String {
-    jvm_class_name(package, &format!("{}__{}", layout.name, class.name))
+    class.source.as_ref().map_or_else(
+        || jvm_class_name(package, &format!("{}__{}", layout.name, class.name)),
+        |source| source_class_name(package, source, &layout.name),
+    )
+}
+
+fn source_class_name(
+    package: &str,
+    source: &nts_core::hir::NamedClassSource,
+    physical: &str,
+) -> String {
+    use crate::generated_members::escaped_name;
+    let module = source
+        .module
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .map(escaped_name)
+        .collect::<Vec<_>>()
+        .join("/");
+    let scopes = source
+        .scopes
+        .iter()
+        .map(|part| escaped_name(part))
+        .collect::<Vec<_>>()
+        .join("/");
+    format!(
+        "{package}/identity/{module}/{scopes}$layout${}",
+        escaped_name(physical)
+    )
 }
 
 /// The class written for a class extending a typed array
@@ -316,7 +344,23 @@ pub fn identity_class_name(
 /// or of the view class it extends.
 #[must_use]
 pub fn view_class_name(package: &str, view: &nts_core::hir::ViewClass) -> String {
-    jvm_class_name(package, &view.name)
+    match (&view.source, view_class(&view.element)) {
+        (Some(source), Some(element)) => source_class_name(package, source, element),
+        _ => jvm_class_name(package, &view.name),
+    }
+}
+
+pub(crate) fn view_parent_class(
+    package: &str,
+    program: &JvmProgram<'_>,
+    view: &nts_core::hir::ViewClass,
+) -> Option<String> {
+    let element = view_class(&view.element)?;
+    Some(
+        view.base
+            .and_then(|base| program.view_classes.get(base))
+            .map_or_else(|| element.to_owned(), |base| view_class_name(package, base)),
+    )
 }
 
 /// A promise: a settled-or-not value and the frames waiting on it.
@@ -424,7 +468,7 @@ pub fn deliverable(descriptor: &str) -> Option<Deliverable> {
     })
 }
 /// The field a closure carries its lane in; see `foreign_bridges`.
-pub const ENV_MEMBER: &str = "$env";
+pub const ENV_MEMBER: &str = crate::generated_members::ENV_MEMBER;
 /// The descriptor for [`ENV`].
 pub const ENV_DESCRIPTOR: &str = "Lnts/rt/NtsEnv;";
 pub const PROMISE_DESCRIPTOR: &str = "Lnts/rt/NtsPromise;";
@@ -603,7 +647,7 @@ pub fn field_descriptor(shape: Shape<'_>, ty: &HirType) -> Option<String> {
 pub const PRINTABLE: &str = "nts/rt/NtsPrintable";
 
 /// [`PRINTABLE`]'s one method, `()Ljava/lang/String;`.
-pub const PRINT: &str = "nts$print";
+pub const PRINT: &str = crate::generated_members::PRINT;
 
 /// The interface a generated class implements to say what a function of it is
 /// called (`Program::function_names`), through [`NAME`]: `runtime/c` reads the
@@ -611,7 +655,7 @@ pub const PRINT: &str = "nts$print";
 pub const NAMED: &str = "nts/rt/NtsNamed";
 
 /// [`NAMED`]'s one method, `()Ljava/lang/String;`.
-pub const NAME: &str = "nts$name";
+pub const NAME: &str = crate::generated_members::NAME;
 
 /// The interface a generated class implements to say what it is called in the
 /// program where its JVM name is not that: `runtime/c`'s descriptor name. See
@@ -619,7 +663,7 @@ pub const NAME: &str = "nts$name";
 pub const CLASS_NAMED: &str = "nts/rt/NtsClassNamed";
 
 /// [`CLASS_NAMED`]'s one method, `()Ljava/lang/String;`.
-pub const CLASS_NAME: &str = "nts$class";
+pub const CLASS_NAME: &str = crate::generated_members::CLASS_NAME;
 
 /// The field an object carries its optional-property presence bits in.
 ///
@@ -632,7 +676,7 @@ pub const CLASS_NAME: &str = "nts$class";
 /// It is a full `int`, so this lane has 32 bits where C has 26. The index the
 /// lowering passes is zero-based and C adds `NTS_PRESENCE_SHIFT` to clear its
 /// own flags; nothing shares this word, so bit `i` is bit `i`.
-pub const PRESENCE: &str = "$presence";
+pub const PRESENCE: &str = crate::generated_members::PRESENCE;
 
 /// The interface a root carrying [`PRESENCE`] implements, so a value whose
 /// class is not known until run time can still be asked.
@@ -648,7 +692,7 @@ pub const PRESENCE_INTERFACE: &str = "nts/rt/NtsPresence";
 /// the method that reads it cannot share a name in a class file's member table
 /// without the two being told apart by descriptor, which is the NTS4013 hazard
 /// one level over.
-pub const PRESENCE_MEMBER: &str = "ntsPresence";
+pub const PRESENCE_MEMBER: &str = crate::generated_members::PRESENCE_MEMBER;
 
 /// The shared storage under [`MAP`] and [`SET`]: an insertion-ordered
 /// `SameValueZero` table, and the owner of every helper that does not care which

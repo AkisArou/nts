@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.math.BigDecimal;
@@ -664,11 +665,11 @@ public final class RuntimeRegression {
         equal(NtsRuntime.strTrim("\uFEFF\u00A0x\u2000"), "x", "JS whitespace");
     }
     private static NtsResumable record(final StringBuilder out, final String text) {
-        return new NtsResumable() { public void resume() { out.append(text); } };
+        return new NtsResumable() { public void ¢nts$resume() { out.append(text); } };
     }
     private static NtsPromise handledPromise() {
         NtsPromise promise = NtsPromise.newPromise();
-        NtsPromise.subscribe(promise, new NtsResumable() { public void resume() {} });
+        NtsPromise.subscribe(promise, new NtsResumable() { public void ¢nts$resume() {} });
         return promise;
     }
     private static void testRejectedValues() {
@@ -683,8 +684,8 @@ public final class RuntimeRegression {
             NtsPromise source = handledPromise(), copy = handledPromise(), adopted = handledPromise();
             NtsPromise race = NtsPromise.race(new NtsPromise[] { source });
             NtsPromise all = NtsPromise.all(new NtsPromise[] { source }, new Object[1]);
-            NtsPromise.subscribe(race, new NtsResumable() { public void resume() {} });
-            NtsPromise.subscribe(all, new NtsResumable() { public void resume() {} });
+            NtsPromise.subscribe(race, new NtsResumable() { public void ¢nts$resume() {} });
+            NtsPromise.subscribe(all, new NtsResumable() { public void ¢nts$resume() {} });
             NtsPromise.adopt(adopted, source);
             NtsPromise.rejectValue(source, reason);
             NtsPromise.rejectWith(copy, source);
@@ -813,14 +814,14 @@ public final class RuntimeRegression {
         // Handled, as `race(...).catch(() => {})` would be: a rejected race
         // nothing subscribes to is an unhandled rejection, which the
         // checkpoint now reports and ends the process for, as node does.
-        NtsPromise.subscribe(race, new NtsResumable() { public void resume() {} });
+        NtsPromise.subscribe(race, new NtsResumable() { public void ¢nts$resume() {} });
         NtsPromise.reject(b, "failure"); NtsPromise.fulfillVoid(a); NtsEnv.drain(NtsEnv.current());
         check(NtsPromise.isRejected(race), "race first rejection");
         check(NtsPromise.isSettled(NtsPromise.all(new NtsPromise[0], new double[0])), "empty all fulfilled");
         check(!NtsPromise.isSettled(NtsPromise.race(new NtsPromise[0])), "empty race pending");
         out.setLength(0);
         NtsEnv.tick(NtsEnv.current(), record(out, "T"));
-        NtsEnv.microtask(NtsEnv.current(), new NtsResumable() { public void resume() { out.append('M'); NtsEnv.tick(NtsEnv.current(), record(out, "t")); } });
+        NtsEnv.microtask(NtsEnv.current(), new NtsResumable() { public void ¢nts$resume() { out.append('M'); NtsEnv.tick(NtsEnv.current(), record(out, "t")); } });
         NtsEnv.microtask(NtsEnv.current(), record(out, "m")); NtsEnv.drain(NtsEnv.current());
         equal(out.toString(), "TMmt", "tick/microtask checkpoint ordering");
     }
@@ -864,19 +865,19 @@ public final class RuntimeRegression {
     private static final class Labelled implements NtsPrintable {
         private final int n;
         Labelled(int n) { this.n = n; }
-        @Override public String nts$print() { return "L" + n; }
+        @Override public String ¢nts$print() { return "L" + n; }
     }
 
     /** A generated class that declares none: `String()` of one is `[object Object]`. */
     private static final class Plain implements NtsPrintable {
         @SuppressWarnings("unused") private final int n;
         Plain(int n) { this.n = n; }
-        @Override public String nts$print() { return "[object Object]"; }
+        @Override public String ¢nts$print() { return "[object Object]"; }
     }
 
     /** A generated closure, which prints as a function with no source. */
     private static final class Closure implements NtsPrintable {
-        @Override public String nts$print() { return "function () { [native code] }"; }
+        @Override public String ¢nts$print() { return "function () { [native code] }"; }
     }
 
     /** A tuple: laid out as a struct, called an Array by the language. */
@@ -992,7 +993,7 @@ public final class RuntimeRegression {
             this.payload = payload;
         }
 
-        @Override public String nts$print() {
+        @Override public String ¢nts$print() {
             check(NtsRuntime.raising() == 0, "no printer runs over a pending payload");
             calls.append(text);
             if (fails) {
@@ -2138,6 +2139,6 @@ public final class RuntimeRegression {
     /** Stands in for a generated hierarchy root that carries presence bits. */
     private static final class Carrier implements NtsPresence {
         int bits;
-        @Override public int ntsPresence() { return bits; }
+        @Override public int ¢nts$presenceGet() { return bits; }
     }
 }

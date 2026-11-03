@@ -161,11 +161,9 @@ NTS_CHECKERS=1 "$nts" emit-jvm "$work/tsconfig.json" \
   --out "$work/nts-classes" --entry "${entry:-module#init}" --entry "module#init" \
   > "$work/emit.log" 2>&1 || { echo "the backend declined $case" >&2; exit 1; }
 
-if javap $nts_jdk_flags -p -cp "$work/nts-classes" nts.gen.Program 2>/dev/null | grep -q 'module\$init'; then
-  init='static { nts.gen.Program.module$init(); }'
-else
-  init=''
-fi
+# nts-module-initializer: begin
+init=$(sh "$root/tooling/android/module-initializer.sh" "$work/nts-classes")
+# nts-module-initializer: end
 
 mkdir -p "$work/src-nts" "$work/src-ref"
 if [ -f "$dir/driver.java" ]; then

@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicInteger;
 import nts.rt.NtsEnv;
@@ -51,7 +52,7 @@ public final class CloseRaceTest {
                         for (int s = 0; s < spin; s++) { Thread.yield(); }
                         try {
                             NtsInbox.post(slot, new NtsResumable() {
-                                @Override public void resume() {
+                                @Override public void ¢nts$resume() {
                                     if (closed[0]) { ranAfterClose.incrementAndGet(); }
                                 }
                             });

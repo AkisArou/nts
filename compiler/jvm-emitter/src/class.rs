@@ -132,6 +132,10 @@ pub struct Class {
     pub binary_name: String,
     pub bytes: Vec<u8>,
     pub lines: Vec<MethodLines>,
+    /// The exact method definitions serialized by this writer, including
+    /// abstract declarations. Diagnostic bindings can reuse these signatures
+    /// without reparsing or copying method bodies.
+    pub declarations: Vec<(u16, String, String)>,
 }
 
 impl Class {
@@ -152,6 +156,9 @@ pub struct ClassBuilder {
     pub methods: Vec<Method>,
     /// What a stack trace calls this class's source.
     pub source_file: Option<String>,
+    /// Opaque compiler-owned diagnostic metadata. The JVM ignores unknown
+    /// attributes; these carry no runtime field, method or initialization.
+    pub attributes: Vec<(String, Vec<u8>)>,
     pub major: u16,
 }
 
@@ -182,6 +189,7 @@ impl ClassBuilder {
             fields: Vec::new(),
             methods: Vec::new(),
             source_file: None,
+            attributes: Vec::new(),
             major: MAJOR_JAVA_8,
         }
     }
@@ -363,6 +371,7 @@ impl ClassBuilder {
         }
 
         let mut lines = Vec::with_capacity(self.methods.len());
+        let mut declarations = Vec::with_capacity(self.methods.len());
         write_count(&mut tail, self.methods.len());
         for method in self.methods {
             let name = pool.utf8(&method.name);
@@ -385,8 +394,8 @@ impl ClassBuilder {
                 let (attribute, origins) = code_attribute(&mut pool, &body);
                 tail.extend_from_slice(&attribute);
                 lines.push(MethodLines {
-                    name: method.name,
-                    descriptor: method.descriptor,
+                    name: method.name.clone(),
+                    descriptor: method.descriptor.clone(),
                     origins,
                 });
             }
@@ -395,18 +404,31 @@ impl ClassBuilder {
                 tail.extend_from_slice(&2u32.to_be_bytes());
                 tail.extend_from_slice(&value.to_be_bytes());
             }
+            declarations.push((method.access, method.name, method.descriptor));
         }
 
-        // Class attributes: `SourceFile`, when there is one to name.
+        let attributes = self.attributes.len() + usize::from(self.source_file.is_some());
+        let count = u16::try_from(attributes).map_err(|_| Error::TooManyAttributes(attributes))?;
+        tail.extend_from_slice(&count.to_be_bytes());
+        let mut names = std::collections::BTreeSet::new();
+        // Class attributes: `SourceFile` and opaque producer-owned metadata.
         if let Some(file) = &self.source_file {
-            write_count(&mut tail, 1);
+            names.insert("SourceFile");
             let name = pool.utf8("SourceFile");
             let value = pool.utf8(file);
             tail.extend_from_slice(&name.to_be_bytes());
             tail.extend_from_slice(&2u32.to_be_bytes());
             tail.extend_from_slice(&value.to_be_bytes());
-        } else {
-            write_count(&mut tail, 0);
+        }
+        for (name, bytes) in &self.attributes {
+            if !names.insert(name.as_str()) {
+                return Err(Error::DuplicateAttribute(name.clone()));
+            }
+            let length =
+                u32::try_from(bytes.len()).map_err(|_| Error::AttributeTooLong(bytes.len()))?;
+            tail.extend_from_slice(&pool.utf8(name).to_be_bytes());
+            tail.extend_from_slice(&length.to_be_bytes());
+            tail.extend_from_slice(bytes);
         }
 
         if pool.overflowed() {
@@ -425,6 +447,7 @@ impl ClassBuilder {
             binary_name: self.name,
             bytes,
             lines,
+            declarations,
         })
     }
 }

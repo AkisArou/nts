@@ -64,19 +64,27 @@ fn lowered_from(name: &str, source: &str) -> (hir::Program, std::path::PathBuf) 
     (prepared.program, dir)
 }
 
-fn closure_type(program: &hir::Program, layout: &str) -> nts_semantic_schema::TypeId {
-    program
-        .layouts
+fn first_authored_closure(program: &hir::Program) -> nts_semantic_schema::TypeId {
+    let mut authored: Vec<_> = program
+        .member_origins
+        .values
         .iter()
-        .find(|l| l.name == layout)
-        .expect("the closure layout")
-        .types[0]
+        .filter_map(|(id, source)| match (&source.kind, &source.declaration) {
+            (hir::StaticValueKind::Authored, hir::StaticDeclaration::Site(site)) => {
+                Some(((site.module.as_str(), site.line, site.column), *id))
+            }
+            _ => None,
+        })
+        .collect();
+    authored.sort_by_key(|(site, _)| *site);
+    assert_eq!(authored.len(), 2, "the two authored arrows in SOURCE");
+    authored[0].1
 }
 
-/// Append a `ClosureStatic` of `Closure0` to `module#init`'s arena; when `live`,
+/// Append the first authored arrow's `ClosureStatic` to `module#init`'s arena; when `live`,
 /// also hold it in the entry block and have the first `array.set` store it.
 fn with_closure_static(program: &mut hir::Program, live: bool) {
-    let ty = closure_type(program, "Closure0");
+    let ty = first_authored_closure(program);
     let init = program
         .funcs
         .iter_mut()
@@ -115,8 +123,20 @@ fn program_class(program: &hir::Program) -> Vec<u8> {
         .clone()
 }
 
-fn names(bytes: &[u8], needle: &str) -> bool {
-    bytes.windows(needle.len()).any(|w| w == needle.as_bytes())
+fn singleton_count(program: &hir::Program) -> usize {
+    let facts = nts_codegen_jvm::JvmProgram::new(program);
+    let layout = facts.layout(first_authored_closure(program)).unwrap();
+    let descriptor = format!(
+        "L{};",
+        nts_codegen_jvm::types::class_name(nts_codegen_jvm::types::DEFAULT_PACKAGE, layout)
+    );
+    let class = nts_jvm_emitter::read::class_file(&program_class(program)).unwrap();
+    let flags = nts_jvm_emitter::class::access::STATIC | nts_jvm_emitter::class::access::FINAL;
+    class
+        .fields
+        .iter()
+        .filter(|field| field.descriptor == descriptor && field.access & flags == flags)
+        .count()
 }
 
 /// The arena keeps a value after every block has dropped it, and building a
@@ -128,12 +148,14 @@ fn a_closure_static_no_block_holds_gets_no_singleton() {
     let (mut live, _) = lowered("live");
     with_closure_static(&mut dead, false);
     with_closure_static(&mut live, true);
-    assert!(
-        !names(&program_class(&dead), "closure$Closure0"),
+    assert_eq!(
+        singleton_count(&dead),
+        0,
         "an excised ClosureStatic built a singleton"
     );
-    assert!(
-        names(&program_class(&live), "closure$Closure0"),
+    assert_eq!(
+        singleton_count(&live),
+        1,
         "the control: a held, read ClosureStatic builds one"
     );
 }
@@ -147,9 +169,11 @@ fn an_uncallable_closure_refuses_by_name() {
         return;
     };
     assert!(
-        said.contains(
-            "erased_call: nts: refused at run time: `Closure1` has no `erased_call` to call"
-        ),
+        said.contains(&format!(
+            "{}: nts: refused at run time: `Closure1` has no `{}` to call",
+            nts_codegen_jvm::generated_members::ERASED_CALL,
+            nts_codegen_jvm::generated_members::ERASED_CALL
+        )),
         "the stub refuses by name as the missing-feature abort: {said}"
     );
 }
@@ -163,7 +187,11 @@ fn an_uncallable_closure_refuses_its_raising_entry_by_name() {
         return;
     };
     assert!(
-        said.contains("erased_call$raises: nts: refused at run time: `Closure1` has no `erased_call$raises` to call"),
+        said.contains(&format!(
+            "{}: nts: refused at run time: `Closure1` has no `{}` to call",
+            nts_codegen_jvm::generated_members::RAISING_CALL,
+            nts_codegen_jvm::generated_members::RAISING_CALL
+        )),
         "the raising stub refuses by name as the missing-feature abort: {said}"
     );
 }
@@ -219,8 +247,12 @@ fn uncallable(name: &str, source: &str, raising: bool, entry: Entry) -> Option<S
         program.typed_signatures
     );
     let reached = match entry {
-        Entry::Uniform => "m.getName().startsWith(\"erased_call\")",
-        Entry::Typed => "m.getName().equals(\"call\")",
+        Entry::Uniform => format!(
+            "(m.getName().equals(\"{}\") || m.getName().equals(\"{}\"))",
+            nts_codegen_jvm::generated_members::ERASED_CALL,
+            nts_codegen_jvm::generated_members::RAISING_CALL
+        ),
+        Entry::Typed => "m.getName().equals(\"call\")".to_owned(),
     };
     for layout in program.layouts.iter_mut().filter(|l| l.name == "Closure1") {
         layout.methods.iter_mut().for_each(|m| *m = None);

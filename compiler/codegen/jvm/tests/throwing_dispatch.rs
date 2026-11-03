@@ -43,7 +43,7 @@ fn materialise() -> PathBuf {
     scratch.join(CASE)
 }
 
-fn assert_slot_names(program: &nts_core::hir::Program) {
+fn assert_slot_names(program: &nts_core::hir::Program) -> usize {
     let facts = nts_codegen_jvm::JvmProgram::new(program);
     let child = program
         .layouts
@@ -72,30 +72,40 @@ fn assert_slot_names(program: &nts_core::hir::Program) {
         program
             .raising_members
             .get(&u32::try_from(raising).unwrap())
-            .map(String::as_str),
-        Some("step@raises")
+            .map(|member| member.member.as_str()),
+        Some("step")
+    );
+    assert_eq!(
+        program.raising_members[&u32::try_from(raising).unwrap()].ordinary_slot,
+        Some(u32::try_from(ordinary).unwrap()),
+        "the owned ordinary relation survives a quiet body filling both slots"
     );
     for receiver in [base, child] {
         assert_eq!(
-            nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, ordinary).as_deref(),
+            nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, ordinary)
+                .unwrap()
+                .as_deref(),
             Some("step")
         );
         assert_eq!(
-            nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, raising).as_deref(),
-            Some("step$raises")
+            nts_codegen_jvm::hierarchy::declared_member(&facts, receiver, raising)
+                .unwrap()
+                .as_deref(),
+            Some(facts.dispatch_name(raising).unwrap().as_str())
         );
     }
     assert_eq!(
-        nts_codegen_jvm::hierarchy::slot_member(&facts, raising, "Base#step"),
-        "step$raises"
+        nts_codegen_jvm::hierarchy::slot_member(&facts, raising, "Base#step").unwrap(),
+        facts.dispatch_name(raising).unwrap()
     );
     assert_eq!(
-        nts_codegen_jvm::hierarchy::slot_member(&facts, ordinary, "Base#step"),
+        nts_codegen_jvm::hierarchy::slot_member(&facts, ordinary, "Base#step").unwrap(),
         "step"
     );
+    raising
 }
 
-fn assert_emitted_slots(emitted: &nts_codegen_jvm::Emitted) {
+fn assert_emitted_slots(emitted: &nts_codegen_jvm::Emitted, raising_name: &str) {
     for name in ["Base", "Child"] {
         let class = emitted
             .classes
@@ -103,7 +113,7 @@ fn assert_emitted_slots(emitted: &nts_codegen_jvm::Emitted) {
             .find(|class| class.binary_name == format!("nts/gen/{name}"))
             .unwrap();
         let class = nts_jvm_emitter::read::class_file(&class.bytes).unwrap();
-        for member in ["step", "step$raises"] {
+        for member in ["step", raising_name] {
             assert!(
                 class
                     .methods
@@ -117,7 +127,8 @@ fn assert_emitted_slots(emitted: &nts_codegen_jvm::Emitted) {
 
 fn assert_missing_slot_fact_conflicts(program: &nts_core::hir::Program) {
     // One normal prepared program, then a local metadata-only counterfactual.
-    // Distinct bodies and all existing backend safety checks remain intact.
+    // The joined semantic rows now reject this missing fact before any class
+    // publication, ahead of the later distinct-body conflict check.
     let mut missing = program.clone();
     missing.raising_members.clear();
     let emitted = nts_codegen_jvm::emit(&missing);
@@ -128,15 +139,24 @@ fn assert_missing_slot_fact_conflicts(program: &nts_core::hir::Program) {
             .any(|class| class.binary_name == "nts/gen/Child"),
         "the original conflicting class unexpectedly emitted without its slot fact"
     );
-    assert!(
-        emitted.diagnostics.iter().any(|diagnostic| {
-            diagnostic.code == "NTS4001"
-                && diagnostic.message.contains("Child#step")
-                && diagnostic.message.contains("Child#step@raises")
-        }),
-        "the original distinct-body conflict is missing: {:?}",
-        emitted.diagnostics
-    );
+    let raising: Vec<_> = program
+        .member_origins
+        .dispatch
+        .iter()
+        .filter(|(_, member)| member.raising)
+        .map(|(slot, _)| *slot)
+        .collect();
+    assert!(!raising.is_empty(), "the original raising semantic rows");
+    for slot in raising {
+        assert!(
+            emitted.diagnostics.iter().any(|diagnostic| {
+                diagnostic.code == "NTS4004"
+                    && diagnostic.message == format!("raising dispatch slot {slot} has missing or inconsistent producer-owned pair metadata")
+            }),
+            "missing pair for actual slot {slot} was not named: {:?}",
+            emitted.diagnostics
+        );
+    }
 }
 
 #[test]
@@ -191,13 +211,18 @@ fn the_throwing_override_and_its_throwing_base_control_both_emit() {
         "the one-change throwing-base control is missing: {:?}",
         emitted.diagnostics
     );
-    assert_slot_names(&prepared.program);
+    let raising = assert_slot_names(&prepared.program);
     assert!(
         written("Child"),
         "the actual subject class must not disappear: {:?}",
         emitted.diagnostics
     );
     assert!(emitted.is_complete(), "{:?}", emitted.diagnostics);
-    assert_emitted_slots(&emitted);
+    assert_emitted_slots(
+        &emitted,
+        &nts_codegen_jvm::JvmProgram::new(&prepared.program)
+            .dispatch_name(raising)
+            .unwrap(),
+    );
     assert_missing_slot_fact_conflicts(&prepared.program);
 }

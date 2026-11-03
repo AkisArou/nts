@@ -14,22 +14,6 @@ use nts_frontend_ts::Frontend;
 
 mod common;
 
-/// The bytecode of `name` and every specialization made of it.
-fn method(listing: &str, name: &str) -> String {
-    let mut body = String::new();
-    let mut inside = false;
-    for line in listing.lines() {
-        if line.starts_with("  ") && !line.starts_with("   ") && line.trim_end().ends_with(");") {
-            inside = line.contains(&format!(" {name}(")) || line.contains(&format!(" {name}$"));
-        } else if inside {
-            body.push_str(line);
-            body.push('\n');
-        }
-    }
-    assert!(!body.is_empty(), "no `{name}` in:\n{listing}");
-    body
-}
-
 #[test]
 fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
     let config = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -83,7 +67,7 @@ fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
     // so their values have a number column too, and `set` takes the value as
     // a `double` beside the key (`fuse`'s `(String, Some(Number))` form).
     for name in ["countBuilt", "countLiteral", "tally"] {
-        let body = method(&listing, name);
+        let body = common::implementation_bodies(&listing, &program, name);
         assert!(
             body.contains(
                 "nts/rt/NtsMap.getString:(Lnts/rt/NtsTable;Ljava/lang/String;)Lnts/rt/NtsValue;"
@@ -94,7 +78,7 @@ fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
         );
     }
     assert!(
-        method(&listing, "tally")
+        common::implementation_bodies(&listing, &program, "tally")
             .contains("nts/rt/NtsMap.hasString:(Lnts/rt/NtsTable;Ljava/lang/String;)Z"),
         "`tally`'s `has` took its key boxed"
     );
@@ -104,7 +88,7 @@ fn a_string_key_that_cannot_be_absent_is_passed_unboxed() {
     // so one boxed `set` is there either way. Boxed, the literal `undefined`
     // and `pick` -- a `set` and a `get` each; through the doors, the literal
     // "undefined" once each. A rule that unboxed `pick` moves one of each.
-    let control = method(&listing, "undefinedKeys");
+    let control = common::implementation_bodies(&listing, &program, "undefinedKeys");
     let count = |call: &str| control.matches(call).count();
     let counts = (
         count(

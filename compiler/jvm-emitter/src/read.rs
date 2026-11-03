@@ -551,6 +551,10 @@ fn members(reader: &mut Reader, pool: &Pool) -> Result<Vec<Member>, Error> {
 /// Every malformed input is an `Error` and none is a panic: the inputs are
 /// other people's jars, and `android.jar` alone is several thousand entries.
 pub fn class_file(bytes: &[u8]) -> Result<ClassFile, Error> {
+    class_file_and_pool(bytes).map(|(class, _)| class)
+}
+
+fn class_file_and_pool(bytes: &[u8]) -> Result<(ClassFile, Pool), Error> {
     let mut reader = Reader::new(bytes);
     if reader.u4()? != 0xCAFE_BABE {
         return fail("not a class file: the magic number is wrong");
@@ -615,17 +619,60 @@ pub fn class_file(bytes: &[u8]) -> Result<ClassFile, Error> {
         ));
     }
 
-    Ok(ClassFile {
-        major,
-        minor,
-        access,
-        binary_name,
-        super_name,
-        interfaces,
-        fields,
-        methods,
-        signature: extra.signature,
-        annotations: extra.annotations,
-        inner_classes: extra.inner_classes,
-    })
+    Ok((
+        ClassFile {
+            major,
+            minor,
+            access,
+            binary_name,
+            super_name,
+            interfaces,
+            fields,
+            methods,
+            signature: extra.signature,
+            annotations: extra.annotations,
+            inner_classes: extra.inner_classes,
+        },
+        pool,
+    ))
+}
+
+/// Allocation targets of each concrete method, resolved from its constant pool.
+/// A method with Code and no `new` instructions has an explicit empty list.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MethodAllocations {
+    pub name: String,
+    pub descriptor: String,
+    pub classes: Vec<String>,
+}
+
+/// Read actual `new` instructions without depending on a disassembler's text.
+/// Unknown or truncated instructions fail instead of producing a partial count.
+pub fn allocations(bytes: &[u8]) -> Result<Vec<MethodAllocations>, Error> {
+    let (class, pool) = class_file_and_pool(bytes)?;
+    let mut methods = Vec::new();
+    for method in class.methods {
+        let Some(code) = method.code else { continue };
+        let mut classes = Vec::new();
+        let mut at = 0;
+        while at < code.bytes.len() {
+            let Some(width) = crate::escapes::width(&code.bytes, at) else {
+                return fail(format!("{}: unknown instruction at {at}", method.name));
+            };
+            if width == 0 || at + width > code.bytes.len() {
+                return fail(format!("{}: truncated instruction at {at}", method.name));
+            }
+            if code.bytes[at] == 0xbb {
+                let index = u16::from_be_bytes([code.bytes[at + 1], code.bytes[at + 2]]);
+                classes.push(pool.class_name(index)?);
+            }
+            at += width;
+        }
+        methods.push(MethodAllocations {
+            name: method.name,
+            descriptor: method.descriptor,
+            classes,
+        });
+    }
+    Ok(methods)
 }

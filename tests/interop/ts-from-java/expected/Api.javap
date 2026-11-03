@@ -4,31 +4,31 @@
 
 Compiled from "nts"
 public final class nts.gen.Cell0 implements nts.rt.NtsPrintable {
-  double n$value;
-  public java.lang.String nts$print();
+  double ¢nts$field$0;
+  public java.lang.String ¢nts$print();
   public nts.gen.Cell0();
 }
 Compiled from "nts"
 public final class nts.gen.Closure0 extends nts.gen.Fn6__44 implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable,nts.rt.NtsNamed {
-  nts.gen.Cell0 n$total;
+  nts.gen.Cell0 ¢nts$field$0;
   public void call(double);
-  public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
-  public java.lang.String nts$print();
-  public java.lang.String nts$name();
+  public nts.rt.NtsValue ¢nts$call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public java.lang.String ¢nts$print();
+  public java.lang.String ¢nts$name();
   public nts.gen.Closure0();
 }
 Compiled from "nts"
 public final class nts.gen.Fn6__44$Lambda extends nts.gen.Fn6__44 implements nts.rt.NtsNamed {
-  nts.rt.NtsNumberCallback it;
+  nts.rt.NtsNumberCallback ¢nts$interface;
   public nts.gen.Fn6__44$Lambda(nts.rt.NtsNumberCallback);
-  public nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
-  public java.lang.String nts$name();
+  public nts.rt.NtsValue ¢nts$call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public java.lang.String ¢nts$name();
 }
 Compiled from "nts"
 public abstract class nts.gen.Fn6__44 extends nts.gen.erased.Callable implements nts.rt.NtsNumberCallback,nts.rt.NtsPrintable {
-  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public abstract nts.rt.NtsValue ¢nts$call(nts.rt.NtsValue, nts.rt.NtsValue);
   public void call(double);
-  public java.lang.String nts$print();
+  public java.lang.String ¢nts$print();
   public nts.gen.Fn6__44();
 }
 Compiled from "nts"
@@ -45,28 +45,28 @@ public final class nts.gen.Program {
   public static nts.rt.NtsSet<java.lang.String> labels();
   public static void eachUpTo(double, nts.gen.erased.Callable);
   public static double triangle(double);
-  public static int answer$nts$uint32();
+  public static int ¢nts$body$11();
   public static long answer();
-  public static double echoed$nts$uint32(int);
+  public static double ¢nts$body$12(int);
   public static double echoed(long);
   public static int below();
   public static int negated(int);
-  public static nts.rt.NtsValue Closure0$erased_call(nts.gen.Closure0, nts.rt.NtsValue, nts.rt.NtsValue);
-  public static void Closure0$call(nts.gen.Closure0, double);
-  public static void eachUpTo$Closure0(double, nts.gen.Closure0);
-  public static void eachUpTo$whole(int, nts.gen.erased.Callable);
+  public static nts.rt.NtsValue ¢nts$body$15(nts.gen.Closure0, nts.rt.NtsValue, nts.rt.NtsValue);
+  public static void ¢nts$body$16(nts.gen.Closure0, double);
+  public static void ¢nts$body$18(double, nts.gen.Closure0);
+  public static void ¢nts$body$19(int, nts.gen.erased.Callable);
   public static void eachUpTo(double, nts.rt.NtsNumberCallback);
 }
 Compiled from "nts"
 public final class nts.gen.Session implements nts.rt.NtsPrintable {
-  double p$$hits;
+  double ¢nts$field$0;
   public double bump();
   public double hits();
-  public java.lang.String nts$print();
+  public java.lang.String ¢nts$print();
   public nts.gen.Session();
 }
 Compiled from "nts"
 public abstract class nts.gen.erased.Callable {
-  public abstract nts.rt.NtsValue erased_call(nts.rt.NtsValue, nts.rt.NtsValue);
+  public abstract nts.rt.NtsValue ¢nts$call(nts.rt.NtsValue, nts.rt.NtsValue);
   public nts.gen.erased.Callable();
 }

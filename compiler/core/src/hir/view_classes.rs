@@ -97,6 +97,7 @@ mod work {
                 .map(|at| ViewClass {
                     class: TypeId(at),
                     name: format!("View{at}"),
+                    source: None,
                     element: HirType::NUMBER,
                     base: (at > 0).then(|| TypeId(at - 1)),
                     species: None,

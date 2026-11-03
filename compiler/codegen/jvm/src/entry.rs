@@ -22,45 +22,43 @@ pub(crate) fn needs_bridge(func: &Func) -> bool {
         && (func.params.iter().any(|param| unsigned32(&param.ty)) || unsigned32(&func.return_type))
 }
 
-pub(crate) fn implementation_names(program: &Program) -> FxHashMap<&str, String> {
-    // Program's method inventory: source bodies and their public/SAM
-    // overloads, plus the constructor, class initializer and launcher. Layout
-    // members live in other classes and therefore in other namespaces.
-    let mut reserved: FxHashSet<_> = program
+pub(crate) fn published(program: &Program) -> FxHashSet<&str> {
+    program
+        .public_api
+        .iter()
+        .map(|(emitted, _)| emitted.as_str())
+        .chain(
+            program
+                .public_namespaces
+                .iter()
+                .flat_map(|(_, members)| members.iter().map(|(_, emitted)| emitted.as_str())),
+        )
+        .collect()
+}
+
+pub(crate) fn implementation_names<'a>(
+    program: &'a Program,
+    published: &FxHashSet<&str>,
+) -> FxHashMap<&'a str, String> {
+    // Public Java entries retain their authored spelling. Every other body
+    // uses its program-unique source identity in the reserved member namespace.
+    // Function order and unrelated insertions cannot rename an existing body.
+    program
         .funcs
         .iter()
-        .map(|func| body::method_name(&func.name))
-        .chain([
-            "<init>".to_owned(),
-            "<clinit>".to_owned(),
-            "main".to_owned(),
-        ])
-        .collect();
-    let mut names = FxHashMap::default();
-    for func in &program.funcs {
-        let public = body::method_name(&func.name);
-        let name = if needs_bridge(func) {
-            let base = format!("{public}$nts$uint32");
-            // N+1 distinct candidates against N reserved names must contain
-            // a free name. Reserve it before considering the next body.
-            (0..=reserved.len())
-                .find_map(|suffix| {
-                    let candidate = if suffix == 0 {
-                        base.clone()
-                    } else {
-                        format!("{base}${suffix}")
-                    };
-                    reserved.insert(candidate.clone()).then_some(candidate)
-                })
-                .unwrap_or_else(|| {
-                    unreachable!("N+1 method names cannot all occur in N reservations")
-                })
-        } else {
-            public
-        };
-        names.insert(func.name.as_str(), name);
-    }
-    names
+        .map(|func| {
+            let name = if func.name == nts_core::hir::lower::MODULE_INIT {
+                crate::generated_members::MODULE_INIT.to_owned()
+            } else if (func.exported || published.contains(func.name.as_str()))
+                && !needs_bridge(func)
+            {
+                body::method_name(&func.name)
+            } else {
+                crate::generated_members::body(&func.name)
+            };
+            (func.name.as_str(), name)
+        })
+        .collect()
 }
 
 pub(crate) fn implementation_name<'p>(program: &'p JvmProgram<'_>, func: &Func) -> &'p str {

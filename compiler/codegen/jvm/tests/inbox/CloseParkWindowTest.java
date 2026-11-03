@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.util.concurrent.CountDownLatch;
@@ -35,7 +36,7 @@ public final class CloseParkWindowTest {
                 environment.set(env);
                 try {
                     NtsInbox.post(NtsEnv.launch(env), new NtsResumable() {
-                        @Override public void resume() {
+                        @Override public void ¢nts$resume() {
                             NtsEnv nested = NtsEnv.enterEnv(env);
                             NtsEnv.leaveEnv(env, nested);
                             nestedRestored.set(NtsEnv.installed() == env);

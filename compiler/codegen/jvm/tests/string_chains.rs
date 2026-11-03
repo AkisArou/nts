@@ -41,7 +41,7 @@ fn private_chains_transfer_one_builder_while_observed_versions_stay_strings() {
         let method = class
             .methods
             .iter()
-            .find(|method| method.name == nts_codegen_jvm::body::method_name(&func.name))
+            .find(|method| method.name == common::implementation_name(program, &func.name))
             .unwrap();
         if proof.parameter_of(func).is_some() {
             assert_ne!(method.access & nts_jvm_emitter::class::access::PRIVATE, 0);
@@ -160,7 +160,7 @@ fn a_declined_optional_carrier_stub_has_every_descriptor_local() {
         let method = class
             .methods
             .iter()
-            .find(|method| method.name == name)
+            .find(|method| method.name == common::implementation_name(&program, name))
             .unwrap();
         let words: usize = nts_jvm_emitter::descriptor::parameters(&method.descriptor)
             .unwrap()
@@ -258,7 +258,7 @@ fn split_optional_arguments_and_a_private_carrier_share_one_descriptor() {
     let method = parsed
         .methods
         .iter()
-        .find(|method| method.name == "pairWriter")
+        .find(|method| method.name == common::implementation_name(&program, "pairWriter"))
         .unwrap();
     assert_eq!(
         method.descriptor,

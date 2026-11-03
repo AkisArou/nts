@@ -1,3 +1,4 @@
+// Generated from a member-templates source by generate-members.ts. Do not edit.
 package nts.rt;
 
 import java.io.IOException;
@@ -331,7 +332,7 @@ public final class NtsSocket {
     private static void later(NtsEnv env, final NtsTextPairCallback failed,
                               final String name, final String message) {
         NtsEnv.tick(env, new NtsResumable() {
-            @Override public void resume() { failed.call(name, message); }
+            @Override public void ¢nts$resume() { failed.call(name, message); }
         });
     }
 
@@ -448,7 +449,7 @@ public final class NtsSocket {
                                final NtsNumberCallback ok, final NtsTextPairCallback failed,
                                final double value, final String name, final String message) {
         NtsInbox.post(slot, new NtsResumable() {
-            @Override public void resume() {
+            @Override public void ¢nts$resume() {
                 if (name == null) { ok.call(value); } else { failed.call(name, message); }
             }
         });

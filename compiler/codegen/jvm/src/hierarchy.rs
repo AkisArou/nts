@@ -18,7 +18,6 @@
 use crate::program::JvmProgram;
 use nts_core::hir::{Field, HirType, Layout, ManagedType};
 use nts_semantic_schema::TypeId;
-use rustc_hash::FxHashSet;
 
 /// Names and declaring owners are facts of the immutable layout graph. Build
 /// them once; a wide record must not rescan a prefix at every field access.
@@ -29,7 +28,7 @@ pub(crate) struct Fields {
 
 #[derive(Debug)]
 struct FieldRow {
-    names: Vec<String>,
+    names: Vec<Result<String, String>>,
     owners: Vec<usize>,
 }
 
@@ -120,22 +119,14 @@ impl Fields {
         for &layout_at in &program.bases.order {
             let layout = &program.layouts[layout_at];
             let parent = program.bases.parents[layout_at];
-            let from = parent.map_or(0, |at| program.layouts[at].fields.len());
-            let mut seen = FxHashSet::default();
             for (at, field) in layout.fields.iter().enumerate() {
                 #[cfg(test)]
                 field_cost::note(|c| {
                     c.name_materializations += 1;
                     c.owner_steps += 1;
                 });
-                let spelled = crate::body::method_name(&field.name.storage_name());
-                // Only the declared slice shares this owner's namespace. An
-                // inherited-position query retains its original raw spelling.
-                let name = if at < from || seen.insert(spelled.clone()) {
-                    spelled
-                } else {
-                    format!("{spelled}_{at}")
-                };
+                let name = crate::member_identity::property(program, &field.name)
+                    .map(|identity| crate::generated_members::storage_field(&identity));
                 // A synthesized field inherits the base-most storage, even
                 // when the parent has a nearer explicit source declaration.
                 let inherited = parent.and_then(|parent| fallbacks[parent].get(at).copied());
@@ -163,10 +154,16 @@ impl Fields {
     }
 
     pub(crate) fn name(&self, layout: usize, field: usize) -> Option<&str> {
-        self.rows.get(layout)?.names.get(field).map(String::as_str)
+        self.rows
+            .get(layout)?
+            .names
+            .get(field)?
+            .as_ref()
+            .ok()
+            .map(String::as_str)
     }
 
-    pub(crate) fn names(&self, layout: usize) -> Option<&[String]> {
+    pub(crate) fn names(&self, layout: usize) -> Option<&[Result<String, String>]> {
         Some(&self.rows.get(layout)?.names)
     }
 
@@ -329,36 +326,28 @@ pub fn inherited(program: &JvmProgram<'_>, layout: &Layout) -> usize {
 
 /// The JVM name of the field at `at` in `owner`, the layout that declares it.
 ///
-/// **Not a function of the field's name alone.** A class's own fields share one
-/// namespace, and a layout can hold two that spell alike: an async frame keeps
-/// its resumption in `state` and each parameter under the parameter's name, so
-/// `serve(entry, method, age, state)` in web-platform's `HttpCache` declared
-/// `state` twice and emit-jvm declined the frame under NTS4013 -- which left
-/// `HttpCache$serve$frame` unwritten and five runtime modules unable to load.
-///
-/// C's rule, because C met this first (`c_member_at`, the `#count` a derived
-/// class repeats): the first of a spelling keeps it and each later one takes
-/// its index. The index is unique in the layout and fixed before any backend
-/// runs, so the declaration, every access and the widen plan's key all compute
-/// the same name. Only fields the owner declares are compared: a derived class
-/// repeating a base's name is two fields on two classes, which the JVM resolves
-/// from the class the access names.
+/// Names come from the producer-owned property key and the catalogue's payload
+/// role. Inherited accesses keep their declaring owner's name. Synthetic frame
+/// keys occupy a separate private domain, so an authored parameter called
+/// `state` cannot collide with the frame's state slot. Missing source identity
+/// remains unavailable and is refused before any class is published.
 #[must_use]
-pub fn field_name(program: &JvmProgram<'_>, owner: &Layout, at: usize) -> String {
+pub fn field_name(program: &JvmProgram<'_>, owner: &Layout, at: usize) -> Option<String> {
     #[cfg(test)]
     field_cost::note(|c| c.name_requests += 1);
-    program.field_name(owner, at).unwrap_or_default().to_owned()
+    program.field_name(owner, at).map(str::to_owned)
 }
 
 /// [`field_name`] for each field a class declares itself, in order.
-#[must_use]
-pub fn declared_names(program: &JvmProgram<'_>, layout: &Layout) -> Vec<String> {
+pub fn declared_names(program: &JvmProgram<'_>, layout: &Layout) -> Result<Vec<String>, String> {
     let from = inherited(program, layout).min(layout.fields.len());
     program
         .field_names(layout)
         .and_then(|names| names.get(from..))
-        .unwrap_or_default()
-        .to_vec()
+        .ok_or_else(|| format!("layout {} has no field identity row", layout.name))?
+        .iter()
+        .cloned()
+        .collect()
 }
 
 /// The fields a class declares itself.
@@ -489,31 +478,35 @@ pub fn member_name(func_name: &str) -> String {
 
 /// A member slot's published raising identity, or its existing declared name.
 /// The map is owned `Hierarchy` authority, not a test of the selected body.
-#[must_use]
-pub fn slot_member(program: &JvmProgram<'_>, slot: usize, declared: &str) -> String {
-    // Field families already carry a typed selector including their face identity.
-    // Keep that authority ahead of the plain semantic member spelling, as the
-    // declaration path does. Raising family entries have their own selector too.
-    if let Some(selector) = program.selector(slot) {
-        return member_name(selector);
-    }
-    if let Some(name) = program.guarded_member(slot) {
-        return name.to_owned();
-    }
-    original_slot_member(program, slot, declared)
+pub fn slot_member(
+    program: &JvmProgram<'_>,
+    slot: usize,
+    declared: &str,
+) -> Result<String, String> {
+    resolve_member(program, slot, true, || Some(member_name(declared)))?
+        .ok_or_else(|| "a call has no declared member".to_owned())
 }
 
-fn original_slot_member(program: &JvmProgram<'_>, slot: usize, declared: &str) -> String {
-    if let Some(selector) = program.selector(slot) {
-        return member_name(selector);
-    }
-    u32::try_from(slot)
-        .ok()
-        .and_then(|slot| program.raising_members.get(&slot))
-        .map_or_else(
-            || member_name(declared),
-            |name| crate::body::method_name(name),
-        )
+/// The only dispatch-name resolver, shared by calls and both declaration views.
+/// Read the catalogue role before resolving the owned declaration. In particular,
+/// a family's declaration exists even when its face was never allocated and has
+/// no concrete method-table row. An unrelated absent slot still has no member.
+fn resolve_member(
+    program: &JvmProgram<'_>,
+    slot: usize,
+    guarded: bool,
+    declaration: impl FnOnce() -> Option<String>,
+) -> Result<Option<String>, String> {
+    let catalogue = if let Some(member) = uniform_member(program, slot) {
+        Some(member)
+    } else if let Some(member) = program.protocol_member(slot)? {
+        Some(member)
+    } else if guarded {
+        program.guarded_spelling(slot)?.map(str::to_owned)
+    } else {
+        None
+    };
+    Ok(declaration().map(|authored| catalogue.unwrap_or(authored)))
 }
 
 /// The JVM name a dispatch slot is known by, which is the *declaring* layout's
@@ -557,13 +550,14 @@ fn original_slot_member(program: &JvmProgram<'_>, slot: usize, declared: &str) -
 /// **A field family's slot is named by its declared accessor**, ahead of all
 /// of that: every row, the face's own included, fills it under a name of its
 /// owner's, and the call names the family's (`JvmProgram::selector`).
-#[must_use]
-pub fn declared_member(program: &JvmProgram<'_>, layout: &Layout, slot: usize) -> Option<String> {
-    let original = original_declared_member(program, layout, slot)?;
-    if program.selector(slot).is_some() || uniform_member(program, slot).is_some() {
-        return Some(original);
-    }
-    Some(program.guarded_member(slot).map_or(original, str::to_owned))
+pub fn declared_member(
+    program: &JvmProgram<'_>,
+    layout: &Layout,
+    slot: usize,
+) -> Result<Option<String>, String> {
+    resolve_member(program, slot, true, || {
+        authored_declared_member(program, layout, slot)
+    })
 }
 
 /// The unchanged public spelling, also used by a default internal selector.
@@ -571,19 +565,26 @@ pub(crate) fn original_declared_member(
     program: &JvmProgram<'_>,
     layout: &Layout,
     slot: usize,
+) -> Result<Option<String>, String> {
+    resolve_member(program, slot, false, || {
+        authored_declared_member(program, layout, slot)
+    })
+}
+
+fn authored_declared_member(
+    program: &JvmProgram<'_>,
+    layout: &Layout,
+    slot: usize,
 ) -> Option<String> {
+    if let Some(declared) = program.declared_selector(layout, slot) {
+        return Some(member_name(declared));
+    }
     let mut at = layout;
     let mut name = at.methods.get(slot)?.as_ref()?;
-    if let Some(selector) = program.selector(slot) {
-        return Some(member_name(selector));
-    }
-    if let Some(uniform) = uniform_member(program, slot) {
-        return Some(uniform);
-    }
     if let Some(declared) =
         declaring_interface(program, layout, slot).and_then(|i| i.methods.get(slot)?.as_ref())
     {
-        return Some(original_slot_member(program, slot, declared));
+        return Some(member_name(declared));
     }
     // Up the chain while a base also declares this slot: the first declaration
     // is the one the JVM resolved against.
@@ -596,7 +597,7 @@ pub(crate) fn original_declared_member(
             None => break,
         }
     }
-    Some(original_slot_member(program, slot, name))
+    Some(member_name(name))
 }
 
 /// The base-most layout above this one, which is where a field shared by a
@@ -852,10 +853,9 @@ pub fn uniform_member(program: &JvmProgram<'_>, slot: usize) -> Option<String> {
                 .iter()
                 .find_map(|layout| layout.methods.get(slot)?.as_ref())
         };
-        filled(erased).map(|name| member_name(name)).or_else(|| {
-            let name = filled(raising_slot?)?;
-            Some(member_name(name.strip_suffix("@raises").unwrap_or(name)))
-        })
+        filled(erased)
+            .or_else(|| filled(raising_slot?))
+            .map(|_| crate::generated_members::ERASED_CALL.to_owned())
     };
     if slot == erased {
         return ordinary();
@@ -878,9 +878,9 @@ pub fn uniform_member(program: &JvmProgram<'_>, slot: usize) -> Option<String> {
                 .is_some_and(|name| name.ends_with("@raises"))
         });
         return if raises {
-            ordinary().map(|name| format!("{name}$raises"))
+            ordinary().map(|_| crate::generated_members::RAISING_CALL.to_owned())
         } else {
-            None
+            ordinary()
         };
     }
     None
@@ -965,13 +965,29 @@ mod tests {
     #[test]
     fn owned_raising_slot_names_do_not_depend_on_the_implementation() {
         let mut program = Program::default();
-        program.raising_members.insert(5, "step@raises".to_owned());
+        program.raising_members.insert(
+            5,
+            nts_core::hir::RaisingMember {
+                member: "step".to_owned(),
+                ordinary_slot: Some(0),
+            },
+        );
+        crate::member_identity::synthetic_rows(&mut program, &[(5, 0, "step", true)]);
         let facts = JvmProgram::new(&program);
         for body in ["Base#step", "Child#step@raises", "another_body"] {
-            assert_eq!(slot_member(&facts, 5, body), "step$raises");
+            assert_eq!(
+                slot_member(&facts, 5, body).expect("fixture member identity"),
+                facts.dispatch_name(5).expect("fixture member identity")
+            );
         }
-        assert_eq!(slot_member(&facts, 0, "Base#step"), "step");
-        assert_eq!(slot_member(&facts, 6, "Base#step"), "step");
+        assert_eq!(
+            slot_member(&facts, 0, "Base#step").expect("fixture member identity"),
+            "step"
+        );
+        assert_eq!(
+            slot_member(&facts, 6, "Base#step").expect("fixture member identity"),
+            "step"
+        );
     }
 
     #[test]
@@ -979,7 +995,13 @@ mod tests {
         use nts_core::hir::interface_access::{Entry, Family};
 
         let mut program = Program::default();
-        program.raising_members.insert(6, "get_x@raises".to_owned());
+        program.raising_members.insert(
+            6,
+            nts_core::hir::RaisingMember {
+                member: "get_x".to_owned(),
+                ordinary_slot: Some(4),
+            },
+        );
         program.interface_access.families.push(Family {
             face: nts_semantic_schema::TypeId(7),
             member: nts_semantic_schema::PropertyKey::Name("x".into()),
@@ -998,11 +1020,50 @@ mod tests {
             pending: false,
             stored_dispatch: true,
         });
+        let face = Layout {
+            types: vec![TypeId(7)],
+            name: "Face".to_owned(),
+            fields: Vec::new(),
+            methods: vec![None; 7],
+            interfaces: Vec::new(),
+            base: None,
+        };
+        let mut allocated = face.clone();
+        allocated.name = "AllocatedFace".to_owned();
+        allocated.methods[4] = Some("actual_getter_row".to_owned());
+        allocated.methods[6] = Some("actual_raising_row".to_owned());
+        program.layouts = vec![face, allocated];
+        crate::member_identity::synthetic_rows(
+            &mut program,
+            &[(4, 7, "x", false), (6, 7, "x", true)],
+        );
         let facts = JvmProgram::new(&program);
-        assert_eq!(slot_member(&facts, 4, "any_body"), "get_x$interface7");
+        for slot in [4, 6] {
+            let expected = facts.dispatch_name(slot).expect("fixture member identity");
+            assert_eq!(
+                declared_member(&facts, &program.layouts[1], slot)
+                    .expect("fixture member identity"),
+                Some(expected.clone()),
+                "allocated-face declaration control"
+            );
+            assert_eq!(
+                declared_member(&facts, &program.layouts[0], slot)
+                    .expect("fixture member identity"),
+                Some(expected),
+                "a declared family exists without a concrete face row"
+            );
+        }
         assert_eq!(
-            slot_member(&facts, 6, "any_body"),
-            "get_x$interface7$raises"
+            declared_member(&facts, &program.layouts[0], 3).expect("fixture member identity"),
+            None
+        );
+        assert_eq!(
+            slot_member(&facts, 4, "any_body").expect("fixture member identity"),
+            facts.dispatch_name(4).expect("fixture member identity")
+        );
+        assert_eq!(
+            slot_member(&facts, 6, "any_body").expect("fixture member identity"),
+            facts.dispatch_name(6).expect("fixture member identity")
         );
     }
 

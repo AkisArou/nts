@@ -168,7 +168,7 @@ fn ordinary_abstract_implementer_keeps_old_plain_subclass_override() {
     }
     let bytes = std::fs::read(new.join("nts/gen/OrdinaryAbstract.class")).unwrap();
     let class = nts_jvm_emitter::read::class_file(&bytes).unwrap();
-    let name = guarded_members::internal_name(0);
+    let name = guarded_members::internal_name(&JvmProgram::new(&subject), 0).unwrap();
     let wrapper = class
         .methods
         .iter()
