@@ -3479,19 +3479,19 @@ test/language/statements/class/static-method-gen-non-configurable-err.js	pass
 test/language/statements/class/static-method-non-configurable-err.js	pass	
 test/language/statements/class/subclass-builtins/subclass-Error.js	pass	
 test/language/statements/class/subclass-builtins/subclass-EvalError.js	pass	
-test/language/statements/class/subclass-builtins/subclass-Float32Array.js	fail	nts: uncaught Test262Error: assert
-test/language/statements/class/subclass-builtins/subclass-Float64Array.js	fail	nts: uncaught Test262Error: assert
-test/language/statements/class/subclass-builtins/subclass-Int16Array.js	fail	nts: uncaught Test262Error: assert
-test/language/statements/class/subclass-builtins/subclass-Int32Array.js	fail	nts: uncaught Test262Error: assert
-test/language/statements/class/subclass-builtins/subclass-Int8Array.js	fail	nts: uncaught Test262Error: assert
+test/language/statements/class/subclass-builtins/subclass-Float32Array.js	pass	
+test/language/statements/class/subclass-builtins/subclass-Float64Array.js	pass	
+test/language/statements/class/subclass-builtins/subclass-Int16Array.js	pass	
+test/language/statements/class/subclass-builtins/subclass-Int32Array.js	pass	
+test/language/statements/class/subclass-builtins/subclass-Int8Array.js	pass	
 test/language/statements/class/subclass-builtins/subclass-RangeError.js	pass	
 test/language/statements/class/subclass-builtins/subclass-ReferenceError.js	pass	
 test/language/statements/class/subclass-builtins/subclass-SyntaxError.js	pass	
 test/language/statements/class/subclass-builtins/subclass-TypeError.js	pass	
 test/language/statements/class/subclass-builtins/subclass-URIError.js	pass	
-test/language/statements/class/subclass-builtins/subclass-Uint16Array.js	fail	nts: uncaught Test262Error: assert
-test/language/statements/class/subclass-builtins/subclass-Uint32Array.js	fail	nts: uncaught Test262Error: assert
-test/language/statements/class/subclass-builtins/subclass-Uint8Array.js	fail	nts: uncaught Test262Error: assert
+test/language/statements/class/subclass-builtins/subclass-Uint16Array.js	pass	
+test/language/statements/class/subclass-builtins/subclass-Uint32Array.js	pass	
+test/language/statements/class/subclass-builtins/subclass-Uint8Array.js	pass	
 test/language/statements/class/subclass/builtin-objects/Error/regular-subclassing.js	pass	
 test/language/statements/class/subclass/builtin-objects/Error/super-must-be-called.js	pass	
 test/language/statements/class/subclass/builtin-objects/NativeError/EvalError-name.js	pass	
