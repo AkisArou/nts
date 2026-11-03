@@ -1,0 +1,44 @@
+/*---
+description: Drop limits defer skipping until the first next and never close on natural exhaustion.
+features: [ts-iteration, ts-class, ts-class-fields, ts-generators, ts-arrays, ts-map-set, ts-generics]
+---*/
+// drop; generic parameter and return; node skips the truncated limit then yields the suffix.
+type Step = IteratorResult<string, undefined>;
+type View = IteratorObject<string, undefined, unknown>;
+class Source extends Iterator<string, undefined, unknown> {
+  input: Iterator<string, unknown, unknown>; log: string[];
+  constructor(input: Iterator<string, unknown, unknown>, log: string[]) { super(); this.input = input; this.log = log; }
+  next(): Step { this.log.push("next"); const r = this.input.next(); return r.done ? { done: true, value: undefined } : { done: false, value: r.value }; }
+  return(): Step { this.log.push("return"); this.input.return?.(); return { done: true, value: undefined }; }
+}
+function* generate(v: string[]): Generator<string, undefined, unknown> { for (const x of v) yield x; return undefined; }
+function sources(v: string[]): Iterator<string, unknown, unknown>[] {
+  let i = 0;
+  const plain: Iterator<string, undefined, unknown> = { next: () => i < v.length ? { done: false, value: v[i++] } : { done: true, value: undefined } };
+  return [v.values(), new Map(v.map((x, k): [number, string] => [k, x])).values(), new Set(v).values(),
+    generate(v), v.join("")[Symbol.iterator](), plain, new Source(v.values(), [])];
+}
+class Manual extends Iterator<string, undefined, unknown> {
+  input: View; left: number; closed: boolean = false;
+  constructor(input: View, limit: number) { super(); this.input = input; this.left = Math.trunc(limit); }
+  next(): Step {
+    if (this.closed) return { done: true, value: undefined };
+    while (this.left > 0) { this.left--; const r = this.input.next(); if (r.done) { this.closed = true; return r; } }
+    const r = this.input.next(); if (r.done) this.closed = true; return r;
+  }
+}
+function route<T extends View>(input: T, limit: number): View { return new Manual(input, limit); }
+for (const values of [[], ["2"], ["1", "2", "3"]]) for (const limit of [0, -0, -0.5, 0.9, 1, 1.9, 2, 3, 4, Infinity]) {
+  for (const raw of sources(values)) {
+    const log: string[] = [], helper: View = route(new Source(raw, log), limit);
+    const skipped = Math.min(values.length, Math.trunc(limit)); assert.compareArray(log, []);
+    for (let i = skipped; i < values.length; i++) {
+      const r = helper.next(); assert.sameValue(r.done, false); assert.sameValue(r.value, values[i]);
+      assert.compareArray(log, Array(i + 1).fill("next"));
+    }
+    const end = helper.next(); assert.sameValue(end.done, true); assert.sameValue(end.value, undefined);
+    assert.compareArray(log, Array(values.length + 1).fill("next"));
+    const again = helper.next(); assert.sameValue(again.done, true); assert.sameValue(again.value, undefined);
+    assert.compareArray(log, Array(values.length + 1).fill("next"));
+  }
+}
