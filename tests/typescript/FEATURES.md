@@ -270,6 +270,12 @@ one; add a row here in the same commit as the first case that uses it.
     `ts-type-form-route-*` identifies each area and its explicit-type or
     plain-operation controls.
 
+54. **Super across typed routes:** fixed home objects, current receivers,
+    method calls, property reads and writes, static lookup, literal prototype
+    changes and derived constructor order.
+    [Super route contracts](#super-route-contracts) name the sources;
+    `ts-super-route-*` identifies each area and its explicit-operation controls.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -380,6 +386,8 @@ flows through it.
 | `structuredclone-routes-controls/` | the same inputs and assertions with specialized manual recursive copies and original-to-copy Maps, including explicit buffers and collections |
 | `string-routes/` | exact string contents, lengths, edge units and search results across typed carriers, held to node |
 | `string-routes-controls/` | the same input values, computations and observations with plain local string carriers |
+| `super-routes/` | super method, property, static, literal-home and constructor behavior through declared carriers, with exact values, receivers, order and errors held to node |
+| `super-routes-controls/` | the same values, routes and assertions using explicit home-prototype calls, Reflect.get/set with the receiver, and Reflect.construct followed by ordered field definitions |
 | `symbol-routes/` | symbol identity, keyed members, mixed listings, enumerable copies and well-known dispatch across typed routes, held to node |
 | `symbol-routes-controls/` | distinct string IDs, separate key lists and explicit record operations producing the same observations without symbols |
 | `symbols/` | symbols as keys, unique symbols, well-known symbols |
@@ -1385,6 +1393,58 @@ draft PR for the maintainers; a supplemental checker is identified separately.
 A Node/specification disagreement leaves that observation unasserted and its
 reproducer in the PR. Maintainers measure and record each nts backend outcome;
 a compiler refusal is a finding and never a reason to weaken a case.
+
+The `super-routes/` family uses `<area>-<form>-<route>.ts`, with
+`ts-super-routes` and one `ts-super-route-*` tag beside the existing carrier
+and syntax tags. Each case isolates one super form on one declared route:
+an interface, base-class or abstract view, generic helper, constructor type,
+checked union, tuple or array, on a variable, field, parameter, return or
+element. Repeated values and multiple runtime classes distinguish the
+method's fixed home object from its current receiver. SameValue and typeof
+checks preserve signed zero, NaN, primitive kinds and reference identities.
+Every invoked getter, setter and tested method records its receiver and
+arguments in a complete ordered log. Computed keys run once before the value;
+compound, postfix and nullish writes preserve read, RHS and write order.
+After a write, assertions identify the receiver's own property, the base
+prototype property and the setter history. Exceptions name their class.
+
+Each `super-routes-controls/` counterpart appends `-control` and keeps the
+same inputs, declared route and assertion calls. A method control calls the
+home prototype's method with `.call(this, ...)`. A property control uses
+`Reflect.get(prototype, key, this)` or `Reflect.set(prototype, key, value,
+this)` and turns a false set result into TypeError, as a strict super write
+does. Read-modify-write controls retain one evaluated key and expand the
+read, arithmetic or nullish decision, write and expression result explicitly.
+Static controls use the base constructor with the current constructor as
+receiver. Literal-method controls read `Object.getPrototypeOf(home)` when
+called, retaining the original home after a method is copied and following
+later changes to that home's prototype. Constructor controls use
+`Reflect.construct(Base, args, Derived)` and then define fields in the same
+order on the returned object; they retain new.target and the error boundary
+for an already initialized this binding. Reflective results have honest
+explicit types or unknown with checked narrowing, without type assertions.
+
+Front matter supplies description and features, no includes, and only module
+or async flags when needed. Cases and controls contain no any, casts,
+non-null assertions or suppressions. A requested spelling rejected by strict
+TypeScript is left out and its actual diagnostic and reproducer are listed
+in the PR. An admitted typed route may state an installed prototype member
+through a merged interface or represent an absent member as optional; a
+runtime descriptor transition can make an initially writable accessor
+getter-only without changing the checker claim. Existing cases, compiler
+sources and recorded outcomes stay intact.
+
+Every file requires independent strict TypeScript script checking with the
+harness, ESNext target, legacy module detection, useDefineForClassFields and
+the default libraries, with skipLibCheck and skipDefaultLibCheck both false.
+The unchanged `oracle(source, scratchDir)` from
+`tooling/census/suites/typescript.ts` runs under the branch's pinned Node
+version. PRs report every case and control's commands and results. An
+unavailable required toolchain leaves validation pending in a draft for the
+maintainers; supplemental checker evidence is identified separately. A
+Node/specification disagreement leaves that observation unasserted and its
+reproducer in the PR. Maintainers run and record every nts backend outcome;
+a refusal is a finding and never a reason to weaken a case or its control.
 
 ## Coverage, source by source
 
@@ -2597,6 +2657,31 @@ access is distinct from an ECMAScript private-name brand check.
 | `signatures` | `signatures-*` | 10 | 10 | Hidden optional arguments, overload implementation values, Object.assign replacing narrow properties and literal-key access to TypeScript-private or protected members |
 | `values` | `values-*` | 11 | 11 | Polymorphic this on subclasses, callable expando properties, namespace value aliases, number and bigint exponentiation and assignment with exact values, errors and evaluation order |
 
+### Super route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [super evaluation and MakeSuperPropertyReference](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-super-keyword), [GetSuperBase](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-getsuperbase), [MakeMethod](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-makemethod) and [EvaluateCall](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-evaluatecall) | lookup begins at the defining home object's current prototype; method calls retain the current receiver, inherited state and virtual calls, including extracted methods and lexical arrows |
+| ECMAScript [OrdinaryGet](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-ordinaryget), [OrdinarySetWithOwnDescriptor](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-ordinarysetwithowndescriptor) and [PutValue](https://tc39.es/ecma262/multipage/ecmascript-data-types-and-values.html#sec-putvalue) | getter and setter receiver identities, prototype data versus receiver own data, farther and absent properties, and strict failed-write TypeError |
+| ECMAScript [assignment evaluation](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-assignment-operators-runtime-semantics-evaluation) and [postfix increment](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-postfix-increment-operator-runtime-semantics-evaluation) | computed-key evaluation count, key/read/RHS/write order, exact assignment and old-value results, nullish short-circuiting and abrupt-completion boundaries |
+| ECMAScript [ClassDefinitionEvaluation](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-runtime-semantics-classdefinitionevaluation), [class field definition](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-runtime-semantics-classfielddefinitionevaluation) and [static block definition](https://tc39.es/ecma262/multipage/ecmascript-language-functions-and-classes.html#sec-runtime-semantics-classstaticblockdefinitionevaluation) | static methods, accessors, field initializers and blocks use the base constructor for lookup while preserving the current constructor receiver and initialization order |
+| ECMAScript [object literal evaluation](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-object-initializer-runtime-semantics-evaluation), [Object.setPrototypeOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.setprototypeof), [Object.getPrototypeOf](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.getprototypeof) and [MakeMethod](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-makemethod) | a literal's method keeps its original home when copied, observes a later prototype change and carries the same home into arrows |
+| ECMAScript [super constructor calls](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-super-keyword-runtime-semantics-evaluation), [BindThisValue](https://tc39.es/ecma262/multipage/executable-code-and-execution-contexts.html#sec-bindthisvalue), [InitializeInstanceElements](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-initializeinstanceelements), [DefineField](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-definefield) and [new.target](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-meta-properties-runtime-semantics-evaluation) | argument effects precede the base call, derived fields follow successful super return on the actual returned object, new.target stays derived, and a repeated binding throws ReferenceError after the repeated base call |
+| ECMAScript [Reflect.get](https://tc39.es/ecma262/multipage/reflection.html#sec-reflect.get), [Reflect.set](https://tc39.es/ecma262/multipage/reflection.html#sec-reflect.set), [Reflect.construct](https://tc39.es/ecma262/multipage/reflection.html#sec-reflect.construct) and [Function.prototype.call](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-function.prototype.call); TypeScript [classes](https://www.typescriptlang.org/docs/handbook/2/classes.html) and [declaration merging](https://www.typescriptlang.org/docs/handbook/declaration-merging.html) | explicit controls preserve the same receiver, home lookup, prototype effects, construction target and declared carrier while exposing the exact operation replaced |
+
+The class-value and dispatch families cover constructor values, ordinary
+method selection and accessor delegation. Descriptor routes cover property
+flags and ordinary writes, private-member routes cover private-name brands,
+and instanceof routes cover ancestry. Earlier isolated super cases remain
+unchanged. This family carries the super operation itself through a declared
+route and checks the home object, receiver, write location, evaluation order
+and error boundary beside its explicit equivalent. Reflection here supplies
+the requested control operation and observable property-state checks.
+
+| area | files | cases | controls | coverage |
+| --- | --- | ---: | ---: | --- |
+| `methods` | `methods-*` | 8 | 8 | Overrides through interfaces, base views, generics and stored methods; multi-level chains, fixed home versus current receiver, virtual dispatch, extracted super methods and arrows |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -2938,6 +3023,8 @@ access is distinct from an ECMAScript private-name brand check.
 | `ts-structuredclone-route-collections` | typed collection clones preserve order, times, deep identities, shared parts and cycles | Structured clone route contracts; typed paths | 10 | 0 |
 | `ts-structuredclone-route-errors` | typed unsupported values throw DataCloneError while supported values and errors preserve specified clone state | Structured clone route contracts; typed paths | 18 | 0 |
 | `ts-structuredclone-route-plain-data` | typed plain clones preserve SameValue payloads, key order, holes, fresh nodes, shared references and cycles | Structured clone route contracts; typed paths | 14 | 0 |
+| `ts-super-route-methods` | super method calls and extracted method values retain fixed home lookup, current receiver state, override dispatch and order through typed routes | Super route contracts; typed paths | 16 | 0 |
+| `ts-super-routes` | super operations preserve home-object lookup, current receivers, exact values, write locations, evaluation order and errors through declared carriers beside explicit controls | Super route contracts; typed paths | 16 | 0 |
 | `ts-symbol-route-copying` | typed spread and assign copy own enumerable symbol identities, retain overwrite positions and keep later writes independent | Symbol route contracts; typed paths | 14 | 0 |
 | `ts-symbol-route-keys` | typed symbol keys preserve identity, independent reads and writes, presence and own versus inherited membership | Symbol route contracts; typed paths | 16 | 0 |
 | `ts-symbol-route-listing` | typed mixed-key listings preserve order, exclude symbols from string enumeration and JSON, and include hidden own symbols | Symbol route contracts; typed paths | 16 | 0 |
