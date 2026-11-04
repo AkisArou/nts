@@ -2922,6 +2922,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `generators` | `generators-*` | 26 | 26 | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers |
 | `exits` | `exits-*` | 26 | 26 | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence |
 | `errors` | `errors-*` | 24 | 24 | Source throws and rejected awaits, caught recovery, terminal state, rejected custom next and consumer catch/finally ordering |
+| `delegation` | `delegation-*` | 26 | 26 | Async and sync delegates, retained inner completion, forwarded exits, nested cleanup and awaited synchronous-source values |
 
 ## Tags
 
@@ -2951,6 +2952,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
 | `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 294 | 1 |
+| `ts-async-iteration-route-delegation` | Async and sync delegates, retained inner completion, forwarded exits, nested cleanup and awaited synchronous-source values | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-async-iteration-route-errors` | Source throws and rejected awaits, caught recovery, terminal state, rejected custom next and consumer catch/finally ordering | Async-iteration route contracts; typed paths | 48 | 0 |
 | `ts-async-iteration-route-exits` | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-async-iteration-route-generators` | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers | Async-iteration route contracts; typed paths | 52 | 0 |
