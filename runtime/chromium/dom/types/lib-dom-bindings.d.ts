@@ -345,6 +345,11 @@ interface CharacterData {}
  */
 interface ClipboardEvent {}
 /**
+ * @ntsBoundBy "nts:dom" EventTarget
+ * @ntsIs nts_dom_is 101
+ */
+interface CloseWatcher {}
+/**
  * @ntsBoundBy "nts:dom" Event
  * @ntsIs nts_dom_is 103
  */
@@ -1155,6 +1160,10 @@ interface NodeList {}
  * @ntsIs nts_dom_is 329
  */
 interface OffscreenCanvas {}
+/**
+ * @ntsIs nts_dom_is 331
+ */
+interface Origin {}
 /**
  * @ntsBoundBy "nts:dom" Event
  * @ntsIs nts_dom_is 334
