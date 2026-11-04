@@ -2863,6 +2863,7 @@ and NaN representation bits are not observations in this family.
 | `arrays` | `arrays-*` | 41 | 41 | Fresh copies, retained receivers, relative and fractional indices, bounds, delete-count clamping, element conversions and backward reads |
 | `collections` | `collections-*` | 26 | 26 | Set-like member order and validation, size-dependent algorithms, exact result order, unchanged receivers and grouping key semantics |
 | `promises` | `promises-*` | 24 | 24 | Fresh capabilities, first settlement, saved resolvers, reaction microtasks, synchronous attempts, arguments, adoption and captured throws |
+| `strings` | `strings-*` | 30 | 30 | Lone surrogate detection/replacement, retained pairs, exact regexp escaping and literal matching, and non-string rejection without conversion |
 
 ## Tags
 
@@ -3086,7 +3087,8 @@ and NaN representation bits are not observations in this family.
 | `ts-library-addition-route-arrays` | Fresh copies, retained receivers, relative and fractional indices, bounds, delete-count clamping, element conversions and backward reads | Library-addition route contracts; typed paths | 82 | 0 |
 | `ts-library-addition-route-collections` | Set-like member order and validation, size-dependent algorithms, exact result order, unchanged receivers and grouping key semantics | Library-addition route contracts; typed paths | 52 | 0 |
 | `ts-library-addition-route-promises` | Fresh capabilities, first settlement, saved resolvers, reaction microtasks, synchronous attempts, arguments, adoption and captured throws | Library-addition route contracts; typed paths | 48 | 0 |
-| `ts-library-addition-routes` | newer copying, set-like, grouping, promise, UTF-16, regexp-escape and half-precision methods across typed carriers beside older-operation controls | Library-addition route contracts; typed paths | 182 | 0 |
+| `ts-library-addition-route-strings` | Lone surrogate detection/replacement, retained pairs, exact regexp escaping and literal matching, and non-string rejection without conversion | Library-addition route contracts; typed paths | 60 | 0 |
+| `ts-library-addition-routes` | newer copying, set-like, grouping, promise, UTF-16, regexp-escape and half-precision methods across typed carriers beside older-operation controls | Library-addition route contracts; typed paths | 242 | 0 |
 | `ts-lifetime-acyclic` | a construction route closes a cycle that an acyclicity proof must include | lifetime contracts: Memory, How small the dynamic part can get; Cycles through foreign objects | 24 | 0 |
 | `ts-lifetime-borrow` | a borrowed reference remains live after its original anchor or read-only call ends | lifetime contracts: Memory, Where nts stands; The ladder of homes; record 0024 | 24 | 0 |
 | `ts-lifetime-frame` | an object or bounded string must outlive a frame after a retention route acts | lifetime contracts: Memory, The ladder of homes; Where nts stands | 28 | 0 |
@@ -3282,7 +3284,7 @@ and NaN representation bits are not observations in this family.
 | `ts-typeof-type` | `typeof x` in a type position | conformance/types/typeQueries; ts-eslint TSTypeQuery | 125 | 0 |
 | `ts-unicode-case-mapping` | default lower/uppercase mappings, expansions, Final_Sigma, surrogate handling and newly assigned letters | Unicode contracts; UCD SpecialCasing, DerivedAge and UnicodeData | 207 | 0 |
 | `ts-unicode-exhaustive` | every code point, including lone surrogates, checked by a Node-generated FNV-1a UTF-16 hash per 4096-point block | Unicode contracts: Staying identical to node, exhaustive layer | 34 | 0 |
-| `ts-unicode-sequences` | exact contextual strings or API observations that a per-code-point sweep cannot establish | Unicode contracts: Staying identical to node, sequence and behaviour layers | 173 | 0 |
+| `ts-unicode-sequences` | exact contextual strings or API observations that a per-code-point sweep cannot establish | Unicode contracts: Staying identical to node, sequence and behaviour layers | 231 | 0 |
 | `ts-union-route-narrowing` | typed guards, discriminants, equality, arrays and predicates select the correct member across returns, closures and assignments | TypeScript Narrowing; control-flow analysis | 20 | 0 |
 | `ts-union-route-objects` | object and class unions retain their layouts, shared fields, optional member presence and reference writes | TypeScript Union Types; discriminated unions; in narrowing | 10 | 0 |
 | `ts-union-route-storage` | five primitive unions cross fields, arrays, Maps, Sets, tuple slots and closures with exact read and printed-value histories | TypeScript Union Types; typed paths; Set semantics | 60 | 0 |
