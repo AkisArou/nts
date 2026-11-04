@@ -50062,7 +50062,7 @@ impl<'a> FuncBuilder<'a> {
         self.snapshot
             .signatures
             .get(signature.0 as usize)
-            .is_some_and(|record| self.arguments_fit(record, &[value]))
+            .is_some_and(|record| self.arguments_fit(record, None, &[value]))
     }
 
     fn is_accessor_property(&self, member: NodeId) -> bool {
@@ -71188,7 +71188,7 @@ impl<'a> FuncBuilder<'a> {
             };
         let candidates: Vec<_> = overloads.into_iter().filter_map(method).collect();
         if candidates.len() > 1
-            && let Some(at) = self.shortest_fit(&candidates, arguments)
+            && let Some(at) = self.shortest_fit(&candidates, merged, arguments)
         {
             return candidates.into_iter().nth(at);
         }
@@ -71256,6 +71256,7 @@ impl<'a> FuncBuilder<'a> {
     fn arguments_fit(
         &self,
         record: &nts_semantic_schema::SignatureRecord,
+        checked: Option<&nts_semantic_schema::SignatureRecord>,
         arguments: &[NodeId],
     ) -> bool {
         let required = record
@@ -71266,9 +71267,15 @@ impl<'a> FuncBuilder<'a> {
         if arguments.len() < required || arguments.len() > record.parameters.len() {
             return false;
         }
-        record.parameters.iter().zip(arguments).all(|(parameter, argument)| {
+        record.parameters.iter().enumerate().zip(arguments).all(|((at, parameter), argument)| {
             let Some(&given) = self.snapshot.node_types.get(argument) else { return true };
             let taken = parameter.ty;
+            // The parameter of the signature the call was checked against,
+            // at the same position: the dictionary whose members a record
+            // conversion may read (`record_holds`).
+            let checked = checked
+                .and_then(|checked| checked.parameters.get(at))
+                .map(|parameter| parameter.ty);
             if let Some(lent) = super::native::native_array_argument(self.snapshot, taken) {
                 return self.lends_as(&lent, given);
             }
@@ -71285,7 +71292,7 @@ impl<'a> FuncBuilder<'a> {
             if let Some(HirType::NativePointer(view)) = self.represent(taken)
                 && let super::native::Pointee::Record(record) = view.viewed()
             {
-                return self.record_holds(record, *argument, given);
+                return self.record_holds(record, *argument, given, checked);
             }
             true
         })
@@ -71337,6 +71344,61 @@ impl<'a> FuncBuilder<'a> {
         }
     }
 
+    /// The member names of the dictionary a checked parameter type names,
+    /// its own and inherited -- an object type's properties carry both --
+    /// through the unions a parameter may spell the dictionary in
+    /// (`number | DOMPointInit | ...`). `None` where no part of the type is
+    /// an object: no dictionary to key on.
+    fn dictionary_member_names(&self, ty: TypeId) -> Option<Vec<&str>> {
+        fn collect<'a>(
+            snapshot: &'a SemanticSnapshot,
+            ty: TypeId,
+            path: &mut Vec<TypeId>,
+            names: &mut Vec<&'a str>,
+        ) -> bool {
+            if path.contains(&ty) {
+                return false;
+            }
+            path.push(ty);
+            let found = match snapshot.types.get(ty.0 as usize).map(|r| &r.kind) {
+                Some(TypeKind::Object { properties }) => {
+                    names.extend(properties.iter().filter_map(|p| p.name.public_name()));
+                    true
+                }
+                // A generic dictionary (`UnderlyingSource<R>`) arrives as an
+                // opaque nominal whose members are not traversed; the
+                // object types carrying its symbol -- its declaration and
+                // instantiations, whose members only the types of the
+                // properties distinguish -- carry the names.
+                Some(TypeKind::Structured) => snapshot
+                    .types
+                    .get(ty.0 as usize)
+                    .and_then(|record| record.symbol)
+                    .is_some_and(|symbol| {
+                        snapshot
+                            .types
+                            .iter()
+                            .enumerate()
+                            .filter(|(_, record)| record.symbol == Some(symbol))
+                            .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
+                            .map(|same| collect(snapshot, same, path, names))
+                            .collect::<Vec<_>>()
+                            .contains(&true)
+                    }),
+                Some(TypeKind::Union(parts) | TypeKind::Intersection(parts)) => parts
+                    .iter()
+                    .map(|part| collect(snapshot, *part, path, names))
+                    .collect::<Vec<_>>()
+                    .contains(&true),
+                _ => false,
+            };
+            path.pop();
+            found
+        }
+        let mut names = Vec::new();
+        collect(self.snapshot, ty, &mut Vec::new(), &mut names).then_some(names)
+    }
+
     /// Whether every member `argument` can carry is a field of `record`, the C
     /// record a binding takes a dictionary by.
     ///
@@ -71354,15 +71416,26 @@ impl<'a> FuncBuilder<'a> {
     ///
     /// A literal says which members it writes, a nested literal for a
     /// nested record included. Any other object may hold every property its
-    /// type declares, an optional one too, so each of them must have a field.
+    /// type declares, an optional one too -- but a dictionary conversion
+    /// reads only the dictionary's own members, so where the checked
+    /// signature's dictionary is known (`checked`), only a property that
+    /// *is* one of its members (inherited ones included) must have a field:
+    /// the rest of the object's face, `DOMPointReadOnly`'s `matrixTransform`
+    /// and `toJSON` beside its `x`, is never read and cannot be dropped.
+    /// Keyed on membership, not on property kind: a member the dictionary
+    /// declares as a callback is written as a method by the class
+    /// implementing it, and would be dropped all the same. Without the
+    /// checked dictionary, every property must have a field, as before.
     fn record_holds(
         &self,
         record: &super::native::Record,
         argument: NodeId,
         given: TypeId,
+        checked: Option<TypeId>,
     ) -> bool {
         let field = |name: &str| record.fields.iter().find(|field| field.name == name);
         if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            let members = checked.and_then(|ty| self.dictionary_member_names(ty));
             let parts = match self.snapshot.types.get(given.0 as usize).map(|r| &r.kind) {
                 Some(TypeKind::Union(parts) | TypeKind::Intersection(parts)) => parts.clone(),
                 #[expect(
@@ -71374,11 +71447,17 @@ impl<'a> FuncBuilder<'a> {
             };
             return parts.iter().all(|part| {
                 match self.snapshot.types.get(part.0 as usize).map(|r| &r.kind) {
-                    Some(TypeKind::Object { properties }) => properties.iter().all(|p| {
-                        p.name
-                            .public_name()
-                            .is_some_and(|name| field(name).is_some())
-                    }),
+                    Some(TypeKind::Object { properties }) => {
+                        properties
+                            .iter()
+                            .all(|p| match (&members, p.name.public_name()) {
+                                (Some(members), Some(name)) => {
+                                    !members.contains(&name) || field(name).is_some()
+                                }
+                                (Some(_), None) => true,
+                                (None, name) => name.is_some_and(|name| field(name).is_some()),
+                            })
+                    }
                     Some(TypeKind::Null | TypeKind::Undefined) => true,
                     #[expect(
                         clippy::match_same_arms,
@@ -71405,7 +71484,7 @@ impl<'a> FuncBuilder<'a> {
                         // the pair's own fields (`write_given`).
                         (super::native::Pointee::Record(inner), _) if inner.given => true,
                         (super::native::Pointee::Record(inner), Some(&ty)) => {
-                            self.record_holds(inner, value, ty)
+                            self.record_holds(inner, value, ty, None)
                         }
                         _ => true,
                     }
@@ -71551,7 +71630,9 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .map(|declaration| (declaration, self.overload_signature(declaration, merged)))
             .collect();
-        let at = self.shortest_fit(&candidates, arguments).unwrap_or(0);
+        let at = self
+            .shortest_fit(&candidates, merged, arguments)
+            .unwrap_or(0);
         candidates
             .into_iter()
             .nth(at)
@@ -71634,13 +71715,14 @@ impl<'a> FuncBuilder<'a> {
     fn shortest_fit(
         &self,
         candidates: &[(NodeId, nts_semantic_schema::SignatureRecord)],
+        checked: &nts_semantic_schema::SignatureRecord,
         arguments: &[NodeId],
     ) -> Option<usize> {
         candidates
             .iter()
             .enumerate()
             .filter(|(_, (declaration, record))| {
-                self.call_fits(&self.as_written(*declaration, record), arguments)
+                self.call_fits(&self.as_written(*declaration, record), checked, arguments)
             })
             .min_by_key(|(at, (_, record))| (record.parameters.len(), *at))
             .map(|(at, _)| at)
@@ -71662,6 +71744,7 @@ impl<'a> FuncBuilder<'a> {
     fn call_fits(
         &self,
         record: &nts_semantic_schema::SignatureRecord,
+        checked: &nts_semantic_schema::SignatureRecord,
         arguments: &[NodeId],
     ) -> bool {
         let Some((_, slots)) = self.dictionary_spread(record, arguments) else {
@@ -71672,7 +71755,7 @@ impl<'a> FuncBuilder<'a> {
                         .get(before.len())
                         .is_some_and(|parameter| self.is_scalar_type(parameter.ty))
             });
-            return !whole && self.arguments_fit(record, arguments);
+            return !whole && self.arguments_fit(record, Some(checked), arguments);
         };
         record
             .parameters
@@ -71689,7 +71772,7 @@ impl<'a> FuncBuilder<'a> {
                             parameters: vec![parameter.clone()],
                             ..record.clone()
                         };
-                        self.arguments_fit(&one, &[*argument])
+                        self.arguments_fit(&one, None, &[*argument])
                     }
                 })
     }
@@ -71867,7 +71950,19 @@ impl<'a> FuncBuilder<'a> {
             .into_iter()
             .map(|declaration| (declaration, self.overload_signature(declaration, merged)))
             .collect();
-        let at = self.shortest_fit(&candidates, arguments).unwrap_or(0);
+        // The construct signature the checker selected for this `new` is
+        // what its arguments were checked against; `merged` here is the
+        // binding's own constructor function, whose parameters would key
+        // `record_holds` on the record's markers instead of the dictionary.
+        let checked = self
+            .snapshot
+            .call_targets
+            .get(&id)
+            .and_then(|target| self.snapshot.signatures.get(target.signature.0 as usize))
+            .unwrap_or(merged);
+        let at = self
+            .shortest_fit(&candidates, checked, arguments)
+            .unwrap_or(0);
         candidates.into_iter().nth(at)
     }
 
