@@ -70,6 +70,13 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("toggle2", "" + div.toggleAttribute("data-flag", true));
   log("toggle3", "" + div.toggleAttribute("data-flag"));
 
+  // A (string or dictionary) union argument, one overload per arm:
+  // createElement's second argument as its string and as its options.
+  const byText = d.createElement("div", "x-vec");
+  const byOptions = d.createElement("div", { is: "x-vec" });
+  log("isText", shown(byText.getAttribute("is")));
+  log("isOptions", shown(byOptions.getAttribute("is")));
+
   // Nullable text: an element's nodeValue is null; setting it does nothing.
   // The read after the write is narrowed to `string` by the checker and is
   // still null: concatenated, it is "null", as page script prints it.

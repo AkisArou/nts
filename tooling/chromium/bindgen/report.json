@@ -1,5 +1,5 @@
 {
-  "bound": 7061,
+  "bound": 7071,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -702,14 +702,9 @@
       "why": "dictionary DOMQuadInit has no member a C struct can carry"
     },
     {
-      "interface": "Document",
-      "member": "createElement/2",
-      "why": "parameter type (DOMString or ElementCreationOptions)"
-    },
-    {
-      "interface": "Document",
-      "member": "createElementNS/3",
-      "why": "parameter type (DOMString or ElementCreationOptions)"
+      "interface": "ElementCreationOptions",
+      "member": "customElementRegistry",
+      "why": "dictionary member of type optional CustomElementRegistry?"
     },
     {
       "interface": "Document",
@@ -2127,14 +2122,19 @@
       "why": "[RuntimeEnabled=ConditionalTracingLoAF] experimental"
     },
     {
-      "interface": "Performance",
-      "member": "measure/3",
-      "why": "parameter type optional (DOMString or PerformanceMeasureOptions)"
+      "interface": "PerformanceMeasureOptions",
+      "member": "detail",
+      "why": "dictionary member of type optional any"
     },
     {
-      "interface": "Performance",
-      "member": "measure/2",
-      "why": "parameter type optional (DOMString or PerformanceMeasureOptions)"
+      "interface": "PerformanceMeasureOptions",
+      "member": "end",
+      "why": "dictionary member of type optional (DOMString or DOMHighResTimeStamp)"
+    },
+    {
+      "interface": "PerformanceMeasureOptions",
+      "member": "start",
+      "why": "dictionary member of type optional (DOMString or DOMHighResTimeStamp)"
     },
     {
       "interface": "Performance",
@@ -3568,18 +3568,8 @@
     },
     {
       "interface": "Animation",
-      "member": "set rangeStart",
-      "why": "parameter type (TimelineRangeOffset or DOMString)"
-    },
-    {
-      "interface": "Animation",
       "member": "get rangeEnd",
       "why": "result type (TimelineRangeOffset or DOMString)"
-    },
-    {
-      "interface": "Animation",
-      "member": "set rangeEnd",
-      "why": "parameter type (TimelineRangeOffset or DOMString)"
     },
     {
       "interface": "AnimationEffect",

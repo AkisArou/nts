@@ -694,11 +694,13 @@ class Generator:
             members = members_of(unwrapped)
             strings = [t for t in members if t.unwrap().keyword_typename in STRINGS]
             # The string is taken only where it is the one primitive member and
-            # the others are interfaces (TrustedScript, TrustedHTML): a union
-            # with several primitive arms (`hidden`'s boolean, double and
-            # string) needs one function per arm, chosen by the value's type,
-            # which an accessor write cannot do yet.
-            primitives = [t for t in members if not t.unwrap().is_interface]
+            # the others are interfaces (TrustedScript, TrustedHTML) or
+            # dictionaries, which are offered as arms of their own
+            # (union_arms): a union with several primitive arms (`hidden`'s
+            # boolean, double and string) needs one function per arm, chosen
+            # by the value's type, which an accessor write cannot do yet.
+            primitives = [t for t in members
+                          if not t.unwrap().is_interface and not t.unwrap(typedef=True).is_dictionary]
             if len(strings) != 1 or len(primitives) != 1:
                 raise Skip(f"parameter type {idl_type.syntactic_form}")
             union = blink_type_info(unwrapped).typename
@@ -779,6 +781,15 @@ class Generator:
             # function keeps the name it had while the string was all that
             # bound (several_arities).
             return interfaces + [None]
+        dictionaries = sorted(t.type_definition_object.identifier for t in members if t.is_dictionary)
+        if len(strings) == 1 and dictionaries and all(
+                t.is_interface or t.is_dictionary or t in strings for t in members):
+            # A string beside a dictionary -- createElement's `(DOMString or
+            # ElementCreationOptions)`, measure's `(DOMString or
+            # PerformanceMeasureOptions)`: each dictionary (and any bound
+            # interface) is an arm, and the string is the argument's own
+            # conversion as above.
+            return interfaces + dictionaries + [None]
         if not all(t.is_interface or t.is_dictionary or t.keyword_typename == "boolean" for t in members):
             # A union one of whose members is a string, the rest containers
             # no arm carries -- URLSearchParams' `(sequence<sequence<USVString>>

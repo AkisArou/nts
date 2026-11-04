@@ -457,6 +457,9 @@ typedef struct NtsDomDragEventInit {
   double screenY;
   NtsDomDataTransfer* dataTransfer;
 } NtsDomDragEventInit;
+typedef struct NtsDomElementCreationOptions {
+  const NtsBorrowedString* is;
+} NtsDomElementCreationOptions;
 typedef struct NtsDomErrorEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -611,6 +614,9 @@ typedef struct NtsDomPageTransitionEventInit {
 typedef struct NtsDomPerformanceMarkOptions {
   struct { uint8_t given; double value; } startTime;
 } NtsDomPerformanceMarkOptions;
+typedef struct NtsDomPerformanceMeasureOptions {
+  struct { uint8_t given; double value; } duration;
+} NtsDomPerformanceMeasureOptions;
 typedef struct NtsDomPointerEventInit {
   uint8_t bubbles;
   uint8_t cancelable;
@@ -2452,7 +2458,11 @@ NtsDomCDATASection* nts_dom_Document_createCDATASection(NtsDomDocument* self, co
 NtsDomComment* nts_dom_Document_createComment(NtsDomDocument* self, const NtsBorrowedString* data);
 NtsDomDocumentFragment* nts_dom_Document_createDocumentFragment(NtsDomDocument* self);
 NtsDomElement* nts_dom_Document_createElement_1(NtsDomDocument* self, const NtsBorrowedString* localName, NtsDomException** error);
+NtsDomElement* nts_dom_Document_createElement_2_ElementCreationOptions(NtsDomDocument* self, const NtsBorrowedString* localName, NtsDomElementCreationOptions options, NtsDomException** error);
+NtsDomElement* nts_dom_Document_createElement_2(NtsDomDocument* self, const NtsBorrowedString* localName, const NtsBorrowedString* options, NtsDomException** error);
 NtsDomElement* nts_dom_Document_createElementNS_2(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomException** error);
+NtsDomElement* nts_dom_Document_createElementNS_3_ElementCreationOptions(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomElementCreationOptions options, NtsDomException** error);
+NtsDomElement* nts_dom_Document_createElementNS_3(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, const NtsBorrowedString* options, NtsDomException** error);
 NtsDomEvent* nts_dom_Document_createEvent(NtsDomDocument* self, const NtsBorrowedString* eventType, NtsDomException** error);
 NtsDomNode* nts_dom_Document_createNSResolver(NtsDomDocument* self, NtsDomNode* nodeResolver);
 NtsDomNodeIterator* nts_dom_Document_createNodeIterator_2(NtsDomDocument* self, NtsDomNode* root, double whatToShow);
@@ -5479,6 +5489,10 @@ NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByName_1(NtsDomPer
 NtsDomPerformanceEntrySequence* nts_dom_Performance_getEntriesByType(NtsDomPerformance* self, const NtsBorrowedString* entryType);
 NtsDomPerformanceMark* nts_dom_Performance_mark_2(NtsDomPerformance* self, const NtsBorrowedString* markName, NtsDomPerformanceMarkOptions markOptions, NtsDomException** error);
 NtsDomPerformanceMark* nts_dom_Performance_mark_1(NtsDomPerformance* self, const NtsBorrowedString* markName, NtsDomException** error);
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_3_PerformanceMeasureOptions(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomPerformanceMeasureOptions startOrMeasureOptions, const NtsBorrowedString* endMark, NtsDomException** error);
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_3(NtsDomPerformance* self, const NtsBorrowedString* measureName, const NtsBorrowedString* startOrMeasureOptions, const NtsBorrowedString* endMark, NtsDomException** error);
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_2_PerformanceMeasureOptions(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomPerformanceMeasureOptions startOrMeasureOptions, NtsDomException** error);
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_2(NtsDomPerformance* self, const NtsBorrowedString* measureName, const NtsBorrowedString* startOrMeasureOptions, NtsDomException** error);
 NtsDomPerformanceMeasure* nts_dom_Performance_measure_1(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomException** error);
 double nts_dom_Performance_now(NtsDomPerformance* self);
 void nts_dom_Performance_setResourceTimingBufferSize(NtsDomPerformance* self, double maxSize);
@@ -6590,6 +6604,8 @@ NtsDomAnimationTimeline* nts_dom_Animation_get_timeline(NtsDomAnimation* self);
 void nts_dom_Animation_set_timeline(NtsDomAnimation* self, NtsDomAnimationTimeline* value);
 double nts_dom_Animation_get_playbackRate(NtsDomAnimation* self);
 void nts_dom_Animation_set_playbackRate(NtsDomAnimation* self, double value, NtsDomException** error);
+void nts_dom_Animation_set_rangeStart(NtsDomAnimation* self, const NtsBorrowedString* value, NtsDomException** error);
+void nts_dom_Animation_set_rangeEnd(NtsDomAnimation* self, const NtsBorrowedString* value, NtsDomException** error);
 const char* nts_dom_Animation_get_playState(NtsDomAnimation* self);
 const char* nts_dom_Animation_get_replaceState(NtsDomAnimation* self);
 bool nts_dom_Animation_get_pending(NtsDomAnimation* self);

@@ -176,6 +176,7 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_edit_context.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_behavior.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_element_creation_options.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_image.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_element_internals.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_error_event.h"
@@ -654,10 +655,12 @@
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_csspseudoelement_document_element_text.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_dompointinit_unrestricteddouble.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_element_text.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_elementcreationoptions_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_htmloptgroupelement_htmloptionelement.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_node_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_performancemeasureoptions_string.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_request_usvstring.h"
+#include "third_party/blink/renderer/bindings/core/v8/v8_union_string_timelinerangeoffset.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedhtml.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscript.h"
 #include "third_party/blink/renderer/bindings/core/v8/v8_union_string_trustedscripturl.h"
@@ -1233,6 +1236,12 @@ blink::SetHTMLUnsafeOptions* NtsDomToSetHTMLUnsafeOptions(NtsDomContext& context
   v8::Isolate* isolate = context.v8_isolate.get();
   auto* to = blink::SetHTMLUnsafeOptions::Create(isolate);
   if (from.runScripts) to->setRunScripts(true);
+  return to;
+}
+blink::ElementCreationOptions* NtsDomToElementCreationOptions(NtsDomContext& context, const NtsDomElementCreationOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::ElementCreationOptions::Create(isolate);
+  if (from.is) to->setIs(NtsText(context, from.is));
   return to;
 }
 blink::ImportNodeOptions* NtsDomToImportNodeOptions(NtsDomContext& context, const NtsDomImportNodeOptions& from, blink::ExceptionState& exception_state) {
@@ -5972,6 +5981,16 @@ blink::PerformanceMarkOptions* NtsDomToPerformanceMarkOptions(NtsDomContext& con
     const auto value = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.startTime.value), exception_state);
     if (exception_state.HadException()) return nullptr;
     to->setStartTime(value);
+  }
+  return to;
+}
+blink::PerformanceMeasureOptions* NtsDomToPerformanceMeasureOptions(NtsDomContext& context, const NtsDomPerformanceMeasureOptions& from, blink::ExceptionState& exception_state) {
+  v8::Isolate* isolate = context.v8_isolate.get();
+  auto* to = blink::PerformanceMeasureOptions::Create(isolate);
+  if (from.duration.given) {
+    const auto value = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(isolate, v8::Number::New(isolate, from.duration.value), exception_state);
+    if (exception_state.HadException()) return nullptr;
+    to->setDuration(value);
   }
   return to;
 }
@@ -15288,11 +15307,43 @@ NtsDomElement* nts_dom_Document_createElement_1(NtsDomDocument* self, const NtsB
   return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), exception_state));
 }
 
+NtsDomElement* nts_dom_Document_createElement_2_ElementCreationOptions(NtsDomDocument* self, const NtsBorrowedString* localName, NtsDomElementCreationOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  auto* options_converted = NtsDomToElementCreationOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(options_converted), exception_state));
+}
+
+NtsDomElement* nts_dom_Document_createElement_2(NtsDomDocument* self, const NtsBorrowedString* localName, const NtsBorrowedString* options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomElement>(receiver->CreateElementForBinding(NtsText(context, localName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(NtsText(context, options).Text()), exception_state));
+}
+
 NtsDomElement* nts_dom_Document_createElementNS_2(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
   auto* receiver = ObjectOf<blink::Document>(self);
   return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), exception_state));
+}
+
+NtsDomElement* nts_dom_Document_createElementNS_3_ElementCreationOptions(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, NtsDomElementCreationOptions options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  auto* options_converted = NtsDomToElementCreationOptions(context, options, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(options_converted), exception_state));
+}
+
+NtsDomElement* nts_dom_Document_createElementNS_3(NtsDomDocument* self, const NtsBorrowedString* namespaceURI, const NtsBorrowedString* qualifiedName, const NtsBorrowedString* options, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Document>(self);
+  return HandleOf<NtsDomElement>(receiver->createElementNS(NtsText(context, namespaceURI), NtsText(context, qualifiedName), blink::MakeGarbageCollected<blink::V8UnionElementCreationOptionsOrString>(NtsText(context, options).Text()), exception_state));
 }
 
 NtsDomEvent* nts_dom_Document_createEvent(NtsDomDocument* self, const NtsBorrowedString* eventType, NtsDomException** error) {
@@ -37650,6 +37701,46 @@ NtsDomPerformanceMark* nts_dom_Performance_mark_1(NtsDomPerformance* self, const
   return HandleOf<NtsDomPerformanceMark>(receiver->mark(script_state, NtsText(context, markName), blink::PerformanceMarkOptions::Create(context.v8_isolate.get()), exception_state));
 }
 
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_3_PerformanceMeasureOptions(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomPerformanceMeasureOptions startOrMeasureOptions, const NtsBorrowedString* endMark, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  auto* startOrMeasureOptions_converted = NtsDomToPerformanceMeasureOptions(context, startOrMeasureOptions, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomPerformanceMeasure>(receiver->measure(script_state, NtsText(context, measureName), blink::MakeGarbageCollected<blink::V8UnionPerformanceMeasureOptionsOrString>(startOrMeasureOptions_converted), NtsText(context, endMark), exception_state));
+}
+
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_3(NtsDomPerformance* self, const NtsBorrowedString* measureName, const NtsBorrowedString* startOrMeasureOptions, const NtsBorrowedString* endMark, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomPerformanceMeasure>(receiver->measure(script_state, NtsText(context, measureName), blink::MakeGarbageCollected<blink::V8UnionPerformanceMeasureOptionsOrString>(NtsText(context, startOrMeasureOptions).Text()), NtsText(context, endMark), exception_state));
+}
+
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_2_PerformanceMeasureOptions(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomPerformanceMeasureOptions startOrMeasureOptions, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  auto* startOrMeasureOptions_converted = NtsDomToPerformanceMeasureOptions(context, startOrMeasureOptions, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return {};
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomPerformanceMeasure>(receiver->measure(script_state, NtsText(context, measureName), blink::MakeGarbageCollected<blink::V8UnionPerformanceMeasureOptionsOrString>(startOrMeasureOptions_converted), exception_state));
+}
+
+NtsDomPerformanceMeasure* nts_dom_Performance_measure_2(NtsDomPerformance* self, const NtsBorrowedString* measureName, const NtsBorrowedString* startOrMeasureOptions, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Performance>(self);
+  blink::ScriptState* script_state = context.MainWorld();
+  blink::ScriptState::Scope script_scope(script_state);
+  return HandleOf<NtsDomPerformanceMeasure>(receiver->measure(script_state, NtsText(context, measureName), blink::MakeGarbageCollected<blink::V8UnionPerformanceMeasureOptionsOrString>(NtsText(context, startOrMeasureOptions).Text()), exception_state));
+}
+
 NtsDomPerformanceMeasure* nts_dom_Performance_measure_1(NtsDomPerformance* self, const NtsBorrowedString* measureName, NtsDomException** error) {
   NtsDomContext& context = nts_dom::Current();
   Throws exception_state(error);
@@ -45070,6 +45161,20 @@ void nts_dom_Animation_set_playbackRate(NtsDomAnimation* self, double value, Nts
   const auto value_converted = blink::NativeValueTraits<blink::IDLDouble>::NativeValue(context.v8_isolate.get(), v8::Number::New(context.v8_isolate.get(), value), exception_state);
   if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
   receiver->setPlaybackRate(value_converted, exception_state);
+}
+
+void nts_dom_Animation_set_rangeStart(NtsDomAnimation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Animation>(self);
+  receiver->setRangeStart(blink::MakeGarbageCollected<blink::V8UnionStringOrTimelineRangeOffset>(NtsText(context, value).Text()), exception_state);
+}
+
+void nts_dom_Animation_set_rangeEnd(NtsDomAnimation* self, const NtsBorrowedString* value, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Animation>(self);
+  receiver->setRangeEnd(blink::MakeGarbageCollected<blink::V8UnionStringOrTimelineRangeOffset>(NtsText(context, value).Text()), exception_state);
 }
 
 const char* nts_dom_Animation_get_playState(NtsDomAnimation* self) {

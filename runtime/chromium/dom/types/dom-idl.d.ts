@@ -52,6 +52,7 @@ declare module "nts:dom" {
   export type DOMRectInit = Struct<{ height: Float64; width: Float64; x: Float64; y: Float64 }, "NtsDomDOMRectInit">;
   export type DocumentTimelineOptions = Struct<{ originTime: Float64 }, "NtsDomDocumentTimelineOptions">;
   export type DragEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; dataTransfer: DataTransfer | null }, "NtsDomDragEventInit">;
+  export type ElementCreationOptions = Struct<{ is: StringView }, "NtsDomElementCreationOptions">;
   export type ErrorEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; colno: Float64; filename: StringView; lineno: Float64; message: StringView }, "NtsDomErrorEventInit">;
   export type EventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8> }, "NtsDomEventInit">;
   export type FocusEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; relatedTarget: EventTarget | null }, "NtsDomFocusEventInit">;
@@ -72,6 +73,7 @@ declare module "nts:dom" {
   export type OptionalEffectTiming = Struct<{ direction: StringView; easing: StringView; fill: StringView; iterationStart: Given<Float64>; iterations: Given<Float64> }, "NtsDomOptionalEffectTiming">;
   export type PageTransitionEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; persisted: Given<CBool<Uint8>> }, "NtsDomPageTransitionEventInit">;
   export type PerformanceMarkOptions = Struct<{ startTime: Given<Float64> }, "NtsDomPerformanceMarkOptions">;
+  export type PerformanceMeasureOptions = Struct<{ duration: Given<Float64> }, "NtsDomPerformanceMeasureOptions">;
   export type PointerEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; detail: Float64; view: Window | null; altKey: CBool<Uint8>; ctrlKey: CBool<Uint8>; metaKey: CBool<Uint8>; modifierAltGraph: CBool<Uint8>; modifierCapsLock: CBool<Uint8>; modifierFn: CBool<Uint8>; modifierNumLock: CBool<Uint8>; modifierScrollLock: CBool<Uint8>; modifierSymbol: CBool<Uint8>; shiftKey: CBool<Uint8>; button: Float64; buttons: Float64; clientX: Float64; clientY: Float64; movementX: Float64; movementY: Float64; region: StringView; relatedTarget: EventTarget | null; screenX: Float64; screenY: Float64; altitudeAngle: Given<Float64>; azimuthAngle: Given<Float64>; height: Given<Float64>; isPrimary: CBool<Uint8>; persistentDeviceId: Float64; pointerId: Float64; pointerType: StringView; pressure: Float64; tangentialPressure: Float64; tiltX: Given<Float64>; tiltY: Given<Float64>; twist: Float64; width: Given<Float64> }, "NtsDomPointerEventInit">;
   export type PointerLockOptions = Struct<{ unadjustedMovement: CBool<Uint8> }, "NtsDomPointerLockOptions">;
   export type PopStateEventInit = Struct<{ bubbles: CBool<Uint8>; cancelable: CBool<Uint8>; composed: CBool<Uint8>; hasUAVisualTransition: CBool<Uint8> }, "NtsDomPopStateEventInit">;
@@ -5810,11 +5812,35 @@ declare module "nts:dom" {
      */
     createElement(this: Document, localName: StringView, error?: Ptr<DOMException | null>): Element;
     /**
+     * @ntsSymbol nts_dom_Document_createElement_2_ElementCreationOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createElement(this: Document, localName: StringView, options: ByValue<ElementCreationOptions> | Fields<ElementCreationOptions>, error?: Ptr<DOMException | null>): Element;
+    /**
+     * @ntsSymbol nts_dom_Document_createElement_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createElement(this: Document, localName: StringView, options: StringView, error?: Ptr<DOMException | null>): Element;
+    /**
      * @ntsSymbol nts_dom_Document_createElementNS_2
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
      */
     createElementNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, error?: Ptr<DOMException | null>): Element;
+    /**
+     * @ntsSymbol nts_dom_Document_createElementNS_3_ElementCreationOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createElementNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, options: ByValue<ElementCreationOptions> | Fields<ElementCreationOptions>, error?: Ptr<DOMException | null>): Element;
+    /**
+     * @ntsSymbol nts_dom_Document_createElementNS_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    createElementNS(this: Document, namespaceURI: StringView | null, qualifiedName: StringView, options: StringView, error?: Ptr<DOMException | null>): Element;
     /**
      * @ntsSymbol nts_dom_Document_createEvent
      * @ntsThrows error nts_dom_exception_take_message
@@ -24559,6 +24585,30 @@ declare module "nts:dom" {
      */
     mark(this: Performance, markName: StringView, error?: Ptr<DOMException | null>): PerformanceMark;
     /**
+     * @ntsSymbol nts_dom_Performance_measure_3_PerformanceMeasureOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    measure(this: Performance, measureName: StringView, startOrMeasureOptions: ByValue<PerformanceMeasureOptions> | Fields<PerformanceMeasureOptions>, endMark: StringView, error?: Ptr<DOMException | null>): PerformanceMeasure;
+    /**
+     * @ntsSymbol nts_dom_Performance_measure_3
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    measure(this: Performance, measureName: StringView, startOrMeasureOptions: StringView, endMark: StringView, error?: Ptr<DOMException | null>): PerformanceMeasure;
+    /**
+     * @ntsSymbol nts_dom_Performance_measure_2_PerformanceMeasureOptions
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    measure(this: Performance, measureName: StringView, startOrMeasureOptions: ByValue<PerformanceMeasureOptions> | Fields<PerformanceMeasureOptions>, error?: Ptr<DOMException | null>): PerformanceMeasure;
+    /**
+     * @ntsSymbol nts_dom_Performance_measure_2
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    measure(this: Performance, measureName: StringView, startOrMeasureOptions: StringView, error?: Ptr<DOMException | null>): PerformanceMeasure;
+    /**
      * @ntsSymbol nts_dom_Performance_measure_1
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -31730,6 +31780,26 @@ declare module "nts:dom" {
      * @ntsSet _set_playbackRate
      */
     playbackRate: Float64;
+    /**
+     * @ntsSymbol nts_dom_Animation_set_rangeStart
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rangeStart(this: Animation, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSet _set_rangeStart
+     */
+    set rangeStart(value: StringView);
+    /**
+     * @ntsSymbol nts_dom_Animation_set_rangeEnd
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    _set_rangeEnd(this: Animation, value: StringView, error?: Ptr<DOMException | null>): void;
+    /**
+     * @ntsSet _set_rangeEnd
+     */
+    set rangeEnd(value: StringView);
     /**
      * @ntsSymbol nts_dom_Animation_get_playState
      */

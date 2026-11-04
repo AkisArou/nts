@@ -122,6 +122,13 @@ export function libDomTranscript(): string {
   const root = document.createElement("section");
   document.body.appendChild(root);
 
+  // A (string or dictionary) union argument, delegated to the arm
+  // lib.dom spells: createElement's options dictionary. (The union's
+  // string arm is in the IDL but not in lib.dom's overloads; the
+  // nts:dom vectors take it.)
+  const byOptions = document.createElement("div", { is: "x-vec" });
+  log("isOptions", "" + byOptions.getAttribute("is"));
+
   const list = (count: number): HTMLUListElement => {
     const ul = document.createElement("ul");
     for (let i = 0; i < count; i++) {
