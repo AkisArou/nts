@@ -8,7 +8,7 @@
 // Keyed on every declared property, as before, this took the longer
 // record instead; keyed on the checked dictionary's members, it takes
 // the shorter, which the emitted call states.
-class ChunkSource {
+class Source {
   chunkSize = 16;
   helper(): number {
     return 1;
@@ -16,5 +16,5 @@ class ChunkSource {
 }
 
 export function probe(): void {
-  new PullStream(new ChunkSource());
+  new PullStream(new Source());
 }

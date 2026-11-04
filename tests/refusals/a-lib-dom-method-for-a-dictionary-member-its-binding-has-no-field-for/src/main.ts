@@ -19,10 +19,13 @@
 // record is taken -- where a DOMPointReadOnly now fits roundRect's
 // dictionary arm the same way
 // (a-lib-dom-object-read-as-a-union-dictionary-arm).
-class PullSource {
-  pull(): void {}
+class Source {
+  chunkSize = 16;
+  pull(): number {
+    return 1;
+  }
 }
 
 export function probe(): void {
-  new PullStream(new PullSource());
+  new PullStream(new Source());
 }
