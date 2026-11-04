@@ -1,0 +1,35 @@
+/*---
+description: A plain-object species destination exposes flat property definition order and length effects.
+features: [ts-species-routes, ts-species-route-overrides, ts-class, ts-inheritance, ts-builtin-subclass, ts-arrays, ts-functions, ts-symbols, ts-objects, ts-unknown, ts-numbers, ts-typeof-operator, ts-new-target, ts-instanceof, ts-narrowing, ts-errors, ts-accessors, ts-iteration, ts-tuples, ts-this-parameter, ts-optional-chaining, ts-unions]
+---*/
+// flat crosses a base-array parameter; node defines indices past an inherited setter without setting length.
+function same(actual: unknown, expected: unknown): void { assert.sameValue(actual, expected); assert.sameValue(typeof actual, typeof expected); }
+const log: unknown[] = []; let destination: object = {};
+class Source extends Array<number | number[]> { constructor(length: number) { super(length); log.push("source", new.target, arguments.length, length); } }
+class Child extends Source {}
+class Returner { constructor(length: number) { log.push("construct", new.target, arguments.length, length); return destination; } }
+Object.defineProperty(Source, Symbol.species, { get() { log.push("species", this); return Returner; } });
+function run(view: (number | number[])[]): unknown { return view.flat(); }
+for (const accessor of [false, true]) {
+  log.length = 0; let storedLength = 77;
+  const prototype = { set 0(value: unknown) { log.push("index-set", this, value); } }; destination = Object.create(prototype);
+  if (accessor) Object.defineProperty(destination, "length", { get() { log.push("length-get", this, storedLength); return storedLength; }, set(value: unknown) { log.push("length-set", this, value, Object.keys(this).join(",")); if (typeof value !== "number") throw new TypeError(); storedLength = value; }, configurable: true });
+  const source = new Child(3), first: number | number[] = [-0], last: number | number[] = [NaN, 7];
+  assert.compareArray(log, ["source", Child, 1, 3]); log.length = 0;
+  function readFirst(this: object): number | number[] { log.push("get", this, 0, Object.keys(destination).join(",")); return first; }
+  function readLast(this: object): number | number[] { log.push("get", this, 2, Object.keys(destination).join(",")); return last; }
+  Object.defineProperty(source, 0, { get: readFirst, enumerable: true, configurable: true }); Object.defineProperty(source, 2, { get: readLast, enumerable: true, configurable: true });
+  const result: unknown = run(source); if (typeof result !== "object" || result === null) throw new TypeError();
+  same(result, destination); same(Object.getPrototypeOf(result), prototype); same(Array.isArray(result), false); same(result === source, false);
+  same(result instanceof Source, false); same(result instanceof Child, false); same(result instanceof Returner, false); same(result instanceof Array, false);
+  const expected: [number, number][] = [[0, -0], [1, NaN], [2, 7]];
+  for (const [index, value] of expected) { same(Reflect.get(result, index), value); const descriptor = Object.getOwnPropertyDescriptor(result, index); if (descriptor === undefined) throw new TypeError(); same(descriptor.writable, true); same(descriptor.enumerable, true); same(descriptor.configurable, true); }
+  same(Reflect.get(result, "length"), accessor ? 77 : undefined); same(Object.hasOwn(result, "length"), accessor);
+  const keys: string[] = ["0", "1", "2"]; if (accessor) keys.push("length"); assert.compareArray(Reflect.ownKeys(result), keys);
+  same(Object.hasOwn(result, 1), true);
+  const expectedLog: unknown[] = ["species", Child, "construct", Returner, 1, 0, "get", source, 0, "", "get", source, 2, "0"];
+  if (accessor) expectedLog.push("length-get", destination, 77);
+  assert.compareArray(log, expectedLog);
+  same(source.length, 3); same(Object.hasOwn(source, 1), false); assert.compareArray(Reflect.ownKeys(source), ["0", "2", "length"]);
+  same(Object.getOwnPropertyDescriptor(source, 0)?.get, readFirst); same(Object.getOwnPropertyDescriptor(source, 2)?.get, readLast);
+}
