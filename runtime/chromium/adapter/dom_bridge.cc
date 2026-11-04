@@ -845,38 +845,71 @@ class Entry {
   STACK_ALLOCATED();
 
 public:
-  explicit Entry(NtsDomContext *context);
+  // A nested entry (this context is the entered one already) keeps nothing
+  // alive and enters nothing: the entry below it on the stack does both,
+  // for as long as this one runs.
+  explicit Entry(NtsDomContext *context, bool nested = false);
   ~Entry();
 
 private:
   scoped_refptr<NtsDomContext> keep_alive_;
   NtsDomContext *previous_; // STACK_ALLOCATED: no BackupRefPtr per entry
 };
-Entry::Entry(NtsDomContext *context)
-    : keep_alive_(context), previous_(entered) {
+Entry::Entry(NtsDomContext *context, bool nested)
+    : keep_alive_(nested ? nullptr : context), previous_(entered) {
   entered = context;
 }
 Entry::~Entry() { entered = previous_; }
+
+// ScriptState::Scope with the enter itself conditional: the handle scope
+// is always this entry's own, so handles made under it close here; the
+// context is entered only when it is not the entered one already.
+class ScriptScope {
+  STACK_ALLOCATED();
+
+public:
+  ScriptScope(blink::ScriptState *script_state, bool enter_context)
+      : handle_scope_(script_state->GetIsolate()) {
+    DCHECK(script_state->ContextIsValid());
+    if (enter_context) {
+      context_ = script_state->GetContext();
+      context_->Enter();
+    }
+  }
+  ~ScriptScope() {
+    if (!context_.IsEmpty())
+      context_->Exit();
+  }
+
+private:
+  v8::HandleScope handle_scope_;
+  v8::Local<v8::Context> context_;
+};
 
 // Everything a native callback that runs the program holds: the context as
 // the thread's entered one; the main world's V8 context, entered, with a
 // handle scope -- Blink code a DOM call reaches may ask for the current world
 // (Text::splitText's wrapper lookup does), as it may when page script's
 // bindings call it; and a microtask scope that checkpoints as the outermost
-// entry returns, as V8 does after a callback.
+// entry returns, as V8 does after a callback. A nested callback -- a
+// listener the program's own click() dispatches -- finds its context
+// entered and its world entered already, and re-enters neither; its
+// handle and microtask scopes are its own, as a nested JS callback's are.
 class ProgramScope {
   STACK_ALLOCATED();
 
 public:
   explicit ProgramScope(NtsDomContext *context)
-      : entry_(context), script_(context->MainWorld()),
+      : nested_(entered == context), entry_(context, nested_),
+        script_(context->MainWorld(), !nested_),
         microtasks_(context->v8_isolate.get(),
                     context->event_loop->microtask_queue(),
                     v8::MicrotasksScope::kRunMicrotasks) {}
 
 private:
+  bool nested_;
   Entry entry_;
-  blink::ScriptState::Scope script_;
+  ScriptScope script_;
   v8::MicrotasksScope microtasks_;
 };
 
