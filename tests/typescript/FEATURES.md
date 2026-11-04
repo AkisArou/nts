@@ -2923,6 +2923,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `exits` | `exits-*` | 26 | 26 | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence |
 | `errors` | `errors-*` | 24 | 24 | Source throws and rejected awaits, caught recovery, terminal state, rejected custom next and consumer catch/finally ordering |
 | `delegation` | `delegation-*` | 26 | 26 | Async and sync delegates, retained inner completion, forwarded exits, nested cleanup and awaited synchronous-source values |
+| `protocol` | `protocol-*` | 24 | 24 | Counted custom iteration, captured next, unawaited promise values, queued requests and manual next/return/throw state transitions |
 
 ## Tags
 
@@ -2956,6 +2957,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-async-iteration-route-errors` | Source throws and rejected awaits, caught recovery, terminal state, rejected custom next and consumer catch/finally ordering | Async-iteration route contracts; typed paths | 48 | 0 |
 | `ts-async-iteration-route-exits` | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-async-iteration-route-generators` | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers | Async-iteration route contracts; typed paths | 52 | 0 |
+| `ts-async-iteration-route-protocol` | Counted custom iteration, captured next, unawaited promise values, queued requests and manual next/return/throw state transitions | Async-iteration route contracts; typed paths | 48 | 0 |
 | `ts-async-iteration-routes` | async generator and iterator protocol behavior across typed carriers beside explicit-step controls, with exact values, completion, closing and ordered effects | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 774 | 0 |
 | `ts-async-route-methods` | async methods and dispatch with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 14 | 0 |
