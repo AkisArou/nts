@@ -78,10 +78,10 @@ class ProbeObserver final : public content::RenderFrameObserver {
       nts_chromium_probe_attach(probe_.get(), dom_.get());
       if (command.GetSwitchValueASCII("nts-collection") != "checkpoint")
         nts_chromium_probe_install_host(probe_.get(), dom_.get());
-      todo_ = nts_chromium_todo_create(
+      todo_.reset(nts_chromium_todo_create(
           probe_.get(), dom_.get(),
           nts_blink_dom_element_by_id(dom_.get(), "native-todo"),
-          command.GetSwitchValueASCII("nts-todo-source") == "lib-dom");
+          command.GetSwitchValueASCII("nts-todo-source") == "lib-dom"));
       counter_output_ = document.GetElementById(
           blink::WebString::FromAscii("benchmark-result"));
       CHECK(!counter_output_.IsNull());
@@ -268,8 +268,7 @@ class ProbeObserver final : public content::RenderFrameObserver {
       // environment closes. Generated await tasks still lack drop callbacks.
       if (microtasks_)
         nts_chromium_probe_teardown_witness(probe_.get());
-      if (todo_)
-        nts_chromium_todo_destroy(std::exchange(todo_, nullptr));
+      todo_.reset();
       dom_.reset();
       microtasks_ = false;
       probe_.reset();
@@ -284,7 +283,8 @@ class ProbeObserver final : public content::RenderFrameObserver {
       nullptr, &nts_blink_dom_destroy};
   base::ScopedClosureRunner counter_listener_;
   bool microtasks_ = false;
-  raw_ptr<NtsChromiumTodo> todo_ = nullptr;
+  std::unique_ptr<NtsChromiumTodo, decltype(&nts_chromium_todo_destroy)>
+      todo_{nullptr, &nts_chromium_todo_destroy};
   base::WeakPtrFactory<ProbeObserver> weak_factory_{this};
 };
 

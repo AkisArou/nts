@@ -5,7 +5,6 @@
 
 #include "base/check.h"
 #include "base/logging.h"
-#include "base/memory/raw_ptr.h"
 #include "content/public/renderer/render_frame.h"
 #include "content/public/renderer/render_frame_observer.h"
 #include "content/public/renderer/render_thread.h"
@@ -41,7 +40,7 @@ class AppObserver final : public content::RenderFrameObserver {
       return;
     CHECK(content::RenderThread::IsMainThread());
     dom_.reset(CreateDomContext(document));
-    app_ = nts_chromium_app_start(dom_.get());
+    app_.reset(nts_chromium_app_start(dom_.get()));
     LOG(INFO) << "NTS_APP start";
   }
 
@@ -61,15 +60,16 @@ class AppObserver final : public content::RenderFrameObserver {
   void Stop() {
     if (!app_)
       return;
-    nts_chromium_app_unload(app_);
+    nts_chromium_app_unload(app_.get());
     dom_.reset();
-    nts_chromium_app_destroy(std::exchange(app_, nullptr));
+    app_.reset();
     LOG(INFO) << "NTS_APP stop";
   }
 
   std::unique_ptr<NtsDomContext, decltype(&nts_blink_dom_destroy)> dom_{
       nullptr, &nts_blink_dom_destroy};
-  raw_ptr<NtsChromiumApp> app_ = nullptr;
+  std::unique_ptr<NtsChromiumApp, decltype(&nts_chromium_app_destroy)> app_{
+      nullptr, &nts_chromium_app_destroy};
 };
 
 }  // namespace
