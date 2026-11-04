@@ -874,6 +874,13 @@ public:
     if (enter_context) {
       context_ = script_state->GetContext();
       context_->Enter();
+    } else {
+      // The entry below entered this world; say so while DCHECKs can
+      // hear it, so a nested callback Blink reached with another
+      // context entered fails here in debug instead of running in
+      // that world. Release builds pay nothing.
+      DCHECK(script_state->GetIsolate()->GetEnteredOrMicrotaskContext() ==
+             script_state->GetContext());
     }
   }
   ~ScriptScope() {
