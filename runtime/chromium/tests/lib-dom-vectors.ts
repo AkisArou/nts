@@ -781,6 +781,15 @@ export function libDomTranscript(): string {
     const path = new Path2D(square);
     const context = document.createElement("canvas").getContext("2d");
     const inside = context === null ? "none" : context.isPointInPath(path, 5, 5) + "," + context.isPointInPath(path, 15, 5);
+    // A (number or dictionary) union argument through lib.dom: roundRect's
+    // radii as a number and as a point; a rounded corner leaves (2, 2) out.
+    const rounded = new Path2D();
+    rounded.roundRect(0, 0, 100, 100, 20);
+    const pointed = new Path2D();
+    pointed.roundRect(0, 0, 100, 100, { x: 20, y: 20 });
+    const corners = context === null ? "none"
+      : context.isPointInPath(rounded, 2, 2) + "," + context.isPointInPath(pointed, 2, 2) + "," + context.isPointInPath(rounded, 50, 50);
+    log("roundCorners", "" + corners);
     log("listArguments", before + "," + either.aborted + "," + none.aborted + "|" + copy.method + ":" + copy.url + "|" +
       changed.method + ":" + changed.url + "|" + inside);
   }

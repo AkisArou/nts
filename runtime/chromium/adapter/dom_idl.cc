@@ -39590,6 +39590,22 @@ void nts_dom_CanvasRenderingContext2D_rotate(NtsDomCanvasRenderingContext2D* sel
   receiver->rotate(angle);
 }
 
+void nts_dom_CanvasRenderingContext2D_roundRect_5_DOMPointInit(NtsDomCanvasRenderingContext2D* self, double x, double y, double w, double h, NtsDomDOMPointInit radii, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  auto* radii_converted = NtsDomToDOMPointInit(context, radii, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->roundRect(x, y, w, h, blink::MakeGarbageCollected<blink::V8UnionDOMPointInitOrUnrestrictedDouble>(radii_converted), exception_state);
+}
+
+void nts_dom_CanvasRenderingContext2D_roundRect_5_number(NtsDomCanvasRenderingContext2D* self, double x, double y, double w, double h, double radii, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::CanvasRenderingContext2D>(self);
+  receiver->roundRect(x, y, w, h, blink::MakeGarbageCollected<blink::V8UnionDOMPointInitOrUnrestrictedDouble>(radii), exception_state);
+}
+
 void nts_dom_CanvasRenderingContext2D_roundRect_4(NtsDomCanvasRenderingContext2D* self, double x, double y, double w, double h, NtsDomException** error) {
   nts_dom::AssertEntered();
   Throws exception_state(error);
@@ -39806,6 +39822,22 @@ void nts_dom_Path2D_rect(NtsDomPath2D* self, double x, double y, double width, d
   nts_dom::AssertEntered();
   auto* receiver = ObjectOf<blink::Path2D>(self);
   receiver->rect(x, y, width, height);
+}
+
+void nts_dom_Path2D_roundRect_5_DOMPointInit(NtsDomPath2D* self, double x, double y, double w, double h, NtsDomDOMPointInit radii, NtsDomException** error) {
+  NtsDomContext& context = nts_dom::Current();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Path2D>(self);
+  auto* radii_converted = NtsDomToDOMPointInit(context, radii, exception_state);
+  if (static_cast<blink::ExceptionState&>(exception_state).HadException()) return;
+  receiver->roundRect(x, y, w, h, blink::MakeGarbageCollected<blink::V8UnionDOMPointInitOrUnrestrictedDouble>(radii_converted), exception_state);
+}
+
+void nts_dom_Path2D_roundRect_5_number(NtsDomPath2D* self, double x, double y, double w, double h, double radii, NtsDomException** error) {
+  nts_dom::AssertEntered();
+  Throws exception_state(error);
+  auto* receiver = ObjectOf<blink::Path2D>(self);
+  receiver->roundRect(x, y, w, h, blink::MakeGarbageCollected<blink::V8UnionDOMPointInitOrUnrestrictedDouble>(radii), exception_state);
 }
 
 void nts_dom_Path2D_roundRect_4(NtsDomPath2D* self, double x, double y, double w, double h, NtsDomException** error) {

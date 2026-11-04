@@ -5766,6 +5766,8 @@ void nts_dom_CanvasRenderingContext2D_reset(NtsDomCanvasRenderingContext2D* self
 void nts_dom_CanvasRenderingContext2D_resetTransform(NtsDomCanvasRenderingContext2D* self);
 void nts_dom_CanvasRenderingContext2D_restore(NtsDomCanvasRenderingContext2D* self, NtsDomException** error);
 void nts_dom_CanvasRenderingContext2D_rotate(NtsDomCanvasRenderingContext2D* self, double angle);
+void nts_dom_CanvasRenderingContext2D_roundRect_5_DOMPointInit(NtsDomCanvasRenderingContext2D* self, double x, double y, double w, double h, NtsDomDOMPointInit radii, NtsDomException** error);
+void nts_dom_CanvasRenderingContext2D_roundRect_5_number(NtsDomCanvasRenderingContext2D* self, double x, double y, double w, double h, double radii, NtsDomException** error);
 void nts_dom_CanvasRenderingContext2D_roundRect_4(NtsDomCanvasRenderingContext2D* self, double x, double y, double w, double h, NtsDomException** error);
 void nts_dom_CanvasRenderingContext2D_save(NtsDomCanvasRenderingContext2D* self);
 void nts_dom_CanvasRenderingContext2D_scale(NtsDomCanvasRenderingContext2D* self, double x, double y);
@@ -5798,6 +5800,8 @@ void nts_dom_Path2D_lineTo(NtsDomPath2D* self, double x, double y);
 void nts_dom_Path2D_moveTo(NtsDomPath2D* self, double x, double y);
 void nts_dom_Path2D_quadraticCurveTo(NtsDomPath2D* self, double cpx, double cpy, double x, double y);
 void nts_dom_Path2D_rect(NtsDomPath2D* self, double x, double y, double width, double height);
+void nts_dom_Path2D_roundRect_5_DOMPointInit(NtsDomPath2D* self, double x, double y, double w, double h, NtsDomDOMPointInit radii, NtsDomException** error);
+void nts_dom_Path2D_roundRect_5_number(NtsDomPath2D* self, double x, double y, double w, double h, double radii, NtsDomException** error);
 void nts_dom_Path2D_roundRect_4(NtsDomPath2D* self, double x, double y, double w, double h, NtsDomException** error);
 double nts_dom_TextMetrics_get_width(NtsDomTextMetrics* self);
 double nts_dom_TextMetrics_get_actualBoundingBoxLeft(NtsDomTextMetrics* self);

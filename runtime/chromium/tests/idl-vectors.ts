@@ -672,6 +672,19 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   log("canvasState", ctx.textAlign + "|" + ctx.lineWidth + "|" + ctx.lineCap + "|" + ctx.font + "|" + (metrics.width > 0 ? "measured" : "zero"));
   thrown("canvasArc", () => { ctx.arc(0, 0, -1, 0, 1, false); });
   thrown("canvasFillRule", () => { ctx.fill(("inside" + "") as CanvasFillRule); });
+  // A (number or dictionary) union argument, one overload per arm:
+  // roundRect's radii as a number, as a point dictionary, and left out
+  // (its 0 default). A rounded corner leaves (2, 2) outside the path
+  // where a square one keeps it in.
+  const corner = (label: string, make: () => void): void => {
+    ctx.beginPath();
+    make();
+    log(label, "" + ctx.isPointInPath(2, 2) + "," + ctx.isPointInPath(50, 50));
+  };
+  corner("roundSquare", () => { ctx.roundRect(0, 0, 100, 100); });
+  corner("roundNumber", () => { ctx.roundRect(0, 0, 100, 100, 20); });
+  corner("roundPoint", () => { ctx.roundRect(0, 0, 100, 100, { x: 20, y: 20 }); });
+  thrown("roundNegative", () => { ctx.roundRect(0, 0, 100, 100, -1); });
   // Image sources (a union of interfaces): a small canvas drawn onto the
   // surface, and as a repeating pattern's tile.
   const stamp = asHTMLCanvasElement(d.createElement("canvas"))!;

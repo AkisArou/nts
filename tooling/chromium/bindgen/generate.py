@@ -782,6 +782,16 @@ class Generator:
             # bound (several_arities).
             return interfaces + [None]
         dictionaries = sorted(t.type_definition_object.identifier for t in members if t.is_dictionary)
+        numerics = [t for t in members if t.keyword_typename in NUMERIC]
+        if numerics and all(t.is_interface or t.is_dictionary or t.is_sequence or t in numerics
+                             for t in members):
+            # A number beside a dictionary -- roundRect's radii,
+            # `(unrestricted double or DOMPointInit or
+            # sequence<(unrestricted double or DOMPointInit)>)`: the number
+            # and each dictionary (and any bound interface) are arms. A
+            # sequence member is not offered, as an unbound interface is
+            # not: a caller passing one finds no overload.
+            return interfaces + dictionaries + ["number"]
         if len(strings) == 1 and dictionaries and all(
                 t.is_interface or t.is_dictionary or t in strings for t in members):
             # A string beside a dictionary -- createElement's `(DOMString or
@@ -842,9 +852,14 @@ class Generator:
                 unwrapped = idl_type.unwrap(typedef=True)
                 dictionary = unwrapped.type_definition_object if unwrapped.is_dictionary else None
             elif isinstance(arm, str):
-                members = [t.unwrap(typedef=True) for t in members_of(idl_type.unwrap(typedef=True))]
-                dictionary = next((t.type_definition_object for t in members
-                                   if t.is_dictionary and t.type_definition_object.identifier == arm), None)
+                # A union's dictionary arm gets no object arm: the compiler
+                # refuses the call as an opaque pointer converted to a
+                # different representation (roundRect's DOMPointReadOnly
+                # radii, 2026-11-04), where the same arm on a plain
+                # dictionary argument (transformPoint's) lowers. An offered
+                # overload must be callable; restore this when the compiler
+                # carries it.
+                continue
             if dictionary is not None:
                 out += [("object", interface, dictionary.identifier, arm)
                         for interface in self.object_interfaces(dictionary)]
@@ -929,6 +944,7 @@ class Generator:
         union = blink_type_info(unwrapped).typename
         member = next((t for t in members_of(unwrapped)
                        if (t.unwrap(typedef=True).keyword_typename == "boolean" and arm == "boolean")
+                       or (t.unwrap(typedef=True).keyword_typename in NUMERIC and arm == "number")
                        or (t.unwrap(typedef=True).keyword_typename in STRINGS and arm == "string")
                        or (t.unwrap(typedef=True).is_dictionary
                            and t.unwrap(typedef=True).type_definition_object.identifier == arm)), None)
