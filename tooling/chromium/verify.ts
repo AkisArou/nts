@@ -10,8 +10,10 @@
  * Run it from the tree to verify; NTS_BIN names the compiler
  * (target/release/nts by default). The profile is perf by default;
  * baseline is the debug build (is_debug = true), for a change whose
- * weight is in a DCHECK the perf build compiles out. It stops at the
- * first failure:
+ * weight is in a DCHECK the perf build compiles out. Any change to
+ * runtime/chromium C++ (adapter, host or embedder) is verified on both
+ * profiles, perf and baseline, before it is reviewed; TypeScript-only
+ * changes keep perf. It stops at the first failure:
  *
  *   1. the bindings are what the generator makes of Blink's IDL, and its
  *      reports are current (bindgen/generate.py --check);
