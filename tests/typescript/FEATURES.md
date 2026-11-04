@@ -3097,7 +3097,8 @@ to exact observations through typed routes, beside literal controls.
 | area | file prefix | cases | controls | observations |
 | --- | --- | ---: | ---: | --- |
 | `construction` | `construction-*` | 24 | 24 | Own message and cause presence, cause identity, callable constructors and hidden standard properties through typed factories and carriers |
-| **Total** | | **24** | **24** | Matching case/control pairs |
+| `names` | `names-*` | 24 | 24 | Every error text branch, four subclass naming styles, own key order, mutable messages and built-in prototype names through typed routes |
+| **Total** | | **48** | **48** | Matching case/control pairs |
 
 ## Tags
 
@@ -3247,6 +3248,7 @@ to exact observations through typed routes, beside literal controls.
 | `ts-equality-route-sorting` | sorting and ordering with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 14 | 0 |
 | `ts-equality-route-strict` | strict equality and SameValue with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 16 | 0 |
 | `ts-error-object-route-construction` | Own message and cause presence, cause identity, callable constructors and hidden standard properties through typed factories and carriers | Error object route contracts; typed paths | 48 | 0 |
+| `ts-error-object-route-names` | Every error text branch, four subclass naming styles, own key order, mutable messages and built-in prototype names through typed routes | Error object route contracts; typed paths | 48 | 0 |
 | `ts-error-object-routes` | error object properties, text, internal brands and aggregate members through typed routes beside literal controls | Error object route contracts; typed paths | 48 | 0 |
 | `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 1285 | 0 |
 | `ts-evaluation-order-route-assignments` | Target/key selection, competing RHS writes, one read/write, updates, logical skips, chained setter results, iterator/member-target interleaving and abrupt RHS | Evaluation-order route contracts; typed paths | 58 | 0 |
