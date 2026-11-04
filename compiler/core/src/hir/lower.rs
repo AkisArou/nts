@@ -71435,6 +71435,19 @@ impl<'a> FuncBuilder<'a> {
     ) -> bool {
         let field = |name: &str| record.fields.iter().find(|field| field.name == name);
         if self.kind_of(argument) != Some(syntax::OBJECT_LITERAL_EXPRESSION) {
+            // A handle is never copied into a record: the copy writes a
+            // managed object's fields, and an opaque value is read through
+            // the overload beside this one that takes it as itself (the
+            // object arm a dictionary argument is offered by). Letting the
+            // record hold one by its members took it over that arm for
+            // `matrix.multiply(rotate)` -- every member has a field -- and
+            // the conversion then refused the pointer. (A struct value is
+            // a record already, not a handle, and is not this.)
+            if let Some(HirType::NativePointer(view)) = self.represent(given)
+                && matches!(view.viewed(), super::native::Pointee::Opaque(_))
+            {
+                return false;
+            }
             let members = checked.and_then(|ty| self.dictionary_member_names(ty));
             let parts = match self.snapshot.types.get(given.0 as usize).map(|r| &r.kind) {
                 Some(TypeKind::Union(parts) | TypeKind::Intersection(parts)) => parts.clone(),
@@ -71718,7 +71731,7 @@ impl<'a> FuncBuilder<'a> {
         checked: &nts_semantic_schema::SignatureRecord,
         arguments: &[NodeId],
     ) -> Option<usize> {
-        candidates
+        if let Some(at) = candidates
             .iter()
             .enumerate()
             .filter(|(_, (declaration, record))| {
@@ -71726,6 +71739,36 @@ impl<'a> FuncBuilder<'a> {
             })
             .min_by_key(|(at, (_, record))| (record.parameters.len(), *at))
             .map(|(at, _)| at)
+        {
+            return Some(at);
+        }
+        // None fits, and the caller takes what this answers so coercion can
+        // name what it cannot carry. A lent array is never that answer for
+        // an argument that does not lend as one: it is the one parameter
+        // kind whose refusal says nothing about the argument's own kind,
+        // and taking it by declaration order made `roundRect`'s radii list
+        // answer for a DOMPointReadOnly (its dictionary arm, declared
+        // after, is the conversion that cannot carry it -- and the one
+        // that names it). The first candidate no lent parameter refuses
+        // outright; where every one does, none, and the caller falls back
+        // as before.
+        candidates.iter().position(|(declaration, record)| {
+            let written = self.as_written(*declaration, record);
+            written
+                .parameters
+                .iter()
+                .zip(arguments)
+                .all(|(parameter, argument)| {
+                    match super::native::native_array_argument(self.snapshot, parameter.ty) {
+                        Some(lent) => self
+                            .snapshot
+                            .node_types
+                            .get(argument)
+                            .is_some_and(|given| self.lends_as(&lent, *given)),
+                        None => true,
+                    }
+                })
+        })
     }
 
     /// Whether a call's arguments fit `record`, a dictionary literal last
