@@ -150,6 +150,30 @@ blink::NotShared<View> TypedArrayOf(const typename View::ValueType *items,
   return blink::NotShared<View>(
       View::Create(UNSAFE_BUFFERS(base::span(items, count))));
 }
+// A sequence of numbers, from the Float64Array the program lends for the
+// call (c:types `Counted<CElements<Float64Array>>`): Blink's vector of the
+// doubles, as V8's conversion makes one from a sequence (`setLineDash`).
+inline blink::Vector<double> NumbersOf(const double *numbers, size_t count) {
+  CHECK(numbers || count == 0);
+  blink::Vector<double> values;
+  values.ReserveInitialCapacity(base::checked_cast<blink::wtf_size_t>(count));
+  for (double number : UNSAFE_BUFFERS(base::span(numbers, count)))
+    values.push_back(number);
+  return values;
+}
+// The same numbers as elements of a union with a numeric member
+// (`roundRect`'s radii as a sequence): each made into Blink's union, in the
+// heap vector a sequence of the union crosses as.
+template <class Union>
+blink::HeapVector<blink::Member<Union>> NumberUnionsOf(const double *numbers,
+                                                       size_t count) {
+  CHECK(numbers || count == 0);
+  blink::HeapVector<blink::Member<Union>> values;
+  values.ReserveInitialCapacity(base::checked_cast<blink::wtf_size_t>(count));
+  for (double number : UNSAFE_BUFFERS(base::span(numbers, count)))
+    values.push_back(blink::MakeGarbageCollected<Union>(number));
+  return values;
+}
 template <class Handle> Handle *HandleOf(blink::ScriptWrappable *object) {
   return reinterpret_cast<Handle *>(object);
 }

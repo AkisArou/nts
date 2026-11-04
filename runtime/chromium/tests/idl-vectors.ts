@@ -685,6 +685,14 @@ export function idlTranscript(d: Document, root: Element, host: VectorHost): str
   corner("roundNumber", () => { ctx.roundRect(0, 0, 100, 100, 20); });
   corner("roundPoint", () => { ctx.roundRect(0, 0, 100, 100, { x: 20, y: 20 }); });
   thrown("roundNegative", () => { ctx.roundRect(0, 0, 100, 100, -1); });
+  // The same radii as a sequence (Blink's second overload), by its number
+  // element arm: a lent Float64Array, corners in order, so [20, 0] rounds
+  // the top-left and bottom-right. And a plain sequence of numbers the
+  // same way: a line dash set and read back.
+  corner("roundList", () => { ctx.roundRect(0, 0, 100, 100, new Float64Array([20, 0])); });
+  ctx.setLineDash(new Float64Array([5, 3]));
+  const dash = ctx.getLineDash();
+  log("lineDash", dash.length + ":" + dash.item(0) + "," + dash.item(1));
   // Image sources (a union of interfaces): a small canvas drawn onto the
   // surface, and as a repeating pattern's tile.
   const stamp = asHTMLCanvasElement(d.createElement("canvas"))!;

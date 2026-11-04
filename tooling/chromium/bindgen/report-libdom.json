@@ -1,8 +1,8 @@
 {
   "libDom": "third_party/tsrs/crates/tsrs_vfs/libs/lib.dom.d.ts",
   "totals": {
-    "bound": 3156,
-    "skipped": 239,
+    "bound": 3157,
+    "skipped": 238,
     "absent: constant": 176,
     "absent: stringifier": 4,
     "absent: iterable": 24,
@@ -12,7 +12,7 @@
     "result type": 64,
     "defined in": 62,
     "[RuntimeEnabled=TouchEventFeatureDetection] overridable": 16,
-    "parameter type": 13,
+    "parameter type": 12,
     "interface SVGPoint": 11,
     "interface SVGRect": 9,
     "interface SVGMatrix": 7,
@@ -2445,6 +2445,7 @@
         "roundRect",
         "save",
         "scale",
+        "setLineDash",
         "setTransform",
         "shadowBlur",
         "shadowColor",
@@ -2463,7 +2464,6 @@
       "skipped": {
         "fillStyle": "result type any",
         "getContextAttributes": "result type CanvasRenderingContext2DSettings",
-        "setLineDash": "parameter type sequence<unrestricted double>",
         "strokeStyle": "result type any"
       },
       "absent": {}

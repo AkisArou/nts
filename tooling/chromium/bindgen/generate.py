@@ -641,6 +641,23 @@ class Generator:
         # it from the array -- no element is copied but the pointer.
         if (unwrapped.is_sequence or unwrapped.is_frozen_array) and not nullable:
             element = unwrapped.element_type
+            # `setLineDash(segments)`: a sequence of unrestricted doubles is
+            # a Float64Array lent for the call (c:types
+            # `Counted<CElements<Float64Array>>`), its elements C's doubles
+            # beside their count, made into Blink's vector as V8's
+            # conversion makes it. A restricted number's conversion would
+            # have to run per element and can throw, so no other numeric
+            # element is lent this way. A plain `number[]` there is the
+            # compiler's recorded follow-up (its elements already lie as
+            # doubles in the array's own block).
+            if (element.unwrap(typedef=True).keyword_typename == "unrestricted double"
+                    and not element.does_include_nullable_type):
+                param = Param(name, f"const double* {name}, size_t {name}_count",
+                              f'{name}: Counted<CElements<Float64Array, "const double">, c_size_t>',
+                              f"{name}_values", False,
+                              prelude=f"auto {name}_values = nts_dom::NumbersOf({name}, {name}_count);")
+                param.lent = True
+                return param
             if element.unwrap(typedef=True).is_interface and not element.does_include_nullable_type:
                 interface = self.bound_interface(element)
                 param = Param(name, f"{self.handle_tag(interface.identifier)}** {name}, size_t {name}_count",
@@ -769,6 +786,21 @@ class Generator:
         if idl_type.does_include_nullable_type:
             return None
         unwrapped = idl_type.unwrap(typedef=True)
+        if unwrapped.is_sequence or unwrapped.is_frozen_array:
+            # A sequence of a union (`roundRect`'s second overload: radii as
+            # `sequence<(unrestricted double or DOMPointInit)>`) is offered
+            # by the element arms a counted array can carry today (see
+            # `parameter` on sequences): numbers, as a lent Float64Array
+            # whose elements the binding wraps in the union. Dictionary
+            # elements would need an array of structs crossing, which no
+            # c:types kind carries yet, so that arm is not offered: a
+            # heterogeneous array finds no overload.
+            element = unwrapped.element_type.unwrap(nullable=True, typedef=True)
+            if element.is_union and not unwrapped.element_type.does_include_nullable_type:
+                members = [t.unwrap(typedef=True) for t in element.flattened_member_types]
+                if any(t.keyword_typename == "unrestricted double" for t in members):
+                    return [("sequence", "number")]
+            return None
         if not unwrapped.is_union:
             return None
         members = [t.unwrap(typedef=True) for t in unwrapped.flattened_member_types]
@@ -937,9 +969,22 @@ class Generator:
     def arm_parameter(self, idl_type, identifier, arm):
         """One arm of a union argument: the handle, the dictionary or the
         boolean, made into Blink's union as V8's binding makes it from that
-        member."""
+        member. A ("sequence", arm) is one element arm of a sequence of the
+        union: a counted array of that member, each element made into the
+        union as here (union_arms)."""
         name = self.safe(identifier)
         unwrapped = idl_type.unwrap(typedef=True)
+        if isinstance(arm, tuple) and arm[0] == "sequence":
+            element = unwrapped.element_type.unwrap(nullable=True, typedef=True)
+            self.headers.add(PathManager(element.union_definition_object).api_path(ext="h"))
+            union = blink_type_info(element).typename
+            param = Param(name, f"const double* {name}, size_t {name}_count",
+                          f'{name}: Counted<CElements<Float64Array, "const double">, c_size_t>',
+                          f"{name}_values", False,
+                          prelude=f"auto {name}_values = nts_dom::NumberUnionsOf<blink::{union}>({name}, {name}_count);")
+            param.arm = "numbers"
+            param.lent = True
+            return param
         self.headers.add(PathManager(unwrapped.union_definition_object).api_path(ext="h"))
         union = blink_type_info(unwrapped).typename
         member = next((t for t in members_of(unwrapped)

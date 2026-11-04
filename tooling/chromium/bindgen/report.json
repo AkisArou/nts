@@ -1,5 +1,5 @@
 {
-  "bound": 7075,
+  "bound": 7078,
   "skipped": [
     {
       "interface": "EventTarget",
@@ -2348,16 +2348,6 @@
     },
     {
       "interface": "CanvasRenderingContext2D",
-      "member": "roundRect/5",
-      "why": "parameter type sequence<(unrestricted double or DOMPointInit)>"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
-      "member": "setLineDash/1",
-      "why": "parameter type sequence<unrestricted double>"
-    },
-    {
-      "interface": "CanvasRenderingContext2D",
       "member": "strokeTextCluster/3",
       "why": "[RuntimeEnabled=ExtendedTextMetrics] overridable"
     },
@@ -2395,11 +2385,6 @@
       "interface": "CanvasGradient",
       "member": "set premultipliedAlpha",
       "why": "[RuntimeEnabled=CanvasGradientCSSColor4] experimental"
-    },
-    {
-      "interface": "Path2D",
-      "member": "roundRect/5",
-      "why": "parameter type sequence<(unrestricted double or DOMPointInit)>"
     },
     {
       "interface": "TextMetrics",

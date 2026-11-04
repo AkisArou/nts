@@ -856,8 +856,9 @@ export function libDomTranscript(): string {
 
   // Lists of numbers answered: an observer's thresholds, one given as 0.1,
   // which Blink keeps as a float (V8 reads it widened), and the default; and
-  // a canvas's line dash read back, empty until setLineDash binds (it waits
-  // on a lent number[]), so a non-empty dash readback is unexercised here.
+  // a canvas's line dash, set from a Float64Array and read back. (A plain
+  // number[] there is still the compiler's follow-up; its refusal is
+  // lib-dom-a-number-array-for-a-typed-array-parameter.)
   {
     const given = new IntersectionObserver((): void => {}, { threshold: 0.1 });
     const plain = new IntersectionObserver((): void => {});
@@ -866,6 +867,7 @@ export function libDomTranscript(): string {
     plain.disconnect();
     const canvas = document.createElement("canvas");
     const context = canvas.getContext("2d");
+    if (context !== null) context.setLineDash(new Float64Array([5, 3]));
     const dash = context === null ? "none" : context.getLineDash().length + ":" + context.getLineDash().join(",");
     log("numberLists", thresholds + "|" + dash);
   }

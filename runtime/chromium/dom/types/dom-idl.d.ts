@@ -26337,6 +26337,13 @@ declare module "nts:dom" {
      */
     rotate(this: CanvasRenderingContext2D, angle: Float64): void;
     /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_roundRect_5_numbers
+     * @ntsNoEscape radii
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    roundRect(this: CanvasRenderingContext2D, x: Float64, y: Float64, w: Float64, h: Float64, radii: Counted<CElements<Float64Array, "const double">, c_size_t>, error?: Ptr<DOMException | null>): void;
+    /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_roundRect_5_DOMPointInit
      * @ntsThrows error nts_dom_exception_take_message
      * @ntsNoEscape error
@@ -26362,6 +26369,11 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_scale
      */
     scale(this: CanvasRenderingContext2D, x: Float64, y: Float64): void;
+    /**
+     * @ntsSymbol nts_dom_CanvasRenderingContext2D_setLineDash
+     * @ntsNoEscape dash
+     */
+    setLineDash(this: CanvasRenderingContext2D, dash: Counted<CElements<Float64Array, "const double">, c_size_t>): void;
     /**
      * @ntsSymbol nts_dom_CanvasRenderingContext2D_setTransform_6
      */
@@ -26498,6 +26510,13 @@ declare module "nts:dom" {
      * @ntsSymbol nts_dom_Path2D_rect
      */
     rect(this: Path2D, x: Float64, y: Float64, width: Float64, height: Float64): void;
+    /**
+     * @ntsSymbol nts_dom_Path2D_roundRect_5_numbers
+     * @ntsNoEscape radii
+     * @ntsThrows error nts_dom_exception_take_message
+     * @ntsNoEscape error
+     */
+    roundRect(this: Path2D, x: Float64, y: Float64, w: Float64, h: Float64, radii: Counted<CElements<Float64Array, "const double">, c_size_t>, error?: Ptr<DOMException | null>): void;
     /**
      * @ntsSymbol nts_dom_Path2D_roundRect_5_DOMPointInit
      * @ntsThrows error nts_dom_exception_take_message
