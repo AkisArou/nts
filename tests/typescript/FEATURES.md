@@ -3001,7 +3001,8 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | --- | --- | ---: | ---: | --- |
 | `ordering` | `ordering-*` | 24 | 24 | Delay order and ties, normalized defaults, microtasks before and between callbacks, and nested timers through typed carriers |
 | `clearing` | `clearing-*` | 24 | 24 | Synchronous, callback and microtask cancellation; fired or absent handles; cross-kind clearing through stored and captured handles |
-| **Total** | | **48** | **48** | Matching case/control pairs |
+| `intervals` | `intervals-*` | 24 | 24 | Exact tick counts and stopping, equal-delay timeout interleaving, and timeouts scheduled by interval callbacks |
+| **Total** | | **72** | **72** | Matching case/control pairs |
 
 ## Tags
 
@@ -3398,6 +3399,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-throw-route-iteration` | exception identity, precedence and cleanup across typed iteration and generator routes | typed throw routes: Errors; Functions; Async; Objects, Calls | 24 | 0 |
 | `ts-throw-route-unwind` | exception replacement, rethrow identity and ordered cleanup across typed routes | typed throw routes: Errors; Functions; Async; Objects, Calls | 16 | 0 |
 | `ts-timer-route-clearing` | Synchronous, callback and microtask cancellation; fired or absent handles; cross-kind clearing through stored and captured handles | Timer route contracts; typed paths | 48 | 0 |
+| `ts-timer-route-intervals` | Exact tick counts and stopping, equal-delay timeout interleaving, and timeouts scheduled by interval callbacks | Timer route contracts; typed paths | 48 | 0 |
 | `ts-timer-route-ordering` | Delay order and ties, normalized defaults, microtasks before and between callbacks, and nested timers through typed carriers | Timer route contracts; typed paths | 48 | 0 |
 | `ts-timer-routes` | timer behavior through typed callback, delay and opaque-handle carriers beside direct-callback controls, with exact values and complete ordered logs | Timer route contracts; typed paths | 48 | 0 |
 | `ts-to-primitive` | an object converted to a primitive: `valueOf`, `toString`, `Symbol.toPrimitive` | typed paths | 374 | 0 |
