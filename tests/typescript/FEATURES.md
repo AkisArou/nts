@@ -2920,6 +2920,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | area | file prefix | cases | controls | observations |
 | --- | --- | ---: | ---: | --- |
 | `generators` | `generators-*` | 26 | 26 | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers |
+| `exits` | `exits-*` | 26 | 26 | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence |
 
 ## Tags
 
@@ -2949,6 +2950,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
 | `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 294 | 1 |
+| `ts-async-iteration-route-exits` | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-async-iteration-route-generators` | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-async-iteration-routes` | async generator and iterator protocol behavior across typed carriers beside explicit-step controls, with exact values, completion, closing and ordered effects | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 774 | 0 |
