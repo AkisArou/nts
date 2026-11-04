@@ -3100,7 +3100,8 @@ to exact observations through typed routes, beside literal controls.
 | `names` | `names-*` | 24 | 24 | Every error text branch, four subclass naming styles, own key order, mutable messages and built-in prototype names through typed routes |
 | `brands` | `brands-*` | 24 | 24 | Subclass ancestry and field order, cause forwarding, internal brands versus prototype shapes, narrowed catches and replacement errors |
 | `aggregate` | `aggregate-*` | 24 | 24 | Copied iterable members, message and cause ownership, Promise.any error objects and guarded cause chains through typed carriers |
-| **Total** | | **96** | **96** | Matching case/control pairs |
+| `builtin-throws` | `builtin-throws-*` | 24 | 24 | Specified built-in exception classes through operation arrays, interfaces and generic helpers, including strict integrity writes through aliases |
+| **Total** | | **120** | **120** | Matching case/control pairs |
 
 ## Tags
 
@@ -3253,6 +3254,7 @@ to exact observations through typed routes, beside literal controls.
 | `ts-error-object-route-names` | Every error text branch, four subclass naming styles, own key order, mutable messages and built-in prototype names through typed routes | Error object route contracts; typed paths | 48 | 0 |
 | `ts-error-object-route-brands` | Subclass ancestry and field order, cause forwarding, internal brands versus prototype shapes, narrowed catches and replacement errors | Error object route contracts; typed paths | 48 | 0 |
 | `ts-error-object-route-aggregate` | Copied iterable members, message and cause ownership, Promise.any error objects and guarded cause chains through typed carriers | Error object route contracts; typed paths | 48 | 0 |
+| `ts-error-object-route-builtin-throws` | Specified built-in exception classes through operation arrays, interfaces and generic helpers, including strict integrity writes through aliases | Error object route contracts; typed paths | 48 | 0 |
 | `ts-error-object-routes` | error object properties, text, internal brands and aggregate members through typed routes beside literal controls | Error object route contracts; typed paths | 48 | 0 |
 | `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 1285 | 0 |
 | `ts-evaluation-order-route-assignments` | Target/key selection, competing RHS writes, one read/write, updates, logical skips, chained setter results, iterator/member-target interleaving and abrupt RHS | Evaluation-order route contracts; typed paths | 58 | 0 |
