@@ -1,0 +1,11 @@
+{
+  "//": "Same config as its defect twin; the one difference is in the source, which writes the dictionary as a literal.",
+  "extends": "../../../tsconfig.fixtures.json",
+  "files": [
+    "src/main.ts",
+    "../../../runtime/chromium/dom/types/dom-idl.d.ts",
+    "../../../runtime/chromium/dom/types/dom-abi.d.ts",
+    "../../../runtime/chromium/dom/types/lib-dom-bindings.d.ts",
+    "../../../runtime/native/libc.d.ts"
+  ]
+}
