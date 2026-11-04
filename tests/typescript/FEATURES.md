@@ -3000,7 +3000,8 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | area | file prefix | cases | controls | observations |
 | --- | --- | ---: | ---: | --- |
 | `ordering` | `ordering-*` | 24 | 24 | Delay order and ties, normalized defaults, microtasks before and between callbacks, and nested timers through typed carriers |
-| **Total** | | **24** | **24** | Matching case/control pairs |
+| `clearing` | `clearing-*` | 24 | 24 | Synchronous, callback and microtask cancellation; fired or absent handles; cross-kind clearing through stored and captured handles |
+| **Total** | | **48** | **48** | Matching case/control pairs |
 
 ## Tags
 
@@ -3111,7 +3112,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-destructuring-route-order` | defaults, repeated getters and failing typed patterns preserve lazy left-to-right effects, partial writes, cleanup order and original errors | BindingInitialization; IteratorBindingInitialization; IteratorClose | 18 | 0 |
 | `ts-destructuring-route-parameters` | typed parameter and callback patterns retain earlier-binding dependencies, receiver data, optional and rest inputs and exact effects | TypeScript Destructuring; BindingInitialization; IteratorBindingInitialization | 20 | 0 |
 | `ts-destructuring-routes` | typed binding and assignment patterns retain exact values, rest contents and observable getter, default and iterator histories beside explicit-read controls | Destructuring route contracts; typed paths | 88 | 0 |
-| `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 94 | 0 |
+| `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 96 | 0 |
 | `ts-descriptor-route-accessors` | defined accessors preserve receiver binding, getter-only refusal, setter-only reads and conversion to data properties | Descriptor route contracts; typed paths | 14 | 0 |
 | `ts-descriptor-route-defining` | typed definitions preserve data and accessor defaults, descriptor snapshots, permitted redefinitions and exact refusal state | Descriptor route contracts; typed paths | 16 | 0 |
 | `ts-descriptor-route-enumerability` | typed hidden properties remain directly readable while enumeration, object copies and object JSON honor enumerable flags | Descriptor route contracts; typed paths | 14 | 0 |
@@ -3396,6 +3397,7 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-throw-route-implicit` | exception identity and cleanup across typed implicit hooks and collection callbacks | typed throw routes: Errors; Functions; Async; Objects, Calls | 36 | 0 |
 | `ts-throw-route-iteration` | exception identity, precedence and cleanup across typed iteration and generator routes | typed throw routes: Errors; Functions; Async; Objects, Calls | 24 | 0 |
 | `ts-throw-route-unwind` | exception replacement, rethrow identity and ordered cleanup across typed routes | typed throw routes: Errors; Functions; Async; Objects, Calls | 16 | 0 |
+| `ts-timer-route-clearing` | Synchronous, callback and microtask cancellation; fired or absent handles; cross-kind clearing through stored and captured handles | Timer route contracts; typed paths | 48 | 0 |
 | `ts-timer-route-ordering` | Delay order and ties, normalized defaults, microtasks before and between callbacks, and nested timers through typed carriers | Timer route contracts; typed paths | 48 | 0 |
 | `ts-timer-routes` | timer behavior through typed callback, delay and opaque-handle carriers beside direct-callback controls, with exact values and complete ordered logs | Timer route contracts; typed paths | 48 | 0 |
 | `ts-to-primitive` | an object converted to a primitive: `valueOf`, `toString`, `Symbol.toPrimitive` | typed paths | 374 | 0 |
