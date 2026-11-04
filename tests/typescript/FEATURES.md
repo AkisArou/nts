@@ -295,6 +295,13 @@ one; add a row here in the same commit as the first case that uses it.
     name their sources; `ts-library-addition-route-*` identifies each area
     beside controls using older operations or explicit node result literals.
 
+58. **Async iteration through typed routes:** lazy independent generators,
+    awaited yields and completion, consumer bindings, closing and failure
+    precedence, delegation and synchronous sources, custom async values and
+    queued hand calls. [Async-iteration route contracts](#async-iteration-route-contracts)
+    name their sources; `ts-async-iteration-route-*` identifies each area
+    beside explicit-step controls retaining the same observations.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -308,6 +315,8 @@ flows through it.
 | `ambient/` | `declare` forms, which emit nothing and resolve to what the program provides |
 | `array-contents/` | typed array writes and reads, exact values, order and slot presence, with node as the oracle |
 | `array-contents-controls/` | counterparts using one declared element type across writes and reads, with node as the oracle |
+| `async-iteration-routes/` | async generators, for-await consumers and custom async iterators through typed routes, with exact values, completion, closing and ordered logs held to node |
+| `async-iteration-routes-controls/` | the same fixtures, routes and assertions using explicit awaited next and return calls, sync sources and plain promise-returning state classes |
 | `async/` | async functions, methods and generators, promises, `for await` (`flags: [async]`) |
 | `async-routes/` | exact values, rejection identities, cleanup and microtask order across typed async routes, held to node |
 | `async-routes-controls/` | concrete calls or local promise carriers with the same awaits, reaction jobs, inputs, logs and assertions |
@@ -1550,6 +1559,33 @@ repository checker cannot start in a cloud sandbox, the PR remains a draft
 with supplemental TypeScript results and the native check pending. Actual
 rejected spellings and any Node/specification differences are documented in
 the relevant PR; maintainers measure and record nts outcomes.
+
+The `async-iteration-routes/` family uses `<area>-<behavior>-<route>.ts`;
+its `async-iteration-routes-controls/` counterpart appends `-control`.
+Each case isolates one protocol behavior through typed interfaces, generic
+consumers, narrowed unions, tuple or readonly source arrays, instance,
+private, static or object methods, Map values or captured bindings.
+A module-level `log: string[]` records source steps, loop bodies, custom
+iterator calls and cleanup. Several inputs check exact values, errors by
+class, completion state and the complete protocol-defined log.
+
+Every file has `flags: [async]` and reports completion through `$DONE`.
+Controls remove async-generator and for-await syntax. They use explicit
+awaited next calls, explicit return calls on the corresponding exits,
+synchronous sources with value awaits, and lazy promise-returning states.
+They preserve fixtures, declared carriers and assertion-call text. A custom
+async iterator's promise value remains unawaited until the consumer itself
+awaits it; the control reads the value of the awaited next-result object.
+Only protocol-fixed ordering is asserted, never counts of microtask turns
+or interleavings with unrelated promises, timers or queueMicrotask calls.
+
+Strict checking treats each file and harness as a script, with default-library
+diagnostics included. No any, casts, non-null assertions, suppressions,
+reflection or property descriptors are used; literal `as const` is permitted.
+The unchanged suite oracle uses pinned Node. If the native repository checker
+cannot start, the PR stays draft with supplemental strict results and the
+required native check pending. Rejected forms and Node/specification
+differences are documented in the PR. Maintainers record nts outcomes.
 
 ## Coverage, source by source
 
@@ -2866,6 +2902,25 @@ and NaN representation bits are not observations in this family.
 | `strings` | `strings-*` | 30 | 30 | Lone surrogate detection/replacement, retained pairs, exact regexp escaping and literal matching, and non-string rejection without conversion |
 | `numbers` | `numbers-*` | 26 | 26 | Half-precision ties, adjacent values, subnormals, signed zero and overflow, endian byte storage and reads, and new Float16Array carriers |
 
+### Async-iteration route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript 2025 [AsyncGenerator objects](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncgenerator-objects), [AsyncGeneratorStart](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncgeneratorstart) and [AsyncGeneratorYield](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncgeneratoryield) | lazy bodies, suspension, awaited yields and terminal completion |
+| ECMAScript 2025 [ForIn/OfBodyEvaluation](https://tc39.es/ecma262/2025/multipage/ecmascript-language-statements-and-declarations.html#sec-runtime-semantics-forinofbodyevaluation-lhs-stmt-iterator-lhskind-labelset) and [AsyncIteratorClose](https://tc39.es/ecma262/2025/multipage/abstract-operations.html#sec-asynciteratorclose) | awaited next results, fresh loop bindings, exit closing, cleanup order and completion precedence |
+| ECMAScript 2025 [Async-from-Sync Iterator Objects](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-async-from-sync-iterator-objects) and [AsyncFromSyncIteratorContinuation](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncfromsynciteratorcontinuation) | synchronous sources, awaited values, rejection cleanup and delegated iteration |
+| ECMAScript 2025 [AsyncGeneratorEnqueue](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncgeneratorenqueue), [AsyncGeneratorCompleteStep](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncgeneratorcompletestep) and [AsyncGeneratorAwaitReturn](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-asyncgeneratorawaitreturn) | queued hand calls, completion values and return before the body starts |
+
+Existing async smoke cases, async-routes, call-routes, capture-routes,
+generator-routes, iterator-routes and proofs retain their cases. This family
+isolates the async protocol through distinct carrier/observation combinations,
+with controls that explicitly perform the corresponding steps. A refused
+backend case is a finding and is never weakened to accommodate the compiler.
+
+| area | file prefix | cases | controls | observations |
+| --- | --- | ---: | ---: | --- |
+| `generators` | `generators-*` | 26 | 26 | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -2894,6 +2949,8 @@ and NaN representation bits are not observations in this family.
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
 | `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 294 | 1 |
+| `ts-async-iteration-route-generators` | Laziness, independence, yield and body order, awaited values and completion, per-step bindings and typed method or factory carriers | Async-iteration route contracts; typed paths | 52 | 0 |
+| `ts-async-iteration-routes` | async generator and iterator protocol behavior across typed carriers beside explicit-step controls, with exact values, completion, closing and ordered effects | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 774 | 0 |
 | `ts-async-route-methods` | async methods and dispatch with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 14 | 0 |
 | `ts-async-route-ordering` | ordering and captures with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 10 | 0 |
