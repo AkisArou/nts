@@ -302,6 +302,13 @@ one; add a row here in the same commit as the first case that uses it.
     name their sources; `ts-async-iteration-route-*` identifies each area
     beside explicit-step controls retaining the same observations.
 
+59. **Timers through typed routes:** callback and microtask order,
+    cancellation, repetition, argument delivery and promises over timers
+    carried by declared callbacks, delays and opaque handles.
+    [Timer route contracts](#timer-route-contracts) identify pinned Node
+    behavior and promise semantics; `ts-timer-route-*` names each area
+    beside controls that call the same callbacks without timers.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -429,6 +436,8 @@ flows through it.
 | `template-routes-controls/` | the same typed routes and assertions using ordered String conversion, concatenation, explicit tag calls and reusable per-site frozen arrays |
 | `throw-routes/` | exception identity, ordered cleanup and retained effects across typed routes, held to node |
 | `throw-routes-controls/` | direct calls to the same throwing bodies inside the caller try, with the same observations |
+| `timer-routes/` | timeout and interval scheduling, clearing, arguments and timer-backed promises through typed routes, with complete logs held to pinned node |
+| `timer-routes-controls/` | the same fixtures, typed carriers, microtasks and assertions with direct callback calls and explicit promise settlement replacing all timers |
 | `tuple-routes/` | exact tuple slots, runtime lengths, array shape and identity through typed storage, elements, calls, widening and conversion |
 | `tuple-routes-controls/` | the same computations with named-slot records, explicit counts and logical array or presence metadata |
 | `tuples/` | tuples with optional, rest and labelled elements, readonly, variadic |
@@ -1586,6 +1595,45 @@ The unchanged suite oracle uses pinned Node. If the native repository checker
 cannot start, the PR stays draft with supplemental strict results and the
 required native check pending. Rejected forms and Node/specification
 differences are documented in the PR. Maintainers record nts outcomes.
+
+The `timer-routes/` family uses `<area>-<behavior>-<route>.ts`;
+its `timer-routes-controls/` counterpart appends `-control`.
+Each short case isolates one timer behavior through a declared callback,
+delay or handle route: instance, private or static fields; Map values;
+interfaces with multiple implementations; generic helpers at two type
+arguments; narrowed callback unions; tuples or readonly arrays; and
+captured bindings, including a fresh binding per loop step.
+
+One module-level `log: string[]` records synchronous work, callbacks,
+microtasks and the consumer after them. Several fixtures check the complete
+ordered log, exact values and counts, and caught error classes. Every file
+uses `flags: [async]` and ends through `$DONE` after its last live timer.
+Cancellation witnesses wait through the canceled callback's opportunity
+before checking the log; interval cases stop every live interval.
+
+Controls contain no timer API calls. They call surviving callbacks directly
+in the expected order, leave canceled callbacks uncalled, and settle timer
+promises explicitly. The original microtasks, fixtures, typed routes and
+assertion-call text remain. Callback and argument values are captured at
+the corresponding registration point when later mutation is observed.
+
+Handles are opaque: they are only stored, passed and supplied to clearing
+functions, never printed, compared, inspected or converted. Delays are at
+most 50 ms. Cases assert supported callback and microtask order without
+reading a clock or asserting elapsed time. String handlers, oversized delays,
+callback function-expression receivers, setImmediate, process.nextTick and
+uncaught callback errors are outside this family.
+
+Required strict checking treats each file and its harness as a script and
+includes all default-library diagnostics. No any, casts, non-null or definite
+assignment assertions, suppressions, reflection or property descriptors are
+used. Each file runs three times through the unchanged suite oracle using
+the branch's pinned Node, with identical result, stdout and stderr required.
+Each run must finish well under a second. If native TypeScript 7.1.0-beta
+cannot start, the PR stays draft with TypeScript 6.0.3 strict results under
+the same options and the required native check pending with maintainers.
+Rejected forms and Node/specification differences are documented in the PR.
+Maintainers run nts on every backend and record its outcomes.
 
 ## Coverage, source by source
 
@@ -2925,6 +2973,35 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `delegation` | `delegation-*` | 26 | 26 | Async and sync delegates, retained inner completion, forwarded exits, nested cleanup and awaited synchronous-source values |
 | `protocol` | `protocol-*` | 24 | 24 | Counted custom iteration, captured next, unawaited promise values, queued requests and manual next/return/throw state transitions |
 
+### Timer route contracts
+
+| source | concepts |
+| --- | --- |
+| Node 24.20.0 [setTimeout](https://nodejs.org/download/release/v24.20.0/docs/api/timers.html#settimeoutcallback-delay-args), [setInterval](https://nodejs.org/download/release/v24.20.0/docs/api/timers.html#setintervalcallback-delay-args) and [cancellation](https://nodejs.org/download/release/v24.20.0/docs/api/timers.html#cancelling-timers) | delay normalization, callback arguments, repeated scheduling and clearing |
+| Node 24.20.0 [timer wrappers](https://github.com/nodejs/node/blob/v24.20.0/lib/timers.js) and [internal timer queues](https://github.com/nodejs/node/blob/v24.20.0/lib/internal/timers.js) | shared clearing implementation; duration buckets, insertion-order list traversal, expiry-ordered buckets and reinserted intervals |
+| Node 24.20.0 [queueMicrotask](https://nodejs.org/download/release/v24.20.0/docs/api/globals.html#queuemicrotaskcallback), [timer dispatch](https://github.com/nodejs/node/blob/v24.20.0/lib/internal/timers.js) and [task queues](https://github.com/nodejs/node/blob/v24.20.0/lib/internal/process/task_queues.js) | queued callbacks and microtask processing between timer callbacks |
+| ECMAScript 2025 [PerformPromiseThen](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-performpromisethen), [TriggerPromiseReactions](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-triggerpromisereactions) and [NewPromiseReactionJob](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-newpromisereactionjob) | settlement schedules reactions; handlers retain values, rejection reasons and program order |
+| ECMAScript 2025 [Promise.race](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-promise.race), [Promise.all](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-promise.all), [Promise.allSettled](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-promise.allsettled) and [Promise.any](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-promise.any) | settlement choice, input-position results, status records and aggregate rejection reasons over timer promises |
+
+The Node timer API does not generally guarantee exact callback timing or
+ordering. This family holds its specific fixtures to pinned Node 24.20.0:
+timers created in one synchronous run, equal-delay insertion order, and
+explicitly sequenced nested work and microtasks. The implementation links
+explain those observations; they do not establish universal elapsed-time
+bounds or ordering across hosts, versions or unrelated scheduling work.
+Three identical oracle runs check repeatability of each fixture.
+
+Existing async, async-routes and async-iteration-routes cases retain their
+observations. This family adds actual timer registration, cancellation,
+repetition and argument forwarding at those typed boundaries. Controls keep
+the same data and routes while replacing the host timer step. A refused
+backend case is a finding and is never weakened to accommodate the compiler.
+
+| area | file prefix | cases | controls | observations |
+| --- | --- | ---: | ---: | --- |
+| `ordering` | `ordering-*` | 24 | 24 | Delay order and ties, normalized defaults, microtasks before and between callbacks, and nested timers through typed carriers |
+| **Total** | | **24** | **24** | Matching case/control pairs |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3319,10 +3396,12 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-throw-route-implicit` | exception identity and cleanup across typed implicit hooks and collection callbacks | typed throw routes: Errors; Functions; Async; Objects, Calls | 36 | 0 |
 | `ts-throw-route-iteration` | exception identity, precedence and cleanup across typed iteration and generator routes | typed throw routes: Errors; Functions; Async; Objects, Calls | 24 | 0 |
 | `ts-throw-route-unwind` | exception replacement, rethrow identity and ordered cleanup across typed routes | typed throw routes: Errors; Functions; Async; Objects, Calls | 16 | 0 |
+| `ts-timer-route-ordering` | Delay order and ties, normalized defaults, microtasks before and between callbacks, and nested timers through typed carriers | Timer route contracts; typed paths | 48 | 0 |
+| `ts-timer-routes` | timer behavior through typed callback, delay and opaque-handle carriers beside direct-callback controls, with exact values and complete ordered logs | Timer route contracts; typed paths | 48 | 0 |
 | `ts-to-primitive` | an object converted to a primitive: `valueOf`, `toString`, `Symbol.toPrimitive` | typed paths | 374 | 0 |
 | `ts-to-string` | an object converted to a string by its `toString` | typed paths | 126 | 0 |
 | `ts-tuple-labels` | a labelled tuple element (`[start: number]`) | conformance/types/tuple/named; ts-eslint TSNamedTupleMember | 14 | 0 |
-| `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 23 | 0 |
+| `ts-tuple-optional` | an optional tuple element (`[a, b?]`) | conformance/types/tuple; ts-eslint TSOptionalType | 25 | 0 |
 | `ts-tuple-rest` | a rest element in a tuple, leading, middle or trailing | conformance/types/tuple; ts-eslint TSRestType | 12 | 0 |
 | `ts-tuples` | a tuple type and the array that carries it | conformance/types/tuple; ts-eslint TSTupleType | 1838 | 0 |
 | `ts-type-aliases` | a `type` alias, generic or recursive | conformance/types/typeAliases; ts-eslint TSTypeAliasDeclaration | 1220 | 0 |
