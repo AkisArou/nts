@@ -314,6 +314,11 @@ one; add a row here in the same commit as the first case that uses it.
     [Encoding route contracts](#encoding-route-contracts) name their sources;
     `ts-encoding-route-*` identifies each area beside literal-result controls.
 
+61. **Error objects through typed routes:** ownership, enumeration, names,
+    text, subclass and internal brands, copied aggregates and built-in throws.
+    [Error object route contracts](#error-object-route-contracts) name the
+    sources; `ts-error-object-route-*` identifies each area and its controls.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -364,6 +369,8 @@ flows through it.
 | `enums/` | numeric, string, const, heterogeneous, computed, merged enums and their objects |
 | `equality-routes/` | full mixed-kind comparison tables, conversion-hook histories, collection counts and stable orders across typed routes, held to node |
 | `equality-routes-controls/` | explicit kind records and comparison algorithms, loop-based searches and collections, and stable ordering with the same observations |
+| `error-object-routes/` | exact error ownership, text, brands, aggregate members and exception classes through declared types, held to pinned node |
+| `error-object-routes-controls/` | plain local Fault instances with literal observations, or explicit standard error throws, retaining the same inputs and typed routes |
 | `errors/` | exceptions typed `unknown`, Error subclasses, finally |
 | `evaluation-order-routes/` | ordered effects inside expressions and statements through declared typed routes, with retained values, skipped steps and abrupt completion held to node |
 | `evaluation-order-routes-controls/` | the same fixtures, routes, logs and assertions with each evaluated part in an ordered temporary, the same conversion operators, explicit calls and branches |
@@ -1661,6 +1668,22 @@ Native TypeScript 7.1.0-beta startup failures use the handoff's 6.0.3 fallback
 with the native check pending; a missing fallback library type is reported.
 Node/specification disagreements leave the disputed observation unasserted.
 Maintainers compile and record each nts backend outcome without weakening cases.
+
+The `error-object-routes/` family uses `<area>-<behavior>-<route>.ts`, with
+matching `error-object-routes-controls/` files ending in `-control`.
+Ordinary cases use the module flag; Promise.any cases use the async flag and
+finish through $DONE. The oracle gives every case strict module execution;
+diagnostic admission checks each source independently as a strict script
+with default-library diagnostics included.
+
+Controls replace observed error instances by a plain local Fault class with
+literal fields and a text field, without inheritance. Brand, prototype,
+ownership and enumeration observations become recorded Node literals.
+Built-in throw controls throw the specified standard error class explicitly.
+Other inputs, declared routes, loops and expected values remain unchanged.
+The family excludes stack data, engine-written message text, SuppressedError,
+DOMException.code, Reflect, Proxy and property descriptors. Maintainers compile every
+case and control on each backend and record its result without weakening it.
 
 ## Coverage, source by source
 
@@ -3056,6 +3079,26 @@ native conversion remains a case even when a backend does not provide it yet.
 | `base64` | `base64-*` | 24 | 24 | Binary-string bytes, padding, whitespace and invalid forms, leftover bits, UTF-8 pipelines and dispatched codec implementations |
 | **Total** | | **122** | **122** | Matching case/control pairs |
 
+### Error object route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [Error objects](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-error-objects), [InstallErrorCause](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-installerrorcause), [toString](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-error.prototype.tostring) and [Error.isError](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-error.iserror) | optional own properties, nonenumerability, native constructor calls, text branches and internal error brands |
+| ECMAScript [AggregateError](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-aggregate-error-objects) and [Promise.any](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise.any) | copied iterable members, aggregate ownership and rejection members in input order |
+| ECMAScript [Object integrity](https://tc39.es/ecma262/multipage/fundamental-objects.html#sec-object.freeze), [JSON.parse](https://tc39.es/ecma262/multipage/structured-data.html#sec-json.parse), [Number methods](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-properties-of-the-number-prototype-object), [String methods](https://tc39.es/ecma262/multipage/text-processing.html#sec-properties-of-the-string-prototype-object) and [URI decoding](https://tc39.es/ecma262/multipage/global-object.html#sec-decodeuricomponent-encodeduricomponent) | specified exception classes for invalid operations and strict writes |
+| ECMAScript [Array construction](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-array), [Array.prototype.reduce](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array.prototype.reduce) and [BigInt construction](https://tc39.es/ecma262/multipage/numbers-and-dates.html#sec-bigint-constructor) | invalid array lengths and fractional BigInt inputs throw RangeError; an empty reduction without an initial value throws TypeError |
+| Web IDL [DOMException](https://webidl.spec.whatwg.org/#dfn-DOMException) and TypeScript [classes](https://www.typescriptlang.org/docs/handbook/2/classes.html) | DOMException error branding, declared subclass fields, inheritance and typed narrowing |
+
+Existing error, throw, instanceof, layout, clone and disposal families cover
+exception flow, narrowing, layouts, cloning and suppression. These cases hold
+the error object's own properties, text, internal brand and aggregate storage
+to exact observations through typed routes, beside literal controls.
+
+| area | file prefix | cases | controls | observations |
+| --- | --- | ---: | ---: | --- |
+| `construction` | `construction-*` | 24 | 24 | Own message and cause presence, cause identity, callable constructors and hidden standard properties through typed factories and carriers |
+| **Total** | | **24** | **24** | Matching case/control pairs |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3203,6 +3246,8 @@ native conversion remains a case even when a backend does not provide it yet.
 | `ts-equality-route-searching` | SameValueZero and searching with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 18 | 0 |
 | `ts-equality-route-sorting` | sorting and ordering with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 14 | 0 |
 | `ts-equality-route-strict` | strict equality and SameValue with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 16 | 0 |
+| `ts-error-object-route-construction` | Own message and cause presence, cause identity, callable constructors and hidden standard properties through typed factories and carriers | Error object route contracts; typed paths | 48 | 0 |
+| `ts-error-object-routes` | error object properties, text, internal brands and aggregate members through typed routes beside literal controls | Error object route contracts; typed paths | 48 | 0 |
 | `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 1285 | 0 |
 | `ts-evaluation-order-route-assignments` | Target/key selection, competing RHS writes, one read/write, updates, logical skips, chained setter results, iterator/member-target interleaving and abrupt RHS | Evaluation-order route contracts; typed paths | 58 | 0 |
 | `ts-evaluation-order-route-calls` | Retained callees/receivers, arguments and spreads, delayed errors, optional skips, dependent defaults, tags and construction | Evaluation-order route contracts; typed paths | 56 | 0 |
@@ -3312,7 +3357,7 @@ native conversion remains a case even when a backend does not provide it yet.
 | `ts-math-route-trigonometry` | prescribed signed zeros, infinities, NaN and domain errors through unary trigonometric functions and exact atan2 branches with exact values and observations | Math route contracts; typed paths | 26 | 0 |
 | `ts-math-routes` | specification-fixed Math and integer-conversion results across typed routes beside operation-free table controls | Math route contracts; typed paths | 98 | 0 |
 | `ts-mixins` | a function returning a subclass of the class it is given | conformance/classes/mixinClassesAndInterfaces | 14 | 0 |
-| `ts-modules` | an ES module (the `module` flag): module scope, strictness, top-level await | conformance/externalModules; conformance/es6/modules | 416 | 10 |
+| `ts-modules` | an ES module (the `module` flag): module scope, strictness, top-level await | conformance/externalModules; conformance/es6/modules | 464 | 10 |
 | `ts-namespace` | a namespace (internal module) and its object | conformance/internalModules; ts-eslint TSModuleDeclaration | 96 | 6 |
 | `ts-narrowing` | control-flow narrowing of a union or `unknown` | conformance/controlFlow; conformance/expressions/typeGuards | 888 | 0 |
 | `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 19 | 0 |
