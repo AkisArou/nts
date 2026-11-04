@@ -309,6 +309,11 @@ one; add a row here in the same commit as the first case that uses it.
     behavior and promise semantics; `ts-timer-route-*` names each area
     beside controls that call the same callbacks without timers.
 
+60. **Text and byte encodings through typed routes:** URI escaping, UTF-8 and
+    UTF-16LE conversion, stream state and binary base64 strings.
+    [Encoding route contracts](#encoding-route-contracts) name their sources;
+    `ts-encoding-route-*` identifies each area beside literal-result controls.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -352,6 +357,8 @@ flows through it.
 | `dispatch-routes-controls/` | stored class tags select plain function bodies with matching receivers, effects and assertions |
 | `disposal-routes/` | disposable values across typed fields, parameters, returns, generics, unions, tuples and arrays, with exact cleanup order, timing and error identities held to node |
 | `disposal-routes-controls/` | explicit try/finally cleanup, handwritten callback stacks and suppression chains with the same typed resources, inputs and assertions |
+| `encoding-routes/` | exact URI, text/byte and base64 conversions, errors and stream state through declared types, held to pinned node |
+| `encoding-routes-controls/` | the same inputs, typed carriers, call order and assertions with literal strings, bytes, writes and errors replacing conversion APIs |
 | `enum-routes/` | numeric, string, computed and const members, reverse mappings, literal narrowing, object listings, flags and merged enums through typed routes, held to node and TypeScript emit |
 | `enum-routes-controls/` | the same values, routes and observations using frozen member objects, explicit reverse maps and literal union types without enum declarations |
 | `enums/` | numeric, string, const, heterogeneous, computed, merged enums and their objects |
@@ -1634,6 +1641,26 @@ cannot start, the PR stays draft with TypeScript 6.0.3 strict results under
 the same options and the required native check pending with maintainers.
 Rejected forms and Node/specification differences are documented in the PR.
 Maintainers run nts on every backend and record its outcomes.
+
+The `encoding-routes/` family uses `<area>-<behavior>-<route>.ts`, with
+matching `encoding-routes-controls/` files ending in `-control`. Each case
+holds a conversion to exact strings, bytes, UTF-16 units or error classes
+through a declared input, function value, encoder, decoder or view route.
+Controls call none of the eight conversion APIs. Plain functions and classes
+return literal Node results in call order; encodeInto controls write literal
+bytes into the same view and return literal read/written counts. The other
+inputs, routes and assertion-call text remain.
+
+Each file is checked independently as a strict script with library diagnostics
+included and runs through the unchanged suite oracle using pinned Node.
+Replacement characters, surrogates and BOMs are observed by charCodeAt units;
+DOMExceptions are checked by instanceof and name, never their messages or code.
+The family excludes legacy encodings, stream classes, newer byte-array codec
+methods, shared buffers, machine-endian multibyte input views and Node-only APIs.
+Native TypeScript 7.1.0-beta startup failures use the handoff's 6.0.3 fallback
+with the native check pending; a missing fallback library type is reported.
+Node/specification disagreements leave the disputed observation unasserted.
+Maintainers compile and record each nts backend outcome without weakening cases.
 
 ## Coverage, source by source
 
@@ -3006,6 +3033,25 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `promises` | `promises-*` | 24 | 24 | Sequential and loop sleeps, timer-backed race/all/allSettled/any values and settlement order, and reaction-created timers behind waiting peers |
 | **Total** | | **120** | **120** | Matching case/control pairs |
 
+### Encoding route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript 2025 [URI functions](https://tc39.es/ecma262/2025/multipage/global-object.html#sec-uri-handling-functions), [Encode](https://tc39.es/ecma262/2025/multipage/global-object.html#sec-encode) and [Decode](https://tc39.es/ecma262/2025/multipage/global-object.html#sec-decode) | string conversion, kept character sets, uppercase UTF-8 escapes, URIError and reserved-escape preservation |
+| WHATWG Encoding [TextEncoder](https://encoding.spec.whatwg.org/#interface-textencoder) and [encodeInto](https://encoding.spec.whatwg.org/#dom-textencoder-encodeinto) | scalar-value conversion, fresh UTF-8 byte results, whole-character writes and UTF-16 read counts |
+| WHATWG Encoding [TextDecoder](https://encoding.spec.whatwg.org/#interface-textdecoder), [UTF-8 decoder](https://encoding.spec.whatwg.org/#utf-8-decoder), [shared UTF-16 decoder](https://encoding.spec.whatwg.org/#shared-utf-16-decoder) and [labels](https://encoding.spec.whatwg.org/#names-and-labels) | maximal invalid parts, fatal errors, recovery, stream and BOM state, labels and exact byte windows |
+| HTML [Base64 utility methods](https://html.spec.whatwg.org/multipage/webappapis.html#atob) and Infra [forgiving-base64](https://infra.spec.whatwg.org/#forgiving-base64) | byte-valued strings, padding, ASCII whitespace, invalid characters, discarded leftover bits and InvalidCharacterError |
+
+Existing unicode and well-formed-string cases observe string operations;
+typed-array-contents cases observe element conversion and view storage.
+This family observes the conversion APIs at those typed boundaries. A planned
+native conversion remains a case even when a backend does not provide it yet.
+
+| area | file prefix | cases | controls | observations |
+| --- | --- | ---: | ---: | --- |
+| `uri-encoding` | `uri-encoding-*` | 24 | 24 | Exact kept and escaped ASCII, uppercase UTF-8 length edges, surrogate failures and primitive conversion through typed input and function values |
+| **Total** | | **24** | **24** | Matching case/control pairs |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3134,6 +3180,8 @@ backend case is a finding and is never weakened to accommodate the compiler.
 | `ts-disposal-route-using-declarations` | typed resource declarations dispose once at the correct scope boundary in reverse order, skip null and undefined, retain acquired methods and reject a missing method | Disposal route contracts; typed paths | 16 | 0 |
 | `ts-enum-computed` | an enum member whose initialiser is an expression, constant or not | conformance/enums | 28 | 0 |
 | `ts-enum-reverse-mapping` | a numeric enum member's value mapped back to its name | conformance/enums | 30 | 0 |
+| `ts-encoding-route-uri-encoding` | Exact kept and escaped ASCII, uppercase UTF-8 length edges, surrogate failures and primitive conversion through typed input and function values | Encoding route contracts; typed paths | 48 | 0 |
+| `ts-encoding-routes` | exact text/byte conversions, errors and retained stream state through typed carriers beside literal-result controls | Encoding route contracts; typed paths | 48 | 0 |
 | `ts-enum` | an `enum` declaration and its object | conformance/enums; ts-eslint TSEnumDeclaration | 87 | 3 |
 | `ts-enum-route-flags-merging` | combined, tested and cleared flag values, repeated enum declarations and namespace functions with exact initialization and call histories with exact values and observations | Enum route contracts; typed paths | 16 | 0 |
 | `ts-enum-route-literal-members` | member unions and discriminants, exhaustive switches, comparison narrowing and const-enum values through interfaces and generic helpers with exact values and observations | Enum route contracts; typed paths | 16 | 0 |
