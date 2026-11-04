@@ -2861,6 +2861,7 @@ and NaN representation bits are not observations in this family.
 | area | file prefix | cases | controls | observations |
 | --- | --- | ---: | ---: | --- |
 | `arrays` | `arrays-*` | 41 | 41 | Fresh copies, retained receivers, relative and fractional indices, bounds, delete-count clamping, element conversions and backward reads |
+| `collections` | `collections-*` | 26 | 26 | Set-like member order and validation, size-dependent algorithms, exact result order, unchanged receivers and grouping key semantics |
 
 ## Tags
 
@@ -3082,7 +3083,8 @@ and NaN representation bits are not observations in this family.
 | `ts-length-route-shared` | shared arrays with complete indexed histories and final contents | Length route contracts; typed paths | 16 | 0 |
 | `ts-length-route-typed-arrays` | typed arrays and resizable buffers with complete indexed histories and final contents | Length route contracts; typed paths | 16 | 0 |
 | `ts-library-addition-route-arrays` | Fresh copies, retained receivers, relative and fractional indices, bounds, delete-count clamping, element conversions and backward reads | Library-addition route contracts; typed paths | 82 | 0 |
-| `ts-library-addition-routes` | newer copying, set-like, grouping, promise, UTF-16, regexp-escape and half-precision methods across typed carriers beside older-operation controls | Library-addition route contracts; typed paths | 82 | 0 |
+| `ts-library-addition-route-collections` | Set-like member order and validation, size-dependent algorithms, exact result order, unchanged receivers and grouping key semantics | Library-addition route contracts; typed paths | 52 | 0 |
+| `ts-library-addition-routes` | newer copying, set-like, grouping, promise, UTF-16, regexp-escape and half-precision methods across typed carriers beside older-operation controls | Library-addition route contracts; typed paths | 134 | 0 |
 | `ts-lifetime-acyclic` | a construction route closes a cycle that an acyclicity proof must include | lifetime contracts: Memory, How small the dynamic part can get; Cycles through foreign objects | 24 | 0 |
 | `ts-lifetime-borrow` | a borrowed reference remains live after its original anchor or read-only call ends | lifetime contracts: Memory, Where nts stands; The ladder of homes; record 0024 | 24 | 0 |
 | `ts-lifetime-frame` | an object or bounded string must outlive a frame after a retention route acts | lifetime contracts: Memory, The ladder of homes; Where nts stands | 28 | 0 |
@@ -3094,7 +3096,7 @@ and NaN representation bits are not observations in this family.
 | `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 230 | 0 |
 | `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 1055 | 0 |
 | `ts-map-set-contents` | Map and Set contents keep their values, runtime kinds and order across typed writes and reads | Map and Set contents contracts; typed paths | 200 | 0 |
-| `ts-mapped-types` | a mapped type (`{ [K in keyof T]: U }`), with modifiers and `as` remapping | conformance/types/mapped; ts-eslint TSMappedType | 24 | 0 |
+| `ts-mapped-types` | a mapped type (`{ [K in keyof T]: U }`), with modifiers and `as` remapping | conformance/types/mapped; ts-eslint TSMappedType | 32 | 0 |
 | `ts-math-route-extremes` | signed-zero orders, NaN positions, empty and spread extrema, absolute magnitude and prescribed hypot special values with exact values and observations | Math route contracts; typed paths | 16 | 0 |
 | `ts-math-route-integer-conversions` | wrapped integer operands, masked shift counts, low-word products and comparisons with truncation across typed carriers with exact values and observations | Math route contracts; typed paths | 20 | 0 |
 | `ts-math-route-powers-roots` | pow and exponentiation special cases, correctly rounded square roots and prescribed root, exponential and logarithmic values with exact values and observations | Math route contracts; typed paths | 20 | 0 |
@@ -3290,7 +3292,7 @@ and NaN representation bits are not observations in this family.
 | `ts-unknown` | the `unknown` type, narrowed before use | conformance/types/unknown; ts-eslint TSUnknownKeyword | 2962 | 0 |
 | `ts-unsound-arity` | a shorter function signature hides an optional parameter from a wider caller | conformance/types/typeRelationships; typed paths | 5 | 0 |
 | `ts-unsound-assertion` | an assertion function claims a type without establishing it at runtime | conformance/controlFlow/assertionTypePredicates; typed paths | 89 | 0 |
-| `ts-unsound-bivariance` | method parameter bivariance permits a wider writer to violate a narrow value type | conformance/types/typeRelationships; typed paths | 239 | 0 |
+| `ts-unsound-bivariance` | method parameter bivariance permits a wider writer to violate a narrow value type | conformance/types/typeRelationships; typed paths | 255 | 0 |
 | `ts-unsound-covariant-array` | array covariance permits a wider writer to violate the original element type | conformance/types/typeRelationships; typed paths | 142 | 0 |
 | `ts-unsound-covariant-view` | a readonly or covariant view retains a narrow claim after a mutable wider alias writes | conformance/types/typeRelationships; typed paths | 92 | 0 |
 | `ts-unsound-generic-widening` | a wider generic instantiation writes an incompatible value or retains an invalid property claim | conformance/types/typeParameters; typed paths | 101 | 0 |
@@ -3300,7 +3302,7 @@ and NaN representation bits are not observations in this family.
 | `ts-unsound-private` | compile-time privacy allows literal-key access that can participate in a false type claim | conformance/classes/propertyMemberDeclarations; typed paths | 7 | 0 |
 | `ts-unsound-refinement` | control-flow narrowing survives a call that mutates the narrowed value | conformance/controlFlow; typed paths | 9 | 0 |
 | `ts-using` | `using` and `await using` declarations, Disposable and DisposableStack | conformance/statements/VariableStatements/usingDeclarations | 104 | 0 |
-| `ts-utility-types` | the lib's utility types (Partial, Pick, Omit, ReturnType, Parameters, Awaited, ...) through values | lib.es5.d.ts; conformance/types/mapped | 33 | 0 |
+| `ts-utility-types` | the lib's utility types (Partial, Pick, Omit, ReturnType, Parameters, Awaited, ...) through values | lib.es5.d.ts; conformance/types/mapped | 41 | 0 |
 | `ts-variadic-tuples` | a variadic tuple type (`[...A, ...B]`) | conformance/types/tuple/variadicTuples | 5 | 0 |
 | `ts-void` | the `void` return type, which does not discard a returned value | conformance/types/primitives/void; ts-eslint TSVoidKeyword | 5 | 0 |
 | `ts-private-member-route-fields` | typed instance routes preserve private field values, alias writes, replaced holders, identity brands and wrong-receiver errors | Private member route contracts; typed paths | 14 | 0 |
