@@ -104,9 +104,21 @@ void nts_chromium_host_destroy(NtsChromiumHost *host, void (*release)(void *),
 
 /* A callback's call into the program: the environment entered, as every
    native callback enters it. A throw cannot cross the C frames of an event
-   dispatch; the closure bridge stops one, so none arrives here. */
+   dispatch; the closure bridge stops one, so none arrives here. A nested
+   callback -- a listener dispatched from inside the program's own call --
+   finds this host's entry already on the stack: its environment is the
+   current one and every depth nts_chromium_host_enter counts is already
+   counted, so entering again would only count and uncount. It runs in the
+   entry there is; anything else (another host's entry, none) enters. */
 static void invoke(void *state, void (*call)(void *), void *argument) {
-  NtsChromiumHostScope scope = nts_chromium_host_enter(state);
+  NtsChromiumHost *host = state;
+  if (host->entries && nts_environment_current() == host->environment) {
+    call(argument);
+    if (nts_raising())
+      NTS_CHROMIUM_HOST_FAIL();
+    return;
+  }
+  NtsChromiumHostScope scope = nts_chromium_host_enter(host);
   call(argument);
   if (nts_raising())
     NTS_CHROMIUM_HOST_FAIL();
