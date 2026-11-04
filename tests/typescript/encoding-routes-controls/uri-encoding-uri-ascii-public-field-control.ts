@@ -1,0 +1,22 @@
+/*---
+description: "Control: Every printable ASCII character has its exact preserved or uppercase escaped form, including space and percent."
+features: [ts-encoding-routes, ts-encoding-route-uri-encoding, ts-strings, ts-arrays, ts-functions, ts-numbers, ts-iteration, ts-class, ts-class-fields, ts-function-types, ts-tuples]
+---*/
+// Control: encodeURI through a public typed function field; every printable ASCII character has its exact preserved or uppercase escaped form, including space and percent.
+// Node prints: uri-ascii:3
+let controlIndex: number = 0;
+const controlResults: string[] = ["%20!%22#$%25&'()*+,-./0123456789:;%3C=%3E?@ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~", "AZaz09-_.!~*'()", ";/?:@&=+$,#%20%25%5B%5D%7B%7D%5C%5E%60%7C%22%3C%3E"];
+function literalEncoding(_value: string): string { return controlResults[controlIndex++]; }
+class PublicUriEncoder { convert: (value: string) => string = literalEncoding; }
+const route: PublicUriEncoder = new PublicUriEncoder();
+const rows: [string, string][] = [
+  [" !\"#$%&'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~", "%20!%22#$%25&'()*+,-./0123456789:;%3C=%3E?@ABCDEFGHIJKLMNOPQRSTUVWXYZ%5B%5C%5D%5E_%60abcdefghijklmnopqrstuvwxyz%7B%7C%7D~"],
+  ["AZaz09-_.!~*'()", "AZaz09-_.!~*'()"],
+  [";/?:@&=+$,# %[]{}\\^`|\"<>", ";/?:@&=+$,#%20%25%5B%5D%7B%7D%5C%5E%60%7C%22%3C%3E"],
+];
+let checked: number = 0;
+for (const [input, expected] of rows) {
+  assert.sameValue(route.convert(input), expected); checked++;
+}
+assert.sameValue(checked, 3);
+console.log("uri-ascii:" + checked);

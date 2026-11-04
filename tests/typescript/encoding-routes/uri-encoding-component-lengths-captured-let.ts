@@ -1,0 +1,19 @@
+/*---
+description: "A retained closure reads each current string at exact lengths around 16, 32 and 64, including multibyte and reserved suffixes."
+features: [ts-encoding-routes, ts-encoding-route-uri-encoding, ts-strings, ts-arrays, ts-functions, ts-numbers, ts-iteration, ts-closures, ts-arrow-functions, ts-function-types, ts-readonly]
+---*/
+// encodeURIComponent through a captured mutable string binding; a retained closure reads each current string at exact lengths around 16, 32 and 64, including multibyte and reserved suffixes.
+// Node prints: component-lengths:12
+let current: string = "unused";
+const run: () => string = () => encodeURIComponent(current);
+const sizes: readonly number[] = [0, 1, 2, 15, 16, 17, 31, 32, 33, 63, 64, 65];
+const expected: string[] = ["", "%C3%A9", "%C3%A9%23", "aaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%C3%A9%23", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa%C3%A9%23"];
+let checked: number = 0;
+for (let index = 0; index < sizes.length; index++) {
+  const size: number = sizes[index];
+  current = size === 0 ? "" : size === 1 ? "\u00e9" : "a".repeat(size - 2) + "\u00e9#";
+  assert.sameValue(current.length, size);
+  assert.sameValue(run(), expected[index]); checked++;
+}
+assert.sameValue(checked, 12);
+console.log("component-lengths:" + checked);
