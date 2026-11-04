@@ -2800,6 +2800,7 @@ especially mutations between steps and values retained through later effects.
 | --- | --- | ---: | ---: | --- |
 | `operators` | `operators-*` | 30 | 30 | Operand reads before conversions, template interleaving, arithmetic/mixed errors, relations, short circuits, comma, unary operations, membership and instance hooks |
 | `assignments` | `assignments-*` | 29 | 29 | Target/key selection, competing RHS writes, one read/write, updates, logical skips, chained setter results, iterator/member-target interleaving and abrupt RHS |
+| `calls` | `calls-*` | 28 | 28 | Retained callees/receivers, arguments and spreads, delayed errors, optional skips, dependent defaults, tags and construction |
 
 ## Tags
 
@@ -2861,7 +2862,7 @@ especially mutations between steps and values retained through later effects.
 | `ts-class-value-route-selection` | classes selected at runtime with exact construction, static observations and identities | Class value route contracts; typed paths | 14 | 0 |
 | `ts-class-value-route-signatures` | construct signatures and generic factories with exact construction, static observations and identities | Class value route contracts; typed paths | 16 | 0 |
 | `ts-class-value-route-storage` | class values in storage with exact construction, static observations and identities | Class value route contracts; typed paths | 16 | 0 |
-| `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 1022 | 1 |
+| `ts-closures` | a function or class capturing typed locals | conformance/functions; typed paths | 1034 | 1 |
 | `ts-builtin-cast` | an own value asserted to a builtin constructor or object type keeps its runtime identity | builtin identity contracts; ts-eslint TSAsExpression | 76 | 0 |
 | `ts-builtin-identity` | the declaration or runtime value selects a builtin operation; spelling and asserted types do not establish identity | builtin identity contracts: Builtins, Feature identity; typed paths | 544 | 0 |
 | `ts-builtin-invocation` | call and construction preserve argument semantics through typed targets | builtin identity contracts; conformance/expressions/newOperator, callExpressions; typed paths | 60 | 0 |
@@ -2895,7 +2896,7 @@ especially mutations between steps and values retained through later effects.
 | `ts-declaration-merging` | two declarations of one name merged into one entity | conformance/internalModules/DeclarationMerging; conformance/interfaces/declarationMerging | 23 | 5 |
 | `ts-declare-field` | a `declare` class field, which emits nothing | conformance/classes/propertyMemberDeclarations; ts-eslint PropertyDefinition.declare | 35 | 0 |
 | `ts-decorators` | standard (TC39) decorators on classes, methods, fields, accessors; context, addInitializer, metadata | conformance/esDecorators; ts-eslint Decorator | 0 | 12 |
-| `ts-default-parameters` | a parameter with a default value | conformance/es6/defaultParameters | 85 | 0 |
+| `ts-default-parameters` | a parameter with a default value | conformance/es6/defaultParameters | 88 | 0 |
 | `ts-definite-assignment` | a definite assignment assertion (`x!: T`, `let x!: T`) | conformance/controlFlow/definiteAssignmentAssertions; ts-eslint PropertyDefinition.definite | 7 | 0 |
 | `ts-destructuring` | a typed destructuring declaration, parameter or assignment | conformance/es6/destructuring | 370 | 0 |
 | `ts-destructuring-route-arrays` | tuples, arrays, strings and typed iterables retain elision, default, nesting, rest and close behavior through array patterns | BindingInitialization; IteratorBindingInitialization; IteratorClose | 18 | 0 |
@@ -2904,7 +2905,7 @@ especially mutations between steps and values retained through later effects.
 | `ts-destructuring-route-order` | defaults, repeated getters and failing typed patterns preserve lazy left-to-right effects, partial writes, cleanup order and original errors | BindingInitialization; IteratorBindingInitialization; IteratorClose | 18 | 0 |
 | `ts-destructuring-route-parameters` | typed parameter and callback patterns retain earlier-binding dependencies, receiver data, optional and rest inputs and exact effects | TypeScript Destructuring; BindingInitialization; IteratorBindingInitialization | 20 | 0 |
 | `ts-destructuring-routes` | typed binding and assignment patterns retain exact values, rest contents and observable getter, default and iterator histories beside explicit-read controls | Destructuring route contracts; typed paths | 88 | 0 |
-| `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 92 | 0 |
+| `ts-discriminated-unions` | a union of object types told apart by a literal-typed property | conformance/types/union/discriminatedUnionTypes | 94 | 0 |
 | `ts-descriptor-route-accessors` | defined accessors preserve receiver binding, getter-only refusal, setter-only reads and conversion to data properties | Descriptor route contracts; typed paths | 14 | 0 |
 | `ts-descriptor-route-defining` | typed definitions preserve data and accessor defaults, descriptor snapshots, permitted redefinitions and exact refusal state | Descriptor route contracts; typed paths | 16 | 0 |
 | `ts-descriptor-route-enumerability` | typed hidden properties remain directly readable while enumeration, object copies and object JSON honor enumerable flags | Descriptor route contracts; typed paths | 14 | 0 |
@@ -2938,8 +2939,9 @@ especially mutations between steps and values retained through later effects.
 | `ts-equality-route-strict` | strict equality and SameValue with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 16 | 0 |
 | `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 1285 | 0 |
 | `ts-evaluation-order-route-assignments` | Target/key selection, competing RHS writes, one read/write, updates, logical skips, chained setter results, iterator/member-target interleaving and abrupt RHS | Evaluation-order route contracts; typed paths | 58 | 0 |
+| `ts-evaluation-order-route-calls` | Retained callees/receivers, arguments and spreads, delayed errors, optional skips, dependent defaults, tags and construction | Evaluation-order route contracts; typed paths | 56 | 0 |
 | `ts-evaluation-order-route-operators` | Operand reads before conversions, template interleaving, arithmetic/mixed errors, relations, short circuits, comma, unary operations, membership and instance hooks | Evaluation-order route contracts; typed paths | 60 | 0 |
-| `ts-evaluation-order-routes` | ordered operand, reference, conversion, call, literal, pattern, class and suspension steps across typed routes beside explicit-statement controls | Evaluation-order route contracts; typed paths | 118 | 0 |
+| `ts-evaluation-order-routes` | ordered operand, reference, conversion, call, literal, pattern, class and suspension steps across typed routes beside explicit-statement controls | Evaluation-order route contracts; typed paths | 174 | 0 |
 | `ts-expando` | properties assigned to a function declaration (an expando) | conformance/functions (expando assignments, TypeScript 3.1) | 3 | 0 |
 | `ts-exponent` | the `**` operator and `**=` | conformance/es7/exponentiationOperator | 9 | 0 |
 | `ts-export-equals` | `export =` | conformance/externalModules; ts-eslint TSExportAssignment | 0 | 4 |
@@ -3025,8 +3027,8 @@ especially mutations between steps and values retained through later effects.
 | `ts-lifetime-region` | a reference remains reachable after the original call result reaches its last use | lifetime contracts: Memory, The ladder of homes; Resetting a region is safe only if nothing can still walk into it; A region needs two proofs | 25 | 0 |
 | `ts-lifetime-scalar` | an object initially used through fields gains an observable identity or shared mutation | lifetime contracts: Memory, Where nts stands; The ladder of homes | 20 | 0 |
 | `ts-lifetime-slot` | successive loop allocations remain distinct when their live instances overlap | lifetime contracts: Memory, Where nts stands; The one memory analysis | 18 | 0 |
-| `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 222 | 0 |
-| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 1051 | 0 |
+| `ts-literal-types` | string, number and boolean literal types and the values they admit | conformance/types/literal; conformance/types/stringLiteral; ts-eslint TSLiteralType | 230 | 0 |
+| `ts-map-set` | `Map<K, V>` and `Set<T>` in typed code | typed paths | 1053 | 0 |
 | `ts-map-set-contents` | Map and Set contents keep their values, runtime kinds and order across typed writes and reads | Map and Set contents contracts; typed paths | 200 | 0 |
 | `ts-mapped-types` | a mapped type (`{ [K in keyof T]: U }`), with modifiers and `as` remapping | conformance/types/mapped; ts-eslint TSMappedType | 24 | 0 |
 | `ts-math-route-extremes` | signed-zero orders, NaN positions, empty and spread extrema, absolute magnitude and prescribed hypot special values with exact values and observations | Math route contracts; typed paths | 16 | 0 |
@@ -3164,7 +3166,7 @@ especially mutations between steps and values retained through later effects.
 | `ts-symbols` | symbols as keys, well-known symbols, `unique symbol` | conformance/Symbols; conformance/es6/Symbols; conformance/types/uniqueSymbol | 816 | 2 |
 | `ts-tagged-templates` | a tagged template with a typed tag function | conformance/es6/templates | 28 | 0 |
 | `ts-template-literal-types` | a template literal type, and the intrinsic string types (Uppercase, Capitalize, ...) | conformance/types/literal/templateLiteralTypes; ts-eslint TSTemplateLiteralType | 12 | 0 |
-| `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 140 | 0 |
+| `ts-template-literals` | template literal expressions and their substitutions | conformance/es6/templates | 196 | 0 |
 | `ts-template-route-escapes-raw` | exact cooked/raw escapes, invalid cooked entries and String.raw interleaving through typed tags and raw-array views with exact values and observations | Template route contracts; typed paths | 20 | 0 |
 | `ts-template-route-identity` | one frozen template object per site across callers, iterations, closures and instances, with Map and WeakMap retention with exact values and observations | Template route contracts; typed paths | 16 | 0 |
 | `ts-template-route-nesting-composition` | nested templates and typed tags returning objects, numbers, functions or tags preserve values and side-effect order with exact values and observations | Template route contracts; typed paths | 16 | 0 |
@@ -3204,8 +3206,8 @@ especially mutations between steps and values retained through later effects.
 | `ts-tuple-route-widening` | widened array writes and readonly views remain visible through fixed tuple readers, including holes, truncation and regrowth | TypeScript Tuple Types; Readonly Tuple Types; ArraySetLength | 16 | 0 |
 | `ts-tuple-routes` | tuples retain exact slots, runtime length, array shape and identities across typed routes beside named-slot record controls | Tuple route contracts; typed paths | 124 | 0 |
 | `ts-typed-array-buffers` | fixed and tracking views retain the specified contents and metadata through buffer resize and transfer | Typed-array contents contracts; ArrayBuffer resize and ArrayBufferCopyAndDetach | 28 | 0 |
-| `ts-typed-array-contents` | typed-array elements and bytes preserve their exact contents and view metadata across typed routes | Typed-array contents contracts; typed paths | 202 | 0 |
-| `ts-typed-array-conversion` | writes through union and generic view parameters obey each element type's wrapping, clamping or rounding | Typed-array contents contracts; NumericToRawBytes; ToUint8Clamp | 38 | 0 |
+| `ts-typed-array-contents` | typed-array elements and bytes preserve their exact contents and view metadata across typed routes | Typed-array contents contracts; typed paths | 206 | 0 |
+| `ts-typed-array-conversion` | writes through union and generic view parameters obey each element type's wrapping, clamping or rounding | Typed-array contents contracts; NumericToRawBytes; ToUint8Clamp | 40 | 0 |
 | `ts-typed-array-methods` | typed receivers, sources and factories preserve exact mutation, conversion, copying, searching and iteration results | ECMAScript, TypedArray objects and CompareTypedArrayElements | 48 | 0 |
 | `ts-typed-array-subclasses` | subclass contents cross base-typed parameters while preserving conversion, view geometry, identity and own state | Objects, Typed arrays; ECMAScript, TypedArray constructors and TypedArraySetElement | 96 | 0 |
 | `ts-typed-array-views` | typed view aliases observe shared bytes, offsets, subarray aliasing, slice copies and explicit DataView byte orders | Objects, Typed arrays; ECMAScript, TypedArray and DataView objects | 18 | 0 |
@@ -3228,7 +3230,7 @@ especially mutations between steps and values retained through later effects.
 | `ts-unsound-covariant-array` | array covariance permits a wider writer to violate the original element type | conformance/types/typeRelationships; typed paths | 142 | 0 |
 | `ts-unsound-covariant-view` | a readonly or covariant view retains a narrow claim after a mutable wider alias writes | conformance/types/typeRelationships; typed paths | 92 | 0 |
 | `ts-unsound-generic-widening` | a wider generic instantiation writes an incompatible value or retains an invalid property claim | conformance/types/typeParameters; typed paths | 101 | 0 |
-| `ts-unsound-object-assign` | Object.assign overwrites a property while the original target retains its narrow type | conformance/types/typeRelationships; typed paths | 39 | 0 |
+| `ts-unsound-object-assign` | Object.assign overwrites a property while the original target retains its narrow type | conformance/types/typeRelationships; typed paths | 47 | 0 |
 | `ts-unsound-overload` | an overload return type can disagree with its accepted implementation | conformance/functions/overloads; typed paths | 3 | 0 |
 | `ts-unsound-predicate` | a user-written type predicate claims a type the runtime value does not have | conformance/controlFlow/typePredicate; typed paths | 89 | 0 |
 | `ts-unsound-private` | compile-time privacy allows literal-key access that can participate in a false type claim | conformance/classes/propertyMemberDeclarations; typed paths | 7 | 0 |
