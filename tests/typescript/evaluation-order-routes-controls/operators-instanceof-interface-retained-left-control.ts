@@ -1,5 +1,5 @@
 /*---
-description: Control: Instanceof keeps its left value through right-operand mutation before a static hook.
+description: "Control: Instanceof keeps its left value through right-operand mutation before a static hook."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-class, ts-class-fields, ts-static, ts-symbols, ts-unknown, ts-interfaces, ts-accessors, ts-functions, ts-objects, ts-arrays, ts-iteration, ts-instanceof]
 ---*/
 // instanceof through interface accessors; node retains the left object while the right replaces its carrier, then calls static hasInstance.

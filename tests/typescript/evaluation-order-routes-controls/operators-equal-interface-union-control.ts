@@ -1,5 +1,5 @@
 /*---
-description: Control: Loose equality converts a retained object after the right operand mutates it.
+description: "Control: Loose equality converts a retained object after the right operand mutates it."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-unions, ts-class, ts-accessors, ts-objects, ts-functions, ts-tuples, ts-arrays, ts-iteration, ts-conversions, ts-to-primitive, ts-numbers]
 ---*/
 // == through an interface union; node reads the right operand's mutation before converting the retained left object.

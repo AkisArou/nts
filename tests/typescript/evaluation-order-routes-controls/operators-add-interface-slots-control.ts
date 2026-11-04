@@ -1,5 +1,5 @@
 /*---
-description: Control: Add retains operand reads before ordered conversions and abrupt completion.
+description: "Control: Add retains operand reads before ordered conversions and abrupt completion."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-accessors, ts-objects, ts-functions, ts-arrays, ts-tuples, ts-iteration, ts-numbers, ts-bigint, ts-conversions, ts-to-primitive, ts-symbols, ts-unsound-object-assign]
 ---*/
 // + through interface slots; node reads both operands before conversions and mixed kinds throw only afterwards.

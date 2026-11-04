@@ -1,5 +1,5 @@
 /*---
-description: Control: Relational greater-equal keeps evaluation and conversion mutations in order.
+description: "Control: Relational greater-equal keeps evaluation and conversion mutations in order."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-generics, ts-generic-constraints, ts-interfaces, ts-accessors, ts-objects, ts-functions, ts-tuples, ts-arrays, ts-iteration, ts-conversions, ts-to-primitive, ts-numbers]
 ---*/
 // >= through a constrained Hook interface; node evaluates both getters before left then right conversion, even for > and >=.
