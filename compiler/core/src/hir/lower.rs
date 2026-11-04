@@ -71351,7 +71351,7 @@ impl<'a> FuncBuilder<'a> {
     /// an object: no dictionary to key on.
     fn dictionary_member_names(&self, ty: TypeId) -> Option<Vec<&str>> {
         fn collect<'a>(
-            snapshot: &'a SemanticSnapshot,
+            snapshot: &'a LoweringSnapshot<'a>,
             ty: TypeId,
             path: &mut Vec<TypeId>,
             names: &mut Vec<&'a str>,
@@ -71367,23 +71367,18 @@ impl<'a> FuncBuilder<'a> {
                 }
                 // A generic dictionary (`UnderlyingSource<R>`) arrives as an
                 // opaque nominal whose members are not traversed; the
-                // object types carrying its symbol -- its declaration and
-                // instantiations, whose members only the types of the
-                // properties distinguish -- carry the names.
+                // object types carrying its symbol carry the names, read
+                // from the snapshot's index of them -- never by revisiting
+                // the nominal's same-symbol siblings, which re-enters this
+                // arm for each and enumerates their permutations.
                 Some(TypeKind::Structured) => snapshot
                     .types
                     .get(ty.0 as usize)
                     .and_then(|record| record.symbol)
-                    .is_some_and(|symbol| {
-                        snapshot
-                            .types
-                            .iter()
-                            .enumerate()
-                            .filter(|(_, record)| record.symbol == Some(symbol))
-                            .filter_map(|(at, _)| u32::try_from(at).ok().map(TypeId))
-                            .map(|same| collect(snapshot, same, path, names))
-                            .collect::<Vec<_>>()
-                            .contains(&true)
+                    .and_then(|symbol| snapshot.dictionary_members(symbol))
+                    .is_some_and(|members| {
+                        names.extend(members.iter().map(String::as_str));
+                        !members.is_empty()
                     }),
                 Some(TypeKind::Union(parts) | TypeKind::Intersection(parts)) => parts
                     .iter()

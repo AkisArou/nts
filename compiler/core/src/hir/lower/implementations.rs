@@ -3,7 +3,7 @@
 use std::ops::Deref;
 use std::sync::OnceLock;
 
-use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, syntax};
+use nts_semantic_schema::{NodeId, NodeKind, SemanticSnapshot, SymbolId, TypeKind, syntax};
 use rustc_hash::FxHashMap;
 
 /// Analysis probes and body builders borrow the same snapshot and index.
@@ -18,6 +18,11 @@ pub(super) struct LoweringSnapshot<'a> {
     /// asker supplies (`reassigned_anywhere`); every later question is a
     /// lookup rather than another pass.
     written: OnceLock<FxHashMap<SymbolId, Vec<NodeId>>>,
+    /// Per symbol, the member names of the object types carrying it: what a
+    /// generic dictionary's opaque nominal answers for its members
+    /// (`dictionary_member_names`). Built in one pass over the types on the
+    /// first question; reading them per question rescanned every type.
+    dictionary_members: OnceLock<FxHashMap<SymbolId, Vec<String>>>,
 }
 
 impl<'a> LoweringSnapshot<'a> {
@@ -27,6 +32,7 @@ impl<'a> LoweringSnapshot<'a> {
             scopes: super::scopes::Index::new(semantic),
             implementations: ImplementationIndex::build(semantic),
             written: OnceLock::new(),
+            dictionary_members: OnceLock::new(),
         }
     }
 
@@ -40,6 +46,33 @@ impl<'a> LoweringSnapshot<'a> {
         index: impl FnOnce() -> FxHashMap<SymbolId, Vec<NodeId>>,
     ) -> &FxHashMap<SymbolId, Vec<NodeId>> {
         self.written.get_or_init(index)
+    }
+
+    /// The members of the dictionary `symbol` declares, from the object
+    /// types carrying it (its declaration and instantiations, whose members
+    /// only the properties' types distinguish). `None` where no object type
+    /// carries the symbol: no members in reach.
+    pub(super) fn dictionary_members(&self, symbol: SymbolId) -> Option<&[String]> {
+        self.dictionary_members
+            .get_or_init(|| {
+                let mut by_symbol: FxHashMap<SymbolId, Vec<String>> = FxHashMap::default();
+                for record in &self.semantic.types {
+                    let (Some(symbol), TypeKind::Object { properties }) =
+                        (record.symbol, &record.kind)
+                    else {
+                        continue;
+                    };
+                    by_symbol.entry(symbol).or_default().extend(
+                        properties
+                            .iter()
+                            .filter_map(|p| p.name.public_name())
+                            .map(str::to_owned),
+                    );
+                }
+                by_symbol
+            })
+            .get(&symbol)
+            .map(Vec::as_slice)
     }
 }
 
