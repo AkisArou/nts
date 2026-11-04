@@ -69,6 +69,13 @@ impl<'a> LoweringSnapshot<'a> {
                             .map(str::to_owned),
                     );
                 }
+                // Each instantiation repeats the declaration's names; the
+                // index answers membership, so one copy of each is enough
+                // and keeps those checks short.
+                for names in by_symbol.values_mut() {
+                    names.sort();
+                    names.dedup();
+                }
                 by_symbol
             })
             .get(&symbol)

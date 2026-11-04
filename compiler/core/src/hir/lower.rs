@@ -71376,9 +71376,13 @@ impl<'a> FuncBuilder<'a> {
                     .get(ty.0 as usize)
                     .and_then(|record| record.symbol)
                     .and_then(|symbol| snapshot.dictionary_members(symbol))
+                    // A hit is a known dictionary even with no members to
+                    // read: only a miss -- no object row for the symbol --
+                    // leaves the fit without a dictionary to key on, as
+                    // the object walk this replaced answered.
                     .is_some_and(|members| {
                         names.extend(members.iter().map(String::as_str));
-                        !members.is_empty()
+                        true
                     }),
                 Some(TypeKind::Union(parts) | TypeKind::Intersection(parts)) => parts
                     .iter()
