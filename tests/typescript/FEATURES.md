@@ -288,6 +288,13 @@ one; add a row here in the same commit as the first case that uses it.
     order and the values already read. [Evaluation-order route contracts](#evaluation-order-route-contracts)
     name the sources; `ts-evaluation-order-route-*` identifies each area.
 
+57. **Recent standard-library methods across typed routes:** copying arrays,
+    set-like algebra and grouping, promise capabilities and synchronous
+    attempts, well-formed UTF-16, regexp escaping and half-precision values.
+    [Library-addition route contracts](#library-addition-route-contracts)
+    name their sources; `ts-library-addition-route-*` identifies each area
+    beside controls using older operations or explicit node result literals.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -364,6 +371,8 @@ flows through it.
 | `layout-routes-controls/` | plain field-by-field literals, explicit kinds and private sidecars or builtin holders preserving the same observations |
 | `length-routes/` | current indexed values, lengths and visit histories while arrays through typed routes grow, shrink, recover or detach, held to node |
 | `length-routes-controls/` | the same computation with local arrays, stable copies or immediate fresh bounds before indexed accesses |
+| `library-addition-routes/` | newer standard-library methods through typed receivers, arguments and callbacks, with exact values, effects, freshness and retained contents held to node |
+| `library-addition-routes-controls/` | the same fixtures, routes and assertions using older loops, constructors and byte operations, or explicit node result literals |
 | `lifetimes/` | lifetime facts followed by a retention or observation route, allocation churn and exact checks, with node as the oracle |
 | `lifetimes-controls/` | single-change counterparts and measured findings for lifetime cases, with node as the oracle |
 | `literal-types/` | literal types and the values they admit, `as const`, template literal types |
@@ -1513,6 +1522,34 @@ default-library diagnostics included. The unchanged suite oracle runs on
 the pinned Node. If the native repository checker cannot start in a cloud
 sandbox, its required check remains pending in a draft PR and supplemental
 TypeScript results are identified separately. Maintainers record nts results.
+
+The `library-addition-routes/` family uses `<area>-<method>-<route>.ts`;
+its `library-addition-routes-controls/` counterpart appends `-control`.
+Each case isolates one newer method through an interface, constrained
+generic, narrowed union, tuple or readonly array, class/private/static field,
+Map value or captured binding. A module-level `log: string[]` records
+observable callbacks, conversions and set-like members. Cases assert exact
+results and logs, fresh copies and unchanged receivers where promised.
+
+Controls retain the fixture values, typed carriers and assertion calls.
+Array controls use indexing loops or older operations on copies; set-like
+controls read size, has and keys once, then perform the prescribed branch
+with older Set operations. Grouping uses ordinary loops over a null-prototype
+object or Map. Promise controls use new Promise with saved resolvers or
+immediate callback invocation inside its executor. UTF-16 controls scan code
+units. RegExp.escape and half-precision controls use explicit node result
+literals, with older byte writes or Float64Array storage where needed.
+Observable conversions and error boundaries stay present in those controls.
+
+Every file has test262 description/features, no includes, only module/async
+flags when needed, and no any, casts, non-null assertions or suppressions.
+No reflection, Proxy or property descriptors are needed. Strict checking
+treats each file with its harness as a script and includes default-library
+diagnostics. The unchanged suite oracle uses the pinned Node. If the native
+repository checker cannot start in a cloud sandbox, the PR remains a draft
+with supplemental TypeScript results and the native check pending. Actual
+rejected spellings and any Node/specification differences are documented in
+the relevant PR; maintainers measure and record nts outcomes.
 
 ## Coverage, source by source
 
@@ -2804,6 +2841,27 @@ especially mutations between steps and values retained through later effects.
 | `literals` | `literals-*` | 26 | 26 | Computed keys, getter spreads, duplicate values, iterators, nested/default/rest patterns, iterator close and class/field initialization |
 | `suspensions` | `suspensions-*` | 26 | 26 | Captured targets/values across await and yield, middle-expression suspensions, competing writes and rejected operands |
 
+### Library-addition route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript 2025 [Array.prototype.toReversed](https://tc39.es/ecma262/2025/multipage/indexed-collections.html#sec-array.prototype.toreversed), [toSpliced](https://tc39.es/ecma262/2025/multipage/indexed-collections.html#sec-array.prototype.tospliced), [with](https://tc39.es/ecma262/2025/multipage/indexed-collections.html#sec-array.prototype.with) and [TypedArray prototype methods](https://tc39.es/ecma262/2025/multipage/indexed-collections.html#sec-properties-of-the-%typedarray%-prototype-object) | copying, relative indices, conversion order, exact typed storage and backward reads |
+| ECMAScript 2025 [GetSetRecord](https://tc39.es/ecma262/2025/multipage/keyed-collections.html#sec-getsetrecord), [Set prototype methods](https://tc39.es/ecma262/2025/multipage/keyed-collections.html#sec-properties-of-the-set-prototype-object), [Object.groupBy](https://tc39.es/ecma262/2025/multipage/fundamental-objects.html#sec-object.groupby) and [Map.groupBy](https://tc39.es/ecma262/2025/multipage/keyed-collections.html#sec-map.groupby) | set-like reads and errors, size branches, result order, callback indices, key coercion and SameValueZero |
+| ECMAScript 2025 [Promise.withResolvers](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-promise.withresolvers), [Promise.try](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-promise.try) and [NewPromiseReactionJob](https://tc39.es/ecma262/2025/multipage/control-abstraction-objects.html#sec-newpromisereactionjob) | capabilities, first settlement, adoption, immediate callback execution and queued reactions |
+| ECMAScript 2025 [String.prototype.isWellFormed](https://tc39.es/ecma262/2025/multipage/text-processing.html#sec-string.prototype.iswellformed), [toWellFormed](https://tc39.es/ecma262/2025/multipage/text-processing.html#sec-string.prototype.towellformed) and [RegExp.escape](https://tc39.es/ecma262/2025/multipage/text-processing.html#sec-regexp.escape) | complete UTF-16 surrogate handling, exact escape forms and required string arguments |
+| ECMAScript 2025 [Math.f16round](https://tc39.es/ecma262/2025/multipage/numbers-and-dates.html#sec-math.f16round), [DataView.getFloat16](https://tc39.es/ecma262/2025/multipage/structured-data.html#sec-dataview.prototype.getfloat16), [setFloat16](https://tc39.es/ecma262/2025/multipage/structured-data.html#sec-dataview.prototype.setfloat16) and [TypedArray objects](https://tc39.es/ecma262/2025/multipage/indexed-collections.html#sec-typedarray-objects) | binary16 round-to-nearest-even, boundaries, signed zeros, view bounds and endian bytes |
+
+Existing sort-routes, map-set-contents, array-contents, typed-array-contents,
+builtin-identity, string-routes, regexp-routes, math-routes and async-routes
+retain their existing cases. This family adds the newer methods themselves
+and distinct typed carriers, with controls that avoid the tested operation.
+Only specified results are asserted; comparator-call counts, error messages
+and NaN representation bits are not observations in this family.
+
+| area | file prefix | cases | controls | observations |
+| --- | --- | ---: | ---: | --- |
+| `arrays` | `arrays-*` | 41 | 41 | Fresh copies, retained receivers, relative and fractional indices, bounds, delete-count clamping, element conversions and backward reads |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3023,6 +3081,8 @@ especially mutations between steps and values retained through later effects.
 | `ts-length-route-loops` | loops that change their own array with complete indexed histories and final contents | Length route contracts; typed paths | 24 | 0 |
 | `ts-length-route-shared` | shared arrays with complete indexed histories and final contents | Length route contracts; typed paths | 16 | 0 |
 | `ts-length-route-typed-arrays` | typed arrays and resizable buffers with complete indexed histories and final contents | Length route contracts; typed paths | 16 | 0 |
+| `ts-library-addition-route-arrays` | Fresh copies, retained receivers, relative and fractional indices, bounds, delete-count clamping, element conversions and backward reads | Library-addition route contracts; typed paths | 82 | 0 |
+| `ts-library-addition-routes` | newer copying, set-like, grouping, promise, UTF-16, regexp-escape and half-precision methods across typed carriers beside older-operation controls | Library-addition route contracts; typed paths | 82 | 0 |
 | `ts-lifetime-acyclic` | a construction route closes a cycle that an acyclicity proof must include | lifetime contracts: Memory, How small the dynamic part can get; Cycles through foreign objects | 24 | 0 |
 | `ts-lifetime-borrow` | a borrowed reference remains live after its original anchor or read-only call ends | lifetime contracts: Memory, Where nts stands; The ladder of homes; record 0024 | 24 | 0 |
 | `ts-lifetime-frame` | an object or bounded string must outlive a frame after a retention route acts | lifetime contracts: Memory, The ladder of homes; Where nts stands | 28 | 0 |
