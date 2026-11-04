@@ -1,5 +1,5 @@
 /*---
-description: Control: Bitwise-or retains operand reads before ordered conversions and abrupt completion.
+description: "Control: Bitwise-or retains operand reads before ordered conversions and abrupt completion."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-accessors, ts-objects, ts-functions, ts-arrays, ts-tuples, ts-iteration, ts-numbers, ts-bigint, ts-conversions, ts-to-primitive, ts-symbols, ts-unsound-object-assign, ts-generics, ts-generic-constraints]
 ---*/
 // | through a constrained generic over interface slots; node reads both operands before conversions and mixed kinds throw only afterwards.

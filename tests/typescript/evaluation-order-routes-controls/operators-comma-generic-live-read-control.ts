@@ -1,5 +1,5 @@
 /*---
-description: Control: Comma observes the changed final value and stops at a throwing middle operand.
+description: "Control: Comma observes the changed final value and stops at a throwing middle operand."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-generics, ts-generic-constraints, ts-interfaces, ts-accessors, ts-objects, ts-functions, ts-iteration, ts-arrays, ts-expressions, ts-errors, ts-numbers]
 ---*/
 // Comma through a generic interface; node keeps the first getter, the intervening write, then the live final read.

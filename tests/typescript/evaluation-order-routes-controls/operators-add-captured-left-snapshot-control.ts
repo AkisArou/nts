@@ -1,5 +1,5 @@
 /*---
-description: Control: Addition retains the captured left value while its right operand assigns the binding.
+description: "Control: Addition retains the captured left value while its right operand assigns the binding."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-closures, ts-functions, ts-tuples, ts-arrays, ts-iteration, ts-expressions, ts-numbers]
 ---*/
 // + over a captured let; node retains the left value before the right assigns 10, yielding old + 10.

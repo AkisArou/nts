@@ -1,5 +1,5 @@
 /*---
-description: Control: Ordered template retains the conversion before the next substitution read.
+description: "Control: Ordered template retains the conversion before the next substitution read."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-class, ts-class-fields, ts-override, ts-accessors, ts-functions, ts-tuples, ts-arrays, ts-iteration, ts-objects, ts-unions, ts-unknown, ts-conversions, ts-to-primitive, ts-symbols, ts-strings, ts-template-literals]
 ---*/
 // Template substitutions through interface accessors; node interleaves each read and conversion, including fallback and custom hints.

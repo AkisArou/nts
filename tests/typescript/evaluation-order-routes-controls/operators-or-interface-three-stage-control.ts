@@ -1,5 +1,5 @@
 /*---
-description: Control: Three-stage or preserves skipped effects and selected identities.
+description: "Control: Three-stage or preserves skipped effects and selected identities."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-unions, ts-type-aliases, ts-accessors, ts-functions, ts-tuples, ts-arrays, ts-iteration, ts-numbers, ts-objects, ts-symbols, ts-null-undefined, ts-expressions]
 ---*/
 // || over three interface accessors; node skips conversion hooks and forbidden reads while retaining each selected value.

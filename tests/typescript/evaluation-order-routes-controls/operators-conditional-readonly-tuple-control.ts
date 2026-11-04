@@ -1,5 +1,5 @@
 /*---
-description: Control: Conditional branches retain the test effect and skip the unchosen branch.
+description: "Control: Conditional branches retain the test effect and skip the unchosen branch."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-readonly, ts-tuples, ts-interfaces, ts-accessors, ts-objects, ts-symbols, ts-unions, ts-type-aliases, ts-functions, ts-arrays, ts-iteration, ts-expressions, ts-numbers, ts-null-undefined]
 ---*/
 // ?: through a readonly tuple element; node reads one branch only and never converts an object test.

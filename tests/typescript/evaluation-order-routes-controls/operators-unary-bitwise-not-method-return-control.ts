@@ -1,5 +1,5 @@
 /*---
-description: Control: Unary bitwise-not converts after a typed method has changed the operand state.
+description: "Control: Unary bitwise-not converts after a typed method has changed the operand state."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-class, ts-functions, ts-objects, ts-unions, ts-tuples, ts-arrays, ts-iteration, ts-conversions, ts-to-primitive, ts-expressions, ts-errors, ts-numbers]
 ---*/
 // Unary ~ over a typed method return; node finishes the mutating call before conversion and skips conversion after a throw.

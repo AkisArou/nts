@@ -1,5 +1,5 @@
 /*---
-description: Control: Membership converts its retained key only after the right operand and its object check.
+description: "Control: Membership converts its retained key only after the right operand and its object check."
 features: [ts-evaluation-order-routes, ts-evaluation-order-route-operators, ts-interfaces, ts-accessors, ts-functions, ts-objects, ts-record, ts-tuples, ts-arrays, ts-iteration, ts-conversions, ts-to-primitive, ts-expressions, ts-errors, ts-unsound-object-assign]
 ---*/
 // in through an Object.assign-widened string slot; node reads both operands before converting the live key, and checks the right kind first.
