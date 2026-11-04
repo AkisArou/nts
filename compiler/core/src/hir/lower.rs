@@ -71759,13 +71759,38 @@ impl<'a> FuncBuilder<'a> {
                 .iter()
                 .zip(arguments)
                 .all(|(parameter, argument)| {
-                    match super::native::native_array_argument(self.snapshot, parameter.ty) {
-                        Some(lent) => self
-                            .snapshot
-                            .node_types
-                            .get(argument)
-                            .is_some_and(|given| self.lends_as(&lent, *given)),
-                        None => true,
+                    if super::native::native_array_argument(self.snapshot, parameter.ty).is_none() {
+                        return true;
+                    }
+                    // An array of the wrong elements is not refused here:
+                    // the lend names its elements, which is the refusal the
+                    // call owes (a Blob[] for the strings Blob's parts are
+                    // bound by). Only an argument that is no array at all
+                    // leaves the lent refusal with nothing to say about it.
+                    let Some(&given) = self.snapshot.node_types.get(argument) else {
+                        return true;
+                    };
+                    if matches!(
+                        self.snapshot
+                            .types
+                            .get(given.0 as usize)
+                            .map(|record| &record.kind),
+                        Some(TypeKind::Null | TypeKind::Undefined)
+                    ) {
+                        return true;
+                    }
+                    match self.represent(given) {
+                        Some(HirType::Managed(ManagedType::Array(_) | ManagedType::View(_))) => {
+                            true
+                        }
+                        Some(_) => false,
+                        None => matches!(
+                            self.snapshot
+                                .types
+                                .get(given.0 as usize)
+                                .map(|record| &record.kind),
+                            Some(TypeKind::Array(_) | TypeKind::Tuple(_))
+                        ),
                     }
                 })
         })
