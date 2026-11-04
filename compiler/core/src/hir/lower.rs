@@ -71726,12 +71726,53 @@ impl<'a> FuncBuilder<'a> {
         checked: &nts_semantic_schema::SignatureRecord,
         arguments: &[NodeId],
     ) -> Option<usize> {
+        let written: Vec<nts_semantic_schema::SignatureRecord> = candidates
+            .iter()
+            .map(|(declaration, record)| self.as_written(*declaration, record))
+            .collect();
+        // WebIDL's overload resolution first narrows to an effective set by
+        // count alone: of the entries for a call of n arguments, only those
+        // whose argument count is min(maxarg, n) remain -- maxarg the most
+        // parameters any entry takes, optional and variadic parameters
+        // counted. An entry here is unexpanded, so it participates at every
+        // count from its required parameters to its total, a variadic one
+        // without an upper bound, and survives where that span covers the
+        // kept count. Only then do the arguments distinguish entries,
+        // [`Self::call_fits`] and, with none fitting, the fallback below
+        // alike: without the count a zero-parameter entry passed every
+        // per-parameter test vacuously and answered for an argument it has
+        // no parameter for. A dictionary spread is not WebIDL's shape -- a
+        // literal's members are the arguments, not one of them -- so an
+        // entry the call spreads into is kept by that, not by count.
+        let maxarg = written
+            .iter()
+            .map(|record| {
+                if record.parameters.iter().any(|parameter| parameter.rest) {
+                    usize::MAX
+                } else {
+                    record.parameters.len()
+                }
+            })
+            .max()
+            .unwrap_or(0);
+        let kept = maxarg.min(arguments.len());
+        let counted = |record: &nts_semantic_schema::SignatureRecord| {
+            if self.dictionary_spread(record, arguments).is_some() {
+                return true;
+            }
+            let required = record
+                .parameters
+                .iter()
+                .filter(|parameter| !parameter.optional && !parameter.rest)
+                .count();
+            let variadic = record.parameters.iter().any(|parameter| parameter.rest);
+            required <= kept && (variadic || kept <= record.parameters.len())
+        };
         if let Some(at) = candidates
             .iter()
             .enumerate()
-            .filter(|(_, (declaration, record))| {
-                self.call_fits(&self.as_written(*declaration, record), checked, arguments)
-            })
+            .filter(|(at, _)| counted(&written[*at]))
+            .filter(|(at, _)| self.call_fits(&written[*at], checked, arguments))
             .min_by_key(|(at, (_, record))| (record.parameters.len(), *at))
             .map(|(at, _)| at)
         {
@@ -71744,50 +71785,53 @@ impl<'a> FuncBuilder<'a> {
         // and taking it by declaration order made `roundRect`'s radii list
         // answer for a DOMPointReadOnly (its dictionary arm, declared
         // after, is the conversion that cannot carry it -- and the one
-        // that names it). The first candidate no lent parameter refuses
-        // outright; where every one does, none, and the caller falls back
-        // as before.
-        candidates.iter().position(|(declaration, record)| {
-            let written = self.as_written(*declaration, record);
-            written
-                .parameters
-                .iter()
-                .zip(arguments)
-                .all(|(parameter, argument)| {
-                    if super::native::native_array_argument(self.snapshot, parameter.ty).is_none() {
-                        return true;
-                    }
-                    // An array of the wrong elements is not refused here:
-                    // the lend names its elements, which is the refusal the
-                    // call owes (a Blob[] for the strings Blob's parts are
-                    // bound by). Only an argument that is no array at all
-                    // leaves the lent refusal with nothing to say about it.
-                    let Some(&given) = self.snapshot.node_types.get(argument) else {
-                        return true;
-                    };
-                    if matches!(
-                        self.snapshot
-                            .types
-                            .get(given.0 as usize)
-                            .map(|record| &record.kind),
-                        Some(TypeKind::Null | TypeKind::Undefined)
-                    ) {
-                        return true;
-                    }
-                    match self.represent(given) {
-                        Some(HirType::Managed(ManagedType::Array(_) | ManagedType::View(_))) => {
-                            true
+        // that names it). The first candidate the count kept that no lent
+        // parameter refuses outright; where every one does, none, and the
+        // caller falls back as before.
+        candidates.iter().enumerate().position(|(at, _)| {
+            let written = &written[at];
+            counted(written)
+                && written
+                    .parameters
+                    .iter()
+                    .zip(arguments)
+                    .all(|(parameter, argument)| {
+                        if super::native::native_array_argument(self.snapshot, parameter.ty)
+                            .is_none()
+                        {
+                            return true;
                         }
-                        Some(_) => false,
-                        None => matches!(
+                        // An array of the wrong elements is not refused here:
+                        // the lend names its elements, which is the refusal the
+                        // call owes (a Blob[] for the strings Blob's parts are
+                        // bound by). Only an argument that is no array at all
+                        // leaves the lent refusal with nothing to say about it.
+                        let Some(&given) = self.snapshot.node_types.get(argument) else {
+                            return true;
+                        };
+                        if matches!(
                             self.snapshot
                                 .types
                                 .get(given.0 as usize)
                                 .map(|record| &record.kind),
-                            Some(TypeKind::Array(_) | TypeKind::Tuple(_))
-                        ),
-                    }
-                })
+                            Some(TypeKind::Null | TypeKind::Undefined)
+                        ) {
+                            return true;
+                        }
+                        match self.represent(given) {
+                            Some(HirType::Managed(
+                                ManagedType::Array(_) | ManagedType::View(_),
+                            )) => true,
+                            Some(_) => false,
+                            None => matches!(
+                                self.snapshot
+                                    .types
+                                    .get(given.0 as usize)
+                                    .map(|record| &record.kind),
+                                Some(TypeKind::Array(_) | TypeKind::Tuple(_))
+                            ),
+                        }
+                    })
         })
     }
 
