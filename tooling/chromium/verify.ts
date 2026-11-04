@@ -5,17 +5,20 @@
  * the lane's files -- they owe no gate step of their own -- on the strength
  * of this run.
  *
- *   node tooling/chromium/verify.ts
+ *   node tooling/chromium/verify.ts [--profile baseline|perf]
  *
  * Run it from the tree to verify; NTS_BIN names the compiler
- * (target/release/nts by default). It stops at the first failure:
+ * (target/release/nts by default). The profile is perf by default;
+ * baseline is the debug build (is_debug = true), for a change whose
+ * weight is in a DCHECK the perf build compiles out. It stops at the
+ * first failure:
  *
  *   1. the bindings are what the generator makes of Blink's IDL, and its
  *      reports are current (bindgen/generate.py --check);
  *   2. without Chromium: the embedder's program on both backends, the
  *      contracts, and the standalone rows;
- *   3. for each backend: the probe staged (probe.ts), the perf engine built
- *      with it, and the dom and microtasks smokes;
+ *   3. for each backend: the probe staged (probe.ts), the profile's engine
+ *      built with it, and the dom and microtasks smokes;
  *   4. the V8 oracle -- the same pages' own script on unmodified
  *      content_shell -- and compare.ts, both backends' transcripts against it;
  *   5. each example app, built and checked (app.ts).
@@ -35,9 +38,12 @@ import { sha256File } from "./hash.ts";
 import { buildProfile } from "./profiles.ts";
 
 const root = resolve(import.meta.dirname, "../..");
-const profile = buildProfile(root, ["--profile", "perf"]);
+const options = process.argv.slice(2);
+assert(options.length === 0 || (options.length === 2 && options[0] === "--profile"),
+  "usage: verify.ts [--profile baseline|perf]");
+const profile = buildProfile(root, options.length ? options : ["--profile", "perf"]);
 const engine = resolve(chromiumSource(root), profile.directory);
-const runs = resolve(root, "target/chromium/perf");
+const runs = resolve(root, "target/chromium", profile.name);
 const apps = resolve(root, "runtime/chromium/examples");
 const staging = (): string => sha256File(resolve(chromiumSource(root), "nts/manifest.json"));
 const record = (path: string): { nativeManifestSha256?: string } => JSON.parse(readFileSync(path, "utf8"));
