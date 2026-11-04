@@ -3098,7 +3098,8 @@ to exact observations through typed routes, beside literal controls.
 | --- | --- | ---: | ---: | --- |
 | `construction` | `construction-*` | 24 | 24 | Own message and cause presence, cause identity, callable constructors and hidden standard properties through typed factories and carriers |
 | `names` | `names-*` | 24 | 24 | Every error text branch, four subclass naming styles, own key order, mutable messages and built-in prototype names through typed routes |
-| **Total** | | **48** | **48** | Matching case/control pairs |
+| `brands` | `brands-*` | 24 | 24 | Subclass ancestry and field order, cause forwarding, internal brands versus prototype shapes, narrowed catches and replacement errors |
+| **Total** | | **72** | **72** | Matching case/control pairs |
 
 ## Tags
 
@@ -3249,6 +3250,7 @@ to exact observations through typed routes, beside literal controls.
 | `ts-equality-route-strict` | strict equality and SameValue with complete mixed-kind tables, hook histories and exact results | Equality route contracts; typed paths | 16 | 0 |
 | `ts-error-object-route-construction` | Own message and cause presence, cause identity, callable constructors and hidden standard properties through typed factories and carriers | Error object route contracts; typed paths | 48 | 0 |
 | `ts-error-object-route-names` | Every error text branch, four subclass naming styles, own key order, mutable messages and built-in prototype names through typed routes | Error object route contracts; typed paths | 48 | 0 |
+| `ts-error-object-route-brands` | Subclass ancestry and field order, cause forwarding, internal brands versus prototype shapes, narrowed catches and replacement errors | Error object route contracts; typed paths | 48 | 0 |
 | `ts-error-object-routes` | error object properties, text, internal brands and aggregate members through typed routes beside literal controls | Error object route contracts; typed paths | 48 | 0 |
 | `ts-errors` | exceptions in typed code: `catch` bindings typed `unknown`, Error subclasses, finally | conformance/statements/tryStatements; typed paths | 1285 | 0 |
 | `ts-evaluation-order-route-assignments` | Target/key selection, competing RHS writes, one read/write, updates, logical skips, chained setter results, iterator/member-target interleaving and abrupt RHS | Evaluation-order route contracts; typed paths | 58 | 0 |
@@ -3523,7 +3525,7 @@ to exact observations through typed routes, beside literal controls.
 | `ts-type-form-route-signatures` | shorter and overloaded signatures, narrow assignment targets and TypeScript access modifiers preserve the arguments, returned values and properties that runtime supplies | Type-form route contracts; typed paths | 20 | 0 |
 | `ts-type-form-route-values` | polymorphic this, function expandos, namespace aliases and exponentiation preserve value identities, exact results, errors and evaluation order | Type-form route contracts; typed paths | 22 | 0 |
 | `ts-type-form-routes` | TypeScript forms preserve actual values, kinds, identities, errors and evaluation order through typed routes beside explicit honest-type or plain-operation controls | Type-form route contracts; typed paths | 102 | 0 |
-| `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 152 | 0 |
+| `ts-type-guards` | a user-defined type predicate (`value is T`) | conformance/expressions/typeGuards; ts-eslint TSTypePredicate | 186 | 0 |
 | `ts-type-operators` | values flowing through type-level operators: keyof, typeof, indexed access, mapped and conditional types | conformance/types (keyof, typeQueries, mapped, conditional) | 35 | 0 |
 | `ts-typeof-operator` | the run-time `typeof` operator over typed values | conformance/expressions/typeGuards/typeGuardsWithTypeOf | 2729 | 0 |
 | `ts-tuple-route-calls` | tuple parameters, results, argument lists, destructuring and variadic instantiations preserve every argument and returned slot | TypeScript Tuple Types; Variadic Tuple Types; rest arguments | 16 | 0 |
