@@ -3053,7 +3053,8 @@ native conversion remains a case even when a backend does not provide it yet.
 | `uri-decoding` | `uri-decoding-*` | 24 | 24 | Hex cases, UTF-8 values and errors, reserved-escape spelling, one-pass decoding and round trips through typed conversion routes |
 | `text-encoder` | `text-encoder-*` | 24 | 24 | Exact UTF-8 bytes and fresh buffers, surrogate replacement, whole-character encodeInto writes, view bounds and continuation through retained encoders |
 | `text-decoder` | `text-decoder-*` | 26 | 26 | UTF-8 and UTF-16LE units, replacement and fatal recovery, BOM and stream state, labels and view windows through retained decoders |
-| **Total** | | **98** | **98** | Matching case/control pairs |
+| `base64` | `base64-*` | 24 | 24 | Binary-string bytes, padding, whitespace and invalid forms, leftover bits, UTF-8 pipelines and dispatched codec implementations |
+| **Total** | | **122** | **122** | Matching case/control pairs |
 
 ## Tags
 
@@ -3183,11 +3184,12 @@ native conversion remains a case even when a backend does not provide it yet.
 | `ts-disposal-route-using-declarations` | typed resource declarations dispose once at the correct scope boundary in reverse order, skip null and undefined, retain acquired methods and reject a missing method | Disposal route contracts; typed paths | 16 | 0 |
 | `ts-enum-computed` | an enum member whose initialiser is an expression, constant or not | conformance/enums | 28 | 0 |
 | `ts-enum-reverse-mapping` | a numeric enum member's value mapped back to its name | conformance/enums | 30 | 0 |
+| `ts-encoding-route-base64` | Binary-string bytes, padding, whitespace and invalid forms, leftover bits, UTF-8 pipelines and dispatched codec implementations | Encoding route contracts; typed paths | 48 | 0 |
 | `ts-encoding-route-text-decoder` | UTF-8 and UTF-16LE units, replacement and fatal recovery, BOM and stream state, labels and view windows through retained decoders | Encoding route contracts; typed paths | 52 | 0 |
 | `ts-encoding-route-text-encoder` | Exact UTF-8 bytes and fresh buffers, surrogate replacement, whole-character encodeInto writes, view bounds and continuation through retained encoders | Encoding route contracts; typed paths | 48 | 0 |
 | `ts-encoding-route-uri-decoding` | Hex cases, UTF-8 values and errors, reserved-escape spelling, one-pass decoding and round trips through typed conversion routes | Encoding route contracts; typed paths | 48 | 0 |
 | `ts-encoding-route-uri-encoding` | Exact kept and escaped ASCII, uppercase UTF-8 length edges, surrogate failures and primitive conversion through typed input and function values | Encoding route contracts; typed paths | 48 | 0 |
-| `ts-encoding-routes` | exact text/byte conversions, errors and retained stream state through typed carriers beside literal-result controls | Encoding route contracts; typed paths | 196 | 0 |
+| `ts-encoding-routes` | exact text/byte conversions, errors and retained stream state through typed carriers beside literal-result controls | Encoding route contracts; typed paths | 244 | 0 |
 | `ts-enum` | an `enum` declaration and its object | conformance/enums; ts-eslint TSEnumDeclaration | 87 | 3 |
 | `ts-enum-route-flags-merging` | combined, tested and cleared flag values, repeated enum declarations and namespace functions with exact initialization and call histories with exact values and observations | Enum route contracts; typed paths | 16 | 0 |
 | `ts-enum-route-literal-members` | member unions and discriminants, exhaustive switches, comparison narrowing and const-enum values through interfaces and generic helpers with exact values and observations | Enum route contracts; typed paths | 16 | 0 |
