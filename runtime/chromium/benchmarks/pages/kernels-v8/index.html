@@ -56,10 +56,19 @@ function fillCanvasRects(count) {
 
 // The same table as kernels_benchmark.cc: 20,000 iterations per sample,
 // three discarded, twenty kept, one posted task per sample. `per-call` calls
-// the kernel with 1 from a loop, as native-typescript's v8.js does.
-const iterations = 20000, warm = 3, measured = 20;
+// the kernel with 1 from a loop, as native-typescript's v8.js does. Canvas
+// adds batch shapes -- the kernel called with N from a loop, one function
+// entry per N iterations -- and `task-call`: one posted task per iteration,
+// the entry a real callback pays (a task per iteration is 2,000 iterations,
+// not 20,000, or the queue itself would take minutes). Fitting time
+// against batch size separates an entry's cost from a call's, on both
+// sides of the comparison.
+const iterations = 20000, warm = 3, measured = 20, taskIterations = 2000;
 const kernels = [['create-element', createElements], ['detached-counter-tree', createDetachedCounterTrees],
   ['event-round-trip', runSynchronousEventRoundTrips], ['canvas-rects', fillCanvasRects]];
+const shapesOf = kernel => kernel === 'canvas-rects'
+  ? [['loop', iterations], ['per-call', 1], ['batch16', 16], ['batch256', 256], ['task-call', 1]]
+  : [['loop', iterations], ['per-call', 1]];
 function nextTask() {
   return new Promise(resolve => {
     const channel = new MessageChannel();
@@ -74,20 +83,34 @@ const output = document.querySelector('#benchmark-result');
 document.querySelector('#v8-kernels-run').addEventListener('input', async () => {
   const samples = [];
   for (const [kernel, run] of kernels) {
-    for (const shape of ['loop', 'per-call']) {
+    for (const [shape, batch] of shapesOf(kernel)) {
+      const total = shape === 'task-call' ? taskIterations : iterations;
       for (let round = 0; round < warm + measured; ++round) {
         await nextTask();
         let checksum = 0;
         const start = performance.now();
-        if (shape === 'loop') {
-          checksum = run(iterations);
+        if (shape === 'task-call') {
+          // One posted task per iteration, the kernel called with 1 from
+          // the task's callback: the sample's elapsed time is the tasks'
+          // entries and the calls together, as a page driving one call
+          // per task pays them.
+          checksum = await new Promise(resolve => {
+            const channel = new MessageChannel();
+            let left = total, sum = 0;
+            channel.port1.onmessage = () => {
+              sum += run(1);
+              if (--left === 0) { channel.port1.close(); resolve(sum); }
+              else channel.port2.postMessage(null);
+            };
+            channel.port2.postMessage(null);
+          });
         } else {
-          for (let index = 0; index < iterations; index += 1) checksum += run(1);
+          for (let done = 0; done < total; done += batch) checksum += run(Math.min(batch, total - done));
         }
         const elapsedNs = (performance.now() - start) * 1e6;
-        if (checksum !== iterations) throw Error(`${kernel} checksum ${checksum}`);
+        if (checksum !== total) throw Error(`${kernel} checksum ${checksum}`);
         if (round < warm) continue;
-        samples.push({kernel, shape, lane: 'v8', round: round - warm, iterations, nsPerOperation: elapsedNs / iterations});
+        samples.push({kernel, shape, lane: 'v8', round: round - warm, iterations: total, nsPerOperation: elapsedNs / total});
       }
     }
   }

@@ -2,6 +2,8 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <sys/resource.h>
 
 /* The standalone check never installs the renderer host, so it posts no idle
    work; reaching this would mean the policy leaked outside Chromium. */
@@ -27,7 +29,23 @@ void nts_dom_release(void* node) {
   abort();
 }
 
-int main(void) {
+int main(int argc, char** argv) {
+  if (argc == 2) {
+    const struct rlimit no_core = {0, 0};
+    if (setrlimit(RLIMIT_CORE, &no_core))
+      return 3;
+    nts_chromium_kernel_timing_begin();
+    if (!strcmp(argv[1], "count-reset-during-timing"))
+      nts_chromium_counting_reset();
+    else if (!strcmp(argv[1], "count-read-during-timing"))
+      (void)nts_chromium_counted_allocations();
+    return 4; /* Both forbidden calls must abort before reaching here. */
+  }
+  nts_chromium_counting_reset();
+  nts_chromium_kernel_timing_begin();
+  nts_chromium_kernel_timing_end();
+  if (nts_chromium_counted_allocations())
+    return 5;
   for (int document = 0; document < 20; ++document) {
     NtsChromiumProbe* probe = nts_chromium_probe_create();
     NtsChromiumProbeResult result = nts_chromium_probe_run(probe);

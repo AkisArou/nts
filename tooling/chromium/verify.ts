@@ -79,6 +79,8 @@ for (const backend of ["c", "llvm"]) {
   assert.equal(built(), staged, "the engine was built from another staging");
   tool(`process discovery stays inside this launch: real ${profile.name} browsers`, "tooling/chromium/browser-check.ts",
     resolve(engine, "content_shell"), resolve(runs, `browser-processes-${backend}`));
+  tool(`${backend}: intrinsic call audit and timed counting guards`, "tooling/chromium/kernel-check.ts",
+    resolve(engine, "nts_shell"), resolve(runs, `kernel-check-${backend}`));
   for (const mode of ["dom", "microtasks"]) {
     const output = resolve(runs, `native-${mode}-${backend}-smoke`);
     tool(`${backend}: ${mode}`, "tooling/chromium/smoke.ts", resolve(engine, "nts_shell"), output, backend, mode);

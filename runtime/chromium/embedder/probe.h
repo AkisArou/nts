@@ -43,8 +43,7 @@ void nts_chromium_probe_destroy(NtsChromiumProbe* probe);
 void nts_chromium_probe_install_microtasks(NtsChromiumProbe* probe,
                                            NtsDomContext* context);
 /* Lets the context's listeners call the program, in its environment. */
-void nts_chromium_probe_attach(NtsChromiumProbe* probe,
-                               NtsDomContext* context);
+void nts_chromium_probe_attach(NtsChromiumProbe* probe, NtsDomContext* context);
 /* Blink-owned checkpoints and idle-time cycle collection; see probe.c. */
 void nts_chromium_probe_install_host(NtsChromiumProbe* probe,
                                      NtsDomContext* context);
@@ -112,14 +111,21 @@ NtsChromiumTodo* nts_chromium_todo_create(NtsChromiumProbe* probe,
 void nts_chromium_todo_destroy(NtsChromiumTodo* todo);
 
 /* The binding kernels (src/kernels.ts): kernel 0 creates detached divs,
-   kernel 1 detached counter trees, kernel 2 event round trips on the body. One call is one native callback that runs
-   `iterations` of the kernel; returns the checksum, aborts on a raised
-   error. `allocations` receives the NTS allocations the call made. */
+   kernel 1 detached counter trees, kernel 2 event round trips on the body. One
+   call is one native callback that runs `iterations` of the kernel; returns the
+   checksum, aborts on a raised error. No measurement API is called on this
+   entry path. */
 double nts_chromium_kernel_run(NtsChromiumProbe* probe,
                                NtsDomContext* context,
                                uint32_t kernel,
-                               uint32_t iterations,
-                               size_t* allocations);
+                               uint32_t iterations);
+
+/* Sample-level instrumentation, called before/after the clock window on
+   both lanes. Counting APIs abort if reached while timing is active. */
+void nts_chromium_counting_reset(void);
+size_t nts_chromium_counted_allocations(void);
+void nts_chromium_kernel_timing_begin(void);
+void nts_chromium_kernel_timing_end(void);
 
 #ifdef __cplusplus
 }

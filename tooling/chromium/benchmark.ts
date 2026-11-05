@@ -38,8 +38,9 @@ const source = chromiumSource(root);
 const executable = resolve(process.argv[2] ?? resolve(source, "out/NtsBaseline/nts_shell"));
 const output = resolve(process.argv[3] ?? "target/chromium/binding-benchmark");
 const backend = process.argv[4];
-assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows|kernels|todo] [--todo-source nts-dom|lib-dom] [--collection idle|checkpoint] [--trace-gc] [--trace] [--profile-renderer]");
+assert(backend === "c" || backend === "llvm", "Usage: benchmark.ts <nts_shell> <output> <c|llvm> [--allow-debug] [--cpu N] [--runs N] [--workload binding|rows|kernels|todo] [--todo-source nts-dom|lib-dom] [--collection idle|checkpoint] [--trace-gc] [--trace] [--profile-renderer] [--build-evidence DIR]");
 let runs = 6;
+let sealedBuild: string | undefined;
 let cpu: number | undefined;
 let workload: "binding" | "rows" | "kernels" | "todo" = "binding";
 let collection: "checkpoint" | "idle" = "idle";
@@ -68,6 +69,7 @@ for (let i = 5; i < process.argv.length; ++i) {
   const option = process.argv[i];
   if (option === "--allow-debug") continue;
   if (option === "--cpu") cpu = Number(process.argv[++i]);
+  else if (option === "--build-evidence") sealedBuild = resolve(process.argv[++i]);
   else if (option === "--runs") runs = Number(process.argv[++i]);
   else if (option === "--trace-gc") traceGc = true;
   else if (option === "--trace") trace = true;
@@ -102,7 +104,8 @@ assert.equal(activeChromiumBuild(root), undefined, "Finish the active build befo
 assert.equal(execFileSync("git", ["-C", source, "diff", "HEAD", "--binary"], {encoding:"utf8"}), "");
 const hash = (bytes: Uint8Array | string): string => createHash("sha256").update(bytes).digest("hex");
 // The build record, with the shared checkout (checkout.ts).
-const evidenceDirectory = dirname(executable).endsWith("/NtsPerf") ? resolve(chromiumState(root), "perf") : chromiumState(root);
+const evidenceDirectory = sealedBuild ?? (dirname(executable).endsWith("/NtsPerf") ? resolve(chromiumState(root), "perf") : chromiumState(root));
+const manifestPath = sealedBuild ? resolve(sealedBuild, "manifest.json") : resolve(source, "nts/manifest.json");
 const buildRecord = JSON.parse(await readFile(resolve(evidenceDirectory, "build-result.json"), "utf8")) as {
   state: string; target: string; gnArgsSha256: string; executableSha256: string; nativeManifestSha256: string; v8ControlExecutableSha256: string;
 };
@@ -110,7 +113,7 @@ assert.equal(buildRecord.state, "passed", "Require a completed successful build"
 assert.equal(buildRecord.target, "nts_shell");
 assert.equal(buildRecord.gnArgsSha256, hash(argsText), "Build arguments changed after building");
 assert.equal(buildRecord.executableSha256, sha256File(executable), "Executable changed after building");
-assert.equal(buildRecord.nativeManifestSha256, hash(await readFile(resolve(source, "nts/manifest.json"))), "Staging changed after building; rebuild first");
+assert.equal(buildRecord.nativeManifestSha256, hash(await readFile(manifestPath)), "Staging changed after building; rebuild first");
 const fixturePath = resolve(root, `runtime/chromium/benchmarks/pages/${workload}/index.html`);
 const v8Executable = resolve(dirname(executable), "content_shell");
 assert(todoSource === "nts-dom" || workload === "todo", "--todo-source is the todo workload's");
@@ -139,6 +142,15 @@ const measurements: Array<{ run: number; order: Mode[]; native: Measurements; v8
 
 // The kernels workload's kernels, in kernels_benchmark.cc's case order.
 const KERNELS = ["create-element", "detached-counter-tree", "event-round-trip", "canvas-rects"];
+// The shape table kernels_benchmark.cc and kernels-benchmark-v8 share:
+// canvas adds batches (one entry per N iterations, for fitting an
+// entry's cost against a call's) and one posted task per iteration.
+// Native runs each shape in two lanes (intrinsic, compiled).
+const kernelShapes = (kernel: string) => kernel === "canvas-rects" ? ["loop", "per-call", "batch16", "batch256", "task-call"] : ["loop", "per-call"];
+const kernelLanes = (mode: Mode, kernel: string, shape: string) => mode === "v8" ? ["v8"]
+  : ["blink-intrinsic", "compiled", ...(kernel === "create-element" && shape === "loop" ? ["blink-atom-lookup"] : [])];
+const kernelSamplesPerRun = (mode: Mode) => KERNELS.reduce((total, kernel) =>
+  total + kernelShapes(kernel).reduce((count, shape) => count + kernelLanes(mode, kernel, shape).length, 0), 0) * 20;
 interface Profile { child: ReturnType<typeof spawn>; data: string; stderr: string[] }
 // Attaches to one process: user-space cycles with frame-pointer call graphs
 // (Chromium keeps frame pointers). An attach the sandbox refuses fails here,
@@ -349,8 +361,18 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     assert.equal(result.status, 0);
     if (workload === "kernels") {
       const kernels = result as unknown as KernelsMeasurements;
-      // Each kernel x two shapes x twenty samples, per lane: two lanes native.
-      assert.equal(kernels.samples.length, KERNELS.length * 2 * 20 * (mode === "native" ? 2 : 1));
+      // Every kernel/shape has twenty samples in each of its lanes.
+      assert.equal(kernels.samples.length, kernelSamplesPerRun(mode));
+      for (const kernel of KERNELS) for (const shape of kernelShapes(kernel)) {
+        for (const lane of kernelLanes(mode, kernel, shape)) {
+          const samples = kernels.samples.filter(sample => sample.kernel === kernel && sample.shape === shape && sample.lane === lane);
+          assert.deepEqual(samples.map(sample => sample.round).sort((a, b) => a - b), Array.from({length: 20}, (_, i) => i), `${kernel}/${shape}/${lane} must measure every round`);
+          for (const sample of samples) {
+            assert.equal(sample.iterations, shape === "task-call" ? 2000 : 20000);
+            assert(Number.isFinite(sample.nsPerOperation) && sample.nsPerOperation > 0);
+          }
+        }
+      }
       if (mode === "native") {
         assert.equal(kernels.liveRoots, 0, "a kernel must root nothing");
         // The DOM kernels allocate nothing of the program's; an event round
@@ -432,8 +454,8 @@ const provenance = {observedAt:new Date().toISOString(),workload,todoSource:work
   scope:debugEngine?"Diagnostic architecture comparison in debug Chromium; not a production performance claim":"Optimized static Chromium (no DCHECKs) architecture comparison; not an official/PGO distribution or whole-application speedup",
   argsText,cpu,runs,buildRecord,executable,executableSha256:sha256File(executable),fixtureSha256:hash(await readFile(fixturePath)),
   v8Executable,v8ExecutableSha256:sha256File(v8Executable),v8FixtureSha256:hash(await readFile(v8FixturePath)),
-  chromiumRevision:execFileSync("git",["-C",source,"rev-parse","HEAD"],{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(resolve(source,"nts/manifest.json"))),
-  compilerCheck:JSON.parse(await readFile(resolve(root,"target/chromium/native-bootstrap/check-result.json"),"utf8")),
+  chromiumRevision:execFileSync("git",["-C",source,"rev-parse","HEAD"],{encoding:"utf8"}).trim(),nativeManifestSha256:hash(await readFile(manifestPath)),
+  sealedBuild, compilerCheck:JSON.parse(await readFile(sealedBuild ? resolve(sealedBuild,"compiler-check.json") : resolve(root,"target/chromium/native-bootstrap/check-result.json"),"utf8")),
   cpuInfo:execFileSync("lscpu",[],{encoding:"utf8"})};
 if (workload === "todo") {
   const samplesOf = (result: Measurements) => (result as unknown as TodoMeasurements).samples;
@@ -475,20 +497,30 @@ if (workload === "todo") {
   };
   const summaries = [];
   for (const kernel of KERNELS) {
-    for (const shape of ["loop", "per-call"]) {
+    for (const shape of kernelShapes(kernel)) {
       const intrinsic = median(kernel, shape, "blink-intrinsic"), compiled = median(kernel, shape, "compiled"), v8 = median(kernel, shape, "v8");
       summaries.push({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic:compiled.medianNs/intrinsic.medianNs,compiledOverV8:compiled.medianNs/v8.medianNs});
     }
   }
+  const atomLookupControl = {
+    intrinsic: median("create-element", "loop", "blink-intrinsic"),
+    lookup: median("create-element", "loop", "blink-atom-lookup"),
+    v8: median("create-element", "loop", "v8"),
+  };
   await writeFile(resolve(output,"result.json"),`${JSON.stringify({...provenance,
     methodology:{launchOrder:"Balanced native-first/V8-first",cases:"kernels_benchmark.cc and kernels-benchmark-v8 share one case table; kernels from native-typescript benchmarks/chromium",
       v8:"HTML-loaded vanilla JS in unmodified content_shell, normal JIT; no measured Runtime.evaluate application",
-      timers:"Native TimeTicks and page performance.now around 20,000-iteration samples, one posted task per sample",
-      limits:"compiled per-call pays one environment and DOM entry per call; native-typescript's per-call called the compiled function directly. Nodes are Blink pointers; only those the program keeps are rooted"},
-    measurements,summaries},null,2)}\n`);
+      timers:"Native TimeTicks and page performance.now around 20,000-iteration samples; task-call uses 2,000 iterations, one MessageChannel task per iteration in all three lanes",
+      atomLookupControl:"create-element/loop also builds AtomicString(div) per call in blink-atom-lookup; the intrinsic bar holds the same atom built once",
+      limits:"Both native lanes emulate the same task roots and checkpoints in per-call and batch shapes; V8 per-call and batches are in-script function calls. Allocation counter reset/read bracket each native sample outside its clock window. Task-call compares real MessageChannel handlers, with the same channel machinery in both native lanes. Nodes are Blink pointers; only those the program keeps are rooted"},
+    measurements,summaries,atomLookupControl},null,2)}\n`);
   console.table(summaries.map(({kernel,shape,intrinsic,compiled,v8,compiledOverIntrinsic,compiledOverV8}) => ({kernel,shape,
     cppNs:+intrinsic.medianNs.toFixed(1),compiledNs:+compiled.medianNs.toFixed(1),v8Ns:+v8.medianNs.toFixed(1),
     compiledOverCpp:+compiledOverIntrinsic.toFixed(3),compiledOverV8:+compiledOverV8.toFixed(3)})));
+  console.table([{kernel:"create-element", shape:"loop", control:"per-call atom lookup",
+    cppNs:+atomLookupControl.intrinsic.medianNs.toFixed(1), lookupNs:+atomLookupControl.lookup.medianNs.toFixed(1), v8Ns:+atomLookupControl.v8.medianNs.toFixed(1),
+    lookupOverCpp:+(atomLookupControl.lookup.medianNs/atomLookupControl.intrinsic.medianNs).toFixed(3),
+    lookupMinusCppNs:+(atomLookupControl.lookup.medianNs-atomLookupControl.intrinsic.medianNs).toFixed(1)}]);
 } else if (workload === "rows") {
   const rowsOf = (result: Measurements) => (result as unknown as RowsMeasurements).samples;
   const summaries = [];

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 /** Standalone C/LLVM embedding check with Chromium's pinned toolchain. */
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { mkdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -29,6 +30,12 @@ execFileSync(nts, ["build", resolve(fixture, "tsconfig.json"), "--out", output, 
   cwd: root, stdio: "inherit", env: { ...process.env, NTS_NO_ACQUIRE: "1" },
 });
 const common = hostFlags(root, toolchain);
+// The raw runtime APIs are confined to the guarded wrappers. A new probe
+// caller cannot bypass the timed-window assertion accidentally.
+const probeSource = readFileSync(resolve(lane, "embedder/probe.c"), "utf8");
+for (const symbol of ["nts_counting_reset", "nts_counted_allocations"])
+  assert.equal(probeSource.match(new RegExp(`\\b${symbol}\\s*\\(`, "g"))?.length, 1,
+    `${symbol} must only be called by its timed-window guard`);
 const checks = [];
 for (const backend of ["c", "llvm"] as const) {
   const generated = resolve(output, backend === "c" ? "probe" : "probe-llvm", "linux-gnu-x86_64");
@@ -43,6 +50,11 @@ for (const backend of ["c", "llvm"] as const) {
   execFileSync(clang, [...common, "-fuse-ld=lld", "-I", generated, resolve(root, "runtime/chromium/embedder/caller.c"),
     archive, "-Wl,--gc-sections", "-lm", "-o", executable], { cwd: root, stdio: "inherit" });
   const observed = execFileSync(executable, [], { encoding: "utf8" }).trim();
+  for (const forbidden of ["count-reset-during-timing", "count-read-during-timing"]) {
+    const refusal = spawnSync(executable, [forbidden], { encoding: "utf8" });
+    assert.equal(refusal.signal, "SIGABRT", `${backend}/${forbidden}: ${refusal.stderr}`);
+    assert.match(refusal.stderr, /nts_chromium_count(?:ing_reset|ed_allocations)/);
+  }
   console.log(`${backend}: ${observed}`);
   checks.push({ backend, observed, archive, archiveSha256: hash(archive), shimSha256: hash(resolve(root, "runtime/chromium/embedder/probe.c")), hostSha256: hash(resolve(lane, "host/host.c")), programSha256: hash(resolve(generated, backend === "c" ? "program.c" : "program.ll")), runtimeSha256: hash(resolve(generated, "nts_runtime.c")) });
 }
