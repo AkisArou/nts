@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync, symlinkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync, symlinkSync, utimesSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawnTest } from "./test-wait.ts";
@@ -25,6 +25,25 @@ function fixture(t:{after(fn:()=>void):void}) {
   const run=mkdtempSync(join(scratch,"run-"));t.after(()=>rmSync(run,{recursive:true,force:true}));
   return {run,base:{PATH:process.env.PATH,HOME:homedir(),JAVA_HOME:"/jdk with spaces",CARGO_HOME:"/cargo",RUSTUP_HOME:"/rustup"}};
 }
+
+test("canonical Git status keeps its index unchanged after a stat refresh",t=>{
+  const {run,base}=fixture(t),repo=join(run,"repo");mkdirSync(repo);
+  const planned=gateEnvironment({...base,GIT_OPTIONAL_LOCKS:"1"},{run});
+  const git=(args:string[],env=planned.env)=>{
+    const result=spawnTest("git",args,{cwd:repo,env,encoding:"utf8"});
+    assert.equal(result.status,0,result.stderr);return result.stdout;
+  };
+  git(["init","--quiet"]);git(["config","user.name","Fixture"]);git(["config","user.email","fixture@example.invalid"]);
+  const file=join(repo,"input");writeFileSync(file,"unchanged content\n");git(["add","input"]);git(["-c","core.hooksPath=/dev/null","-c","commit.gpgsign=false","commit","--quiet","-m","fixture"]);
+  const index=join(repo,".git/index"),before=readFileSync(index);
+  utimesSync(file,946684800,946684800);
+  assert.equal(git(["status","--porcelain"],{...planned.env,GIT_OPTIONAL_LOCKS:"1"}),"");
+  assert.notDeepEqual(readFileSync(index),before,"the control must refresh the index");
+  const refreshed=readFileSync(index);utimesSync(file,978307200,978307200);
+  assert.equal(git(["status","--porcelain"]),"");
+  assert.deepEqual(readFileSync(index),refreshed,"canonical read-only status must not write the index");
+  assert.equal(planned.env.GIT_OPTIONAL_LOCKS,"0");
+});
 
 test("different launcher ambients produce identical step environments",t=>{
   const {run,base}=fixture(t);
