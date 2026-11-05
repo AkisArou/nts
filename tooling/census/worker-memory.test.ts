@@ -20,6 +20,15 @@ const scratch = () => {
 };
 const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(join(CGROUP, group, "memory.events"), "utf8"))![1]);
 
+test("a resident pool requires an explicit admission policy before setup", async () => {
+  let closed = 0, setup = 0;
+  const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
+  const options = { paths: [], jobs: 1, memory, workerBytes: 1, args: () => [], onRow: () => {} };
+  await assert.rejects(runMemoryWorkers(options), /resident workers require an explicit admission policy/);
+  assert.equal(setup, 0, "missing admission fails before any worker or memory setup");
+  assert.equal(closed, 1, "the pool still closes the run it owns");
+});
+
 test("a real step records its aggregate memory.peak before the cgroup is removed", { timeout: TEST_HANG_MS }, t => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
