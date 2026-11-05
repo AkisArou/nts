@@ -7,12 +7,12 @@
     "rayon_num_threads": "1"
   },
   "counter_scope": "exec-inherited-user-instructions-v1",
-  "commit": "4f0389108f9b37f4be9aeb0cfdeffa45e2d26b56",
-  "nts_sha256": "f73818b47c491df17ddd8e6bd597f93a97f1f915caaa061745f740a329d772b9",
-  "raw_directory": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1",
+  "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+  "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+  "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1",
   "complete": true,
-  "total_cpu_s": 2711.3085479999995,
-  "maximum_spread": 0.0009779434240195783,
+  "total_cpu_s": 2150.965688999999,
+  "maximum_spread": 0.0012021083512725461,
   "modules": [
     {
       "module": "runtime/node/assert",
@@ -29,18 +29,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 208581921743,
-          "user_s": 20.323843,
-          "sys_s": 0.111725,
-          "cpu_s": 20.435568,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_assert-1.perf",
+          "instructions": 181989358193,
+          "user_s": 15.885839,
+          "sys_s": 0.119668,
+          "cpu_s": 16.005507,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_assert-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.495771820999998,
+          "wall_s": 16.054133209,
           "listing_functions": 2810,
           "listing_definitions": 2810,
-          "listing_sha256": "db7597c3037de3fdfdf04ef3c2892fd5448cba021604a438177fb1d728d3a840"
+          "listing_sha256": "141f172441c7ac9a102c499a5b20555db2d6f268b1d7f43060500642b4fd7eee"
         },
         {
           "module": "runtime/node/assert",
@@ -53,18 +53,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 208594605188,
-          "user_s": 19.657488,
-          "sys_s": 0.112698,
-          "cpu_s": 19.770186000000002,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_assert-2.perf",
+          "instructions": 181970662318,
+          "user_s": 18.016417,
+          "sys_s": 0.118668,
+          "cpu_s": 18.135085,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_assert-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 19.81945756899999,
+          "wall_s": 18.239992753,
           "listing_functions": 2810,
           "listing_definitions": 2810,
-          "listing_sha256": "db7597c3037de3fdfdf04ef3c2892fd5448cba021604a438177fb1d728d3a840"
+          "listing_sha256": "141f172441c7ac9a102c499a5b20555db2d6f268b1d7f43060500642b4fd7eee"
         },
         {
           "module": "runtime/node/assert",
@@ -77,18 +77,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 208604144301,
-          "user_s": 20.293404,
-          "sys_s": 0.124671,
-          "cpu_s": 20.418074999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_assert-3.perf",
+          "instructions": 182042554044,
+          "user_s": 16.439019,
+          "sys_s": 0.126484,
+          "cpu_s": 16.565503,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_assert-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.475847527000035,
+          "wall_s": 16.65415664599999,
           "listing_functions": 2810,
           "listing_definitions": 2810,
-          "listing_sha256": "db7597c3037de3fdfdf04ef3c2892fd5448cba021604a438177fb1d728d3a840"
+          "listing_sha256": "141f172441c7ac9a102c499a5b20555db2d6f268b1d7f43060500642b4fd7eee"
         },
         {
           "module": "runtime/node/assert",
@@ -101,18 +101,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 208628131936,
-          "user_s": 19.619251,
-          "sys_s": 0.130645,
-          "cpu_s": 19.749896,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_assert-4.perf",
+          "instructions": 182066102699,
+          "user_s": 18.97272,
+          "sys_s": 0.17056,
+          "cpu_s": 19.143279999999997,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_assert-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 19.801047609,
+          "wall_s": 19.647950774000027,
           "listing_functions": 2810,
           "listing_definitions": 2810,
-          "listing_sha256": "db7597c3037de3fdfdf04ef3c2892fd5448cba021604a438177fb1d728d3a840"
+          "listing_sha256": "141f172441c7ac9a102c499a5b20555db2d6f268b1d7f43060500642b4fd7eee"
         },
         {
           "module": "runtime/node/assert",
@@ -125,23 +125,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 208610138970,
-          "user_s": 19.676654,
-          "sys_s": 0.113683,
-          "cpu_s": 19.790337,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_assert-5.perf",
+          "instructions": 181953414932,
+          "user_s": 19.073849,
+          "sys_s": 0.20112,
+          "cpu_s": 19.274969,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_assert-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 19.842849874999956,
+          "wall_s": 19.460966140999982,
           "listing_functions": 2810,
           "listing_definitions": 2810,
-          "listing_sha256": "db7597c3037de3fdfdf04ef3c2892fd5448cba021604a438177fb1d728d3a840"
+          "listing_sha256": "141f172441c7ac9a102c499a5b20555db2d6f268b1d7f43060500642b4fd7eee"
         }
       ],
-      "median_instructions": 208604144301,
-      "median_cpu_s": 19.790337,
-      "spread": 0.00022154457401613037
+      "median_instructions": 181989358193,
+      "median_cpu_s": 18.135085,
+      "spread": 0.0006193220778083486
     },
     {
       "module": "runtime/node/async_hooks",
@@ -158,18 +158,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3384265591,
-          "user_s": 0.261651,
-          "sys_s": 0.010862,
-          "cpu_s": 0.272513,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_async_hooks-1.perf",
+          "instructions": 3202481142,
+          "user_s": 0.245128,
+          "sys_s": 0.013764,
+          "cpu_s": 0.258892,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_async_hooks-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.28821551900000003,
+          "wall_s": 0.2743581379999999,
           "listing_functions": 408,
           "listing_definitions": 408,
-          "listing_sha256": "ac255461e54945948f0bc93b84a6438754fd797ac58c31f0ea6b91a2d56e92dd"
+          "listing_sha256": "092ff3b78839eb15c5099ba11b4245bf0d3895605173be723b0b6593d645a236"
         },
         {
           "module": "runtime/node/async_hooks",
@@ -182,18 +182,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3384279359,
-          "user_s": 0.268516,
-          "sys_s": 0.012019,
-          "cpu_s": 0.280535,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_async_hooks-2.perf",
+          "instructions": 3202466919,
+          "user_s": 0.260571,
+          "sys_s": 0.011856,
+          "cpu_s": 0.272427,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_async_hooks-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.2889244590000017,
+          "wall_s": 0.2878238640000054,
           "listing_functions": 408,
           "listing_definitions": 408,
-          "listing_sha256": "ac255461e54945948f0bc93b84a6438754fd797ac58c31f0ea6b91a2d56e92dd"
+          "listing_sha256": "092ff3b78839eb15c5099ba11b4245bf0d3895605173be723b0b6593d645a236"
         },
         {
           "module": "runtime/node/async_hooks",
@@ -206,18 +206,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3384261141,
-          "user_s": 0.270239,
-          "sys_s": 0.009968,
-          "cpu_s": 0.280207,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_async_hooks-3.perf",
+          "instructions": 3202494950,
+          "user_s": 0.243393,
+          "sys_s": 0.009971,
+          "cpu_s": 0.253364,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_async_hooks-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.2918174759999965,
+          "wall_s": 0.26920891600000324,
           "listing_functions": 408,
           "listing_definitions": 408,
-          "listing_sha256": "ac255461e54945948f0bc93b84a6438754fd797ac58c31f0ea6b91a2d56e92dd"
+          "listing_sha256": "092ff3b78839eb15c5099ba11b4245bf0d3895605173be723b0b6593d645a236"
         },
         {
           "module": "runtime/node/async_hooks",
@@ -230,18 +230,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3384263550,
-          "user_s": 0.259835,
-          "sys_s": 0.011923,
-          "cpu_s": 0.271758,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_async_hooks-4.perf",
+          "instructions": 3202468311,
+          "user_s": 0.417688,
+          "sys_s": 0.01383,
+          "cpu_s": 0.431518,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_async_hooks-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.284151165999996,
+          "wall_s": 0.4623668169999728,
           "listing_functions": 408,
           "listing_definitions": 408,
-          "listing_sha256": "ac255461e54945948f0bc93b84a6438754fd797ac58c31f0ea6b91a2d56e92dd"
+          "listing_sha256": "092ff3b78839eb15c5099ba11b4245bf0d3895605173be723b0b6593d645a236"
         },
         {
           "module": "runtime/node/async_hooks",
@@ -254,23 +254,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3384267443,
-          "user_s": 0.272333,
-          "sys_s": 0.013867,
-          "cpu_s": 0.2862,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_async_hooks-5.perf",
+          "instructions": 3202493642,
+          "user_s": 0.24251,
+          "sys_s": 0.008982,
+          "cpu_s": 0.251492,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_async_hooks-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.29635055900004226,
+          "wall_s": 0.2792657469999976,
           "listing_functions": 408,
           "listing_definitions": 408,
-          "listing_sha256": "ac255461e54945948f0bc93b84a6438754fd797ac58c31f0ea6b91a2d56e92dd"
+          "listing_sha256": "092ff3b78839eb15c5099ba11b4245bf0d3895605173be723b0b6593d645a236"
         }
       ],
-      "median_instructions": 3384265591,
-      "median_cpu_s": 0.280207,
-      "spread": 0.000005383154325633299
+      "median_instructions": 3202481142,
+      "median_cpu_s": 0.258892,
+      "spread": 0.000008752939752110223
     },
     {
       "module": "runtime/node/buffer",
@@ -287,18 +287,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11153548470,
-          "user_s": 0.873698,
-          "sys_s": 0.014914,
-          "cpu_s": 0.888612,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_buffer-1.perf",
+          "instructions": 9675302975,
+          "user_s": 0.772032,
+          "sys_s": 0.014855,
+          "cpu_s": 0.786887,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_buffer-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.9042082300000001,
+          "wall_s": 0.8003613350000001,
           "listing_functions": 525,
           "listing_definitions": 525,
-          "listing_sha256": "ccd7a74f44469d7c6c93f555aaf398b13df2c219454f47199d0796edb48bb251"
+          "listing_sha256": "2ac4ee97f8e67bfde08dc4c56c8c7a29285525cd4b5987debc49ac690d2d83a2"
         },
         {
           "module": "runtime/node/buffer",
@@ -311,18 +311,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11153550868,
-          "user_s": 0.861599,
-          "sys_s": 0.013907,
-          "cpu_s": 0.875506,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_buffer-2.perf",
+          "instructions": 9674441721,
+          "user_s": 0.849587,
+          "sys_s": 0.014955,
+          "cpu_s": 0.864542,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_buffer-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.8877274169999874,
+          "wall_s": 0.8801740889999928,
           "listing_functions": 525,
           "listing_definitions": 525,
-          "listing_sha256": "ccd7a74f44469d7c6c93f555aaf398b13df2c219454f47199d0796edb48bb251"
+          "listing_sha256": "2ac4ee97f8e67bfde08dc4c56c8c7a29285525cd4b5987debc49ac690d2d83a2"
         },
         {
           "module": "runtime/node/buffer",
@@ -335,18 +335,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11153562868,
-          "user_s": 0.871938,
-          "sys_s": 0.018947,
-          "cpu_s": 0.890885,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_buffer-3.perf",
+          "instructions": 9674434272,
+          "user_s": 0.782546,
+          "sys_s": 0.014965,
+          "cpu_s": 0.797511,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_buffer-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.9014367120000534,
+          "wall_s": 0.808838745999994,
           "listing_functions": 525,
           "listing_definitions": 525,
-          "listing_sha256": "ccd7a74f44469d7c6c93f555aaf398b13df2c219454f47199d0796edb48bb251"
+          "listing_sha256": "2ac4ee97f8e67bfde08dc4c56c8c7a29285525cd4b5987debc49ac690d2d83a2"
         },
         {
           "module": "runtime/node/buffer",
@@ -359,18 +359,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11153551274,
-          "user_s": 0.866843,
-          "sys_s": 0.013951,
-          "cpu_s": 0.8807940000000001,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_buffer-4.perf",
+          "instructions": 9674476988,
+          "user_s": 1.488876,
+          "sys_s": 0.029771,
+          "cpu_s": 1.518647,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_buffer-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.8942242439999827,
+          "wall_s": 1.5894820380000165,
           "listing_functions": 525,
           "listing_definitions": 525,
-          "listing_sha256": "ccd7a74f44469d7c6c93f555aaf398b13df2c219454f47199d0796edb48bb251"
+          "listing_sha256": "2ac4ee97f8e67bfde08dc4c56c8c7a29285525cd4b5987debc49ac690d2d83a2"
         },
         {
           "module": "runtime/node/buffer",
@@ -383,23 +383,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11153577786,
-          "user_s": 0.87077,
-          "sys_s": 0.011909,
-          "cpu_s": 0.882679,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_buffer-5.perf",
+          "instructions": 9674413765,
+          "user_s": 0.792907,
+          "sys_s": 0.015934,
+          "cpu_s": 0.808841,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_buffer-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.8965810360000469,
+          "wall_s": 0.821644639999955,
           "listing_functions": 525,
           "listing_definitions": 525,
-          "listing_sha256": "ccd7a74f44469d7c6c93f555aaf398b13df2c219454f47199d0796edb48bb251"
+          "listing_sha256": "2ac4ee97f8e67bfde08dc4c56c8c7a29285525cd4b5987debc49ac690d2d83a2"
         }
       ],
-      "median_instructions": 11153551274,
-      "median_cpu_s": 0.882679,
-      "spread": 0.000002628401183590867
+      "median_instructions": 9674441721,
+      "median_cpu_s": 0.808841,
+      "spread": 0.00009191357963378444
     },
     {
       "module": "runtime/node/child_process",
@@ -416,18 +416,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 320038064162,
-          "user_s": 31.631348,
-          "sys_s": 0.163509,
-          "cpu_s": 31.794857,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_child_process-1.perf",
+          "instructions": 270205111783,
+          "user_s": 24.187097,
+          "sys_s": 0.158557,
+          "cpu_s": 24.345654,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_child_process-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.876571867,
+          "wall_s": 24.405118079,
           "listing_functions": 3533,
           "listing_definitions": 3533,
-          "listing_sha256": "60cde362d32122dd387e6e89ffe91baa7e66e488ff8985ff9c2cb782768413de"
+          "listing_sha256": "89d486c4335cf2feb37bcd7ed77ba10cd0a3d15bbef1d608a436e54eb134a22a"
         },
         {
           "module": "runtime/node/child_process",
@@ -440,18 +440,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 319908593972,
-          "user_s": 31.286945,
-          "sys_s": 0.167469,
-          "cpu_s": 31.454414,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_child_process-2.perf",
+          "instructions": 270098816587,
+          "user_s": 25.555208,
+          "sys_s": 0.166432,
+          "cpu_s": 25.72164,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_child_process-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.542521116000017,
+          "wall_s": 25.816216097000012,
           "listing_functions": 3533,
           "listing_definitions": 3533,
-          "listing_sha256": "60cde362d32122dd387e6e89ffe91baa7e66e488ff8985ff9c2cb782768413de"
+          "listing_sha256": "89d486c4335cf2feb37bcd7ed77ba10cd0a3d15bbef1d608a436e54eb134a22a"
         },
         {
           "module": "runtime/node/child_process",
@@ -464,18 +464,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 320163169203,
-          "user_s": 31.099463,
-          "sys_s": 0.164572,
-          "cpu_s": 31.264035,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_child_process-3.perf",
+          "instructions": 270128618743,
+          "user_s": 24.617158,
+          "sys_s": 0.160569,
+          "cpu_s": 24.777727,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_child_process-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.346907242000047,
+          "wall_s": 24.883605800999998,
           "listing_functions": 3533,
           "listing_definitions": 3533,
-          "listing_sha256": "60cde362d32122dd387e6e89ffe91baa7e66e488ff8985ff9c2cb782768413de"
+          "listing_sha256": "89d486c4335cf2feb37bcd7ed77ba10cd0a3d15bbef1d608a436e54eb134a22a"
         },
         {
           "module": "runtime/node/child_process",
@@ -488,18 +488,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 320003100193,
-          "user_s": 31.170547,
-          "sys_s": 0.185624,
-          "cpu_s": 31.356171,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_child_process-4.perf",
+          "instructions": 269992740111,
+          "user_s": 25.897566,
+          "sys_s": 0.280607,
+          "cpu_s": 26.178173,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_child_process-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.461861351000028,
+          "wall_s": 26.333087081999984,
           "listing_functions": 3533,
           "listing_definitions": 3533,
-          "listing_sha256": "60cde362d32122dd387e6e89ffe91baa7e66e488ff8985ff9c2cb782768413de"
+          "listing_sha256": "89d486c4335cf2feb37bcd7ed77ba10cd0a3d15bbef1d608a436e54eb134a22a"
         },
         {
           "module": "runtime/node/child_process",
@@ -512,23 +512,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 320197805658,
-          "user_s": 30.730676,
-          "sys_s": 0.168618,
-          "cpu_s": 30.899293999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_child_process-5.perf",
+          "instructions": 269972690369,
+          "user_s": 24.488541,
+          "sys_s": 0.152569,
+          "cpu_s": 24.64111,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_child_process-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 30.977333145000042,
+          "wall_s": 24.705626183999993,
           "listing_functions": 3533,
           "listing_definitions": 3533,
-          "listing_sha256": "60cde362d32122dd387e6e89ffe91baa7e66e488ff8985ff9c2cb782768413de"
+          "listing_sha256": "89d486c4335cf2feb37bcd7ed77ba10cd0a3d15bbef1d608a436e54eb134a22a"
         }
       ],
-      "median_instructions": 320038064162,
-      "median_cpu_s": 31.356171,
-      "spread": 0.0009040447535626495
+      "median_instructions": 270098816587,
+      "median_cpu_s": 24.777727,
+      "spread": 0.0008609071298371074
     },
     {
       "module": "runtime/node/cluster",
@@ -545,18 +545,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 353735650657,
-          "user_s": 36.051844,
-          "sys_s": 0.171499,
-          "cpu_s": 36.223343,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_cluster-1.perf",
+          "instructions": 292540072588,
+          "user_s": 26.798181,
+          "sys_s": 0.177618,
+          "cpu_s": 26.975799,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_cluster-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 36.318988686000004,
+          "wall_s": 27.041388498,
           "listing_functions": 3788,
           "listing_definitions": 3788,
-          "listing_sha256": "2e15057306fbcb1757d3fcd45150736bdf6ee80b86d3e8d43a94dd7188b992c6"
+          "listing_sha256": "1f58669632a427647795bea0cbb02b8e8199a9786469f5ee3f1f40a43822b2f4"
         },
         {
           "module": "runtime/node/cluster",
@@ -569,18 +569,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 353667553633,
-          "user_s": 36.98556,
-          "sys_s": 0.170552,
-          "cpu_s": 37.156112,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_cluster-2.perf",
+          "instructions": 292646417340,
+          "user_s": 27.913842,
+          "sys_s": 0.168638,
+          "cpu_s": 28.08248,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_cluster-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 37.261098222,
+          "wall_s": 28.181078903000003,
           "listing_functions": 3788,
           "listing_definitions": 3788,
-          "listing_sha256": "2e15057306fbcb1757d3fcd45150736bdf6ee80b86d3e8d43a94dd7188b992c6"
+          "listing_sha256": "1f58669632a427647795bea0cbb02b8e8199a9786469f5ee3f1f40a43822b2f4"
         },
         {
           "module": "runtime/node/cluster",
@@ -593,18 +593,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 353656285987,
-          "user_s": 35.297888,
-          "sys_s": 0.173598,
-          "cpu_s": 35.471486,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_cluster-3.perf",
+          "instructions": 292651678328,
+          "user_s": 27.023085,
+          "sys_s": 0.187344,
+          "cpu_s": 27.210428999999998,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_cluster-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 35.55556992799998,
+          "wall_s": 27.30176840000003,
           "listing_functions": 3788,
           "listing_definitions": 3788,
-          "listing_sha256": "2e15057306fbcb1757d3fcd45150736bdf6ee80b86d3e8d43a94dd7188b992c6"
+          "listing_sha256": "1f58669632a427647795bea0cbb02b8e8199a9786469f5ee3f1f40a43822b2f4"
         },
         {
           "module": "runtime/node/cluster",
@@ -617,18 +617,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 353687427176,
-          "user_s": 36.30776,
-          "sys_s": 0.175548,
-          "cpu_s": 36.483308,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_cluster-4.perf",
+          "instructions": 292578878590,
+          "user_s": 26.820129,
+          "sys_s": 0.165659,
+          "cpu_s": 26.985788000000003,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_cluster-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 36.606150232999994,
+          "wall_s": 27.069674204999988,
           "listing_functions": 3788,
           "listing_definitions": 3788,
-          "listing_sha256": "2e15057306fbcb1757d3fcd45150736bdf6ee80b86d3e8d43a94dd7188b992c6"
+          "listing_sha256": "1f58669632a427647795bea0cbb02b8e8199a9786469f5ee3f1f40a43822b2f4"
         },
         {
           "module": "runtime/node/cluster",
@@ -641,23 +641,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 353663030332,
-          "user_s": 35.85466,
-          "sys_s": 0.164616,
-          "cpu_s": 36.019276000000005,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_cluster-5.perf",
+          "instructions": 292597450898,
+          "user_s": 26.959603,
+          "sys_s": 0.167624,
+          "cpu_s": 27.127227,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_cluster-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 36.108505068999946,
+          "wall_s": 27.189025002999987,
           "listing_functions": 3788,
           "listing_definitions": 3788,
-          "listing_sha256": "2e15057306fbcb1757d3fcd45150736bdf6ee80b86d3e8d43a94dd7188b992c6"
+          "listing_sha256": "1f58669632a427647795bea0cbb02b8e8199a9786469f5ee3f1f40a43822b2f4"
         }
       ],
-      "median_instructions": 353667553633,
-      "median_cpu_s": 36.223343,
-      "spread": 0.0002244118743104373
+      "median_instructions": 292597450898,
+      "median_cpu_s": 27.127227,
+      "spread": 0.00038150581905815883
     },
     {
       "module": "runtime/node/console",
@@ -674,18 +674,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 218902874061,
-          "user_s": 21.673338,
-          "sys_s": 0.107751,
-          "cpu_s": 21.781089,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_console-1.perf",
+          "instructions": 189598342750,
+          "user_s": 16.843003,
+          "sys_s": 0.125552,
+          "cpu_s": 16.968555,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_console-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.841943464,
+          "wall_s": 17.01514491,
           "listing_functions": 2904,
           "listing_definitions": 2904,
-          "listing_sha256": "569d7bf2f26de577a353e920f076001a1006ce3caae3b252057ff78b5edbc25e"
+          "listing_sha256": "6079f8191b51b4ca5be181ed8e065e573fe7479aec54f37329c451107ce59411"
         },
         {
           "module": "runtime/node/console",
@@ -698,18 +698,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 218845325551,
-          "user_s": 22.288829,
-          "sys_s": 0.131612,
-          "cpu_s": 22.420441,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_console-2.perf",
+          "instructions": 189555847966,
+          "user_s": 17.658233,
+          "sys_s": 0.13159,
+          "cpu_s": 17.789823,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_console-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 22.488085105000007,
+          "wall_s": 17.85984979000001,
           "listing_functions": 2904,
           "listing_definitions": 2904,
-          "listing_sha256": "569d7bf2f26de577a353e920f076001a1006ce3caae3b252057ff78b5edbc25e"
+          "listing_sha256": "6079f8191b51b4ca5be181ed8e065e573fe7479aec54f37329c451107ce59411"
         },
         {
           "module": "runtime/node/console",
@@ -722,18 +722,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 219059343898,
-          "user_s": 21.489134,
-          "sys_s": 0.120728,
-          "cpu_s": 21.609862,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_console-3.perf",
+          "instructions": 189527452223,
+          "user_s": 16.893175,
+          "sys_s": 0.119696,
+          "cpu_s": 17.012871,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_console-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.67008614999999,
+          "wall_s": 17.06763189799999,
           "listing_functions": 2904,
           "listing_definitions": 2904,
-          "listing_sha256": "569d7bf2f26de577a353e920f076001a1006ce3caae3b252057ff78b5edbc25e"
+          "listing_sha256": "6079f8191b51b4ca5be181ed8e065e573fe7479aec54f37329c451107ce59411"
         },
         {
           "module": "runtime/node/console",
@@ -746,18 +746,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 218879569302,
-          "user_s": 21.900332,
-          "sys_s": 0.134533,
-          "cpu_s": 22.034865,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_console-4.perf",
+          "instructions": 189531482615,
+          "user_s": 16.952138,
+          "sys_s": 0.122668,
+          "cpu_s": 17.074806000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_console-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 22.12202979,
+          "wall_s": 17.13382804500003,
           "listing_functions": 2904,
           "listing_definitions": 2904,
-          "listing_sha256": "569d7bf2f26de577a353e920f076001a1006ce3caae3b252057ff78b5edbc25e"
+          "listing_sha256": "6079f8191b51b4ca5be181ed8e065e573fe7479aec54f37329c451107ce59411"
         },
         {
           "module": "runtime/node/console",
@@ -770,23 +770,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 218901195244,
-          "user_s": 21.722627,
-          "sys_s": 0.115703,
-          "cpu_s": 21.83833,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_console-5.perf",
+          "instructions": 189524391313,
+          "user_s": 17.236934,
+          "sys_s": 0.115656,
+          "cpu_s": 17.352590000000003,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_console-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.89628878400009,
+          "wall_s": 17.402404587999975,
           "listing_functions": 2904,
           "listing_definitions": 2904,
-          "listing_sha256": "569d7bf2f26de577a353e920f076001a1006ce3caae3b252057ff78b5edbc25e"
+          "listing_sha256": "6079f8191b51b4ca5be181ed8e065e573fe7479aec54f37329c451107ce59411"
         }
       ],
-      "median_instructions": 218901195244,
-      "median_cpu_s": 21.83833,
-      "spread": 0.0009779434240195783
+      "median_instructions": 189531482615,
+      "median_cpu_s": 17.074806000000002,
+      "spread": 0.00039019482657431936
     },
     {
       "module": "runtime/node/crypto",
@@ -803,18 +803,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 397923613095,
-          "user_s": 40.441086,
-          "sys_s": 0.187557,
-          "cpu_s": 40.628643,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_crypto-1.perf",
+          "instructions": 313538046080,
+          "user_s": 28.635858,
+          "sys_s": 0.207483,
+          "cpu_s": 28.843341,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_crypto-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 40.734604905,
+          "wall_s": 28.917562852,
           "listing_functions": 4327,
           "listing_definitions": 4327,
-          "listing_sha256": "99047ab240e18a7ac1fe863ba7d9f101328c3112cc60e1a4d3bdb96f987394a4"
+          "listing_sha256": "4a93c4aee6c4c451c4c4c9ac363285ddca59028523c810d7955ee203dc9e0a83"
         },
         {
           "module": "runtime/node/crypto",
@@ -827,18 +827,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 398149644687,
-          "user_s": 41.354848,
-          "sys_s": 0.214445,
-          "cpu_s": 41.569292999999995,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_crypto-2.perf",
+          "instructions": 313595542641,
+          "user_s": 29.327331,
+          "sys_s": 0.188518,
+          "cpu_s": 29.515849,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_crypto-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 41.67824745599998,
+          "wall_s": 29.622050527999992,
           "listing_functions": 4327,
           "listing_definitions": 4327,
-          "listing_sha256": "99047ab240e18a7ac1fe863ba7d9f101328c3112cc60e1a4d3bdb96f987394a4"
+          "listing_sha256": "4a93c4aee6c4c451c4c4c9ac363285ddca59028523c810d7955ee203dc9e0a83"
         },
         {
           "module": "runtime/node/crypto",
@@ -851,18 +851,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 398158751632,
-          "user_s": 39.396367,
-          "sys_s": 0.184515,
-          "cpu_s": 39.580881999999995,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_crypto-3.perf",
+          "instructions": 313355582033,
+          "user_s": 28.303511,
+          "sys_s": 0.225336,
+          "cpu_s": 28.528847,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_crypto-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 39.68025438599999,
+          "wall_s": 28.61886129000003,
           "listing_functions": 4327,
           "listing_definitions": 4327,
-          "listing_sha256": "99047ab240e18a7ac1fe863ba7d9f101328c3112cc60e1a4d3bdb96f987394a4"
+          "listing_sha256": "4a93c4aee6c4c451c4c4c9ac363285ddca59028523c810d7955ee203dc9e0a83"
         },
         {
           "module": "runtime/node/crypto",
@@ -875,18 +875,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 398154406145,
-          "user_s": 40.156505,
-          "sys_s": 0.224342,
-          "cpu_s": 40.380847,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_crypto-4.perf",
+          "instructions": 313220411123,
+          "user_s": 28.362701,
+          "sys_s": 0.187538,
+          "cpu_s": 28.550239,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_crypto-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 40.501589236999976,
+          "wall_s": 28.629242434000016,
           "listing_functions": 4327,
           "listing_definitions": 4327,
-          "listing_sha256": "99047ab240e18a7ac1fe863ba7d9f101328c3112cc60e1a4d3bdb96f987394a4"
+          "listing_sha256": "4a93c4aee6c4c451c4c4c9ac363285ddca59028523c810d7955ee203dc9e0a83"
         },
         {
           "module": "runtime/node/crypto",
@@ -899,23 +899,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 398113555490,
-          "user_s": 39.873477,
-          "sys_s": 0.215428,
-          "cpu_s": 40.088905000000004,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_crypto-5.perf",
+          "instructions": 313596935995,
+          "user_s": 28.649083,
+          "sys_s": 0.178553,
+          "cpu_s": 28.827636000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_crypto-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 40.191465963999974,
+          "wall_s": 28.90680347100005,
           "listing_functions": 4327,
           "listing_definitions": 4327,
-          "listing_sha256": "99047ab240e18a7ac1fe863ba7d9f101328c3112cc60e1a4d3bdb96f987394a4"
+          "listing_sha256": "4a93c4aee6c4c451c4c4c9ac363285ddca59028523c810d7955ee203dc9e0a83"
         }
       ],
-      "median_instructions": 398149644687,
-      "median_cpu_s": 40.380847,
-      "spread": 0.0005909137564648059
+      "median_instructions": 313538046080,
+      "median_cpu_s": 28.827636000000002,
+      "spread": 0.0012021083512725461
     },
     {
       "module": "runtime/node/dgram",
@@ -932,18 +932,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321800135876,
-          "user_s": 31.572605,
-          "sys_s": 0.180589,
-          "cpu_s": 31.753194,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dgram-1.perf",
+          "instructions": 266698258114,
+          "user_s": 24.254234,
+          "sys_s": 0.146626,
+          "cpu_s": 24.40086,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dgram-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.833869043000004,
+          "wall_s": 24.457914806,
           "listing_functions": 3731,
           "listing_definitions": 3731,
-          "listing_sha256": "97390a9ce2d3cd696382de230dc1898e7456c3560bc944a818bf465940bcceed"
+          "listing_sha256": "611246e68bf481fe234024924eb3f49f0c6a0570f4a8d07bf388555bee10964d"
         },
         {
           "module": "runtime/node/dgram",
@@ -956,18 +956,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321739142165,
-          "user_s": 32.426335,
-          "sys_s": 0.178525,
-          "cpu_s": 32.60486,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dgram-2.perf",
+          "instructions": 266695238993,
+          "user_s": 24.910788,
+          "sys_s": 0.210281,
+          "cpu_s": 25.121069,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dgram-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.69356269300001,
+          "wall_s": 25.19333601,
           "listing_functions": 3731,
           "listing_definitions": 3731,
-          "listing_sha256": "97390a9ce2d3cd696382de230dc1898e7456c3560bc944a818bf465940bcceed"
+          "listing_sha256": "611246e68bf481fe234024924eb3f49f0c6a0570f4a8d07bf388555bee10964d"
         },
         {
           "module": "runtime/node/dgram",
@@ -980,18 +980,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321741167766,
-          "user_s": 31.543114,
-          "sys_s": 0.173518,
-          "cpu_s": 31.716632,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dgram-3.perf",
+          "instructions": 266712132826,
+          "user_s": 24.105659,
+          "sys_s": 0.161768,
+          "cpu_s": 24.267426999999998,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dgram-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.797446945000033,
+          "wall_s": 24.34767554700002,
           "listing_functions": 3731,
           "listing_definitions": 3731,
-          "listing_sha256": "97390a9ce2d3cd696382de230dc1898e7456c3560bc944a818bf465940bcceed"
+          "listing_sha256": "611246e68bf481fe234024924eb3f49f0c6a0570f4a8d07bf388555bee10964d"
         },
         {
           "module": "runtime/node/dgram",
@@ -1004,18 +1004,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321790426269,
-          "user_s": 31.992834,
-          "sys_s": 0.169569,
-          "cpu_s": 32.162403,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dgram-4.perf",
+          "instructions": 266739654757,
+          "user_s": 24.072842,
+          "sys_s": 0.179585,
+          "cpu_s": 24.252427,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dgram-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.24352030099998,
+          "wall_s": 24.314249223000022,
           "listing_functions": 3731,
           "listing_definitions": 3731,
-          "listing_sha256": "97390a9ce2d3cd696382de230dc1898e7456c3560bc944a818bf465940bcceed"
+          "listing_sha256": "611246e68bf481fe234024924eb3f49f0c6a0570f4a8d07bf388555bee10964d"
         },
         {
           "module": "runtime/node/dgram",
@@ -1028,23 +1028,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321819029997,
-          "user_s": 31.776916,
-          "sys_s": 0.197447,
-          "cpu_s": 31.974363,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dgram-5.perf",
+          "instructions": 266707379656,
+          "user_s": 24.193969,
+          "sys_s": 0.153642,
+          "cpu_s": 24.347611,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dgram-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.05337211200001,
+          "wall_s": 24.409314772999963,
           "listing_functions": 3731,
           "listing_definitions": 3731,
-          "listing_sha256": "97390a9ce2d3cd696382de230dc1898e7456c3560bc944a818bf465940bcceed"
+          "listing_sha256": "611246e68bf481fe234024924eb3f49f0c6a0570f4a8d07bf388555bee10964d"
         }
       ],
-      "median_instructions": 321790426269,
-      "median_cpu_s": 31.974363,
-      "spread": 0.00024830000932563046
+      "median_instructions": 266707379656,
+      "median_cpu_s": 24.347611,
+      "spread": 0.00016654127073167935
     },
     {
       "module": "runtime/node/diagnostics_channel",
@@ -1061,18 +1061,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3113694024,
-          "user_s": 0.251587,
-          "sys_s": 0.012957,
-          "cpu_s": 0.264544,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_diagnostics_channel-1.perf",
+          "instructions": 2982588564,
+          "user_s": 0.229346,
+          "sys_s": 0.010996,
+          "cpu_s": 0.240342,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_diagnostics_channel-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.27838184900000124,
+          "wall_s": 0.2533513009999988,
           "listing_functions": 375,
           "listing_definitions": 375,
-          "listing_sha256": "b53fd845224b977c9e7049a450a6b1f69f1e8b644ad9d30fc9780de8eefe33d8"
+          "listing_sha256": "1a878a2d402e7c7979f00d32a01ce0691f4efd689a3441c9f0ff0c15d7bcc14c"
         },
         {
           "module": "runtime/node/diagnostics_channel",
@@ -1085,18 +1085,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3113699122,
-          "user_s": 0.260693,
-          "sys_s": 0.011903,
-          "cpu_s": 0.272596,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_diagnostics_channel-2.perf",
+          "instructions": 2982598085,
+          "user_s": 0.21534,
+          "sys_s": 0.012932,
+          "cpu_s": 0.228272,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_diagnostics_channel-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.28525490400000125,
+          "wall_s": 0.23989713699999266,
           "listing_functions": 375,
           "listing_definitions": 375,
-          "listing_sha256": "b53fd845224b977c9e7049a450a6b1f69f1e8b644ad9d30fc9780de8eefe33d8"
+          "listing_sha256": "1a878a2d402e7c7979f00d32a01ce0691f4efd689a3441c9f0ff0c15d7bcc14c"
         },
         {
           "module": "runtime/node/diagnostics_channel",
@@ -1109,18 +1109,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3113697226,
-          "user_s": 0.240909,
-          "sys_s": 0.009012,
-          "cpu_s": 0.249921,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_diagnostics_channel-3.perf",
+          "instructions": 2982591179,
+          "user_s": 0.222543,
+          "sys_s": 0.011018,
+          "cpu_s": 0.233561,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_diagnostics_channel-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.262206204999995,
+          "wall_s": 0.24614266199999837,
           "listing_functions": 375,
           "listing_definitions": 375,
-          "listing_sha256": "b53fd845224b977c9e7049a450a6b1f69f1e8b644ad9d30fc9780de8eefe33d8"
+          "listing_sha256": "1a878a2d402e7c7979f00d32a01ce0691f4efd689a3441c9f0ff0c15d7bcc14c"
         },
         {
           "module": "runtime/node/diagnostics_channel",
@@ -1133,18 +1133,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3113710546,
-          "user_s": 0.234902,
-          "sys_s": 0.011936,
-          "cpu_s": 0.246838,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_diagnostics_channel-4.perf",
+          "instructions": 2982601220,
+          "user_s": 0.220076,
+          "sys_s": 0.015915,
+          "cpu_s": 0.235991,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_diagnostics_channel-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.2575553530000034,
+          "wall_s": 0.24789476400002605,
           "listing_functions": 375,
           "listing_definitions": 375,
-          "listing_sha256": "b53fd845224b977c9e7049a450a6b1f69f1e8b644ad9d30fc9780de8eefe33d8"
+          "listing_sha256": "1a878a2d402e7c7979f00d32a01ce0691f4efd689a3441c9f0ff0c15d7bcc14c"
         },
         {
           "module": "runtime/node/diagnostics_channel",
@@ -1157,23 +1157,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3113693255,
-          "user_s": 0.238565,
-          "sys_s": 0.017913,
-          "cpu_s": 0.256478,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_diagnostics_channel-5.perf",
+          "instructions": 2982587277,
+          "user_s": 0.23116,
+          "sys_s": 0.008958,
+          "cpu_s": 0.240118,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_diagnostics_channel-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.26959181200002785,
+          "wall_s": 0.2524660370000056,
           "listing_functions": 375,
           "listing_definitions": 375,
-          "listing_sha256": "b53fd845224b977c9e7049a450a6b1f69f1e8b644ad9d30fc9780de8eefe33d8"
+          "listing_sha256": "1a878a2d402e7c7979f00d32a01ce0691f4efd689a3441c9f0ff0c15d7bcc14c"
         }
       ],
-      "median_instructions": 3113697226,
-      "median_cpu_s": 0.256478,
-      "spread": 0.000005553212402142904
+      "median_instructions": 2982591179,
+      "median_cpu_s": 0.235991,
+      "spread": 0.00000467480033439216
     },
     {
       "module": "runtime/node/dns",
@@ -1190,18 +1190,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12944789501,
-          "user_s": 1.108288,
-          "sys_s": 0.015936,
-          "cpu_s": 1.124224,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dns-1.perf",
+          "instructions": 11955184118,
+          "user_s": 1.050947,
+          "sys_s": 0.018894,
+          "cpu_s": 1.069841,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dns-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.1383044050000026,
+          "wall_s": 1.084973724000003,
           "listing_functions": 642,
           "listing_definitions": 642,
-          "listing_sha256": "cb19a6ca68843ed412ca1f9e32094063989d64642cecce26daba5d8b9b87543a"
+          "listing_sha256": "c42d9d9d1a24f916a1da2eecd86c26bedbc899f043312dfc00e53f7fb516a719"
         },
         {
           "module": "runtime/node/dns",
@@ -1214,18 +1214,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12944808553,
-          "user_s": 1.076299,
-          "sys_s": 0.021892,
-          "cpu_s": 1.098191,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dns-2.perf",
+          "instructions": 11954581145,
+          "user_s": 0.97477,
+          "sys_s": 0.012891,
+          "cpu_s": 0.987661,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dns-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.112523331000004,
+          "wall_s": 1.0022196169999953,
           "listing_functions": 642,
           "listing_definitions": 642,
-          "listing_sha256": "cb19a6ca68843ed412ca1f9e32094063989d64642cecce26daba5d8b9b87543a"
+          "listing_sha256": "c42d9d9d1a24f916a1da2eecd86c26bedbc899f043312dfc00e53f7fb516a719"
         },
         {
           "module": "runtime/node/dns",
@@ -1238,18 +1238,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12944819642,
-          "user_s": 1.067975,
-          "sys_s": 0.020944,
-          "cpu_s": 1.088919,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dns-3.perf",
+          "instructions": 11955030939,
+          "user_s": 0.969383,
+          "sys_s": 0.014913,
+          "cpu_s": 0.984296,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dns-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.1032738460000255,
+          "wall_s": 0.9969268810000212,
           "listing_functions": 642,
           "listing_definitions": 642,
-          "listing_sha256": "cb19a6ca68843ed412ca1f9e32094063989d64642cecce26daba5d8b9b87543a"
+          "listing_sha256": "c42d9d9d1a24f916a1da2eecd86c26bedbc899f043312dfc00e53f7fb516a719"
         },
         {
           "module": "runtime/node/dns",
@@ -1262,18 +1262,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12944789245,
-          "user_s": 1.102072,
-          "sys_s": 0.015952,
-          "cpu_s": 1.118024,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dns-4.perf",
+          "instructions": 11955031144,
+          "user_s": 0.971254,
+          "sys_s": 0.015936,
+          "cpu_s": 0.9871899999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dns-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.1322891899999814,
+          "wall_s": 1.0014790059999796,
           "listing_functions": 642,
           "listing_definitions": 642,
-          "listing_sha256": "cb19a6ca68843ed412ca1f9e32094063989d64642cecce26daba5d8b9b87543a"
+          "listing_sha256": "c42d9d9d1a24f916a1da2eecd86c26bedbc899f043312dfc00e53f7fb516a719"
         },
         {
           "module": "runtime/node/dns",
@@ -1286,23 +1286,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12944800338,
-          "user_s": 1.093505,
-          "sys_s": 0.017959,
-          "cpu_s": 1.111464,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_dns-5.perf",
+          "instructions": 11954562703,
+          "user_s": 0.963922,
+          "sys_s": 0.013964,
+          "cpu_s": 0.9778859999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_dns-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.1265341560000088,
+          "wall_s": 0.9926895670000231,
           "listing_functions": 642,
           "listing_definitions": 642,
-          "listing_sha256": "cb19a6ca68843ed412ca1f9e32094063989d64642cecce26daba5d8b9b87543a"
+          "listing_sha256": "c42d9d9d1a24f916a1da2eecd86c26bedbc899f043312dfc00e53f7fb516a719"
         }
       ],
-      "median_instructions": 12944800338,
-      "median_cpu_s": 1.111464,
-      "spread": 0.0000023482035453881167
+      "median_instructions": 11955030939,
+      "median_cpu_s": 0.9871899999999999,
+      "spread": 0.00005198140788897909
     },
     {
       "module": "runtime/node/events",
@@ -1319,18 +1319,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 198514588204,
-          "user_s": 18.813367,
-          "sys_s": 0.110718,
-          "cpu_s": 18.924084999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_events-1.perf",
+          "instructions": 174737963714,
+          "user_s": 15.452434,
+          "sys_s": 0.107733,
+          "cpu_s": 15.560167,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_events-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 18.978416070999998,
+          "wall_s": 15.600066958,
           "listing_functions": 2772,
           "listing_definitions": 2772,
-          "listing_sha256": "3bc49f5d01c2c4e0349bcce2a872433a80e7a1f394d6cede92486045d3a63eeb"
+          "listing_sha256": "170f26b81c80777e95396d873ec2ad61d60fbb91cf643214140573e2e6e35c7a"
         },
         {
           "module": "runtime/node/events",
@@ -1343,18 +1343,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 198493823340,
-          "user_s": 19.075514,
-          "sys_s": 0.130609,
-          "cpu_s": 19.206122999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_events-2.perf",
+          "instructions": 174876800405,
+          "user_s": 15.590362,
+          "sys_s": 0.092808,
+          "cpu_s": 15.68317,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_events-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 19.262612492999992,
+          "wall_s": 15.726386100000003,
           "listing_functions": 2772,
           "listing_definitions": 2772,
-          "listing_sha256": "3bc49f5d01c2c4e0349bcce2a872433a80e7a1f394d6cede92486045d3a63eeb"
+          "listing_sha256": "170f26b81c80777e95396d873ec2ad61d60fbb91cf643214140573e2e6e35c7a"
         },
         {
           "module": "runtime/node/events",
@@ -1367,18 +1367,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 198462053929,
-          "user_s": 18.624291,
-          "sys_s": 0.107684,
-          "cpu_s": 18.731975,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_events-3.perf",
+          "instructions": 174796019850,
+          "user_s": 15.50611,
+          "sys_s": 0.109744,
+          "cpu_s": 15.615853999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_events-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 18.785027589000006,
+          "wall_s": 15.660892630999996,
           "listing_functions": 2772,
           "listing_definitions": 2772,
-          "listing_sha256": "3bc49f5d01c2c4e0349bcce2a872433a80e7a1f394d6cede92486045d3a63eeb"
+          "listing_sha256": "170f26b81c80777e95396d873ec2ad61d60fbb91cf643214140573e2e6e35c7a"
         },
         {
           "module": "runtime/node/events",
@@ -1391,18 +1391,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 198459593555,
-          "user_s": 19.054769,
-          "sys_s": 0.130619,
-          "cpu_s": 19.185388,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_events-4.perf",
+          "instructions": 174817804960,
+          "user_s": 15.405158,
+          "sys_s": 0.10376,
+          "cpu_s": 15.508918,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_events-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 19.241639766999985,
+          "wall_s": 15.548256771999993,
           "listing_functions": 2772,
           "listing_definitions": 2772,
-          "listing_sha256": "3bc49f5d01c2c4e0349bcce2a872433a80e7a1f394d6cede92486045d3a63eeb"
+          "listing_sha256": "170f26b81c80777e95396d873ec2ad61d60fbb91cf643214140573e2e6e35c7a"
         },
         {
           "module": "runtime/node/events",
@@ -1415,23 +1415,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 198499336356,
-          "user_s": 18.854223,
-          "sys_s": 0.102665,
-          "cpu_s": 18.956888,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_events-5.perf",
+          "instructions": 174821043424,
+          "user_s": 15.423574,
+          "sys_s": 0.101746,
+          "cpu_s": 15.52532,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_events-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 19.00800341100001,
+          "wall_s": 15.567581571999996,
           "listing_functions": 2772,
           "listing_definitions": 2772,
-          "listing_sha256": "3bc49f5d01c2c4e0349bcce2a872433a80e7a1f394d6cede92486045d3a63eeb"
+          "listing_sha256": "170f26b81c80777e95396d873ec2ad61d60fbb91cf643214140573e2e6e35c7a"
         }
       ],
-      "median_instructions": 198493823340,
-      "median_cpu_s": 18.956888,
-      "spread": 0.00027710753617338213
+      "median_instructions": 174817804960,
+      "median_cpu_s": 15.560167,
+      "spread": 0.0007945422279684866
     },
     {
       "module": "runtime/node/fs",
@@ -1448,18 +1448,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 455502728685,
-          "user_s": 47.765189,
-          "sys_s": 0.243347,
-          "cpu_s": 48.008536,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_fs-1.perf",
+          "instructions": 367136976879,
+          "user_s": 34.172768,
+          "sys_s": 0.201557,
+          "cpu_s": 34.374325,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_fs-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 48.13810658399999,
+          "wall_s": 34.44761154,
           "listing_functions": 4375,
           "listing_definitions": 4375,
-          "listing_sha256": "f71ff79f9358f776163bdc4a0228c8571d6d83051ab642cebac096829e46f5c4"
+          "listing_sha256": "00c6e2595fbe192b3b791c8d41b2e6a5b9bef0b3418271ae3de577d4c5ff5314"
         },
         {
           "module": "runtime/node/fs",
@@ -1472,18 +1472,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 455411362269,
-          "user_s": 48.341417,
-          "sys_s": 0.233411,
-          "cpu_s": 48.574828,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_fs-2.perf",
+          "instructions": 367206119270,
+          "user_s": 36.833709,
+          "sys_s": 0.20654,
+          "cpu_s": 37.040248999999996,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_fs-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 48.68888788200001,
+          "wall_s": 37.152731886000026,
           "listing_functions": 4375,
           "listing_definitions": 4375,
-          "listing_sha256": "f71ff79f9358f776163bdc4a0228c8571d6d83051ab642cebac096829e46f5c4"
+          "listing_sha256": "00c6e2595fbe192b3b791c8d41b2e6a5b9bef0b3418271ae3de577d4c5ff5314"
         },
         {
           "module": "runtime/node/fs",
@@ -1496,18 +1496,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 455309383654,
-          "user_s": 49.72357,
-          "sys_s": 0.248449,
-          "cpu_s": 49.972019,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_fs-3.perf",
+          "instructions": 367027033718,
+          "user_s": 37.01025,
+          "sys_s": 0.202529,
+          "cpu_s": 37.212779,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_fs-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 50.09848167499999,
+          "wall_s": 37.31739376400004,
           "listing_functions": 4375,
           "listing_definitions": 4375,
-          "listing_sha256": "f71ff79f9358f776163bdc4a0228c8571d6d83051ab642cebac096829e46f5c4"
+          "listing_sha256": "00c6e2595fbe192b3b791c8d41b2e6a5b9bef0b3418271ae3de577d4c5ff5314"
         },
         {
           "module": "runtime/node/fs",
@@ -1520,18 +1520,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 455520627159,
-          "user_s": 48.791968,
-          "sys_s": 0.251358,
-          "cpu_s": 49.043326,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_fs-4.perf",
+          "instructions": 367114887735,
+          "user_s": 37.097931,
+          "sys_s": 0.228306,
+          "cpu_s": 37.326237000000006,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_fs-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 49.16909089300002,
+          "wall_s": 37.464311959000014,
           "listing_functions": 4375,
           "listing_definitions": 4375,
-          "listing_sha256": "f71ff79f9358f776163bdc4a0228c8571d6d83051ab642cebac096829e46f5c4"
+          "listing_sha256": "00c6e2595fbe192b3b791c8d41b2e6a5b9bef0b3418271ae3de577d4c5ff5314"
         },
         {
           "module": "runtime/node/fs",
@@ -1544,23 +1544,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 455454956606,
-          "user_s": 49.332215,
-          "sys_s": 0.229482,
-          "cpu_s": 49.561696999999995,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_fs-5.perf",
+          "instructions": 367161850871,
+          "user_s": 35.939461,
+          "sys_s": 0.2265,
+          "cpu_s": 36.165961,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_fs-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 49.69148043400003,
+          "wall_s": 36.26150108999992,
           "listing_functions": 4375,
           "listing_definitions": 4375,
-          "listing_sha256": "f71ff79f9358f776163bdc4a0228c8571d6d83051ab642cebac096829e46f5c4"
+          "listing_sha256": "00c6e2595fbe192b3b791c8d41b2e6a5b9bef0b3418271ae3de577d4c5ff5314"
         }
       ],
-      "median_instructions": 455454956606,
-      "median_cpu_s": 49.043326,
-      "spread": 0.0004639559661712145
+      "median_instructions": 367136976879,
+      "median_cpu_s": 37.040248999999996,
+      "spread": 0.0004879355893374626
     },
     {
       "module": "runtime/node/http",
@@ -1577,18 +1577,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 440668108554,
-          "user_s": 47.485396,
-          "sys_s": 0.219462,
-          "cpu_s": 47.704858,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_http-1.perf",
+          "instructions": 361569714858,
+          "user_s": 34.245297,
+          "sys_s": 0.191477,
+          "cpu_s": 34.436774,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_http-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.83412426199999,
+          "wall_s": 34.532276295,
           "listing_functions": 4461,
           "listing_definitions": 4461,
-          "listing_sha256": "90606a4bf14a526ba30114c4955a9e7141700f2c13a5bd897b23413ac4e2b244"
+          "listing_sha256": "a579fd1be83214b373c8c26d5915a27d6d933140b08a7e72a53616e833000780"
         },
         {
           "module": "runtime/node/http",
@@ -1601,18 +1601,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 440784567769,
-          "user_s": 46.003492,
-          "sys_s": 0.195538,
-          "cpu_s": 46.19903,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_http-2.perf",
+          "instructions": 361635364696,
+          "user_s": 34.669552,
+          "sys_s": 0.223518,
+          "cpu_s": 34.89307,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_http-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 46.31367308900002,
+          "wall_s": 34.99063814200001,
           "listing_functions": 4461,
           "listing_definitions": 4461,
-          "listing_sha256": "90606a4bf14a526ba30114c4955a9e7141700f2c13a5bd897b23413ac4e2b244"
+          "listing_sha256": "a579fd1be83214b373c8c26d5915a27d6d933140b08a7e72a53616e833000780"
         },
         {
           "module": "runtime/node/http",
@@ -1625,18 +1625,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 440701742339,
-          "user_s": 47.385988,
-          "sys_s": 0.205495,
-          "cpu_s": 47.591483,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_http-3.perf",
+          "instructions": 361558323216,
+          "user_s": 34.823101,
+          "sys_s": 0.212324,
+          "cpu_s": 35.035425000000004,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_http-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.715004353000026,
+          "wall_s": 35.132590603999965,
           "listing_functions": 4461,
           "listing_definitions": 4461,
-          "listing_sha256": "90606a4bf14a526ba30114c4955a9e7141700f2c13a5bd897b23413ac4e2b244"
+          "listing_sha256": "a579fd1be83214b373c8c26d5915a27d6d933140b08a7e72a53616e833000780"
         },
         {
           "module": "runtime/node/http",
@@ -1649,18 +1649,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 440815156044,
-          "user_s": 46.344343,
-          "sys_s": 0.204506,
-          "cpu_s": 46.548849000000004,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_http-4.perf",
+          "instructions": 361377244252,
+          "user_s": 40.115202,
+          "sys_s": 0.19539,
+          "cpu_s": 40.310592,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_http-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 46.67692259800003,
+          "wall_s": 40.46658792700001,
           "listing_functions": 4461,
           "listing_definitions": 4461,
-          "listing_sha256": "90606a4bf14a526ba30114c4955a9e7141700f2c13a5bd897b23413ac4e2b244"
+          "listing_sha256": "a579fd1be83214b373c8c26d5915a27d6d933140b08a7e72a53616e833000780"
         },
         {
           "module": "runtime/node/http",
@@ -1673,23 +1673,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 440927803149,
-          "user_s": 46.682317,
-          "sys_s": 0.200431,
-          "cpu_s": 46.882748,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_http-5.perf",
+          "instructions": 361596472895,
+          "user_s": 34.936441,
+          "sys_s": 0.19646,
+          "cpu_s": 35.132901000000004,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_http-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.00363862699992,
+          "wall_s": 35.23775816300005,
           "listing_functions": 4461,
           "listing_definitions": 4461,
-          "listing_sha256": "90606a4bf14a526ba30114c4955a9e7141700f2c13a5bd897b23413ac4e2b244"
+          "listing_sha256": "a579fd1be83214b373c8c26d5915a27d6d933140b08a7e72a53616e833000780"
         }
       ],
-      "median_instructions": 440784567769,
-      "median_cpu_s": 46.882748,
-      "spread": 0.0005893201481090848
+      "median_instructions": 361569714858,
+      "median_cpu_s": 35.035425000000004,
+      "spread": 0.000714268671051066
     },
     {
       "module": "runtime/node/net",
@@ -1706,18 +1706,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 322082250357,
-          "user_s": 32.622522,
-          "sys_s": 0.162536,
-          "cpu_s": 32.785058,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_net-1.perf",
+          "instructions": 268705732729,
+          "user_s": 24.313022,
+          "sys_s": 0.169592,
+          "cpu_s": 24.482614,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_net-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.88056411000001,
+          "wall_s": 24.539665532,
           "listing_functions": 3692,
           "listing_definitions": 3692,
-          "listing_sha256": "8559fd7e2a15215186fa1601e0b0bead237befaeb465b317e92d523f3964c03f"
+          "listing_sha256": "6caced0b3373a1dc3b710ea3c8eba805130431f41e2dda583b50b38f655734b2"
         },
         {
           "module": "runtime/node/net",
@@ -1730,18 +1730,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321895080610,
-          "user_s": 31.936131,
-          "sys_s": 0.161641,
-          "cpu_s": 32.097772,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_net-2.perf",
+          "instructions": 268600612115,
+          "user_s": 25.7684,
+          "sys_s": 0.136689,
+          "cpu_s": 25.905089,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_net-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.181733189999996,
+          "wall_s": 25.98497207799999,
           "listing_functions": 3692,
           "listing_definitions": 3692,
-          "listing_sha256": "8559fd7e2a15215186fa1601e0b0bead237befaeb465b317e92d523f3964c03f"
+          "listing_sha256": "6caced0b3373a1dc3b710ea3c8eba805130431f41e2dda583b50b38f655734b2"
         },
         {
           "module": "runtime/node/net",
@@ -1754,18 +1754,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 321964066685,
-          "user_s": 32.531317,
-          "sys_s": 0.191485,
-          "cpu_s": 32.722802,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_net-3.perf",
+          "instructions": 268570205585,
+          "user_s": 25.631139,
+          "sys_s": 0.144653,
+          "cpu_s": 25.775792000000003,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_net-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.809154912,
+          "wall_s": 25.847614708000037,
           "listing_functions": 3692,
           "listing_definitions": 3692,
-          "listing_sha256": "8559fd7e2a15215186fa1601e0b0bead237befaeb465b317e92d523f3964c03f"
+          "listing_sha256": "6caced0b3373a1dc3b710ea3c8eba805130431f41e2dda583b50b38f655734b2"
         },
         {
           "module": "runtime/node/net",
@@ -1778,18 +1778,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 322105104191,
-          "user_s": 32.307116,
-          "sys_s": 0.17557,
-          "cpu_s": 32.482686,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_net-4.perf",
+          "instructions": 268542485990,
+          "user_s": 26.386887,
+          "sys_s": 0.158515,
+          "cpu_s": 26.545402000000003,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_net-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.57192858200002,
+          "wall_s": 26.666969654000017,
           "listing_functions": 3692,
           "listing_definitions": 3692,
-          "listing_sha256": "8559fd7e2a15215186fa1601e0b0bead237befaeb465b317e92d523f3964c03f"
+          "listing_sha256": "6caced0b3373a1dc3b710ea3c8eba805130431f41e2dda583b50b38f655734b2"
         },
         {
           "module": "runtime/node/net",
@@ -1802,23 +1802,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 322028765570,
-          "user_s": 32.39521,
-          "sys_s": 0.184562,
-          "cpu_s": 32.579772,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_net-5.perf",
+          "instructions": 268546422999,
+          "user_s": 27.685239,
+          "sys_s": 0.150618,
+          "cpu_s": 27.835857,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_net-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.66307335199998,
+          "wall_s": 27.921396035999933,
           "listing_functions": 3692,
           "listing_definitions": 3692,
-          "listing_sha256": "8559fd7e2a15215186fa1601e0b0bead237befaeb465b317e92d523f3964c03f"
+          "listing_sha256": "6caced0b3373a1dc3b710ea3c8eba805130431f41e2dda583b50b38f655734b2"
         }
       ],
-      "median_instructions": 322028765570,
-      "median_cpu_s": 32.579772,
-      "spread": 0.0006524597412362887
+      "median_instructions": 268570205585,
+      "median_cpu_s": 25.905089,
+      "spread": 0.0006078991128655176
     },
     {
       "module": "runtime/node/os",
@@ -1835,18 +1835,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12106240205,
-          "user_s": 0.962068,
-          "sys_s": 0.019918,
-          "cpu_s": 0.981986,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_os-1.perf",
+          "instructions": 10475021810,
+          "user_s": 0.854459,
+          "sys_s": 0.021949,
+          "cpu_s": 0.876408,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_os-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.9967889799999975,
+          "wall_s": 0.8903798310000056,
           "listing_functions": 547,
           "listing_definitions": 547,
-          "listing_sha256": "cb1a2d4a0e44d457fa081ec62124bbc22ce2b34c10dac7f31ec2a48528d1992b"
+          "listing_sha256": "0bcd154b296ef9b5a755e0cb01c193259e8df404b66b9f08be458b798d67435a"
         },
         {
           "module": "runtime/node/os",
@@ -1859,18 +1859,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12106255276,
-          "user_s": 0.995464,
-          "sys_s": 0.016928,
-          "cpu_s": 1.012392,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_os-2.perf",
+          "instructions": 10475015228,
+          "user_s": 0.866546,
+          "sys_s": 0.017879,
+          "cpu_s": 0.884425,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_os-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.0273604010000126,
+          "wall_s": 0.8948907130000007,
           "listing_functions": 547,
           "listing_definitions": 547,
-          "listing_sha256": "cb1a2d4a0e44d457fa081ec62124bbc22ce2b34c10dac7f31ec2a48528d1992b"
+          "listing_sha256": "0bcd154b296ef9b5a755e0cb01c193259e8df404b66b9f08be458b798d67435a"
         },
         {
           "module": "runtime/node/os",
@@ -1883,18 +1883,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12106249373,
-          "user_s": 0.989681,
-          "sys_s": 0.012952,
-          "cpu_s": 1.002633,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_os-3.perf",
+          "instructions": 10475096339,
+          "user_s": 0.853178,
+          "sys_s": 0.013986,
+          "cpu_s": 0.867164,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_os-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.016372590999992,
+          "wall_s": 0.8804907569999924,
           "listing_functions": 547,
           "listing_definitions": 547,
-          "listing_sha256": "cb1a2d4a0e44d457fa081ec62124bbc22ce2b34c10dac7f31ec2a48528d1992b"
+          "listing_sha256": "0bcd154b296ef9b5a755e0cb01c193259e8df404b66b9f08be458b798d67435a"
         },
         {
           "module": "runtime/node/os",
@@ -1907,18 +1907,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12106385377,
-          "user_s": 0.990401,
-          "sys_s": 0.015934,
-          "cpu_s": 1.006335,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_os-4.perf",
+          "instructions": 10475043084,
+          "user_s": 0.86551,
+          "sys_s": 0.01596,
+          "cpu_s": 0.88147,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_os-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.0209057299999986,
+          "wall_s": 0.8949906119999942,
           "listing_functions": 547,
           "listing_definitions": 547,
-          "listing_sha256": "cb1a2d4a0e44d457fa081ec62124bbc22ce2b34c10dac7f31ec2a48528d1992b"
+          "listing_sha256": "0bcd154b296ef9b5a755e0cb01c193259e8df404b66b9f08be458b798d67435a"
         },
         {
           "module": "runtime/node/os",
@@ -1931,23 +1931,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 12106283697,
-          "user_s": 0.983201,
-          "sys_s": 0.015932,
-          "cpu_s": 0.999133,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_os-5.perf",
+          "instructions": 10475066351,
+          "user_s": 0.868894,
+          "sys_s": 0.026968,
+          "cpu_s": 0.895862,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_os-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.0106214090000138,
+          "wall_s": 0.9098701260000235,
           "listing_functions": 547,
           "listing_definitions": 547,
-          "listing_sha256": "cb1a2d4a0e44d457fa081ec62124bbc22ce2b34c10dac7f31ec2a48528d1992b"
+          "listing_sha256": "0bcd154b296ef9b5a755e0cb01c193259e8df404b66b9f08be458b798d67435a"
         }
       ],
-      "median_instructions": 12106255276,
-      "median_cpu_s": 1.002633,
-      "spread": 0.00001199150170005936
+      "median_instructions": 10475043084,
+      "median_cpu_s": 0.88147,
+      "spread": 0.000007743282299355059
     },
     {
       "module": "runtime/node/path",
@@ -1964,18 +1964,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 8128915090,
-          "user_s": 0.661265,
-          "sys_s": 0.010924,
-          "cpu_s": 0.672189,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_path-1.perf",
+          "instructions": 8033951924,
+          "user_s": 0.647019,
+          "sys_s": 0.009976,
+          "cpu_s": 0.656995,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_path-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.6859257250000009,
+          "wall_s": 0.6701737989999965,
           "listing_functions": 365,
           "listing_definitions": 365,
-          "listing_sha256": "89979f2df8f4dd145a9f4fb082df9afb90755295393c2a2ef1580da321e72719"
+          "listing_sha256": "81b3185357dc04d9afe60cd68c251de4ae3f7eeab094a16ace3fb4e0f5c0b173"
         },
         {
           "module": "runtime/node/path",
@@ -1988,18 +1988,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 8128804327,
-          "user_s": 0.684031,
-          "sys_s": 0.012877,
-          "cpu_s": 0.696908,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_path-2.perf",
+          "instructions": 8033933665,
+          "user_s": 0.633344,
+          "sys_s": 0.01594,
+          "cpu_s": 0.649284,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_path-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.7104914820000122,
+          "wall_s": 0.6620787230000132,
           "listing_functions": 365,
           "listing_definitions": 365,
-          "listing_sha256": "89979f2df8f4dd145a9f4fb082df9afb90755295393c2a2ef1580da321e72719"
+          "listing_sha256": "81b3185357dc04d9afe60cd68c251de4ae3f7eeab094a16ace3fb4e0f5c0b173"
         },
         {
           "module": "runtime/node/path",
@@ -2012,18 +2012,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 8128821155,
-          "user_s": 0.686751,
-          "sys_s": 0.009977,
-          "cpu_s": 0.696728,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_path-3.perf",
+          "instructions": 8033935045,
+          "user_s": 0.633468,
+          "sys_s": 0.009966,
+          "cpu_s": 0.6434340000000001,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_path-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.7109122080000234,
+          "wall_s": 0.6534817010000116,
           "listing_functions": 365,
           "listing_definitions": 365,
-          "listing_sha256": "89979f2df8f4dd145a9f4fb082df9afb90755295393c2a2ef1580da321e72719"
+          "listing_sha256": "81b3185357dc04d9afe60cd68c251de4ae3f7eeab094a16ace3fb4e0f5c0b173"
         },
         {
           "module": "runtime/node/path",
@@ -2036,18 +2036,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 8128824200,
-          "user_s": 0.671782,
-          "sys_s": 0.016923,
-          "cpu_s": 0.688705,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_path-4.perf",
+          "instructions": 8033962544,
+          "user_s": 0.661916,
+          "sys_s": 0.012967,
+          "cpu_s": 0.6748829999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_path-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.7018155350000016,
+          "wall_s": 0.688941324000014,
           "listing_functions": 365,
           "listing_definitions": 365,
-          "listing_sha256": "89979f2df8f4dd145a9f4fb082df9afb90755295393c2a2ef1580da321e72719"
+          "listing_sha256": "81b3185357dc04d9afe60cd68c251de4ae3f7eeab094a16ace3fb4e0f5c0b173"
         },
         {
           "module": "runtime/node/path",
@@ -2060,23 +2060,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 8128823643,
-          "user_s": 0.676892,
-          "sys_s": 0.011931,
-          "cpu_s": 0.6888230000000001,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_path-5.perf",
+          "instructions": 8033951893,
+          "user_s": 0.635812,
+          "sys_s": 0.015933,
+          "cpu_s": 0.651745,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_path-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.7023059660000727,
+          "wall_s": 0.6643802039999864,
           "listing_functions": 365,
           "listing_definitions": 365,
-          "listing_sha256": "89979f2df8f4dd145a9f4fb082df9afb90755295393c2a2ef1580da321e72719"
+          "listing_sha256": "81b3185357dc04d9afe60cd68c251de4ae3f7eeab094a16ace3fb4e0f5c0b173"
         }
       ],
-      "median_instructions": 8128823643,
-      "median_cpu_s": 0.6888230000000001,
-      "spread": 0.000013625989203847055
+      "median_instructions": 8033951893,
+      "median_cpu_s": 0.651745,
+      "spread": 0.0000035946276386589204
     },
     {
       "module": "runtime/node/perf_hooks",
@@ -2093,18 +2093,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 215382899671,
-          "user_s": 21.358892,
-          "sys_s": 0.138587,
-          "cpu_s": 21.497479000000002,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_perf_hooks-1.perf",
+          "instructions": 187955641135,
+          "user_s": 16.423505,
+          "sys_s": 0.115748,
+          "cpu_s": 16.539253,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_perf_hooks-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.564865398999995,
+          "wall_s": 16.583808866,
           "listing_functions": 3000,
           "listing_definitions": 3000,
-          "listing_sha256": "5854878da65d205c97e456ebc2b147d7b1c2d812068907c52c684e9781d6ce55"
+          "listing_sha256": "61ec0c21814c9128d93da4eef556bdd589c910bc17157c7650c7d9c53ebe1f4c"
         },
         {
           "module": "runtime/node/perf_hooks",
@@ -2117,18 +2117,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 215414099295,
-          "user_s": 20.342927,
-          "sys_s": 0.142614,
-          "cpu_s": 20.485540999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_perf_hooks-2.perf",
+          "instructions": 187917933429,
+          "user_s": 19.775283,
+          "sys_s": 0.115712,
+          "cpu_s": 19.890995,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_perf_hooks-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.536824955000018,
+          "wall_s": 19.966972387999995,
           "listing_functions": 3000,
           "listing_definitions": 3000,
-          "listing_sha256": "5854878da65d205c97e456ebc2b147d7b1c2d812068907c52c684e9781d6ce55"
+          "listing_sha256": "61ec0c21814c9128d93da4eef556bdd589c910bc17157c7650c7d9c53ebe1f4c"
         },
         {
           "module": "runtime/node/perf_hooks",
@@ -2141,18 +2141,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 215421538679,
-          "user_s": 21.072843,
-          "sys_s": 0.118667,
-          "cpu_s": 21.191509999999997,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_perf_hooks-3.perf",
+          "instructions": 187936495723,
+          "user_s": 17.205282,
+          "sys_s": 0.114694,
+          "cpu_s": 17.319976,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_perf_hooks-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.24985427199997,
+          "wall_s": 17.372104156999963,
           "listing_functions": 3000,
           "listing_definitions": 3000,
-          "listing_sha256": "5854878da65d205c97e456ebc2b147d7b1c2d812068907c52c684e9781d6ce55"
+          "listing_sha256": "61ec0c21814c9128d93da4eef556bdd589c910bc17157c7650c7d9c53ebe1f4c"
         },
         {
           "module": "runtime/node/perf_hooks",
@@ -2165,18 +2165,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 215349950534,
-          "user_s": 20.589197,
-          "sys_s": 0.143638,
-          "cpu_s": 20.732834999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_perf_hooks-4.perf",
+          "instructions": 187934629340,
+          "user_s": 17.01838,
+          "sys_s": 0.114658,
+          "cpu_s": 17.133038,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_perf_hooks-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.79113958700001,
+          "wall_s": 17.194571386000025,
           "listing_functions": 3000,
           "listing_definitions": 3000,
-          "listing_sha256": "5854878da65d205c97e456ebc2b147d7b1c2d812068907c52c684e9781d6ce55"
+          "listing_sha256": "61ec0c21814c9128d93da4eef556bdd589c910bc17157c7650c7d9c53ebe1f4c"
         },
         {
           "module": "runtime/node/perf_hooks",
@@ -2189,23 +2189,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 215424837001,
-          "user_s": 20.947763,
-          "sys_s": 0.116689,
-          "cpu_s": 21.064452,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_perf_hooks-5.perf",
+          "instructions": 187915334529,
+          "user_s": 18.499435,
+          "sys_s": 0.106777,
+          "cpu_s": 18.606212,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_perf_hooks-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.121667103000103,
+          "wall_s": 18.668081394999927,
           "listing_functions": 3000,
           "listing_definitions": 3000,
-          "listing_sha256": "5854878da65d205c97e456ebc2b147d7b1c2d812068907c52c684e9781d6ce55"
+          "listing_sha256": "61ec0c21814c9128d93da4eef556bdd589c910bc17157c7650c7d9c53ebe1f4c"
         }
       ],
-      "median_instructions": 215414099295,
-      "median_cpu_s": 21.064452,
-      "spread": 0.000347743135367784
+      "median_instructions": 187934629340,
+      "median_cpu_s": 17.319976,
+      "spread": 0.00021449343716950509
     },
     {
       "module": "runtime/node/process",
@@ -2222,18 +2222,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 447071115255,
-          "user_s": 48.301872,
-          "sys_s": 0.24737,
-          "cpu_s": 48.549242,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_process-1.perf",
+          "instructions": 361078942198,
+          "user_s": 33.675924,
+          "sys_s": 0.191543,
+          "cpu_s": 33.867467000000005,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_process-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 48.678190312000005,
+          "wall_s": 33.967884363,
           "listing_functions": 4645,
           "listing_definitions": 4645,
-          "listing_sha256": "0ad8a2efdfc97628daf43e773a526d704e4f75ee602e0fed2bb5695af0895c9c"
+          "listing_sha256": "96b0ba340eb8e3106ce1d61d129d127b92995672d4912b8cd28133046bb02f5b"
         },
         {
           "module": "runtime/node/process",
@@ -2246,18 +2246,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 447071894183,
-          "user_s": 46.752925,
-          "sys_s": 0.225364,
-          "cpu_s": 46.978289,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_process-2.perf",
+          "instructions": 361133650576,
+          "user_s": 34.455909,
+          "sys_s": 0.194479,
+          "cpu_s": 34.650388,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_process-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.098338323,
+          "wall_s": 34.79659409,
           "listing_functions": 4645,
           "listing_definitions": 4645,
-          "listing_sha256": "0ad8a2efdfc97628daf43e773a526d704e4f75ee602e0fed2bb5695af0895c9c"
+          "listing_sha256": "96b0ba340eb8e3106ce1d61d129d127b92995672d4912b8cd28133046bb02f5b"
         },
         {
           "module": "runtime/node/process",
@@ -2270,18 +2270,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 447017745023,
-          "user_s": 47.123433,
-          "sys_s": 0.239364,
-          "cpu_s": 47.362797,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_process-3.perf",
+          "instructions": 360990308525,
+          "user_s": 35.090251,
+          "sys_s": 0.233167,
+          "cpu_s": 35.323418000000004,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_process-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.477165966,
+          "wall_s": 35.447056392,
           "listing_functions": 4645,
           "listing_definitions": 4645,
-          "listing_sha256": "0ad8a2efdfc97628daf43e773a526d704e4f75ee602e0fed2bb5695af0895c9c"
+          "listing_sha256": "96b0ba340eb8e3106ce1d61d129d127b92995672d4912b8cd28133046bb02f5b"
         },
         {
           "module": "runtime/node/process",
@@ -2294,18 +2294,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 446985384714,
-          "user_s": 46.78984,
-          "sys_s": 0.224463,
-          "cpu_s": 47.014303,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_process-4.perf",
+          "instructions": 361094981635,
+          "user_s": 39.347422,
+          "sys_s": 0.240064,
+          "cpu_s": 39.587486,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_process-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.12950222599995,
+          "wall_s": 39.72800794800004,
           "listing_functions": 4645,
           "listing_definitions": 4645,
-          "listing_sha256": "0ad8a2efdfc97628daf43e773a526d704e4f75ee602e0fed2bb5695af0895c9c"
+          "listing_sha256": "96b0ba340eb8e3106ce1d61d129d127b92995672d4912b8cd28133046bb02f5b"
         },
         {
           "module": "runtime/node/process",
@@ -2318,23 +2318,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 447094320287,
-          "user_s": 46.97286,
-          "sys_s": 0.205526,
-          "cpu_s": 47.178385999999996,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_process-5.perf",
+          "instructions": 361149376132,
+          "user_s": 33.174935,
+          "sys_s": 0.255849,
+          "cpu_s": 33.430783999999996,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_process-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 47.328060471999926,
+          "wall_s": 34.14319365599996,
           "listing_functions": 4645,
           "listing_definitions": 4645,
-          "listing_sha256": "0ad8a2efdfc97628daf43e773a526d704e4f75ee602e0fed2bb5695af0895c9c"
+          "listing_sha256": "96b0ba340eb8e3106ce1d61d129d127b92995672d4912b8cd28133046bb02f5b"
         }
       ],
-      "median_instructions": 447071115255,
-      "median_cpu_s": 47.178385999999996,
-      "spread": 0.0002437117112223941
+      "median_instructions": 361094981635,
+      "median_cpu_s": 34.650388,
+      "spread": 0.0004406423198726195
     },
     {
       "module": "runtime/node/punycode",
@@ -2351,18 +2351,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 803504155,
-          "user_s": 0.072392,
-          "sys_s": 0.007914,
-          "cpu_s": 0.080306,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_punycode-1.perf",
+          "instructions": 799413800,
+          "user_s": 0.075433,
+          "sys_s": 0.002033,
+          "cpu_s": 0.07746600000000001,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_punycode-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.09124243300000671,
+          "wall_s": 0.0867874690000026,
           "listing_functions": 28,
           "listing_definitions": 28,
-          "listing_sha256": "9ea9a47de59245de13b00f23cabb8aab66d69532c6eadbb14f7f2eac16744bbb"
+          "listing_sha256": "9b1b8e53779a56e793773b871762ef969ee641b7a4fd667c53bc71edac733bd0"
         },
         {
           "module": "runtime/node/punycode",
@@ -2375,18 +2375,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 803504307,
-          "user_s": 0.075004,
-          "sys_s": 0.004995,
-          "cpu_s": 0.079999,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_punycode-2.perf",
+          "instructions": 799413909,
+          "user_s": 0.072954,
+          "sys_s": 0.005987,
+          "cpu_s": 0.07894100000000001,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_punycode-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.09067717800001264,
+          "wall_s": 0.09101637800000026,
           "listing_functions": 28,
           "listing_definitions": 28,
-          "listing_sha256": "9ea9a47de59245de13b00f23cabb8aab66d69532c6eadbb14f7f2eac16744bbb"
+          "listing_sha256": "9b1b8e53779a56e793773b871762ef969ee641b7a4fd667c53bc71edac733bd0"
         },
         {
           "module": "runtime/node/punycode",
@@ -2399,18 +2399,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 803505615,
-          "user_s": 0.074265,
-          "sys_s": 0.004998,
-          "cpu_s": 0.079263,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_punycode-3.perf",
+          "instructions": 799414127,
+          "user_s": 0.077519,
+          "sys_s": 0.004971,
+          "cpu_s": 0.08249000000000001,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_punycode-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.08910312500002328,
+          "wall_s": 0.0944191250000149,
           "listing_functions": 28,
           "listing_definitions": 28,
-          "listing_sha256": "9ea9a47de59245de13b00f23cabb8aab66d69532c6eadbb14f7f2eac16744bbb"
+          "listing_sha256": "9b1b8e53779a56e793773b871762ef969ee641b7a4fd667c53bc71edac733bd0"
         },
         {
           "module": "runtime/node/punycode",
@@ -2423,18 +2423,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 803502642,
-          "user_s": 0.072103,
-          "sys_s": 0.006952,
-          "cpu_s": 0.079055,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_punycode-4.perf",
+          "instructions": 799412573,
+          "user_s": 0.094979,
+          "sys_s": 0.00494,
+          "cpu_s": 0.099919,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_punycode-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.08797376199997961,
+          "wall_s": 0.1175472160000354,
           "listing_functions": 28,
           "listing_definitions": 28,
-          "listing_sha256": "9ea9a47de59245de13b00f23cabb8aab66d69532c6eadbb14f7f2eac16744bbb"
+          "listing_sha256": "9b1b8e53779a56e793773b871762ef969ee641b7a4fd667c53bc71edac733bd0"
         },
         {
           "module": "runtime/node/punycode",
@@ -2447,23 +2447,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 803502812,
-          "user_s": 0.077138,
-          "sys_s": 0.004055,
-          "cpu_s": 0.081193,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_punycode-5.perf",
+          "instructions": 799413767,
+          "user_s": 0.097063,
+          "sys_s": 0.004997,
+          "cpu_s": 0.10206,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_punycode-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.09072325899999123,
+          "wall_s": 0.11473246899992227,
           "listing_functions": 28,
           "listing_definitions": 28,
-          "listing_sha256": "9ea9a47de59245de13b00f23cabb8aab66d69532c6eadbb14f7f2eac16744bbb"
+          "listing_sha256": "9b1b8e53779a56e793773b871762ef969ee641b7a4fd667c53bc71edac733bd0"
         }
       ],
-      "median_instructions": 803504155,
-      "median_cpu_s": 0.079999,
-      "spread": 0.0000037000500616723997
+      "median_instructions": 799413800,
+      "median_cpu_s": 0.08249000000000001,
+      "spread": 0.0000019439273943877566
     },
     {
       "module": "runtime/node/querystring",
@@ -2480,18 +2480,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 16340632114,
-          "user_s": 1.363535,
-          "sys_s": 0.028652,
-          "cpu_s": 1.3921869999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_querystring-1.perf",
+          "instructions": 14675240203,
+          "user_s": 1.170991,
+          "sys_s": 0.021929,
+          "cpu_s": 1.19292,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_querystring-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.4044033099999942,
+          "wall_s": 1.2072493830000022,
           "listing_functions": 608,
           "listing_definitions": 608,
-          "listing_sha256": "e02ecd6e2797b1a82f7d167f5bd7ec23e78ef74f724202792e1db7a8d6328dcb"
+          "listing_sha256": "367228586df6b8fa498d7dafae6660110f350d8112a44f7aa92edcaf32649a91"
         },
         {
           "module": "runtime/node/querystring",
@@ -2504,18 +2504,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 16340783089,
-          "user_s": 1.268449,
-          "sys_s": 0.020917,
-          "cpu_s": 1.289366,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_querystring-2.perf",
+          "instructions": 14675203674,
+          "user_s": 1.193285,
+          "sys_s": 0.016962,
+          "cpu_s": 1.2102469999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_querystring-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.3033355730000185,
+          "wall_s": 1.2247182679999968,
           "listing_functions": 608,
           "listing_definitions": 608,
-          "listing_sha256": "e02ecd6e2797b1a82f7d167f5bd7ec23e78ef74f724202792e1db7a8d6328dcb"
+          "listing_sha256": "367228586df6b8fa498d7dafae6660110f350d8112a44f7aa92edcaf32649a91"
         },
         {
           "module": "runtime/node/querystring",
@@ -2528,18 +2528,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 16340804895,
-          "user_s": 1.318405,
-          "sys_s": 0.020901,
-          "cpu_s": 1.339306,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_querystring-3.perf",
+          "instructions": 14675224619,
+          "user_s": 1.318528,
+          "sys_s": 0.014942,
+          "cpu_s": 1.33347,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_querystring-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.353825091000006,
+          "wall_s": 1.3494773529999657,
           "listing_functions": 608,
           "listing_definitions": 608,
-          "listing_sha256": "e02ecd6e2797b1a82f7d167f5bd7ec23e78ef74f724202792e1db7a8d6328dcb"
+          "listing_sha256": "367228586df6b8fa498d7dafae6660110f350d8112a44f7aa92edcaf32649a91"
         },
         {
           "module": "runtime/node/querystring",
@@ -2552,18 +2552,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 16340798857,
-          "user_s": 1.341981,
-          "sys_s": 0.020944,
-          "cpu_s": 1.3629250000000002,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_querystring-4.perf",
+          "instructions": 14675230221,
+          "user_s": 1.339269,
+          "sys_s": 0.021941,
+          "cpu_s": 1.36121,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_querystring-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.3770501709999516,
+          "wall_s": 1.3780410159999739,
           "listing_functions": 608,
           "listing_definitions": 608,
-          "listing_sha256": "e02ecd6e2797b1a82f7d167f5bd7ec23e78ef74f724202792e1db7a8d6328dcb"
+          "listing_sha256": "367228586df6b8fa498d7dafae6660110f350d8112a44f7aa92edcaf32649a91"
         },
         {
           "module": "runtime/node/querystring",
@@ -2576,23 +2576,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 16340514572,
-          "user_s": 1.280117,
-          "sys_s": 0.027906,
-          "cpu_s": 1.308023,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_querystring-5.perf",
+          "instructions": 14675275564,
+          "user_s": 1.355901,
+          "sys_s": 0.021925,
+          "cpu_s": 1.377826,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_querystring-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.3223088749999878,
+          "wall_s": 1.3927244959999807,
           "listing_functions": 608,
           "listing_definitions": 608,
-          "listing_sha256": "e02ecd6e2797b1a82f7d167f5bd7ec23e78ef74f724202792e1db7a8d6328dcb"
+          "listing_sha256": "367228586df6b8fa498d7dafae6660110f350d8112a44f7aa92edcaf32649a91"
         }
       ],
-      "median_instructions": 16340783089,
-      "median_cpu_s": 1.339306,
-      "spread": 0.00001776706594647237
+      "median_instructions": 14675230221,
+      "median_cpu_s": 1.33347,
+      "spread": 0.00000489873950626496
     },
     {
       "module": "runtime/node/readline",
@@ -2609,18 +2609,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 260756223759,
-          "user_s": 27.21666,
-          "sys_s": 0.147633,
-          "cpu_s": 27.364293,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_readline-1.perf",
+          "instructions": 217583561975,
+          "user_s": 21.092704,
+          "sys_s": 0.128649,
+          "cpu_s": 21.221353,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_readline-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 27.443179011,
+          "wall_s": 21.289577712,
           "listing_functions": 3202,
           "listing_definitions": 3202,
-          "listing_sha256": "14f68a40958620e6d41a45358bc93f5dec34c78b455d50aba4a4625c96bb02ea"
+          "listing_sha256": "666ec87feee591f381b58f82f2e946f29f1fa2c00649ef0080239d58a3cd3c8b"
         },
         {
           "module": "runtime/node/readline",
@@ -2633,18 +2633,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 260753624186,
-          "user_s": 25.637366,
-          "sys_s": 0.139664,
-          "cpu_s": 25.77703,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_readline-2.perf",
+          "instructions": 217612265537,
+          "user_s": 20.156949,
+          "sys_s": 0.145586,
+          "cpu_s": 20.302535000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_readline-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 25.845364982,
+          "wall_s": 20.400025605999982,
           "listing_functions": 3202,
           "listing_definitions": 3202,
-          "listing_sha256": "14f68a40958620e6d41a45358bc93f5dec34c78b455d50aba4a4625c96bb02ea"
+          "listing_sha256": "666ec87feee591f381b58f82f2e946f29f1fa2c00649ef0080239d58a3cd3c8b"
         },
         {
           "module": "runtime/node/readline",
@@ -2657,18 +2657,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 260744030723,
-          "user_s": 26.023773,
-          "sys_s": 0.14959,
-          "cpu_s": 26.173363,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_readline-3.perf",
+          "instructions": 217594619870,
+          "user_s": 19.632131,
+          "sys_s": 0.140688,
+          "cpu_s": 19.772819000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_readline-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 26.24731495000003,
+          "wall_s": 19.824407915999995,
           "listing_functions": 3202,
           "listing_definitions": 3202,
-          "listing_sha256": "14f68a40958620e6d41a45358bc93f5dec34c78b455d50aba4a4625c96bb02ea"
+          "listing_sha256": "666ec87feee591f381b58f82f2e946f29f1fa2c00649ef0080239d58a3cd3c8b"
         },
         {
           "module": "runtime/node/readline",
@@ -2681,18 +2681,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 260737168549,
-          "user_s": 26.020471,
-          "sys_s": 0.155455,
-          "cpu_s": 26.175926,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_readline-4.perf",
+          "instructions": 217597664975,
+          "user_s": 22.425859,
+          "sys_s": 0.152342,
+          "cpu_s": 22.578201,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_readline-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 26.251359582999953,
+          "wall_s": 22.657712451,
           "listing_functions": 3202,
           "listing_definitions": 3202,
-          "listing_sha256": "14f68a40958620e6d41a45358bc93f5dec34c78b455d50aba4a4625c96bb02ea"
+          "listing_sha256": "666ec87feee591f381b58f82f2e946f29f1fa2c00649ef0080239d58a3cd3c8b"
         },
         {
           "module": "runtime/node/readline",
@@ -2705,23 +2705,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 260760595278,
-          "user_s": 25.689386,
-          "sys_s": 0.147632,
-          "cpu_s": 25.837018,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_readline-5.perf",
+          "instructions": 217619709916,
+          "user_s": 22.134778,
+          "sys_s": 0.285698,
+          "cpu_s": 22.420476,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_readline-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 25.91041547799995,
+          "wall_s": 23.021277914999985,
           "listing_functions": 3202,
           "listing_definitions": 3202,
-          "listing_sha256": "14f68a40958620e6d41a45358bc93f5dec34c78b455d50aba4a4625c96bb02ea"
+          "listing_sha256": "666ec87feee591f381b58f82f2e946f29f1fa2c00649ef0080239d58a3cd3c8b"
         }
       ],
-      "median_instructions": 260753624186,
-      "median_cpu_s": 26.173363,
-      "spread": 0.00008984806090506225
+      "median_instructions": 217597664975,
+      "median_cpu_s": 21.221353,
+      "spread": 0.00016613360251982456
     },
     {
       "module": "runtime/node/stream",
@@ -2738,18 +2738,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 298379838478,
-          "user_s": 30.869192,
-          "sys_s": 0.176504,
-          "cpu_s": 31.045696000000003,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_stream-1.perf",
+          "instructions": 247010709898,
+          "user_s": 23.223461,
+          "sys_s": 0.188421,
+          "cpu_s": 23.411882000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_stream-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.13473970199999,
+          "wall_s": 23.48268172600001,
           "listing_functions": 3669,
           "listing_definitions": 3669,
-          "listing_sha256": "19cc6fe0dccc4bdfeb74a12f6f39c3e8e1ad9c0a8ef74306b09aff9a9b763d04"
+          "listing_sha256": "6eba26da5d3baf1c39c2b081317dee904a4a9efca5695c6e3dcca2fb4b71a8bf"
         },
         {
           "module": "runtime/node/stream",
@@ -2762,18 +2762,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 298374791354,
-          "user_s": 29.321458,
-          "sys_s": 0.169568,
-          "cpu_s": 29.491026,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_stream-2.perf",
+          "instructions": 247059151830,
+          "user_s": 23.102506,
+          "sys_s": 0.159559,
+          "cpu_s": 23.262065000000003,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_stream-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 29.569722534,
+          "wall_s": 23.354330652000005,
           "listing_functions": 3669,
           "listing_definitions": 3669,
-          "listing_sha256": "19cc6fe0dccc4bdfeb74a12f6f39c3e8e1ad9c0a8ef74306b09aff9a9b763d04"
+          "listing_sha256": "6eba26da5d3baf1c39c2b081317dee904a4a9efca5695c6e3dcca2fb4b71a8bf"
         },
         {
           "module": "runtime/node/stream",
@@ -2786,18 +2786,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 298413996213,
-          "user_s": 29.552556,
-          "sys_s": 0.176532,
-          "cpu_s": 29.729088,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_stream-3.perf",
+          "instructions": 246982249401,
+          "user_s": 22.202696,
+          "sys_s": 0.14647,
+          "cpu_s": 22.349166,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_stream-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 29.80520514700003,
+          "wall_s": 22.401499811999965,
           "listing_functions": 3669,
           "listing_definitions": 3669,
-          "listing_sha256": "19cc6fe0dccc4bdfeb74a12f6f39c3e8e1ad9c0a8ef74306b09aff9a9b763d04"
+          "listing_sha256": "6eba26da5d3baf1c39c2b081317dee904a4a9efca5695c6e3dcca2fb4b71a8bf"
         },
         {
           "module": "runtime/node/stream",
@@ -2810,18 +2810,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 298354972227,
-          "user_s": 29.65927,
-          "sys_s": 0.187535,
-          "cpu_s": 29.846805,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_stream-4.perf",
+          "instructions": 246990573001,
+          "user_s": 24.400415,
+          "sys_s": 0.156514,
+          "cpu_s": 24.556929,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_stream-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 29.929876184999944,
+          "wall_s": 24.634195036999998,
           "listing_functions": 3669,
           "listing_definitions": 3669,
-          "listing_sha256": "19cc6fe0dccc4bdfeb74a12f6f39c3e8e1ad9c0a8ef74306b09aff9a9b763d04"
+          "listing_sha256": "6eba26da5d3baf1c39c2b081317dee904a4a9efca5695c6e3dcca2fb4b71a8bf"
         },
         {
           "module": "runtime/node/stream",
@@ -2834,23 +2834,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 298382044890,
-          "user_s": 30.300194,
-          "sys_s": 0.170537,
-          "cpu_s": 30.470731,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_stream-5.perf",
+          "instructions": 247047250596,
+          "user_s": 24.687678,
+          "sys_s": 0.341843,
+          "cpu_s": 25.029521,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_stream-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 30.583839382000036,
+          "wall_s": 25.922455862000003,
           "listing_functions": 3669,
           "listing_definitions": 3669,
-          "listing_sha256": "19cc6fe0dccc4bdfeb74a12f6f39c3e8e1ad9c0a8ef74306b09aff9a9b763d04"
+          "listing_sha256": "6eba26da5d3baf1c39c2b081317dee904a4a9efca5695c6e3dcca2fb4b71a8bf"
         }
       ],
-      "median_instructions": 298379838478,
-      "median_cpu_s": 29.846805,
-      "spread": 0.0001978314139008397
+      "median_instructions": 247010709898,
+      "median_cpu_s": 23.411882000000002,
+      "spread": 0.00031136824280486586
     },
     {
       "module": "runtime/node/string_decoder",
@@ -2867,18 +2867,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11543383569,
-          "user_s": 0.973931,
-          "sys_s": 0.026877,
-          "cpu_s": 1.000808,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_string_decoder-1.perf",
+          "instructions": 10039497347,
+          "user_s": 0.890961,
+          "sys_s": 0.013916,
+          "cpu_s": 0.904877,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_string_decoder-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.0118928339999984,
+          "wall_s": 0.9184487609999924,
           "listing_functions": 535,
           "listing_definitions": 535,
-          "listing_sha256": "593fc81c98f72aab8ff0563da9a0679fcf7dc4907996a32b78b520ba742aee56"
+          "listing_sha256": "61a46db401a964579b2091e2486823b7fc2c246116c5aa22f9c9bd57349a6b05"
         },
         {
           "module": "runtime/node/string_decoder",
@@ -2891,18 +2891,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11543370145,
-          "user_s": 0.926881,
-          "sys_s": 0.01494,
-          "cpu_s": 0.9418209999999999,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_string_decoder-2.perf",
+          "instructions": 10039462255,
+          "user_s": 0.807849,
+          "sys_s": 0.020899,
+          "cpu_s": 0.828748,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_string_decoder-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.9560584399999934,
+          "wall_s": 0.8424497739999788,
           "listing_functions": 535,
           "listing_definitions": 535,
-          "listing_sha256": "593fc81c98f72aab8ff0563da9a0679fcf7dc4907996a32b78b520ba742aee56"
+          "listing_sha256": "61a46db401a964579b2091e2486823b7fc2c246116c5aa22f9c9bd57349a6b05"
         },
         {
           "module": "runtime/node/string_decoder",
@@ -2915,18 +2915,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11543428440,
-          "user_s": 0.955209,
-          "sys_s": 0.020909,
-          "cpu_s": 0.9761179999999999,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_string_decoder-3.perf",
+          "instructions": 10039503521,
+          "user_s": 0.815908,
+          "sys_s": 0.017954,
+          "cpu_s": 0.833862,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_string_decoder-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.9904035879999865,
+          "wall_s": 0.8453297950000269,
           "listing_functions": 535,
           "listing_definitions": 535,
-          "listing_sha256": "593fc81c98f72aab8ff0563da9a0679fcf7dc4907996a32b78b520ba742aee56"
+          "listing_sha256": "61a46db401a964579b2091e2486823b7fc2c246116c5aa22f9c9bd57349a6b05"
         },
         {
           "module": "runtime/node/string_decoder",
@@ -2939,18 +2939,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11543397050,
-          "user_s": 0.991691,
-          "sys_s": 0.02389,
-          "cpu_s": 1.015581,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_string_decoder-4.perf",
+          "instructions": 10039466135,
+          "user_s": 0.938061,
+          "sys_s": 0.015938,
+          "cpu_s": 0.953999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_string_decoder-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 1.0303482560000266,
+          "wall_s": 0.9685703970000031,
           "listing_functions": 535,
           "listing_definitions": 535,
-          "listing_sha256": "593fc81c98f72aab8ff0563da9a0679fcf7dc4907996a32b78b520ba742aee56"
+          "listing_sha256": "61a46db401a964579b2091e2486823b7fc2c246116c5aa22f9c9bd57349a6b05"
         },
         {
           "module": "runtime/node/string_decoder",
@@ -2963,23 +2963,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 11543410931,
-          "user_s": 0.942514,
-          "sys_s": 0.013878,
-          "cpu_s": 0.9563919999999999,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_string_decoder-5.perf",
+          "instructions": 10039491814,
+          "user_s": 1.454498,
+          "sys_s": 0.02965,
+          "cpu_s": 1.484148,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_string_decoder-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.966486624000012,
+          "wall_s": 1.5966917469999753,
           "listing_functions": 535,
           "listing_definitions": 535,
-          "listing_sha256": "593fc81c98f72aab8ff0563da9a0679fcf7dc4907996a32b78b520ba742aee56"
+          "listing_sha256": "61a46db401a964579b2091e2486823b7fc2c246116c5aa22f9c9bd57349a6b05"
         }
       ],
-      "median_instructions": 11543397050,
-      "median_cpu_s": 0.9761179999999999,
-      "spread": 0.000005050084963764689
+      "median_instructions": 10039491814,
+      "median_cpu_s": 0.904877,
+      "spread": 0.000004110379515642748
     },
     {
       "module": "runtime/node/timers",
@@ -2996,18 +2996,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 5753876016,
-          "user_s": 0.500451,
-          "sys_s": 0.010975,
-          "cpu_s": 0.5114259999999999,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_timers-1.perf",
+          "instructions": 5517566924,
+          "user_s": 0.475465,
+          "sys_s": 0.010983,
+          "cpu_s": 0.48644800000000005,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_timers-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.5241776610000088,
+          "wall_s": 0.5415666329999949,
           "listing_functions": 532,
           "listing_definitions": 532,
-          "listing_sha256": "d519d79e43791fe2136dbfb55898ef565fbf74afbbdbeeddb3703c4987839645"
+          "listing_sha256": "f55095cf4a4c70e7a1ec0fdebb4bac4670ea40feb9c6377ff96072665203c62b"
         },
         {
           "module": "runtime/node/timers",
@@ -3020,18 +3020,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 5753875268,
-          "user_s": 0.490705,
-          "sys_s": 0.013953,
-          "cpu_s": 0.504658,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_timers-2.perf",
+          "instructions": 5517555319,
+          "user_s": 0.486781,
+          "sys_s": 0.012928,
+          "cpu_s": 0.499709,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_timers-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.5155681510000141,
+          "wall_s": 0.5128278050000081,
           "listing_functions": 532,
           "listing_definitions": 532,
-          "listing_sha256": "d519d79e43791fe2136dbfb55898ef565fbf74afbbdbeeddb3703c4987839645"
+          "listing_sha256": "f55095cf4a4c70e7a1ec0fdebb4bac4670ea40feb9c6377ff96072665203c62b"
         },
         {
           "module": "runtime/node/timers",
@@ -3044,18 +3044,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 5753877358,
-          "user_s": 0.479673,
-          "sys_s": 0.016917,
-          "cpu_s": 0.49659000000000003,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_timers-3.perf",
+          "instructions": 5517572791,
+          "user_s": 0.460381,
+          "sys_s": 0.013967,
+          "cpu_s": 0.474348,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_timers-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.509436061000044,
+          "wall_s": 0.48602052999997974,
           "listing_functions": 532,
           "listing_definitions": 532,
-          "listing_sha256": "d519d79e43791fe2136dbfb55898ef565fbf74afbbdbeeddb3703c4987839645"
+          "listing_sha256": "f55095cf4a4c70e7a1ec0fdebb4bac4670ea40feb9c6377ff96072665203c62b"
         },
         {
           "module": "runtime/node/timers",
@@ -3068,18 +3068,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 5753893075,
-          "user_s": 0.500094,
-          "sys_s": 0.01095,
-          "cpu_s": 0.511044,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_timers-4.perf",
+          "instructions": 5517576648,
+          "user_s": 0.509362,
+          "sys_s": 0.01094,
+          "cpu_s": 0.5203019999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_timers-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.5230246789999655,
+          "wall_s": 0.5329282999999705,
           "listing_functions": 532,
           "listing_definitions": 532,
-          "listing_sha256": "d519d79e43791fe2136dbfb55898ef565fbf74afbbdbeeddb3703c4987839645"
+          "listing_sha256": "f55095cf4a4c70e7a1ec0fdebb4bac4670ea40feb9c6377ff96072665203c62b"
         },
         {
           "module": "runtime/node/timers",
@@ -3092,23 +3092,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 5753884822,
-          "user_s": 0.477478,
-          "sys_s": 0.01094,
-          "cpu_s": 0.488418,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_timers-5.perf",
+          "instructions": 5517577921,
+          "user_s": 0.517354,
+          "sys_s": 0.018901,
+          "cpu_s": 0.5362549999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_timers-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.5007776640000521,
+          "wall_s": 0.5721393960000715,
           "listing_functions": 532,
           "listing_definitions": 532,
-          "listing_sha256": "d519d79e43791fe2136dbfb55898ef565fbf74afbbdbeeddb3703c4987839645"
+          "listing_sha256": "f55095cf4a4c70e7a1ec0fdebb4bac4670ea40feb9c6377ff96072665203c62b"
         }
       ],
-      "median_instructions": 5753877358,
-      "median_cpu_s": 0.504658,
-      "spread": 0.0000030947838058903443
+      "median_instructions": 5517572791,
+      "median_cpu_s": 0.499709,
+      "spread": 0.000004096379409679329
     },
     {
       "module": "runtime/node/tty",
@@ -3125,18 +3125,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 50992825,
-          "user_s": 0.008569,
-          "sys_s": 0.00641,
-          "cpu_s": 0.014979,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_tty-1.perf",
+          "instructions": 50534964,
+          "user_s": 0.003893,
+          "sys_s": 0.003888,
+          "cpu_s": 0.007781,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_tty-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.02693175699999847,
+          "wall_s": 0.03314917499999865,
           "listing_functions": 2,
           "listing_definitions": 2,
-          "listing_sha256": "c229df1422e9c7afaec3dd61b189748668e8189718073f184e2e4a272614d542"
+          "listing_sha256": "99c9eb2153347d63e0b73d286cd27847d20f81068dbecb14a64b1345137b9659"
         },
         {
           "module": "runtime/node/tty",
@@ -3149,18 +3149,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 50992602,
-          "user_s": 0.006712,
-          "sys_s": 0.005728,
-          "cpu_s": 0.01244,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_tty-2.perf",
+          "instructions": 50535575,
+          "user_s": 0.006481,
+          "sys_s": 0.00462,
+          "cpu_s": 0.011101,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_tty-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.02214169600000605,
+          "wall_s": 0.023539804000000004,
           "listing_functions": 2,
           "listing_definitions": 2,
-          "listing_sha256": "c229df1422e9c7afaec3dd61b189748668e8189718073f184e2e4a272614d542"
+          "listing_sha256": "99c9eb2153347d63e0b73d286cd27847d20f81068dbecb14a64b1345137b9659"
         },
         {
           "module": "runtime/node/tty",
@@ -3173,18 +3173,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 50993128,
-          "user_s": 0.004835,
-          "sys_s": 0.007248,
-          "cpu_s": 0.012083,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_tty-3.perf",
+          "instructions": 50534991,
+          "user_s": 0.005679,
+          "sys_s": 0.00567,
+          "cpu_s": 0.011349,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_tty-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.023324130999972114,
+          "wall_s": 0.02374911299999803,
           "listing_functions": 2,
           "listing_definitions": 2,
-          "listing_sha256": "c229df1422e9c7afaec3dd61b189748668e8189718073f184e2e4a272614d542"
+          "listing_sha256": "99c9eb2153347d63e0b73d286cd27847d20f81068dbecb14a64b1345137b9659"
         },
         {
           "module": "runtime/node/tty",
@@ -3197,18 +3197,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 50992327,
-          "user_s": 0.003796,
-          "sys_s": 0.008451,
-          "cpu_s": 0.012247000000000001,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_tty-4.perf",
+          "instructions": 50535547,
+          "user_s": 0.00616,
+          "sys_s": 0.004033,
+          "cpu_s": 0.010193,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_tty-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.023328281000023706,
+          "wall_s": 0.038506737000017895,
           "listing_functions": 2,
           "listing_definitions": 2,
-          "listing_sha256": "c229df1422e9c7afaec3dd61b189748668e8189718073f184e2e4a272614d542"
+          "listing_sha256": "99c9eb2153347d63e0b73d286cd27847d20f81068dbecb14a64b1345137b9659"
         },
         {
           "module": "runtime/node/tty",
@@ -3221,23 +3221,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 50992321,
-          "user_s": 0.007146,
-          "sys_s": 0.00509,
-          "cpu_s": 0.012236,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_tty-5.perf",
+          "instructions": 50535136,
+          "user_s": 0.005666,
+          "sys_s": 0.00567,
+          "cpu_s": 0.011335999999999999,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_tty-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.0229618049999699,
+          "wall_s": 0.022657365999999457,
           "listing_functions": 2,
           "listing_definitions": 2,
-          "listing_sha256": "c229df1422e9c7afaec3dd61b189748668e8189718073f184e2e4a272614d542"
+          "listing_sha256": "99c9eb2153347d63e0b73d286cd27847d20f81068dbecb14a64b1345137b9659"
         }
       ],
-      "median_instructions": 50992602,
-      "median_cpu_s": 0.012247000000000001,
-      "spread": 0.0000158259122977622
+      "median_instructions": 50535136,
+      "median_cpu_s": 0.011101,
+      "spread": 0.000012090638869421966
     },
     {
       "module": "runtime/node/url",
@@ -3254,18 +3254,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 39686656024,
-          "user_s": 3.396706,
-          "sys_s": 0.041846,
-          "cpu_s": 3.438552,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_url-1.perf",
+          "instructions": 36217999155,
+          "user_s": 3.388899,
+          "sys_s": 0.038894,
+          "cpu_s": 3.427793,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_url-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 3.459703641999993,
+          "wall_s": 3.4507915070000017,
           "listing_functions": 841,
           "listing_definitions": 841,
-          "listing_sha256": "486badbc357ec765b1d881fbe585d37cc05810c16fefd2fa903764acd502545a"
+          "listing_sha256": "094bd7b8e292bf34929a1669cc23b02e76b883ca1d4d04276919ff9f1bf42aff"
         },
         {
           "module": "runtime/node/url",
@@ -3278,18 +3278,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 39680824491,
-          "user_s": 3.285882,
-          "sys_s": 0.038838,
-          "cpu_s": 3.32472,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_url-2.perf",
+          "instructions": 36218105216,
+          "user_s": 2.950682,
+          "sys_s": 0.042911,
+          "cpu_s": 2.993593,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_url-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 3.342989558000001,
+          "wall_s": 3.0121727800000224,
           "listing_functions": 841,
           "listing_definitions": 841,
-          "listing_sha256": "486badbc357ec765b1d881fbe585d37cc05810c16fefd2fa903764acd502545a"
+          "listing_sha256": "094bd7b8e292bf34929a1669cc23b02e76b883ca1d4d04276919ff9f1bf42aff"
         },
         {
           "module": "runtime/node/url",
@@ -3302,18 +3302,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 39680777883,
-          "user_s": 3.267014,
-          "sys_s": 0.037827,
-          "cpu_s": 3.304841,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_url-3.perf",
+          "instructions": 36218007114,
+          "user_s": 2.959626,
+          "sys_s": 0.027922,
+          "cpu_s": 2.987548,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_url-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 3.3239511629999616,
+          "wall_s": 3.003045023999992,
           "listing_functions": 841,
           "listing_definitions": 841,
-          "listing_sha256": "486badbc357ec765b1d881fbe585d37cc05810c16fefd2fa903764acd502545a"
+          "listing_sha256": "094bd7b8e292bf34929a1669cc23b02e76b883ca1d4d04276919ff9f1bf42aff"
         },
         {
           "module": "runtime/node/url",
@@ -3326,18 +3326,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 39681801721,
-          "user_s": 3.29756,
-          "sys_s": 0.039849,
-          "cpu_s": 3.3374089999999996,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_url-4.perf",
+          "instructions": 36217038587,
+          "user_s": 3.777966,
+          "sys_s": 0.033709,
+          "cpu_s": 3.811675,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_url-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 3.3573370839999988,
+          "wall_s": 3.8407132749999873,
           "listing_functions": 841,
           "listing_definitions": 841,
-          "listing_sha256": "486badbc357ec765b1d881fbe585d37cc05810c16fefd2fa903764acd502545a"
+          "listing_sha256": "094bd7b8e292bf34929a1669cc23b02e76b883ca1d4d04276919ff9f1bf42aff"
         },
         {
           "module": "runtime/node/url",
@@ -3350,23 +3350,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 39686735026,
-          "user_s": 3.242044,
-          "sys_s": 0.037872,
-          "cpu_s": 3.279916,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_url-5.perf",
+          "instructions": 36217260108,
+          "user_s": 3.951743,
+          "sys_s": 0.05281,
+          "cpu_s": 4.004553,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_url-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 3.2996351650001015,
+          "wall_s": 4.066911789000034,
           "listing_functions": 841,
           "listing_definitions": 841,
-          "listing_sha256": "486badbc357ec765b1d881fbe585d37cc05810c16fefd2fa903764acd502545a"
+          "listing_sha256": "094bd7b8e292bf34929a1669cc23b02e76b883ca1d4d04276919ff9f1bf42aff"
         }
       ],
-      "median_instructions": 39681801721,
-      "median_cpu_s": 3.32472,
-      "spread": 0.00015012666882596726
+      "median_instructions": 36217999155,
+      "median_cpu_s": 3.427793,
+      "spread": 0.000029451027516724793
     },
     {
       "module": "runtime/node/util",
@@ -3383,18 +3383,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 212683327774,
-          "user_s": 20.643552,
-          "sys_s": 0.13468,
-          "cpu_s": 20.778232,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_util-1.perf",
+          "instructions": 186090982318,
+          "user_s": 18.428581,
+          "sys_s": 0.138559,
+          "cpu_s": 18.567140000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_util-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.835769665,
+          "wall_s": 18.695090453999992,
           "listing_functions": 2851,
           "listing_definitions": 2851,
-          "listing_sha256": "2eb36015659e55be10695d04b019b52740c04466280dbedbbb68209ca8ddedfd"
+          "listing_sha256": "37731abae7dfe2843327a976cee6497dd8260c4105f8bfa12063f887df79261c"
         },
         {
           "module": "runtime/node/util",
@@ -3407,18 +3407,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 212543353152,
-          "user_s": 20.51301,
-          "sys_s": 0.127716,
-          "cpu_s": 20.640726,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_util-2.perf",
+          "instructions": 186061778667,
+          "user_s": 17.582988,
+          "sys_s": 0.112695,
+          "cpu_s": 17.695683,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_util-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.693208543000015,
+          "wall_s": 17.78674300400002,
           "listing_functions": 2851,
           "listing_definitions": 2851,
-          "listing_sha256": "2eb36015659e55be10695d04b019b52740c04466280dbedbbb68209ca8ddedfd"
+          "listing_sha256": "37731abae7dfe2843327a976cee6497dd8260c4105f8bfa12063f887df79261c"
         },
         {
           "module": "runtime/node/util",
@@ -3431,18 +3431,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 212727027373,
-          "user_s": 20.072856,
-          "sys_s": 0.129649,
-          "cpu_s": 20.202505000000002,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_util-3.perf",
+          "instructions": 186088251408,
+          "user_s": 16.536927,
+          "sys_s": 0.102729,
+          "cpu_s": 16.639656,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_util-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.25528421999997,
+          "wall_s": 16.692076326999988,
           "listing_functions": 2851,
           "listing_definitions": 2851,
-          "listing_sha256": "2eb36015659e55be10695d04b019b52740c04466280dbedbbb68209ca8ddedfd"
+          "listing_sha256": "37731abae7dfe2843327a976cee6497dd8260c4105f8bfa12063f887df79261c"
         },
         {
           "module": "runtime/node/util",
@@ -3455,18 +3455,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 212643573997,
-          "user_s": 20.528521,
-          "sys_s": 0.109735,
-          "cpu_s": 20.638256000000002,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_util-4.perf",
+          "instructions": 186108481792,
+          "user_s": 20.370089,
+          "sys_s": 0.153503,
+          "cpu_s": 20.523592,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_util-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 20.690322789,
+          "wall_s": 20.73407281699998,
           "listing_functions": 2851,
           "listing_definitions": 2851,
-          "listing_sha256": "2eb36015659e55be10695d04b019b52740c04466280dbedbbb68209ca8ddedfd"
+          "listing_sha256": "37731abae7dfe2843327a976cee6497dd8260c4105f8bfa12063f887df79261c"
         },
         {
           "module": "runtime/node/util",
@@ -3479,23 +3479,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 212698306819,
-          "user_s": 21.425844,
-          "sys_s": 0.117785,
-          "cpu_s": 21.543629000000003,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_util-5.perf",
+          "instructions": 186080340412,
+          "user_s": 17.910518,
+          "sys_s": 0.233484,
+          "cpu_s": 18.144002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_util-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.657898520000046,
+          "wall_s": 18.63481725600001,
           "listing_functions": 2851,
           "listing_definitions": 2851,
-          "listing_sha256": "2eb36015659e55be10695d04b019b52740c04466280dbedbbb68209ca8ddedfd"
+          "listing_sha256": "37731abae7dfe2843327a976cee6497dd8260c4105f8bfa12063f887df79261c"
         }
       ],
-      "median_instructions": 212683327774,
-      "median_cpu_s": 20.640726,
-      "spread": 0.0008641729711897916
+      "median_instructions": 186088251408,
+      "median_cpu_s": 18.144002,
+      "spread": 0.00025100869901706346
     },
     {
       "module": "runtime/node/zlib",
@@ -3512,18 +3512,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 328021712135,
-          "user_s": 31.546985,
-          "sys_s": 0.17255,
-          "cpu_s": 31.719535,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_zlib-1.perf",
+          "instructions": 270160551901,
+          "user_s": 27.102222,
+          "sys_s": 0.173524,
+          "cpu_s": 27.275746,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_zlib-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.801199034000003,
+          "wall_s": 27.408559339,
           "listing_functions": 4139,
           "listing_definitions": 4139,
-          "listing_sha256": "83c46c141ee58d62d0226887fbfa53b58ff7019287a89bf210b9ebfb62779307"
+          "listing_sha256": "36d6fb5449ea12801199b0129bde5a96ce0089eff2a775cd31d1288c2fb6f385"
         },
         {
           "module": "runtime/node/zlib",
@@ -3536,18 +3536,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 328009136602,
-          "user_s": 32.263749,
-          "sys_s": 0.164638,
-          "cpu_s": 32.428386999999994,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_zlib-2.perf",
+          "instructions": 270149235774,
+          "user_s": 25.060386,
+          "sys_s": 0.207346,
+          "cpu_s": 25.267732000000002,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_zlib-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 32.51159482200001,
+          "wall_s": 25.398466264999996,
           "listing_functions": 4139,
           "listing_definitions": 4139,
-          "listing_sha256": "83c46c141ee58d62d0226887fbfa53b58ff7019287a89bf210b9ebfb62779307"
+          "listing_sha256": "36d6fb5449ea12801199b0129bde5a96ce0089eff2a775cd31d1288c2fb6f385"
         },
         {
           "module": "runtime/node/zlib",
@@ -3560,18 +3560,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 328029649470,
-          "user_s": 31.270628,
-          "sys_s": 0.194544,
-          "cpu_s": 31.465172,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_zlib-3.perf",
+          "instructions": 270132804744,
+          "user_s": 27.152648,
+          "sys_s": 0.244032,
+          "cpu_s": 27.39668,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_zlib-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.53990394399996,
+          "wall_s": 28.382467608000034,
           "listing_functions": 4139,
           "listing_definitions": 4139,
-          "listing_sha256": "83c46c141ee58d62d0226887fbfa53b58ff7019287a89bf210b9ebfb62779307"
+          "listing_sha256": "36d6fb5449ea12801199b0129bde5a96ce0089eff2a775cd31d1288c2fb6f385"
         },
         {
           "module": "runtime/node/zlib",
@@ -3584,18 +3584,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 328015616366,
-          "user_s": 31.496226,
-          "sys_s": 0.180572,
-          "cpu_s": 31.676798,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_zlib-4.perf",
+          "instructions": 270127875656,
+          "user_s": 27.685361,
+          "sys_s": 0.216305,
+          "cpu_s": 27.901666,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_zlib-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 31.751438698999934,
+          "wall_s": 28.135198997,
           "listing_functions": 4139,
           "listing_definitions": 4139,
-          "listing_sha256": "83c46c141ee58d62d0226887fbfa53b58ff7019287a89bf210b9ebfb62779307"
+          "listing_sha256": "36d6fb5449ea12801199b0129bde5a96ce0089eff2a775cd31d1288c2fb6f385"
         },
         {
           "module": "runtime/node/zlib",
@@ -3608,23 +3608,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 328039401317,
-          "user_s": 32.971076,
-          "sys_s": 0.192518,
-          "cpu_s": 33.163593999999996,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_node_zlib-5.perf",
+          "instructions": 270164587401,
+          "user_s": 24.357127,
+          "sys_s": 0.244907,
+          "cpu_s": 24.602034,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_node_zlib-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 33.330837085000006,
+          "wall_s": 24.72093209200003,
           "listing_functions": 4139,
           "listing_definitions": 4139,
-          "listing_sha256": "83c46c141ee58d62d0226887fbfa53b58ff7019287a89bf210b9ebfb62779307"
+          "listing_sha256": "36d6fb5449ea12801199b0129bde5a96ce0089eff2a775cd31d1288c2fb6f385"
         }
       ],
-      "median_instructions": 328021712135,
-      "median_cpu_s": 31.719535,
-      "spread": 0.00009226790239291738
+      "median_instructions": 270149235774,
+      "median_cpu_s": 27.275746,
+      "spread": 0.00013590505944960363
     },
     {
       "module": "runtime/web-platform",
@@ -3641,18 +3641,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 248304135518,
-          "user_s": 23.774888,
-          "sys_s": 0.170614,
-          "cpu_s": 23.945502,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_web-platform-1.perf",
+          "instructions": 219461115397,
+          "user_s": 22.201569,
+          "sys_s": 0.125667,
+          "cpu_s": 22.327236,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_web-platform-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 24.004732673000007,
+          "wall_s": 22.463236451999997,
           "listing_functions": 3055,
           "listing_definitions": 3055,
-          "listing_sha256": "66881e43e7fa340df6147dc4f9abd228c825d4be5d22bb609a82b267bcbc4f90"
+          "listing_sha256": "55479a3a39a9945fcaa52a76107b358040be398bbc29c6302eee3e8c62602383"
         },
         {
           "module": "runtime/web-platform",
@@ -3665,18 +3665,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 248305478377,
-          "user_s": 24.46603,
-          "sys_s": 0.154557,
-          "cpu_s": 24.620587,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_web-platform-2.perf",
+          "instructions": 219434707390,
+          "user_s": 20.499446,
+          "sys_s": 0.172515,
+          "cpu_s": 20.671961,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_web-platform-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 24.694153154000027,
+          "wall_s": 20.778438421999976,
           "listing_functions": 3055,
           "listing_definitions": 3055,
-          "listing_sha256": "66881e43e7fa340df6147dc4f9abd228c825d4be5d22bb609a82b267bcbc4f90"
+          "listing_sha256": "55479a3a39a9945fcaa52a76107b358040be398bbc29c6302eee3e8c62602383"
         },
         {
           "module": "runtime/web-platform",
@@ -3689,18 +3689,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 248274378015,
-          "user_s": 24.241802,
-          "sys_s": 0.15463,
-          "cpu_s": 24.396432,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_web-platform-3.perf",
+          "instructions": 219463008545,
+          "user_s": 22.347398,
+          "sys_s": 0.178885,
+          "cpu_s": 22.526283,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_web-platform-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 24.497554463999986,
+          "wall_s": 23.07316483099997,
           "listing_functions": 3055,
           "listing_definitions": 3055,
-          "listing_sha256": "66881e43e7fa340df6147dc4f9abd228c825d4be5d22bb609a82b267bcbc4f90"
+          "listing_sha256": "55479a3a39a9945fcaa52a76107b358040be398bbc29c6302eee3e8c62602383"
         },
         {
           "module": "runtime/web-platform",
@@ -3713,18 +3713,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 248404118498,
-          "user_s": 23.788509,
-          "sys_s": 0.142623,
-          "cpu_s": 23.931132,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_web-platform-4.perf",
+          "instructions": 219383239451,
+          "user_s": 23.674477,
+          "sys_s": 0.177306,
+          "cpu_s": 23.851783,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_web-platform-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 23.997201652999966,
+          "wall_s": 24.116818758999987,
           "listing_functions": 3055,
           "listing_definitions": 3055,
-          "listing_sha256": "66881e43e7fa340df6147dc4f9abd228c825d4be5d22bb609a82b267bcbc4f90"
+          "listing_sha256": "55479a3a39a9945fcaa52a76107b358040be398bbc29c6302eee3e8c62602383"
         },
         {
           "module": "runtime/web-platform",
@@ -3737,23 +3737,23 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 248340711338,
-          "user_s": 24.32754,
-          "sys_s": 0.151623,
-          "cpu_s": 24.479163,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/runtime_web-platform-5.perf",
+          "instructions": 219373839863,
+          "user_s": 18.819238,
+          "sys_s": 0.122712,
+          "cpu_s": 18.94195,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/runtime_web-platform-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 24.562211242999997,
+          "wall_s": 19.010722866999917,
           "listing_functions": 3055,
           "listing_definitions": 3055,
-          "listing_sha256": "66881e43e7fa340df6147dc4f9abd228c825d4be5d22bb609a82b267bcbc4f90"
+          "listing_sha256": "55479a3a39a9945fcaa52a76107b358040be398bbc29c6302eee3e8c62602383"
         }
       ],
-      "median_instructions": 248305478377,
-      "median_cpu_s": 24.396432,
-      "spread": 0.0005225689579300141
+      "median_instructions": 219434707390,
+      "median_cpu_s": 22.327236,
+      "spread": 0.00040646907605612626
     },
     {
       "module": "tests/compile-time/escape-analysis-scaling",
@@ -3770,18 +3770,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3471512369,
-          "user_s": 0.207233,
-          "sys_s": 0.021896,
-          "cpu_s": 0.229129,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/tests_compile-time_escape-analysis-scaling-1.perf",
+          "instructions": 3334716539,
+          "user_s": 0.235566,
+          "sys_s": 0.013983,
+          "cpu_s": 0.249549,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/tests_compile-time_escape-analysis-scaling-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.24258052699999827,
+          "wall_s": 0.26138802900000885,
           "listing_functions": 3,
           "listing_definitions": 3,
-          "listing_sha256": "e59dcc82d29c760d89b12f7709b63d10438aba4034823a7f718d1f1413ad6ad6"
+          "listing_sha256": "de86ebeb7c5bb594f630170358a06b916cef65824e564811f60b870e4e0e584d"
         },
         {
           "module": "tests/compile-time/escape-analysis-scaling",
@@ -3794,18 +3794,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3471513592,
-          "user_s": 0.232262,
-          "sys_s": 0.015027,
-          "cpu_s": 0.247289,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/tests_compile-time_escape-analysis-scaling-2.perf",
+          "instructions": 3334714474,
+          "user_s": 0.192935,
+          "sys_s": 0.021629,
+          "cpu_s": 0.214564,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/tests_compile-time_escape-analysis-scaling-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.2618340540000063,
+          "wall_s": 0.2469137659999833,
           "listing_functions": 3,
           "listing_definitions": 3,
-          "listing_sha256": "e59dcc82d29c760d89b12f7709b63d10438aba4034823a7f718d1f1413ad6ad6"
+          "listing_sha256": "de86ebeb7c5bb594f630170358a06b916cef65824e564811f60b870e4e0e584d"
         },
         {
           "module": "tests/compile-time/escape-analysis-scaling",
@@ -3818,18 +3818,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3471511094,
-          "user_s": 0.198517,
-          "sys_s": 0.025051,
-          "cpu_s": 0.223568,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/tests_compile-time_escape-analysis-scaling-3.perf",
+          "instructions": 3334715836,
+          "user_s": 0.201314,
+          "sys_s": 0.01692,
+          "cpu_s": 0.21823399999999998,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/tests_compile-time_escape-analysis-scaling-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.23727813400002196,
+          "wall_s": 0.23282463700004155,
           "listing_functions": 3,
           "listing_definitions": 3,
-          "listing_sha256": "e59dcc82d29c760d89b12f7709b63d10438aba4034823a7f718d1f1413ad6ad6"
+          "listing_sha256": "de86ebeb7c5bb594f630170358a06b916cef65824e564811f60b870e4e0e584d"
         },
         {
           "module": "tests/compile-time/escape-analysis-scaling",
@@ -3842,18 +3842,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3471515576,
-          "user_s": 0.210604,
-          "sys_s": 0.014951,
-          "cpu_s": 0.225555,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/tests_compile-time_escape-analysis-scaling-4.perf",
+          "instructions": 3334715483,
+          "user_s": 0.239007,
+          "sys_s": 0.023902,
+          "cpu_s": 0.262909,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/tests_compile-time_escape-analysis-scaling-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.23919369200000073,
+          "wall_s": 0.2749580750000314,
           "listing_functions": 3,
           "listing_definitions": 3,
-          "listing_sha256": "e59dcc82d29c760d89b12f7709b63d10438aba4034823a7f718d1f1413ad6ad6"
+          "listing_sha256": "de86ebeb7c5bb594f630170358a06b916cef65824e564811f60b870e4e0e584d"
         },
         {
           "module": "tests/compile-time/escape-analysis-scaling",
@@ -3866,28 +3866,28 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 3471513298,
-          "user_s": 0.244032,
-          "sys_s": 0.022003,
-          "cpu_s": 0.266035,
-          "counter_file": "/home/akisarou/.cache/nts-handover/escape-168/fold/calibration-rc-bd9-r1/tests_compile-time_escape-analysis-scaling-5.perf",
+          "instructions": 3334718521,
+          "user_s": 0.19848,
+          "sys_s": 0.016911,
+          "cpu_s": 0.215391,
+          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-rc-r1/tests_compile-time_escape-analysis-scaling-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 0.27781063600000927,
+          "wall_s": 0.22970298699999694,
           "listing_functions": 3,
           "listing_definitions": 3,
-          "listing_sha256": "e59dcc82d29c760d89b12f7709b63d10438aba4034823a7f718d1f1413ad6ad6"
+          "listing_sha256": "de86ebeb7c5bb594f630170358a06b916cef65824e564811f60b870e4e0e584d"
         }
       ],
-      "median_instructions": 3471513298,
-      "median_cpu_s": 0.229129,
-      "spread": 0.0000012910804196852865
+      "median_instructions": 3334715836,
+      "median_cpu_s": 0.21823399999999998,
+      "spread": 0.0000012135971554361191
     }
   ],
   "tripwire_policy": {
     "ratio": 1.1,
-    "observed_max_spread": 0.0009779434240195783,
+    "observed_max_spread": 0.0012021083512725461,
     "spread_multiplier": 4,
     "relative_floor": 0.1
   }
