@@ -30,26 +30,24 @@ one page that changes as work goes; the designs it builds are in
 
 ## Now
 
-- **The team:** the coordinator decides, designs and reviews. Agents implement
-  and measure:
-  - **compiler4** and **ClaudeHelper:** silent wrong answers in the core and
-    lowering; compiler4 also reviews every compiler change;
-  - **compiler3:** the foundations track, kept on it while wrong answers
-    remain: the one memory analysis, then bounds-check placement;
-  - **runtime:** `runtime/c`, compile-time blow-ups, then stage 3 of the
-    builtins mechanism;
-  - **runtime3:** calling C, the C calling convention, Node-API, and the JVM;
-  - **tsrs:** the frontend and the gate tooling;
-  - **helper2** and **helper4:** landing the cloud agents' pull requests,
-    fixtures, Unicode, the TypeScript runtimes and the Are We Fast Yet ports;
-  - **nodejs:** the node lane, moving to Node 26;
-  - **cloud agents** (ChatGPT, through pull requests): the web platform's
-    conformance, the Web Cryptography API, WebSocket and EventSource, and
-    benchmark ports ([cloud-agents](contributing/cloud-agents.md)).
+- **The team:** the coordinator decides, designs and reviews. Four agents
+  implement and measure, and the other Codex lanes hold until the new workflow
+  ([log](records/notebooks/decisions-log.md#lanes-hold-for-the-new-workflow-11-03)):
+  - **compiler4:** managed-type coercion (#159), with function bodies built
+    only where a program reaches them, inside the compile-time budget; it also
+    reviews every compiler change;
+  - **nodejs:** the shared TypeScript oracle (#193), then Node 26;
+  - **tsrs2:** the gate's tooling: record integrity now, and how a landing
+    learns which checks it owes once the survey of existing tools is in;
+  - **chromium:** the Chromium bindings, held to Blink's own C++;
+  - **cloud agents** (ChatGPT, through pull requests): test families for the
+    TypeScript suite, which land without a gate run, and the survey of
+    mature build and test tools for the gate
+    ([cloud-agents](contributing/cloud-agents.md)).
 
   The JVM is maintained while its new work waits for phase 4; the Wasm backend
-  is being rebuilt on Binaryen IR. Calling C is built in parallel with phase
-  2's other work, by runtime, runtime3, tsrs and helper2 (phase 2, item 9).
+  is to be rebuilt on Binaryen IR. Calling C (phase 2, item 9) and the other
+  held lanes' work resume with the new workflow.
 - **Node 26:** the node lane moves the node reference from Node 24.20.0 to
   26.13.0, the LTS line, on one branch:
   - one mechanical commit: the pin, node's sources, and the bundled

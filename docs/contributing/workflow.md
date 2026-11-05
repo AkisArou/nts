@@ -154,7 +154,12 @@ stable patch ID) and nothing else uses them. These decisions are logged in
   changes in `~/Projects/nts` and commits them without a gate, holding the
   landing lock, while no train is running. While the queue is busy, it
   submits them with `land-unit.ts` instead, and the service fast-forwards a
-  checked docs-only commit at the next train boundary.
+  checked docs-only commit at the next train boundary. A docs commit runs
+  the nine tree checks first: `audit` reads the headings the census cites.
+- **Test fixtures go straight to `main` too.** A tests-only change carries
+  its records, made by the gate's own recorders on main's official pin,
+  twice and identical, with only new rows. The coordinator fast-forwards
+  `main` to it like documentation, after the tree checks, with no gate.
 
 ## Reporting
 

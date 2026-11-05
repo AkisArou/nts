@@ -144,10 +144,28 @@ commits them to `main` without a gate, but **only while no train is running**:
   `land` refuse it at the end;
 - while a train runs, leave uncommitted edits only on files that train does
   not change. A dirty file the fast-forward must update aborts the landing;
+- first run the nine tree checks on it: commit it in a detached scratch
+  tree and run `land.ts <commit> --dry-run` there, which takes seconds.
+  The `audit` check reads the section headings the census cites, and on
+  2026-11-05 a docs commit that removed three of them turned `main` red;
 - while the queue is busy, submit the commit with `land-unit.ts` from a
   detached tree at it, after staging the same files in `~/Projects/nts`. A
   docs-only commit is checked on its own tree and fast-forwarded at the next
   train boundary, with no gate.
+
+**Test fixtures go straight to main too** (user, 2026-11-05). A change that
+only adds or edits test fixtures, with the records the gate checks them
+against, needs no gate run: the records are the gate's verdict on them, made
+by its own recorders. The coordinator lands it like documentation, holding
+the landing lock while no train runs (`git merge --ff-only` in
+`~/Projects/nts`), after:
+- recording it with those recorders on main's official pin, twice and
+  byte-identical, where only the new rows differ from main's records. A
+  changed row means main's records are stale: stop and report it;
+- running the nine tree checks on it (`land.ts <commit> --dry-run`).
+
+A fixture without its record, or with a wrong one, turns the next train red
+for whoever is in it. Lanes hand their tests-only commits to the coordinator.
 
 **A page in `docs/` is a specification, not a notebook** (user, 2026-10-27).
 It states the current design and contract, with no dates, history or running

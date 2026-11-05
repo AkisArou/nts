@@ -1308,6 +1308,15 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   so a rename cannot silently disable their checks. The contract is in
   [JVM and Android](../../targets/jvm.md#decisions).
 
+## Lanes hold for the new workflow (11-03)
+
+- **The decision.** After the usage limit stopped every Codex lane on the
+  morning of 11-03, the user resumed them: each lane finishes its current
+  job to landing, at the same bar and without hurry, and then holds. New
+  work goes through the new project workflow instead of long-lived agents.
+- **Who is still working.** compiler4 (#159), nodejs (#193, then Node 26),
+  tsrs2 (the gate tooling) and the Codex chromium agent. The others hold.
+
 ## Chromium performance bar (11-05)
 
 - **The decision.** The user set the Chromium lane's bar: compiled TypeScript
@@ -1350,3 +1359,27 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   are refused permanently. Reading a prototype and choosing one when an object
   is made (`Object.getPrototypeOf`, `Object.create` given a prototype,
   `__proto__` in an object literal) stay in scope.
+
+## Tests-only landings (11-05)
+
+- **The decision.** The user: "Why do we need the gate for those test
+  fixtures. I guess we should revise our rule for the gate? Just land them!
+  They are just test fixtures." A change that only adds or edits test
+  fixtures lands without a gate run, like documentation.
+- **Why the records still come with it.** A fixture's record is the gate's
+  verdict on it, and a fixture without one turns the next train red for
+  someone else. So the coordinator records new fixtures with the gate's own
+  recorders on main's official pin, twice and identical, and checks that only
+  new rows appear. The contract is in `AGENTS.md`.
+- **Failing tests land too.** The user, the same evening: "of course they
+  should be included in our main. it is normal for tests to fail. they are
+  tests." A test is never held out because nts cannot build it. The record
+  gains a build-failure outcome (#228), so the failure is pinned the way a
+  wrong answer is, and the four existing hold-out commits are reverted once
+  it lands.
+- **First use.** The thirteen ChatGPT families of PRs #391 to #454, 3,118
+  files: 3,110 tonight, and the 8 that nts cannot build yet once #228 lands.
+- **The gate's tooling.** The same evening the user asked for a survey of
+  mature build and test tools, such as Bazel, Buck2, Nx, Turborepo, tup and
+  BuildXL, before more bespoke work. The file-access recorder (#245) is held
+  at a WIP checkpoint until the survey's verdict.
