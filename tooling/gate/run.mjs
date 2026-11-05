@@ -70,6 +70,7 @@
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
 import { instrumentPolicy, readStepInstrument } from "./step-result.ts";
+import { orderStepStarts, readStepWallHistory, readPreviousStepWalls, writeStepWallHistory } from "./step-scheduling.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -141,7 +142,7 @@ const STEPS = [
     capabilities: ["jvm"],
   },
   { name: "test262-llvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
-  { name: "typescript-cases", slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
+  { name: "typescript-cases", slots: 8, min: 8, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
     capabilities: ["jvm"],
   },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },
@@ -381,6 +382,8 @@ function readTimes() {
 }
 const BASE = readTimes();
 const estimate = (name) => BASE.get(name)?.wall ?? 60;
+const WALL_HISTORY_FILE = join(target, "gate-costs", "steps.json");
+const WALL_HISTORY = new Map([...readPreviousStepWalls(join(dirname(RUN_DIR), "latest", "summary.json")), ...readStepWallHistory(WALL_HISTORY_FILE)]);
 
 // ---------------------------------------------------------------------------
 // Identities, so a summary says which binary and which tree it is about.
@@ -554,12 +557,9 @@ function preflight(step) {
 }
 
 function order(names) {
-  // The most work first (cpu seconds from times.tsv, else wall x slots): the long steps decide
-  // when the run ends, so they start while the most slots are free. Tiny steps
-  // (see `admit`) run beside them at once whatever the budget, so a cheap check
-  // still answers in its first minute.
-  const work = (n) => (BASE.get(n)?.cpu > 0 ? BASE.get(n).cpu : estimate(n) * Math.min(BY_NAME.get(n).slots, SLOTS));
-  return [...names].sort((a, b) => work(b) - work(a));
+  // Start the longest measured wall paths first. This history is separate
+  // from the committed timing-verdict baseline and from token claim weights.
+  return orderStepStarts(names, WALL_HISTORY, estimate);
 }
 // A step that takes a minute or so rides free beside the budget (up to a
 // quarter over it), at its minimum slots: the run's first verdicts arrive in
@@ -959,6 +959,10 @@ function done() {
     process.stderr.write(`could not write the summary files: ${e.message}\n`);
   }
   if (RECORD_TIMES) recordTimes();
+  if (normalized.report.canonical) {
+    const warning = writeStepWallHistory(WALL_HISTORY_FILE, plan.map(name => ({ name, ...results.get(name) })), WALL_HISTORY);
+    if (warning) process.stderr.write(`scheduling history unavailable: ${warning}\n`);
+  }
   process.exitCode = interrupted && interrupted.startsWith("signal") ? 130 : green ? 0 : 1;
 }
 

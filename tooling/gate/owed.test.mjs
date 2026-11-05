@@ -478,6 +478,22 @@ test("a data file a step's tool reads beside itself owes that step", () => {
   assert.ok(stepsFor("tooling/gate/times.tsv").length < landing().length);
 });
 
+test("a private timing fixture does not make committed step estimates a verdict input", () => {
+  const path = "tooling/gate/times.tsv";
+  const expected = [...stepsFor("tooling/chromium/args.gn")].sort();
+  const inputs = stepInputs(), previous = inputs.get(path);
+  // The coarse beside-file inference may claim this reader for fixture data.
+  // Inject that claim directly; the complete reader declaration must win.
+  inputs.set(path, new Set([...(previous ?? []), "tooling"]));
+  try {
+    assert.ok(inputs.get(path).has("tooling"), "the alias inference is present");
+    for (const added of [false, true]) assert.deepEqual([...changeOwes([{ path, added }])].sort(), expected);
+    owes("tooling/gate/compile-times.tsv", ["compile-time"], { not: ["examples"] });
+  } finally {
+    if (previous === undefined) inputs.delete(path); else inputs.set(path, previous);
+  }
+});
+
 test("the Chromium lane's own files owe only what every change owes", () => {
   // As the gate's step times do: placed, and owing nothing of its own.
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
