@@ -6,6 +6,7 @@
 
 #include <string_view>
 
+#include "base/no_destructor.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_context_creation_attributes_core.h"
 #include "third_party/blink/renderer/core/html/canvas/canvas_rendering_context.h"
 #include "third_party/blink/renderer/core/html/canvas/html_canvas_element.h"
@@ -14,6 +15,7 @@
 #include "third_party/blink/renderer/modules/canvas/canvas2d/canvas_rendering_context_2d.h"
 #include "third_party/blink/renderer/platform/bindings/dom_wrapper_world.h"
 #include "third_party/blink/renderer/platform/bindings/v8_binding.h"
+#include "third_party/blink/renderer/platform/wtf/std_lib_extras.h"
 
 namespace {
 
@@ -72,9 +74,20 @@ nts_dom_HTMLCanvasElement_getContext_2d(NtsDomHTMLCanvasElement *self,
   }
   if (std::string_view(context_id) != "2d")
     return nullptr;
+  // The interned atom, held static: constructing String("2d") allocates
+  // and hashes a new impl on every call, and even AtomicString("2d")
+  // hashes and probes the atom table on every call. Replacing the fresh
+  // String saved about 40 ns in the canvas profile
+  // (docs/records/chromium-canvas-v8-profile.md); the static atom also
+  // avoids the repeated lookup. The adapter runs on the main thread.
+  DEFINE_STATIC_LOCAL(const blink::AtomicString, two_d, ("2d"));
+  // This ABI is the no-options overload. An immutable default need not be
+  // reconstructed for a context lookup; caller-supplied attributes are not
+  // cached by this path.
+  static const base::NoDestructor<blink::CanvasContextCreationAttributesCore>
+      default_attributes;
   blink::CanvasRenderingContext *rendering = canvas->GetCanvasRenderingContext(
-      context.document->GetExecutionContext(), blink::String("2d"),
-      blink::CanvasContextCreationAttributesCore());
+      context.document->GetExecutionContext(), two_d, *default_attributes);
   if (!rendering || !rendering->IsRenderingContext2D())
     return nullptr;
   return HandleOf<NtsDomCanvasRenderingContext2D>(
