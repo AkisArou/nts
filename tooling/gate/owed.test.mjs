@@ -8,11 +8,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
-import { chmodSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, gateSteps, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, stepInputs, targetFiles, WIDE } from "./owed.mjs";
+import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -44,6 +44,56 @@ const superset = (got, want, what) => {
   for (const s of want) assert.ok(got.includes(s), `${what} should owe ${s}; owes ${got.join(" ")}`);
 };
 const full = () => stepsFor("no/rule/matches/this.txt");
+
+test("unplaced ECMAScript providers keep their declared reach beside inferred readers", t => {
+  const inputs = stepInputs(), path = "runtime/ecmascript", previous = inputs.get(path);
+  t.after(() => previous === undefined ? inputs.delete(path) : inputs.set(path, previous));
+  inputs.set(path, new Set([...(previous ?? []), "tooling"]));
+  for (const added of [false, true]) {
+    const rules = owed([{path:"runtime/ecmascript/unplaced-provider.ts",added}]);
+    assert.ok(rules.some(rule => rule.name === "unplaced ECMAScript provider definitions" && rule.full));
+    superset(gateSteps(rules), ["build", "tests", "types"], "the provider's compiled consumers");
+  }
+  assert.ok(!owed([{path:"runtime/ecmascript/src/json/json.ts",added:false}]).some(rule => rule.full));
+  assert.ok(!owed([{path:"runtime/ecmascript/tools/icu.ts",added:false}]).some(rule => rule.full));
+});
+
+test("a quoted runtime/* fixture alias does not make tooling read the Chromium runtime", t => {
+  const config = {compilerOptions:{paths:{"@nts/runtime/*":["runtime/*"]}}};
+  const inputs = stepInputs(), paths = globSync(config.compilerOptions.paths["@nts/runtime/*"][0]);
+  assert.ok(paths.includes("runtime/chromium"), "the inferred scanner expands this fixture data");
+  const previous = paths.map(path => [path, inputs.get(path)]);
+  t.after(() => {for(const [path, steps] of previous)steps === undefined ? inputs.delete(path) : inputs.set(path, steps);});
+  const actualReader = [...stepsFor("tooling/chromium/processes.ts")].sort();
+  assert.ok(actualReader.includes("tooling"), "the real Chromium test helper remains a tooling input");
+  for(const path of paths)inputs.set(path, new Set([...(inputs.get(path) ?? []), "tooling"]));
+  for(const path of ["runtime/chromium/host/host.c", "runtime/chromium/adapter/dom_bridge.cc", "runtime/chromium/examples/todo/main.ts"])
+    for(const added of [false, true]) {
+      const rules = owed([{path,added}]);
+      assert.deepEqual([...gateSteps(rules)].sort(), [...stepsFor("tooling/gate/times.tsv")].sort(), path);
+      assert.ok(rules.some(rule => rule.name === "the Chromium lane"));
+    }
+  assert.deepEqual([...stepsFor("tooling/chromium/processes.ts")].sort(), actualReader);
+  superset(changeReach([{path:"runtime/chromium/dom/types/dom-idl.d.ts",added:false}]), ["blockers", "integrity", "interop"], "the actual DOM corpus readers");
+});
+
+test("the real Chromium runtime readers are complete", () => {
+  const listed = spawnSync("git", ["ls-files", "-z", "--", "runtime/chromium"], {encoding:"utf8"});
+  assert.equal(listed.status, 0, listed.stderr);
+  const paths = listed.stdout.split("\0").filter(Boolean);
+  assert.ok(paths.length > 0, "the real Chromium runtime inventory is empty");
+  const declaration = RULES.find(rule => rule.name === "the Chromium lane").stepReaders;
+  const inputs = stepInputs();
+  for(const path of paths) {
+    const declared = declaration(path);
+    assert.ok(Array.isArray(declared), `no direct-reader declaration for ${path}`);
+    // The quoted runtime/* alias in fixture data contributes this one known
+    // inferred edge. No other step may hide behind the complete declaration.
+    const allowed = new Set([...declared, "tooling"]);
+    const unexpected = [...covering(inputs, path)].filter(step => !allowed.has(step));
+    assert.deepEqual(unexpected, [], `a new reader of runtime/chromium: update the Chromium lane's stepReaders (${path}: ${unexpected.join(" ")})`);
+  }
+});
 
 test("every nested tooling test owes its recursive collector without an unknown-path full gate",()=>{
   for(const path of ["tooling/new/deep/a.test.ts","tooling/bench/run-session.test.ts","tooling/bootstrap/typescript.test.ts","tooling/conformance/web-platform/host-tests.test.ts"]){

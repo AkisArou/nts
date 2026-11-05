@@ -456,6 +456,16 @@ export const RULES = [
     ],
   },
   {
+    // A provider entry not placed under an existing provider tree still
+    // needs the complete compiler and runtime checks. An inferred reader
+    // cannot turn this conservative reach into only that reader's step.
+    name: "unplaced ECMAScript provider definitions",
+    when: (p) => /^runtime\/ecmascript\/[^/]+\.ts$/.test(p),
+    full: true,
+    steps: ["build", "tests", "types"],
+    arms: [{ kind: "answers", asks: "do the provider's checking and compiled consumers still agree", run: "the full gate until the provider has a more specific reach rule" }],
+  },
+  {
     // The two program controls and the JSON benchmark cases import these
     // sources outside their tsconfig directories. The generic corpus map
     // intentionally does not follow those external imports.
@@ -754,11 +764,12 @@ export const RULES = [
     // The Chromium lane's own files: the Blink build, its harnesses and the
     // bindings generator (tooling/chromium), and what only that build compiles
     // -- the app host, the Blink adapter, the embedder probe, the apps, the
-    // tests and benchmarks, their docs (runtime/chromium). No gate step runs
-    // any of it (a file a step does run still owes that step, through the step
-    // map). A gate step that starts reading a file here must enter the step
-    // map too, or this rule hides it: settling the path is a claim that
-    // nothing in the gate reaches it. What a gated program does reach is
+    // tests and benchmarks, their docs (runtime/chromium). The runtime half
+    // is read by the C backend's foreign_window test at the three DOM
+    // declarations below. processes.test.ts reads only processes.ts and a
+    // private /proc fixture. Keep inferred readers for tooling/chromium;
+    // a new direct runtime reader must update this complete declaration.
+    // What a gated program does reach stays additive below and is
     // charged as its own path, through the corpora: the DOM surface and its
     // native half (runtime/chromium/dom) that `target.chromium()` brings to an
     // interop project owe `interop`, and the declarations the blockers
@@ -766,6 +777,8 @@ export const RULES = [
     // checked by tooling/chromium/verify.ts (both backends, against the V8
     // oracle).
     name: "the Chromium lane",
+    stepReaders: p => !p.startsWith("runtime/chromium/") ? undefined
+      : /^runtime\/chromium\/dom\/types\/(dom-idl|dom-abi|lib-dom-bindings)\.d\.ts$/.test(p) ? ["tests"] : [],
     wide: true,
     when: (p) => /^(tooling|runtime)\/chromium\//.test(p),
     settled: true,
@@ -1219,7 +1232,7 @@ export function stepInputs() {
 }
 
 /** The entries of `map` (input -> Set) that cover `path`: the path itself, or a directory above it. */
-function covering(map, path) {
+export function covering(map, path) {
   const out = new Set();
   for (const [input, names] of map) if (path === input || path.startsWith(`${input}/`)) for (const n of names) out.add(n);
   return out;
@@ -1399,7 +1412,10 @@ export function owed(changes) {
     }
 
     // What the steps run.
-    const steps = [...covering(stepInputs(), path)];
+    const declaredReaders = rulesFor(path, added).map(rule => rule.stepReaders?.(path)).filter(readers => readers !== undefined);
+    const steps = declaredReaders.length
+      ? [...new Set(declaredReaders.flat())]
+      : [...covering(stepInputs(), path)];
     if (steps.length) {
       // A step's own scripts owe that step, wide or not; the corpora it reads
       // are owed by their own rules, and a fixture's wide steps run in the
