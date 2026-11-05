@@ -4,7 +4,7 @@ features: [ts-hole-routes, ts-hole-route-making, ts-arrays]
 ---*/
 
 // Array.from on a length-only object creates owned undefined slots. Route: readonly tuple rows. Node prints making-from-arraylike-length:ok.
-type V = number | string | undefined;
+type V = unknown;
 const items: V[] = Array.from({ length: 3 });
 const rows: readonly [string, V[]][] = [["first", items]];
 const routed = rows[0][1];
