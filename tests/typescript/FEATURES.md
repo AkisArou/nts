@@ -323,6 +323,12 @@ A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
 
+54. **Array method results through typed routes:** dense searches, copies,
+    callbacks and folds, in-place writes, and iterable construction.
+    [Array method route contracts](#array-method-route-contracts) name the
+    sources; `ts-array-method-route-*` identifies each area and its explicit
+    loop controls.
+
 ## The families
 
 | family | what it holds |
@@ -332,6 +338,8 @@ flows through it.
 | `ambient/` | `declare` forms, which emit nothing and resolve to what the program provides |
 | `array-contents/` | typed array writes and reads, exact values, order and slot presence, with node as the oracle |
 | `array-contents-controls/` | counterparts using one declared element type across writes and reads, with node as the oracle |
+| `array-method-routes/` | exact dense-array searches, copies, callback arguments, folds, mutation returns and construction through declared types, held to node |
+| `array-method-routes-controls/` | the same inputs, typed routes and assertions with the tested methods replaced by local indexed or iterable loops |
 | `async-iteration-routes/` | async generators, for-await consumers and custom async iterators through typed routes, with exact values, completion, closing and ordered logs held to node |
 | `async-iteration-routes-controls/` | the same fixtures, routes and assertions using explicit awaited next and return calls, sync sources and plain promise-returning state classes |
 | `async/` | async functions, methods and generators, promises, `for await` (`flags: [async]`) |
@@ -1684,6 +1692,20 @@ Other inputs, declared routes, loops and expected values remain unchanged.
 The family excludes stack data, engine-written message text, SuppressedError,
 DOMException.code, Reflect, Proxy and property descriptors. Maintainers compile every
 case and control on each backend and record its result without weakening it.
+
+The `array-method-routes/` matrix uses `<area>-<behavior>-<route>.ts`
+in place of combination cases. Each case has `ts-array-method-routes`,
+one `ts-array-method-route-*` area tag and existing syntax tags. Dense
+arrays cross declared fields, interfaces, constrained generics, narrowed
+unions, Maps, tuples, readonly views and captured bindings. Exact results,
+complete callback logs, identities and specified error classes distinguish
+the methods' contracts. Controls append `-control` and replace each tested
+call with a local indexed loop or iterable loop, preserving every other
+input, route and assertion. No case changes its source inside a callback.
+Strict checking treats unflagged files as scripts and module-flagged files
+as modules, with the harness as a script and library diagnostics included.
+Node uses the unchanged suite oracle; maintainers measure and record
+backend outcomes.
 
 ## Coverage, source by source
 
@@ -3103,6 +3125,26 @@ to exact observations through typed routes, beside literal controls.
 | `builtin-throws` | `builtin-throws-*` | 24 | 24 | Specified built-in exception classes through operation arrays, interfaces and generic helpers, including strict integrity writes through aliases |
 | **Total** | | **120** | **120** | Matching case/control pairs |
 
+### Array method route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [Array objects](https://tc39.es/ecma262/#sec-array-objects), [at](https://tc39.es/ecma262/#sec-array.prototype.at), [indexOf](https://tc39.es/ecma262/#sec-array.prototype.indexof), [lastIndexOf](https://tc39.es/ecma262/#sec-array.prototype.lastindexof) and [includes](https://tc39.es/ecma262/#sec-array.prototype.includes) | relative indices, integer conversion, bounds and equality for dense reads |
+| ECMAScript [Array prototype methods](https://tc39.es/ecma262/#sec-properties-of-the-array-prototype-object), [FlattenIntoArray](https://tc39.es/ecma262/#sec-flattenintoarray) and [Array iterator objects](https://tc39.es/ecma262/#sec-array-iterator-objects) | ordered callbacks and folds, shallow copies, flattening depth, exact in-place results and iterator output |
+| ECMAScript [Array.from](https://tc39.es/ecma262/#sec-array.from), [Array.of](https://tc39.es/ecma262/#sec-array.of), [Array.isArray](https://tc39.es/ecma262/#sec-array.isarray) and [array initializers](https://tc39.es/ecma262/#sec-array-initializer) | iterable and array-like inputs, mapper values and indices, dense construction, array classification and spread |
+| TypeScript [generics](https://www.typescriptlang.org/docs/handbook/2/generics.html), [object types](https://www.typescriptlang.org/docs/handbook/2/objects.html), [narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) and [more on functions](https://www.typescriptlang.org/docs/handbook/2/functions.html) | declared carriers, constraints, readonly views, callback signatures and explicit this parameters |
+
+The existing array-contents, length-routes, sort-routes, iterator-routes,
+tuple-routes, destructuring-routes and species-routes families retain their
+storage, mutation-during-traversal, sorting, protocol, tuple, pattern and
+subclass observations. This family isolates dense method results without
+holes, callback mutation, subclass policies or sorting.
+
+| area | cases | controls | observations and routes |
+| --- | ---: | ---: | --- |
+| `reads` | 24 | 24 | relative indices, strict and SameValueZero searches, first and last matches, and decisive predicate visits through declared arrays and callbacks |
+| **Total** | **24** | **24** | exact inputs and assertions retained in every pair |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3120,6 +3162,8 @@ to exact observations through typed routes, beside literal controls.
 | `ts-ambient` | an ambient declaration (`declare var/function/class/namespace/global`), which emits nothing | conformance/ambient; ts-eslint TSDeclareFunction, `declare` modifiers | 6 | 1 |
 | `ts-any` | an explicitly `any`-typed value, the dynamic escape hatch | conformance/types/any; ts-eslint TSAnyKeyword | 4 | 0 |
 | `ts-array-contents` | array elements retain values, runtime kinds, order and slot presence across typed writes and reads | Array contents contracts; typed paths | 142 | 0 |
+| `ts-array-method-routes` | dense array method results, callbacks, identities and errors through typed routes beside explicit loop controls | Array method route contracts; typed paths | 48 | 0 |
+| `ts-array-method-route-reads` | relative indices, strict and SameValueZero searches, first and last matches, and decisive predicate visits through declared arrays and callbacks | Array method route contracts; typed paths | 48 | 0 |
 | `ts-array-iteration` | writes through typed aliases during iteration preserve live traversal and callback semantics | Objects, Arrays; ECMAScript, CreateArrayIterator and Array.prototype.forEach | 8 | 0 |
 | `ts-array-reads` | indexed, method, iterator and conversion reads observe actual values through differing declared types | Array contents contracts; typed paths | 36 | 0 |
 | `ts-array-representation` | concrete element storage crosses a wider reader with exact payloads, identities and slot presence | Language, Types, A type is a layout; Objects, Arrays | 24 | 0 |
