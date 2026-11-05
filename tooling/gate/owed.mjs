@@ -765,6 +765,9 @@ export const RULES = [
     when: (p) => p === "tooling/gate/times.tsv",
     settled: true,
     steps: [],
+    // Complete canonical readers: the runner uses these estimates for
+    // scheduling and warnings; tooling tests read only their private copies.
+    stepReaders: () => [],
     arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
   },
   {
