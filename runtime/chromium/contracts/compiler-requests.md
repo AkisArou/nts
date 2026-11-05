@@ -501,3 +501,60 @@ it. The Chromium lane
 then binds IDL `T?` results of numeric `T` through it, and checks them
 against page script in the differential vectors (an `<input type=text>`'s
 selection, and a `type=checkbox`'s, which is null).
+
+## 17. One combined host entry and leave
+
+**Requested 2026-11-04, renewed 2026-11-05 with numbers. Priority: the
+per-call entry cost (brief item 2). Blocks: nothing; every compiled
+callback into Blink pays it.**
+
+**Observed.** The host-side entry below the adapter's scopes is three
+enter/leave pairs across translation units -- environment
+(`nts_chromium_host_enter/leave`, runtime/chromium/host/host.c), the
+callback invocation itself, and the runtime's callback depth (its
+entries counter) -- reached through the host's invoker on every
+outermost entry. In the canvas per-call decomposition
+(`docs/records/chromium-canvas-per-call.md`) the whole bare entry is
+32–34 ns; the host enters were about 15% of it in the unit-cost matrix
+of `docs/records/chromium-per-call-entry.md`, and the adapter has since
+removed its own larger slices. Three pairs where the state is one:
+which entry is outermost is computed three times, on both sides of two
+ABI seams.
+
+**Proposed.** One enter and one leave in the runtime that bring the
+environment, invoke the callback, and settle the depth together --
+`nts_host_enter(host, call, state)` replacing the invoker's three
+pairs -- with the host's entries/closing accounting kept inside it.
+The adapter already asks the host for exactly this shape through
+`nts_blink_dom_set_invoker`; only the seam count changes.
+
+**Accept.** The per-call rows of the binding and kernels workloads in
+instructions per call, on a pinned compiler, before and after; the
+bare-entry unit matrix (0/1/4 operations) narrowing by the two removed
+pairs.
+
+## 18. A per-literal atom slot for converted literal strings
+
+**Requested 2026-11-05. Priority: per-call name conversions. Blocks:
+nothing; every ID/name lookup from compiled code pays it.**
+
+**Observed.** A compiled string literal reaches Blink through the
+adapter's `NtsText`, which caches the converted `AtomicString` in a
+per-context HashMap keyed by the literal's address (the immortal bit
+of request 1's `StringView`, as delivered). A canvas per-call entry
+pays about 71 cycles for `getElementById`, of which Blink's own lookup
+is shared with hand-written C++; the compiled-only remainder is the
+hash lookup and the atom's refcount, where hand-written C++ passes a
+static atom. The same lookup stands in front of every name-typed DOM
+call (getElementById, querySelector, setAttribute, classList, …).
+
+**Proposed.** A literal carries its converted form beside it: a slot in
+(or beside) the literal's storage the host fills once per document and
+reads thereafter, so a literal's conversion is a load, not a lookup.
+The compiler owns the literal's layout; the slot's width and the
+fill-once protocol are the lane's design to propose. Non-literal
+strings keep the HashMap path (address-keyed, immortal bit clear).
+
+**Accept.** The binding workload's name-lookup rows in instructions per
+call, before and after, on a pinned compiler; the exact-units witness
+unchanged.
