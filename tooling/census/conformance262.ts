@@ -128,6 +128,7 @@ import { selectTypescript } from "./suites/typescript.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
+import { Admission, RESUME_AT_GB } from "../gate/admission.ts";
 import {beginComparison,digest,resourceStop,RECORD_COMPARISON_STEPS} from "../lanes/resource-comparison.ts";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 
@@ -257,22 +258,9 @@ function machineState() {
 }
 const machineAtStart = machineState();
 
-// **Refuse to start rather than be killed at case 19,000.** The DEGRADED check
-// sees paging; it cannot see the allocator failing outright, which on this box
-// arrives as the kernel or the session killing the process -- after the work is
-// lost, and out of band. A run needs roughly a worker's ordinary frontend (~0.2
-// GB) per job, plus room for one case to climb to the 6 GB cap, plus headroom
-// for everything else: below that, it does not begin.
-// `NTS_CENSUS_MIN_AVAILABLE_GB` overrides the figure for a machine that knows
-// better.
-const REQUIRED_GB = Number(process.env.NTS_CENSUS_MIN_AVAILABLE_GB ?? (jobs * 0.2 + MEMORY_CAP_KB / 1e6 + 2).toFixed(1));
-if (machineAtStart.available_gb < REQUIRED_GB) {
-  cannotMeasure(
-    `${machineAtStart.available_gb} GB available, and a run of ${jobs} worker(s) with a ` +
-      `${MEMORY_CAP_KB / 1e6} GB per-case cap wants ${REQUIRED_GB} GB before it starts. ` +
-      "Wait for the machine, or lower --jobs.",
-  );
-}
+// Admission is sized only after saved rows have removed completed cases.
+// A fully resumed selection starts no workers and requests no case memory.
+let REQUIRED_GB = 0;
 /** The least memory seen while the run was going, sampled at each progress mark. */
 let lowestAvailableGb = machineAtStart.available_gb;
 const describeMachine = (m) =>
@@ -499,11 +487,17 @@ async function runAll(all) {
   // new case, the ones running finish on their own timeout, and the feed
   // resumes at 14 GB (`tooling/gate/admission.ts`).
   if (paths.length > 0) {
+    const workers = Math.min(jobs, paths.length);
+    REQUIRED_GB = Math.max(RESUME_AT_GB, Number(process.env.NTS_CENSUS_MIN_AVAILABLE_GB ??
+      (workers * 0.2 + MEMORY_CAP_KB / 1e6 + 2).toFixed(1)));
+    const report = (message: string) => process.stderr.write(`  ${message}\n`);
+    // The shared feeder waits before dispatch, including the first case.
+    const admission = new Admission({ resumeAt: REQUIRED_GB, report });
     try {
       await runMemoryWorkers({
-        paths, jobs, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024,
+        paths, jobs: workers, admission, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024,
         args: (index) => [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
-        report: (message) => process.stderr.write(`  ${message}\n`),
+        report,
         onRow: (row) => {
           results.set(row.path, row);
           if (rowsFile) appendFileSync(rowsFile, `${JSON.stringify(row)}\n`);
