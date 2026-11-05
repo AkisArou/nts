@@ -445,6 +445,8 @@ flows through it.
 | `object-routes/` | exact key order, getter/setter histories, copies, integrity and presence through typed objects, held to node |
 | `object-routes-controls/` | explicit ordered names, field copies, presence flags and direct operations with matching inputs and observations |
 | `objects/` | object literals and types, structural assignment, keys, spread, Record |
+| `promise-combinator-routes/` | exact Promise combinator outputs, input consumption, errors and microtask turns through declared types, held to node |
+| `promise-combinator-routes-controls/` | matched combinator-free implementations using new Promise, then, counters and exact logged observations |
 | `private-member-routes/` | private fields, brands, methods, accessors and static state across typed instances, class evaluations and public views, held to node |
 | `private-member-routes-controls/` | identical instances, typed carriers and assertions using one guarded Map per private name and guarded adjacent variables for static private state |
 | `proofs/` | facts proved from code, followed by a route that can invalidate them, with node as the oracle |
@@ -1993,6 +1995,17 @@ in the pull request; cases are never weakened to fit a backend.
 Dispatch-route cases retain node's answer even where nts refuses a form.
 Maintainers record backend results separately. Strict-rejected matrix
 forms are listed with their diagnostics in the pull request.
+
+### Promise combinator route contracts
+
+| source | concepts |
+| --- | --- |
+| [ECMAScript, Promise objects](https://tc39.es/ecma262/multipage/control-abstraction-objects.html#sec-promise-objects) | input resolution and rejection, iterable consumption, thenable adoption, result ordering and reaction jobs |
+| [TypeScript, Generics](https://www.typescriptlang.org/docs/handbook/2/generics.html) and [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) | declared and narrowed promise, thenable, tuple, interface, Map and class routes |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `all` | 24 | 24 | ordered values, identity, fresh arrays, rejection races, iterable consumption and thenables |
 
 ### Async route contracts
 
@@ -3770,6 +3783,8 @@ aliases use only one-byte element kinds.
 | `ts-instanceof-route-prototypes` | Hand-made and changed chains preserve exact membership before and after each mutation | Instanceof route contracts; typed paths | 14 | 0 |
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
+| `ts-promise-combinator-route-all` | all input-order values, early rejections, eager iterables and sparse/thenable consumption | Promise combinator route contracts; ECMAScript, Promise.all | 48 | 0 |
+| `ts-promise-combinator-routes` | Promise combinators held to node beside explicit combinator-free controls | Promise combinator route contracts; typed paths | 48 | 0 |
 | `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
 | `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 252 | 0 |
 | `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 52 | 0 |
