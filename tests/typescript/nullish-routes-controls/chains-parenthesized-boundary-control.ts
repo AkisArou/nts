@@ -9,6 +9,8 @@ interface Outer { inner: Inner }
 const list: Inner[] = [];
 const outer: Outer = { inner: list[0] };
 assert.throws(TypeError, () => {
-  const saved = outer; const selected = saved === null || saved === undefined ? undefined : saved.inner; const result = selected.x; void result;
+  const saved = outer;
+  if (saved === null || saved === undefined) throw new TypeError("unreached");
+  const result = saved.inner.x; void result;
 });
 console.log("chains-parenthesized-boundary:ok");
