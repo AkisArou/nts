@@ -44,6 +44,13 @@ const options = process.argv.slice(2);
 assert(options.length === 0 || (options.length === 2 && options[0] === "--profile"),
   "usage: verify.ts [--profile baseline|perf]");
 const profile = buildProfile(root, options.length ? options : ["--profile", "perf"]);
+
+// Name the tree this run verifies, so a log says which commit its
+// verdict belongs to whoever runs it.
+const git = (args: string[]): string =>
+  execFileSync("git", ["-C", root, ...args], { encoding: "utf8" }).trim();
+const dirty = git(["--no-optional-locks", "status", "--porcelain"]) ? " (dirty)" : "";
+console.log(`verify: ${git(["rev-parse", "HEAD"])}${dirty}, profile ${profile.name}`);
 const engine = resolve(chromiumSource(root), profile.directory);
 const runs = resolve(root, "target/chromium", profile.name);
 const apps = resolve(root, "runtime/chromium/examples");
