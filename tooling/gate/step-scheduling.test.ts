@@ -65,7 +65,7 @@ cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
 else
-  node --input-type=module -e 'import {appendFileSync} from "node:fs";appendFileSync(${JSON.stringify(observed)},JSON.stringify({step:process.env.NTS_GATE_STEP,slots:Number(process.env.NTS_GATE_JOBS)})+"\\n");await new Promise(resolve=>setTimeout(resolve,250));'
+  node --input-type=module -e 'import {appendFileSync} from "node:fs";appendFileSync(${JSON.stringify(observed)},JSON.stringify({step:process.env.NTS_GATE_STEP,slots:Number(process.env.NTS_GATE_JOBS)})+"\\n");'
 fi
 `);
   const compiler = join(own, "nts"); writeFileSync(compiler, "controlled compiler identity\n");
@@ -79,7 +79,9 @@ fi
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as { steps: { name: string; slots: number }[] };
   assert.equal(summary.steps.find(step => step.name === "typescript-cases")?.slots, 8, "the fixed census cannot remain on a partial grant");
   const starts = readFileSync(observed, "utf8").trim().split("\n").map(line => JSON.parse(line) as { step: string; slots: number });
-  assert.equal(starts[0]!.step, "typescript-cases", "measured wall time takes precedence over CPU work and the old baseline");
+  assert.deepEqual(starts.map(row => row.step).sort(), ["tests", "typescript-cases"]);
+  const admissions = [...actual.stderr.matchAll(/^-- ([a-z-]+) started /gm)].map(match => match[1]);
+  assert.deepEqual(admissions, ["typescript-cases", "tests"], "measured wall time takes precedence over CPU work and the old baseline");
   assert.equal(readFileSync(join(gate, "times.tsv"), "utf8"), baseline, "scheduling must never rewrite timing-verdict baselines");
   const history = JSON.parse(readFileSync(join(target, "gate-costs/steps.json"), "utf8")) as { version: number; steps: Record<string, number> };
   assert.equal(history.version, 1);
