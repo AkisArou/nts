@@ -897,21 +897,41 @@ private:
 // the thread's entered one; the main world's V8 context, entered, with a
 // handle scope -- Blink code a DOM call reaches may ask for the current world
 // (Text::splitText's wrapper lookup does), as it may when page script's
-// bindings call it; and a microtask scope that checkpoints as the outermost
-// entry returns, as V8 does after a callback. A nested callback -- a
-// listener the program's own click() dispatches -- finds its context
-// entered and its world entered already, and re-enters neither; its
-// handle and microtask scopes are its own, as a nested JS callback's are.
+// bindings call it; and a microtask scope. A nested callback -- a listener
+// the program's own click() dispatches -- finds its context entered and
+// its world entered already, and re-enters neither; its handle and
+// microtask scopes are its own, as a nested JS callback's are.
+//
+// Whether the microtask scope checkpoints as the entry returns depends on
+// what runs next. Blink checkpoints at the end of every task
+// (EventLoop::PerformMicrotaskCheckpoint from the task's epilogue), and
+// nothing that runs script sits between a task-root entry's return and
+// that checkpoint, so a task-root entry -- a timer, a posted callback or
+// job, an async completion, a microtask job itself -- defers to it: the
+// checkpoint, with its kept-object clearing, rejected-promise
+// notification and IndexedDB end-of-checkpoint tasks, happens at the
+// same observable point either way. An entry Blink continues from
+// inside the same task -- a listener dispatch (the next listener runs
+// next), an animation-frame or idle callback (the next callback of the
+// frame runs next) -- checkpoints at its own exit, as V8's bindings do
+// after a callback, because the next callback must observe this one's
+// microtasks already run. A nested entry never adds a checkpoint point
+// of its own, whichever kind it is: the outermost entry's kind decides,
+// as the scope depth already ensured when every scope ran microtasks.
 class ProgramScope {
   STACK_ALLOCATED();
 
 public:
-  explicit ProgramScope(NtsDomContext *context)
+  enum class Checkpoint { kAtExit, kDeferredToTaskEnd };
+
+  ProgramScope(NtsDomContext *context, Checkpoint checkpoint)
       : nested_(entered == context), entry_(context, nested_),
         script_(context->MainWorld(), !nested_),
-        microtasks_(context->v8_isolate.get(),
-                    context->event_loop->microtask_queue(),
-                    v8::MicrotasksScope::kRunMicrotasks) {}
+        microtasks_(
+            context->v8_isolate.get(), context->event_loop->microtask_queue(),
+            !nested_ && checkpoint == Checkpoint::kAtExit
+                ? v8::MicrotasksScope::kRunMicrotasks
+                : v8::MicrotasksScope::kDoNotRunMicrotasks) {}
 
 private:
   bool nested_;
@@ -931,7 +951,7 @@ void NtsPendingPromise::Settle(const char *name, const char *message,
   if (!context || !promise || context->closed)
     return;
   context->listeners->promises.erase(this);
-  ProgramScope scope(context);
+  ProgramScope scope(context, ProgramScope::Checkpoint::kDeferredToTaskEnd);
   struct Call {
     RAW_PTR_EXCLUSION const NtsDomPromiseOps *ops; // see PlainPointers
     RAW_PTR_EXCLUSION void *state;                 // see PlainPointers
@@ -1183,7 +1203,7 @@ void NtsStringCall::Run(const char *text) {
   if (!context || context->closed || !context->invoke)
     return;
   context->listeners->strings.erase(this);
-  nts_dom::ProgramScope scope(context);
+  nts_dom::ProgramScope scope(context, nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
   struct Call {
     nts_dom::NtsDomStringCallback callback;
     RAW_PTR_EXCLUSION const char *text; // see PlainPointers
@@ -1209,7 +1229,7 @@ void NtsBlobCall::Run(blink::Blob *blob) {
   if (!context || context->closed || !context->invoke)
     return;
   context->listeners->blobs.erase(this);
-  nts_dom::ProgramScope scope(context);
+  nts_dom::ProgramScope scope(context, nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
   struct Call {
     nts_dom::NtsDomBlobCallback callback;
     RAW_PTR_EXCLUSION NtsDomBlob *blob; // see PlainPointers
@@ -1270,7 +1290,7 @@ void NtsDomContext::Dispatch(NtsDomCallback callback,
                              void *closure) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this);
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kAtExit);
   // On this stack for the call, as the program's own frames are: the event
   // is found here by Oilpan's stack scan, and is alive for the dispatch.
   struct Call {
@@ -1345,7 +1365,7 @@ void NtsDomContext::RunFrame(NtsDomFrameCallback callback, double time,
                              void *closure, NtsDomDestroy destroy) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this);
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kAtExit);
   struct Call {
     NtsDomFrameCallback callback;
     double time;
@@ -1367,7 +1387,7 @@ void NtsDomContext::RunMicrotask(NtsDomMicrotaskCallback callback,
                                  void *closure, NtsDomDestroy destroy) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this);
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
   struct Call {
     NtsDomMicrotaskCallback callback;
     RAW_PTR_EXCLUSION void *closure; // see PlainPointers
@@ -1389,7 +1409,7 @@ void NtsDomContext::RunIdleCallback(NtsDomIdleCallback callback,
                                     void *closure, NtsDomDestroy destroy) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this);
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kAtExit);
   // On this stack for the call: the deadline is found here by Oilpan's scan.
   struct Call {
     STACK_ALLOCATED();
@@ -1490,14 +1510,14 @@ void NtsDomContext::ClearTimer(double id) {
 void NtsDomContext::RunCallback(void (*call)(void *), void *state) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this);
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
   invoke(invoke_host.get(), call, state);
 }
 
 void NtsDomContext::RunTimer(nts_dom::NtsTimer *timer) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this);
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
   // The timer is on this stack for the run, where Oilpan's scan finds it.
   timer_nesting = timer->nesting();
   invoke(
@@ -1912,13 +1932,24 @@ void nts_blink_dom_set_promise_ops(NtsDomContext *context,
   context->promise_ops = ops;
   context->promise_state = state;
 }
-int32_t nts_blink_dom_entry(NtsDomContext *context, NativeJob::Callback run,
-                            void *state) {
+static int32_t DomEntry(NtsDomContext *context, NativeJob::Callback run,
+                        void *state,
+                        nts_dom::ProgramScope::Checkpoint checkpoint) {
   if (context->closed || !context->document->IsActive())
     return 11; // InvalidStateError
-  nts_dom::ProgramScope scope(context);
+  nts_dom::ProgramScope scope(context, checkpoint);
   run(state);
   return 0;
+}
+int32_t nts_blink_dom_entry(NtsDomContext *context, NativeJob::Callback run,
+                            void *state) {
+  return DomEntry(context, run, state,
+                  nts_dom::ProgramScope::Checkpoint::kAtExit);
+}
+int32_t nts_blink_dom_entry_deferred(NtsDomContext *context,
+                                     NativeJob::Callback run, void *state) {
+  return DomEntry(context, run, state,
+                  nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
 }
 NtsDomNode *nts_blink_dom_element_by_id(NtsDomContext *context,
                                         const char *id) {

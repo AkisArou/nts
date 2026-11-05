@@ -60,12 +60,49 @@ kernel would change the benchmark, not the architecture.
 
 ## Candidates (each removes its cost at the cause)
 
-1. **Checkpoint only when microtasks are pending.** ProgramScope keeps
-   the MicrotasksScope for enqueue semantics but constructs it
-   kDoNotRunMicrotasks and performs the checkpoint explicitly at exit
-   only when the queue is non-empty. Removes most of the 52-cycle
-   checkpoint on entries that queued nothing (canvas, and most DOM
-   callbacks). Adapter-only.
+1. **Defer a task-root entry's checkpoint to the task's own end.**
+   ProgramScope learns two kinds: an entry Blink continues from inside
+   the same task (listener dispatch, animation-frame and idle
+   callbacks) checkpoints at its own exit, unchanged; a task-root
+   entry (timer, posted callback or job, async completion, promise
+   settle, a microtask job) constructs its scope kDoNotRunMicrotasks
+   and lets Blink's end-of-task checkpoint do the work. A nested entry
+   never adds a checkpoint point of its own, as the scope depth
+   already ensured. Correctness, from the code: V8's
+   PerformCheckpointInternal would bail early on an empty queue if
+   Blink had no microtasks-completed callback registered, but Blink
+   registers exactly one (EventLoop::RunEndOfCheckpointTasks:
+   rejected-promise notification plus IndexedDB's
+   end-of-checkpoint tasks), and ClearKeptObjects runs beside it, so
+   "queue empty" alone never shows the checkpoint is a no-op — and no
+   public API exposes V8's whole-checkpoint predicate. The deferral
+   instead shows the checkpoint still happens at the same observable
+   point: Blink performs one as every task returns
+   (EventLoop::PerformMicrotaskCheckpoint from the task epilogue), and
+   nothing that runs script sits between a task-root entry's return
+   and it. Guarded by the timer vectors' checkpoint scenario
+   (mutation delivery ordered before the next task) on both backends.
+   The embedder's own entry (nts_blink_dom_entry: witness, app and
+   rows creation from lifecycle points) is not a task root and keeps
+   its at-exit checkpoint — measured: with it deferred, a mutation
+   queued by the witness program was never delivered (compare c/dom
+   loses data-observed), because no scheduler epilogue follows a
+   lifecycle entry and Blink discards still-pending
+   end-of-checkpoint work when a later checkpoint completes without
+   draining it (RunEndOfMicrotaskCheckpointTasks). The benchmark
+   harness's kernel runs, which are task bodies, take a deferred
+   variant of the same entry, so the rows measure what production
+   task-root callbacks pay.
+   The other two side channels have no scenario to write today, each
+   for a stated reason: IndexedDB is not bound (Window's indexedDB
+   skipped in bindgen/report-libdom.json; Blink's one
+   end-of-checkpoint-task producer is the IDBTransaction
+   constructor), WeakRef is unrepresentable in the compiler
+   (tests/refusals/weakref-property), and an unhandled compiled
+   rejection is reported fatally at the host's own checkpoint
+   (runtime/c, nts_report_unhandled_rejections), never through
+   Blink's rejected-promises queue. Targets the 52-cycle checkpoint
+   plus its 18-cycle scope setup on every task-root entry.
 2. **Entry count, not refcount** (candidate 4 of the entry stack,
    refreshed): Entry's scoped_refptr becomes a plain count on the
    context with release deferred to the outermost exit. Removes the

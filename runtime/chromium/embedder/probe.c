@@ -612,7 +612,7 @@ double nts_chromium_kernel_run(NtsChromiumProbe* probe,
   ProbeScope scope = enter(probe);
   nts_counting_reset();
   KernelRun run = {context, kernel, iterations, -1};
-  if (nts_blink_dom_entry(context, run_kernel, &run) || nts_raising() ||
+  if (nts_blink_dom_entry_deferred(context, run_kernel, &run) || nts_raising() ||
       run.result < 0)
     PROBE_FAIL();
   *allocations = nts_counted_allocations();
