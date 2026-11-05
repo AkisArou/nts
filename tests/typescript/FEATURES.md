@@ -3315,7 +3315,7 @@ aliases use only one-byte element kinds.
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 8 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 228 | 0 |
-| `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 1114 | 1 |
+| `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 1118 | 1 |
 | `ts-async-iteration-route-delegation` | Async and sync delegates, retained inner completion, forwarded exits, nested cleanup and awaited synchronous-source values | Async-iteration route contracts; typed paths | 52 | 0 |
 | `ts-async-iteration-route-errors` | Source throws and rejected awaits, caught recovery, terminal state, rejected custom next and consumer catch/finally ordering | Async-iteration route contracts; typed paths | 48 | 0 |
 | `ts-async-iteration-route-exits` | Break, return, throw, labeled exits and continue, exact closing calls, awaited cleanup, nested order and error precedence | Async-iteration route contracts; typed paths | 52 | 0 |
