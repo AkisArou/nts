@@ -271,6 +271,13 @@ export const RULES = [
     ],
   },
   {
+    name: "the standalone program generator",
+    when: p => p.startsWith("tooling/census/generate/"),
+    steps: ["tooling"],
+    settled: true, // Offline proof-directed generator: no gate step reads it; its own tests run in tooling.
+    arms: [{ kind: "answers", asks: "does the generator still generate, pre-check and reduce programs against the oracle", run: "node --test tooling/census/generate/*.test.ts from the committed tree" }],
+  },
+  {
     name: "standalone native conformance probes",
     when: p => /^tooling\/conformance\/(?:agreement\.mjs|binding-probe\.sh|fuzz-runtime\.mjs|reference-boundary\.sh|native-link\.mjs)$/.test(p),
     settled: true,
