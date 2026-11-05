@@ -6,7 +6,7 @@ import { createHash } from "node:crypto";
 import { sha256File } from "./hash.ts";
 import { createWriteStream } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
-import { mkdir, readFile, readdir, readlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, readlink, writeFile } from "node:fs/promises";
 import { basename, dirname, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { openPage } from "./browser.ts";
@@ -91,27 +91,11 @@ const { cdp, evaluate, until, origin } = page;
 
 async function processes() {
   const records = [];
-  for (const entry of await readdir("/proc")) {
-    if (!/^\d+$/.test(entry)) continue;
+  for (const record of await page.processes()) {
+    if (record.type === "launcher") continue;
+    const entry = String(record.pid);
     try {
-      // Chromium rewrites argv into one process-title string on Linux, so
-      // /proc/cmdline does not necessarily preserve its original NUL splits.
-      const commandLine = (await readFile(`/proc/${entry}/cmdline`, "utf8")).replaceAll("\0", " ").trim();
-      if (commandLine !== executable && !commandLine.startsWith(`${executable} `)) continue;
-      const type = commandLine.match(/(?:^|\s)--type=([^\s]+)/)?.[1] ?? "browser";
-      const status = Object.fromEntries((await readFile(`/proc/${entry}/status`, "utf8")).trim().split("\n").map((line) => {
-        const colon = line.indexOf(":");
-        return [line.slice(0, colon), line.slice(colon + 1).trim()];
-      }));
-      // Only this launch's descendants, including renderers forked by zygotes.
-      let parent = Number(status.PPid);
-      const seen = new Set();
-      while (parent > 1 && parent !== page.pid && !seen.has(parent)) {
-        seen.add(parent);
-        const parentStatus = await readFile(`/proc/${parent}/status`, "utf8");
-        parent = Number(parentStatus.match(/^PPid:\s+(\d+)/m)?.[1] ?? 0);
-      }
-      if (parent !== page.pid) continue;
+      const { commandLine, type, status } = record;
       const namespaces: Record<string, string> = {};
       for (const namespace of ["user", "pid", "net", "mnt"]) {
         try { namespaces[namespace] = await readlink(`/proc/${entry}/ns/${namespace}`); }

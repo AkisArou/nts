@@ -5,11 +5,16 @@
  * caller's; this adds only what driving it needs (DevTools on a free port,
  * a fresh profile).
  */
-import { spawn } from "node:child_process";
+import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type { WriteStream } from "node:fs";
 import { rmSync } from "node:fs";
-import { mkdtemp } from "node:fs/promises";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
+import { pinLaunchProcesses, scopeProcesses, type LaunchProcess } from "./processes.ts";
 
 export interface Target { type: string; url: string; webSocketDebuggerUrl: string }
 
@@ -22,6 +27,13 @@ export interface LaunchOptions {
   profile?: string;
   /** The shell's flags, before the URL. */
   args?: string[];
+  /**
+   * Start the shell under taskset on this CPU, so every thread it ever
+   * spawns inherits the mask from birth. For measurement: pinning a
+   * running renderer reaches only its main thread, and cpu_core
+   * counters silently miss a thread scheduled on an E-core.
+   */
+  cpu?: number;
   /** Which DevTools target is the page; the first page by default. */
   target?: (target: Target) => boolean;
   /**
@@ -37,8 +49,14 @@ export interface LaunchOptions {
 }
 
 export interface Page {
-  /** The process group leader: xvfb-run, the shell its descendant. */
+  /** The systemd-run launcher. Process ownership comes from `processes()`. */
   readonly pid: number;
+  /** The transient scope that owns this launch and every browser process. */
+  readonly unit: string;
+  readonly cgroup: string;
+  readonly busAddress: string;
+  pinForMeasurement(): Promise<{ rendererPid: number; affinities: string[] }>;
+  processes(): Promise<LaunchProcess[]>;
   /** The shell's DevTools HTTP origin (`/json/version`, `/json/list`). */
   readonly origin: string;
   /** Everything the shell has written so far. */
@@ -53,21 +71,45 @@ export interface Page {
   until<T>(predicate: () => T | Promise<T>, label: string, timeout?: number): Promise<NonNullable<T>>;
   /** Closes the page, which ends the shell; kills what is left. */
   close(): Promise<void>;
-  /** Kills the shell's process group now. */
+  /** Stops the launch's scope now. */
   kill(): void;
 }
 
 const DEFAULT_FAILURE = /FATAL:|Check failed|nts host: check failed/;
+const activeLaunches = new Set<() => void>();
+process.once("exit", () => { for (const stop of activeLaunches) stop(); });
+for (const [signal, code] of [["SIGINT", 130], ["SIGTERM", 143]] as const) {
+  process.once(signal, () => { for (const stop of activeLaunches) stop(); process.exit(code); });
+}
 
 export async function openPage(executable: string, url: string, options: LaunchOptions): Promise<Page> {
   const profile = options.profile ?? await mkdtemp(`${options.temporary}/profile-`);
+  // Unix socket paths are short. Keep the private bus in a short, owned
+  // cache directory even when the caller's evidence path is deeply nested.
+  const busRoot = join(homedir(), ".cache", "nts-chromium-bus");
+  await mkdir(busRoot, { recursive: true });
+  const busDirectory = await mkdtemp(join(busRoot, "b-"));
+  const busConfig = join(busDirectory, "session.conf");
+  await writeFile(busConfig, `<busconfig>
+  <type>session</type>
+  <listen>unix:dir=${encodeURIComponent(busDirectory)}</listen>
+  <auth>EXTERNAL</auth>
+  <policy context="default">
+    <allow send_destination="*" eavesdrop="true"/>
+    <allow eavesdrop="true"/>
+    <allow own="*"/>
+  </policy>
+</busconfig>\n`);
   const failure = options.failure === undefined ? DEFAULT_FAILURE : options.failure;
   const callTimeout = options.callTimeout ?? 60_000;
   const waitTimeout = options.waitTimeout ?? 30_000;
   // X11 because the display is Xvfb's.
   const args = ["--ozone-platform=x11", "--remote-debugging-port=0", "--remote-debugging-address=127.0.0.1", `--user-data-dir=${profile}`,
     ...(options.args ?? []), url];
-  const child = spawn("xvfb-run", ["-a", "-s", "-screen 0 1280x900x24", executable, ...args], { detached: true, stdio: ["ignore", "pipe", "pipe"] });
+  const command = options.cpu === undefined ? [executable, ...args] : ["taskset", "-c", String(options.cpu), executable, ...args];
+  const unit = `chromium-launch-${randomUUID()}.scope`;
+  const child = spawn("systemd-run", ["--user", "--scope", "--quiet", "--collect", `--unit=${unit}`,
+    "dbus-run-session", `--config-file=${busConfig}`, "--", "xvfb-run", "-a", "-s", "-screen 0 1280x900x24", ...command], { stdio: ["ignore", "pipe", "pipe"] });
   let log = "";
   let launchError: Error | undefined;
   let exited = false;
@@ -93,12 +135,21 @@ export async function openPage(executable: string, url: string, options: LaunchO
       }
     });
   }
-  // Ends the shell's process group, and removes the profile if it was made
-  // here: every harness ends a page this way, closed or not.
+  // Stop by the launch's own unit, including any reparented descendants.
+  let stopped = false;
   const kill = () => {
-    if (child.pid && !exited) { try { process.kill(-child.pid, "SIGKILL"); } catch { /* gone */ } }
+    if (stopped) return;
+    try { execFileSync("systemctl", ["--user", "stop", unit], { stdio: "pipe" }); }
+    catch (error) {
+      const message = error instanceof Error && "stderr" in error ? String(error.stderr) : String(error);
+      if (!exited && !/not (?:loaded|found)/.test(message)) throw error;
+    }
+    stopped = true;
+    activeLaunches.delete(kill);
+    rmSync(busDirectory, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
     if (options.profile === undefined) rmSync(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 });
   };
+  activeLaunches.add(kill);
 
   async function until<T>(predicate: () => T | Promise<T>, label: string, timeout = waitTimeout): Promise<NonNullable<T>> {
     const deadline = performance.now() + timeout;
@@ -115,6 +166,13 @@ export async function openPage(executable: string, url: string, options: LaunchO
 
   try {
     const endpoint = await until(() => log.match(/DevTools listening on (ws:\/\/[^\s]+)/)?.[1], "DevTools");
+    const group = execFileSync("systemctl", ["--user", "show", unit, "--property=ControlGroup", "--value"], { encoding: "utf8" }).trim();
+    assert(group.startsWith("/") && !group.split("/").includes("..") && group.endsWith(`/${unit}`), `Invalid launch cgroup: ${group}`);
+    const sockets = (await readdir(busDirectory, { withFileTypes: true })).filter(entry => entry.isSocket());
+    assert.equal(sockets.length, 1, "the launch must have exactly one private session-bus socket");
+    const busAddress = `unix:path=${encodeURIComponent(join(busDirectory, sockets[0].name))}`;
+    log += `\nlaunch unit=${unit} cgroup=${group} private-session-bus=${busAddress}\n`;
+    const processes = () => scopeProcesses(group, executable);
     const origin = `http://${new URL(endpoint).host}`;
     const choose = options.target ?? ((target: Target) => target.type === "page");
     const target = await until(async () => {
@@ -153,7 +211,11 @@ export async function openPage(executable: string, url: string, options: LaunchO
       return result.result.value;
     };
     return {
-      pid: child.pid!, origin,
+      pid: child.pid!, unit, cgroup: group, busAddress, processes, origin,
+      pinForMeasurement: async () => {
+        assert(options.cpu !== undefined, "openPage needs a CPU birth mask before pinning a measured launch");
+        return pinLaunchProcesses(await processes(), options.cpu);
+      },
       log: () => log, exited: () => exited, cdp, evaluate, until, kill,
       on(method, handler) { handlers.set(method, [...(handlers.get(method) ?? []), handler]); },
       // Closing its last window ends the shell, as closing the app's would; a

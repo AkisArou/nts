@@ -5,7 +5,7 @@ import { openPage } from "./browser.ts";
 import { execFileSync, spawn } from "node:child_process";
 import { createHash } from "node:crypto";
 import { sha256File } from "./hash.ts";
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { stripTypeScriptTypes } from "node:module";
 import { pathToFileURL } from "node:url";
@@ -252,26 +252,6 @@ async function driveTodo(mode: Mode, cdp: Cdp, evaluate: <T>(expression: string)
   return {samples, status: 0, dom, timing: "dispatch to the end of the next frame, harness-side performance.now"};
 }
 
-async function rendererDescendants(parentPid: number, engine: string): Promise<number[]> {
-  const candidates = await Promise.all((await readdir("/proc")).filter(name => /^\d+$/.test(name)).map(async name => {
-    try {
-      const command = (await readFile(`/proc/${name}/cmdline`, "utf8")).replaceAll("\0", " ");
-      if (!command.startsWith(`${engine} `) || !command.includes("--type=renderer")) return undefined;
-      let parent = Number((await readFile(`/proc/${name}/status`, "utf8")).match(/^PPid:\s+(\d+)/m)?.[1]);
-      const seen = new Set<number>();
-      while (parent > 1 && parent !== parentPid && !seen.has(parent)) {
-        seen.add(parent);
-        parent = Number((await readFile(`/proc/${parent}/status`, "utf8")).match(/^PPid:\s+(\d+)/m)?.[1]);
-      }
-      return parent === parentPid ? Number(name) : undefined;
-    } catch (error) {
-      if (error instanceof Error && "code" in error && ["ENOENT","ESRCH","EACCES"].includes(String(error.code))) return undefined;
-      throw error;
-    }
-  }));
-  return candidates.filter((pid): pid is number => pid !== undefined);
-}
-
 async function measure(run: number, mode: Mode): Promise<LaunchResult> {
   const engine = mode === "native" ? executable : v8Executable;
   const url = pathToFileURL(mode === "native" ? fixturePath : v8FixturePath);
@@ -286,24 +266,40 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
   const jsFlags = [...(traceGc ? ["--trace-gc"] : []), ...(diagnosticJsFlags ? [diagnosticJsFlags] : [])];
   if (jsFlags.length) args.push(`--js-flags=${jsFlags.join(" ")}`);
   const page = await openPage(engine, fixture, {
-    temporary: output, args, target: target => target.url === fixture,
+    temporary: output, args, cpu, target: target => target.url === fixture,
     failure: /FATAL:|Check failed|nts host: check failed|NTS_.*unexpectedly ran/,
     callTimeout: 60_000, waitTimeout: 60_000,
   });
   const { cdp, evaluate } = page;
   const until = <T>(predicate: () => T | Promise<T>): Promise<NonNullable<T>> => page.until(predicate, `the ${mode} benchmark (see ${output}/launch-${run}-${mode}.log)`);
   let traceStream: string | undefined;
+  const affinities: string[] = [];
   page.on("Tracing.tracingComplete", params => { traceStream = (params.stream as string | undefined) ?? ""; });
   try {
     await until(() => evaluate<boolean>(`location.href === ${JSON.stringify(fixture)} && document.querySelector('#benchmark-result')?.getAttribute('data-state') === 'ready'`));
-    const renderers = await rendererDescendants(page.pid, engine);
+    const processes = await page.processes();
+    const renderers = processes.filter(record => record.type === "renderer").map(record => record.pid);
     assert.equal(renderers.length, 1, "Require an unambiguous measured renderer; do not guess among spare processes");
     const rendererPid = renderers[0];
     if (mode === "native") assert.equal(rendererPid, Number(page.log().match(/^\[(\d+):[^\]]+\][^\n]*NTS_PROBE attach/m)?.[1]));
     assert(Number.isSafeInteger(rendererPid) && rendererPid > 1);
     const command = (await readFile(`/proc/${rendererPid}/cmdline`, "utf8")).replaceAll("\0", " ");
     assert(command.startsWith(engine) && command.includes("--type=renderer"));
-    if (cpu !== undefined) execFileSync("taskset", ["-pc", String(cpu), String(rendererPid)], {stdio:"pipe"});
+    // The shell was born under taskset (browser.ts), which puts the
+    // whole browser tree on the measured CPU. Move every process but
+    // the zygote and the renderers back to the wide mask -- renderers
+    // are born through the zygote and keep the narrow one -- then
+    // record every process's thread masks in the launch log: the
+    // evidence that the measured CPU held only the renderer and no
+    // renderer thread could leave it (cpu_core counts nothing on an
+    // E-core). The launch's own cgroup holds its processes even after
+    // reparenting; another lane may run the same binary in another scope.
+    // Processes spawned later inherit from a moved parent.
+    if (cpu !== undefined) {
+      const pinned = await page.pinForMeasurement();
+      assert.equal(pinned.rendererPid, rendererPid);
+      affinities.push(...pinned.affinities);
+    }
     const rendererStatus = await readFile(`/proc/${rendererPid}/status`, "utf8");
     assert(/^Seccomp:\s+2$/m.test(rendererStatus));
     assert(/^NoNewPrivs:\s+1$/m.test(rendererStatus));
@@ -403,7 +399,7 @@ async function measure(run: number, mode: Mode): Promise<LaunchResult> {
     return {result,executable:engine,fixture,args,rendererPid,rendererStatus,loadBefore,loadAfter:(await readFile("/proc/loadavg","utf8")).trim()};
   } finally {
     page.kill();
-    await writeFile(resolve(output, `launch-${run}-${mode}.log`), page.log());
+    await writeFile(resolve(output, `launch-${run}-${mode}.log`), page.log() + (affinities.length ? `\n${affinities.join("\n")}\n` : ""));
   }
 }
 for (let run = 0; run < runs; ++run) {

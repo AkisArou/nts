@@ -65,6 +65,8 @@ function run(label: string, command: string, args: string[]): void {
 const tool = (label: string, script: string, ...args: string[]): void =>
   run(label, process.execPath, [resolve(root, script), ...args]);
 
+run("process command lines and scope membership", process.execPath,
+  ["--test", resolve(root, "tooling/chromium/processes.test.ts")]);
 run("the bindings are current", "python3", [resolve(root, "tooling/chromium/bindgen/generate.py"), "--check"]);
 tool("the embedder's program, C and LLVM", "runtime/chromium/embedder/program/check.ts");
 tool("the contracts", "runtime/chromium/contracts/check.ts");
@@ -75,6 +77,8 @@ for (const backend of ["c", "llvm"]) {
   const staged = staging();
   tool(`build the engine with the ${backend} probe`, "tooling/chromium/chromium.ts", "build", "--profile", profile.name);
   assert.equal(built(), staged, "the engine was built from another staging");
+  tool(`process discovery stays inside this launch: real ${profile.name} browsers`, "tooling/chromium/browser-check.ts",
+    resolve(engine, "content_shell"), resolve(runs, `browser-processes-${backend}`));
   for (const mode of ["dom", "microtasks"]) {
     const output = resolve(runs, `native-${mode}-${backend}-smoke`);
     tool(`${backend}: ${mode}`, "tooling/chromium/smoke.ts", resolve(engine, "nts_shell"), output, backend, mode);
