@@ -96,7 +96,7 @@
     "Symbol.hasInstance": {
       "class": "inapplicable",
       "reason": "runtime-redirect-hook",
-      "authority": "docs/language/boundaries.md §Redirect hooks"
+      "authority": "docs/language/boundaries.md §In scope, not yet built"
     },
     "Symbol.iterator": {
       "class": "gap"
@@ -104,7 +104,7 @@
     "Symbol.toPrimitive": {
       "class": "inapplicable",
       "reason": "runtime-redirect-hook",
-      "authority": "docs/language/boundaries.md §Redirect hooks"
+      "authority": "docs/language/boundaries.md §In scope, not yet built"
     },
     "Symbol.toStringTag": {
       "class": "gap"
@@ -112,7 +112,7 @@
     "Symbol.unscopables": {
       "class": "inapplicable",
       "reason": "runtime-redirect-hook",
-      "authority": "docs/language/boundaries.md §Redirect hooks"
+      "authority": "docs/language/boundaries.md §Sloppy mode"
     },
     "Temporal": {
       "class": "gap",
@@ -146,7 +146,7 @@
     "__proto__": {
       "class": "inapplicable",
       "reason": "no-prototype-chain",
-      "authority": "docs/language/boundaries.md §The prototype chain"
+      "authority": "docs/language/boundaries.md §In scope, not yet built"
     },
     "arbitrary-module-namespace-names": {
       "class": "supported"
@@ -204,7 +204,7 @@
     "cross-realm": {
       "class": "inapplicable",
       "reason": "no-realms",
-      "authority": "docs/language/boundaries.md §Realms"
+      "authority": "docs/language/boundaries.md §In scope, not yet built"
     },
     "decorators": {
       "class": "gap"

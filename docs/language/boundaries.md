@@ -93,7 +93,8 @@ provided. `Symbol.unscopables` changes only how a name is looked up inside
 
 In test262, `noStrict` and `raw` files are scope-excluded: counted, and not
 attempted ([test262](../conformance/test262.md#scope-at-the-pin)). Every
-`caller` case is a `noStrict` file. A JavaScript dependency written for sloppy
+`caller` case is a `noStrict` file, and `features.json` classes the
+`Symbol.unscopables` feature with this section. A JavaScript dependency written for sloppy
 mode is not compiled either, and a CommonJS dependency comes in through an
 interop layer ([modules](modules.md#commonjs)).
 
@@ -141,14 +142,14 @@ values a use can reach, and only those values pay.
 The compiler's reflection message calls this family a representation
 boundary. This page, not the message, states the scope.
 
-Their test262 cases count in the denominator. Today `features.json` still
-classes `Proxy`, `Reflect`, `Reflect.construct`, `globalThis` and
-`nonextensible-applies-to-private` as `inapplicable`,
+Their test262 cases are to count in the denominator. Today `features.json`
+still classes `Proxy`, `Reflect`, `Reflect.construct`, `globalThis`,
+`nonextensible-applies-to-private`, `Symbol.hasInstance`,
+`Symbol.toPrimitive`, `__proto__` and `cross-realm` as `inapplicable`, and
 `test262-exclusions.json` excludes every case that includes
-`propertyHelper.js`, and the `cross-realm` cases are excluded; narrowing both
-files to the three boundaries is planned ([plan](../plan.md#backlog)). The node
-tests a module lists as not applicable for these features are in scope the
-same way.
+`propertyHelper.js`; narrowing both files to the three boundaries is planned
+([plan](../plan.md#backlog)). The node tests a module lists as not applicable
+for these features are in scope the same way.
 
 ## Not boundaries
 
