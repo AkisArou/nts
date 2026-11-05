@@ -2633,7 +2633,7 @@ access is distinct from an ECMAScript private-name brand check.
 | `ts-array-representation` | concrete element storage crosses a wider reader with exact payloads, identities and slot presence | Language, Types, A type is a layout; Objects, Arrays | 24 | 0 |
 | `ts-array-widening` | one array crosses wider, readonly, generic, holder or tuple views without changing stored values | Language, Types, Decisions; Array contents contracts | 34 | 0 |
 | `ts-array-writes` | writes and array construction through widened routes preserve values, length, order and holes | Objects, Arrays; ECMAScript, Array prototype methods | 40 | 0 |
-| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 5459 | 0 |
+| `ts-arrays` | typed arrays of values (`T[]`, `Array<T>`) and their methods | conformance/types/primitives; ts-eslint TSArrayType | 5463 | 0 |
 | `ts-arrow-functions` | an arrow function, generic or typed | conformance/es6/arrowFunction | 829 | 0 |
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 8 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
@@ -3052,8 +3052,8 @@ access is distinct from an ECMAScript private-name brand check.
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
 | `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
-| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 104 | 0 |
-| `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 48 | 0 |
+| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 108 | 0 |
+| `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 52 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
