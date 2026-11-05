@@ -676,11 +676,11 @@ mod tests {
         );
         assert_eq!(found.at_call, before_calls);
         let mut builder = FuncBuilder::probe(&indexed);
-        builder.generic_calls.clone_from(&found.at_call);
+        builder.calls.generic = Some(&found.at_call);
         structural.wire_calls(&mut builder, "");
-        assert!(!builder.generic_calls.contains_key(&ordinary));
-        assert_eq!(builder.generic_calls[&shaped], "@shape");
-        assert_eq!(builder.generic_calls[&calls[0]], "<str>");
+        assert!(builder.calls.suffix(ordinary).is_none());
+        assert_eq!(builder.calls.suffix(shaped).unwrap(), "@shape");
+        assert_eq!(builder.calls.suffix(calls[0]).unwrap(), "<str>");
         // Empty authoritative entries also remain untouched, not populated.
         found.copies.insert(body, Vec::new());
         let results = associate(&indexed, &mut found);

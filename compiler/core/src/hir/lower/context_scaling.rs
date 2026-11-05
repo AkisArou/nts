@@ -4,7 +4,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use super::*;
-use std::cell::Cell;
+use std::{borrow::Borrow, cell::Cell};
 
 pub(super) mod family;
 
@@ -21,6 +21,10 @@ pub(super) fn context() {
     }
 }
 
+fn module_context(context: &impl Borrow<ModuleScope>) -> &ModuleScope {
+    context.borrow()
+}
+
 pub(super) fn binding(shared: &Shared, builder: &FuncBuilder<'_>) {
     if !OBSERVE.with(Cell::get) {
         return;
@@ -30,7 +34,7 @@ pub(super) fn binding(shared: &Shared, builder: &FuncBuilder<'_>) {
     // the borrowed one. Identity detects a real copy; empty-table coincidence
     // cannot turn a nonempty copied table into zero work.
     let original: &ModuleScope = &shared.module;
-    let bound: &ModuleScope = &builder.module;
+    let bound = module_context(&builder.module);
     if !std::ptr::eq(original, bound) {
         COPIED_ROWS.with(|n| n.set(n.get() + bound.constants.len()));
     }

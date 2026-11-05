@@ -137,7 +137,7 @@ impl Plan {
             for input in conversion_inputs(probe, node) {
                 let found = probe.snapshot.node_types.get(&input).map_or_else(
                     || plan.all.clone(),
-                    |ty| plan.for_type(probe.snapshot, &probe.hierarchy, *ty),
+                    |ty| plan.for_type(probe.snapshot, probe.hierarchy, *ty),
                 );
                 if targets.is_empty() || found.len() == plan.all.len() {
                     targets = found;
@@ -206,11 +206,11 @@ impl Plan {
         from: NodeId,
         ty: &HirType,
     ) -> Rc<[usize]> {
-        let represented = self.for_value(probe.snapshot, &probe.hierarchy, ty);
+        let represented = self.for_value(probe.snapshot, probe.hierarchy, ty);
         let Some(source) = probe.snapshot.node_types.get(&from) else {
             return represented;
         };
-        let source = self.for_type(probe.snapshot, &probe.hierarchy, *source);
+        let source = self.for_type(probe.snapshot, probe.hierarchy, *source);
         if represented.is_empty() || source.len() == self.all.len() {
             return represented;
         }

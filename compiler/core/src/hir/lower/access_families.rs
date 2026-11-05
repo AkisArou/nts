@@ -577,7 +577,7 @@ impl FuncBuilder<'_> {
         let receiver = self.push(
             OpKind::Unerase {
                 value: object,
-                failure: Some(cast_field_failure(&self.hierarchy, face, member)),
+                failure: Some(cast_field_failure(self.hierarchy, face, member)),
             },
             HirType::Managed(ManagedType::Object(face)),
             origin.clone(),
@@ -909,13 +909,13 @@ impl Families {
         let Some(wanted) = properties(probe, face) else {
             return Vec::new();
         };
-        let wanted = planning_properties(&probe.hierarchy, face, wanted);
+        let wanted = planning_properties(probe.hierarchy, face, wanted);
         self.owners
             .candidates(&wanted)
             .into_iter()
             .filter(|owner| {
                 self.flow.reaches(*owner, face)
-                    && fits_the_face(probe, &probe.hierarchy, face, *owner, &wanted)
+                    && fits_the_face(probe, probe.hierarchy, face, *owner, &wanted)
             })
             .collect()
     }
@@ -1282,10 +1282,10 @@ fn callable_contract(
 /// a face whose required members the declaration cannot supply.
 pub(super) fn reserves(probe: &FuncBuilder<'_>, owner: TypeId, face: TypeId) -> bool {
     properties(probe, face).is_some_and(|properties| {
-        let properties = planning_properties(&probe.hierarchy, face, properties);
+        let properties = planning_properties(probe.hierarchy, face, properties);
         candidate_satisfies(
             probe,
-            &probe.hierarchy,
+            probe.hierarchy,
             &probe.hierarchy.access_families.flow,
             face,
             owner,

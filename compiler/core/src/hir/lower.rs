@@ -361,12 +361,10 @@ enum BindingConstant {
 /// with a constant initializer is resolved to its value at each use, so it costs
 /// nothing and reads like an immediate; a `let` is storage that every function
 /// shares.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 struct ModuleScope {
     /// Computed once; cooked-only templates need a boundary for erased reflection.
     templates: bool,
-    /// One initialization proof for representation and throwing decisions.
-    initialization: std::rc::Rc<initialization::Analysis>,
     /// Symbol to readiness flag, only where an executable access can be early.
     initialized: rustc_hash::FxHashMap<u32, u32>,
     /// Symbol to value, for a `const` this could evaluate.
@@ -461,17 +459,13 @@ struct ModuleScope {
 }
 
 impl ModuleScope {
-    fn for_snapshot(
-        snapshot: &SemanticSnapshot,
-        initialization: std::rc::Rc<initialization::Analysis>,
-    ) -> Self {
+    fn for_snapshot(snapshot: &SemanticSnapshot) -> Self {
         let templates = snapshot
             .nodes
             .iter()
             .any(|node| node.kind == NodeKind::Syntax(syntax::TAGGED_TEMPLATE_EXPRESSION));
         Self {
             templates,
-            initialization,
             ..Self::default()
         }
     }
@@ -485,7 +479,7 @@ impl ModuleScope {
 /// other question a call site has to ask: whether anything overrides the method,
 /// because a method nothing overrides is a static call and a method something
 /// overrides is not.
-#[derive(Debug, Clone, Default)]
+#[derive(Debug, Default)]
 struct Hierarchy {
     /// A class's superclass, by instance type.
     base: rustc_hash::FxHashMap<TypeId, TypeId>,
@@ -2584,7 +2578,11 @@ fn collect_hierarchy(
     }
 
     collect_interfaces(snapshot, &probe, &mut hierarchy, &instantiations);
-    probe.hierarchy.cast_faces.clone_from(&hierarchy.cast_faces);
+    let probe_hierarchy = Hierarchy {
+        cast_faces: hierarchy.cast_faces.clone(),
+        ..Hierarchy::default()
+    };
+    probe.hierarchy = &probe_hierarchy;
     hierarchy.template_instances = template_instances(snapshot, &instantiations);
     collect_anonymous_objects(snapshot, &probe, &mut hierarchy);
     // After both, because it edits `declares`: a member that becomes storage
@@ -5406,7 +5404,7 @@ const A_GENERIC_DECLARATION_READING_THIS: &str =
     "a generic `function` declaration that reads its own `this`, used as a value";
 
 /// Why this method cannot be used as a value, if it cannot.
-#[derive(Default, Clone)]
+#[derive(Default)]
 struct Naming {
     printers: std::rc::Rc<printed::Plan>,
     iterators: std::rc::Rc<iterator_calls::Plan>,
@@ -6429,7 +6427,7 @@ fn an_operator_that_can_raise(probe: &FuncBuilder, at: NodeId) -> bool {
 }
 
 fn a_synthesized_throw(probe: &FuncBuilder<'_>, at: NodeId) -> bool {
-    probe.module.initialization.can_raise_at(at)
+    probe.initialization.can_raise_at(at)
         || probe.array_constructor_may_raise(at)
         || an_operator_that_can_raise(probe, at)
         || probe.iterators.close_can_raise(at)
@@ -8661,11 +8659,11 @@ fn naming(
     hierarchy: &Hierarchy,
 ) -> Naming {
     let mut probe = FuncBuilder::probe(snapshot);
-    probe.hierarchy = hierarchy.clone();
+    probe.hierarchy = hierarchy;
     // Captured function declarations are closure values too. The same table
     // must classify their calls during raising analysis and during lowering.
     probe.closures = SharedClosures::new(snapshot, closures.to_vec());
-    probe.module.initialization =
+    probe.initialization =
         std::rc::Rc::new(initialization::analyze(snapshot, &probe, closures, readers));
     probe.printers = std::rc::Rc::new(printed::Plan::new(&probe));
     let generators = generator_indices(snapshot);
@@ -8678,14 +8676,14 @@ fn naming(
         printers: probe.printers.clone(),
         iterators: probe.iterators.clone(),
         parameter_entries: probe.closures.parameter_entries(),
-        initialization: probe.module.initialization.clone(),
+        initialization: probe.initialization.clone(),
         qualified,
         ambiguous,
         class_tokens,
         ..Naming::default()
     };
     let throwing = throwing_symbols(snapshot, &probe);
-    probe.throwing.clone_from(&throwing.any);
+    probe.throwing = &throwing.any;
     let raising = raising_copies(snapshot, &probe, &throwing);
     naming.raising = raising.copies;
     naming.copyable = raising.eligible;
@@ -8694,9 +8692,9 @@ fn naming(
     naming.closures_carry = raising.closures_carry;
     naming.gate_holder = raising.gate_holder;
     naming.raising_then = throwing.bodily;
-    naming.throwing = throwing.any;
     naming.presence_keys = presence_keys(snapshot, &probe);
     naming.added_keys = std::rc::Rc::new(added_keys(snapshot, &probe));
+    naming.throwing = throwing.any;
     naming.generators = generators;
     naming.written_order = written_order;
     naming
@@ -8925,7 +8923,7 @@ fn initialized_before_use(probe: &FuncBuilder, name_node: NodeId) -> bool {
     probe
         .node(name_node)
         .symbol
-        .is_some_and(|symbol| probe.module.initialization.proven_ready(symbol.0))
+        .is_some_and(|symbol| probe.initialization.proven_ready(symbol.0))
 }
 
 /// Whether anything but its own declaration can write this name.
@@ -9302,13 +9300,13 @@ fn is_scalar(ty: &HirType) -> bool {
 fn module_scope_probe<'a>(
     snapshot: &'a LoweringSnapshot<'a>,
     foreign: &'a super::runtime::ForeignTable,
-    hierarchy: &Hierarchy,
-    initialization: &std::rc::Rc<initialization::Analysis>,
+    hierarchy: &'a Hierarchy,
+    naming: &'a Naming,
 ) -> FuncBuilder<'a> {
     let mut probe = FuncBuilder::new(snapshot, foreign);
-    probe.hierarchy = hierarchy.clone();
-    probe.module.initialization = initialization.clone();
-    probe.written_order = written_field_orders(snapshot, &probe);
+    probe.hierarchy = hierarchy;
+    probe.initialization = naming.initialization.clone();
+    probe.written_order = &naming.written_order;
     probe
 }
 
@@ -9318,9 +9316,9 @@ fn collect_module_scope(
     foreign: &super::runtime::ForeignTable,
     closures: &[ClosureInfo],
     hierarchy: &Hierarchy,
-    initialization: &std::rc::Rc<initialization::Analysis>,
+    naming: &Naming,
 ) -> ModuleScope {
-    let mut scope = ModuleScope::for_snapshot(snapshot, initialization.clone());
+    let mut scope = ModuleScope::for_snapshot(snapshot);
     // With the hierarchy, and that is the whole of a silent wrong answer.
     //
     // This probe lays out every class a module-scope binding mentions, and its
@@ -9338,7 +9336,7 @@ fn collect_module_scope(
     // had a different type; `NtsObj_Request` has eight consecutive
     // `NtsString *` members, where the same defect compiles clean and returns
     // the wrong value.
-    let mut probe = module_scope_probe(snapshot, foreign, hierarchy, initialization);
+    let mut probe = module_scope_probe(snapshot, foreign, hierarchy, naming);
     // **And with the written field order, for the same reason as the hierarchy.**
     // Without it this probe laid `interface R extends Required<Omit<O, …>> { … }`
     // out in the checker's own-members-first order while every function indexed
@@ -9667,7 +9665,7 @@ fn collect_module_scope(
 /// Readiness storage is independent of value storage: a folded constant and a
 /// class binding need a flag as surely as a mutable global does.
 fn add_initialized_flags(probe: &FuncBuilder, scope: &mut ModuleScope) {
-    let mut flagged: Vec<_> = scope.initialization.flagged().collect();
+    let mut flagged: Vec<_> = probe.initialization.flagged().collect();
     flagged.sort_unstable_by_key(|(symbol, _)| *symbol);
     for (symbol, name) in flagged {
         let flag = u32::try_from(scope.globals.len()).unwrap_or(u32::MAX);
@@ -11021,33 +11019,39 @@ impl Structural {
     }
 }
 
+/// Borrowed layers in the same precedence order as call planning. Selecting a
+/// body must not copy every call in the program into that body's builder.
+#[derive(Default)]
+struct CallContext<'a> {
+    generic: Option<&'a rustc_hash::FxHashMap<NodeId, String>>,
+    structural: Option<&'a Structural>,
+    original: Option<&'a rustc_hash::FxHashMap<NodeId, (String, Retyped)>>,
+    within: Option<&'a rustc_hash::FxHashMap<NodeId, (String, Retyped)>>,
+    class: Option<&'a rustc_hash::FxHashMap<NodeId, String>>,
+    function: Option<&'a rustc_hash::FxHashMap<NodeId, String>>,
+}
+
+impl<'a> CallContext<'a> {
+    fn structural(&self, call: NodeId) -> Option<&'a (String, Retyped)> {
+        self.within
+            .and_then(|calls| calls.get(&call))
+            .or_else(|| self.original.and_then(|calls| calls.get(&call)))
+    }
+
+    fn suffix(&self, call: NodeId) -> Option<&'a String> {
+        self.function
+            .and_then(|calls| calls.get(&call))
+            .or_else(|| self.class.and_then(|calls| calls.get(&call)))
+            .or_else(|| self.structural(call).map(|(suffix, _)| suffix))
+            .or_else(|| self.generic.and_then(|calls| calls.get(&call)))
+    }
+}
+
 impl Structural {
-    fn wire_calls(&self, builder: &mut FuncBuilder<'_>, suffix: &str) {
-        for context in ["", suffix] {
-            if let Some(calls) = self.at_call.get(context) {
-                for (call, (suffix, bindings)) in calls {
-                    builder.generic_calls.insert(*call, suffix.clone());
-                    builder.structural_calls.insert(*call, bindings.clone());
-                    let constructed = planned_callee(builder, *call).is_some_and(|callee| {
-                        let implementation = builder.snapshot.implementation_of(callee);
-                        self.constructions
-                            .contains(&(implementation, suffix.clone()))
-                    });
-                    if constructed {
-                        builder.copied_constructions.insert(*call);
-                    } else {
-                        builder.copied_constructions.remove(call);
-                    }
-                    let raises = planned_callee(builder, *call)
-                        .is_some_and(|callee| self.raising.contains(&(callee, suffix.clone())));
-                    if raises {
-                        builder.raising_specializations.insert(*call);
-                    } else {
-                        builder.raising_specializations.remove(call);
-                    }
-                }
-            }
-        }
+    fn wire_calls<'a>(&'a self, builder: &mut FuncBuilder<'a>, suffix: &str) {
+        builder.calls.structural = Some(self);
+        builder.calls.original = self.at_call.get("");
+        builder.calls.within = self.at_call.get(suffix);
     }
 }
 
@@ -11140,7 +11144,7 @@ struct StructuralPlanner<'a, 's> {
 
 fn structural_instantiations(snapshot: &LoweringSnapshot<'_>, hierarchy: &Hierarchy) -> Structural {
     let mut probe = FuncBuilder::probe(snapshot);
-    probe.hierarchy = hierarchy.clone();
+    probe.hierarchy = hierarchy;
 
     // Every call in the program, in the original's context: an argument's type
     // is what the checker says it is.
@@ -14477,11 +14481,17 @@ impl ClassCopy {
     }
 }
 
-/// What every function's lowering needs from the program around it.
-///
-/// Bundled because each of these is decided once for the whole program and read
-/// by every copy: the module scope, the hierarchy, the closures, what each
-/// function is *called*, and which copies of a generic to make.
+/// Empty facts for probes that run before program planning. Owned by the one
+/// lowering snapshot, so making a question-only builder allocates no context.
+#[derive(Default)]
+struct ProbeContext {
+    module: ModuleScope,
+    hierarchy: Hierarchy,
+    naming: Naming,
+}
+
+/// Program facts built once and borrowed by every body. Initializer refusal
+/// analysis completes the module's refusal facts before bodies borrow them.
 struct Shared {
     module: ModuleScope,
     hierarchy: Hierarchy,
@@ -14524,15 +14534,15 @@ impl Shared {
     /// was supposed to be in belonged to the other hierarchy.
     fn whole_program(
         snapshot: &LoweringSnapshot<'_>,
-        module: &ModuleScope,
-        hierarchy: &Hierarchy,
+        module: ModuleScope,
+        hierarchy: Hierarchy,
         closures: &[ClosureInfo],
         naming: Naming,
     ) -> Self {
         #[cfg(test)]
         context_scaling::context();
-        let mut structural = structural_instantiations(snapshot, hierarchy);
-        erased_calls::raising_copies(snapshot, hierarchy, &naming, &mut structural);
+        let mut structural = structural_instantiations(snapshot, &hierarchy);
+        erased_calls::raising_copies(snapshot, &hierarchy, &naming, &mut structural);
         let probe = FuncBuilder::probe(snapshot);
         let mut closures = closures.to_vec();
         let variants = closure_variants(&probe, &closures, &structural);
@@ -14561,7 +14571,7 @@ impl Shared {
         let thenables = std::rc::Rc::new(thenables(
             snapshot,
             &probe,
-            hierarchy,
+            &hierarchy,
             &naming.raising_then,
             &mut closures,
         ));
@@ -14570,8 +14580,8 @@ impl Shared {
         bound_functions(&probe, &mut closures);
         module_jobs(snapshot, &module.roles, &mut closures);
         Self {
-            module: module.clone(),
-            hierarchy: hierarchy.clone(),
+            module,
+            hierarchy,
             closures: SharedClosures::with_entries(closures, naming.parameter_entries.clone()),
             naming,
             generics,
@@ -14585,7 +14595,7 @@ impl Shared {
 
     /// A builder for one copy, wired to the program-wide naming.
     fn builder<'a>(
-        &self,
+        &'a self,
         snapshot: &'a LoweringSnapshot<'a>,
         foreign: &'a super::runtime::ForeignTable,
         copy: Copy,
@@ -14598,8 +14608,8 @@ impl Shared {
         let mut builder = FuncBuilder::instantiating(
             snapshot,
             foreign,
-            self.module.clone(),
-            self.hierarchy.clone(),
+            &self.module,
+            &self.hierarchy,
             self.closures.clone(),
             copy.substitution,
             copy.suffix.clone(),
@@ -14614,7 +14624,7 @@ impl Shared {
         builder.construct_target = copy.constructs;
         builder.class_instances = std::rc::Rc::clone(&self.class_instances);
         builder.thenables = std::rc::Rc::clone(&self.thenables);
-        builder.generic_calls.clone_from(&self.generics.at_call);
+        builder.calls.generic = Some(&self.generics.at_call);
         // A structural call names its copy the same way a generic one does, so
         // the naming site needs no second question -- one map, two sources.
         //
@@ -14631,24 +14641,11 @@ impl Shared {
         // here. On top of the program-wide answers for the same reason the
         // structural ones are: a call with nothing deferred names the same
         // copy everywhere, and one that deferred names this copy's.
-        if let Some(calls) = copy
+        builder.calls.class = copy
             .instance
-            .and_then(|at| self.generics.at_call_in.get(&at))
-        {
-            for (call, suffix) in calls {
-                builder.generic_calls.insert(*call, suffix.clone());
-            }
-        }
-        // And the calls this copy of a generic *function* makes, which is the
-        // same sentence with the copy identified by its name instead of by a
-        // type: `inner(initial)` written in `outer` names `inner<f64>` in
-        // `outer<f64>` and `inner<i32>` in `outer<i32>`, and the program-wide
-        // answer for that call is neither.
-        if let Some(calls) = within.and_then(|at| self.generics.at_call_in_copy.get(&at)) {
-            for (call, suffix) in calls {
-                builder.generic_calls.insert(*call, suffix.clone());
-            }
-        }
+            .and_then(|at| self.generics.at_call_in.get(&at));
+        // A generic function's own instance is the final override.
+        builder.calls.function = within.and_then(|at| self.generics.at_call_in_copy.get(&at));
         wire_naming(&mut builder, &self.naming);
         #[cfg(test)]
         context_scaling::binding(self, &builder);
@@ -14670,19 +14667,19 @@ impl Shared {
 /// instead of the program's, so `Object.keys` on it disagreed with node --
 /// silently, because the layout is otherwise correct and no diagnostic is
 /// involved.
-fn wire_naming(builder: &mut FuncBuilder, naming: &Naming) {
+fn wire_naming<'a>(builder: &mut FuncBuilder<'a>, naming: &'a Naming) {
     builder.printers = naming.printers.clone();
     builder.iterators = naming.iterators.clone();
-    builder.module.initialization = naming.initialization.clone();
-    builder.qualified.clone_from(&naming.qualified);
-    builder.generators.clone_from(&naming.generators);
-    builder.throwing.clone_from(&naming.throwing);
-    builder.raising.clone_from(&naming.raising);
-    builder.withheld.clone_from(&naming.withheld);
-    builder.presence_keys.clone_from(&naming.presence_keys);
-    builder.written_order.clone_from(&naming.written_order);
+    builder.initialization = naming.initialization.clone();
+    builder.qualified = &naming.qualified;
+    builder.generators = &naming.generators;
+    builder.throwing = &naming.throwing;
+    builder.raising = &naming.raising;
+    builder.withheld = &naming.withheld;
+    builder.presence_keys = &naming.presence_keys;
+    builder.written_order = &naming.written_order;
     builder.added_keys = naming.added_keys.clone();
-    builder.class_tokens.clone_from(&naming.class_tokens);
+    builder.class_tokens = &naming.class_tokens;
 }
 
 /// Reads that happen before the module declaring them has evaluated.
@@ -15370,23 +15367,16 @@ fn evaluation_order(snapshot: &SemanticSnapshot, lazy: &[bool]) -> (Vec<usize>, 
 /// Find the declarations whose initializer cannot lower, and record them on the
 /// module so that reading one refuses.
 ///
-/// Probed against a `Shared` built from the module as it stands and then folded
-/// back into it. Two of them and not one, because the second has to carry the
-/// answer the first was built to find, and this runs before any function is
-/// lowered so that the answer reaches them.
+/// All immutable planning is built once. This first walk adds only the
+/// initializer refusal facts, before any body builder can borrow the context.
 fn mark_refused_initializers(
     snapshot: &LoweringSnapshot<'_>,
-    module: &mut ModuleScope,
-    hierarchy: &Hierarchy,
-    closures: &[ClosureInfo],
-    naming: Naming,
+    shared: &mut Shared,
     lowered: &mut Lowered,
 ) -> rustc_hash::FxHashSet<u32> {
-    let probing = Shared::whole_program(snapshot, module, hierarchy, closures, naming);
-    let refused = refused_initializers(snapshot, &probing, lowered);
-    drop(probing);
+    let refused = refused_initializers(snapshot, shared, lowered);
     for symbol in &refused {
-        module.unsupported.entry(*symbol).or_insert_with(|| {
+        shared.module.unsupported.entry(*symbol).or_insert_with(|| {
             "a module-scope variable whose initializer was refused above".to_owned()
         });
     }
@@ -15470,7 +15460,7 @@ fn lower_module_initializer(
     let (initializer, deferred, refusals) = module_statements(
         snapshot,
         &shared.module.roles.lazy,
-        &shared.module.initialization,
+        &shared.naming.initialization,
     );
     lowered.diagnostics.extend(refusals);
 
@@ -17259,7 +17249,7 @@ fn field_aliases(
         return Vec::new();
     }
     let mut probe = FuncBuilder::new(snapshot, foreign);
-    probe.hierarchy = hierarchy.clone();
+    probe.hierarchy = hierarchy;
     probe.closures = closures.to_vec().into();
     wire_naming(&mut probe, naming);
     let targets: std::collections::BTreeSet<_> = hierarchy
@@ -17348,13 +17338,7 @@ pub fn lower_with(
     // probe lays out classes and a layout built without the hierarchy is a different
     // layout. See `hierarchy_and_naming` for why the two are built together.
     let (hierarchy, naming) = hierarchy_and_naming(snapshot, foreign, &closures, &readers);
-    let mut module = collect_module_scope(
-        snapshot,
-        foreign,
-        &closures,
-        &hierarchy,
-        &naming.initialization,
-    );
+    let module = collect_module_scope(snapshot, foreign, &closures, &hierarchy, &naming);
     lowered.diagnostics.extend(module.refusals.iter().cloned());
     lowered.program.globals.clone_from(&module.globals);
     hierarchy.publish_uniform_slots(&mut lowered.program);
@@ -17362,15 +17346,9 @@ pub fn lower_with(
     let mut wanted: std::collections::BTreeSet<usize> = std::collections::BTreeSet::new();
 
     let generic = generic_classes(snapshot);
-    let refused = mark_refused_initializers(
-        snapshot,
-        &mut module,
-        &hierarchy,
-        &closures,
-        naming.clone(),
-        &mut lowered,
-    );
-    let shared = Shared::whole_program(snapshot, &module, &hierarchy, &closures, naming);
+    let mut shared = Shared::whole_program(snapshot, module, hierarchy, &closures, naming);
+    let refused = mark_refused_initializers(snapshot, &mut shared, &mut lowered);
+    let hierarchy = &shared.hierarchy;
     #[cfg(test)]
     result_overload_tests::observe(
         "shared-after-value-registration",
@@ -17572,11 +17550,11 @@ pub fn lower_with(
         &mut layout_collector,
     );
     (layout_collector, ()) = layout_collector.with_program(&mut lowered.program, |program| {
-        access_family_functions::declare(snapshot, &hierarchy, &shared.naming, program);
+        access_family_functions::declare(snapshot, hierarchy, &shared.naming, program);
     });
     declare_interface_methods(
         &mut layout_collector,
-        &hierarchy,
+        hierarchy,
         &mut shared.builder(snapshot, foreign, Copy::default()),
         &mut lowered.program,
     );
@@ -17586,8 +17564,8 @@ pub fn lower_with(
         &shared.builder(snapshot, foreign, Copy::default()),
         &lowered.program,
     );
-    relate_closures_to_signatures(snapshot, &closures, &hierarchy, &mut lowered.program);
-    declare_uniform_entries(snapshot, &hierarchy, &mut lowered.program, &shared);
+    relate_closures_to_signatures(snapshot, &closures, hierarchy, &mut lowered.program);
+    declare_uniform_entries(snapshot, hierarchy, &mut lowered.program, &shared);
 
     // Stage 0: count what a fix would have to convert, before anything converts.
     // `NTS_ARRIVALS` only -- this pass changes nothing yet, and a measurement that
@@ -17603,9 +17581,15 @@ pub fn lower_with(
             eprintln!("  ARRIVAL {call}: {why}");
         }
     }
-    finish_dispatch_tables(snapshot, &hierarchy, &mut lowered.program);
+    finish_dispatch_tables(snapshot, hierarchy, &mut lowered.program);
 
-    publish_surface(&mut lowered, snapshot, &shared.naming, &module, entry);
+    publish_surface(
+        &mut lowered,
+        snapshot,
+        &shared.naming,
+        &shared.module,
+        entry,
+    );
     let parameter_entries = std::mem::take(&mut lowered.arrivals.parameter_entries);
     lowered.diagnostics.extend(parameter_entries::split(
         &mut lowered.program,
@@ -17630,13 +17614,13 @@ pub fn lower_with(
     expand_layout_tests(&mut lowered.program);
     printed::decide(
         snapshot,
-        &hierarchy,
+        hierarchy,
         &closures,
         &shared.naming,
         &mut lowered.program,
     );
     settle_printer_checks(&mut lowered);
-    printed::devirtualize(snapshot, &hierarchy, &mut lowered.program);
+    printed::devirtualize(snapshot, hierarchy, &mut lowered.program);
     function_names::decide(snapshot, &closures, &mut lowered.program);
     // After every step that makes a function or publishes one: the interface
     // adapters and bridges `finish_dispatch_tables` writes move values across
@@ -17644,7 +17628,7 @@ pub fn lower_with(
     typed_signatures::type_signature_calls(
         snapshot,
         &closures,
-        &hierarchy,
+        hierarchy,
         &lowered.arrivals,
         &mut lowered.program,
     );
@@ -17683,11 +17667,11 @@ pub fn lower_with(
     // creates layouts as lowering proceeds and `canonicalize_objects` rewrites ids
     // afterwards. Filled earlier it was the checker's answer to a question the
     // program had not finished answering.
-    lowered.program.record_parents = record_parents(snapshot, &hierarchy, &lowered.program);
+    lowered.program.record_parents = record_parents(snapshot, hierarchy, &lowered.program);
     member_origins::sources(
         snapshot,
         &shared.closures,
-        &module.roles.namespace,
+        &shared.module.roles.namespace,
         &shared.naming,
         &mut lowered.program,
     );
@@ -22961,24 +22945,10 @@ struct FuncBuilder<'a> {
     suffix: String,
     /// What each function declaration is emitted as, where its plain name is
     /// taken by another module's.
-    qualified: rustc_hash::FxHashMap<NodeId, String>,
-    /// What each *call* to a generic function names, by call node.
-    ///
-    /// A call has to reach the copy made for its own instantiation, and the
-    /// copy's name is the only thing that distinguishes one from another.
-    generic_calls: rustc_hash::FxHashMap<NodeId, String>,
-    /// What each call site's callee was *specialised* with, where it was.
-    ///
-    /// The suffix above names the copy; this is the other half, and the caller
-    /// needs it: `coerce_to_parameter` asks what the parameter is represented as
-    /// and reads that from the **declaration**, which still says `Named`. A call
-    /// to a copy over `Thing` must coerce to `Thing` -- otherwise the argument
-    /// meets the same prefix check and the same refusal, and the copy is emitted
-    /// and never reached.
-    structural_calls: rustc_hash::FxHashMap<NodeId, Retyped>,
-    /// The `new` and `super(...)` sites that name a constructor's copy over a
-    /// union member ([`Structural::constructions`]).
-    copied_constructions: rustc_hash::FxHashSet<NodeId>,
+    qualified: &'a rustc_hash::FxHashMap<NodeId, String>,
+    /// The program's call plans, with this copy's overrides. Both the suffix
+    /// and retyped parameters are read from the same selected structural row.
+    calls: CallContext<'a>,
     /// In a copy over union members, the parameters (and their `const`
     /// aliases) re-typed to one, which decide `typeof` tests on them.
     member_retyped: rustc_hash::FxHashSet<u32>,
@@ -23043,9 +23013,10 @@ struct FuncBuilder<'a> {
     /// may come after another value.
     pending_labels: Vec<(NodeId, Vec<(String, ValueId)>)>,
     /// What the module declares outside any function.
-    module: ModuleScope,
+    module: &'a ModuleScope,
+    initialization: std::rc::Rc<initialization::Analysis>,
     /// What every class in the program declares, and what it extends.
-    hierarchy: Hierarchy,
+    hierarchy: &'a Hierarchy,
     /// The class this method's own class extends, if it extends one.
     ///
     /// `super(...)` and `super.m()` name it, and nothing else can: the checker
@@ -23192,7 +23163,7 @@ struct FuncBuilder<'a> {
     /// there and is refused everywhere else.
     generator: Option<super::GeneratorFrame>,
     /// Which generator each `function*` is, decided once by [`naming`].
-    generators: rustc_hash::FxHashMap<NodeId, usize>,
+    generators: &'a rustc_hash::FxHashMap<NodeId, usize>,
     /// The values in this function that are a generator frame *this call site
     /// made*, and so whose resumption is named after the callee.
     ///
@@ -23203,22 +23174,22 @@ struct FuncBuilder<'a> {
     /// the reservation is read, because that is the only place that knows.
     generator_calls: rustc_hash::FxHashSet<ValueId>,
     /// Which functions can raise a `throw`. See [`Naming::throwing`].
-    throwing: rustc_hash::FxHashSet<u32>,
+    throwing: &'a rustc_hash::FxHashSet<u32>,
     /// The descriptor's implicit call edges, shared with throwing analysis.
     printers: std::rc::Rc<printed::Plan>,
     iterators: std::rc::Rc<iterator_calls::Plan>,
     /// The declarations a raising copy exists for. See [`raising_copies`].
-    raising: rustc_hash::FxHashSet<NodeId>,
+    raising: &'a rustc_hash::FxHashSet<NodeId>,
     /// For a `(root, member)` family whose raising slot was **withheld**: the member
     /// that withheld it. [`Naming::withheld`] carries why it is published rather than
     /// derived here, and the two refusal sites below are its readers.
-    withheld: rustc_hash::FxHashMap<(TypeId, MemberKey), Vec<String>>,
+    withheld: &'a rustc_hash::FxHashMap<(TypeId, MemberKey), Vec<String>>,
     /// The calls in this body that name a raising copy, and so are followed by
     /// a test. Written by [`Self::lower_try`] and by the raising walk; read by
     /// [`Self::push_call`], which is the one place a plain call is emitted.
     raising_calls: rustc_hash::FxHashSet<NodeId>,
     /// Calls whose selected source specialization has its own raising entry.
-    raising_specializations: rustc_hash::FxHashSet<NodeId>,
+
     /// Whether this body is a **raising copy**: one reached only from call
     /// sites that test for a raise afterwards.
     ///
@@ -23235,16 +23206,16 @@ struct FuncBuilder<'a> {
     /// this existing, and no boundary has to learn anything.
     raises: bool,
     /// Which property names an `in` asks about. See [`Naming::presence_keys`].
-    presence_keys: rustc_hash::FxHashSet<String>,
+    presence_keys: &'a rustc_hash::FxHashSet<String>,
     /// The order the program writes each field-name set; see
     /// [`Naming::written_order`], which computes it once for the whole program.
-    written_order: WrittenOrders,
+    written_order: &'a WrittenOrders,
     /// The keys a write may add to an object after it was made: see
     /// [`added_keys`].
     added_keys: std::rc::Rc<AddedKeys>,
     /// The token index of each class used as a value; see
     /// [`Naming::class_tokens`], and its reason for being decided once.
-    class_tokens: rustc_hash::FxHashMap<u32, usize>,
+    class_tokens: &'a rustc_hash::FxHashMap<u32, usize>,
     /// Which of them this function allocated.
     ///
     /// A closure nobody creates is not lowered at all. That is the rule
@@ -23374,14 +23345,14 @@ impl<'a> FuncBuilder<'a> {
     }
 
     fn new(snapshot: &'a LoweringSnapshot<'a>, foreign: &'a super::runtime::ForeignTable) -> Self {
+        let context = snapshot.probe_context();
         Self {
             snapshot,
             foreign,
             raises: false,
-            raising: rustc_hash::FxHashSet::default(),
-            withheld: rustc_hash::FxHashMap::default(),
+            raising: &context.naming.raising,
+            withheld: &context.naming.withheld,
             raising_calls: rustc_hash::FxHashSet::default(),
-            raising_specializations: rustc_hash::FxHashSet::default(),
             boxed: std::rc::Rc::default(),
             guarded: std::rc::Rc::default(),
             in_closure: false,
@@ -23408,10 +23379,8 @@ impl<'a> FuncBuilder<'a> {
             this: None,
             initializing_fields: Vec::new(),
             suffix: String::new(),
-            qualified: rustc_hash::FxHashMap::default(),
-            generic_calls: rustc_hash::FxHashMap::default(),
-            structural_calls: rustc_hash::FxHashMap::default(),
-            copied_constructions: rustc_hash::FxHashSet::default(),
+            qualified: &context.naming.qualified,
+            calls: CallContext::default(),
             member_retyped: rustc_hash::FxHashSet::default(),
             class_instances: std::rc::Rc::default(),
             thenables: std::rc::Rc::default(),
@@ -23428,9 +23397,10 @@ impl<'a> FuncBuilder<'a> {
             com_entry: None,
             pending_hstrings: Vec::new(),
             pending_labels: Vec::new(),
-            hierarchy: Hierarchy::default(),
+            hierarchy: &context.hierarchy,
             base: None,
-            module: ModuleScope::default(),
+            module: &context.module,
+            initialization: context.naming.initialization.clone(),
             closures: SharedClosures::default(),
             expecting: None,
             synthetic: 0,
@@ -23438,14 +23408,14 @@ impl<'a> FuncBuilder<'a> {
             callback_returns: Vec::new(),
             async_result: None,
             generator: None,
-            generators: rustc_hash::FxHashMap::default(),
+            generators: &context.naming.generators,
             generator_calls: rustc_hash::FxHashSet::default(),
-            throwing: rustc_hash::FxHashSet::default(),
+            throwing: &context.naming.throwing,
             printers: std::rc::Rc::default(),
             iterators: std::rc::Rc::default(),
-            presence_keys: rustc_hash::FxHashSet::default(),
-            class_tokens: rustc_hash::FxHashMap::default(),
-            written_order: WrittenOrders::default(),
+            presence_keys: &context.naming.presence_keys,
+            class_tokens: &context.naming.class_tokens,
+            written_order: &context.naming.written_order,
             added_keys: std::rc::Rc::default(),
             used_closures: Vec::new(),
             conversions: Vec::new(),
@@ -23478,8 +23448,8 @@ impl<'a> FuncBuilder<'a> {
     fn within(
         snapshot: &'a LoweringSnapshot<'a>,
         foreign: &'a super::runtime::ForeignTable,
-        module: ModuleScope,
-        hierarchy: Hierarchy,
+        module: &'a ModuleScope,
+        hierarchy: &'a Hierarchy,
         closures: SharedClosures,
     ) -> Self {
         Self {
@@ -23496,8 +23466,8 @@ impl<'a> FuncBuilder<'a> {
     fn instantiating(
         snapshot: &'a LoweringSnapshot<'a>,
         foreign: &'a super::runtime::ForeignTable,
-        module: ModuleScope,
-        hierarchy: Hierarchy,
+        module: &'a ModuleScope,
+        hierarchy: &'a Hierarchy,
         closures: SharedClosures,
         substitution: Substitution,
         suffix: String,
@@ -30992,9 +30962,9 @@ impl<'a> FuncBuilder<'a> {
             return Some(HirType::Erased);
         }
         if let Some(bound) = self
-            .structural_calls
-            .get(&call)
-            .and_then(|retyped| retyped.get(&u32::try_from(at).unwrap_or(u32::MAX)))
+            .calls
+            .structural(call)
+            .and_then(|(_, retyped)| retyped.get(&u32::try_from(at).unwrap_or(u32::MAX)))
         {
             return Some(bound.clone());
         }
@@ -31396,7 +31366,7 @@ impl<'a> FuncBuilder<'a> {
     /// 17 of 29 runtime projects emitted the same program renumbered -- a binding
     /// read pushed and then removed by DCE, which is churn for nothing.
     fn operand_has_no_effects(&self, operand: NodeId) -> bool {
-        if self.module.initialization.can_raise_at(operand) {
+        if self.initialization.can_raise_at(operand) {
             return false;
         }
         // **Through parentheses first.** `typeof(null)` is a
@@ -31710,14 +31680,13 @@ impl<'a> FuncBuilder<'a> {
     /// A potentially early access tests its binding, including a folded constant.
     fn check_initialized(&mut self, id: NodeId, symbol: u32) -> Result<(), Diagnostic> {
         if self
-            .module
             .initialization
             .uninitialized_local(id, symbol)
             .is_some()
         {
             return self.check_uninitialized_local(id, symbol);
         }
-        if self.module.initialization.guards_capture(id, symbol)
+        if self.initialization.guards_capture(id, symbol)
             && let Some(cell) = self.class_cells.get(&symbol).copied()
         {
             let origin = self.origin(id);
@@ -31731,7 +31700,7 @@ impl<'a> FuncBuilder<'a> {
             );
             return self.check_binding_ready(id, symbol, ready);
         }
-        if !self.module.initialization.guards(id, symbol) {
+        if !self.initialization.guards(id, symbol) {
             return Ok(());
         }
         let Some(flag) = self.module.initialized.get(&symbol).copied() else {
@@ -31776,7 +31745,7 @@ impl<'a> FuncBuilder<'a> {
     fn check_initialized_place(&mut self, id: NodeId, global: u32) -> Result<(), Diagnostic> {
         let symbol = self.module.initialized.keys().copied().find(|symbol| {
             self.module.variables.get(symbol) == Some(&global)
-                && self.module.initialization.guards(id, *symbol)
+                && self.initialization.guards(id, *symbol)
         });
         if let Some(symbol) = symbol {
             self.check_initialized(id, symbol)?;
@@ -31928,7 +31897,7 @@ impl<'a> FuncBuilder<'a> {
                 let initializer = declaration_initializer(&children, *name, |c| self.kind_of(c));
                 if !self.evaluate_a_class_initializer(initializer)?
                     && let Some(initializer) = initializer
-                    && self.module.initialization.can_raise_at(initializer)
+                    && self.initialization.can_raise_at(initializer)
                 {
                     self.lower_expression(initializer)?;
                 }
@@ -35721,7 +35690,7 @@ impl<'a> FuncBuilder<'a> {
         let readiness_only = self
             .boxed
             .get(index)
-            .is_some_and(|symbol| self.module.initialization.class_cell(*symbol));
+            .is_some_and(|symbol| self.initialization.class_cell(*symbol));
         let mut fields = if readiness_only {
             Vec::new()
         } else {
@@ -35764,7 +35733,7 @@ impl<'a> FuncBuilder<'a> {
     /// Whether the cell at `index` carries a `ready` flag.
     fn is_guarded(&self, index: usize) -> bool {
         self.boxed.get(index).is_some_and(|symbol| {
-            self.guarded.contains(symbol) && self.module.initialization.cell_needs_guard(*symbol)
+            self.guarded.contains(symbol) && self.initialization.cell_needs_guard(*symbol)
         })
     }
 
@@ -35963,9 +35932,9 @@ impl<'a> FuncBuilder<'a> {
                 .as_ref()
                 .and_then(|text| text.as_utf8())
                 .map_or_else(|| "a name".to_owned(), str::to_owned);
-            if self.module.initialization.lexical_cell(symbol) {
+            if self.initialization.lexical_cell(symbol) {
                 self.check_lexical_cell_ready(at, symbol, cell)?;
-            } else if self.module.initialization.var_cell(symbol) {
+            } else if self.initialization.var_cell(symbol) {
                 self.check_var_ready(at, symbol, cell);
             } else {
                 // Merged or otherwise unclassified bindings retain the
@@ -51280,11 +51249,7 @@ impl<'a> FuncBuilder<'a> {
         target: NodeId,
         symbol: nts_semantic_schema::SymbolId,
     ) -> Result<Place, Diagnostic> {
-        if let Some(declaration) = self
-            .module
-            .initialization
-            .uninitialized_local(target, symbol.0)
-        {
+        if let Some(declaration) = self.initialization.uninitialized_local(target, symbol.0) {
             return Ok(Place::UninitializedBinding {
                 at: target,
                 symbol: symbol.0,
@@ -51842,7 +51807,7 @@ impl<'a> FuncBuilder<'a> {
         .collect();
         let args = self.lower_argument_values(id, &arguments, None, None)?;
         let name = self.emitted_callee_name(Some(declaration), tag)?;
-        let specialization = self.generic_calls.get(&id).map_or("", String::as_str);
+        let specialization = self.calls.suffix(id).map_or("", String::as_str);
         let name = format!("{name}{specialization}{}", self.raising_suffix_of(id));
         self.push_call(id, Callee::Direct(name), args, Some(declaration), None)
     }
@@ -52062,7 +52027,7 @@ impl<'a> FuncBuilder<'a> {
         let candidates =
             self.printers
                 .for_conversion(self, from, &self.values[represented.0 as usize].ty);
-        let entries = self.printers.raising_entries(&candidates, &self.throwing);
+        let entries = self.printers.raising_entries(&candidates, self.throwing);
         let origin = self.origin(from);
         let text = self.runtime_call(
             "nts_value_to_string",
@@ -52860,7 +52825,7 @@ impl<'a> FuncBuilder<'a> {
                         self.field_set(cell, 0, value, &origin);
                         // A var's flag means assigned, not that its declaration
                         // statement ran. `x = 2; var x;` leaves that value intact.
-                        if self.module.initialization.var_cell(symbol)
+                        if self.initialization.var_cell(symbol)
                             && self
                                 .cell_of(symbol)
                                 .is_some_and(|index| self.is_guarded(index))
@@ -53251,7 +53216,7 @@ impl<'a> FuncBuilder<'a> {
     /// The checker's literal answer for a condition, where the condition reads
     /// nothing that can change under it.
     fn the_checker_decided(&self, condition: NodeId) -> Option<bool> {
-        if self.module.initialization.can_raise_at(condition) {
+        if self.initialization.can_raise_at(condition) {
             return None;
         }
         let ty = self.snapshot.node_types.get(&condition)?;
@@ -54011,7 +53976,7 @@ impl<'a> FuncBuilder<'a> {
                         .find(|at| self.kind_of(*at) == Some(syntax::IDENTIFIER))
                         .and_then(|name| self.node(name).symbol)
                 {
-                    if self.module.initialization.class_cell(symbol.0) {
+                    if self.initialization.class_cell(symbol.0) {
                         let cell = self.open_class_cell(symbol.0, id)?;
                         let origin = self.origin(id);
                         let ready =
@@ -56153,7 +56118,7 @@ impl<'a> FuncBuilder<'a> {
                     "an interface field accessor without a complete raising family",
                 ));
             }
-            let entry = access_family_functions::entry(&self.hierarchy, family, writes, raising);
+            let entry = access_family_functions::entry(self.hierarchy, family, writes, raising);
             return Ok(Some(Callee::Virtual {
                 slot: entry.slot,
                 declared: entry.declared,
@@ -57843,7 +57808,7 @@ impl<'a> FuncBuilder<'a> {
                         reserved.push(*slot as usize);
                     }
                     methods[*slot as usize] = Some(access_family_functions::placeholder(
-                        &self.hierarchy,
+                        self.hierarchy,
                         family,
                         supply,
                         writes,
@@ -58043,7 +58008,7 @@ impl<'a> FuncBuilder<'a> {
         // stated as a construction instead of hoped for as a sort.
         if let Some(base) = base {
             fields = self.after_the_base(id, base, fields)?;
-        } else if let Some(parent) = declared_record_parent(self.snapshot, &self.hierarchy, ty) {
+        } else if let Some(parent) = declared_record_parent(self.snapshot, self.hierarchy, ty) {
             // **A record with a declared parent is laid out parent-first too**, for
             // the reason the class above is: every upcast in every backend is a
             // pointer cast that assumes it.
@@ -65307,7 +65272,11 @@ impl<'a> FuncBuilder<'a> {
         if !self.printers.at(call).is_empty() || !self.iterators.at(call).is_empty() {
             return false;
         }
-        if self.raising_specializations.contains(&call) {
+        if let Some(structural) = self.calls.structural
+            && let Some((suffix, _)) = self.calls.structural(call)
+            && planned_callee(self, call)
+                .is_some_and(|callee| structural.raising.contains(&(callee, suffix.clone())))
+        {
             return true;
         }
         if self.hierarchy.access_families.at(call).next().is_some() {
@@ -65345,7 +65314,7 @@ impl<'a> FuncBuilder<'a> {
         // The symmetric half is [`Self::callee_for`], which dispatches at that slot. Both
         // read the slot rather than re-deriving the family, so a site that names an index
         // and a table that fills one cannot disagree.
-        if let Some((root, key)) = interface_member_of(self.snapshot, self, &self.hierarchy, call)
+        if let Some((root, key)) = interface_member_of(self.snapshot, self, self.hierarchy, call)
             && self.hierarchy.slot_for(root, &key, true).is_some()
         {
             return true;
@@ -65659,16 +65628,15 @@ impl<'a> FuncBuilder<'a> {
     /// this root's key*, and *can this declaration raise*. A dispatch root is a base class
     /// or an interface and the slot machinery never cared which, so neither does this.
     fn an_interface_member_that_can_raise(&self, call: NodeId) -> bool {
-        let Some((ty, key)) = interface_member_of(self.snapshot, self, &self.hierarchy, call)
-        else {
+        let Some((ty, key)) = interface_member_of(self.snapshot, self, self.hierarchy, call) else {
             return false;
         };
         if literal_methods::supplies_method_value(self, ty, &key.key) {
             return true;
         }
-        members_filling(self.snapshot, self, &self.hierarchy, ty, &key)
+        members_filling(self.snapshot, self, self.hierarchy, ty, &key)
             .into_iter()
-            .any(|at| a_declaration_that_can_raise(self.snapshot, &self.throwing, at))
+            .any(|at| a_declaration_that_can_raise(self.snapshot, self.throwing, at))
     }
 
     /// `-x`, `+x`, `!x`.
@@ -69901,7 +69869,7 @@ impl<'a> FuncBuilder<'a> {
         // And the copy made for *this* call's instantiation, where the callee
         // is generic. There is one copy per distinct substitution and the
         // suffix is what tells them apart.
-        let specialization = self.generic_calls.get(&id).map_or("", String::as_str);
+        let specialization = self.calls.suffix(id).map_or("", String::as_str);
         let name = format!("{name}{specialization}{}", self.raising_suffix_of(id));
 
         // A callee inside the compiled program becomes a static call; one outside
@@ -85087,7 +85055,7 @@ impl<'a> FuncBuilder<'a> {
 
     fn lower_identifier(&mut self, id: NodeId) -> Result<ValueId, Diagnostic> {
         if let Some(symbol) = self.node(id).symbol
-            && let Some(declaration) = self.module.initialization.uninitialized_local(id, symbol.0)
+            && let Some(declaration) = self.initialization.uninitialized_local(id, symbol.0)
         {
             self.check_initialized(id, symbol.0)?;
             return self.unwritten(id, declaration);
@@ -89251,7 +89219,7 @@ mod tests {
         );
         for reversed in [false, true] {
             let mut probe = super::FuncBuilder::new(&snapshot, foreign);
-            probe.hierarchy = hierarchy.clone();
+            probe.hierarchy = &hierarchy;
             probe.closures = closures.clone().into();
             super::wire_naming(&mut probe, &naming);
             let mut schemas = schemas.clone();
@@ -89328,7 +89296,7 @@ mod tests {
         assert!(faces.len() >= 2);
         for anonymous_first in [true, false] {
             let mut probe = super::FuncBuilder::new(&snapshot, foreign);
-            probe.hierarchy = hierarchy.clone();
+            probe.hierarchy = &hierarchy;
             probe.closures = closures.clone().into();
             super::wire_naming(&mut probe, &naming);
             let (first, second) = if anonymous_first {

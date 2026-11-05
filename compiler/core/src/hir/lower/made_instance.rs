@@ -470,8 +470,15 @@ impl FuncBuilder<'_> {
     /// over the union member its argument is (`union_member_retype`), or `""`
     /// for the constructor as declared.
     pub(super) fn constructed_copy(&self, site: NodeId) -> String {
-        if self.copied_constructions.contains(&site) {
-            self.generic_calls.get(&site).cloned().unwrap_or_default()
+        if let Some(structural) = self.calls.structural
+            && let Some((suffix, _)) = self.calls.structural(site)
+            && super::planned_callee(self, site).is_some_and(|callee| {
+                structural
+                    .constructions
+                    .contains(&(self.snapshot.implementation_of(callee), suffix.clone()))
+            })
+        {
+            self.calls.suffix(site).cloned().unwrap_or_default()
         } else {
             String::new()
         }

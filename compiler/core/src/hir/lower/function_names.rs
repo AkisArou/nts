@@ -406,7 +406,7 @@ impl FuncBuilder<'_> {
             }
             Some(Written::Bound) => {}
             None => {
-                if let Some(text) = token_name(self.snapshot, &self.class_tokens, type_id) {
+                if let Some(text) = token_name(self.snapshot, self.class_tokens, type_id) {
                     return Ok(Some(self.push(
                         OpKind::ConstString(text.into()),
                         string,

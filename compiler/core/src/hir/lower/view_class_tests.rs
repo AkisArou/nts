@@ -304,8 +304,10 @@ fn native_constructor_memo_keeps_instance_and_projection_contexts_separate() {
             .is_none(),
         "same parent identity, contextual Object storage"
     );
+    let mut hierarchy = super::Hierarchy::default();
+    hierarchy.cast_faces.insert(parent_ty);
     let mut face_context = super::FuncBuilder::probe(&snapshot);
-    face_context.hierarchy.cast_faces.insert(parent_ty);
+    face_context.hierarchy = &hierarchy;
     if cfg!(debug_assertions) {
         // Debug builds reject this deliberately malformed field-face context
         // before a constructor can be selected.

@@ -34,7 +34,7 @@ impl Method {
     ) -> Option<Self> {
         let owner = probe.hierarchy.declaring(receiver, key)?;
         let mut declarations = if probe.hierarchy.overridden(receiver, key) {
-            members_filling(probe.snapshot, probe, &probe.hierarchy, owner, key)
+            members_filling(probe.snapshot, probe, probe.hierarchy, owner, key)
         } else {
             vec![probe.implementation_of(probe.member_declaration(owner, &key.key)?)]
         };
@@ -418,7 +418,7 @@ impl FuncBuilder<'_> {
     }
 
     pub(super) fn implicit_iterator_callees(&self, at: NodeId) -> Vec<NodeId> {
-        self.iterators.raising_callees(at, &self.throwing)
+        self.iterators.raising_callees(at, self.throwing)
     }
 
     pub(super) fn implicit_method(
@@ -437,7 +437,7 @@ impl FuncBuilder<'_> {
         let member = &key.key;
         let raises = method
             .as_ref()
-            .is_some_and(|method| method.can_raise(&self.throwing))
+            .is_some_and(|method| method.can_raise(self.throwing))
             && (self.raises || !self.exits.is_empty());
         if raises
             && let Some(method) = &method

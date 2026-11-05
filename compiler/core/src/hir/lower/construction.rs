@@ -422,7 +422,7 @@ impl FuncBuilder<'_> {
                 return self.lower_closure_call(id, name_node, &arguments);
             }
             let name = self.emitted_callee_name(Some(declaration), name_node)?;
-            let specialization = self.generic_calls.get(&id).map_or("", String::as_str);
+            let specialization = self.calls.suffix(id).map_or("", String::as_str);
             let name = format!("{name}{specialization}{}", self.raising_suffix_of(id));
             let callee = Callee::Direct(name);
             let (args, lent) = self.lower_call_arguments(id, &callee, &arguments, None)?;

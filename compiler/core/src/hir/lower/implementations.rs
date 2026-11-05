@@ -11,6 +11,7 @@ use rustc_hash::FxHashMap;
 /// AST while answering questions about the materialised one.
 pub(super) struct LoweringSnapshot<'a> {
     semantic: &'a SemanticSnapshot,
+    probe_context: std::cell::OnceCell<super::ProbeContext>,
     pub(super) scopes: super::scopes::Index,
     implementations: ImplementationIndex,
     /// Per symbol, its references that stand where a write lands. Built on
@@ -26,9 +27,14 @@ pub(super) struct LoweringSnapshot<'a> {
 }
 
 impl<'a> LoweringSnapshot<'a> {
+    pub(super) fn probe_context(&self) -> &super::ProbeContext {
+        self.probe_context.get_or_init(super::ProbeContext::default)
+    }
+
     pub(super) fn new(semantic: &'a SemanticSnapshot) -> Self {
         Self {
             semantic,
+            probe_context: std::cell::OnceCell::new(),
             scopes: super::scopes::Index::new(semantic),
             implementations: ImplementationIndex::build(semantic),
             written: OnceLock::new(),

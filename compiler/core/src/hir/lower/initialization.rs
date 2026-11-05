@@ -41,7 +41,7 @@ impl FuncBuilder<'_> {
         cell: ValueId,
     ) -> Result<(), Diagnostic> {
         if self.in_closure
-            && self.module.initialization.lexical_cell(symbol)
+            && self.initialization.lexical_cell(symbol)
             && self
                 .cell_of(symbol)
                 .is_some_and(|index| self.is_guarded(index))
@@ -83,7 +83,7 @@ impl FuncBuilder<'_> {
             return None;
         }
         let symbol = self.node(operand).symbol?.0;
-        if !self.module.initialization.var_cell(symbol)
+        if !self.initialization.var_cell(symbol)
             || !self
                 .cell_of(symbol)
                 .is_some_and(|index| self.is_guarded(index))

@@ -586,9 +586,9 @@ pub(super) fn raising_copies(
             continue;
         };
         let mut probe = FuncBuilder::probe(snapshot);
-        probe.hierarchy = hierarchy.clone();
-        probe.raising.clone_from(&naming.raising);
-        probe.throwing.clone_from(&naming.throwing);
+        probe.hierarchy = hierarchy;
+        probe.raising = &naming.raising;
+        probe.throwing = &naming.throwing;
         probe.retyped_symbols = super::retyped_symbols_of(&probe, key.0, retyped);
         structural.wire_calls(&mut probe, &key.1);
         let mut selected = FxHashMap::default();
