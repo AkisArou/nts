@@ -3244,7 +3244,8 @@ aliases use only one-byte element kinds.
 | `conversion` | 24 | 24 | all eleven element kinds on of, from, fill, set, with, map and constructor paths; exact wrapping, clamping, rounding, signed zeros, bigints and invalid indices |
 | `search` | 24 | 24 | NaN and signed-zero equality, unconverted needles, relative and out-of-range starts, at and forward or reverse predicate searches |
 | `copies` | 24 | 24 | shared subarrays, independent slices and copying methods, in-place reversal, overlap snapshots within and across one-byte kinds, and atomic set bounds failures |
-| **Total** | **72** | **72** | exact inputs and assertion expectations retained in every pair |
+| `construction` | 24 | 24 | element and byte lengths, element widths, fixed buffer windows and rejection, cross-kind copies, mapper calls, iterable and array-like inputs and factory arity |
+| **Total** | **96** | **96** | exact inputs and assertion expectations retained in every pair |
 
 ## Tags
 
@@ -3697,10 +3698,11 @@ aliases use only one-byte element kinds.
 | `ts-typed-array-contents` | typed-array elements and bytes preserve their exact contents and view metadata across typed routes | Typed-array contents contracts; typed paths | 206 | 0 |
 | `ts-typed-array-conversion` | writes through union and generic view parameters obey each element type's wrapping, clamping or rounding | Typed-array contents contracts; NumericToRawBytes; ToUint8Clamp | 44 | 0 |
 | `ts-typed-array-methods` | typed receivers, sources and factories preserve exact mutation, conversion, copying, searching and iteration results | ECMAScript, TypedArray objects and CompareTypedArrayElements | 48 | 0 |
-| `ts-typed-array-routes` | exact typed-array method contracts through declared routes beside plain-array controls | Typed-array route contracts; typed paths | 144 | 0 |
+| `ts-typed-array-routes` | exact typed-array method contracts through declared routes beside plain-array controls | Typed-array route contracts; typed paths | 192 | 0 |
 | `ts-typed-array-route-conversion` | all eleven element kinds on of, from, fill, set, with, map and constructor paths; exact wrapping, clamping, rounding, signed zeros, bigints and invalid indices | Typed-array route contracts; typed paths | 48 | 0 |
 | `ts-typed-array-route-search` | NaN and signed-zero equality, unconverted needles, relative and out-of-range starts, at and forward or reverse predicate searches | Typed-array route contracts; typed paths | 48 | 0 |
 | `ts-typed-array-route-copies` | shared subarrays, independent slices and copying methods, in-place reversal, overlap snapshots within and across one-byte kinds, and atomic set bounds failures | Typed-array route contracts; typed paths | 48 | 0 |
+| `ts-typed-array-route-construction` | element and byte lengths, element widths, fixed buffer windows and rejection, cross-kind copies, mapper calls, iterable and array-like inputs and factory arity | Typed-array route contracts; typed paths | 48 | 0 |
 | `ts-typed-array-subclasses` | subclass contents cross base-typed parameters while preserving conversion, view geometry, identity and own state | Objects, Typed arrays; ECMAScript, TypedArray constructors and TypedArraySetElement | 96 | 0 |
 | `ts-typed-array-views` | typed view aliases observe shared bytes, offsets, subarray aliasing, slice copies and explicit DataView byte orders | Objects, Typed arrays; ECMAScript, TypedArray and DataView objects | 18 | 0 |
 | `ts-typeof-type` | `typeof x` in a type position | conformance/types/typeQueries; ts-eslint TSTypeQuery | 125 | 0 |
