@@ -1,7 +1,7 @@
 // One in-flight case per kernel-bounded worker, preserving survivor verdicts.
 // A dead worker's persistent slice retains its oom_kill count until this run
 // closes. A restart starts a fresh scope and takes a new baseline per case.
-import { PressureError } from "../gate/step-result.ts";
+import { PressureError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import { Admission, createFeed } from "../gate/admission.ts";
@@ -16,13 +16,13 @@ export type ResidentPoolOptions = {
   args: (index: number) => string[];
   onRow: (row: any) => void;
   report?: (message: string) => void;
-  admission?: Admission;
+  admission: Admission;
 };
 
 type Dispatch = { path: string; ordinal: number };
 type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
 
-async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission = new Admission({ report }) }: ResidentPoolOptions,
+async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission }: ResidentPoolOptions,
   work: Dispatch[], isolated: boolean, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
   const queue = createFeed(work.map((_, index) => String(index)), admission);
@@ -165,6 +165,10 @@ export type ResidentPoolSummary = {
 /** Each input has one final row. Parallel pressure is retried once, alone in
  * fresh cgroups after every parallel scope and its charges have been removed. */
 export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<ResidentPoolSummary> {
+  if (!(options.admission instanceof Admission)) {
+    options.memory.close();
+    throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit admission policy");
+  }
   const { paths, jobs, memory, report = () => {} } = options;
   let budgetBytes: number;
   try { budgetBytes = memory.effectiveBudgetBytes(); }
@@ -180,7 +184,7 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   };
   for (const { dispatch } of replays.sort((a, b) => a.dispatch.ordinal - b.dispatch.ordinal)) {
     const isolated = new MemoryRun({ budgetBytes });
-    await round({ ...options, memory: isolated, jobs: 1, admission: options.admission ?? new Admission({ report }) }, [dispatch], true, jobs + summary.isolatedReplays);
+    await round({ ...options, memory: isolated, jobs: 1 }, [dispatch], true, jobs + summary.isolatedReplays);
     summary.isolatedReplays++;
   }
   report(`resident pressure requeues: ${summary.pressureRequeues}; idle restarts ${summary.idlePressureRestarts}; aggregate kills ${summary.aggregatePressureKills}; system-wide kills ${summary.systemPressureKills}; isolated replays ${summary.isolatedReplays}`);

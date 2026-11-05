@@ -24,7 +24,8 @@ test("a resident pool requires an explicit admission policy before setup", async
   let closed = 0, setup = 0;
   const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
   const options = { paths: [], jobs: 1, memory, workerBytes: 1, args: () => [], onRow: () => {} };
-  await assert.rejects(runMemoryWorkers(options), /resident workers require an explicit admission policy/);
+  // Model an untyped caller; typed callers must supply the required policy.
+  await assert.rejects(runMemoryWorkers(options as Parameters<typeof runMemoryWorkers>[0]), /resident workers require an explicit admission policy/);
   assert.equal(setup, 0, "missing admission fails before any worker or memory setup");
   assert.equal(closed, 1, "the pool still closes the run it owns");
 });
@@ -110,6 +111,7 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
   const rows: any[] = [];
   await runMemoryWorkers({
     paths: ["before", "oom", "after"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
+    admission: new Admission({ read: () => 32 }),
     args: () => [fixture, directory], onRow: (row) => rows.push(row),
   });
   assert.deepEqual(rows.map((row) => [row.path, row.bucket]), [["before", "strict-pass"], ["oom", "memory-cap"], ["after", "strict-pass"]]);
@@ -129,6 +131,7 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
   const reports: string[] = [];
   const summary = await runMemoryWorkers({
     paths: ["pressure-a", "pressure-b"], jobs: 2, memory, workerBytes: 640 * 2 ** 20,
+    admission: new Admission({ read: () => 32 }),
     args: (index) => [fixture, directory, String(index)],
     onRow: (row) => rows.push(row),
     report: message => {
@@ -211,6 +214,7 @@ test("a worker death without any OOM evidence is an instrument failure", async t
   const rows: any[] = [];
   const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "lost-worker-control" });
   await assert.rejects(runMemoryWorkers({ paths: ["lost"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
+    admission: new Admission({ read: () => 32 }),
     args: () => [fixture, directory], onRow: row => rows.push(row) }), /no OOM kill recorded/);
   assert.deepEqual(rows, []);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
