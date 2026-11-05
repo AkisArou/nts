@@ -130,7 +130,7 @@ kernel would change the benchmark, not the architecture.
    dropped: with no measurable gain, the hand-written lifetime
    handling (the release_pending path) buys nothing scoped_refptr
    does not give for free, so the simpler design stays. Its commits
-   are archived on chromium/entry-count-measured-noise at
+   are archived as refs/archive/chromium/entry-count-measured-noise at
    56dd25e9be5bee612d1c49fe74d88b2aa3994f04 (the tip that was
    measured, before the drop).
 3. **Combined host entry** (compiler lane): one call that enters
