@@ -71,15 +71,15 @@ void nts_blink_dom_set_retain(NtsDomContext* context, NtsDomRetain retain);
 int32_t nts_blink_dom_entry(NtsDomContext* context,
                             void (*run)(void*),
                             void* state);
-// The same entry for a caller that is itself the body of a Blink task
-// (the benchmark harness's kernel runs): the microtask checkpoint is
-// deferred to the task's own end, as it is for the adapter's task-root
-// callbacks. Embedder entries that run program code from a lifecycle
-// point use nts_blink_dom_entry, which checkpoints as it returns --
-// there is no task epilogue after them to defer to.
-int32_t nts_blink_dom_entry_deferred(NtsDomContext* context,
-                                     void (*run)(void*),
-                                     void* state);
+// The same entry run as the whole body of a Blink task: the microtask
+// checkpoint is the one Blink runs as that task ends, as it is for the
+// adapter's own task bodies. Callers must run nothing after it in the
+// task. Embedder entries that run program code from a lifecycle point
+// use nts_blink_dom_entry, which checkpoints as it returns -- there is
+// no task epilogue after them to defer to.
+int32_t nts_blink_dom_task_body(NtsDomContext* context,
+                                void (*run)(void*),
+                                void* state);
 // Each closure the context holds for the program -- listeners not yet
 // removed, frame, microtask and idle callbacks and timers not yet run,
 // observers' delegates -- each given back when it is done with. One

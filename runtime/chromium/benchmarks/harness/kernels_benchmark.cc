@@ -15,6 +15,9 @@
 #include "base/values.h"
 #include "third_party/blink/public/platform/task_type.h"
 #include "third_party/blink/renderer/core/dom/document.h"
+#include "third_party/blink/renderer/core/execution_context/agent.h"
+#include "third_party/blink/renderer/core/execution_context/execution_context.h"
+#include "third_party/blink/renderer/platform/scheduler/public/event_loop.h"
 #include "third_party/blink/renderer/core/dom/element.h"
 #include "third_party/blink/renderer/core/dom/events/native_event_listener.h"
 #include "third_party/blink/renderer/core/dom/text.h"
@@ -178,6 +181,15 @@ class KernelsRun {
     Post(std::move(run));
   }
 
+  // The checkpoint Blink's task epilogue runs, performed by the harness
+  // because it, not the scheduler, ends each emulated task body.
+  static void EndTask(blink::Document& document) {
+    document.GetExecutionContext()
+        ->GetAgent()
+        ->event_loop()
+        ->PerformMicrotaskCheckpoint();
+  }
+
   void Sample() {
     const Case& c = kCases[next_case_];
     blink::Document& document = *document_;
@@ -205,14 +217,19 @@ class KernelsRun {
     } else if (c.shape == Shape::kLoop) {
       checksum = nts_chromium_kernel_run(probe_, context_, c.kernel,
                                          kIterations, &allocations);
+      EndTask(document);
     } else {
-      // One native callback per iteration: an environment entry and a DOM
-      // entry each, what an event handler costs in this architecture.
+      // One native callback per iteration, each run as the whole body of
+      // a task as an event handler is: an environment entry and a DOM
+      // entry, then the checkpoint Blink runs as the task ends. The
+      // checkpoint is inside the timed region on purpose -- every real
+      // task body pays it in this architecture.
       for (uint32_t i = 0; i < kIterations; ++i) {
         size_t made = 0;
         checksum +=
             nts_chromium_kernel_run(probe_, context_, c.kernel, 1, &made);
         allocations += made;
+        EndTask(document);
       }
     }
     const double elapsed_ns =

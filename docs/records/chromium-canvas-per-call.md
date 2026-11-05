@@ -60,39 +60,57 @@ kernel would change the benchmark, not the architecture.
 
 ## Candidates (each removes its cost at the cause)
 
-1. **Defer a task-root entry's checkpoint to the task's own end.**
-   ProgramScope learns two kinds: an entry Blink continues from inside
-   the same task (listener dispatch, animation-frame and idle
-   callbacks) checkpoints at its own exit, unchanged; a task-root
-   entry (timer, posted callback or job, async completion, promise
-   settle, a microtask job) constructs its scope kDoNotRunMicrotasks
-   and lets Blink's end-of-task checkpoint do the work. A nested entry
-   never adds a checkpoint point of its own, as the scope depth
-   already ensured. Correctness, from the code: V8's
-   PerformCheckpointInternal would bail early on an empty queue if
-   Blink had no microtasks-completed callback registered, but Blink
-   registers exactly one (EventLoop::RunEndOfCheckpointTasks:
-   rejected-promise notification plus IndexedDB's
-   end-of-checkpoint tasks), and ClearKeptObjects runs beside it, so
-   "queue empty" alone never shows the checkpoint is a no-op — and no
-   public API exposes V8's whole-checkpoint predicate. The deferral
-   instead shows the checkpoint still happens at the same observable
-   point: Blink performs one as every task returns
-   (EventLoop::PerformMicrotaskCheckpoint from the task epilogue), and
-   nothing that runs script sits between a task-root entry's return
-   and it. Guarded by the timer vectors' checkpoint scenario
-   (mutation delivery ordered before the next task) on both backends.
-   The embedder's own entry (nts_blink_dom_entry: witness, app and
-   rows creation from lifecycle points) is not a task root and keeps
-   its at-exit checkpoint — measured: with it deferred, a mutation
-   queued by the witness program was never delivered (compare c/dom
-   loses data-observed), because no scheduler epilogue follows a
-   lifecycle entry and Blink discards still-pending
-   end-of-checkpoint work when a later checkpoint completes without
-   draining it (RunEndOfMicrotaskCheckpointTasks). The benchmark
-   harness's kernel runs, which are task bodies, take a deferred
-   variant of the same entry, so the rows measure what production
-   task-root callbacks pay.
+1. **Defer a task body's checkpoint to the checkpoint that follows
+   it.** The rule is literal: deferring is equivalent only when
+   nothing else in the task runs script or queues a microtask after
+   the entry returns, before that checkpoint — a C++ promise
+   resolution in between would otherwise run its reaction between
+   this entry's microtasks and the ones they queue (m1, m2, r1 at
+   exit; m1, r1, m2 deferred). By construction only RunTaskBody may
+   create a deferred scope, running its body as the whole entry with
+   nothing after it; each deferred kind then holds by what its caller
+   does next. A timer fire is a whole task whose epilogue checkpoints
+   (EventLoop::PerformMicrotaskCheckpoint). A microtask job, a native
+   job and a promise settle run inside a checkpoint already — a
+   settle from a V8 promise reaction — where no scope checkpoints at
+   its own exit either. A string or blob callback is invoked by Blink
+   under its own V8RunMicrotasksScope (V8ScriptRunner::CallFunction),
+   which checkpoints as the callback returns, before the task's C++
+   continues. An embedder task body (nts_blink_dom_task_body) is
+   whole-task by contract. Every other entry — listener dispatch,
+   observer delivery, animation-frame and idle callbacks, the
+   lifecycle entry — checkpoints at its own exit, because Blink
+   continues from it inside the same task. A nested entry never adds
+   a checkpoint point of its own, as the scope depth already ensured.
+   Correctness, from the code: V8's PerformCheckpointInternal would
+   bail early on an empty queue if Blink had no
+   microtasks-completed callback registered, but Blink registers
+   exactly one on its per-agent queue
+   (EventLoop::RunEndOfCheckpointTasks: rejected-promise
+   notification plus IndexedDB's end-of-checkpoint tasks), and
+   ClearKeptObjects runs beside it, so "queue empty" alone never
+   shows the checkpoint is a no-op — and no public API exposes V8's
+   whole-checkpoint predicate. Guarded by the timer vectors'
+   checkpoint scenario (mutation delivery ordered before the next
+   task) on both backends, and in DCHECK builds by a structural
+   record: a deferred entry marks its checkpoint pending until the
+   microtasks-completed callback clears it, and any non-nested entry
+   starting first fails a DCHECK naming both entries. The record
+   caught one real misclassification on its first exercise: observer
+   deliveries (RunCallback) deferred twice in one task, where Blink
+   runs the next observer's callback next; they checkpoint at exit
+   now. The embedder's lifecycle entry (nts_blink_dom_entry: witness,
+   app and rows creation) is not a task body and keeps its at-exit
+   checkpoint — measured: with it deferred, a mutation queued by the
+   witness program was never delivered (compare c/dom loses
+   data-observed), because no scheduler epilogue follows a lifecycle
+   entry and Blink discards still-pending end-of-checkpoint work
+   when a later checkpoint completes without draining it
+   (RunEndOfMicrotaskCheckpointTasks). The kernels harness runs each
+   per-call iteration as a whole task body through the same
+   production path and performs the task-end checkpoint itself,
+   inside the timed region, so both arms of a measurement pay what
+   every real task body pays.
    The other two side channels have no scenario to write today, each
    for a stated reason: IndexedDB is not bound (Window's indexedDB
    skipped in bindgen/report-libdom.json; Blink's one
