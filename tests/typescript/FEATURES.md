@@ -1639,6 +1639,7 @@ forms are listed with their diagnostics in the pull request.
 | `settled` | 21 | 21 | allSettled status and reason records, order, empty and thenable cases |
 | `any` | 22 | 22 | first fulfillment, aggregate rejection reasons, fresh errors arrays and thenables |
 | `race` | 23 | 23 | first fulfillment/rejection, already-settled order, thenables, pending and iterable consumption |
+| `turns` | 28 | 28 | thenable adoption, first settlement, throwing and microtask turn positions |
 
 ### Async route contracts
 
@@ -2640,7 +2641,7 @@ access is distinct from an ECMAScript private-name brand check.
 | `ts-as-const` | a const assertion (`as const`), which is not a freeze | conformance/expressions/typeAssertions/constAssertions | 8 | 0 |
 | `ts-assertion-functions` | an assertion function (`asserts value is T`, `asserts condition`) | conformance/controlFlow/assertionTypePredicates; ts-eslint TSTypePredicate.asserts | 102 | 0 |
 | `ts-async-generators` | an async generator, `for await`, and `Symbol.asyncIterator` | conformance/es2018 (asyncGenerators, forAwait); conformance/types/forAwait | 31 | 0 |
-| `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 474 | 1 |
+| `ts-async` | async functions, methods and arrows, and the promises they return | conformance/async; conformance/es2017 | 530 | 1 |
 | `ts-bigint` | `bigint` values, literals and literal types in typed code | conformance/es2020 (bigint); ts-eslint TSBigIntKeyword | 752 | 0 |
 | `ts-async-route-methods` | async methods and dispatch with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 14 | 0 |
 | `ts-async-route-ordering` | ordering and captures with exact values, identities, cleanup and microtask order | Async route contracts; typed paths | 10 | 0 |
@@ -3054,10 +3055,11 @@ access is distinct from an ECMAScript private-name brand check.
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
 | `ts-promise-combinator-route-all` | all input-order values, early rejections, eager iterables and sparse/thenable consumption | Promise combinator route contracts; ECMAScript, Promise.all | 48 | 0 |
-| `ts-promise-combinator-routes` | Promise combinators held to node beside explicit combinator-free controls | Promise combinator route contracts; typed paths | 180 | 0 |
+| `ts-promise-combinator-routes` | Promise combinators held to node beside explicit combinator-free controls | Promise combinator route contracts; typed paths | 236 | 0 |
 | `ts-promise-combinator-route-settled` | allSettled status, property presence and reason identity through typed routes | Promise combinator route contracts; ECMAScript, Promise.allSettled | 42 | 0 |
 | `ts-promise-combinator-route-any` | any first fulfillment and AggregateError input-order reasons | Promise combinator route contracts; ECMAScript, Promise.any | 44 | 0 |
 | `ts-promise-combinator-route-race` | race first settlement, input-order ties, pending and thenable behavior | Promise combinator route contracts; ECMAScript, Promise.race | 46 | 0 |
+| `ts-promise-combinator-route-turns` | thenable adoption and exact microtask turns of all four combinators | Promise combinator route contracts; ECMAScript, Promise jobs | 56 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
