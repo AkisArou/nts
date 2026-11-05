@@ -5,6 +5,7 @@
 #include <limits>
 #include <string>
 #include <optional>
+#include <source_location>
 
 #include "base/check.h"
 #include "base/memory/raw_ptr_exclusion.h"
@@ -893,6 +894,34 @@ private:
   v8::Local<v8::Context> context_;
 };
 
+#if DCHECK_IS_ON()
+// A checkpoint ran on this thread: a deferred one it was waiting for is
+// no longer pending. Registered once per isolate, the first time an
+// entry on it defers.
+void CheckpointRan(v8::Isolate *, void *) {
+  if (checkpoint_pending) {
+    checkpoint_pending->checkpoint_deferred = false;
+    checkpoint_pending = nullptr;
+    checkpoint_pending_from = nullptr;
+  }
+}
+void NoteCheckpointDeferred(NtsDomContext *context, const char *from) {
+  // On the event loop's own queue, as Blink registers its end-of-
+  // checkpoint tasks: the isolate-level registration lands on V8's
+  // default queue, which Blink never checkpoints.
+  static constinit thread_local v8::MicrotaskQueue *registered = nullptr;
+  v8::MicrotaskQueue *queue = context->event_loop->microtask_queue();
+  if (registered != queue) {
+    queue->AddMicrotasksCompletedCallback(&CheckpointRan);
+    registered = queue;
+  }
+  DCHECK(!checkpoint_pending);
+  context->checkpoint_deferred = true;
+  checkpoint_pending = context;
+  checkpoint_pending_from = from;
+}
+#endif
+
 // Everything a native callback that runs the program holds: the context as
 // the thread's entered one; the main world's V8 context, entered, with a
 // handle scope -- Blink code a DOM call reaches may ask for the current world
@@ -924,16 +953,50 @@ class ProgramScope {
 public:
   enum class Checkpoint { kAtExit, kDeferredToTaskEnd };
 
-  ProgramScope(NtsDomContext *context, Checkpoint checkpoint)
-      : nested_(entered == context), entry_(context, nested_),
+  ProgramScope(NtsDomContext *context, Checkpoint checkpoint,
+               std::source_location site = std::source_location::current())
+      :
+#if DCHECK_IS_ON()
+        context_(context), checkpoint_(checkpoint),
+        site_(site.function_name()),
+#endif
+        nested_(entered == context), entry_(context, nested_),
         script_(context->MainWorld(), !nested_),
         microtasks_(
             context->v8_isolate.get(), context->event_loop->microtask_queue(),
             !nested_ && checkpoint == Checkpoint::kAtExit
                 ? v8::MicrotasksScope::kRunMicrotasks
-                : v8::MicrotasksScope::kDoNotRunMicrotasks) {}
+                : v8::MicrotasksScope::kDoNotRunMicrotasks) {
+#if DCHECK_IS_ON()
+    // Not inside a running checkpoint: an entry there (a promise
+    // reaction settling a program promise, a microtask job) runs as
+    // part of the pending checkpoint itself, which clears the record
+    // as it completes.
+    if (!nested_ &&
+        !context->event_loop->microtask_queue()->IsRunningMicrotasks())
+      DCHECK(!checkpoint_pending)
+          << "an entry deferred its checkpoint to the task's end, and "
+             "more script is running in the same task: deferred by "
+          << checkpoint_pending_from << ", next entry " << site_;
+#endif
+  }
+  ~ProgramScope() {
+#if DCHECK_IS_ON()
+    // Outside a running checkpoint only: a microtask job's own entry
+    // returns inside one, and the jobs after it in that checkpoint
+    // legitimately run before the checkpoint completes.
+    if (!nested_ && checkpoint_ == Checkpoint::kDeferredToTaskEnd &&
+        !context_->event_loop->microtask_queue()->IsRunningMicrotasks())
+      NoteCheckpointDeferred(context_, site_);
+#endif
+  }
 
 private:
+#if DCHECK_IS_ON()
+  NtsDomContext *context_; // STACK_ALLOCATED: no BackupRefPtr per entry
+  Checkpoint checkpoint_;
+  const char *site_;
+#endif
   bool nested_;
   Entry entry_;
   ScriptScope script_;
@@ -1915,6 +1978,12 @@ NtsPromise *Answer(NtsDomContext &context, blink::ScriptState *script_state,
 
 extern "C" {
 void nts_blink_dom_destroy(NtsDomContext *context) {
+#if DCHECK_IS_ON()
+  // The release below ends the context the pending-checkpoint record
+  // may name.
+  if (nts_dom::checkpoint_pending == context)
+    nts_dom::checkpoint_pending = nullptr;
+#endif
   context->Close();
   context->Release();
 }

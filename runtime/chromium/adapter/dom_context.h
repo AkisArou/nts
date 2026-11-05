@@ -78,6 +78,19 @@ namespace nts_dom {
 // click() -- is its own and gives the outer one back.
 inline constinit thread_local NtsDomContext *entered = nullptr;
 
+#if DCHECK_IS_ON()
+// The context whose task-root entry deferred its microtask checkpoint
+// to the task's end, whose checkpoint has not run yet (ProgramScope,
+// dom_bridge.cc): set as such an entry returns, cleared by the
+// microtasks-completed callback. A debug build fails if another
+// non-nested entry starts first -- which is what an entry misclassified
+// as task-root would do, silently reordering microtasks in a release
+// build.
+inline constinit thread_local NtsDomContext *checkpoint_pending = nullptr;
+// The function whose entry deferred, named in that build's failure.
+inline constinit thread_local const char *checkpoint_pending_from = nullptr;
+#endif
+
 class ListenerSet;
 class NativeJob;
 class NtsTimer;
@@ -512,6 +525,11 @@ struct NtsDomContext : public base::RefCounted<NtsDomContext> {
   blink::HashMap<const void *, blink::String> literals;
   blink::HashMap<const void *, blink::AtomicString> names;
   bool closed = false;
+#if DCHECK_IS_ON()
+  // This context's deferred checkpoint has not run yet; see
+  // checkpoint_pending above, which names this context while it holds.
+  bool checkpoint_deferred = false;
+#endif
   const raw_ptr<v8::Isolate> v8_isolate;
   uint32_t job_sequence = 0;
   // The program's timers are their own id space, apart from page script's,
