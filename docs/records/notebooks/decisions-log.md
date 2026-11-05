@@ -1307,3 +1307,17 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   consume structured method identities and compiler-owned raising relations,
   so a rename cannot silently disable their checks. The contract is in
   [JVM and Android](../../targets/jvm.md#decisions).
+
+## Chromium performance bar (11-05)
+
+- **The decision.** The user set the Chromium lane's bar: compiled TypeScript
+  calling Blink is as fast as Blink's own C++ calling it directly. The
+  `blink-intrinsic` lane of `tooling/chromium/benchmark.ts` is the target on
+  every kernel and every shape, entries included. V8's page script stays as a
+  reference column.
+- **Why.** The lane exists to remove the JavaScript layer between a program
+  and Blink, so the cost left to remove is everything the compiled side pays
+  beyond Blink's own calls. Beating V8 is not enough: on 11-05 the compiled
+  canvas call already beat V8 at one entry per call (0.94 times), while its
+  entry still cost about 61 ns more than Blink's own C++. The contract is in
+  [Chromium](../../targets/chromium.md#decisions).

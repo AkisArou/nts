@@ -151,3 +151,9 @@ part of the gate.
 - Cycles across the three heaps are collected in memory stage 7, by the joint
   collection designed above (I-6; 10-28,
   [log](../records/notebooks/decisions-log.md#memory-concurrency-and-interop-10-28)).
+- Compiled code is held to Blink's own C++: a compiled program calling the DOM
+  is as fast as the same calls made from C++ directly, which is the
+  `blink-intrinsic` lane of `tooling/chromium/benchmark.ts`. That holds for
+  every kernel and every shape, entries included. V8's page script is measured
+  beside it as a reference, not as the bar (11-05,
+  [log](../records/notebooks/decisions-log.md#chromium-performance-bar-11-05)).
