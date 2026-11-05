@@ -3191,7 +3191,8 @@ reflection or assertions about an engine's error messages.
 | area | cases | controls | observations and routes |
 | --- | ---: | ---: | --- |
 | `integers` | 24 | 24 | signed and unsigned 8-, 16- and 32-bit bytes, default and explicit byte order, modular wrapping, truncation, nonfinite zeroing and fractional offsets |
-| **Total** | **24** | **24** | exact inputs and assertions retained in every pair |
+| `floats` | 24 | 24 | binary32 rounding and limits, binary64 exactness, signed zero and infinities, independently seeded getter bytes and NaN value-only observations |
+| **Total** | **48** | **48** | exact inputs and assertions retained in every pair |
 
 ## Tags
 
@@ -3290,8 +3291,9 @@ reflection or assertions about an engine's error messages.
 | `ts-control-flow-route-short-circuit` | typed short-circuit and evaluation routes preserve skipped effects, references, operands, arguments and computed keys | Control-flow route contracts; typed paths | 26 | 0 |
 | `ts-control-flow-route-switch` | typed switches preserve selection, case-search order, fallthrough, exhaustive defaults and exits | Control-flow route contracts; typed paths | 14 | 0 |
 | `ts-control-flow-routes` | typed control structures preserve exact values, kinds, identities and complete execution histories beside explicit controls | Control-flow route contracts; typed paths | 102 | 0 |
-| `ts-dataview-routes` | exact DataView and ArrayBuffer operations through typed routes beside plain-byte controls | DataView route contracts; typed paths | 48 | 0 |
+| `ts-dataview-routes` | exact DataView and ArrayBuffer operations through typed routes beside plain-byte controls | DataView route contracts; typed paths | 96 | 0 |
 | `ts-dataview-route-integers` | signed and unsigned 8-, 16- and 32-bit bytes, default and explicit byte order, modular wrapping, truncation, nonfinite zeroing and fractional offsets | DataView route contracts; typed paths | 48 | 0 |
+| `ts-dataview-route-floats` | binary32 rounding and limits, binary64 exactness, signed zero and infinities, independently seeded getter bytes and NaN value-only observations | DataView route contracts; typed paths | 48 | 0 |
 | `ts-date-route-construction` | typed numeric inputs, Date.UTC components, clipping, astronomical years and optional-argument presence through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 14 | 0 |
 | `ts-date-route-setters` | all seven UTC setters, optional components, invalid-state recovery, returned times and retained getter views through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 22 | 0 |
 | `ts-date-route-shared` | identity, alias writes, independent copies, generic returns, closures and retained carrier populations through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 16 | 0 |
