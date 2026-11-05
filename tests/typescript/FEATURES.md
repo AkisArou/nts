@@ -3768,8 +3768,8 @@ aliases use only one-byte element kinds.
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
 | `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
-| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 104 | 0 |
-| `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 48 | 0 |
+| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 108 | 0 |
+| `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 52 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
