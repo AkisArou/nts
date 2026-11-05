@@ -941,8 +941,9 @@ void NoteCheckpointDeferred(NtsDomContext *context, const char *from) {
 // notification and IndexedDB end-of-checkpoint tasks, happens at the
 // same observable point either way. An entry Blink continues from
 // inside the same task -- a listener dispatch (the next listener runs
-// next), an animation-frame or idle callback (the next callback of the
-// frame runs next) -- checkpoints at its own exit, as V8's bindings do
+// next), an observer delivery (the next observer's callback runs
+// next), an animation-frame or idle callback (the next callback of
+// the frame runs next) -- checkpoints at its own exit, as V8's bindings do
 // after a callback, because the next callback must observe this one's
 // microtasks already run. A nested entry never adds a checkpoint point
 // of its own, whichever kind it is: the outermost entry's kind decides,
@@ -1573,7 +1574,11 @@ void NtsDomContext::ClearTimer(double id) {
 void NtsDomContext::RunCallback(void (*call)(void *), void *state) {
   if (closed || !invoke)
     return;
-  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kDeferredToTaskEnd);
+  // An observer's delivery: Blink's delivery step runs the next
+  // observer's callback next, in the same task, and page script's
+  // bindings checkpoint after each -- so this checkpoints at its own
+  // exit, as a frame callback does.
+  nts_dom::ProgramScope scope(this, nts_dom::ProgramScope::Checkpoint::kAtExit);
   invoke(invoke_host.get(), call, state);
 }
 
