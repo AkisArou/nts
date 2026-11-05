@@ -319,6 +319,12 @@ one; add a row here in the same commit as the first case that uses it.
     [Error object route contracts](#error-object-route-contracts) name the
     sources; `ts-error-object-route-*` identifies each area and its controls.
 
+62. **Typed-array methods across declared routes:** element conversion on
+    every writing path, equality and predicate searches, shared and copied
+    results, construction and live callbacks.
+    [Typed-array route contracts](#typed-array-route-contracts) name the sources;
+    `ts-typed-array-route-*` identifies each area and its plain-array controls.
+
 A concept with no run-time effect (a type alias, an interface's existence, a
 variance annotation) has no case of its own: it appears only where a value
 flows through it.
@@ -476,6 +482,8 @@ flows through it.
 | `type-operators/` | values through keyof, typeof, indexed access, mapped and conditional types |
 | `typed-array-contents/` | typed-array writes and reads, exact conversions, shared bytes, resize histories and subclass contents, with node as the oracle |
 | `typed-array-contents-controls/` | counterparts holding the view locally at its exact type with the same writes and assertions, with node as the oracle |
+| `typed-array-routes/` | exact element conversions, searches, sharing, copies, construction and callback histories through declared types, held to node |
+| `typed-array-routes-controls/` | the same inputs, routes, loops and assertions with named local operations over plain element arrays and explicit shared windows |
 | `typed-paths/` | where a static type and the run-time value part ways, and where a number's representation shows |
 | `unicode/` | exhaustive code-point blocks, contextual sequences and Unicode conformance inputs, with the pinned node as the oracle |
 | `union-routes/` | exact union payloads, identities and branch histories across storage, narrowing, object layouts and widening, held to node |
@@ -1729,6 +1737,22 @@ NaN is checked only as a value, never by its output bytes. Strict checking
 treats unflagged files as scripts and module-flagged files as modules, with
 the harness as a script and library diagnostics included. Node uses the
 unchanged suite oracle; maintainers measure and record backend outcomes.
+
+The `typed-array-routes/` matrix uses `<area>-<behavior>-<route>.ts`.
+Each case has `ts-typed-array-routes`, one `ts-typed-array-route-*` area tag
+and existing syntax tags. Arrays, inputs, offsets, callbacks and operations
+cross declared fields, constrained generics, interfaces, narrowed unions,
+Maps, readonly tuples and captured bindings. Index loops observe elements;
+SameValue assertions preserve zero signs, NaN and exact bigint values.
+Controls append `-control`, replace native storage with number or bigint
+arrays, and replace native operations with named local functions. Shared
+windows carry explicit storage, offset and length; float32 controls use
+tables of the case's inputs and node's values. Inputs, routes, loops and
+assertion expectations otherwise stay unchanged. Controls use no typed
+array, ArrayBuffer or Math.fround. Strict checking includes the libraries,
+checks unflagged cases as scripts and module-flagged cases as modules, and
+keeps the harness a script. Node uses the unchanged suite oracle; maintainers
+compile and record backend outcomes.
 
 ## Coverage, source by source
 
@@ -3197,6 +3221,29 @@ reflection or assertions about an engine's error messages.
 | `buffers` | 24 | 24 | tracking, fixed and offset views through resize and revival, maximum failures, detachment, transfer length and resizability, zero filling and independent slices |
 | **Total** | **120** | **120** | exact inputs and assertions retained in every pair |
 
+### Typed-array route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [TypedArray objects](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-typedarray-objects), [TypedArray constructors](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-typedarray-constructors), [from](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-%typedarray%.from) and [of](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-%typedarray%.of) | element kinds, allocation, conversion, source forms, mapper arguments and byte-window validation |
+| ECMAScript [TypedArray prototype methods](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-properties-of-the-%typedarray%-prototype-object) and [integer-indexed exotic objects](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html#sec-integer-indexed-exotic-objects) | writing-path conversion, searches, independent or shared results, overlapping copies, live iteration and callback arguments |
+| ECMAScript [NumericToRawBytes](https://tc39.es/ecma262/multipage/structured-data.html#sec-numerictorawbytes) and [ToUint8Clamp](https://tc39.es/ecma262/multipage/abstract-operations.html#sec-touint8clamp) | modular integer and bigint widths, ties-to-even clamping, binary32 rounding and signed-zero preservation |
+| TypeScript [generics](https://www.typescriptlang.org/docs/handbook/2/generics.html), [object types](https://www.typescriptlang.org/docs/handbook/2/objects.html) and [narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) | typed carriers, constraints, interfaces, readonly layouts and discriminated alternatives |
+
+The existing typed-array-contents family retains its index-write conversions,
+one-method examples, subclasses, views and changing buffers. Sort-routes,
+length-routes, proofs and species-routes retain sorting, changing lengths,
+invalidated facts and species construction. These cases isolate writing-path
+conversions and method contracts with native-free controls. They do not
+observe multi-byte element bytes or use sorting, float16, species, reflection,
+resizable or transferred buffers, or engine error-message text. Shared byte
+aliases use only one-byte element kinds.
+
+| area | cases | controls | observations and routes |
+| --- | ---: | ---: | --- |
+| `conversion` | 24 | 24 | all eleven element kinds on of, from, fill, set, with, map and constructor paths; exact wrapping, clamping, rounding, signed zeros, bigints and invalid indices |
+| **Total** | **24** | **24** | exact inputs and assertion expectations retained in every pair |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3648,6 +3695,8 @@ reflection or assertions about an engine's error messages.
 | `ts-typed-array-contents` | typed-array elements and bytes preserve their exact contents and view metadata across typed routes | Typed-array contents contracts; typed paths | 206 | 0 |
 | `ts-typed-array-conversion` | writes through union and generic view parameters obey each element type's wrapping, clamping or rounding | Typed-array contents contracts; NumericToRawBytes; ToUint8Clamp | 44 | 0 |
 | `ts-typed-array-methods` | typed receivers, sources and factories preserve exact mutation, conversion, copying, searching and iteration results | ECMAScript, TypedArray objects and CompareTypedArrayElements | 48 | 0 |
+| `ts-typed-array-routes` | exact typed-array method contracts through declared routes beside plain-array controls | Typed-array route contracts; typed paths | 48 | 0 |
+| `ts-typed-array-route-conversion` | all eleven element kinds on of, from, fill, set, with, map and constructor paths; exact wrapping, clamping, rounding, signed zeros, bigints and invalid indices | Typed-array route contracts; typed paths | 48 | 0 |
 | `ts-typed-array-subclasses` | subclass contents cross base-typed parameters while preserving conversion, view geometry, identity and own state | Objects, Typed arrays; ECMAScript, TypedArray constructors and TypedArraySetElement | 96 | 0 |
 | `ts-typed-array-views` | typed view aliases observe shared bytes, offsets, subarray aliasing, slice copies and explicit DataView byte orders | Objects, Typed arrays; ECMAScript, TypedArray and DataView objects | 18 | 0 |
 | `ts-typeof-type` | `typeof x` in a type position | conformance/types/typeQueries; ts-eslint TSTypeQuery | 125 | 0 |
