@@ -22,6 +22,7 @@ export interface RefusalDiagnostic { code: string; where: "body" | "harness" | "
 export interface RuntimeFailure { exit: number | null; signal: string | null; output: string; }
 export type TypeScriptObservation =
   | { kind: "pass" }
+  | { kind: "build-failure"; stage: "emit" | "link" | "compiler-crash"; diagnostic: string }
   | { kind: "wrong"; errorClass: string; failure: RuntimeFailure }
   | { kind: "wrong-output"; printed: PrintedOutput; nodeOutput: PrintedOutput; failure: RuntimeFailure }
   | { kind: "refused"; diagnostics: RefusalDiagnostic[] }
@@ -88,12 +89,29 @@ function refusalDiagnostic(value: unknown): RefusalDiagnostic {
     where: oneOf(row.where, ["body", "harness", "other", "none"], "unknown refusal location") };
 }
 
+/** Build diagnostics describe a generated artifact, not program output.
+ * Their first line keeps the defect text while locations and generated
+ * numbers move independently between otherwise identical attempts. */
+export function stableBuildDiagnostic(value: string): string {
+  const first = value.split("\n").map(line => line.trim()).find(Boolean);
+  assert.ok(first, "a build failure needs its first diagnostic");
+  return first
+    .replace(/(["'])(?:\/|[A-Za-z]:[\\/])[^"'\r\n]*\1/g, "$1<path>$1")
+    .replace(/(?:\/|[A-Za-z]:[\\/])[^\s"'<>]+/g, "<path>")
+    .replace(/\b(?:[\w.+-]+[\\/])*[\w.+-]+\.(?:c|cc|cpp|h|hpp|rs|ts|tsx|js|mjs|ll|bc|o|a|so|class)(?::\d+(?::\d+)?)?\b/g, "<path>")
+    .replace(/\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?)\b/g, "N");
+}
+
 export function parseObservation(input: unknown): TypeScriptObservation {
   const row = object(input, "invalid TypeScript observation");
   switch (row.kind) {
     case "pass":
       keys(row, ["kind"], "pass observation");
       return { kind: "pass" };
+    case "build-failure":
+      keys(row, ["kind", "stage", "diagnostic"], "build failure observation");
+      return { kind: "build-failure", stage: oneOf(row.stage, ["emit", "link", "compiler-crash"], "unknown build failure stage"),
+        diagnostic: stableBuildDiagnostic(text(row.diagnostic, "missing build diagnostic")) };
     case "wrong":
       keys(row, ["kind", "errorClass", "failure"], "wrong observation");
       return { kind: "wrong", errorClass: text(row.errorClass, "missing thrown class"), failure: runtimeFailure(row.failure) };
@@ -135,8 +153,13 @@ export function observationFromRow(input: unknown): TypeScriptObservation {
     case "threw": return parseObservation({ kind: "wrong", errorClass: row.thrown, failure: row.runtimeFailure });
     case "wrong-output": return parseObservation({ kind: "wrong-output", printed: row.printed, nodeOutput: row.nodeOutput, failure: row.runtimeFailure });
     case "invalid-hir": return parseObservation({ kind: "invalid-hir", validator: row.validatorError });
-    case "crash": return parseObservation({ kind: "runtime-abort", failure: row.runtimeFailure });
+    case "crash":
+      return row.why === "emit"
+        ? parseObservation({ kind: "build-failure", stage: "compiler-crash", diagnostic: row.buildDiagnostic })
+        : parseObservation({ kind: "runtime-abort", failure: row.runtimeFailure });
     case "unsupported": {
+      if (row.why === "emit" || row.why === "link")
+        return parseObservation({ kind: "build-failure", stage: row.why, diagnostic: row.buildDiagnostic });
       assert.ok(row.why === "lowering" || row.why === "typescript" || row.why === "backend", `unmeasured case: ${String(row.why)}`);
       assert.ok(Array.isArray(row.diagnostics), "refusal has no diagnostics");
       // Codes and locations identify a refusal; its prose remains in raw rows

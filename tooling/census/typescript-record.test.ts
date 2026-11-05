@@ -101,7 +101,7 @@ test("observations use the unredacted producer facts, never the display summary"
   assert.equal(compareTypeScriptObservation(before, after).word, "CHANGED");
   assert.deepEqual(observationFromRow({ bucket: "invalid-hir", first: "redacted", validatorError: observations[3].kind === "invalid-hir" ? observations[3].validator : "" }), observations[3]);
   for (const row of [{ bucket: "timeout" }, { bucket: "memory-cap" }, { bucket: "infrastructure-error" },
-    { bucket: "unsupported", why: "link", first: "bad generated C" }, { bucket: "unsupported", why: "harness" },
+    { bucket: "unsupported", why: "link", first: "" }, { bucket: "unsupported", why: "harness" },
     { bucket: "crash", why: "emit", first: "SIGABRT" }, { bucket: "invalid-hir", first: "display only" },
     { bucket: "threw", thrown: "Error", message: "display only" }]) assert.throws(() => observationFromRow(row));
 });

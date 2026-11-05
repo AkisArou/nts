@@ -260,7 +260,6 @@ export function pin(rev, opts = {}) {
 
 /** The build itself, run only under the lock. */
 function build(sha, diff, applied, dir) {
-  const binary = join(dir, "nts");
   if (existsSync(join(TREE, ".git"))) git(["checkout", "--detach", "-q", "--force", sha], TREE);
   else git(["worktree", "add", "--detach", "-q", TREE, sha]);
   // A previous pin's patch or build output must not survive into this one.
@@ -296,18 +295,28 @@ function build(sha, diff, applied, dir) {
     built_at: new Date().toISOString(),
     binary_sha256: sha256(readFileSync(join(TARGET, "release/nts"))),
   };
-  // Written beside the binary in a fresh directory, then moved into place, so
-  // a half-written pin is never mistaken for a whole one.
+  return publishPin(join(TARGET, "release/nts"), dir, record, diff?.text);
+}
+
+/** The builder owns the source/provenance claim; this one publisher binds its
+ * exact compiler bytes and makes the complete directory visible atomically.
+ * Protocol tests use the same publisher in an isolated fixture directory. */
+export function publishPin(source: string, dir: string, provenance, diff?: string): string {
+  const record = { ...provenance, binary_sha256: sha256(readFileSync(source)) };
   const staging = `${dir}.partial-${process.pid}`;
   rmSync(staging, { recursive: true, force: true });
   mkdirSync(staging, { recursive: true });
-  copyFileSync(join(TARGET, "release/nts"), join(staging, "nts"));
-  chmodSync(join(staging, "nts"), 0o755);
-  if (diff) writeFileSync(join(staging, "applied.diff"), diff.text);
-  writeFileSync(join(staging, "provenance.json"), `${JSON.stringify(record, null, 2)}\n`);
-  rmSync(dir, { recursive: true, force: true });
-  renameSync(staging, dir);
-  return binary;
+  try {
+    copyFileSync(source, join(staging, "nts"));
+    chmodSync(join(staging, "nts"), 0o755);
+    if (sha256(readFileSync(join(staging, "nts"))) !== record.binary_sha256 || sha256(readFileSync(source)) !== record.binary_sha256)
+      throw new Error("compiler bytes changed while publishing the pin");
+    if (diff) writeFileSync(join(staging, "applied.diff"), diff);
+    writeFileSync(join(staging, "provenance.json"), `${JSON.stringify(record, null, 2)}\n`);
+    rmSync(dir, { recursive: true, force: true });
+    renameSync(staging, dir);
+    return join(dir, "nts");
+  } finally { rmSync(staging, { recursive: true, force: true }); }
 }
 
 // **Seen to decide before it is trusted.**

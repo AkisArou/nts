@@ -345,7 +345,8 @@ function linkC(stdout, out, tools) {
     // message was kept. `infrastructure-error` is the bucket the runner already
     // has for "this run could not measure anything", and it belongs here rather
     // than in `unsupported`, where it reads as a refusal the compiler made.
-    if (/internal compiler error|Segmentation fault|Killed|out of memory/i.test(said)) {
+    if (error.signal || (error.status >= 128 && error.status <= 255) ||
+        /internal compiler error|Segmentation fault|Killed|out of memory/i.test(said)) {
       return { bucket: "infrastructure-error", why: "the toolchain did not survive the link" };
     }
     // The first line the toolchain said, so the next one is diagnosable from the
@@ -358,6 +359,7 @@ function linkC(stdout, out, tools) {
     return {
       bucket: "unsupported",
       why: "link",
+      buildDiagnostic: line ?? said.split("\n").map(line => line.trim()).find(Boolean) ?? `linker exited ${error.status ?? error.code ?? "without a status"}`,
       first: line?.replace(/\/\S*\//g, "").trim().slice(0, 160),
     };
   }
@@ -469,7 +471,8 @@ export function attempt(dir, body, tools, origin?) {
     // Only the resident controller above can attribute an OOM to its limit.
     // A native panic/abort belongs to the compiler, never an unsupported case.
     if (emit.signal || emit.status === 101 || (emit.status >= 128 && emit.status <= 255)) {
-      return { bucket: "crash", why: "emit", first: emit.signal ?? `exit ${emit.status}` };
+      return { bucket: "crash", why: "emit", first: emit.signal ?? `exit ${emit.status}`,
+        buildDiagnostic: diagnostics.split("\n").map(line => line.trim()).find(Boolean) ?? `compiler terminated: ${emit.signal ?? `exit ${emit.status}`}` };
     }
     const type_error = FIRST_TYPE_ERROR.exec(diagnostics);
     if (type_error) {
@@ -512,6 +515,7 @@ export function attempt(dir, body, tools, origin?) {
     return {
       bucket: "unsupported",
       why: "emit",
+      buildDiagnostic: said ?? `emitter exited ${emit.status}`,
       first: said?.replace(/"[^"]*"/g, '"X"').replace(/\b(\w*Id)\(\d+\)/g, "$1(N)").replace(/\d+/g, "N").slice(0, 200),
     };
   }
