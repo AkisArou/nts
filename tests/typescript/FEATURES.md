@@ -1996,6 +1996,19 @@ Dispatch-route cases retain node's answer even where nts refuses a form.
 Maintainers record backend results separately. Strict-rejected matrix
 forms are listed with their diagnostics in the pull request.
 
+
+### Nullish route contracts
+
+| source | concepts |
+| --- | --- |
+| [ECMAScript Optional Chaining](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-optional-chaining) | nullish-only short circuit, receiver identity, skipped work |
+| [ECMAScript Assignment Operators](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-assignment-operators) | short-circuit logical writes, target references and returned values |
+| TypeScript typed paths | generic, interface, class, array, tuple, Map and Record carriers |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `coalesce` | 24 | 24 | falsy versus nullish values, fallback laziness, chained coalescing and typed reads |
+
 ### Promise combinator route contracts
 
 | source | concepts |
@@ -3562,7 +3575,7 @@ aliases use only one-byte element kinds.
 | `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 19 | 0 |
 | `ts-new-target` | `new.target` | conformance/es6/newTarget | 241 | 0 |
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 9 | 0 |
-| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 2542 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 2590 | 0 |
 | `ts-number-format-route-fixed-notation` | binary-value rounding and ties, exact fixed digits, signed zero, exponent fallback and digit-count validation through typed numbers with exact values and observations | Number-format route contracts; typed paths | 18 | 0 |
 | `ts-number-format-route-partial-parsing` | longest valid prefixes, optional and wrapped radices, signed zero and explicit number-to-text pipelines through typed parser inputs with exact values and observations | Number-format route contracts; typed paths | 20 | 0 |
 | `ts-number-format-route-precision-exponent` | significant digits, exponent carries, padding, omitted arguments and range precedence through generic and interface routes with exact values and observations | Number-format route contracts; typed paths | 20 | 0 |
@@ -3799,6 +3812,8 @@ aliases use only one-byte element kinds.
 | `ts-hole-route-reading` | array iteration and text serialization including holes | Hole route contracts; ECMAScript, Array objects | 44 | 0 |
 | `ts-hole-route-copying` | sparse slot retention, densification and flattening across array copies | Hole route contracts; ECMAScript, Array.prototype | 46 | 0 |
 | `ts-hole-route-changing` | array mutation preserves and moves absent indexes distinct from undefined | Hole route contracts; ECMAScript, Array.prototype | 54 | 0 |
+| `ts-nullish-routes` | Nullish operators and truthiness across typed carriers beside equivalent explicit controls | Nullish route contracts; typed paths | 48 | 0 |
+| `ts-nullish-route-coalesce` | coalescing and logical OR preserve or replace signed zero, NaN, zero bigint and other typed values, with lazy fallbacks | Nullish route contracts; ECMAScript, CoalesceExpression | 48 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
