@@ -18,6 +18,7 @@ export const HOST_CAPABILITIES = [
 
 export const FIXED_AMBIENT: Readonly<Record<string, string>> = {
   LANG: "C.UTF-8", LC_ALL: "C.UTF-8", TZ: "UTC", FORCE_COLOR: "0", TERM: "dumb",
+  GIT_OPTIONAL_LOCKS: "0",
 };
 export const UNSET_AMBIENT = [
   "RAYON_NUM_THREADS",
