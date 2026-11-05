@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
@@ -9,8 +9,20 @@ import { fileURLToPath } from "node:url";
 import { selectRange, selectionInfrastructure, unionViews, type RuleView } from "./owed-range.ts";
 import {committedChanges} from "./change-paths.ts";
 import {waitFor} from "./test-wait.ts";
+import {dependencyCache} from "../lanes/dependency-inputs.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
+function fixtureRepository(t,repo:string,env:NodeJS.ProcessEnv):void {
+  execFileSync("git",["clone","--quiet","--shared","--no-checkout",ROOT,repo],{env,stdio:["ignore","pipe","pipe"]});
+  const git=(cwd:string,...args:string[])=>execFileSync("git",args,{cwd,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  git(repo,"checkout","--quiet","--detach",git(ROOT,"rev-parse","HEAD"));
+  // These fixtures change only policy/data, so use the same acquired registry
+  // bytes as the source. Installed endpoint trees still belong to each range.
+  const shared=dirname(git(ROOT,"rev-parse","--path-format=absolute","--git-common-dir"));
+  const cache=dependencyCache(repo);assert.equal(existsSync(cache),false);
+  mkdirSync(dirname(cache),{recursive:true});symlinkSync(dependencyCache(shared),cache,"dir");
+  t.after(()=>rmSync(cache,{force:true}));
+}
 test("committed paths preserve spaces, Unicode, tabs and line breaks across a rename",t=>{
   const repo=mkdtempSync(join(tmpdir(),"owed-paths-"));t.after(()=>rmSync(repo,{recursive:true,force:true}));
   const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
@@ -80,40 +92,55 @@ export const allSteps=()=>['tooling'];\n`;
   writeFileSync(join(repo,"tooling/gate/owed.mjs"),policy);writeFileSync(join(repo,"mode"),"healthy");
   git("init","-qb","main");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
   writeFileSync(join(repo,"candidate"),"candidate\n");git("add","candidate");git("commit","-qm","candidate");
-  assert.deepEqual(selectRange(repo,`${base}..HEAD`).checks.steps,["tooling"],"healthy source control");
+  const healthy=git("rev-parse","HEAD");
+  writeFileSync(join(repo,"mode"),"fail");git("add","mode");git("commit","-qm","policy failure");
+  const failed=git("rev-parse","HEAD");
+  assert.deepEqual(selectRange(repo,`${base}..${healthy}`).checks.steps,["tooling"],"healthy source control");
   writeFileSync(report,"");
+  const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
+  const stat=readFileSync(`/proc/${process.pid}/stat`,"utf8"),start=stat.slice(stat.lastIndexOf(")")+2).split(" ")[19];
+  const stale=`refs/nts-selector/${process.pid}-0-${boot}-expired/base`,live=`refs/nts-selector/${process.pid}-${start}-${boot}-control/base`;
+  git("update-ref",stale,base);git("update-ref",live,base);
   // A different process may have created gitdir before commondir. Keep that
   // exact intermediate registry entry present for the whole selection.
   const incomplete=join(repo,".git/worktrees/half-written");mkdirSync(incomplete,{recursive:true});
   writeFileSync(join(incomplete,"gitdir"),join(directory,"other/.git")+"\n");
   const marker=readFileSync(join(incomplete,"gitdir"),"utf8");
-  assert.deepEqual(selectRange(repo,`${base}..HEAD`).checks.steps,["tooling"]);
-  writeFileSync(join(repo,"mode"),"fail");git("add","mode");git("commit","-qm","policy failure");
-  assert.throws(()=>selectRange(repo,`${base}..HEAD`),/intentional policy failure/);
+  assert.deepEqual(selectRange(repo,`${base}..${healthy}`).checks.steps,["tooling"]);
+  assert.throws(()=>selectRange(repo,`${base}..${failed}`),/intentional policy failure/);
   const rows=readFileSync(report,"utf8").trim().split("\n").map(line=>JSON.parse(line));
   assert.equal(rows.length,4,"both endpoint imports on success and policy failure");
   for(const row of rows){
     assert.notEqual(row.common,join(repo,".git"));
     assert.match(row.objects,/^count: 0$/m);assert.match(row.objects,/^in-pack: 0$/m);
     assert.ok(row.pins.split("\n").some(line=>line.endsWith(` ${row.revision}`)),"borrowed revision has a live source pin");
+    assert.equal(row.pins.includes(stale),false,"reused PID does not preserve an abandoned pin");
+    assert.ok(row.pins.includes(live),"another live owner's pin is retained");
     assert.equal(existsSync(dirname(row.common)),false,"owned range and private registry cleaned");
   }
-  assert.equal(git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"","pins removed after both outcomes");
+  assert.equal(git("for-each-ref","--format=%(refname)","refs/nts-selector/"),live,"only the other live owner's pin remains");
+  git("update-ref","-d",live);
   assert.equal(readFileSync(join(incomplete,"gitdir"),"utf8"),marker,"source's in-progress entry left intact");
   assert.equal(existsSync(join(incomplete,"commondir")),false);
 });
 
-test("concurrent range preflights have distinct endpoint registry names and collect only their own trees", async t => {
+test("concurrent range preflights collect the same stale pin and only their own trees", async t => {
   const directory=mkdtempSync(join(tmpdir(),"owed-concurrent-")),repo=join(directory,"repo");
   const sockets=new Set<Socket>(),seen:string[]=[];
-  let pair:Socket[]=[],aborted=false;
+  let pair:Socket[]=[],collections:Socket[]=[],aborted=false;
   const server=createServer(socket=>{
     sockets.add(socket);socket.on("close",()=>sockets.delete(socket));
     let input="";
     socket.on("data",bytes=>{
       input+=bytes;
       if(!input.endsWith("\n"))return;
-      seen.push(JSON.parse(input));pair.push(socket);
+      const message=JSON.parse(input);
+      if(message?.collection){
+        collections.push(socket);
+        if(collections.length===2){for(const waiting of collections)waiting.end("release\n");collections=[];}
+        return;
+      }
+      seen.push(message);pair.push(socket);
       // Both real endpoint imports must be live before either may proceed.
       if(pair.length===2||aborted){for(const waiting of pair)waiting.end("release\n");pair=[];}
     });
@@ -145,9 +172,23 @@ export const allSteps=()=>["tooling"];
   const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
   git("init","-qb","main");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
   writeFileSync(join(repo,"candidate"),"candidate\n");git("add","candidate");git("commit","-qm","candidate");
+  const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
+  const stale=`refs/nts-selector/${process.pid}-0-${boot}-concurrent/base`;
+  git("update-ref",stale,base);
+  const actual=execFileSync("sh",["-c","command -v git"],{encoding:"utf8"}).trim(),bin=join(directory,"bin"),deletions=join(directory,"deletions.jsonl");mkdirSync(bin);
+  writeFileSync(join(bin,"git"),`#!${process.execPath}
+import {spawnSync} from 'node:child_process';import {appendFileSync} from 'node:fs';import {createConnection} from 'node:net';
+const args=process.argv.slice(2),result=spawnSync(${JSON.stringify(actual)},args,{encoding:'utf8'});
+if(process.env.OWED_TEST_COLLECT==='1'&&args[0]==='for-each-ref'&&args.at(-1)==='refs/nts-selector/')await new Promise((done,reject)=>{
+ const socket=createConnection({host:'127.0.0.1',port:Number(process.env.OWED_TEST_BARRIER_PORT)});
+ socket.once('error',reject);socket.once('connect',()=>socket.write(JSON.stringify({collection:true})+'\\n'));socket.once('data',()=>socket.end());socket.once('close',done);
+});
+if(args[0]==='update-ref'&&args[1]==='-d'&&args[2]===${JSON.stringify(stale)})appendFileSync(${JSON.stringify(deletions)},JSON.stringify({args,status:result.status})+'\\n');
+process.stdout.write(result.stdout??'');process.stderr.write(result.stderr??'');process.exitCode=result.status??1;
+`);chmodSync(join(bin,"git"),0o755);env.PATH=`${bin}:${env.PATH}`;
   const script=`import {selectRange} from ${JSON.stringify(new URL("./owed-range.ts",import.meta.url).href)};console.log(JSON.stringify(selectRange(process.argv[1],process.argv[2]).checks));`;
   const run=()=>{
-    const child=spawn(process.execPath,["--input-type=module","-e",script,repo,`${base}..HEAD`],{env,stdio:["ignore","pipe","pipe"]});children.push(child);
+    const child=spawn(process.execPath,["--input-type=module","-e",script,repo,`${base}..HEAD`],{env:{...env,OWED_TEST_COLLECT:"1"},stdio:["ignore","pipe","pipe"]});children.push(child);
     let out="",err="";child.stdout!.on("data",bytes=>out+=bytes);child.stderr!.on("data",bytes=>err+=bytes);
     return new Promise<{code:number|null,out:string,err:string}>((done,reject)=>{
       child.once("error",reject);child.once("close",code=>{
@@ -163,17 +204,22 @@ export const allSteps=()=>["tooling"];
   for(const result of results){assert.equal(result.code,0,result.err);assert.deepEqual(JSON.parse(result.out).steps,["tooling"]);}
   assert.equal(seen.length,4,"both selectors evaluate both real endpoint trees");
   assert.equal(new Set(seen.map(path=>basename(path))).size,4,`shared registry basenames: ${JSON.stringify(seen)}`);
+  const removed=readFileSync(deletions,"utf8").trim().split("\n").map(line=>JSON.parse(line));
+  assert.equal(removed.length,2,"both selectors collected the same enumerated ref");
+  assert.ok(removed.every(row=>row.args[3]===base),"both deletions compare the enumerated old value");
+  assert.equal(removed.filter(row=>row.status!==0).length,1,"one compare-and-delete observes the already removed ref");
+  assert.equal(git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"");
   assert.equal(git("worktree","list","--porcelain").split("\n").filter(line=>line.startsWith("worktree ")).length,1,"neither preflight leaves a registered endpoint");
 });
 
 test("a rule cannot narrow its own committed range and dirty policy cannot alter it", async t => {
   const directory = mkdtempSync(join(tmpdir(), "owed-range-test-"));
   const repo = join(directory, basename(directory)+"-repo");
-  t.after(() => {if(existsSync(join(repo,".git")))execFileSync("git",["worktree","remove","--force",repo],{cwd:ROOT,stdio:["ignore","pipe","pipe"]});rmSync(directory, { recursive: true, force: true });});
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
   const env = { ...process.env, GIT_AUTHOR_NAME: "test", GIT_AUTHOR_EMAIL: "test@example.invalid", GIT_COMMITTER_NAME: "test", GIT_COMMITTER_EMAIL: "test@example.invalid" };
   for (const key of Object.keys(env)) if (key.startsWith("GIT_") && !/GIT_(AUTHOR|COMMITTER)_/.test(key)) delete env[key];
   const git = (...args: string[]) => execFileSync("git", ["-c","core.hooksPath=/dev/null",...args], { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  execFileSync("git", ["worktree","add","--quiet","--detach",repo,"HEAD"], { cwd:ROOT,env, stdio: ["ignore", "pipe", "pipe"] });
+  fixtureRepository(t,repo,env);
   const base = git("rev-parse", "HEAD");
   const policy = join(repo, "tooling/gate/owed.mjs");
   const original = readFileSync(policy, "utf8");
@@ -199,7 +245,7 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   assert.deepEqual(selectRange(repo, `${base}..${tip}`).checks, selected.checks);
   assert.equal(git("rev-parse", "HEAD"), tip);
   const worktrees = git("worktree", "list", "--porcelain");
-  assert.equal(worktrees.split("\n").filter(l => l.startsWith(`worktree ${directory}/`)).length, 1, "the fixture's detached tree remains registered");
+  assert.equal(worktrees.split("\n").filter(l => l.startsWith(`worktree ${directory}/`)).length, 1, "only the fixture's own primary tree remains registered");
   const committed = git("show", `${tip}:tooling/gate/owed.mjs`);
   assert.ok(committed.includes("export function selfTest() {"));
   writeFileSync(policy, committed.replace("export function selfTest() {", 'export function selfTest() { return "broken rule control"; }\nfunction unusedOriginalSelfTest() {'));
@@ -214,11 +260,14 @@ test("a failed range worktree creation is identified as infrastructure",t=>{
  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
  git("init","-qb","main");writeFileSync(join(repo,"base"),"base");git("add","base");git("commit","-qm","base");const base=git("rev-parse","HEAD");
  writeFileSync(join(repo,"next"),"next");git("add","next");git("commit","-qm","next");
- const actual=execFileSync("sh",["-c","command -v git"],{encoding:"utf8"}).trim(),bin=join(repo,"bin");mkdirSync(bin);
+ const actual=execFileSync("sh",["-c","command -v git"],{encoding:"utf8"}).trim(),bin=join(repo,"bin"),attempt=join(repo,"attempt");mkdirSync(bin);
  const quote=(s:string)=>"'"+s.replaceAll("'","'\\''")+"'";
- writeFileSync(join(bin,"git"),`#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = add ]; then echo 'resource unavailable' >&2; exit 75; fi\nexec ${quote(actual)} "$@"\n`);chmodSync(join(bin,"git"),0o755);
+ writeFileSync(join(bin,"git"),`#!/bin/sh\nif [ "$1" = worktree ] && [ "$2" = add ]; then pwd > ${quote(attempt)}; echo 'resource unavailable' >&2; exit 75; fi\nexec ${quote(actual)} "$@"\n`);chmodSync(join(bin,"git"),0o755);
  const prior=process.env.PATH;t.after(()=>{process.env.PATH=prior;});process.env.PATH=`${bin}:${prior}`;
  assert.throws(()=>selectRange(repo,`${base}..HEAD`),error=>selectionInfrastructure(error)&&String(error).includes("resource unavailable"));
+ const registry=readFileSync(attempt,"utf8").trim();assert.equal(basename(registry),"registry.git");
+ assert.equal(existsSync(dirname(registry)),false,"failed creation removes its private range directory");
+ assert.equal(git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"","failed creation removes its pins");
 });
 
 test("Cargo infrastructure crosses the endpoint process without becoming a policy refusal", t => {
@@ -311,9 +360,9 @@ test("transitive imports and rule data both prevent stable-selector narrowing wh
 test("the real unchanged selector reaches a newly added census test without a core fallback",async t=>{
   const directory=mkdtempSync(join(tmpdir(),"owed-real-leaf-"));
   const repo=join(directory,basename(directory)+"-repo"),env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
-  t.after(()=>{if(existsSync(join(repo,".git")))execFileSync("git",["worktree","remove","--force",repo],{cwd:ROOT,stdio:["ignore","pipe","pipe"]});rmSync(directory,{recursive:true,force:true});});
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
   const git=(...args:string[])=>execFileSync("git",["-c","core.hooksPath=/dev/null",...args],{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
-  execFileSync("git",["worktree","add","--quiet","--detach",repo,"HEAD"],{cwd:ROOT,env,stdio:["ignore","pipe","pipe"]});
+  fixtureRepository(t,repo,env);
   const base=git("rev-parse","HEAD"),path="tooling/census/new-scope-control.test.ts";
   writeFileSync(join(repo,path),"import {test} from 'node:test';test('new leaf',()=>{});\n");git("add",path);git("commit","-qm","new leaf");
   const selected=selectRange(repo,`${base}..HEAD`);

@@ -36,6 +36,46 @@ function git(repo: string, ...args: string[]): string {
   return infrastructure(`selector git ${args[0]}`,()=>execFileSync("git", args, { cwd: repo, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"], maxBuffer: 64 << 20 }).trim());
 }
 
+function processIdentity(pid:number):{start:string;live:boolean}|null {
+  try {
+    const stat=readFileSync(`/proc/${pid}/stat`,"utf8");
+    const fields=stat.slice(stat.lastIndexOf(")")+2).split(" ");
+    if(!/^\d+$/.test(fields[19]))throw new Error(`invalid process identity for ${pid}`);
+    return {start:fields[19],live:fields[0]!=="Z"&&fields[0]!=="X"};
+  }catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return null;throw error;}
+}
+
+function collectPin(repo:string,ref:string,expected:string):void {
+  try{git(repo,"update-ref","-d",ref,expected);}
+  catch(error){
+    // Another collector can remove this exact dead owner's ref after our
+    // enumeration. Only an independently confirmed absence completes it;
+    // a changed ref or any other Git failure remains infrastructure failure.
+    try{execFileSync("git",["show-ref","--verify","--quiet",ref],{cwd:repo,stdio:["ignore","pipe","pipe"]});}
+    catch(probe){if((probe as {status?:number;signal?:string}).status===1&&!(probe as {signal?:string}).signal)return;}
+    throw error;
+  }
+}
+
+function selectorPins(repo:string,nonce:string):string {
+  return infrastructure("selector object lifetime",()=>{
+    const boot=readFileSync("/proc/sys/kernel/random/boot_id","utf8").trim().replaceAll("-","");
+    if(!/^[a-f0-9]{32}$/.test(boot))throw new Error("invalid boot identity");
+    // A terminated selector may not reach finally. A boot and process-start
+    // identity prevents a reused PID from keeping its abandoned refs alive.
+    for(const row of git(repo,"for-each-ref","--format=%(refname) %(objectname)","refs/nts-selector/").split("\n")){
+      const [ref,expected]=row.split(" ");
+      const owner=/^refs\/nts-selector\/(\d+)-(\d+)-([a-f0-9]{32})-[A-Za-z0-9-]+\/(?:base|tip)$/.exec(ref);
+      if(!owner)continue;
+      const identity=owner[3]===boot?processIdentity(Number(owner[1])):null;
+      if(!identity?.live||identity.start!==owner[2])collectPin(repo,ref,expected);
+    }
+    const identity=processIdentity(process.pid);
+    if(!identity?.live)throw new Error("selector process identity is unavailable");
+    return `refs/nts-selector/${process.pid}-${identity.start}-${boot}-${nonce}`;
+  });
+}
+
 function endpoints(repo: string, range: string): [string, string] {
   const parts = range.split("..");
   if (parts.length !== 2 || parts.some(p => !p || p.startsWith("."))) throw new Error(`--range wants A..B, got ${range}`);
@@ -77,19 +117,28 @@ export function selectRange(repo: string, range: string): RangeSelection {
   const shared=dirname(git(repo,"rev-parse","--path-format=absolute","--git-common-dir"));
   infrastructure("selector directory",()=>mkdirSync(parent,{recursive:true}));
   const directory=infrastructure("selector directory",()=>mkdtempSync(join(parent,"range-")));
-  const added: string[] = [];
+  const registry=join(directory,"registry.git");
+  const pins:string[]=[];
   const views: RuleView[] = [];
   let result: RangeSelection | undefined;
   const errors: unknown[] = [];
-  let cleanupFailed = false;
   try {
-    infrastructure("selector owner record",()=>writeFileSync(join(directory,"owner.json"),JSON.stringify({version:1,pid:process.pid,created:Date.now(),repo:shared})+"\n"));
+    const owner=selectorPins(repo,basename(directory));
+    // The private registry never creates objects. Keep every borrowed endpoint
+    // reachable in the source until its owned range has finished, including
+    // when a caller names a dangling commit or moves a source branch.
+    for(const [index,revision] of [base,tip].entries()){
+      const ref=`${owner}/${index===0?"base":"tip"}`;
+      git(repo,"update-ref",ref,revision,"0".repeat(revision.length));pins.push(ref);
+    }
+    const objects=git(repo,"rev-parse","--path-format=absolute","--git-path","objects");
+    git(directory,"init","--quiet","--bare","--template=",registry);
+    // Git's alternates format uses C-quoted byte paths, including whitespace.
+    infrastructure("selector object store",()=>writeFileSync(join(registry,"objects/info/alternates"),`"${Array.from(Buffer.from(objects),byte=>`\\${byte.toString(8).padStart(3,"0")}`).join("")}"\n`));
+    infrastructure("selector owner record",()=>writeFileSync(join(directory,"owner.json"),JSON.stringify({version:2,pid:process.pid,created:Date.now(),repo:shared,registry,pins})+"\n"));
     for (const [index, revision] of [base, tip].entries()) {
-      // Git derives the shared registry id from this basename, not its parent.
-      // Keep it unique across simultaneous range preflights and their cleanup.
       const tree = join(directory, `${basename(directory)}-${index}`);
-      git(repo, "worktree", "add", "--quiet", "--detach", tree, revision);
-      added.push(tree);
+      git(registry, "worktree", "add", "--quiet", "--detach", tree, revision);
       if (existsSync(join(tree, "pnpm-lock.yaml"))) {
         infrastructure("selector inputs",()=>execFileSync("sh", [INPUTS, "lane", shared, tree], { cwd: tree, stdio: ["ignore", "pipe", "pipe"] }));
       }
@@ -113,11 +162,10 @@ export function selectRange(repo: string, range: string): RangeSelection {
       ...(stable?{candidateNewPaths:{identity,paths:changes.filter(change=>change.added).map(change=>change.path)}}:{}) };
   } catch (error) { errors.push(error); }
   finally {
-    for (const tree of added.reverse()) {
-      try { git(repo, "worktree", "remove", "--force", tree); }
-      catch (error) { cleanupFailed = true; errors.push(error); }
-    }
-    if (!cleanupFailed)try{infrastructure("selector cleanup",()=>rmSync(directory,{recursive:true,force:true}));}catch(error){errors.push(error);}
+    // All registrations are private to this directory. Removing it also
+    // collects a partially created endpoint, without consulting shared state.
+    try{infrastructure("selector cleanup",()=>rmSync(directory,{recursive:true,force:true}));}catch(error){errors.push(error);}
+    for(const ref of pins)try{git(repo,"update-ref","-d",ref);}catch(error){errors.push(error);}
   }
   if (errors.length) throw new AggregateError(errors, `range selection failed; no owed scope was granted: ${errors.map(String).join("; ")}`);
   return result!;
