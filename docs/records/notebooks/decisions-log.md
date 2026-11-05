@@ -1321,3 +1321,26 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   canvas call already beat V8 at one entry per call (0.94 times), while its
   entry still cost about 61 ns more than Blink's own C++. The contract is in
   [Chromium](../../targets/chromium.md#decisions).
+
+## Language boundaries (11-05)
+
+- **The decision.** The user: "I think we should only skip support for eval,
+  new Function and with (I might forget something that is really unsafe like
+  with and super dynamic like eval). for the rest, we have to find the best
+  representation/performant solution when it is time to." Two permanent
+  boundaries remain:
+  - code made from text while the program runs: `eval`, direct or indirect,
+    the `Function` family's constructors given source text, and a timer given
+    a string of code;
+  - sloppy mode, which includes `with`. `Symbol.unscopables` acts only inside
+    `with`, so it goes with it.
+- **Everything else is in scope.** The prototype chain's reflection and
+  replacement, realms, `Symbol.toPrimitive` and `Symbol.hasInstance` join
+  `globalThis`, `Proxy`, `Reflect`, object integrity and the descriptors. Each
+  is built after the static foundations, with the best representation the
+  compiler can prove, and costs nothing where a program does not use it.
+- **What it replaces.** The test262 boundary list of 09-29, and the 10-30
+  "reflection may yet be supported", which this answers with yes.
+- **test262.** Only the two boundaries leave the denominator. The exclusion
+  files are narrowed to them as planned work. The contract is in
+  [Boundaries](../../language/boundaries.md#decisions).
