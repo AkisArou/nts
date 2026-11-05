@@ -1,8 +1,9 @@
 # Boundaries
 
 What nts does not compile, and why. A boundary is a decision: the construct is
-out of scope on principle, and it is in no backlog. There are two: code made
-from text while the program runs, and sloppy mode. A gap is different: it is
+out of scope on principle, and it is in no backlog. There are three: code made
+from text while the program runs, changing an existing object's prototype, and
+sloppy mode. A gap is different: it is
 refused today and wanted, and the [feature table](README.md) lists it. This
 page is for anyone writing a program for nts, and for whoever decides whether a
 test is in scope. The conformance tools cite its sections as the authority for
@@ -38,10 +39,10 @@ Wasm's design as one struct per type.
 
 There is no prototype pointer and no property map, so reading a property of a
 known type is a load at a known offset. That layout is the default, not a
-limit. A feature that needs more, such as a prototype replaced or a property
-redefined while the program runs, is to get a representation that holds it
-only in the values the compiler proves use it; every other value keeps the
-fixed layout ([in scope, not yet built](#in-scope-not-yet-built)).
+limit. A feature that needs more, such as a property redefined while the
+program runs, is to get a representation that holds it only in the values the
+compiler proves use it; every other value keeps the fixed layout
+([in scope, not yet built](#in-scope-not-yet-built)).
 
 ## Dynamic code
 
@@ -64,6 +65,20 @@ proves constant may be compiled ahead of time later, as an optimization, as a
 [design note](../records/notebooks/eval.md) shows. test262's `eval` and
 `Function` cases leave the in-scope denominator; `test262-exclusions.json`
 does not exclude them yet.
+
+## Changing a prototype
+
+An object's prototype is fixed when the object is made. `Object.setPrototypeOf`,
+`Reflect.setPrototypeOf` and an assignment to `__proto__` change it
+afterwards, under a live object, and nts refuses them. Every method call and
+inherited read on that object would otherwise depend on a link that can move
+while the program runs, and the compiler could no longer decide them from the
+object's type.
+
+Reading a prototype with `Object.getPrototypeOf`, and choosing one when an
+object is made, with `Object.create` given a prototype object or `__proto__`
+in an object literal, are not boundaries: they are in scope
+([below](#in-scope-not-yet-built)).
 
 ## Sloppy mode
 
@@ -91,8 +106,9 @@ them is a boundary.
   block-level function hoisting for web compatibility, labelled function
   declarations, function declarations as `if` clauses, and initializers in
   `for-in` heads. `[[IsHTMLDDA]]`, the slot behind `document.all`, belongs
-  to a host object nts never has. Its `__proto__` is not a boundary: it is in
-  scope with the prototype chain ([below](#in-scope-not-yet-built)).
+  to a host object nts never has. Assigning its `__proto__` accessor goes with
+  [changing a prototype](#changing-a-prototype); reading it, and `__proto__`
+  in an object literal, are in scope ([below](#in-scope-not-yet-built)).
 - **Its library half is not a boundary.** `escape`, `unescape`,
   `String.prototype.substr`, the HTML methods (`anchor`, `bold` and the rest),
   `trimLeft` and `trimRight`, `Date.prototype.getYear`, `setYear` and
@@ -106,7 +122,7 @@ test262's `test/annexB` directory is in the strict lane.
 
 ## In scope, not yet built
 
-Everything JavaScript defines beyond the two boundaries above is in scope.
+Everything JavaScript defines beyond the three boundaries above is in scope.
 These come after the static foundations are solid, each with the best
 representation the compiler can prove, chosen when its time comes. Each is to
 cost nothing in a program that does not use it: the compiler proves which
@@ -118,7 +134,7 @@ values a use can reach, and only those values pay.
 | `Proxy` and `Reflect` | refused; every `Reflect` member as reflection | L25 |
 | object integrity: `Object.freeze`, `seal`, `preventExtensions`, `isFrozen`, `isSealed`, `isExtensible` | refused; `seal`, `preventExtensions`, `isSealed` and `isExtensible` as reflection | L26 |
 | property descriptors: `Object.defineProperty`, `defineProperties`, `getOwnPropertyDescriptor`, `getOwnPropertyDescriptors` | refused as reflection | with L25 and L26: `Reflect` and the integrity levels are defined in terms of them |
-| the prototype chain: `Object.getPrototypeOf`, `Object.setPrototypeOf`, `__proto__` (the accessor and the object-literal key), `Object.create` given a prototype object | the first two refused as "prototype and descriptor reflection", `Object.create` of an object because a layout has no prototype slot; `Object.create(null)` makes a dictionary and compiles | a prototype slot only in the values the compiler proves are read or replaced; `Reflect.getPrototypeOf` and `setPrototypeOf` with L25 |
+| reading a prototype and choosing one at creation: `Object.getPrototypeOf`, reading `__proto__`, `Object.create` given a prototype object, `__proto__` in an object literal | `Object.getPrototypeOf` refused as "prototype and descriptor reflection", `Object.create` of an object because a layout has no prototype slot; `Object.create(null)` makes a dictionary and compiles | a prototype slot only in the values the compiler proves are made with a chosen prototype; `Reflect.getPrototypeOf` with L25 |
 | more than one realm: test262's `$262.createRealm`, an iframe's own intrinsics | one realm, laid out by the compiler | a second set of intrinsics only in a program that makes one |
 | `Symbol.toPrimitive` and `Symbol.hasInstance` | a type that declares `[Symbol.toPrimitive]` is refused where it is converted; `instanceof` answers from the class hierarchy | the compiler sees which types declare a hook, and only conversions and `instanceof` on those types call it |
 
@@ -130,7 +146,7 @@ classes `Proxy`, `Reflect`, `Reflect.construct`, `globalThis` and
 `nonextensible-applies-to-private` as `inapplicable`,
 `test262-exclusions.json` excludes every case that includes
 `propertyHelper.js`, and the `cross-realm` cases are excluded; narrowing both
-files to the two boundaries is planned ([plan](../plan.md#backlog)). The node
+files to the three boundaries is planned ([plan](../plan.md#backlog)). The node
 tests a module lists as not applicable for these features are in scope the
 same way.
 
@@ -160,10 +176,14 @@ a boundary:
 
 ## Decisions
 
-- There are two permanent boundaries, and nothing else is one: code made from
-  text while the program runs, and sloppy mode, `with` included. Everything
-  else JavaScript defines is in scope (user, 11-05,
+- There are three permanent boundaries, and nothing else is one: code made
+  from text while the program runs, changing an existing object's prototype,
+  and sloppy mode, `with` included. Everything else JavaScript defines is in
+  scope (user, 11-05,
   [log](../records/notebooks/decisions-log.md#language-boundaries-11-05)).
+  - `Object.setPrototypeOf`, `Reflect.setPrototypeOf` and assigning
+    `__proto__` are refused; reading a prototype and choosing one when an
+    object is made are in scope.
   - `eval`, and the `Function` family given source text known only at run
     time, are refused; source the compiler proves constant may be compiled
     later, as an optimization, and their test262 cases leave the denominator
@@ -171,7 +191,7 @@ a boundary:
   - Nothing is compiled in sloppy mode; a CommonJS dependency comes in through
     an interop layer (L18; 10-28,
     [log](../records/notebooks/decisions-log.md#language-10-28)).
-  - The prototype chain, realms, `Symbol.toPrimitive` and
+  - Reading the prototype chain, realms, `Symbol.toPrimitive` and
     `Symbol.hasInstance` join `globalThis`, `Proxy` with `Reflect`, object
     integrity and the property descriptors in scope. Each is built after the
     static foundations, with the best representation the compiler can prove,

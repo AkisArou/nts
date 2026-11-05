@@ -1344,3 +1344,9 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
 - **test262.** Only the two boundaries leave the denominator. The exclusion
   files are narrowed to them as planned work. The contract is in
   [Boundaries](../../language/boundaries.md#decisions).
+- **A third boundary, the same evening.** The user: "this should not be
+  supported: changing an object's prototype at run time." So
+  `Object.setPrototypeOf`, `Reflect.setPrototypeOf` and assigning `__proto__`
+  are refused permanently. Reading a prototype and choosing one when an object
+  is made (`Object.getPrototypeOf`, `Object.create` given a prototype,
+  `__proto__` in an object literal) stay in scope.

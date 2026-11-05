@@ -578,13 +578,13 @@ Noted, not scheduled:
 - analysis budgets scaled by program size, each exhaustion reported by name
   (P-7);
 - the in-scope dynamic features, each with the best representation the
-  compiler can prove when its time comes: the prototype chain, realms,
-  `Symbol.toPrimitive` and `Symbol.hasInstance`, `Proxy`, `Reflect`, object
-  integrity and the descriptors. Code made from text and sloppy mode are the
-  only permanent boundaries
+  compiler can prove when its time comes: reading and choosing prototypes,
+  realms, `Symbol.toPrimitive` and `Symbol.hasInstance`, `Proxy`, `Reflect`,
+  object integrity and the descriptors. Code made from text, changing a
+  prototype and sloppy mode are the only permanent boundaries
   ([boundaries](language/boundaries.md#decisions));
 - narrow test262's exclusion files (`features.json`,
-  `test262-exclusions.json`) to those two boundaries, so every in-scope
+  `test262-exclusions.json`) to those three boundaries, so every in-scope
   feature counts in the denominator;
 - node's own tests in the gate once the node lane resumes (Q-5).
 

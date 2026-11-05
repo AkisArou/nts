@@ -120,7 +120,8 @@ The marks are features, not tests. The measured state is in `results/`
 | decorators | not yet | standard decorators are compiled away silently today; decided: refused by name until the standard semantics are implemented ([Decisions](#decisions)); `experimentalDecorators` is refused |
 | auto-accessors (`accessor x = 1`) | not yet | the `accessor` modifier is not read, so the member compiles as a plain field (L10) |
 | `Object.freeze`, `seal`, `preventExtensions`; property descriptors (`Object.defineProperty`, `getOwnPropertyDescriptor`); `Proxy` and `Reflect`; `globalThis` | not yet | in scope later, after the static foundations and a discussion ([boundaries.md](boundaries.md#in-scope-not-yet-built); registers [L24 to L26](../open-questions.md#1-language-and-compiler)) |
-| the prototype chain: `Object.getPrototypeOf`, `setPrototypeOf`, `__proto__`, `Object.create(proto)` | not yet | in scope later, after the static foundations ([boundaries.md](boundaries.md#in-scope-not-yet-built)); `Object.create(null)` compiles |
+| changing a prototype: `Object.setPrototypeOf`, `Reflect.setPrototypeOf`, assigning `__proto__` | out of scope | a permanent boundary ([boundaries.md](boundaries.md#changing-a-prototype)) |
+| reading or choosing a prototype: `Object.getPrototypeOf`, `Object.create(proto)`, `__proto__` in an object literal | not yet | in scope later, after the static foundations ([boundaries.md](boundaries.md#in-scope-not-yet-built)); `Object.create(null)` compiles |
 | `Symbol.toPrimitive` and `Symbol.hasInstance` | not yet | in scope later ([boundaries.md](boundaries.md#in-scope-not-yet-built)); today the static type decides conversion and `instanceof` |
 | `Symbol.unscopables` | out of scope | it acts only inside `with`, which sloppy mode alone allows ([boundaries.md](boundaries.md#sloppy-mode)) |
 | the wrapper objects (`new String`, `new Number`, `new Boolean`) | not yet | |
