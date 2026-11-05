@@ -126,7 +126,11 @@ kernel would change the benchmark, not the architecture.
    context with release deferred to the outermost exit. Removes the
    two atomic RMWs (~18 cycles/entry here; measured −51 cycles/entry
    in its A/B, at +31 instructions — the cycles/instructions verdict
-   is the quiet-window call).
+   is the quiet-window call). Measured as noise in the 2x2 below and
+   dropped: with no measurable gain, the hand-written lifetime
+   handling (the release_pending path) buys nothing scoped_refptr
+   does not give for free, so the simpler design stays. Its commits
+   are archived on chromium/entry-count-measured-noise.
 3. **Combined host entry** (compiler lane): one call that enters
    environment, callback and depth together, one that leaves, in place
    of three pairs across translation units. Already requested with
@@ -143,3 +147,51 @@ HandleScope + Enter (Blink may ask for the current world at any call;
 the already-entered shortcut provably never fires for posted-task
 callbacks), and Blink's own getContext/fillRect bodies, which every arm
 pays.
+
+## Measured: candidates 1 and 2, 2x2 at the tip
+
+Four arms at 84ffe61c5, throwaway toggles on a detached checkout (the
+diffs are in the lane's report of 2026-11-05; rebuild by applying one
+to the tip): abtip (both candidates), abnoc1 (deferral off: task
+bodies checkpoint at exit), abnoc2 (entry count off: scoped_refptr
+restored), aboff (both off). Five rounds, arms alternating within
+each round at two counted launches, starting arm rotating; counted
+with perf stat (cpu_core instructions/cycles, renderer main thread)
+on CPU 4 under with-lock.sh, landing lock held throughout. Machine:
+load (1 min) 0.6-6.3 across sittings, MemAvailable 15.3-19.6 GiB,
+0-3 compiler processes on the other CPUs. Each per-call iteration
+is a whole task body: entry plus the harness's PerformMicrotaskCheckpoint,
+both timed. 1,840,000 outermost entries per counted launch.
+
+Canvas per-call, pooled medians of 10 launches per arm (round-median
+spread for ns; V8 from the same sittings):
+
+| arm | ns/task root | spread | V8 ns | nts/V8 | instr/launch | cycles/launch |
+|---|---|---|---|---|---|---|
+| aboff | 237.4 | 236.3..244.7 | 205.0 | 1.158 | 44,927,198,903 | 14,267,999,251 |
+| abnoc1 | 238.3 | 237.5..239.2 | 205.0 | 1.163 | 44,784,416,068 | 14,309,578,622 |
+| abnoc2 | 226.9 | 226.5..230.4 | 205.0 | 1.107 | 44,222,391,284 | 14,156,290,340 |
+| abtip | 225.1 | 224.1..229.4 | 200.0 | 1.125 | 44,176,989,448 | 14,150,122,696 |
+
+Effects, paired by round (median of the five round deltas):
+
+| effect | ns/task root | instr/entry | cycles/entry |
+|---|---|---|---|
+| candidate 1, count on | -13.0 (5/5 rounds) | -362 (4/5) | -67 |
+| candidate 1, count off | -10.8 (5/5) | -403 (5/5) | -8 |
+| candidate 2, deferral on | -0.3 (mixed) | -6 (mixed) | -10 (mixed) |
+| candidate 2, deferral off | +0.9 (mixed) | -54 | +37 (mixed) |
+| combined | -10.1 (5/5) | -460 (5/5) | -53 |
+
+Candidate 1 is a measured win on every round and both backgrounds.
+Candidate 2 is not distinguishable from zero in this sitting, in
+wall or counted instructions/cycles, on either background; its
+earlier stacked A/B (-51 cycles at +31 instructions) was of the
+same order as this sitting's launch-to-launch spread. It was
+dropped on that verdict (not held): a plain count with a deferred
+release is lifetime handling written by hand where scoped_refptr
+already does the job, and no measurable gain pays for it. The canvas
+row still loses to V8 at the tip (225 ns against 200-205 ns):
+candidates 1 and 2 close about 12 ns of the roughly 34 ns gap the
+both-off arm shows. The rest is the standing costs above and Blink's
+own call bodies (candidates 3 and 4).
