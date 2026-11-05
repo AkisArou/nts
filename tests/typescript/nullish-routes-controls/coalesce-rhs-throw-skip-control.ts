@@ -1,6 +1,6 @@
 /*---
 description: "Coalescing over zero skips a throwing fallback. Route: class field and throwing function (control)"
-features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-class, ts-throws]
+features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-class, ts-errors]
 ---*/
 
 // Coalescing over zero skips a throwing fallback. Route: class field and throwing function. Node prints coalesce-rhs-throw-skip:ok.

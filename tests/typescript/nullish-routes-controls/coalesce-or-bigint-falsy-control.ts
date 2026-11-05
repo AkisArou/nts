@@ -1,6 +1,6 @@
 /*---
 description: "Logical OR replaces zero bigint while keeping negative bigint. Route: Map returning bigint (control)"
-features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-map]
+features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-map-set]
 ---*/
 
 // Logical OR replaces zero bigint while keeping negative bigint. Route: Map returning bigint. Node prints coalesce-or-bigint-falsy:ok.
