@@ -329,6 +329,12 @@ flows through it.
     sources; `ts-array-method-route-*` identifies each area and its explicit
     loop controls.
 
+55. **DataView and ArrayBuffer operations through typed routes:** integer
+    and float bytes, exact 64-bit integers, view windows and aliases, and
+    resizable or transferred buffer state.
+    [DataView route contracts](#dataview-route-contracts) name the sources;
+    `ts-dataview-route-*` identifies each area and its plain-byte controls.
+
 ## The families
 
 | family | what it holds |
@@ -362,6 +368,8 @@ flows through it.
 | `conversions/` | ToPrimitive under each operator, number and string conversions |
 | `destructuring-routes/` | array, object, parameter, assignment and failing patterns across declared types with exact bound values, rest contents and observable effect/protocol order |
 | `destructuring-routes-controls/` | pattern-free explicit reads, undefined tests, copy loops and iterator calls preserving the same inputs, logs and assertions |
+| `dataview-routes/` | exact DataView values, byte order, bounds, aliasing, resize, transfer and copying through declared types, held to node |
+| `dataview-routes-controls/` | the same inputs, typed routes and assertions with native operations replaced by named local functions over plain byte arrays |
 | `date-routes/` | exact UTC times, fields, text, setter results and shared identity across typed Date routes, held to node |
 | `date-routes-controls/` | independent numeric Gregorian arithmetic and plain state with the same inputs, logs and assertions, without Date operations |
 | `descriptor-routes/` | data and accessor flags, reflection, enumeration and integrity levels across typed object routes, held to node |
@@ -1706,6 +1714,21 @@ Strict checking treats unflagged files as scripts and module-flagged files
 as modules, with the harness as a script and library diagnostics included.
 Node uses the unchanged suite oracle; maintainers measure and record
 backend outcomes.
+
+The `dataview-routes/` matrix uses `<area>-<behavior>-<route>.ts`
+in place of combination cases. Each case has `ts-dataview-routes`, one
+`ts-dataview-route-*` area tag and existing syntax tags. Views, buffers,
+offsets, byte-order flags and values cross declared fields, interfaces,
+constrained generics, narrowed unions, Maps, readonly tuples and captured
+bindings. Byte loops, exact values and specified error classes observe the
+native contracts. Controls append `-control` and use local named operations
+over plain number arrays; float tables contain only the case's input bytes,
+and buffer models hold explicit length, maximum and detachment state.
+Inputs, routes, loops and assertion expectations are otherwise unchanged.
+NaN is checked only as a value, never by its output bytes. Strict checking
+treats unflagged files as scripts and module-flagged files as modules, with
+the harness as a script and library diagnostics included. Node uses the
+unchanged suite oracle; maintainers measure and record backend outcomes.
 
 ## Coverage, source by source
 
@@ -3149,6 +3172,27 @@ holes, callback mutation, subclass policies or sorting.
 | `construction` | 24 | 24 | dense copies from arrays, Sets, Maps, generators, code-point strings and array-likes, mapper indices, Array.of, array classification and iterable spread |
 | **Total** | **122** | **122** | exact inputs and assertions retained in every pair |
 
+### DataView route contracts
+
+| source | concepts |
+| --- | --- |
+| ECMAScript [DataView objects](https://tc39.es/ecma262/multipage/structured-data.html#sec-dataview-objects), [GetViewValue](https://tc39.es/ecma262/multipage/structured-data.html#sec-getviewvalue) and [SetViewValue](https://tc39.es/ecma262/multipage/structured-data.html#sec-setviewvalue) | explicit byte order, exact numeric reads and writes, offset conversion, view bounds and failure classes |
+| ECMAScript [NumericToRawBytes](https://tc39.es/ecma262/multipage/structured-data.html#sec-numerictorawbytes) and [RawBytesToNumeric](https://tc39.es/ecma262/multipage/structured-data.html#sec-rawbytestonumeric) | integer wrapping, IEEE 754 rounding, signed zero, infinities, NaN values and 64-bit bigint interpretations |
+| ECMAScript [ArrayBuffer objects](https://tc39.es/ecma262/multipage/structured-data.html#sec-arraybuffer-objects), [resize](https://tc39.es/ecma262/multipage/structured-data.html#sec-arraybuffer.prototype.resize), [transfer](https://tc39.es/ecma262/multipage/structured-data.html#sec-arraybuffer.prototype.transfer), [transferToFixedLength](https://tc39.es/ecma262/multipage/structured-data.html#sec-arraybuffer.prototype.transfertofixedlength) and [slice](https://tc39.es/ecma262/multipage/structured-data.html#sec-arraybuffer.prototype.slice) | tracking and fixed windows, zeroed growth, recoverable bounds, detachment, retained bytes, resizability and independent copies |
+| TypeScript [generics](https://www.typescriptlang.org/docs/handbook/2/generics.html), [object types](https://www.typescriptlang.org/docs/handbook/2/objects.html) and [narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) | declared carriers, constraints, interfaces, readonly layouts and narrowed value alternatives |
+
+The existing typed-array-contents, proofs, length-routes,
+structuredclone-routes and instanceof-routes families retain their element
+conversion, invalidated-proof, changing-length, cloning and brand
+observations. This family isolates DataView's native byte contracts and
+ArrayBuffer state, without shared buffers, float16, typed-array methods,
+reflection or assertions about an engine's error messages.
+
+| area | cases | controls | observations and routes |
+| --- | ---: | ---: | --- |
+| `integers` | 24 | 24 | signed and unsigned 8-, 16- and 32-bit bytes, default and explicit byte order, modular wrapping, truncation, nonfinite zeroing and fractional offsets |
+| **Total** | **24** | **24** | exact inputs and assertions retained in every pair |
+
 ## Tags
 
 <!-- tags:begin -->
@@ -3246,6 +3290,8 @@ holes, callback mutation, subclass policies or sorting.
 | `ts-control-flow-route-short-circuit` | typed short-circuit and evaluation routes preserve skipped effects, references, operands, arguments and computed keys | Control-flow route contracts; typed paths | 26 | 0 |
 | `ts-control-flow-route-switch` | typed switches preserve selection, case-search order, fallthrough, exhaustive defaults and exits | Control-flow route contracts; typed paths | 14 | 0 |
 | `ts-control-flow-routes` | typed control structures preserve exact values, kinds, identities and complete execution histories beside explicit controls | Control-flow route contracts; typed paths | 102 | 0 |
+| `ts-dataview-routes` | exact DataView and ArrayBuffer operations through typed routes beside plain-byte controls | DataView route contracts; typed paths | 48 | 0 |
+| `ts-dataview-route-integers` | signed and unsigned 8-, 16- and 32-bit bytes, default and explicit byte order, modular wrapping, truncation, nonfinite zeroing and fractional offsets | DataView route contracts; typed paths | 48 | 0 |
 | `ts-date-route-construction` | typed numeric inputs, Date.UTC components, clipping, astronomical years and optional-argument presence through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 14 | 0 |
 | `ts-date-route-setters` | all seven UTC setters, optional components, invalid-state recovery, returned times and retained getter views through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 22 | 0 |
 | `ts-date-route-shared` | identity, alias writes, independent copies, generic returns, closures and retained carrier populations through TypeScript carriers with exact values and observations | Date route contracts; typed paths | 16 | 0 |
