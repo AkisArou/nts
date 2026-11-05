@@ -2007,6 +2007,7 @@ forms are listed with their diagnostics in the pull request.
 | --- | ---: | ---: | --- |
 | `all` | 24 | 24 | ordered values, identity, fresh arrays, rejection races, iterable consumption and thenables |
 | `settled` | 21 | 21 | allSettled status and reason records, order, empty and thenable cases |
+| `any` | 22 | 22 | first fulfillment, aggregate rejection reasons, fresh errors arrays and thenables |
 
 ### Async route contracts
 
@@ -3787,6 +3788,7 @@ aliases use only one-byte element kinds.
 | `ts-promise-combinator-route-all` | all input-order values, early rejections, eager iterables and sparse/thenable consumption | Promise combinator route contracts; ECMAScript, Promise.all | 48 | 0 |
 | `ts-promise-combinator-routes` | Promise combinators held to node beside explicit combinator-free controls | Promise combinator route contracts; typed paths | 48 | 0 |
 | `ts-promise-combinator-route-settled` | allSettled status, property presence and reason identity through typed routes | Promise combinator route contracts; ECMAScript, Promise.allSettled | 42 | 0 |
+| `ts-promise-combinator-route-any` | any first fulfillment and AggregateError input-order reasons | Promise combinator route contracts; ECMAScript, Promise.any | 44 | 0 |
 | `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
 | `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 252 | 0 |
 | `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 52 | 0 |
