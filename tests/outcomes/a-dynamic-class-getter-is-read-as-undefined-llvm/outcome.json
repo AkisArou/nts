@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 58,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 29,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "dynamicRead 0 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 0 str 1,48"
+      },
+      {
+        "compiled": "dynamicRead 1 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 1 str 1,48"
+      },
+      {
+        "compiled": "dynamicRead 2 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 2 str 1,50"
+      },
+      {
+        "compiled": "dynamicRead 3 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 3 str 1,48"
+      },
+      {
+        "compiled": "dynamicRead 4 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 4 str 1,50"
+      },
+      {
+        "compiled": "dynamicRead 5 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 5 str 1,52"
+      },
+      {
+        "compiled": "dynamicRead 6 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 6 str 3,49,46,53"
+      },
+      {
+        "compiled": "dynamicRead 7 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 7 str 3,48,46,53"
+      },
+      {
+        "compiled": "dynamicRead 8 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 8 str 3,50,46,53"
+      },
+      {
+        "compiled": "dynamicRead 9 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 9 str 4,45,48,46,53"
+      },
+      {
+        "compiled": "dynamicRead 10 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 10 str 3,52,46,55"
+      },
+      {
+        "compiled": "dynamicRead 11 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 11 str 4,45,50,46,55"
+      },
+      {
+        "compiled": "dynamicRead 12 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 12 str 1,56"
+      },
+      {
+        "compiled": "dynamicRead 13 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 13 str 2,50,56"
+      },
+      {
+        "compiled": "dynamicRead 14 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 14 str 3,49,48,48"
+      },
+      {
+        "compiled": "dynamicRead 15 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 15 str 3,50,53,54"
+      },
+      {
+        "compiled": "dynamicRead 16 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 16 str 3,50,53,54"
+      },
+      {
+        "compiled": "dynamicRead 17 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 17 str 4,49,48,48,48"
+      },
+      {
+        "compiled": "dynamicRead 18 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 18 str 4,52,48,57,54"
+      },
+      {
+        "compiled": "dynamicRead 19 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 19 str 5,54,53,53,51,54"
+      },
+      {
+        "compiled": "dynamicRead 20 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 20 str 10,50,49,52,55,52,56,51,54,52,56"
+      },
+      {
+        "compiled": "dynamicRead 21 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 21 str 11,45,50,49,52,55,52,56,51,54,52,56"
+      },
+      {
+        "compiled": "dynamicRead 22 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 22 str 10,50,49,52,55,52,56,51,54,52,56"
+      },
+      {
+        "compiled": "dynamicRead 23 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 23 str 10,52,50,57,52,57,54,55,50,57,54"
+      },
+      {
+        "compiled": "dynamicRead 24 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 24 str 16,57,48,48,55,49,57,57,50,53,52,55,52,48,57,57,50"
+      },
+      {
+        "compiled": "dynamicRead 25 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 25 str 17,45,57,48,48,55,49,57,57,50,53,52,55,52,48,57,57,48"
+      },
+      {
+        "compiled": "dynamicRead 26 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 26 str 10,49,46,48,48,48,48,48,48,48,49"
+      },
+      {
+        "compiled": "dynamicRead 27 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 27 str 5,49,50,51,52,54"
+      },
+      {
+        "compiled": "dynamicRead 28 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "dynamicRead 28 str 3,78,97,78"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 58 compared, 58 expected, 29 disagreements",
+  "node": null,
+  "measured_with": "f73818b47c491df1",
+  "source": "measured"
+}

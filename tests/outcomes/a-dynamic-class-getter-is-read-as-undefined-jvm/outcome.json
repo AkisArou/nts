@@ -1,0 +1,63 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "aborted",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 29,
+      "unavailable": 0,
+      "runtime_declined": 29,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 0,
+      "aborts": 29
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [],
+    "aborts": [
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+      "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')"
+    ],
+    "error": null
+  },
+  "run": "check",
+  "category": "aborted",
+  "nts": "the program threw rather than refusing: java.lang.ClassCastException: class nts.gen.Child cannot be cast to class nts.rt.NtsMap (nts.gen.Child and nts.rt.NtsMap are in unnamed module of loader 'app')",
+  "node": null,
+  "measured_with": "f73818b47c491df1",
+  "source": "measured"
+}

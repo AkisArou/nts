@@ -1,0 +1,150 @@
+{
+  "version": 1,
+  "check": {
+    "version": 1,
+    "status": "disagrees",
+    "counts": {
+      "functions": 2,
+      "expected": 58,
+      "compared": 58,
+      "unavailable": 0,
+      "runtime_declined": 0,
+      "timeouts": 0,
+      "approximated": 0,
+      "disagreements": 29,
+      "aborts": 0
+    },
+    "oracle": {
+      "expected": 58,
+      "received": 58,
+      "complete": true
+    },
+    "refusals": [],
+    "disagreements": [
+      {
+        "compiled": "deletedOwnField 0 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 0 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 1 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 1 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 2 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 2 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 3 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 3 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 4 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 4 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 5 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 5 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 6 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 6 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 7 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 7 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 8 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 8 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 9 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 9 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 10 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 10 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 11 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 11 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 12 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 12 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 13 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 13 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 14 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 14 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 15 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 15 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 16 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 16 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 17 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 17 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 18 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 18 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 19 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 19 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 20 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 20 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 21 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 21 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 22 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 22 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 23 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 23 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 24 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 24 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 25 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 25 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 26 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 26 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 27 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 27 str 4,98,97,115,101"
+      },
+      {
+        "compiled": "deletedOwnField 28 str 9,117,110,100,101,102,105,110,101,100",
+        "node": "deletedOwnField 28 str 4,98,97,115,101"
+      }
+    ],
+    "aborts": [],
+    "error": null
+  },
+  "run": "check",
+  "category": "wrong-answer",
+  "nts": "disagrees: 58 compared, 58 expected, 29 disagreements",
+  "node": null,
+  "measured_with": "f73818b47c491df1",
+  "source": "measured"
+}
