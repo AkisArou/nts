@@ -6,6 +6,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import test from "node:test";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
+import { TEST_HANG_MS, testProcessResult } from "../../gate/test-wait.ts";
 import type { FunctionSpec, NumberValue, ProgramModel } from "./model.ts";
 import { precheckProgram } from "./precheck.ts";
 import { generateModel } from "./scenarios.ts";
@@ -209,9 +210,9 @@ export function evaluate(request: Request) {
     }) };
 }
 `);
-  const run = spawnSync(process.execPath, [fileURLToPath(new URL("./main.ts", import.meta.url)),
+  const run = testProcessResult(spawnSync(process.execPath, [fileURLToPath(new URL("./main.ts", import.meta.url)),
     "--reduce", directory, "--oracle", oraclePath, "--out", out, "--max-candidates", "0"],
-  { encoding: "utf8", timeout: 30_000 });
+  { encoding: "utf8", timeout: TEST_HANG_MS }), "the reduce command");
   assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}\n${run.error?.message ?? ""}`);
   assert.match(run.stdout, /program hash: [0-9a-f]{64}/);
   assert.equal(readFileSync(join(directory, "src", "main.ts"), "utf8"), written.source);
