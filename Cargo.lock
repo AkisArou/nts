@@ -471,6 +471,7 @@ dependencies = [
  "nts-semantic-schema",
  "rustc-hash",
  "serde",
+ "serde_json",
 ]
 
 [[package]]

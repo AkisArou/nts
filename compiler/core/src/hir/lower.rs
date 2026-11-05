@@ -14529,6 +14529,8 @@ impl Shared {
         closures: &[ClosureInfo],
         naming: Naming,
     ) -> Self {
+        #[cfg(test)]
+        context_scaling::context();
         let mut structural = structural_instantiations(snapshot, hierarchy);
         erased_calls::raising_copies(snapshot, hierarchy, &naming, &mut structural);
         let probe = FuncBuilder::probe(snapshot);
@@ -14648,6 +14650,8 @@ impl Shared {
             }
         }
         wire_naming(&mut builder, &self.naming);
+        #[cfg(test)]
+        context_scaling::binding(self, &builder);
         builder
     }
 }
@@ -90263,3 +90267,9 @@ struct Spread {
     slot: HirType,
     count: ValueId,
 }
+
+#[cfg(test)]
+mod immutable_context_tests;
+
+#[cfg(test)]
+mod context_scaling;
