@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { createServer, type Socket } from "node:net";
 import { fileURLToPath } from "node:url";
 import { selectRange, selectionInfrastructure, unionViews, type RuleView } from "./owed-range.ts";
@@ -60,6 +60,47 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
   const got=selectRange(repo,`${base}..HEAD`);
   assert.deepEqual(got.checks.steps,["tests","tooling"]);
   assert.equal(got.strict,true,"unknown historical routing stays strict");
+});
+
+test("range registries are private, borrow pinned objects, and disappear after success or failure",t=>{
+  const directory=mkdtempSync(join(tmpdir(),"owed-private-registry-")),repo=join(directory,"repo"),report=join(directory,"report.jsonl");
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const env={...process.env,GIT_AUTHOR_NAME:"t",GIT_AUTHOR_EMAIL:"t@t",GIT_COMMITTER_NAME:"t",GIT_COMMITTER_EMAIL:"t@t"};
+  mkdirSync(join(repo,"tooling/gate"),{recursive:true});
+  const git=(...args:string[])=>execFileSync("git",args,{cwd:repo,env,encoding:"utf8",stdio:["ignore","pipe","pipe"]}).trim();
+  const policy=`import {execFileSync} from 'node:child_process';
+import {appendFileSync,readFileSync} from 'node:fs';
+const git=(...args)=>execFileSync('git',args,{encoding:'utf8',stdio:['ignore','pipe','pipe']}).trim();
+const common=git('rev-parse','--path-format=absolute','--git-common-dir');
+appendFileSync(${JSON.stringify(report)},JSON.stringify({common,revision:git('rev-parse','HEAD'),objects:git('count-objects','-v'),pins:execFileSync('git',['-C',${JSON.stringify(repo)},'for-each-ref','--format=%(refname) %(objectname)','refs/nts-selector/'],{encoding:'utf8'})})+'\\n');
+export const selfTest=()=>readFileSync('mode','utf8')==='fail'?'intentional policy failure':null;
+export const owed=()=>[{name:'control',paths:[],steps:['tooling'],arms:[]}];
+export const gateSteps=rules=>rules.flatMap(rule=>rule.steps);
+export const allSteps=()=>['tooling'];\n`;
+  writeFileSync(join(repo,"tooling/gate/owed.mjs"),policy);writeFileSync(join(repo,"mode"),"healthy");
+  git("init","-qb","main");git("add",".");git("commit","-qm","base");const base=git("rev-parse","HEAD");
+  writeFileSync(join(repo,"candidate"),"candidate\n");git("add","candidate");git("commit","-qm","candidate");
+  assert.deepEqual(selectRange(repo,`${base}..HEAD`).checks.steps,["tooling"],"healthy source control");
+  writeFileSync(report,"");
+  // A different process may have created gitdir before commondir. Keep that
+  // exact intermediate registry entry present for the whole selection.
+  const incomplete=join(repo,".git/worktrees/half-written");mkdirSync(incomplete,{recursive:true});
+  writeFileSync(join(incomplete,"gitdir"),join(directory,"other/.git")+"\n");
+  const marker=readFileSync(join(incomplete,"gitdir"),"utf8");
+  assert.deepEqual(selectRange(repo,`${base}..HEAD`).checks.steps,["tooling"]);
+  writeFileSync(join(repo,"mode"),"fail");git("add","mode");git("commit","-qm","policy failure");
+  assert.throws(()=>selectRange(repo,`${base}..HEAD`),/intentional policy failure/);
+  const rows=readFileSync(report,"utf8").trim().split("\n").map(line=>JSON.parse(line));
+  assert.equal(rows.length,4,"both endpoint imports on success and policy failure");
+  for(const row of rows){
+    assert.notEqual(row.common,join(repo,".git"));
+    assert.match(row.objects,/^count: 0$/m);assert.match(row.objects,/^in-pack: 0$/m);
+    assert.ok(row.pins.split("\n").some(line=>line.endsWith(` ${row.revision}`)),"borrowed revision has a live source pin");
+    assert.equal(existsSync(dirname(row.common)),false,"owned range and private registry cleaned");
+  }
+  assert.equal(git("for-each-ref","--format=%(refname)","refs/nts-selector/"),"","pins removed after both outcomes");
+  assert.equal(readFileSync(join(incomplete,"gitdir"),"utf8"),marker,"source's in-progress entry left intact");
+  assert.equal(existsSync(join(incomplete,"commondir")),false);
 });
 
 test("concurrent range preflights have distinct endpoint registry names and collect only their own trees", async t => {
