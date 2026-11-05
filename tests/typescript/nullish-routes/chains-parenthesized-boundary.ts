@@ -1,13 +1,14 @@
 /*---
-description: "Parentheses end an optional chain before its next member. Route: out-of-bounds array element as required inner field"
+description: "Parentheses end an optional chain before its next member. Route: captured typed nullable binding changed by closure"
 features: [ts-nullish-routes, ts-nullish-route-chains, ts-null-undefined, ts-optional-chaining]
 ---*/
 
-// Parentheses end an optional chain before its next member. Route: out-of-bounds array element as required inner field. Node prints chains-parenthesized-boundary:ok.
+// Parentheses end an optional chain before its next member. Route: captured typed nullable binding changed by closure. Node prints chains-parenthesized-boundary:ok.
 interface Inner { x: number }
 interface Outer { inner: Inner }
-const list: Inner[] = [];
-const outer: Outer = { inner: list[0] };
+let outer: Outer | null = { inner: { x: 7 } };
+function clear(): void { outer = null; }
+clear();
 assert.throws(TypeError, () => {
   const result = (outer?.inner).x; void result;
 });
