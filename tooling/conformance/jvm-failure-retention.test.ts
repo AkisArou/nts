@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import { once } from "node:events";
 import { afterEach, test } from "node:test";
 import { mkdtempSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -104,7 +105,14 @@ test("a newly published run has its real live owner before any entry, and locked
   assert.equal(JSON.parse(readFileSync(join(folder, "owner.json"), "utf8")).pid, process.pid);
 });
 
-test("two concurrent collectors serialize and remove each expired entry once", async () => {
+test("two concurrent collectors serialize and remove each expired entry once", async t => {
+  // The full gate runs the verifier beside tooling. Reproduce that live
+  // legacy owner explicitly so this guard cannot depend on machine timing.
+  const verifier = spawn(process.execPath, ["-e", "process.stdout.write('ready');process.stdin.resume()", "jvm-verifies.ts"],
+    { stdio: ["pipe", "pipe", "pipe"] });
+  t.after(async () => { const closed = once(verifier, "close"); verifier.stdin.end(); await closed; });
+  const ready = await once(verifier.stdout, "data");
+  assert.equal(String(ready[0]), "ready");
   const base = root(), folder = run(base, "expired");
   entry(folder, 1, "one", NOW - 20 * DAY);
   entry(folder, 2, "two", NOW - 20 * DAY);
