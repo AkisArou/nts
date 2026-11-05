@@ -113,7 +113,11 @@ test("two concurrent collectors serialize and remove each expired entry once", a
   t.after(async () => { const closed = once(verifier, "close"); verifier.stdin.end(); await closed; });
   const ready = await once(verifier.stdout, "data");
   assert.equal(String(ready[0]), "ready");
-  const base = root(), folder = run(base, "expired");
+  const base = root(), folder = createFailureRun(base, fingerprint);
+  const receipt = JSON.parse(readFileSync(join(folder, "owner.json"), "utf8"));
+  // This known owner is dead even while a receipt-less verifier is live.
+  // A live process cannot have two different start identities.
+  writeFileSync(join(folder, "owner.json"), JSON.stringify({ ...receipt, start: String(BigInt(receipt.start) + 1n) }));
   entry(folder, 1, "one", NOW - 20 * DAY);
   entry(folder, 2, "two", NOW - 20 * DAY);
   const collect = () => new Promise<{ removed: number }>((done, reject) => {
