@@ -1848,7 +1848,7 @@ compile and record backend outcomes.
 
 | area | case prefix | cases | controls | coverage |
 | --- | --- | ---: | ---: | --- |
-| parameter-shape | `shape-*` | 26 | 26 | Six parameter forms across four storage routes, plus omitted optional and default arguments |
+| parameter-shape | `shape-*` | 26 | 38 | Six parameter forms across four storage routes, plus omitted optional and default arguments |
 | receivers | `receiver-*` | 11 | 11 | Object and class call/apply/bind, captured arrows, handler fields, array thisArg, static values and returned functions |
 | throws | `throw-*` | 14 | 14 | Fields, arrays, Maps, returned and passed functions, conditional and union calls, captures, array callbacks and accessors |
 | async-generators | `async-*`, `generator-*` | 10 | 10 | Async functions, generators and async generators as values, async generator methods, field for-await and stored yield delegation |
@@ -2324,6 +2324,7 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | area | cases | controls | typed routes |
 | --- | ---: | ---: | --- |
 | `making` | 28 | 28 | Elisions, Array constructors, length changes, deletion, Array.from/of, fill and stored undefined |
+| `visiting` | 26 | 26 | Callback skip/visit order, reduction errors, search and indexed reads on sparse slots |
 
 ### Typed-array contents contracts
 
@@ -3767,7 +3768,8 @@ aliases use only one-byte element kinds.
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
 | `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
-| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 56 | 0 |
+| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 104 | 0 |
+| `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 48 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
