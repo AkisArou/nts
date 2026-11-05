@@ -176,6 +176,51 @@ function observeIntersection(): void {
 }
 
 // The last step waits for both observers, up to two seconds.
+// The checkpoint, observed across a task boundary: a mutation made in a
+// timer callback is delivered to its observer before the next timer
+// runs. Delivery is a microtask on Blink's queue, so this reads the
+// same whether the checkpoint ran as the mutating callback returned or
+// as its task ended -- and read differently if it never ran. Outcomes
+// go to their own attribute: only the order mutated, delivered,
+// next-task is what both sides keep.
+//
+// The checkpoint's three side channels have no scenario of their own
+// here, each for a stated reason. IndexedDB transactions deactivate at
+// checkpoint end (Blink's one end-of-checkpoint task producer is the
+// IDBTransaction constructor), but IndexedDB is not bound: Window's
+// indexedDB is skipped in bindgen/report-libdom.json. WeakRef kept
+// objects clear at the checkpoint, but WeakRef is unrepresentable in
+// the compiler (tests/refusals/weakref-property), so kept objects are
+// populated only by page script's derefs. And a rejected promise
+// nobody handles is not Blink's notification on this surface at all:
+// the runtime reports it fatally at the host's own checkpoint
+// (runtime/c, nts_report_unhandled_rejections), node-style, so the
+// compiled side has no unhandledrejection event to order against the
+// oracle's. When any of those surfaces binds, its scenario belongs
+// beside this one.
+function checkpointGuards(): void {
+  // Everything is made inside the timer, as in observeMutations: a node
+  // or observer registration kept from here would root a handle at
+  // witness time.
+  setTimeout((): void => {
+    const target = document().createElement("div");
+    target.id = "checkpoint-mutation";
+    const body = document().body;
+    if (body !== null) body.appendChild(target);
+    const observer = newMutationObserver((records: MutationRecordSequence, self: MutationObserver): void => {
+      note("data-checkpoint", "mutation-delivered" + records.length);
+      self.disconnect();
+    });
+    observer.observe(target, { childList: true });
+    target.appendChild(document().createElement("i"));
+    note("data-checkpoint", "mutated");
+  }, 0);
+  setTimeout((): void => {
+    note("data-checkpoint", "next-task");
+    note("data-checkpoint", "done");
+  }, 40);
+}
+
 function finish(): void {
   const pre = document().querySelector("#native-timers");
   if (pre === null) return;
@@ -184,8 +229,9 @@ function finish(): void {
   const resized = pre.getAttribute("data-resize");
   const intersected = pre.getAttribute("data-intersection");
   const idled = pre.getAttribute("data-idle");
+  const checkpointed = pre.getAttribute("data-checkpoint");
   const settled = resized !== null && resized.endsWith("done;") && intersected !== null && intersected.endsWith("done;")
-    && idled !== null && idled.endsWith("done;");
+    && idled !== null && idled.endsWith("done;") && checkpointed !== null && checkpointed.endsWith("done;");
   if (!settled && waited < 100) {
     setTimeout(finish, 20);
     return;
@@ -207,12 +253,14 @@ export function startTimerVectors(): void {
     pre.setAttribute("data-resize", "");
     pre.setAttribute("data-intersection", "");
     pre.setAttribute("data-idle", "");
+    pre.setAttribute("data-checkpoint", "");
   }
   remember("data-ticks", 0);
   remember("data-interval", 0);
   remember("data-depth", 0);
   armSelfRemoval();
   armSelfClearingHandler();
+  checkpointGuards();
   // Order by delay, then by when they were set: a negative or NaN timeout
   // is 0, and a 0 runs before a 5 and a 20.
   setTimeout((): void => { log("t20"); intervals(); }, 20);
