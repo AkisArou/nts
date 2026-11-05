@@ -405,6 +405,8 @@ flows through it.
 | `generic-routes/` | simultaneous generic instantiations and crossings that preserve exact runtime values, with node as the oracle |
 | `generic-routes-controls/` | separate non-generic declarations for every used type argument, retaining computations, input values and assertions |
 | `generics/` | a matrix of six positions by eight kinds of type argument, then the facets of type parameters |
+| `hole-routes/` | exact sparse array presence, values and method behavior across declared TypeScript routes, held to node |
+| `hole-routes-controls/` | two dense value/presence lists and local indexed operations preserving the cases' observations |
 | `implicit-calls/` | implicit calls through interfaces, constrained generics, unions and declared class shapes, with exact call logs, state and results |
 | `implicit-calls-controls/` | explicit-call counterparts for implicit-call cases, preserving their instrumentation and observations |
 | `instanceof-routes/` | exact instance answers, custom-check call histories and TypeErrors across typed operands, live prototype chains and runtime constructors, held to node |
@@ -2312,6 +2314,17 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | `reads` | 18 | 18 | Indexing, membership, predicates, iterators, callbacks, destructuring, rest-argument spread and string/JSON conversions |
 | `representations` | 12 | 12 | Concrete writes and wider readers for every primitive kind, object instances and literals, closures, nested arrays, holes and stored undefined |
 | `iteration` | 4 | 4 | Push and truncation during for-of, and insertion and deletion by splice inside forEach, through widened writers |
+### Hole route contracts
+
+| source | concepts |
+| --- | --- |
+| [ECMAScript, Array objects](https://tc39.es/ecma262/multipage/indexed-collections.html#sec-array-objects) | absent indexed elements versus present undefined, sparse method visitation, copies, iteration and mutation |
+| [TypeScript, Generics](https://www.typescriptlang.org/docs/handbook/2/generics.html) and [Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html) | typed routes can hide the runtime absence of indexed elements |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `making` | 28 | 28 | Elisions, Array constructors, length changes, deletion, Array.from/of, fill and stored undefined |
+
 ### Typed-array contents contracts
 
 | source | concepts |
@@ -3753,6 +3766,8 @@ aliases use only one-byte element kinds.
 | `ts-instanceof-route-prototypes` | Hand-made and changed chains preserve exact membership before and after each mutation | Instanceof route contracts; typed paths | 14 | 0 |
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
+| `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
+| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 56 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
