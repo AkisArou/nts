@@ -78,7 +78,7 @@ import {rootTrial} from "./root-trial.ts";
 import {publishReady,removeReady,snapshotReady,type ReadyEntry,type ReadyProof} from "./ready.ts";
 import {admitted} from "./admission-hold.ts";
 
-// NTS_LAND_HOME is for land.test.ts, which drives this file against a scratch
+// NTS_LAND_HOME is for the land-*.test.ts tests, which drive this file against a scratch
 // repository and a stand-in gate.
 const HOME = process.env.NTS_LAND_HOME ?? homedir();
 const LOCK = join(HOME, ".cache/nts-land.lock");

@@ -2,12 +2,17 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
-import { auditTestTiming, timingProblems, timingSites } from "./test-timing.ts";
+import { auditTestTiming, isTestCode, timingProblems, timingSites } from "./test-timing.ts";
 import { testProcessResult, waitFor } from "./test-wait.ts";
 
 test("every tooling test has only its exact reviewed timing sites", () => {
   const result = auditTestTiming(fileURLToPath(new URL("../../", import.meta.url)));
   assert.deepEqual(result.problems, [], result.problems.join("\n"));
+});
+
+test("a shared test-fixture module is linted like the test files that import it", () => {
+  for (const name of ["land-fast.test.ts", "integrity.test.mjs", "land-test-fixture.ts", "selector-fixture.ts"]) assert.ok(isTestCode(name), name);
+  for (const name of ["land.ts", "test-timing.ts", "fixture-configs.mjs"]) assert.ok(!isTestCode(name), name);
 });
 
 test("the lint rejects sleeps, aliased timers, clocks and short process deadlines", () => {

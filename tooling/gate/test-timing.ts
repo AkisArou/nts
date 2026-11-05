@@ -1,5 +1,6 @@
-// Conservative test-side timing lint. Every new timer or clock expression
-// requires review, including timers in generated fixture scripts. Normal tests
+// Conservative test-side timing lint. Every new timer or clock expression in a
+// test file or a shared test-fixture module (*-fixture.ts) requires review,
+// including timers in generated fixture scripts. Normal tests
 // wait on an event/state through test-wait.ts instead of sleeping then asserting.
 import { readdirSync, readFileSync } from "node:fs";
 import { join, relative, resolve } from "node:path";
@@ -7,6 +8,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { REVIEWED_TEST_TIMING, type ReviewedTiming } from "./test-timing-reviewed.ts";
 
 export type TimingSite = { file: string; line: number; source: string };
+export const isTestCode = (name: string): boolean => /\.test\.(?:ts|mjs)$|-fixture\.(?:ts|mjs)$/.test(name);
 const timing = /\bsetTimeout\b|\bsetInterval\b|\bAtomics\s*\.\s*wait\b|\bsleep\b|\b(?:Date|performance)\s*\.\s*now\s*\(|\btimeout\s*:/;
 
 export function timingSites(file: string, source: string): TimingSite[] {
@@ -32,7 +34,7 @@ export function auditTestTiming(root: string): { files: number; sites: TimingSit
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) walk(path);
-      else if (entry.isFile() && /\.test\.(?:ts|mjs)$/.test(entry.name)) files.push(path);
+      else if (entry.isFile() && isTestCode(entry.name)) files.push(path);
     }
   }
   walk(join(root, "tooling"));
