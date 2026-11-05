@@ -1,15 +1,15 @@
 /*---
-description: "Parentheses end an optional chain before its next member. Route: captured typed nullable binding changed by closure"
+description: "Parentheses terminate an optional chain, so a null base throws when the next member is read. Route: declared nonnullable helper given a captured binding cleared by closure"
 features: [ts-nullish-routes, ts-nullish-route-chains, ts-null-undefined, ts-optional-chaining]
 ---*/
 
-// Parentheses end an optional chain before its next member. Route: captured typed nullable binding changed by closure. Node prints chains-parenthesized-boundary:ok.
+// Parentheses terminate an optional chain, so a null base throws when the next member is read. Route: declared nonnullable helper given a captured binding cleared by closure. Node prints chains-parenthesized-boundary:ok.
 interface Inner { x: number }
 interface Outer { inner: Inner }
+function read(base: Outer): number { return (base?.inner).x; }
 let outer: Outer | null = { inner: { x: 7 } };
 function clear(): void { outer = null; }
 clear();
-assert.throws(TypeError, () => {
-  const result = (outer?.inner).x; void result;
-});
+const selected = outer;
+assert.throws(TypeError, () => { read(selected); });
 console.log("chains-parenthesized-boundary:ok");
