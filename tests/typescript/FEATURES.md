@@ -2326,6 +2326,7 @@ and [typed-array indexed access](https://tc39.es/ecma262/multipage/ordinary-and-
 | `making` | 28 | 28 | Elisions, Array constructors, length changes, deletion, Array.from/of, fill and stored undefined |
 | `visiting` | 26 | 26 | Callback skip/visit order, reduction errors, search and indexed reads on sparse slots |
 | `reading` | 22 | 22 | Iteration, keys, entries, enumeration, string/JSON conversion, spread and Math.max |
+| `copying` | 23 | 23 | slice, concat, spread, Array.from, change-by-copy methods, flat and copyWithin |
 
 ### Typed-array contents contracts
 
@@ -3769,9 +3770,10 @@ aliases use only one-byte element kinds.
 | `ts-instanceof-route-values` | Stored constructor identity, replacement, valid callable chains and exact invalid-operand TypeErrors survive typed routes | Instanceof route contracts; typed paths | 18 | 0 |
 | `ts-instanceof-routes` | Instance answers, custom calls and errors survive typed operands and runtime constructors beside explicit operator-free controls | Instanceof route contracts; typed paths | 86 | 0 |
 | `ts-hole-route-making` | sparse array creation, growth, deletion, truncation and filling through typed routes | Hole route contracts; ECMAScript, Array objects | 56 | 0 |
-| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 152 | 0 |
+| `ts-hole-routes` | precise sparse array presence and values beside explicit dense-list controls | Hole route contracts; typed paths | 198 | 0 |
 | `ts-hole-route-visiting` | callback and search behavior over absent versus owned undefined array indexes | Hole route contracts; ECMAScript, Array.prototype | 52 | 0 |
 | `ts-hole-route-reading` | array iteration and text serialization including holes | Hole route contracts; ECMAScript, Array objects | 44 | 0 |
+| `ts-hole-route-copying` | sparse slot retention, densification and flattening across array copies | Hole route contracts; ECMAScript, Array.prototype | 46 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
