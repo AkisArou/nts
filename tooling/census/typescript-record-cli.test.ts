@@ -45,7 +45,9 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const fingerprint = createHash("sha256").update(readFileSync(binary)).digest("hex").slice(0, 16);
   const one = join(scratch, "one.tsv"), expected = join(scratch, "expected.tsv"), rows = join(scratch, "rows.jsonl"), json = join(scratch, "report.json");
   writeFileSync(one, serializeTypeScriptRecord({ metadata: recorded.metadata, cases: new Map([[target, pass]]) }));
-  function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION) {
+  const meminfo=join(scratch,"low-meminfo");
+  writeFileSync(meminfo,"MemAvailable: 0 kB\n");
+  function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION, lowMemory = false) {
     writeFileSync(expected, contents);
     writeFileSync(rows, JSON.stringify({ fingerprint, under: "tests/typescript", harness: harnessHashOf("ts"), observations, output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" +
       JSON.stringify({ path: target, ...observed }) + "\n");
@@ -53,7 +55,8 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
-        env: { ...process.env, NTS_BIN: binary, NTS_CENSUS_DIR: join(scratch, "run") } });
+        env: { ...process.env, NTS_BIN: binary, NTS_CENSUS_DIR: join(scratch, "run"),
+          ...(lowMemory?{NTS_MEMINFO:meminfo,NTS_CENSUS_MIN_AVAILABLE_GB:"1000000"}:{}) } });
   }
   for (const [before, after, word, status] of [
     [pass, wrong, "REGRESSED", 1], [refused, wrong, "CHANGED", 1], [invalid, abort, "CHANGED", 1],
@@ -90,6 +93,12 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(shifted.status, 0, shifted.stdout + shifted.stderr);
   assert.equal(JSON.parse(readFileSync(json, "utf8")).observations[target].validator, "Queue<N>#push TypeId(N) type N at: 7");
   const contents = serializeTypeScriptRecord(recorded);
+  const resumed=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,true);
+  assert.equal(resumed.status,0,resumed.stdout+resumed.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(json,"utf8")).observations[target],pass);
+  assert.doesNotMatch(resumed.stderr,/memory:|waiting for|holding new cases/);
+  assert.match(resumed.stdout,/needed 0 to start/);
+
   for (const [mutated, message] of [
     [contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), "new case has no record"],
     [contents + "tests/typescript/missing-source.ts\t{\"kind\":\"pass\"}\n", "recorded case gone missing"],
