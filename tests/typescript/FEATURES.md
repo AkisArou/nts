@@ -2076,6 +2076,19 @@ Dispatch-route cases retain node's answer even where nts refuses a form.
 Maintainers record backend results separately. Strict-rejected matrix
 forms are listed with their diagnostics in the pull request.
 
+
+### Nullish route contracts
+
+| source | concepts |
+| --- | --- |
+| [ECMAScript Optional Chaining](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-optional-chaining) | nullish-only short circuit, receiver identity, skipped work |
+| [ECMAScript Assignment Operators](https://tc39.es/ecma262/multipage/ecmascript-language-expressions.html#sec-assignment-operators) | short-circuit logical writes, target references and returned values |
+| TypeScript typed paths | generic, interface, class, array, tuple, Map and Record carriers |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `coalesce` | 24 | 24 | falsy versus nullish values, fallback laziness, chained coalescing and typed reads |
+
 ### Promise combinator route contracts
 
 | source | concepts |
@@ -3960,6 +3973,8 @@ land without another open Unicode pull request.
 | `ts-hole-route-reading` | array iteration and text serialization including holes | Hole route contracts; ECMAScript, Array objects | 44 | 0 |
 | `ts-hole-route-copying` | sparse slot retention, densification and flattening across array copies | Hole route contracts; ECMAScript, Array.prototype | 46 | 0 |
 | `ts-hole-route-changing` | array mutation preserves and moves absent indexes distinct from undefined | Hole route contracts; ECMAScript, Array.prototype | 54 | 0 |
+| `ts-nullish-routes` | Nullish operators and truthiness across typed carriers beside equivalent explicit controls | Nullish route contracts; typed paths | 48 | 0 |
+| `ts-nullish-route-coalesce` | coalescing and logical OR preserve or replace signed zero, NaN, zero bigint and other typed values, with lazy fallbacks | Nullish route contracts; ECMAScript, CoalesceExpression | 48 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
