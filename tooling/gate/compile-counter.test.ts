@@ -261,7 +261,7 @@ test("RC runs fresh with --rc despite a valid NoGC shared measurement, and owns 
   }
   const commands = join(root, "commands.jsonl"), nts = join(root, "nts");
   writeFileSync(nts, `#!/usr/bin/env node
-require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({args:process.argv.slice(2), ambient:Object.fromEntries(["LANG", "LC_ALL", "TZ", "FORCE_COLOR", "TERM", "RAYON_NUM_THREADS"].map(key=>[key,process.env[key]]))})+'\\n');
+require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({args:process.argv.slice(2), ambient:Object.fromEntries(${JSON.stringify([...Object.keys(FIXED_AMBIENT), "RAYON_NUM_THREADS"])}.map(key=>[key,process.env[key]]))})+'\\n');
 `);
   chmodSync(nts, 0o755);
   const sha256 = createHash("sha256").update(readFileSync(nts)).digest("hex");

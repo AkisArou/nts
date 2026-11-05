@@ -21,7 +21,7 @@ test("integrity executes every listing and counts only a kept prepared child", (
     writeFileSync(compiler, `#!/usr/bin/env node
 import {appendFileSync} from "node:fs";
 const argv=process.argv.slice(2);
-appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv,ambient:Object.fromEntries(["LANG", "LC_ALL", "TZ", "FORCE_COLOR", "TERM", "RAYON_NUM_THREADS"].map(key=>[key,process.env[key]]))})+"\\n");
+appendFileSync(process.env.CONTROL_COMMANDS,JSON.stringify({pid:process.pid,argv,ambient:Object.fromEntries(${JSON.stringify([...Object.keys(FIXED_AMBIENT), "RAYON_NUM_THREADS"])}.map(key=>[key,process.env[key]]))})+"\\n");
 if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
 `);
     chmodSync(compiler, 0o755);
