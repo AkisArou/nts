@@ -112,6 +112,7 @@ import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { artifactFiles, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
 import { artifactResult, completeVerifier, verifierEnvironment, verifierExecution } from "../gate/artifact-reuse.ts";
+import { createFailureRun, retainRecentFailures } from "./jvm-failure-retention.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -172,6 +173,13 @@ if (process.argv.includes("--stale")) {
   for (const shape of stale) console.log(`  ^ no longer declined in either corpus: ${shape} (${rows.get(shape).verdict}) -- remove it from tooling/conformance/jvm-declines.known, or re-verdict it`);
   console.log(`  jvm-declines.known: ${rows.size - stale.length} of ${rows.size} row(s) still declined, ${stale.length} stale`);
   process.exit(0);
+}
+try {
+  const retention = retainRecentFailures(base, Date.now());
+  console.log(`  failure retention: removed ${retention.removed} entries (${(retention.bytes / 2 ** 20).toFixed(1)} MiB), kept ${retention.kept}, ${retention.marked} of them marked KEEP`);
+} catch (error) {
+  // Evidence housekeeping cannot turn a completed verifier into a wrong answer.
+  console.warn(`  failure retention: cleanup incomplete: ${error.message}`);
 }
 const scratch = mkdtempSync(join(base, "run-"));
 process.on("exit", () => rmSync(scratch, { recursive: true, force: true }));
@@ -249,7 +257,7 @@ function verifierFailure(result, summary) {
 // whose normal exit cleanup remains unchanged. No compiler or JDK is rerun.
 let retained;
 function retainFailure(project, out, emit, verify, reason) {
-  retained ??= mkdtempSync(join(base, `failed-${FINGERPRINT}-`));
+  retained ??= createFailureRun(base, FINGERPRINT);
   const key = createHash("sha256").update(project).digest("hex");
   const entry = mkdtempSync(join(retained, `${key}-`));
   if (existsSync(out)) renameSync(out, join(entry, "classes"));
