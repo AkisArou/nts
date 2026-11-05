@@ -1,0 +1,36 @@
+/*---
+description: "setUint8 truncates and wraps finite values and stores nonfinite values as zero, with exact unsigned reads and bytes. (control)"
+features: [ts-dataview-routes, ts-dataview-route-integers, ts-arrays, ts-functions, ts-iteration, ts-numbers, ts-type-aliases, ts-class, ts-class-fields, ts-private-fields, ts-this, ts-readonly, ts-tuples, ts-destructuring]
+---*/
+
+function localArrayBuffer(size: number): number[] { const bytes: number[] = []; for (let i = 0; i < size; i++) bytes[i] = 0; return bytes; }
+function localDataView(bytes: number[]): number[] { return bytes; }
+function localGet(bytes: number[], offset: number, width: number, signed: boolean, little = false): number {
+  offset -= offset % 1; let value = 0; for (let i = 0; i < width; i++) value = value * 256 + bytes[offset + (little ? width - 1 - i : i)];
+  return signed && value >= 256 ** width / 2 ? value - 256 ** width : value;
+}
+function localSet(bytes: number[], offset: number, value: number, width: number, little = false): void {
+  offset -= offset % 1; const modulus = 256 ** width; if (value !== value || value === Infinity || value === -Infinity) value = 0;
+  value -= value % 1; value = (value % modulus + modulus) % modulus;
+  for (let i = 0; i < width; i++) { bytes[offset + (little ? i : width - 1 - i)] = value % 256; value = (value - value % 256) / 256; }
+}
+function localSetUint8(bytes: number[], offset: number, value: number): void { localSet(bytes, offset, value, 1); }
+function localGetUint8(bytes: number[], offset: number): number { return localGet(bytes, offset, 1, false); }
+// setUint8 truncates and wraps finite values and stores nonfinite values as zero, with exact unsigned reads and bytes. Route: a private View field. Node prints integers-uint8-private-conversion:ok.
+type View = number[];
+class ByteSlot {
+  #view: View = localDataView(localArrayBuffer(1));
+  constructor() { localSetUint8(this.#view, 0, 165); }
+  write(value: number): void { localSetUint8(this.#view, 0, value); }
+  read(): number { return localGetUint8(this.#view, 0); }
+  bytes(): number[] { const result: number[] = []; for (let i = 0; i < 1; i++) result[i] = localGetUint8(this.#view, i); return result; }
+}
+const rows: readonly [number, number][] = [
+  [-257, 255], [-1, 255], [0, 0], [255, 255], [256, 0], [257, 1],
+  [-1.9, 255], [1.9, 1], [-0.9, 0], [NaN, 0], [Infinity, 0], [-Infinity, 0]
+];
+for (const [value, expected] of rows) {
+  const slot = new ByteSlot(); slot.write(value);
+  assert.sameValue(slot.read(), expected); assert.compareArray(slot.bytes(), [expected]);
+}
+console.log("integers-uint8-private-conversion:ok");
