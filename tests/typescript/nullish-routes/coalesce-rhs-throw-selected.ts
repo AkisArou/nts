@@ -1,6 +1,6 @@
 /*---
 description: "Coalescing over null evaluates a throwing fallback once. Route: interface field and throwing function"
-features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-interfaces, ts-throws]
+features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-interfaces, ts-errors]
 ---*/
 
 // Coalescing over null evaluates a throwing fallback once. Route: interface field and throwing function. Node prints coalesce-rhs-throw-selected:ok.
