@@ -3145,7 +3145,8 @@ holes, callback mutation, subclass policies or sorting.
 | `reads` | 24 | 24 | relative indices, strict and SameValueZero searches, first and last matches, and decisive predicate visits through declared arrays and callbacks |
 | `copies` | 26 | 26 | joining, slice and concat boundaries, flattening depth, copying writes and ordered iterator results with unchanged sources and shallow identities |
 | `callbacks` | 24 | 24 | exact callback values, indices, receivers and thisArg, fresh results, fold starts, empty and single-element folds, and noncommutative reverse folds |
-| **Total** | **74** | **74** | exact inputs and assertions retained in every pair |
+| `writes` | 24 | 24 | exact lengths and removed elements, splice forms, normalized fill and copy ranges, overlap direction, shared object slots and same-array returns |
+| **Total** | **98** | **98** | exact inputs and assertions retained in every pair |
 
 ## Tags
 
@@ -3164,10 +3165,11 @@ holes, callback mutation, subclass policies or sorting.
 | `ts-ambient` | an ambient declaration (`declare var/function/class/namespace/global`), which emits nothing | conformance/ambient; ts-eslint TSDeclareFunction, `declare` modifiers | 6 | 1 |
 | `ts-any` | an explicitly `any`-typed value, the dynamic escape hatch | conformance/types/any; ts-eslint TSAnyKeyword | 4 | 0 |
 | `ts-array-contents` | array elements retain values, runtime kinds, order and slot presence across typed writes and reads | Array contents contracts; typed paths | 142 | 0 |
-| `ts-array-method-routes` | dense array method results, callbacks, identities and errors through typed routes beside explicit loop controls | Array method route contracts; typed paths | 148 | 0 |
+| `ts-array-method-routes` | dense array method results, callbacks, identities and errors through typed routes beside explicit loop controls | Array method route contracts; typed paths | 196 | 0 |
 | `ts-array-method-route-reads` | relative indices, strict and SameValueZero searches, first and last matches, and decisive predicate visits through declared arrays and callbacks | Array method route contracts; typed paths | 48 | 0 |
 | `ts-array-method-route-copies` | joining, slice and concat boundaries, flattening depth, copying writes and ordered iterator results with unchanged sources and shallow identities | Array method route contracts; typed paths | 52 | 0 |
 | `ts-array-method-route-callbacks` | exact callback values, indices, receivers and thisArg, fresh results, fold starts, empty and single-element folds, and noncommutative reverse folds | Array method route contracts; typed paths | 48 | 0 |
+| `ts-array-method-route-writes` | exact lengths and removed elements, splice forms, normalized fill and copy ranges, overlap direction, shared object slots and same-array returns | Array method route contracts; typed paths | 48 | 0 |
 | `ts-array-iteration` | writes through typed aliases during iteration preserve live traversal and callback semantics | Objects, Arrays; ECMAScript, CreateArrayIterator and Array.prototype.forEach | 8 | 0 |
 | `ts-array-reads` | indexed, method, iterator and conversion reads observe actual values through differing declared types | Array contents contracts; typed paths | 36 | 0 |
 | `ts-array-representation` | concrete element storage crosses a wider reader with exact payloads, identities and slot presence | Language, Types, A type is a layout; Objects, Arrays | 24 | 0 |
