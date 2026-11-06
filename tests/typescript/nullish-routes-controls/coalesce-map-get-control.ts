@@ -1,6 +1,6 @@
 /*---
 description: "A Map lookup retains numeric falsy values. Route: Map string-key lookup (control)"
-features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-map, ts-numbers]
+features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-map-set, ts-numbers]
 ---*/
 
 // A Map lookup retains numeric falsy values. Route: Map string-key lookup. Node prints coalesce-map-get:ok.

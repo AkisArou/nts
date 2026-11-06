@@ -1,6 +1,6 @@
 /*---
 description: "A computed Record coalescing key runs once. Route: Record with computed key"
-features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-records, ts-computed-keys]
+features: [ts-nullish-routes, ts-nullish-route-coalesce, ts-null-undefined, ts-record, ts-computed-keys]
 ---*/
 
 // A computed Record coalescing key runs once. Route: Record with computed key. Node prints coalesce-record-key:ok.
