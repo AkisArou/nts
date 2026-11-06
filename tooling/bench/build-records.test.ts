@@ -35,6 +35,7 @@ test("compile observations retain defects and reject incomplete instruments", as
     "generated code containing diagnostic-shaped data is not a compiler diagnostic");
   assert.deepEqual(compileOutcome(completed(0, "declined: NTS4001 shape at /scratch/case.ts:42"), "emit"),
     { kind: "refused", diagnostic: "declined: NTS4001 shape at <path>" });
+  assert.equal(compileOutcome(completed(0, "NTS1001 property panicked is not supported"), "emit")?.kind, "refused", "a source name cannot hide a refusal");
   assert.deepEqual(compileOutcome(completed(1, "error: /scratch/program.c:21: invalid operand 37"), "link"),
     { kind: "build-failure", stage: "link", diagnostic: "error: <path> invalid operand N" });
   assert.deepEqual(compileOutcome(completed(101, "NTS1001 an earlier refusal\nthread 'main' (24) panicked at /compiler/foo.rs:17:3:\nbroken route\n"), "emit"),
