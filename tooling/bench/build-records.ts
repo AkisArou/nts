@@ -11,6 +11,7 @@ import { compileActive, memoryRun } from "../census/worker-memory.ts";
 import { type Backend, stableBuildDiagnostic } from "../census/typescript-record.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { Admission } from "../gate/admission.ts";
+import { gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
 import { withToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError, type ActiveResult } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
@@ -22,6 +23,12 @@ const BACKENDS = ["c", "llvm", "jvm"] as const;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 type Result = ActiveResult & { memoryKilled?: boolean };
 type Command = (binary: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => Promise<Result>;
+
+export function compileEnvironment(launcher: NodeJS.ProcessEnv, scratch: string, binary: string): NodeJS.ProcessEnv {
+  const run = launcher[ENVIRONMENT_CONTEXT] ? launcher.NTS_GATE_RUN_DIR : scratch;
+  assert.ok(run, "benchmark canonical handoff is missing its owned run directory");
+  return gateEnvironment(launcher, { run, owned: { NTS_BIN: binary, NTS_CHECKERS: "1" } }).env;
+}
 
 /** A process stop is never an expected compiler defect, including an OOM SIGKILL. */
 export function compileOutcome(result: Result, stage: "emit" | "link"): BenchmarkOutcome | null {
@@ -175,6 +182,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   const scratch = mkdtempSync(join(base, "compile-"));
   let resident = false;
   try {
+    const environment = compileEnvironment(process.env, scratch, binary);
     const all = cases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
     assert.ok(paths.length > 0, `unknown benchmark case: ${only}`);
     const identities = await benchmarkIdentities(ROOT, all, scratch), driver = driverIdentity(ROOT);
@@ -196,7 +204,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       // Keep this admission wait referenced, as the calibration recorder does.
       while (!admission.open()) await poll(2000);
       resident = true;
-      const outcome = await withToken(() => observeCompile({ backend, project: projectFor(ROOT, path, scratch), output: join(scratch, "output"), binary, root: ROOT, env: process.env }), { project: path, backend });
+      const outcome = await withToken(() => observeCompile({ backend, project: projectFor(ROOT, path, scratch), output: join(scratch, "output"), binary, root: ROOT, env: environment }), { project: path, backend });
       actual.get(backend)!.push({ path, scope: "compile", source: identities.get(path)!, driver, outcome });
       console.log(`${backend} ${path}: ${outcome.kind}`);
     }
