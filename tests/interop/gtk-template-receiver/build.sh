@@ -4,8 +4,8 @@ root=$(CDPATH= cd -- "$(dirname -- "$0")/../../.." && pwd)
 source="$root/tests/interop/gtk-template-receiver"
 out=${1:-"$root/target/interop-gtk-template-receiver"}
 nts=${NTS_BIN:-"$root/target/release/nts"}
-if ! pkg-config --exists gtk4 || ! command -v xvfb-run >/dev/null 2>&1; then
-  echo "SKIP gtk-template-receiver: GTK4 and xvfb-run are required"
+if ! pkg-config --exists gtk4 || ! command -v Xvfb >/dev/null 2>&1; then
+  echo "SKIP gtk-template-receiver: GTK4 and Xvfb are required"
   exit 0
 fi
 mkdir -p "$out"
@@ -18,7 +18,7 @@ for mode in nogc rc; do
     "$nts" build "$project/tsconfig.json" --out "$out/$mode/$arm" "$flag"
     for backend in c llvm; do
       binary="$out/$mode/$arm/$backend/linux-gnu-x86_64/$backend"
-      GSK_RENDERER=cairo G_DEBUG=fatal-criticals timeout 30 xvfb-run -a "$binary" \
+      GSK_RENDERER=cairo G_DEBUG=fatal-criticals timeout 30 "$root/tests/interop/with-display.sh" "$binary" \
         > "$out/$mode-$arm-$backend.stdout" 2> "$out/$mode-$arm-$backend.stderr"
       diff -u "$project/expected.txt" "$out/$mode-$arm-$backend.stdout"
       printf '%s %s %s: ' "$mode" "$arm" "$backend"
