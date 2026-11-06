@@ -1,0 +1,139 @@
+// record-pending.ts on a small tree of its own: which cases it finds pending,
+// which recorders it runs, and what it lets them write. The recorders here are
+// stand-ins that write rows through the same merge helpers the real ones use.
+import assert from "node:assert/strict";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join } from "node:path";
+import { test } from "node:test";
+import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
+import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
+import { findPending, recordPending, type Runner } from "./record-pending.ts";
+
+const BACKENDS = ["c", "llvm", "jvm"] as const;
+const refused: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }] };
+const compileRefused: BenchmarkOutcome = { kind: "refused", diagnostic: "NTS1001 unsupported shape" };
+const node = "exit 0; Observed: x=1;";
+
+function tree(t: { after(fn: () => void): void }): string {
+  const base = join(homedir(), ".cache/nts/record-pending-tests");
+  mkdirSync(base, { recursive: true });
+  const root = mkdtempSync(join(base, "tree-"));
+  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
+  for (const name of ["recorded", "new"]) put(`tests/typescript/family/${name}.ts`, "/*---\nfeatures: []\n---*/\nassert.sameValue(1, 1);\n");
+  for (const backend of BACKENDS) {
+    put(`results/typescript/${backend}/cases.tsv`, serializeTypeScriptRecord({ metadata: { version: 3, backend, commit: "a".repeat(40),
+      compiler: "b".repeat(16), harness: "c".repeat(16), under: "tests/typescript" }, cases: new Map([["tests/typescript/family/recorded.ts", refused]]) }));
+    put(`results/benchmarks/${backend}/outcomes.tsv`, serializeBenchmarkRecord({ metadata: { version: 1, backend, commit: "a".repeat(40),
+      compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] }, rows: [cell("recorded", compileRefused)] }));
+  }
+  for (const name of ["recorded", "new"]) put(`benchmarks/cases/${name}/case.ts`, "export function run(): number { return 1; }\n");
+  for (const name of ["recorded", "new"]) put(`tests/outcomes/${name}/src/main.ts`, `observe("x", String(1));\ndone();\n`);
+  put("tests/outcomes/recorded/outcome.json", stored("refused", "NTS1001 a shape"));
+  for (const name of ["recorded", "new"]) {
+    put(`tests/programs/${name}/tsconfig.json`, '{"files":["src/main.ts"]}\n');
+    put(`tests/programs/${name}/src/main.ts`, "export function work(n: number): number { return n; }\n");
+  }
+  put("results/oracle-counts/_generator.json", JSON.stringify({ version: 1, generator_version: 1, generator_digest: "a".repeat(32), seed: null }) + "\n");
+  for (const fixture of ["tests/programs/recorded", "benchmarks/cases/recorded"]) put(`results/oracle-counts/${fixture}.json`, `{"fixture":"${fixture}"}\n`);
+  return root;
+}
+function cell(name: string, outcome: BenchmarkOutcome) {
+  return { path: `benchmarks/cases/${name}`, scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64), outcome };
+}
+function stored(category: string, nts: string): string {
+  return `${JSON.stringify({ run: "build", category, nts, ...(category === "refused" ? { ran: "exit 0" } : {}), node, measured_with: "d".repeat(16), source: "measured" }, null, 2)}\n`;
+}
+/** Every file under the tree, by path, for a byte-for-byte comparison. */
+function files(root: string): Map<string, string> {
+  return new Map(readdirSync(root, { withFileTypes: true, recursive: true }).filter(entry => entry.isFile())
+    .map(entry => { const path = join(entry.parentPath, entry.name); return [path.slice(root.length + 1), readFileSync(path, "utf8")]; }));
+}
+
+/** Stand-ins for the four recorders: the pending rows, and one improvement each. */
+function recorders(root: string, overrides: Partial<Record<string, () => void>> = {}): { run: Runner; ran: string[][] } {
+  const ran: string[][] = [];
+  const edit = (path: string, change: (text: string) => string) => writeFileSync(join(root, path), change(readFileSync(join(root, path), "utf8")));
+  const run: Runner = (args) => {
+    ran.push(args);
+    const script = args[0]!, override = overrides[script];
+    if (override) { override(); return 0; }
+    if (script === "tooling/differential/record-oracles.ts") {
+      for (const fixture of args.slice(1)) writeFileSync(join(root, `results/oracle-counts/${fixture}.json`), `{"fixture":"${fixture}","recorded":true}\n`);
+    } else if (script === "tooling/census/conformance262.ts") {
+      edit(args.at(-1)!, text => mergeTypeScriptRecord(text, new Map<string, TypeScriptObservation>([
+        ["tests/typescript/family/new.ts", { kind: "pass" }], ["tests/typescript/family/recorded.ts", { kind: "pass" }]])));
+    } else if (script === "tooling/bench/build-records.ts") {
+      for (const backend of BACKENDS) edit(`results/benchmarks/${backend}/outcomes.tsv`, text => mergeBenchmarkRecord(text, [cell("new", { kind: "pass" }), cell("recorded", { kind: "pass" })]));
+    } else if (script === "tooling/conformance/outcomes-check.ts") {
+      writeFileSync(join(root, "tests/outcomes/new/outcome.json"), stored("agrees", node));
+      writeFileSync(join(root, "tests/outcomes/recorded/outcome.json"), stored("agrees", node));
+    }
+    return 0;
+  };
+  return { run, ran };
+}
+
+test("it finds exactly the cases whose records have no row yet", t => {
+  const root = tree(t);
+  assert.deepEqual(findPending(root, "oracle-counts").map(one => [one.name, one.record]), [
+    ["benchmarks/cases/new", "results/oracle-counts/benchmarks/cases/new.json"], ["tests/programs/new", "results/oracle-counts/tests/programs/new.json"]]);
+  assert.deepEqual(findPending(root, "typescript").map(one => [one.name, one.record]),
+    BACKENDS.map(backend => ["tests/typescript/family/new.ts", `results/typescript/${backend}/cases.tsv`]));
+  assert.deepEqual(findPending(root, "benchmarks").map(one => [one.name, one.record]),
+    BACKENDS.map(backend => ["benchmarks/cases/new", `results/benchmarks/${backend}/outcomes.tsv`]));
+  assert.deepEqual(findPending(root, "outcomes").map(one => [one.name, one.record]), [["tests/outcomes/new", "tests/outcomes/new/outcome.json"]]);
+});
+
+test("it records the pending and improved rows, every other byte as it was, and then has nothing to do", t => {
+  const root = tree(t), before = files(root), lines: string[] = [];
+  const { run, ran } = recorders(root);
+  assert.equal(recordPending(root, ["oracle-counts", "typescript", "benchmarks", "outcomes"], run, line => lines.push(line)), 0, lines.join("\n"));
+  assert.deepEqual(ran.map(args => args.join(" ")), [
+    "tooling/differential/record-oracles.ts benchmarks/cases/new tests/programs/new",
+    ...BACKENDS.map(backend => `tooling/census/conformance262.ts --suite typescript --backend ${backend} --record-pending results/typescript/${backend}/cases.tsv`),
+    "tooling/bench/build-records.ts --record-pending", "tooling/conformance/outcomes-check.ts --record-pending"]);
+  const recorded = lines.filter(line => line.startsWith("  recorded "));
+  assert.equal(recorded.length, 2 + 3 * 2 + 3 * 2 + 2, recorded.join("\n"));
+  assert.ok(recorded.includes('  recorded results/typescript/c/cases.tsv: tests/typescript/family/new.ts {"kind":"pass"} (pending)'), recorded.join("\n"));
+  assert.ok(recorded.some(line => line.startsWith("  recorded results/typescript/c/cases.tsv: tests/typescript/family/recorded.ts {\"kind\":\"refused\"")
+    && line.endsWith('-> {"kind":"pass"} (improved)')), recorded.join("\n"));
+  assert.ok(recorded.includes("  recorded tests/outcomes/recorded/outcome.json: tests/outcomes/recorded refused -> agrees (improved)"));
+  const after = files(root), touched = new Set([...BACKENDS.flatMap(backend => [`results/typescript/${backend}/cases.tsv`, `results/benchmarks/${backend}/outcomes.tsv`]),
+    "results/oracle-counts/tests/programs/new.json", "results/oracle-counts/benchmarks/cases/new.json", "tests/outcomes/new/outcome.json", "tests/outcomes/recorded/outcome.json"]);
+  for (const [path, text] of before) if (!touched.has(path)) assert.equal(after.get(path), text, `${path} is untouched`);
+  for (const backend of BACKENDS) {
+    const header = (path: string, files: Map<string, string>) => files.get(path)!.split("\n")[0];
+    assert.equal(header(`results/typescript/${backend}/cases.tsv`, after), header(`results/typescript/${backend}/cases.tsv`, before), "a record's header is kept");
+  }
+  for (const kind of ["oracle-counts", "typescript", "benchmarks", "outcomes"] as const) assert.deepEqual(findPending(root, kind), [], `${kind}: nothing pending`);
+  // Nothing pending and nothing improved: the recorders write nothing, and nothing changes.
+  const quiet: string[] = [], idle = recorders(root, Object.fromEntries(["tooling/census/conformance262.ts", "tooling/bench/build-records.ts",
+    "tooling/conformance/outcomes-check.ts"].map(script => [script, () => {}])));
+  assert.equal(recordPending(root, ["oracle-counts", "typescript", "benchmarks", "outcomes"], idle.run, line => quiet.push(line)), 0, quiet.join("\n"));
+  assert.equal(idle.ran.some(args => args[0] === "tooling/differential/record-oracles.ts"), false, "no oracle fixture to record, so no recorder");
+  assert.deepEqual(files(root), after);
+  assert.match(quiet.at(-1)!, /^record-pending: 0 row\(s\) recorded; nothing is committed$/);
+});
+
+test("a recorder that rewrites a recorded row without improving it, or records a case that was not pending, is refused and put back", t => {
+  const root = tree(t), before = files(root), lines: string[] = [];
+  const edit = (path: string, change: (text: string) => string) => writeFileSync(join(root, path), change(readFileSync(join(root, path), "utf8")));
+  const worse = { kind: "wrong" as const, errorClass: "Test262Error", failure: { exit: 1, signal: null, output: "uncaught Test262Error: 2" } };
+  const { run } = recorders(root, {
+    "tooling/census/conformance262.ts": () => edit("results/typescript/c/cases.tsv", text => mergeTypeScriptRecord(text, new Map([["tests/typescript/family/recorded.ts", worse]]))),
+    "tooling/differential/record-oracles.ts": () => writeFileSync(join(root, "results/oracle-counts/tests/programs/recorded.json"), "{\"rewritten\":true}\n"),
+    "tooling/conformance/outcomes-check.ts": () => writeFileSync(join(root, "tests/outcomes/recorded/outcome.json"), stored("wrong-answer", "exit 0; Observed: x=2;")),
+  });
+  assert.equal(recordPending(root, ["oracle-counts", "typescript", "outcomes"], run, line => lines.push(line)), 1);
+  const refusals = lines.filter(line => line.startsWith("  REFUSED "));
+  assert.equal(refusals.length, 3, lines.join("\n"));
+  assert.ok(refusals.some(line => line.includes("results/typescript/c/cases.tsv: the row of tests/typescript/family/recorded.ts was rewritten, and it is no improvement")));
+  assert.ok(refusals.some(line => line.includes("results/oracle-counts/tests/programs/recorded.json: a recorded population was rewritten")));
+  assert.ok(refusals.some(line => line.includes("tests/outcomes/recorded/outcome.json was rewritten, and it is no improvement")));
+  const after = files(root);
+  for (const path of ["results/typescript/c/cases.tsv", "results/oracle-counts/tests/programs/recorded.json", "tests/outcomes/recorded/outcome.json"]) {
+    assert.equal(after.get(path), before.get(path), `${path} is put back as it was`);
+  }
+});

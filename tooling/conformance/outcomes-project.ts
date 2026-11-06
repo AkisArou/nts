@@ -37,11 +37,11 @@ const HARNESS = readFileSync(join(HERE, "outcomes-harness.ts"), "utf8");
  * does not have -- its ignored node_modules survive the clean -- and reading it
  * failed blockers-check with ENOENT (2026-10-14); this is the same listing.
  */
-export const outcomeFixtures = () => {
-  if (!existsSync(OUTCOMES)) return [];
-  const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: OUTCOMES, encoding: "utf8" });
+export const outcomeFixtures = (directory = OUTCOMES) => {
+  if (!existsSync(directory)) return [];
+  const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: directory, encoding: "utf8" });
   const tracked = listed.status === 0 ? new Set(listed.stdout.split("\0").filter(Boolean).map((p) => p.split("/")[0])) : null;
-  return readdirSync(OUTCOMES, { withFileTypes: true })
+  return readdirSync(directory, { withFileTypes: true })
     .filter((e) => e.isDirectory() && (tracked === null || tracked.has(e.name)))
     .map((e) => e.name)
     .sort();
