@@ -14,14 +14,15 @@ follows; this page is the why and the whole picture.
 ## The loop
 
 1. A **task** is written: one change that can land within a day.
-2. An **agent** takes it, works in its own worktree off `main`, and adds the
-   tests that show the change.
+2. An **agent** takes it, works in a worktree from the pool starting at the
+   newest `main`, and adds the tests that show the change.
 3. The **landing check** runs: only the checks the change can affect, in ten
    minutes or less. Green: `main` moves to the change at once and is pushed.
 4. The **full check** runs continuously on the newest `main`, after landing.
    Green: that commit is marked `verified`. Red: the commit that broke it is
    found and reverted automatically, and fixing it becomes a task.
-5. The agent ends when its task lands. Its worktree is deleted.
+5. The agent ends when its task lands, and its worktree goes back to the
+   pool.
 
 ## Tasks
 
@@ -50,8 +51,8 @@ follows; this page is the why and the whole picture.
 - **As many as the work and the machine allow.** Areas that touch different
   paths run in parallel: for example two or three agents on the compiler,
   and others on `runtime/node`, Chromium, tooling or tests at the same time.
-  The landing check and the machine's memory set the limit, not a fixed
-  number.
+  The limit is the size of the worktree pool, which the machine's memory and
+  disk set.
 - **One message per task:** landed, or blocked and why. No progress reports,
   no evidence packets. The landing check is the evidence.
 - **Which agents** (Codex or Claude sessions, started by hand or by
@@ -101,21 +102,31 @@ are written by the full check.
 
 ## After landing: the full check
 
-The full check is every step the gate has today: all suites, all three
-backends, the wide steps. It runs on the newest `main` over and over,
-covering everything that landed since its last run, at low priority and
-within its own memory share, so agents' landing checks come first.
+The full check is every step the gate has today, in two parts. Both run at
+low priority and within their own memory share, so agents' landing checks
+come first.
 
-- **Green:** the commit is marked `verified` (a branch of that name, pushed).
-  Recordings, benchmarks and anything that needs a known-good compiler use
-  `verified`, not the tip of `main`.
-- **Red:** the culprit search finds the commit that broke it, the lander
-  reverts that commit (the revert passes the landing check like any change),
-  and re-landing it with a fix becomes a task.
+- **The core** (all suites on all three backends, about half an hour) runs
+  on the newest `main` back to back, covering everything that landed since
+  its last run.
+- **The wide steps** (integrity, the profile, compile time, addons, interop,
+  on-device and the rest, about an hour more) run on the newest `verified`
+  commit a few times a day, and every night before the benchmarks.
+
+What follows from a run:
+
+- **Green core:** the commit is marked `verified` (a branch of that name,
+  pushed). Recordings, benchmarks and anything that needs a known-good
+  compiler use `verified`, not the tip of `main`.
+- **Red:** the culprit search finds the commit that broke it, among those
+  since that part's last green run. The lander reverts that commit (the
+  revert passes the landing check like any change), and re-landing it with a
+  fix becomes a task.
 - **What can be wrong on `main`, and for how long:** only a heavy suite's
-  result, and only until the next full check finds it (about half an hour
-  today). Builds and unit tests are never broken on `main`, because the
-  landing check runs them.
+  result, and only until the full check finds it: within about an hour for
+  the core, within the day for a wide step. A build or unit test that a
+  change can affect is never broken on `main`, because the landing check
+  runs it.
 
 ## Records
 
@@ -139,10 +150,11 @@ regression becomes a task. Benchmarks never block a landing.
 
 ## The machine
 
-- **Worktrees are per task** and are deleted when the task lands. The shared
-  checkout `~/Projects/nts` stays on `main`.
-- **One shared compile cache** (sccache) instead of a full build folder in
-  every worktree.
+- **A fixed pool of worktrees,** one for each agent that can work at once,
+  each with its own build folder kept warm. A task takes a free one at the
+  newest `main` and gives it back when it lands, so the next task's build is
+  incremental rather than cold, and the disk holds the pool and nothing
+  else. The shared checkout `~/Projects/nts` stays on `main`.
 - **No evidence folders.** The landing check's and the full check's logs are
   the evidence; the lander keeps three days of them.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
@@ -177,14 +189,14 @@ the first node task.
 1. **Fresh start.** Agents are on hold with their work committed. The
    branch list, on the machine and on GitHub, is cut to `main` and the
    branches tasks name; worktrees to the shared checkout; agents' evidence
-   folders, old pins and run folders are deleted. Every unmerged branch is read first: landed or obsolete
-   work goes, and anything still worth doing becomes a task naming the
-   branch.
+   folders, old pins and run folders are deleted. Every unmerged branch is
+   read first: landed or obsolete work goes, and anything still worth doing
+   becomes a task naming the branch.
 2. **The landing check:** the path-scoped check of ten minutes or less, and
    direct landing from it.
 3. **The full check after landing:** run continuously, the `verified` marker,
    and the automatic revert through the culprit search.
-4. **Records written by the full check,** and the shared compile cache.
+4. **Records written by the full check,** and the worktree pool.
 5. **Restart** with agents on the first tasks, as many as the task list
    holds work for in different areas.
 
