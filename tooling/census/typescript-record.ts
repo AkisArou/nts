@@ -4,6 +4,7 @@ import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableBuildDiagnostic, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
 import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformance/output-prefix.ts";
+import { parseLineRecord, serializeLineRecord, type LineRecordFormat } from "./line-record.ts";
 
 // Version 3 checks printed output before native declines against Node.
 // An older raw checkpoint must be remeasured, not resumed with stale locations.
@@ -162,33 +163,24 @@ export function observationFromRow(input: unknown): TypeScriptObservation {
 }
 
 export function parseTypeScriptRecord(contents: string): TypeScriptRecord {
-  const lines = contents.split("\n");
-  assert.ok(lines[0].startsWith(prefix), "missing versioned TypeScript record header; re-record the complete suite");
-  const meta = metadata(JSON.parse(lines[0].slice(prefix.length)));
-  const cases = new Map<string, TypeScriptObservation>();
-  for (const line of lines.slice(1)) {
-    if (line === "" || line.startsWith("#")) continue;
-    const fields = line.split("\t");
-    assert.equal(fields.length, 2, "malformed TypeScript record row");
-    const [path, json] = fields;
-    if (meta.version === 2) assert.notEqual(JSON.parse(json).kind, "wrong-output", "wrong output requires a version 3 record");
-    canonical(path, "invalid TypeScript case path");
-    assert.ok(path.endsWith(".ts") && (path === meta.under || path.startsWith(meta.under + "/")), "case outside record selection");
-    assert.ok(!cases.has(path), `duplicate recorded case: ${path}`);
-    cases.set(path, parseObservation(JSON.parse(json)));
-  }
-  assert.ok(cases.size > 0, "an empty record measures nothing");
-  return { metadata: meta, cases };
+  const parsed = parseLineRecord(contents, recordFormat);
+  return { metadata: parsed.metadata, cases: new Map(parsed.rows.map(({ path, value }) => [path, value])) };
 }
 
 export function serializeTypeScriptRecord(record: TypeScriptRecord): string {
-  const header = metadata(record.metadata);
-  const lines = [...record.cases].sort(([a], [b]) => a.localeCompare(b, "en"))
-    .map(([path, value]) => `${path}\t${JSON.stringify(parseObservation(value))}`);
-  const result = prefix + JSON.stringify(header) + "\n" + lines.join("\n") + "\n";
-  parseTypeScriptRecord(result);
-  return result;
+  return serializeLineRecord({ metadata: record.metadata, rows: [...record.cases].map(([path, value]) => ({ path, value })) }, recordFormat);
 }
+
+const recordFormat: LineRecordFormat<RecordMetadata, TypeScriptObservation> = {
+  prefix, label: "TypeScript", metadata,
+  row(path, value, meta) {
+    if (meta.version === 2) assert.notEqual(object(value, "invalid TypeScript observation").kind, "wrong-output", "wrong output requires a version 3 record");
+    canonical(path, "invalid TypeScript case path");
+    assert.ok(path.endsWith(".ts") && (path === meta.under || path.startsWith(meta.under + "/")), "case outside record selection");
+    return parseObservation(value);
+  },
+  key: path => path,
+};
 
 /** Check source identity before --recorded can narrow the executed population. */
 export function assertRecordedInventory(record: TypeScriptRecord, sourcePaths: readonly string[]): void {
