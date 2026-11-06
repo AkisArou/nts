@@ -8,6 +8,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
+import type { Bench } from "./bench.ts";
 import { Git } from "./git.ts";
 import { verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
 import { layout, type Layout } from "./state.ts";
@@ -91,6 +92,33 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
       return { commit, run, steps: results, reasons, verdict: verdictOf(results) };
     },
   };
+}
+
+/**
+ * A stand-in nts-bench: like the real one it keeps one run record and the
+ * rendered page as a results-only commit on the tree's HEAD. `slower` names
+ * the rows the page marks slower than their own best; `quiet: false` is a
+ * machine that never got quiet.
+ */
+export function stubBench(options: { slower?: string[]; quiet?: boolean; stray?: boolean } = {}): Bench & { calls: string[] } {
+  const calls: string[] = [];
+  const bench = (tree: string, run: string) => {
+    calls.push(tree);
+    writeFileSync(join(run, "bench.log"), "nts-bench\n");
+    if (options.quiet === false) return { status: 124, quiet: false };
+    const git = new Git(tree, ENV);
+    const id = `2026-11-07-${git.run(["rev-parse", "--short=12", "HEAD"])}-${calls.length}`;
+    mkdirSync(join(tree, "results/benchmarks/runs"), { recursive: true });
+    writeFileSync(join(tree, "results/benchmarks/runs", `${id}.json`), "{}\n");
+    writeFileSync(join(tree, "results/benchmarks/full.md"), ["# Benchmark results", "", "| Case | nts C | nts C own best |", "|---|---|---|",
+      "|fast|1 ns|1 ns|", ...(options.slower ?? []).map(name => `|${name}|2 ns|1 ns **SLOWER THAN BEST**|`), ""].join("\n"));
+    const paths = [`results/benchmarks/runs/${id}.json`, "results/benchmarks/full.md"];
+    if (options.stray) { writeFileSync(join(tree, "stray.txt"), "x\n"); paths.push("stray.txt"); }
+    git.run(["add", "--", ...paths]);
+    git.run(["commit", "-q", "-m", `results: retain benchmark run ${id}`, "--", ...paths]);
+    return { status: 0, quiet: true };
+  };
+  return Object.assign(bench, { calls });
 }
 
 /** A landing queue that records what it was given. */

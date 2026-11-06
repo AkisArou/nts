@@ -3,7 +3,7 @@
 //
 //   node tooling/full-check/unit.ts                  print the unit
 //   node tooling/full-check/unit.ts --install        make the controller tree, write the unit, reload systemd
-//   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00 --memory-high=20G
+//   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00 --bench-wait=240 --memory-high=20G
 //
 // Then `systemctl --user enable --now nts-full-check` starts it, `journalctl
 // --user -u nts-full-check -f` follows it, and `systemctl --user stop
@@ -16,12 +16,13 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import { DEFAULT_QUIET_WAIT_MINUTES } from "./bench.ts";
 import { DEFAULT_SCHEDULE, parseTimes, type Schedule } from "./schedule.ts";
 import { layout as defaultLayout, type Layout } from "./state.ts";
 
 export const UNIT = "nts-full-check";
 
-export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; memoryHigh: string; env: NodeJS.ProcessEnv };
+export type UnitOptions = { node: string; layout: Layout; schedule: Schedule; quietWait: number; memoryHigh: string; env: NodeJS.ProcessEnv };
 
 /** A systemd unit-file value: quoted, with `%` (a specifier) and quotes escaped. */
 const quote = (value: string) => `"${value.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("%", "%%")}"`;
@@ -31,7 +32,7 @@ const argument = (value: string) => quote(value).replaceAll("$", "$$$$");
 export function unitText(options: UnitOptions): string {
   const { layout, schedule } = options;
   const environment = { ...hostEnvironment(options.env), ...FIXED_AMBIENT };
-  const exec = [options.node, join(layout.controller, "tooling/full-check/service.ts"), `--wide-at=${schedule.wide.join(",")}`, `--nightly-at=${schedule.nightly}`];
+  const exec = [options.node, join(layout.controller, "tooling/full-check/service.ts"), `--wide-at=${schedule.wide.join(",")}`, `--nightly-at=${schedule.nightly}`, `--bench-wait=${options.quietWait}`];
   return [
     "[Unit]",
     "Description=nts full check: the core on the newest main, the wide steps on verified",
@@ -65,20 +66,21 @@ export function unitText(options: UnitOptions): string {
   ].join("\n");
 }
 
-export function parseUnitOptions(argv: readonly string[]): { install: boolean; schedule: Schedule; memoryHigh: string } {
+export function parseUnitOptions(argv: readonly string[]): { install: boolean; schedule: Schedule; quietWait: number; memoryHigh: string } {
   const schedule = { ...DEFAULT_SCHEDULE };
-  let install = false, memoryHigh = "20G";
+  let install = false, memoryHigh = "20G", quietWait = DEFAULT_QUIET_WAIT_MINUTES;
   for (const arg of argv) {
     if (arg === "--install") install = true;
+    else if (/^--bench-wait=\d+$/.test(arg)) quietWait = Number(arg.slice(13));
     else if (arg.startsWith("--wide-at=")) schedule.wide = parseTimes(arg.slice(10));
     else if (arg.startsWith("--nightly-at=")) {
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
     } else if (/^--memory-high=\d+[KMGT]$/.test(arg)) memoryHigh = arg.slice(14);
-    else throw new Error(`unknown argument ${arg}; usage: unit.ts [--install] [--wide-at=HH:MM,...] [--nightly-at=HH:MM] [--memory-high=20G]`);
+    else throw new Error(`unknown argument ${arg}; usage: unit.ts [--install] [--wide-at=HH:MM,...] [--nightly-at=HH:MM] [--bench-wait=<minutes>] [--memory-high=20G]`);
   }
-  return { install, schedule, memoryHigh };
+  return { install, schedule, quietWait, memoryHigh };
 }
 
 function run(command: string, args: string[], cwd: string): string {
@@ -91,7 +93,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
   try {
     const options = parseUnitOptions(process.argv.slice(2));
     const layout = defaultLayout();
-    const text = unitText({ node: process.execPath, layout, schedule: options.schedule, memoryHigh: options.memoryHigh, env: process.env });
+    const text = unitText({ node: process.execPath, layout, schedule: options.schedule, quietWait: options.quietWait, memoryHigh: options.memoryHigh, env: process.env });
     if (!options.install) process.stdout.write(text);
     else {
       const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");

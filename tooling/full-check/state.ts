@@ -81,6 +81,8 @@ export type State = {
   probes: ProbeRecord[];
   /** The last verified commit whose pending and improved records were written and submitted. */
   records?: { commit: string; at: string; submitted: string | null; result: string };
+  /** The last nightly benchmark attempt; `measured` when nts-bench ran on `commit`. */
+  bench?: { commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean };
   /** The last commit `verified` was pushed at, and when a push last failed. */
   pushed?: string;
   push_failed_at?: string;
