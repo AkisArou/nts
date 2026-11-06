@@ -471,6 +471,12 @@ test("interop builds only the projects a range reaches, when it can say which", 
   assert.equal(projects("tooling/gate/token.sh"), "all");
 });
 
+test("the record writers owe their own tests, not the full gate", () => {
+  owes("tooling/records/pending.ts", ["tooling"]);
+  // No gate step runs the recorder: the full check does, after landing.
+  owes("tooling/records/record-pending.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "benches"] });
+});
+
 test("what a step runs owes that step", () => {
   owes("tooling/conformance/integrity.ts", ["integrity", "integrity-runtime"], { not: ["examples"] });
   owes("tooling/conformance/c-compiles.mjs", ["c-compiles"], { not: ["examples"] });

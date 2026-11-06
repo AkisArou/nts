@@ -854,6 +854,17 @@ export const RULES = [
     arms: [],
   },
   {
+    // The record checks' shared notion of a pending case, and the recorder the
+    // full check runs after landing. A check that imports a module here owes
+    // its own step through `stepInputs`; the modules' tests run in tooling.
+    name: "the record writers",
+    when: (p) => p.startsWith("tooling/records/"),
+    steps: ["tooling"],
+    arms: [
+      { kind: "answers", asks: "does it still write only pending and improved rows", run: "NTS_BIN=<main's pin> node tooling/records/record-pending.ts in a scratch tree at main; git diff shows only those rows" },
+    ],
+  },
+  {
     // `pinned.sh` builds every gate tree with it, the full run's too, so it
     // owes every step, as the runner does.
     name: "the gate trees' inputs",
