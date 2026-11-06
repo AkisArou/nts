@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 14,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "The outer activation sweep includes all fourteen original activation names; each selected activation trains all five complete original networks. ML remains a refused-by-design eval row with no native arrival or pass claim."
+      }
+    }
+  }
+}

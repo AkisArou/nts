@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 150,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "Outer repetitions of all three complete permitted Air recordings, including the original standalone 150 iterations; the IR payloads are never truncated."
+      }
+    }
+  }
+}

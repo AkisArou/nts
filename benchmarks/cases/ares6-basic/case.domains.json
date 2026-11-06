@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 3,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "A bounded outer repetition count; every repetition runs all five complete original BASIC programs with their full outputs and reset seeded RNG."
+      }
+    }
+  }
+}

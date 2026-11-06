@@ -1,0 +1,14 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 200,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "Outer repetitions parse all four complete upstream source strings, retaining the original standalone 200 iterations without truncating any parser input."
+      }
+    }
+  }
+}
