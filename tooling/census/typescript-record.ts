@@ -6,9 +6,9 @@ import { normalizeGeneratedNumbers, stableBuildDiagnostic, stableRuntimeAbortOut
 import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformance/output-prefix.ts";
 import { parseLineRecord, serializeLineRecord, type LineRecordFormat } from "./line-record.ts";
 
-// Version 3 checks printed output before native declines against Node.
-// An older raw checkpoint must be remeasured, not resumed with stale locations.
-export const TYPESCRIPT_OBSERVATIONS_VERSION = 3;
+// Version 4 excludes external compiler stops from measured observations.
+// Published TSV version 3 stays compatible; old raw checkpoints are remeasured.
+export const TYPESCRIPT_OBSERVATIONS_VERSION = 4;
 
 export type Backend = "c" | "llvm" | "jvm";
 export interface RecordMetadata {

@@ -45,13 +45,13 @@ export function compileOutcome(result: Result, stage: "emit" | "link"): Benchmar
   if (compilerExternalStop(result.status, result.signal) || (stage === "link" && compilerStopped(result.status, result.signal)) || result.status === null || result.status === 126 || result.status === 127) {
     throw new ToolingInstrumentError("tooling-setup", `benchmark ${stage === "link" ? "link tool" : "compiler"} NOT MEASURED: ${stop}`);
   }
-  if (stage === "emit" && !/panicked|internal compiler error/i.test(diagnostic)) {
+  if (stage === "emit") {
     const refusal = diagnostic.split("\n").find(line => /(?:declined:|\bNTS\d{4}\b|\bTS\d{4,}\b)/.test(line));
     if (refusal) return { kind: "refused", diagnostic: stableBuildDiagnostic(refusal) };
   }
   if (result.status === 0) return null;
   assert.ok(diagnostic, "benchmark NOT MEASURED: failed command supplied no diagnostic");
-  return { kind: "build-failure", stage: stage === "emit" && /panicked|internal compiler error/i.test(diagnostic) ? "compiler-crash" : stage,
+  return { kind: "build-failure", stage,
     diagnostic: stableBuildDiagnostic(diagnostic) };
 }
 
