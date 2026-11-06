@@ -134,7 +134,7 @@ fi
 `);
   for (const code of [0,7,86,87,88,89,90,91,92]) {
     writeFileSync(join(root,"result-code"),String(code));
-    const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:"rustfmt",CARGO_TARGET_DIR:join(run,"target")}});
+    const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:"rustfmt",CARGO_TARGET_DIR:join(run,"target")}});
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:root,env:planned.env,encoding:"utf8"});
     assert.equal(actual.status,code===0?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,"summary.json"),"utf8"));

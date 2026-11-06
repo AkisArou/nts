@@ -3,6 +3,7 @@
 import {createHash,randomUUID} from "node:crypto";
 import {existsSync,mkdirSync,readdirSync,readFileSync,renameSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
+import {programHost} from "../gate/canonical-environment.ts";
 
 export type ResourceStop={path:string;kind:"timeout"|"memory-cap";phase:string};
 export type ComparisonIdentity={suite:string;under:string;backend:string;record:string;selection:string;policy:string;compiler:string};
@@ -71,7 +72,7 @@ export type GateComparisons={host:string;requested:string[];steps:Record<string,
 export function comparisonHost(environment:any,run:string):string {
   const ambient={...environment.ambient};
   if(ambient.TMPDIR===join(run,"tmp"))ambient.TMPDIR="<owned-run>/tmp";
-  return JSON.stringify([environment.host,ambient]);
+  return JSON.stringify([programHost(environment.host),ambient]);
 }
 export function gateComparisons(run:string,summary:any):GateComparisons {
   if(summary.environment?.canonical!==true||!Array.isArray(summary.requested)||!Array.isArray(summary.steps))throw new Error("comparison gate lacks a canonical complete summary");

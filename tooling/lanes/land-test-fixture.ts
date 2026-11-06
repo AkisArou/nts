@@ -49,6 +49,15 @@ export const reportContext=`node - "$NTS_GATE_RUN_DIR/summary.json" <<'CONTEXT'
 const fs=require("node:fs"),path=process.argv[2],summary=JSON.parse(fs.readFileSync(path));
 summary.environment=JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).report;
 if (process.env.LAND_TEST_NON_CANONICAL) summary.environment.canonical=false;
+const members=Number(process.env.NTS_GATE_TRAIN_MEMBERS||0),failed=summary.steps.find(row=>row.verdict==='FAIL'&&!row.instrument);
+if(members>1&&failed) summary.train_red_stop={version:1,commit:summary.identities.commit,members,trigger:failed.name,cancelled:[],decided_at:'2026-11-05T22:00:00.000Z',drained_at:'2026-11-05T22:00:01.000Z'};
+summary.fail_fast=false;summary.interrupted=null;
+if(summary.train_red_stop&&process.env.LAND_TEST_PROOF_FAULT==='missing')delete summary.train_red_stop;
+if(summary.train_red_stop&&process.env.LAND_TEST_PROOF_FAULT==='foreign')summary.train_red_stop.commit='f'.repeat(40);
+if(summary.train_red_stop&&process.env.LAND_TEST_PROOF_FAULT==='contradictory')summary.train_red_stop.cancelled=[failed.name];
+if(process.env.LAND_TEST_PROOF_FAULT==='drain-timeout'){summary.scope_execution=true;summary.scope_cleanup={state:'error',reason:'step cgroup drain timed out'};}
+if(process.env.LAND_TEST_PROOF_FAULT==='passing-red'){delete summary.train_red_stop;summary.steps=summary.steps.map(row=>({...row,verdict:'PASS'}));summary.verdict='red';}
+if(process.env.LAND_TEST_PROOF_FAULT==='interrupted')summary.interrupted='signal SIGTERM';
 fs.writeFileSync(path,JSON.stringify(summary));
 CONTEXT
 `;
@@ -128,6 +137,9 @@ export function scratch(): Scratch {
   writeFileSync(join(root,"tooling/lanes/inputs.sh"),'#!/bin/sh\nln -sfn "$2/node_modules" "$3/node_modules"\n');
   const runtime=join(root,"tooling/lanes/land.ts"),context=join(dir,"controls.sh.json");
   writeFileSync(runtime,readFileSync(runtime,"utf8").replace('const argv = process.argv.slice(2);',`const argv = process.argv.slice(2);if(process.env.NTS_LAND_TRAIN_UNIT){for(const preload of JSON.parse(readFileSync(${JSON.stringify(context)},'utf8')).imports)await import(/^[a-z][a-z0-9+.-]*:/i.test(preload)?preload:pathToFileURL(preload).href);}`));
+  const program=readFileSync(runtime,"utf8"),ready=program.replace("new Admission({ report: say })","new Admission({ read: () => 32, report: say })");
+  assert.notEqual(ready,program,"the stand-in controller owns its retry admission policy");
+  writeFileSync(runtime,ready);
 
   for (const project of ["java-from-ts", "ts-from-java"]) {
     mkdirSync(join(root, "tests/interop", project), { recursive: true });
@@ -287,7 +299,7 @@ writeFileSync(join(process.env.NTS_GATE_RUN_DIR, "summary.json"), JSON.stringify
   steps, requested, started: "t", wall_s: 1, identities: {commit: process.argv[2]},
 }));
 JS
-`));
+`+reportContext));
   if (mainRed) writeFileSync(join(s.root, "BAD_MEMORY"), "already red on main\n");
   run(s, s.root, ["add", "tooling/gate", ...(mainRed ? ["BAD_MEMORY"] : [])]);
   run(s, s.root, ["commit", "-q", "-m", "a memory check selected only by another landing"]);
@@ -317,7 +329,7 @@ const steps=requested.map(name=>{
 appendFileSync(process.env.LAND_TEST_GATES+'.scopes',JSON.stringify({requested,candidate})+'\\n');
 writeFileSync(join(process.env.NTS_GATE_RUN_DIR,'summary.json'),JSON.stringify({requested,steps,verdict:steps.some(row=>row.verdict==='FAIL')?'red':'green',started:'t',wall_s:1,identities:{commit:process.argv[2],nts:{sha256:compiler}},environment:JSON.parse(process.env.NTS_GATE_ENV_CONTEXT).report}));
 RESOURCE
-`));
+`+reportContext));
   run(s,s.root,["add","tooling/gate"]);run(s,s.root,["commit","-qm","typed resource gate"]);
 }
 

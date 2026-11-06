@@ -3,12 +3,12 @@
 
 import { heldLandings } from "./held-landings.ts";
 import { waitFor } from "../gate/test-wait.ts";
-import { readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import assert from "node:assert/strict";
 import { LAND, STAND_IN_GATE, controls, gates, land, landTogether, lane, memoryGate, onMain, reportContext, run, scratch, spawnTest, states, test, until } from "./land-test-fixture.ts";
 
-test("a red train is halved until the red landing is alone, and only it is refused", async () => {
+test("a red train attributes exact prefixes and only refuses its failing member", async () => {
   const s = scratch();
   const a = lane(s, "a", { "a.txt": "a\n" });
   const b = lane(s, "b", { "b.txt": "b\n" });
@@ -22,11 +22,24 @@ test("a red train is halved until the red landing is alone, and only it is refus
   assert.match(rr.out, /gate not green: fake=FAIL/);
   assert.ok(onMain(s, "a.txt") && onMain(s, "b.txt") && onMain(s, "c.txt"));
   assert.ok(!onMain(s, "RED"));
-  // [a b red c] red, [a b] green, [red c] red, [red] red, [c] green.
-  assert.equal(gates(s), 8, "the three red attempts also check their failed step on main");
+  // Full red, base green, a/ab/ab-red, then abc and the full survivors.
+  assert.equal(gates(s), 7, "unchanged green prefixes are retained before the full survivor gate");
+  const directory=join(s.home,".cache/nts-land/runs");
+  const journal=readdirSync(directory).map(name=>join(directory,name,"attribution-journal.json")).find(existsSync);
+  assert.ok(journal);
+  const phases=JSON.parse(readFileSync(join(dirname(journal),"attribution-phases.json"),"utf8"));
+  assert.equal(phases.prefixes.length,4);assert.ok(phases.prefixes.every(row=>row.started&&row.finished));
+  const fullPath = readdirSync(dirname(journal)).find(name => name.startsWith("survivor-phase-") && name.endsWith(".json"));
+  assert.ok(fullPath);
+  const full=JSON.parse(readFileSync(join(dirname(journal),fullPath),"utf8"));
+  assert.equal(full.verdict,"green");assert.ok(full.started&&full.finished);
+  const baselinePath = readdirSync(dirname(journal)).find(name => name.startsWith("base-phase-") && name.endsWith(".json"));
+  assert.ok(baselinePath);
+  const baseline = JSON.parse(readFileSync(join(dirname(journal), baselinePath), "utf8"));
+  assert.equal(baseline.verdict, "green"); assert.ok(baseline.started && baseline.finished);
 });
 
-for (const culpritFirst of [true, false]) test(`halving keeps a red step the culprit does not owe (${culpritFirst ? "first" : "second"} half)`, async () => {
+for (const culpritFirst of [true, false]) test(`prefix attribution keeps a red step the culprit does not owe (${culpritFirst ? "first" : "second"} member)`, async () => {
   const s = scratch();
   memoryGate(s);
   const culprit = lane(s, "culprit", { BAD_MEMORY: "the allocation regression\n" });
@@ -41,9 +54,10 @@ for (const culpritFirst of [true, false]) test(`halving keeps a red step the cul
   assert.equal(onMain(s, "BAD_MEMORY"), false);
   assert.equal(onMain(s, "SELECT_MEMORY"), true);
   const runs = readFileSync(s.gates + ".steps", "utf8").trim().split("\n").map(line => JSON.parse(line));
-  assert.equal(runs.length, 5, "the train and culprit failures each check main");
+  assert.equal(runs.length, 5, "one base check, retain earlier green prefixes, then the complete survivors");
   assert.equal(runs.filter(r => r.culprit).length, 2);
-  for (const r of runs) assert.ok(r.requested.includes("memory"), "neither half drops the train's red check");
+  for (const r of runs) assert.ok(r.requested.includes("memory"), "no prefix drops the train's red check");
+  for (const r of runs.slice(1,-1)) assert.deepEqual(r.requested,["memory"],"attribution measures only the completed failing set");
 });
 
 for (const selectorFirst of [true, false]) test(`a red main refuses only the landing that owes its red step (${selectorFirst ? "first" : "second"} in train)`, async () => {

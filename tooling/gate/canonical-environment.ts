@@ -7,8 +7,9 @@ import { join, relative, resolve, isAbsolute } from "node:path";
 import { pathToFileURL } from "node:url";
 import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,type RunTemporary} from "./run-temporary.ts";
 
+export const HOST_INFRASTRUCTURE = ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 export const HOST_CAPABILITIES = [
-  "PATH", "HOME", "XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS", "CARGO_HOME", "RUSTUP_HOME",
+  "PATH", "HOME", ...HOST_INFRASTRUCTURE, "CARGO_HOME", "RUSTUP_HOME",
   "JAVA_HOME", "JDK_HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "DEBUGINFOD_URLS",
   "CC", "CXX", "RUSTC", "RUSTDOC", "NTS_LLVM_CC", "NTS_LLVM_AS", "NTS_BIND_CC",
   "GI_GIR_PATH", "XDG_DATA_DIRS", "NTS_NAPI_INCLUDE", "NTS_APPLE_ROOT", "NTS_APPLE_SDK",
@@ -50,6 +51,7 @@ const INFRASTRUCTURE = new Set([
 ]);
 const EXPERIMENTS = new Set([
   ...EXTRA_POLICY, "NTS_GATE_STEPS", "NTS_GATE_SLOTS", "NTS_GATE_JOBS", "NTS_JOBS", "NTS_GATE_MEM_GB",
+  "NTS_GATE_TRAIN_MEMBERS",
   "NTS_GATE_FRONTENDS", "NTS_GATE_FAIL_FAST", "NTS_GATE_ACCEPT_SKIP", "NTS_GATE_TIME_STRICT", "NTS_GATE_RECORD_TIMES",
   "NTS_BIN", "NTS_SUITE_BIN", "NTS_CHECKERS", "NTS_INTEROP_PROJECTS", "NTS_DOCTEST_CRATES", "NTS_COREDUMPS",
   "NTS_RC_NAIVE", "NTS_BENCH_AGREE_FLOOR", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
@@ -77,6 +79,11 @@ export function hostEnvironment(launcher: NodeJS.ProcessEnv): NodeJS.ProcessEnv 
   host.CARGO_HOME ||= join(host.HOME, ".cargo");
   host.RUSTUP_HOME ||= join(host.HOME, ".rustup");
   return host;
+}
+
+/** Bus locations authorize orchestration; they do not identify program inputs. */
+export function programHost(host: Readonly<Record<string, unknown>> | undefined): Record<string, unknown> {
+  return Object.fromEntries(Object.entries(host ?? {}).filter(([name]) => !(HOST_INFRASTRUCTURE as readonly string[]).includes(name)));
 }
 
 /** Only counted compiler invocations use upstream's fixed Rayon setting. */

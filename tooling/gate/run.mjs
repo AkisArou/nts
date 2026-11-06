@@ -70,6 +70,8 @@
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
 import { instrumentPolicy, readStepInstrument } from "./step-result.ts";
+import { definiteFailure } from "./train/red-stop.ts";
+import { GateScopes } from "./train/step-scope.ts";
 import { orderStepStarts, readStepWallHistory, readPreviousStepWalls, writeStepWallHistory } from "./step-scheduling.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -314,6 +316,8 @@ const FRONTENDS = (() => {
   catch (error) { usage(error.message); }
 })();
 const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAST !== "0";
+const TRAIN_MEMBERS = Number(env.NTS_GATE_TRAIN_MEMBERS ?? "0");
+if (!Number.isSafeInteger(TRAIN_MEMBERS) || TRAIN_MEMBERS < 0) throw new Error("invalid owned train member count");
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
 const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
 const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
@@ -414,13 +418,16 @@ const results = new Map(); // name -> { verdict, reason, ... }
 const running = new Map(); // name -> { child, slots, started, rider, elastic }
 let interrupted = null;
 let stopping = false;
+let trainRedStop = null;
+let scopes;
+let scopeCleanup = { state: "complete" };
 let summaryWritten = false;
 let caseCosts = null;
 const identities = {};
 let plan = [];
 
-function stepEnv(step, slots) {
-  const e = { ...env };
+function stepEnv(step, slots, scope) {
+  const e = gateEnvironment(env, { run: RUN_DIR, owned: { NTS_TOOLING_SLICE: scope.slice } }).env;
   // NTS_JOBS sets the run's budget here; inside a step all.sh would read it as
   // "every knob at once" and undo the slot split.
   delete e.NTS_JOBS;
@@ -519,7 +526,7 @@ function used(includeElastic = true) {
     if (r.elastic) {
       if (!includeElastic) continue;
       // What it holds right now: a token is one process of its workers.
-      const held = tok.held.get(name) ?? 0;
+      const held = r.draining ? r.slots : tok.held.get(name) ?? 0;
       elastic += 1;
       slots += held;
       mem += (s.mem / s.slots) * held;
@@ -642,6 +649,7 @@ let observedAdmissionOpen = null;
 const tok = createTokenPool({
   // `used()` counts the tokens held in an elastic step's share.
   free: () => {
+    if (stopping) return 0;
     observedAdmissionOpen = caseAdmission.open();
     return observedAdmissionOpen ? SLOTS - used().slots - withhold : 0;
   },
@@ -729,6 +737,12 @@ function schedule() {
 }
 
 function start(step, slots, rider = false) {
+  let scope;
+  try { scopes ??= new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); scope = scopes.step(); }
+  catch (error) {
+    finish(step.name, "INSTRUMENT", `step scope setup failed: ${error.message}`, { instrument: { kind: "tooling-setup", verdict: "INSTRUMENT" } });
+    report(step.name); stop(`step scope setup failed: ${error.message}`); return;
+  }
   const log = join(RUN_DIR, `${step.name}.log`);
   const timeFile = join(RUN_DIR, `${step.name}.time`);
   rmSync(join(RUN_DIR, `${step.name}.instrument.json`), { force: true });
@@ -736,21 +750,34 @@ function start(step, slots, rider = false) {
   let cmd = ["sh", join(HERE, "all.sh"), "--call", step.name];
   if (existsSync("/usr/bin/time")) cmd = ["/usr/bin/time", "-f", "%e %U %S %M", "-o", timeFile, ...cmd];
   if (!step.favoured && FAVOURED_PLANNED()) cmd = ["nice", "-n", "5", ...cmd];
-  const argv = [cmd[0], cmd.slice(1)];
-  const child = spawn(argv[0], argv[1], {
+  const launch = scope.command(cmd[0], cmd.slice(1));
+  const child = spawn(launch.command, launch.args, {
     cwd: ROOT,
-    env: stepEnv(step, slots),
+    env: stepEnv(step, slots, scope),
     stdio: ["ignore", fd, fd],
-    detached: true, // its own process group, so it can be stopped whole
+    detached: true,
   });
   closeSync(fd);
   const started = Date.now();
   const elastic = Boolean(step.elastic && tokenAddr);
-  running.set(step.name, { child, slots, started, rider, elastic });
+  const owned = { child, slots, started, rider, elastic, scope, draining: false };
+  running.set(step.name, owned);
   process.stderr.write(elastic
     ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running)\n`
     : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running)\n`);
-  child.on("exit", (code, signal) => {
+  let completed = false;
+  const complete = async (code, signal, spawnError) => {
+    if (completed) return;
+    completed = true;
+    owned.draining = true;
+    let drained, cleanupError, entered, entryError;
+    try { entered = scope.entry(); } catch (error) { entryError = `step scope entry was not proved: ${error.message}`; }
+    try { drained = await scope.drain(); }
+    catch (error) {
+      cleanupError = `step scope cleanup failed: ${error.message}`;
+      scopeCleanup = { state: "error", reason: cleanupError };
+      stop(cleanupError);
+    }
     running.delete(step.name);
     const wall = (Date.now() - started) / 1000;
     let cpu, user, sys, maxrss;
@@ -763,46 +790,57 @@ function start(step, slots, rider = false) {
     } catch {}
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
     account();
-    const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString() };
+    const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered };
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
-    if (stopping && (signal || code !== 0)) {
+    let instrument;
+    try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
+    catch (error) { instrument = { kind: "invalid-instrument", reason: error.message }; }
+    if (cleanupError || spawnError) {
+      const reason = cleanupError ?? `step scope launch failed: ${spawnError.message}`;
+      finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "tooling-cleanup", verdict: "INSTRUMENT", reason } });
+    } else if (trainRedStop && ["SIGTERM", "SIGKILL"].includes(signal) && !instrument) {
+      finish(step.name, "NOT RUN", `cancelled after ${trainRedStop.trigger} failed`, { ...extra, cancelled_by: trainRedStop.trigger });
+    } else if (stopping && !trainRedStop && (signal || code !== 0)) {
       finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
+    } else if (entryError) {
+      finish(step.name, "INSTRUMENT", entryError, { ...extra, instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason: entryError } });
     } else {
-      let instrument;
-      try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
-      catch (error) { instrument = { kind: "invalid-instrument", reason: error.message }; }
       const status = signal ? `killed by ${signal}` : `exit ${code}`;
       const heap = nodeHeapOomReason(text);
       const disposition=instrument&&instrumentPolicy(instrument.kind,instrument.completedFailures);
       if(instrument)finish(step.name,disposition?.verdict??"INSTRUMENT",instrument.reason,{...extra,instrument});
+      else if(signal || code >= 128)finish(step.name,"INSTRUMENT",`${status}; top-level termination is not a completed verdict`,{...extra,instrument:{kind:"tooling-setup",verdict:"INSTRUMENT"}});
       else if(code===0)finish(step.name,"PASS","",extra);
       else if(code===77)finish(step.name,"SKIPPED",lastLine(text)||"exited 77 without a reason",extra);
       else finish(step.name,"FAIL",heap?`${heap}; ${status}`:status,extra);
     }
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
+    if (TRAIN_MEMBERS > 1 && definiteFailure({ name: step.name, ...results.get(step.name) }) && !stopping) {
+      trainRedStop = { version: 1, commit: git("rev-parse", "HEAD"), members: TRAIN_MEMBERS,
+        trigger: step.name, decided_at: new Date().toISOString() };
+      stop(`cancelled after ${step.name} failed`);
+    }
     if (results.get(step.name).verdict === "FAIL" && FAIL_FAST && !stopping) {
       stop("NTS_GATE_FAIL_FAST: a step failed");
     }
     if (!stopping) schedule();
     else if (running.size === 0) done();
-  });
+  };
+  child.on("exit", (code, signal) => { void complete(code, signal); });
+  child.on("error", error => { void complete(null, null, error); });
 }
 
 function stop(why) {
-  if (stopping) return;
+  if (stopping) { if (why.startsWith("signal")) interrupted = why; return; }
   stopping = true;
-  interrupted = why;
-  for (const name of pending) finish(name, "NOT RUN", why);
+  if (!trainRedStop) interrupted = why;
+  for (const name of pending) finish(name, "NOT RUN", why, trainRedStop ? { cancelled_by: trainRedStop.trigger } : {});
   pending = [];
   for (const [, r] of running) {
-    try { process.kill(-r.child.pid, "SIGTERM"); } catch {}
+    try { r.scope.kill(); }
+    catch (error) { scopeCleanup = { state: "error", reason: `cannot cancel ${r.scope.slice}: ${error.message}` }; }
   }
-  setTimeout(() => {
-    for (const [, r] of running) {
-      try { process.kill(-r.child.pid, "SIGKILL"); } catch {}
-    }
-  }, 5000).unref();
   if (running.size === 0) done();
 }
 
@@ -873,6 +911,8 @@ function slower() {
 function done() {
   if (summaryWritten) return;
   summaryWritten = true;
+  try { scopes?.close(); }
+  catch (error) { scopeCleanup = { state: "error", reason: `cannot close run scopes: ${error.message}` }; }
   clearInterval(costClock);
   if (!identities.nts) identify();
   identities.node = process.version;
@@ -894,7 +934,7 @@ function done() {
     if (r.verdict === "SKIPPED" && ACCEPT_SKIP.has(name)) { r.accepted = true; continue; }
     red.push(name);
   }
-  const green = red.length === 0;
+  const green = red.length === 0 && scopeCleanup.state === "complete";
   const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted)
     : {path:env.TMPDIR,state:"kept: rows still running"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
@@ -937,6 +977,11 @@ function done() {
     verdict: green ? "green" : "red",
     fail_fast: FAIL_FAST,
     interrupted,
+    scope_execution: true,
+    scope_cleanup: scopeCleanup,
+    scope_root: scopes ? { slice: scopes.slice, group: scopes.group } : null,
+    ...(trainRedStop ? { train_red_stop: { ...trainRedStop,
+      cancelled: plan.filter(name => results.get(name).cancelled_by !== undefined).sort(), drained_at: new Date().toISOString() } } : {}),
     started: new Date(startedAt).toISOString(),
     wall_s: wall,
     root: ROOT,
@@ -1028,10 +1073,7 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"]) {
 process.on("uncaughtException", (e) => {
   process.stderr.write(`run.mjs: ${e.stack ?? e}\n`);
   interrupted = `runner crashed: ${e.message}`;
-  stopping = true;
-  for (const [, r] of running) { try { process.kill(-r.child.pid, "SIGKILL"); } catch {} }
-  running.clear();
-  try { done(); } finally { process.exit(1); }
+  stop(interrupted);
 });
 
 checkTable();
@@ -1039,7 +1081,7 @@ plan = requested();
 takeTreeLock();
 mkdirSync(RUN_DIR, { recursive: true });
 caseCosts = new CaseCosts(RUN_DIR);
-identities.commit = git("rev-parse", "--short=12", "HEAD");
+identities.commit = git("rev-parse", "HEAD");
 const dirty = git("status", "--porcelain", "--untracked-files=no");
 identities.dirty = dirty === null ? null : dirty.split("\n").filter(Boolean).length;
 if (!plan.includes("build")) identify();

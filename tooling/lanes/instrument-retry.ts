@@ -1,5 +1,6 @@
 // Preserve completed evidence while retrying instruments on the frozen tip.
 import {instrumentPolicy} from "../gate/step-result.ts";
+import {programHost} from "../gate/canonical-environment.ts";
 export type StepResult = { name: string; verdict: string; reason?: string; [key: string]: unknown };
 export type Attempt = { summary: { requested: string[]; steps: StepResult[]; identities: any; environment: any; [key: string]: any }; run: string; status: number | null; signal?: string | null; error?: unknown };
 export function needsOperatorHold(row: StepResult): boolean {
@@ -8,7 +9,8 @@ export function needsOperatorHold(row: StepResult): boolean {
   const policy=instrumentPolicy(instrument.kind,instrument.completedFailures);
   return !policy || policy.verdict!==row.verdict || (instrument.verdict!==undefined&&instrument.verdict!==row.verdict) || policy.disposition==="operator-hold";
 }
-export function retryInstruments(first: Attempt, invoke: (steps: string[], attempt: number) => Attempt, hold: (rows: StepResult[]) => void): Attempt {
+export function retryInstruments(first: Attempt, invoke: (steps: string[], attempt: number) => Attempt, hold: (rows: StepResult[]) => void,
+  decided: (attempt: Attempt) => boolean = () => false): Attempt {
   let current = first;
   const requested = first.summary.requested;
   const rows = new Map(first.summary.steps.map(row => [row.name, row]));
@@ -23,10 +25,13 @@ export function retryInstruments(first: Attempt, invoke: (steps: string[], attem
     hold(instruments);
     const retry = requested.filter(name => ["INSTRUMENT", "NOT RUN"].includes(rows.get(name)?.verdict ?? "NOT RUN"));
     const next = invoke(retry, attempts.length + 1);
+    // The caller validates a terminal disposition against this raw attempt.
+    // Do not join its cancelled rows or wait on unrelated pressure again.
+    if (decided(next)) return next;
     if (!next.summary || next.summary.identities?.commit !== first.summary.identities?.commit
         || next.summary.identities?.nts?.sha256 !== first.summary.identities?.nts?.sha256
         || next.summary.environment?.canonical !== true
-        || JSON.stringify(next.summary.environment?.host) !== JSON.stringify(first.summary.environment?.host)) {
+        || JSON.stringify(programHost(next.summary.environment?.host)) !== JSON.stringify(programHost(first.summary.environment?.host))) {
       for (const name of retry) rows.set(name, { name, verdict: "INSTRUMENT", reason: "retry lacks the frozen compiler, commit or canonical host identity" });
       attempts.push({ run: next.run, steps: retry });
       continue;

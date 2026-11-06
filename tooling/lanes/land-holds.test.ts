@@ -3,7 +3,7 @@
 
 import { heldLandings } from "./held-landings.ts";
 import { waitFor } from "../gate/test-wait.ts";
-import { readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import assert from "node:assert/strict";
 import { LAND, STAND_IN_GATE, controls, gates, land, landTogether, lane, onMain, reportContext, resourceGate, run, scratch, spawnTest, states, test, until } from "./land-test-fixture.ts";
@@ -47,6 +47,10 @@ test("resource recheck with mismatched budgets holds without attribution",async(
 
 test("a pressure-only train holds its members and retries the frozen step without baseline or halving", async () => {
   const s = scratch();
+  const zero=join(s.home,"zero-meminfo"),admission=join(s.root,"tooling/gate/admission.ts");
+  writeFileSync(zero,"MemAvailable: 0 kB\n");
+  const original=readFileSync(admission,"utf8"),controlled=original.replace('const MEMINFO = process.env.NTS_MEMINFO ?? "/proc/meminfo";',`const MEMINFO = ${JSON.stringify(zero)};`);
+  assert.notEqual(controlled,original);writeFileSync(admission,controlled);
   const once = join(s.home, "pressure-once");
   writeFileSync(join(s.root, "tooling/gate/pinned.sh"), controls(s, STAND_IN_GATE + reportContext + `
 node - "$NTS_GATE_RUN_DIR/summary.json" <<'PRESSURE'
@@ -61,9 +65,23 @@ if(!fs.existsSync(once)) {
 }
 PRESSURE
 `));
-  run(s, s.root, ["add", "tooling/gate/pinned.sh"]); run(s, s.root, ["commit", "-q", "-m", "pressure stand-in"]);
+  run(s, s.root, ["add", "tooling/gate/pinned.sh","tooling/gate/admission.ts"]); run(s, s.root, ["commit", "-q", "-m", "pressure stand-in"]);
   const a = lane(s, "pressure-a", { "a.txt": "a\n" }), b = lane(s, "pressure-b", { "b.txt": "b\n" });
-  const results = await landTogether(s, [a, b]);
+  let answered=false,consumedMachineAdmission=false;
+  const pending=landTogether(s,[a,b]).then(results=>{answered=true;return results;});
+  await until("the fixture-owned instrument retry",()=>{
+    if(answered)return true;
+    const file=join(s.home,".cache/nts-land/status.json");
+    if(existsSync(file)){
+      let state;try{state=JSON.parse(readFileSync(file,"utf8"));}catch(error){if((error as NodeJS.ErrnoException).code!=="ENOENT")throw error;}
+      if(String(state?.reason??"").includes("waiting for memory admission")){
+        consumedMachineAdmission=true;writeFileSync(zero,"MemAvailable: 33554432 kB\n");
+      }
+    }
+    return false;
+  });
+  const results = await pending;
+  assert.equal(consumedMachineAdmission,false,"a stand-in gate's retry admission must be fixture-owned even when the reported machine has no memory");
   for (const result of results) assert.equal(result.status, 0, result.out);
   const output = results.map(result => result.out).join("\n");
   assert.match(output, /instrument hold .*same frozen train, no baseline check or halving/);

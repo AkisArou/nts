@@ -61,7 +61,7 @@ export function gateCapabilities(tree: string, requested: readonly string[] | "a
         if (interop?.trim()) throw new Error(`interop project ${project} has no build.sh`);
         continue;
       }
-      const capabilities = /^#[ \t]*nts-gate-capabilities:[ \t]*(.*)$/m.exec(readFileSync(script, "utf8"))?.[1].trim().split(/\s+/).filter(Boolean) ?? [];
+      const capabilities = /^#[ \t]*nts-gate-capabilities:[ \t]*(.*)$/m.exec(readFileSync(script, "utf8"))?.[1]!.trim().split(/\s+/).filter(Boolean) ?? [];
       sites.push({ step: "interop", project, capabilities });
     }
   }

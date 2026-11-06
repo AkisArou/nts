@@ -5,13 +5,16 @@ import {durableRecord} from "./durable-record.ts";
 import {abandonFrozen} from "./train-abandon.ts";
 import {ensureTrain,markTrainRunning,retireTrainOwner,refreshController,trainOwner,withTrainLaunchLock} from "./train-service.ts";
 import { needsOperatorHold, retryInstruments } from "./instrument-retry.ts";
+import { definiteFailure, readTrainRedStop, type TrainRedStop } from "../gate/train/red-stop.ts";
+import { sweep, prefixTimings, readAttribution, type Omission, type Identity as AttributionIdentity } from "./train-attribution/sweep.ts";
+import { reapGateRoot } from "../gate/train/step-scope.ts";
 import {gateComparisons,resourceOnly,pairedResources,type GateComparisons} from "./resource-comparison.ts";
 import {mergeGateRetry,type GateRetry} from "./gate-retry.ts";
 import { heldBatches, heldForEntry, heldActions, heldLandings, holdLandings, wasHeldGeneration, prepareHeldResolution, pendingHeldResolutions, appliedHeldResolution } from "./held-landings.ts";
 import { Admission } from "../gate/admission.ts";
 import {pruneRunTemporaries} from "../gate/run-temporary.ts";
 import {selectRange,selectionInfrastructure} from "../gate/owed-range.ts";
-import { assertLandingEnvironment, gateEnvironment, reportLauncherDrops } from "../gate/canonical-environment.ts";
+import { assertLandingEnvironment, gateEnvironment, programHost, reportLauncherDrops } from "../gate/canonical-environment.ts";
 // Land a commit on main: the owed gate steps, one gate at a time, then a
 // fast-forward. What every lane did by hand, which is how main went red.
 //
@@ -743,7 +746,7 @@ function status(fields: Record<string, unknown>): void {
 }
 
 /** How a gate of one commit ended: green, or why not. */
-type Gated = ({ ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun" | "held"; message: string; required?: RequiredChecks }) & {comparisons?:GateComparisons};
+type Gated = ({ ok: true; run: string; note: string; checks: Owed } | { ok: false; run: string; state: "red" | "unrun" | "held"; message: string; required?: RequiredChecks }) & {comparisons?:GateComparisons;redStop?:TrainRedStop;failures?:string[]};
 
 /**
  * tests.mjs prunes obsolete test executables after PASS. Keep its current set:
@@ -781,10 +784,9 @@ function checkGateTarget(root: string, context: {commit:string;base:string;train
 }
 
 /** Gate `landing`, which is `base` plus the train, in the shared gate tree. */
-function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed, shadow = false, retained?:GateRetry): Gated {
-  const short = landing.slice(0, 12);
+function prepareGateTree(root:string,landing:string):void {
+  const short=landing.slice(0,12);
   const resource=GateResource.inherited(`${GATE_TREE}.lock`);
-  checkGateTarget(root,{commit:landing,base,train:members,shadow});
   const setupRun=join(STATE,"setup",`${short}-${process.pid}`);
   // The gate tree is this landing's while the lock is held: check it out at
   // the commit being landed, and ask its rules what the range owes.
@@ -795,6 +797,15 @@ function gate(root: string, base: string, landing: string, members: string[], re
     ...(resource ? {stdio:resource.stdio("pipe")} : {}),
   });
   if (setup.status !== 0) fail(`could not check out ${short} in the gate tree:\n${setup.stdout}${setup.stderr}`);
+}
+
+function gate(root: string, base: string, landing: string, members: string[], required: RequiredChecks, selected?: Owed, shadow = false, retained?:GateRetry): Gated {
+  const short = landing.slice(0, 12);
+  try { reapGateRoot(join(GATE_TREE, "target/gate-scope-owner.json")); }
+  catch (error) { return { ok: false, state: "held", run: retained?.run ?? "", message: `prior gate ownership cleanup held before tree preparation: ${String(error)}` }; }
+  const resource=GateResource.inherited(`${GATE_TREE}.lock`);
+  checkGateTarget(root,{commit:landing,base,train:members,shadow});
+  prepareGateTree(root,landing);
   const owed = unionChecks(selected ?? owedSteps(GATE_TREE, `${base}..${landing}`), required);
   say(`${short} on ${base.slice(0, 12)} owes: ${describe(owed)}`);
 
@@ -817,6 +828,7 @@ function gate(root: string, base: string, landing: string, members: string[], re
       NTS_GATE_TARGET: GATE_TARGET,
       ...STANDING_GATE_POLICY,
       NTS_GATE_RUN_DIR: run,
+      NTS_GATE_TRAIN_MEMBERS: String(!selected && !shadow && !retained ? members.length : 0),
       NTS_CHECKERS: "1",
       CARGO_INCREMENTAL: "0",
       CARGO_PROFILE_DEV_DEBUG: TEST_BUILD_DEBUG,
@@ -840,12 +852,37 @@ function gate(root: string, base: string, landing: string, members: string[], re
       try{summary=JSON.parse(readFileSync(summaryPath,"utf8"));}catch(error){summaryError=String(error);}
       return { ...processResult, run: attemptRun, summary, summaryError };
     };
+    const completedRed = (attempt: ReturnType<typeof invoke>, proof: TrainRedStop): Gated => {
+      if(![0,1].includes(attempt.status??-1)||attempt.signal||attempt.error)return {ok:false,run:attempt.run,state:"held",message:"red-stop measurement has an unexpected process disposition"};
+      const rows=attempt.summary.steps.filter(definiteFailure),failed=rows.map(row=>row.name);
+      let comparisons:GateComparisons;
+      try {comparisons=gateComparisons(attempt.run,{...attempt.summary,requested:failed,steps:rows});}
+      catch(error){return {ok:false,run:attempt.run,state:"held",message:`completed failure comparison not measured: ${String(error)}`};}
+      return {ok:false,run:attempt.run,state:"red",redStop:proof,comparisons,failures:failed,
+        message:`definite red at ${proof.trigger}; ${proof.cancelled.length} deliberately cancelled step(s); see ${attempt.run}`,
+        required:{steps:failed,interop:failed.includes("interop")?owed.interop:null}};
+    };
     let first = invoke(run,retained?.steps);
     if (!first.summary || !Array.isArray(first.summary.steps)) return { ok: false, run, state: "held", message: `gate measurement has no complete readable summary (exit ${first.status}): ${first.summaryError??"missing step results"}; see ${join(run, "gate.log")}` };
     const observedCommit=String(first.summary.identities?.commit??"");
     if(observedCommit.length<7||!landing.startsWith(observedCommit))return {ok:false,run,state:"held",message:`gate measurement names ${observedCommit||"no commit"}, not frozen ${short}`};
+    if(first.summary.interrupted!=null)return {ok:false,run,state:"held",message:`gate measurement was interrupted: ${String(first.summary.interrupted)}`};
     if (first.summary && !first.summary.requested) first.summary.requested = owed.steps === "all" ? first.summary.steps.map(row => row.name) : owed.steps;
+    if(first.summary.scope_execution===true&&first.summary.scope_cleanup?.state!=="complete")return {ok:false,run,state:"held",message:`step ownership cleanup did not complete: ${first.summary.scope_cleanup?.reason??"missing drain proof"}`};
     if (first.summary.environment?.canonical !== true) return {ok:false,run,state:"red",message:"non-canonical or unrecorded environment is not landing evidence"};
+    // Read the exact original attempt before retry joins can replace rows.
+    // Cancelled comparisons are unfinished by design; only completed failing
+    // rows enter resource pairing or the base check.
+    const expectedSteps:string[]=retained?.steps??(owed.steps==="all"?first.summary.requested:owed.steps);
+    const earlyMembers=!selected&&!shadow&&!retained?members.length:0;
+    const operatorHolds=first.summary.steps.filter(needsOperatorHold);
+    if(operatorHolds.length)return {ok:false,run,state:"held",message:operatorHolds.map(row=>`${row.name}: ${row.reason??"measurement did not complete"}`).join("; ")};
+    if(first.summary.steps.every(row=>row.verdict==="PASS")&&(first.status!==0||first.signal||first.error||first.summary.verdict!=="green"))return {
+      ok:false,run,state:"held",message:"red-stop lacks a completed failure: the gate disposition contradicts its passing rows"};
+    let early:TrainRedStop|undefined;
+    try {early=readTrainRedStop(first.summary,landing,earlyMembers,expectedSteps);}
+    catch(error){return {ok:false,run,state:"held",message:`red-stop measurement not proved: ${String(error)}`};}
+    if(early)return completedRed(first,early);
     if(retained) {
       try {
         const previous=JSON.parse(readFileSync(join(retained.run,"summary.json"),"utf8"));
@@ -854,7 +891,27 @@ function gate(root: string, base: string, landing: string, members: string[], re
         say(`retained ${previous.steps.length-retained.steps.length} completed step(s) from ${retained.run}; freshly measured ${retained.steps.join(" ")}`);
       } catch(error) {return {ok:false,run,state:"held",message:`held-step retry not measured: ${String(error)}`};}
     }
-    const retried = retryInstruments(first, (retry, attempt) => invoke(join(run, `attempt-${attempt}`), retry), rows => {
+    let retryDisposition:Gated|undefined;
+    const retried = retryInstruments(first, (retry, attempt) => {
+      const next=invoke(join(run, `attempt-${attempt}`),retry);
+      try {
+        if(!next.summary||!Array.isArray(next.summary.steps))throw new Error("retry has no complete readable summary");
+        if(next.summary.identities?.commit!==first.summary.identities?.commit
+            ||next.summary.identities?.nts?.sha256!==first.summary.identities?.nts?.sha256
+            ||next.summary.environment?.canonical!==true
+            ||JSON.stringify(programHost(next.summary.environment?.host))!==JSON.stringify(programHost(first.summary.environment?.host)))throw new Error("retry changed the frozen compiler, commit or canonical host identity");
+        if(next.summary.interrupted!=null)throw new Error(`retry was interrupted: ${String(next.summary.interrupted)}`);
+        if(next.summary.scope_execution===true&&next.summary.scope_cleanup?.state!=="complete")throw new Error(`retry step ownership cleanup did not complete: ${next.summary.scope_cleanup?.reason??"missing drain proof"}`);
+        if(next.summary.steps.some(needsOperatorHold))throw new Error("retry has an unfinished instrument requiring an operator");
+        if(next.summary.steps.every(row=>row.verdict==="PASS")&&(next.status!==0||next.signal||next.error||next.summary.verdict!=="green"))throw new Error("retry disposition contradicts its passing rows");
+        const proof=readTrainRedStop(next.summary,landing,earlyMembers,retry);
+        if(proof)retryDisposition=completedRed(next,proof);
+      } catch(error) {
+        retryDisposition={ok:false,run:next.run,state:"held",message:`retry measurement not proved: ${String(error)}`};
+        return {...next,summary:null};
+      }
+      return next;
+    }, rows => {
       const reason = rows.map(row => `${row.name}: ${row.reason ?? "instrument failure"}`).join("; ");
       const admission = new Admission({ report: say });
       let observed = false;
@@ -865,7 +922,8 @@ function gate(root: string, base: string, landing: string, members: string[], re
         status({ ...held, commit: landing, base, run, train: members });
         say(`instrument hold ${held.age_s} s: ${held.reason}; same frozen train, no baseline check or halving`);
       });
-    });
+    },()=>retryDisposition!==undefined);
+    if(retryDisposition)return retryDisposition;
     const gated = retried;
     const summary = retried.summary;
     if (summary.attempts) {
@@ -893,9 +951,11 @@ function gate(root: string, base: string, landing: string, members: string[], re
       return !(v === "PASS" || (v === "SKIPPED" && standingSkips.includes(s) && acceptedSkips.has(s)));
     });
     if (gated.status !== 0 || gated.signal || gated.error || summary.verdict !== "green" || wrong.length > 0) {
+      if(selected&&wrong.some(name=>!byName.has(name)||["NOT RUN","INSTRUMENT"].includes(byName.get(name)!)))return {
+        ok:false,run,state:"held",message:`selected-step measurement did not finish with complete verdicts: ${wrong.join(" ")}; see ${run}`};
       const failed = wrong.length ? wrong : steps;
       return {
-        ok: false, run, state: "red",comparisons,
+        ok: false, run, state: "red",comparisons,failures:summary.steps.filter(definiteFailure).map(row=>row.name),
         message: `gate not green: ${wrong.map((s) => `${s}=${byName.get(s) ?? "NOT RUN"}`).join(" ") || `process ${gated.status ?? gated.signal ?? gated.error?.message}; summary ${summary.verdict}`}; see ${run}`,
         required: { steps: failed, interop: failed.includes("interop") ? owed.interop : null },
       };
@@ -933,7 +993,9 @@ export function runShadowGate(root: string, base: string, tip: string, checks: O
  * of more than one was red: the culprit is found by gating its first half
  * next, and nothing is answered yet.
  */
-type FrozenComposition = {base:string;tip:string;generation?:string;members:{entry:Entry;landing:string}[]};
+type FrozenComposition = {base:string;tip:string;generation?:string;members:{entry:Entry;landing:string}[];
+  attribution?:{gated:Extract<Gated,{ok:false}>;journal:string;identity:AttributionIdentity};
+  survivor?:{journal:string;originRun:string;steps:string[];started?:string;finished?:string}};
 type TrainCycle = {state:"done"|"halve";size:number};
 function durableTrainEntry(entry:Entry):Entry {
   return admitted("queued submission",()=>{
@@ -946,16 +1008,20 @@ function durableTrainEntry(entry:Entry):Entry {
     } catch(error) {return {hold:String(error)};}
   },held=>{status(held);say(`queued submission held ${held.age_s} s: ${held.reason}`);});
 }
-function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maximum = TRAIN_MAX): TrainCycle {
-  const base = git(["rev-parse", "main"], root);
+function composeTrain(root:string,base:string,train:Entry[],maximum:number,respond:(entry:Entry,result:Result)=>void=answer):FrozenComposition {
   let tip = base;
   const members: { entry: Entry; landing: string }[] = [];
   const unavailable=existsSync(DISPOSITIONS)?readdirSync(DISPOSITIONS).filter(n=>n.endsWith(".json")).map(n=>JSON.parse(readFileSync(join(DISPOSITIONS,n),"utf8"))).filter(r=>r.state!=="landed"):[];
   const inTrain=new Set(train.map(e=>e.sha));
   const held=heldLandings(STATE);
-  if (resume?.base === base) { members.push(...resume.members); tip=resume.tip; }
-  else for (const {entry,prerequisites,from} of compose(train,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0)) {
+  const withdrawing = new Set<string>();
+  for (const {entry,prerequisites,from} of compose(train,(a,b)=>spawnSync("git",["merge-base","--is-ancestor",a,b],{cwd:root}).status===0)) {
     const short = entry.sha.slice(0, 12);
+    if (withdrawRequested(entry)) {
+      withdrawing.add(entry.id);
+      respond(entry, { state: "withdrawn", message: `${short} withdrawn before the next composition` });
+      continue;
+    }
     const heldParent=held.find(row=>spawnSync("git",["merge-base","--is-ancestor",row.entry.sha,entry.sha],{cwd:root}).status===0&&!alreadyInMain(root,base,row.entry.sha));
     if(heldParent){
       durableRecord(join(STATE,"held-dependencies",`${entry.id}.json`),{hold:heldParent.batch.id,prerequisite:heldParent.entry.id});
@@ -963,55 +1029,85 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     }
     rmSync(join(STATE,"held-dependencies",`${entry.id}.json`),{force:true});
     if(members.length>=maximum){say(`${short} (${entry.id}) deferred: train capacity ${maximum} compatible members`);continue;}
-    const failed=prerequisites.find(p=>resultOf(p.id)&&resultOf(p.id)!.state!=="landed");
+    const failed=prerequisites.find(p=>withdrawing.has(p.id)||resultOf(p.id)&&resultOf(p.id)!.state!=="landed");
     const missing=unavailable.find(r=>r.entry.sha!==entry.sha&&!inTrain.has(r.entry.sha)&&spawnSync("git",["merge-base","--is-ancestor",r.entry.sha,entry.sha],{cwd:root}).status===0&&!alreadyInMain(root,base,r.entry.sha));
     if(failed||missing) {
       const prerequisite=failed?.sha??missing.entry.sha;
-      answer(entry,{state:"conflict",message:`${short} has a withdrawn or refused prerequisite ${prerequisite.slice(0,12)}; rebase or explicitly resubmit that prerequisite before landing this stack`});
+      respond(entry,{state:"conflict",message:`${short} has a withdrawn or refused prerequisite ${prerequisite.slice(0,12)}; rebase or explicitly resubmit that prerequisite before landing this stack`});
       continue;
     }
     const landing = replayOnto(root, base, tip, entry.sha,from);
     if (!landing) {
       const behind = members.length > 0 ? ` or the ${members.length} landing(s) ahead of it in this train` : "";
-      answer(entry, { state: "conflict", message: `${short} does not replay onto main (${base.slice(0, 12)})${behind} without a conflict: rebase onto main by hand, then land` });
+      respond(entry, { state: "conflict", message: `${short} does not replay onto main (${base.slice(0, 12)})${behind} without a conflict: rebase onto main by hand, then land` });
       continue;
     }
     if (landing === tip) {
-      if(tip===base)answer(entry, { state: "landed", message: `${short}'s changes are on main already`, landing: tip, main: base });
-      else answer(entry,{state:"conflict",message:`${short} adds no commits: its changes are already contained in the pending train through ${members.at(-1)!.entry.id} (${tip.slice(0,12)}); follow that landing's disposition`});
+      if(tip===base)respond(entry, { state: "landed", message: `${short}'s changes are on main already`, landing: tip, main: base });
+      else respond(entry,{state:"conflict",message:`${short} adds no commits: its changes are already contained in the pending train through ${members.at(-1)!.entry.id} (${tip.slice(0,12)}); follow that landing's disposition`});
       continue;
     }
     if (landing !== entry.sha) say(`${short} replayed onto ${tip.slice(0, 12)} as ${landing.slice(0, 12)}`);
     members.push({ entry, landing });
     tip = landing;
   }
+  return {base,tip,members,generation:randomUUID()};
+}
+
+function archiveTrainTip(root:string,tip:string):void {
+  if(!process.env.NTS_LAND_TRAIN_UNIT)return;
+  const ref=`${LAND_TRAIN_ARCHIVES}${process.env.NTS_LAND_TRAIN_UNIT}/frozen-${tip}`;
+  const present=spawnSync("git",["rev-parse","--verify",ref],{cwd:root,encoding:"utf8"});
+  if(present.status!==0)git(["update-ref",ref,tip,"0".repeat(tip.length)],root);
+  else if(present.stdout.trim()!==tip)fail("frozen train archive changed");
+}
+
+function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maximum = TRAIN_MAX): TrainCycle {
+  const base = git(["rev-parse", "main"], root);
+  const frozen:FrozenComposition=resume?.base===base?resume:composeTrain(root,base,train,maximum);
+  const {tip,members}=frozen;
   if (members.length === 0) return {state:"done",size:members.length};
   // Before gating, move legacy members to the store old waiters never read.
   // A later instrument hold cannot be picked up again by an old lander.
-  for(const member of members)member.entry=durableTrainEntry(member.entry);
+  for(const member of members)if(!resultOf(member.entry.id))member.entry=durableTrainEntry(member.entry);
   const shas = members.map((m) => m.entry.sha.slice(0, 12));
   if (members.length > 1) say(`a train of ${members.length}: ${shas.join(" ")}`);
 
-  const frozen = {base,tip,members,generation:resume?.generation??randomUUID()};
   if (process.env.NTS_LAND_TRAIN_UNIT) {
     durableRecord(FROZEN,{version:1,phase:"running",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum});
-    const ref=`${LAND_TRAIN_ARCHIVES}${process.env.NTS_LAND_TRAIN_UNIT}/frozen-${tip}`;
-    const present=spawnSync("git",["rev-parse","--verify",ref],{cwd:root,encoding:"utf8"});
-    if(present.status!==0)git(["update-ref",ref,tip,"0".repeat(tip.length)],root);
-    else if(present.stdout.trim()!==tip)fail("frozen train archive changed");
+    archiveTrainTip(root,tip);
+  }
+  // A survivor composition is a fresh train boundary, even when its frozen
+  // base is unchanged. A withdrawal cannot bypass filtering through resume.
+  if (frozen.survivor && members.some(member => withdrawRequested(member.entry))) {
+    const next = composeTrain(root, base, members.map(member => member.entry), maximum);
+    next.survivor = { journal: frozen.survivor.journal, originRun: frozen.survivor.originRun, steps: frozen.survivor.steps };
+    return runTrain(root, next.members.map(member => member.entry), next, maximum);
   }
   const started = Date.now();
   const required = members.reduce((checks, { entry }) => unionRequired(checks, entry.required ?? { steps: [], interop: null }), { steps: [], interop: null } as RequiredChecks);
   const retained=members[0].entry.gateRetry;
   const reuse=retained?.base===base&&retained.tip===tip&&members.every(member=>JSON.stringify(member.entry.gateRetry)===JSON.stringify(retained))?retained:undefined;
-  const gated = gate(root, base, tip, shas, required,undefined,false,reuse);
+  const interruptedSurvivor=Boolean(frozen.survivor?.started&&!frozen.survivor.finished);
+  if(frozen.survivor&&!interruptedSurvivor&&!frozen.attribution) {
+    frozen.survivor.started=new Date().toISOString();
+    durableRecord(FROZEN,{version:1,phase:"running",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum});
+  }
+  const gated:Gated=interruptedSurvivor?{ok:false,state:"held",run:frozen.survivor!.originRun,message:"survivors' full gate was interrupted before its measurement completed"}
+    :frozen.attribution?.gated??gate(root, base, tip, shas, required,undefined,false,reuse);
+  if(frozen.survivor&&!interruptedSurvivor&&!frozen.attribution) {
+    frozen.survivor.finished=new Date().toISOString();
+    durableRecord(join(frozen.survivor.originRun,`survivor-phase-${frozen.generation}.json`),{version:1,tip,steps:frozen.survivor.steps,
+      started:frozen.survivor.started,finished:frozen.survivor.finished,run:gated.run,verdict:gated.ok?"green":gated.state});
+  }
   const record = (verdict: string) => {
     mkdirSync(STATE, { recursive: true });
     appendFileSync(join(STATE, "trains.tsv"), `${new Date(started).toISOString()}\t${members.length}\t${verdict}\t${Math.round((Date.now() - started) / 1000)}\t${tip.slice(0, 12)}\t${shas.join(",")}\n`);
   };
   const holdBatch=(measurement:{run:string;message:string},retry?:GateRetry):TrainCycle=>{
+    if(members.every(member=>resultOf(member.entry.id)))return {state:"done",size:members.length};
     admitted("held-batch journal",()=>{
-      try{return {value:holdLandings(STATE,{tip,generation:frozen.generation,run:measurement.run,reason:measurement.message,entries:members.map(member=>member.entry),...(retry?{retry}:{})})};}
+      try{return {value:holdLandings(STATE,{tip,generation:frozen.generation,run:measurement.run,reason:measurement.message,entries:members.filter(member=>!resultOf(member.entry.id)).map(member=>member.entry),...(retry?{retry}:{})})};}
       catch(error){return {hold:String(error)};}
     },held=>{status(held);say(`held-batch journal held ${held.age_s} s: ${held.reason}`);});
     status({state:"held",commit:tip,base,run:measurement.run,train:shas,reason:measurement.message});
@@ -1019,16 +1115,24 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     return {state:"done",size:members.length};
   };
   if (!gated.ok) {
-    record(gated.state);
+    if(!frozen.attribution)record(gated.state);
     if(gated.state==="held")return holdBatch(gated);
+    if(frozen.survivor&&gated.required?.steps.some(step=>frozen.survivor!.steps.includes(step)))return holdBatch({...gated,message:`a failure returned in the full survivor gate after passing its exact prefix measurement: ${gated.message}`});
     status({ state: gated.state, commit: tip, base, run: gated.run, train: shas });
-    let inherited = gated.required;
+    let inherited = frozen.attribution ? { steps: frozen.attribution.identity.steps, interop: gated.required?.interop ?? null } : gated.required;
     let redOnMain: string[] = [];
-    let remaining = members;
-    if (gated.state === "red" && gated.run) {
+    let remaining = members.filter(member=>!resultOf(member.entry.id));
+    if (frozen.attribution) {
+      try {
+        if (frozen.attribution.identity.base !== base || frozen.attribution.identity.tip !== tip) throw new Error("foreign attribution base or tip");
+        readAttribution(JSON.parse(readFileSync(frozen.attribution.journal, "utf8")), frozen.attribution.identity);
+      } catch (error) { return holdBatch({ run: gated.run, message: `attribution recovery held before base measurement: ${String(error)}` }); }
+    }
+    if (gated.state === "red" && gated.run && !frozen.attribution) {
       // Use the frozen train's rules and each member's own replayed delta,
       // before the base check changes the shared gate tree. A submitting
       // worktree may have moved while waiting and is not evidence here.
+      if(frozen.attribution)prepareGateTree(root,tip);
       let previous = base;
       const own = members.map(({ landing }) => {
         const checks = owedSteps(GATE_TREE, `${previous}..${landing}`);
@@ -1040,6 +1144,7 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
         interop: null,
       };
       let baseline:Gated;
+      const baseStarted = new Date().toISOString();
       if(gated.comparisons&&resourceOnly(gated.comparisons,suspect.steps)) {
         const retry={base,tip,run:gated.run,steps:suspect.steps};
         say(`resource-only regressions: paired candidate/main recheck of ${suspect.steps.join(" ")}`);
@@ -1059,6 +1164,8 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
         say(`checking failed steps on main (${base.slice(0, 12)}): ${suspect.steps.join(" ")}`);
         baseline=gate(root,base,base,[],{steps:[],interop:null},suspect);
       }
+      durableRecord(join(gated.run, `base-phase-${frozen.generation}.json`), { version: 1, base, tip, steps: suspect.steps,
+        started: baseStarted, finished: new Date().toISOString(), run: baseline.run, verdict: baseline.ok ? "green" : baseline.state });
       if(!baseline.ok&&baseline.state==="held")return holdBatch({...baseline,message:`baseline not measured: ${baseline.message}`});
       redOnMain = baseline.ok ? [] : baseline.required?.steps ?? suspect.steps;
       inherited = {
@@ -1068,6 +1175,7 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
       if (redOnMain.length) {
         say(`red on main (${base.slice(0, 12)}): ${redOnMain.join(" ")}; see ${baseline.run}`);
         for (const [i, { entry }] of members.entries()) {
+          if(resultOf(entry.id))continue;
           const blocked = redOnMain.filter(step => own[i].steps === "all" || own[i].steps.includes(step));
           if (blocked.length) answer(entry, {
             state: "red", run: baseline.run,
@@ -1090,7 +1198,75 @@ function runTrain(root: string, train: Entry[], resume?: FrozenComposition, maxi
     const active=remaining.filter(({entry})=>!withdrawRequested(entry)&&(entry.durable||alive(entry.pid))&&(existsSync(join(QUEUE,`${entry.id}.json`))||existsSync(join(LEGACY_QUEUE,`${entry.id}.json`))));
     for(const {entry} of remaining)if(!active.some(m=>m.entry.id===entry.id))answer(entry,{state:"withdrawn",message:`${entry.sha.slice(0,12)} withdrawn after the frozen run; omitted from recomposition`});
     if(active.length!==remaining.length)say(`withdrawn members leave the failed train before recomposition: ${remaining.filter(m=>!active.includes(m)).map(m=>m.entry.sha.slice(0,12)).join(" ")}`);
-    if (active.length !== members.length) return {state:"done",size:members.length};
+    if (active.length !== (frozen.attribution?remaining.length:members.length)) return {state:"done",size:members.length};
+    if(!active.length)return {state:"done",size:members.length};
+    if(gated.state==="red"&&gated.run&&members.length>1&&inherited?.steps.length) {
+      const identity:AttributionIdentity=frozen.attribution?.identity??{base,tip,members:members.map(m=>({id:m.entry.id,sha:m.entry.sha})),
+        steps:inherited.steps,original_run:gated.run,red_decided_at:gated.redStop?.decided_at??new Date().toISOString()};
+      if(JSON.stringify(identity.steps)!==JSON.stringify(inherited.steps))return holdBatch({...gated,message:"base-green attribution scope changed while recovering its journal"});
+      const journalPath=frozen.attribution?.journal??join(gated.run,"attribution-journal.json");
+      frozen.attribution={gated,journal:journalPath,identity};
+      durableRecord(FROZEN,{version:1,phase:"running",entries:members.map(m=>m.entry),composition:frozen,nextLimit:maximum});
+      const entries=new Map(members.map(m=>[m.entry.id,m.entry]));
+      let composed:FrozenComposition|undefined;
+      let successor:FrozenComposition;
+      try {
+        const saved=existsSync(journalPath)?JSON.parse(readFileSync(journalPath,"utf8")):undefined;
+        const attributed=sweep(identity,saved,{
+          persist:journal=>{
+            durableRecord(journalPath,journal);
+            durableRecord(join(gated.run,"attribution-phases.json"),{version:1,red_decided_at:identity.red_decided_at,prefixes:prefixTimings(journal)});
+          },
+          compose:parts=>{
+            const selected=parts.map(part=>{
+              const entry=entries.get(part.id);
+              if(!entry||entry.sha!==part.sha)throw new Error("attribution member changed identity");
+              if(resultOf(entry.id))throw new Error("an answered member cannot enter another attribution prefix");
+              return entry;
+            });
+            const omissions:Omission[]=[];
+            composed=composeTrain(root,base,selected,maximum,(entry,result)=>{
+              if(result.state!=="conflict" && result.state!=="withdrawn")throw new Error("attribution replay needs a separate non-conflict disposition");
+              omissions.push({member:{id:entry.id,sha:entry.sha},reason:result.message,...(result.state==="withdrawn"?{disposition:"withdrawn" as const}:{})});
+            });
+            archiveTrainTip(root,composed.tip);
+            return {members:composed.members.map(m=>({id:m.entry.id,sha:m.entry.sha})),tip:composed.tip,omissions};
+          },
+          measure:(parts,prefix,steps)=>{
+            const measured=gate(root,base,prefix,parts.map(m=>m.sha.slice(0,12)),{steps:[],interop:null},{steps,interop:inherited!.interop});
+            if(measured.ok)return {verdict:"green",run:measured.run,failed:[],reason:""};
+            if(measured.state!=="red"||!measured.failures?.length||!measured.required?.steps.every(step=>measured.failures!.includes(step)))return {verdict:"held",run:measured.run||gated.run,failed:[],reason:measured.message};
+            return {verdict:"red",run:measured.run,failed:measured.failures,reason:measured.message};
+          },
+          refuse:(member,result)=>{
+            const entry=entries.get(member.id);
+            if(!entry||entry.sha!==member.sha)throw new Error("attribution refusal changed member identity");
+            const prior=resultOf(entry.id);
+            if(prior) {
+              if(prior.state!=="red"||prior.run!==result.run)throw new Error("attribution refusal contradicts its existing disposition");
+              reconcileAnswer(entry,prior);
+            } else answer(entry,{state:"red",run:result.run,message:`${entry.sha.slice(0,12)} first fails ${result.failed.join(" ")} in its exact replay prefix; ${result.reason}`});
+          },
+          omit:({member,reason,disposition:omittedDisposition})=>{
+            const entry=entries.get(member.id);
+            if(!entry||entry.sha!==member.sha)throw new Error("attribution conflict changed member identity");
+            const prior=resultOf(entry.id);
+            if(prior) {
+              if(prior.state!==(omittedDisposition??"conflict")||prior.run!==gated.run||prior.message!==reason)throw new Error("attribution conflict contradicts its existing disposition");
+              reconcileAnswer(entry,prior);
+            } else answer(entry,{state:omittedDisposition??"conflict",run:gated.run,message:reason});
+          },
+          now:()=>new Date().toISOString(),
+        });
+        if(attributed.state==="held")return holdBatch({run:attributed.run,message:attributed.reason});
+        if(!attributed.members.length)return {state:"done",size:members.length};
+        if(!composed||composed.tip!==attributed.tip)throw new Error("attribution lacks the complete survivor composition");
+        composed.survivor={journal:journalPath,originRun:gated.run,steps:identity.steps};
+        say(`attribution complete: ${attributed.refusals.length} culprit(s), ${attributed.omissions.length} replay conflict(s); gating ${composed.members.length} survivor(s) for their complete owed set`);
+        successor=composed;
+      } catch(error) {return holdBatch({run:gated.run,message:`attribution held: ${String(error)}; journal ${journalPath}`});}
+      return runTrain(root,successor.members.map(m=>m.entry),successor,maximum);
+    }
     if (members.length > 1) {
       say(`a train of ${members.length} was ${gated.state}: gating its first half on its own next`);
       return {state:"halve",size:members.length};

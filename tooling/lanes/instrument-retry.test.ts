@@ -39,3 +39,13 @@ test("a hung or broken tooling instrument leaves completed assertions and stops 
     assert.equal(retryInstruments(first,()=>assert.fail("no retry"),()=>assert.fail("no memory wait")),first);
   }
 });
+test("a decided retry disposition stops before another pressure retry or evidence join",()=>{
+  const first=attempt([pressure]),terminal=attempt([{name:"bad",verdict:"FAIL"},pressure],"decided-red");
+  let calls=0;
+  const result=retryInstruments(first,()=>{
+    calls++;
+    return calls===1?terminal:attempt([{name:"pressure",verdict:"INSTRUMENT",instrument:{kind:"tooling-setup"}}],"unexpected-retry");
+  },()=>{},next=>next===terminal);
+  assert.equal(calls,1,"an already-decided failure must not wait on an unrelated pressure retry");
+  assert.equal(result,terminal,"the caller owns the terminal disposition and its raw attempt evidence");
+});

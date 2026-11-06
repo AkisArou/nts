@@ -21,7 +21,7 @@ export function processActivity(text:string) {
   const fields=text.slice(end+2).trim().split(/\s+/);
   const values=[2,3,11,12,13,14,19].map(at=>Number(fields[at]));
   if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw new Error("invalid process activity counters");
-  return {group:values[0],session:values[1],cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),started:values[6]};
+  return {group:values[0]!,session:values[1]!,cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),started:values[6]!};
 }
 function processAt(pid:number) {
   try{return processActivity(readFileSync(`/proc/${pid}/stat`,"utf8"));}
