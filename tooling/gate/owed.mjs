@@ -938,7 +938,10 @@ export function allSteps() {
 
 // Explicit transfers of a removed step's checks to current steps. An empty
 // steps list retires the check and requires a reviewable reason.
-export const STEP_SUCCESSORS = {};
+export const STEP_SUCCESSORS = {
+  // One step per backend, each against its own record.
+  "typescript-cases": { steps: ["typescript-c", "typescript-llvm", "typescript-jvm"] },
+};
 
 /** Production/build dependency reach; workspace tests cover dev dependencies. */
 function cargoCrates(execute = execFileSync) {
