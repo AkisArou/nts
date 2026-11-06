@@ -7,9 +7,9 @@ import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as poll } from "node:timers/promises";
-import { compileActive, memoryRun } from "../census/worker-memory.ts";
+import { compileSync, memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
-import { stableBuildDiagnostic } from "../conformance/observation-text.ts";
+import { compilerExternalStop, compilerStop, compilerStopped, stableBuildDiagnostic } from "../conformance/observation-text.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { Admission } from "../gate/admission.ts";
 import { gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
@@ -36,9 +36,14 @@ export function compileOutcome(result: Result, stage: "emit" | "link"): Benchmar
   // LLVM and C can emit arbitrary program strings on stdout. Only stderr is
   // a diagnostic channel on success; a failed command may use either channel.
   const diagnostic = result.stderr.trim() || (result.status === 0 ? "" : result.stdout.trim());
-  if (result.error || result.signal || result.status === null || result.status >= 126 || result.memoryKilled || result.hung || result.runaway ||
+  if (result.error || result.memoryKilled || result.hung || result.runaway ||
     /toolchain did not survive|out of memory|memory limit|INSTRUMENT FAILURE|NOT MEASURED|disk quota exceeded|no space left on device|\b(?:EDQUOT|ENOSPC)\b/i.test(diagnostic)) {
     throw new ToolingInstrumentError("tooling-setup", `benchmark NOT MEASURED: ${result.error?.message ?? result.signal ?? result.hung ?? result.runaway ?? (result.out.trim() || `exit ${result.status}`)}`);
+  }
+  const stop = compilerStop(result.out, result.status, result.signal);
+  if (stage === "emit" && compilerStopped(result.status, result.signal)) return { kind: "build-failure", stage: "compiler-crash", diagnostic: stop };
+  if (compilerExternalStop(result.status, result.signal) || (stage === "link" && compilerStopped(result.status, result.signal)) || result.status === null || result.status === 126 || result.status === 127) {
+    throw new ToolingInstrumentError("tooling-setup", `benchmark ${stage === "link" ? "link tool" : "compiler"} NOT MEASURED: ${stop}`);
   }
   if (stage === "emit" && !/panicked|internal compiler error/i.test(diagnostic)) {
     const refusal = diagnostic.split("\n").find(line => /(?:declined:|\bNTS\d{4}\b|\bTS\d{4,}\b)/.test(line));
@@ -66,8 +71,12 @@ function regularFiles(directory: string): string[] {
   return result.sort();
 }
 
-export async function observeCompile({ backend, project, output, binary, root, env, command =
-  (binary, args, options) => compileActive({ memoryCapKb: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 6_000_000 * 1024) / 1024 }, binary, args, options) }:
+export async function observeCompile({ backend, project, output, binary, root, env, command = async (binary, args, options) => {
+  const began = performance.now();
+  const result = compileSync({ memoryCapKb: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 6_000_000 * 1024) / 1024 }, binary, args,
+    { ...options, encoding: "utf8", maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
+  return { ...result, stdout: result.stdout ?? "", stderr: result.stderr ?? "", out: `${result.stdout ?? ""}${result.stderr ?? ""}`, elapsedMs: performance.now() - began };
+} }:
   { backend: Backend; project: string; output: string; binary: string; root: string; env: NodeJS.ProcessEnv; command?: Command }): Promise<BenchmarkOutcome> {
   rmSync(output, { recursive: true, force: true }); mkdirSync(output, { recursive: true });
   const options = { cwd: root, env: { ...env, NTS_CHECKERS: "1" } };

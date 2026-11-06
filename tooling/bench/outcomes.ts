@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
 import type { Backend } from "../census/typescript-record.ts";
-import { stableBuildDiagnostic } from "../conformance/observation-text.ts";
+import { compilerStopped, stableBuildDiagnostic } from "../conformance/observation-text.ts";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 
 export const BENCHMARK_SCOPES = ["compile", "scalar", "workload"] as const;
@@ -46,7 +46,9 @@ export function parseBenchmarkOutcome(value: unknown): BenchmarkOutcome {
     case "build-failure": {
       keys(row, ["kind", "stage", "diagnostic"]);
       const diagnostic = text(row.diagnostic);
-      assert.ok(!/toolchain did not survive|SIG(?:KILL|TERM|SEGV|ABRT)|out of memory|memory limit|timed out/i.test(diagnostic), "an infrastructure or resource stop cannot be recorded");
+      assert.ok(!/toolchain did not survive|out of memory|memory limit|timed out/i.test(diagnostic), "an infrastructure or resource stop cannot be recorded");
+      const signal = /\bSIG[A-Z0-9]+\b/.exec(diagnostic)?.[0];
+      assert.ok(!signal || (row.stage === "compiler-crash" && compilerStopped(null, signal)), "an external or link-tool signal cannot be recorded");
       return { kind: "build-failure", stage: choice(row.stage, ["emit", "link", "compiler-crash"]), diagnostic: stableBuildDiagnostic(diagnostic) };
     }
     case "wrong": {

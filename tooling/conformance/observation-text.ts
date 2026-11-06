@@ -68,7 +68,7 @@ export function compilerExternalStop(status: number | null, signal: string | nul
 export function compilerStop(output: string, status: number | null, signal: string | null): string {
   if (compilerExternalStop(status, signal)) {
     const name = signal ?? Object.entries(signalNumbers).find(([, number]) => status === 128 + number)?.[0];
-    return name ? `stopped by ${name}${signal === null ? ` (exit ${status})` : ""}` : `stopped with exit ${status}`;
+    return name ? `stopped by ${name}` : `stopped with exit ${status}`;
   }
   const lines = output.split("\n").map(line => line.trim());
   const at = lines.findIndex(line => /^thread '[^']*'(?: \(\d+\))? panicked at /.test(line));
@@ -79,5 +79,6 @@ export function compilerStop(output: string, status: number | null, signal: stri
   }
   const named = lines.find(line => /^thread '[^']*'(?: \(\d+\))? has overflowed its stack$/.test(line) || /^memory allocation of \d+ bytes failed$/.test(line));
   if (named !== undefined) return stableBuildDiagnostic(named);
-  return signal !== null ? `stopped by ${signal}` : `stopped with exit ${status}`;
+  const fault = signal ?? [...compilerFaultSignals].find(name => signalNumbers[name] !== undefined && status === 128 + signalNumbers[name]!);
+  return fault ? `stopped by ${fault}` : `stopped with exit ${status}`;
 }

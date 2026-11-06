@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { constants } from "node:os";
-import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "../conformance/observation-text.ts";
+import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableBuildDiagnostic, stableCheckText } from "../conformance/observation-text.ts";
 import * as observations from "../conformance/observation-text.ts";
 const { compilerExternalStop } = observations;
 
@@ -32,7 +32,8 @@ test("a compiler stop is named by the stop itself, never by a refusal printed fi
     "thread 'nts' (N) has overflowed its stack");
   assert.equal(compilerStop("memory allocation of 103079215080 bytes failed\n", null, "SIGABRT"), "memory allocation of N bytes failed");
   assert.equal(compilerStop("", null, "SIGSEGV"), "stopped by SIGSEGV");
-  assert.equal(compilerStop("NTS1001 a refusal\n", 139, null), "stopped with exit 139");
+  assert.equal(compilerStop("NTS1001 a refusal\n", 139, null), "stopped by SIGSEGV");
+  assert.notEqual(stableBuildDiagnostic(compilerStop("", 134, null)), stableBuildDiagnostic(compilerStop("", 139, null)), "different fault signals remain different after diagnostic normalization");
 });
 
 test("only a self-raised signal or Rust panic belongs to the compiler", () => {
