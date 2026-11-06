@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: CallArgumentType { func: \"Closure0#call_this\", callee: \"C#@private2:#m\", at: 0, expected: Managed(Object(TypeId(13))), found: Erased }",
+  "node": "exit 1; nts: uncaught Observed: access=TT;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}
