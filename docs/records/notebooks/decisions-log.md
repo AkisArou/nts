@@ -37,7 +37,7 @@ Dates are 2026.
   immutable record per run rather than one growing file, so parallel landings
   do not conflict and each run can be cited. `full.md` is rendered from the
   newest complete run with nts's own best per row
-  ([workflow](../../contributing/workflow.md#decisions)).
+  ([workflow](../../workflow.md#decisions)).
 - **Losses are expected while the compiler is unfinished** (10-29): "we might
   lose, but we have to profile and see why, note it, and possibly
   add/update/modify the plan." Each loss is profiled, its cause recorded, and
@@ -62,7 +62,7 @@ Dates are 2026.
   proof removed is a memory-safety hole; the proof that would remove the cost
   is recorded as an idea or a plan item. The bounds ideas are in
   [bounds-check placement](bounds-check-placement.md); the role is in
-  [workflow](../../contributing/workflow.md#roles).
+  [workflow](../../workflow.md).
 - **An obvious winner is built first** (10-28): where a faster
   implementation is obvious or much expected (SIMD, a native library, code the
   compiler generates per type), it is the first one built, not a later
@@ -1383,3 +1383,26 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   mature build and test tools, such as Bazel, Buck2, Nx, Turborepo, tup and
   BuildXL, before more bespoke work. The file-access recorder (#245) is held
   at a WIP checkpoint until the survey's verdict.
+
+## Fresh start (11-06)
+
+- **The decision.** The user approved the workflow in
+  [`docs/workflow.md`](../../workflow.md) and a fresh start of the machine:
+  "for sure remove every branch/worktree that is not needed", keeping the
+  Chromium build caches. On archiving the rest: "by archiving it, we for sure
+  will forget it." On the Codex archive: "I think we should just ditch them."
+- **What replaced archiving.** No new `refs/archive/` refs. Unfinished work
+  stays on a branch only while a task in [`plan.md`](../../plan.md) names it;
+  everything else is deleted. Two reviews read every branch the old rules
+  would have archived: the retired lanes' resume notes, and every finished
+  commit since 10-20 that no task cited. Their still-wanted work became
+  tasks with branches.
+- **Citations stay resolvable.** A commit that a record or result on `main`
+  cites by hash, and that `main` does not contain, gets `refs/cited/<sha>`, a
+  pointer at that commit alone (272 on the day), so deleting branches never
+  breaks a citation.
+- **The Codex archive is gone.** Its 140 refs dated from 10-03 to 10-12;
+  `main` had moved 2,850 commits since, one fix had been taken from it in a
+  month, and a bug it fixed that still exists shows up as a failing case.
+  The quarry rule left `CLAUDE.md` and
+  [the workflow page](../../workflow.md), which replaced the old one.

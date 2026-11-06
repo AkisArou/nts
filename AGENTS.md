@@ -35,7 +35,7 @@ says who owns which paths and which branch prefix each uses.
 ## Your tree, and the shared checkout
 
 Work in your lane's own worktree, `~/Projects/nts-lanes/<lane>`, on branches
-`<lane>/<topic>` (`docs/contributing/workflow.md`). `~/Projects/nts` is `main` and is
+`<lane>/<topic>` ([`docs/workflow.md`](docs/workflow.md)). `~/Projects/nts` is `main` and is
 landing-only: nobody edits there. The exception is the coordinator's
 documentation, which the user reads there (see "Documentation goes straight to
 main" below). It supplies the inputs no commit carries (`third_party/*`
@@ -67,7 +67,7 @@ not change.
 ## Landing
 
 Nothing reaches `main` except a fast-forward to a commit that passed the gate
-steps it owes. `land` does the whole of it (see `docs/contributing/workflow.md`):
+steps it owes. `land` does the whole of it (see [`docs/workflow.md`](docs/workflow.md)):
 
 ```sh
 node tooling/lanes/land.ts <commit> --dry-run   # the steps it owes

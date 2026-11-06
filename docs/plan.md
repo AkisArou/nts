@@ -30,43 +30,175 @@ one page that changes as work goes; the designs it builds are in
 
 ## Now
 
-- **The team:** the coordinator decides, designs and reviews. Four agents
-  implement and measure, and the other Codex lanes hold until the new workflow
-  ([log](records/notebooks/decisions-log.md#lanes-hold-for-the-new-workflow-11-03)):
-  - **compiler4:** managed-type coercion (#159), with function bodies built
-    only where a program reaches them, inside the compile-time budget; it also
-    reviews every compiler change;
-  - **nodejs:** the shared TypeScript oracle (#193), then Node 26;
-  - **tsrs2:** the gate's tooling: record integrity now, and how a landing
-    learns which checks it owes once the survey of existing tools is in;
-  - **chromium:** the Chromium bindings, held to Blink's own C++;
-  - **cloud agents** (ChatGPT, through pull requests): test families for the
-    TypeScript suite, which land without a gate run, and the survey of
-    mature build and test tools for the gate
-    ([cloud-agents](contributing/cloud-agents.md)).
+- **The switch to [how we work](workflow.md).** The fresh start is done
+  (11-06): branches, worktrees, archives and the agents' evidence folders are
+  cut to what the tasks below need. Next, in order: the landing check, the
+  full check after landing, the records it writes and the worktree pool;
+  then agents restart on the tasks below, one agent per task.
+- **In flight, held for the switch.** Each lands through the old lander
+  until the landing check exists:
+  - the shared TypeScript oracle (#193, `node/oracle-e039`) and Node 26
+    (#124, `node/node26-finished`), landed straight on `main` with Node 24
+    dropped (user, 11-06), then the oracle's disk defect: it prepares every
+    case's snapshot before running the first, about 17 GB at once. The other
+    `node/*` branches are those two tasks' earlier rounds;
+  - managed-type coercion inside the compile-time budget (#159,
+    `compiler/managed-coercion-main102-r10`; the other
+    `compiler/managed-coercion*` and `compiler/receiver-*-2d` branches are
+    its earlier rounds);
+  - the gate's memory admission (#335, `tsrs/335-gate-memory`);
+  - the synchronous benchmark ports (#315,
+    `coordinator/benchmark-ports-315`, with tsrs2's records on
+    `tsrs/benchmark-outcomes`), once two things are settled: whether ARES-6
+    lands as the ports have it or restored to upstream
+    (`helper4/ares6-family`), and Octane's provenance files
+    (`helper4/octane-namespace`);
+  - steps started by their work, not their last wall time (#333,
+    `coordinator/gate-order-333`);
+  - Chromium, paused by the user (`chromium/*`).
+- **The machine:** one shared 32 GB box; CPUs 4–5 are kept for measurement
+  ([`../AGENTS.md`](../AGENTS.md)).
 
-  The JVM is maintained while its new work waits for phase 4; the Wasm backend
-  is to be rebuilt on Binaryen IR. Calling C (phase 2, item 9) and the other
-  held lanes' work resume with the new workflow.
-- **Node 26:** the node lane moves the node reference from Node 24.20.0 to
-  26.13.0, the LTS line, on one branch:
-  - one mechanical commit: the pin, node's sources, and the bundled
-    libraries' recipe and licence records;
-  - then `runtime/node`, module by module, each against node's own changes
-    between the two versions, checked by node 26's tests on both lanes;
-    `zlib` first, as the pilot that settles the procedure;
-  - no gate or benchmarks until the branch lands, through one gate. Each tree
-    links the node inputs its own `.tool-versions` names, so trees on both
-    versions coexist during the move
-    ([log](records/notebooks/decisions-log.md#node-26-10-31)).
-- **The JVM's class archive:** each installation gets its own class archive,
-  written at the jar's final path, and a program the build proves starts no
-  threads returns from `main` instead of calling `System.exit`. helper2
-  builds it as its own change with startup rows, and runtime3 reviews it
-  ([log](records/notebooks/decisions-log.md#jvm-class-archive-11-02)).
-- **The machine:** one shared 32 GB box. At most two heavy jobs run at once,
-  CPUs 4–5 are kept for measurement, and every build checks the disk floor
-  first ([`../AGENTS.md`](../AGENTS.md)).
+## Tasks
+
+The queue, in the order it is taken: wrong answers first, then aborts and
+failed builds, then refusals by reach, then the foundations and performance,
+then tooling. A task whose work is already on a branch names it, and the
+branch goes when the task lands or is dropped. The numbers are the old task
+ids, kept so the records that cite them still resolve.
+
+**Wrong answers**
+- Decorators are compiled away; refuse them by name until the standard
+  semantics exist (#14).
+- Stored callbacks and catch roles (#188): `tsrs/3b-mainac1b-namespace-source-preview`
+  (rebase the #188 commit alone), `tsrs/3b-source-refusal-correction`.
+- Writes inside implicit calls are lost (#113 A), with Navier-Stokes' build
+  (#138): `compiler/implicit-member-call-effects-025`; its earlier round
+  `compiler/implicit-member-call-effects` also holds the gate profile's
+  overflow checks for `nts-dev`.
+- A program's own Math, `Number.isNaN`, `parseInt` or typed-array class is
+  replaced by the builtin (#129).
+- Two literals with the same fields and different getters share a descriptor
+  (#185): `compiler/getter185-on276`, `compiler/getter-identity-fix`.
+- Map and Set contents (#158, with #203's typed Map view):
+  `compiler/collection-tagged-semantics` and its earlier rounds
+  `compiler/collection-tagged-semantics-pre-view-landing`,
+  `compiler/map-semantics-before-licence-rebase` (#47).
+- Generics: a generic called from a generic is instantiated at its constraint
+  (#212), private fields across instantiations (#237), invalid HIR from two
+  instantiations (#231), a record's number field reads 0 on the second call
+  (#205).
+- A narrowed field survives a callback that replaces it (#180); a key absent
+  from a `Record` reads as present (#211); `String()` skips an object's own
+  `toString` (#221); deleting a field that shadows an inherited getter (#286);
+  an inherited getter read treats an instance as a Map (#284).
+- Private names: `#x in this` during initialization (#233), methods without
+  identity (#234), a static private read through a subclass (#235),
+  same-spelled private names (#236).
+- Numbers: wide integers in power-of-two bases (#262), a definite-assignment
+  assertion taken as a write (#263), a TypeError node does not throw (#264).
+- The JVM's fixed view over a shrunk resizable buffer (#113 E):
+  `runtime3/jvm-fixed-view-resize`.
+- The rest of #190's wrong answers, by reach.
+
+**Aborts and failed builds**
+- A rest parameter reads the second argument (#209); `Array.isArray` over a
+  typed array (#208); a refused function called through `{ size }` (#161); a
+  class called with `.call` through a construct signature (#222).
+- The compiler stops: recursive aliases through Map/Set (#200), `parseInt`
+  through a widened interface (#260), property names that are not C
+  identifiers (#165, #227), `new Array(-1)` (#312).
+- Generated code is rejected: C for constrained generics (#310), LLVM's
+  missing declaration (#311), a JVM VerifyError (#265) and ClassCastException
+  (#215).
+- Array holes have no representation (#143).
+- An LLVM addon exporting a class fails to load (#181):
+  `runtime3/llvm-addon-class-main29107`.
+
+**Refusals, by reach**
+- Exceptional transfer through indirect calls (#18):
+  `compiler/exceptional-transfer-producer`.
+- Octane's loose equality and `Object.assign` (#147):
+  `compiler/octane-equality-assign`; then `Error()` without `new` and
+  `new.target`.
+- Undefined reads: uninitialized-field occupancy (#33), then value-owned
+  property attributes (#229).
+- Node-API function exports and naming (#149, #134):
+  `runtime3/napi-function-exports`, `runtime3/napi-function-values-d2c`,
+  `runtime3/addon-private-names`, `runtime3/napi-publication-manifest`.
+- A module-scope function installed by a static block: the refusal fixture on
+  `helper/write-once-module-function`.
+- Strict-mode unmapped `arguments` (#55), `instanceof` a const alias (#182),
+  `bigint[]` push (#189), object statics over unknown layouts (#187),
+  typed-array subclass species (#186), the absent-routes refusals (#178), key
+  order (#179), a union's dictionary arm (#278), Proxy without traps (#173),
+  JVM interface field accessors (#327), generic methods on generic classes
+  (#267), printer admission (#146), Math gaps (#206), `parseInt` whitespace
+  (#214), runtime library statements cut (#16).
+- Node: native `process` conformance (#287) and the nine held node tests
+  (#238).
+
+**Foundations and performance**
+- Memory: stage 1 (#12); the arena API lands with its first caller
+  (`compiler/arena-api`); a field overwritten in a loop leaks (#126,
+  `helper4/lifetime-field-overwrite-finding`).
+- LLVM at least as fast as C (#97): nsw and internal linkage
+  (`compiler/llvm-linkage-nsw`); descriptor initializers from one renderer
+  (#248).
+- Proved-integer arithmetic (#28): `jvm/exact-region-certificates`,
+  `jvm/integral-producer-evidence`; the bounds relational domain (#96).
+- The builtins mechanism (#42, #137): `jvm/provider-package-identity`;
+  canonical path observations on `tsrs/builtins-observed-roots-qualified`,
+  unless main's real-path records already cover them.
+  Capture by value (#184), identical instantiations sharing one body (#192),
+  per-site copies for union parameters (#154), the verifier (#257, #266,
+  #285), the view kind as an integer (#207).
+- Calling C stage 2 (#91): `runtime3/c-number-kinds-clean-stack` first,
+  `runtime3/c-number-kinds` for review; the C memory declaration tests
+  (`tsrs/c-memory-after-capture-repair`).
+- Every row at the bar (#94): `parseInt` (#243), the JVM's int-cursor reads
+  (`refs/archive/jvm/jvm/int-unit-at`), the comparators as standing columns
+  (#89).
+- Compile time: quadratic loops (#115), the 237x regression (#122),
+  ai-astar on the JVM (#334).
+- The JVM class archive (#148), JVM interop (#21), Zig as the bundled C
+  toolchain (#44, a product decision for the user).
+
+**Benchmarks and the web platform**
+- Brotli and Web Crypto (#71): `helper/brotli-native-111`,
+  `helper/web-crypto-pr110` and its earlier rounds
+  (`helper/web-crypto-pr109-*`, `helper/crypto-pr109-before-liveness-20261029`),
+  `helper/base64-after-crypto-replay-20261030`.
+- Web tests decide by completion (#49): `helper/web-test-completion`,
+  `helper/web-chain-pr14`; then the WebSocket server goes (#52) and the
+  interface tag sweep (#53).
+- AWFY macro rows (#26):
+  `helper/awfy-cd-havlak-qualification-evidence-20261030`,
+  `helper/awfy-ports-parked`.
+- The asynchronous benchmark harness (#56), then the parked JetStream pull
+  requests #69 to #74 and #118 (a licence decision).
+- One build driver for the CLI and `nts-bench` (#196).
+
+**Tooling**
+- The quiet-window batch (#46): `tsrs/gate-window-preparation`,
+  `tsrs/build-failure-summary`; ratchets that record their own progress
+  (#74).
+- Wall-clock deadlines replaced (#83): `tsrs/timeout-callers`,
+  `compiler/runtime-raise-effects-submit`,
+  `helper/source-oracle-plans-before-landed-ingress-20261029`; a definite
+  failure outranks a hang (#87).
+- Record integrity (#174): `tsrs/174-record-integrity`.
+- Step inputs by recording what each check reads (#245):
+  `tsrs/245-recording-filesystem`.
+- Tool reports lose their tail (#329): `coordinator/exit-after-output`.
+- Node's compile cache out of `/tmp` (#324): `tsrs/node-cache-retention`,
+  `tsrs/node-cache-retention-unfolded90`.
+- The TypeScript families the new oracle can judge (#195, #276); tests leak a
+  temp folder per case (#197); the JVM jar built from `JAVA_HOME` (#194);
+  type-check coverage of tooling (#281).
+- The old lander's open defects fold into the landing check: #120, #121,
+  #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
+  #330, #332.
 
 ## The phases
 

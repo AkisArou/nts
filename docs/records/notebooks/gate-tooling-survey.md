@@ -112,7 +112,7 @@ All living documentation and source links below were **consulted on 2026-11-05**
 - <a id="R2"></a>**[R2]** [`tooling/gate/owed.mjs`](https://github.com/AkisArou/nts/blob/main/tooling/gate/owed.mjs), hand rules, Cargo and corpus discovery, wide checks and fallback policy.
 - <a id="R3"></a>**[R3]** [`tooling/gate/owed-range.ts`](https://github.com/AkisArou/nts/blob/main/tooling/gate/owed-range.ts), immutable endpoint selectors and union semantics; [`tooling/gate/checks.ts`](https://github.com/AkisArou/nts/blob/main/tooling/gate/checks.ts), check-set unions.
 - <a id="R4"></a>**[R4]** [`tooling/lanes/land.ts`](https://github.com/AkisArou/nts/blob/main/tooling/lanes/land.ts), queue, train selection, gate execution, proof validation and splitting; [`verification-ledger.ts`](https://github.com/AkisArou/nts/blob/main/tooling/lanes/verification-ledger.ts).
-- <a id="R5"></a>**[R5]** [`docs/contributing/workflow.md`](https://github.com/AkisArou/nts/blob/main/docs/contributing/workflow.md), workflow, queue safety and full-run policy.
+- <a id="R5"></a>**[R5]** [`docs/contributing/workflow.md`](https://github.com/AkisArou/nts/blob/24a6e345a23b/docs/contributing/workflow.md), workflow, queue safety and full-run policy.
 - <a id="R6"></a>**[R6]** [`tooling/lanes/inputs.sh`](https://github.com/AkisArou/nts/blob/main/tooling/lanes/inputs.sh), shared Git-ignored corpora and pinned Node inputs.
 
 **Observed-read systems and comparable build engines:**

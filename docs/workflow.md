@@ -42,6 +42,9 @@ follows; this page is the why and the whole picture.
 - **Nothing valuable sits on a branch.** Unfinished work on a branch is
   either a task in the list that names the branch, or it is deleted. Old
   branches are not kept "just in case": that is how work gets forgotten.
+  A commit that a record cites by hash stays reachable through
+  `refs/cited/<sha>`, a pointer at that commit alone, so deleting a branch
+  never breaks a citation.
 
 ## Agents
 
@@ -201,3 +204,62 @@ the first node task.
    holds work for in different areas.
 
 Until a part is built, the old lander keeps doing that part's job.
+
+## Until the switch is built
+
+- **Landing:** `node tooling/lanes/land.ts <commit> --dry-run` says what a
+  change owes; `node tooling/lanes/land.ts <commit>`, run in the background,
+  gates it and lands it.
+- **Documentation and test fixtures** go straight to `main`: the coordinator
+  commits them holding the landing lock (`~/.cache/nts-land.lock`) while no
+  landing runs, after the tree checks (`land.ts <commit> --dry-run`). A
+  fixture comes with its records, made twice on main's official pin.
+- **A control or a bisect** is a pinned compiler, not a tree:
+  `node tooling/conformance/pin.ts <rev>` builds
+  `~/.cache/nts-pins/<12 hex>/nts`.
+- **What is going on:** `node tooling/lanes/lane.ts status`.
+- **A tree's cargo target is its own `target/`:** two trees sharing one run
+  each other's compiled crates.
+
+## Decisions
+
+- **This workflow** (11-06): the landing check, the full check after
+  landing, tasks that land within a day, agents per task, and the fresh start
+  ([log](records/notebooks/decisions-log.md#fresh-start-11-06)). It replaces
+  the lane model of record 0355.
+- **A cloud agent works through pull requests** under
+  [cloud-agents.md](contributing/cloud-agents.md) (10-28,
+  [log](records/notebooks/decisions-log.md#contributors-and-packages-10-28)).
+- **Reporting:** every benchmark result is shown as it is produced, with its
+  ratios against node and Bun, the machine's conditions and the verdict
+  (regression, improvement or noise), losing rows included. A fix that adds a
+  run-time cost is read for what the compiler could prove instead
+  ([log](records/notebooks/decisions-log.md#the-bar)).
+- **Measuring** (10-28,
+  [log](records/notebooks/decisions-log.md#performance-and-process-10-28)):
+  rounds of before, after and before again, over at least 5 processes;
+  instruction counts decide regressions; wall time has a floor of max(3%,
+  twice the spread); where a row's layout range exceeds the effect, the
+  layout-interval instrument decides: at least 20 independent code and heap
+  layouts per arm, A/B/A brackets in each, and a 99% bootstrap interval over
+  the layouts. An interval wholly below zero is an improvement, wholly above
+  zero a regression, and one containing zero is noise
+  ([how to run it](../tooling/bench/README.md#layout-intervals)). Every
+  comparator's version is pinned (node, Bun, the JDK and clang), and every
+  report records the machine's load.
+- **Every benchmark run is kept** (10-29,
+  [log](records/notebooks/decisions-log.md#the-bar)): each run writes one
+  record under `results/benchmarks/runs/`, never edited afterwards, with
+  every cell (time, spread, checksum, status), the bar's verdict per
+  comparator, and the run's metadata. `results/benchmarks/full.md` is
+  rendered from the newest complete run, with nts's best result per row
+  beside it, so a row slower than nts's own best shows as a regression.
+- **The full check's later additions** (10-28): a weekly run with result
+  caches off; native instruction counts gated per benchmark row against the
+  noise band; a sanitized, reference-counted differential run over the
+  corpus; the compile-time guard extended to code generation and link time;
+  result caches keyed on the schema, compiler and runtime digests. Not built
+  yet.
+- **Platforms:** Apple and Windows programs may stay unrun when their only
+  refusals are platform skips. A red that only affects the JVM is recorded in
+  `tooling/conformance/jvm-declines.known` and fixed afterwards.
