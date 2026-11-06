@@ -80,6 +80,16 @@ function cacheFixture(t: TestContext): string {
   folder("nts/snapshots");
   folder("nts-tsrs2-review-r1");
   folder("nts-gone-tool");
+  // node-environment.ts's NODE_TEST_DIR roots: two left, one fresh, and other tools' folders.
+  folder("n1a6c", 2);
+  folder("n26d/.tmp.2993385");
+  folder("n26d", 3);
+  folder("n2zz");
+  folder("nvim");
+  writeFileSync(join(cache, "nvim/init.lua"), "-- a tool's own\n");
+  folder("node", 9);
+  writeFileSync(join(cache, "node/compile-cache"), "");
+  folder("node", 9);
   writeFileSync(join(cache, "nts-land.lock"), ""); // a file, not a folder
   return cache;
 }
@@ -165,8 +175,10 @@ test("the count names every branch, worktree and cache folder outside its rules,
   lacks(/runs\/(today|yesterday)/);
   lacks(/not-nts-at-all|ntsc-is-not-nts|nts-land\.lock/);
   lacks(/nts-chromium-checkpoint|nts\/apple|nts\/node-deps|nts-gate\/bin/);
+  has(/^~\/\.cache\/n<pid>: 2 folder\(s\), 2\.0 to 3\.0 days old \(n1a6c, n26d\), NODE_TEST_DIR roots left by tooling\/conformance\/node-environment\.ts; a runner removes its own$/);
+  lacks(/^~\/\.cache\/(?:n2zz|nvim|node)\b/); // fresh, or another tool's
   lacks(new RegExp(`nts-pins/(${MAIN.slice(0, 12)}|${VERIFIED.slice(0, 12)}|tree|target)`));
-  assert.equal(red.length, 17, red.join("\n"));
+  assert.equal(red.length, 18, red.join("\n"));
 });
 
 test("a machine within the rules is green; one the count could not read is not", t => {

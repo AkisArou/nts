@@ -1,7 +1,8 @@
 // The count step (docs/workflow.md, The machine: "the full check counts
 // them"). Red when a branch is named by no task in docs/plan.md, a worktree is
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json
-// keeps. Each red line names the item and why. It deletes nothing; it reports.
+// keeps, or a node test root a stopped runner left (n<pid in base 36>). Each
+// red line names the item and why. It deletes nothing; it reports.
 //
 //   node tooling/full-check/count.ts          the lines, exit 0 green, 1 red, 2 not counted
 //
@@ -23,6 +24,7 @@ import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
+import { OWNER_MARK } from "../conformance/node-environment.ts";
 
 export type Pull = { number: number; headRefName: string; isCrossRepository?: boolean };
 export type Worktree = { path: string; head?: string; branch?: string; prunable?: boolean };
@@ -216,6 +218,22 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context): string[] {
   return lines;
 }
 
+/**
+ * ~/.cache/n<pid in base 36>: the NODE_TEST_DIR roots of
+ * tooling/conformance/node-environment.ts, short for node's socket names. One
+ * holds only its mark and node's `.tmp.*` test folders, which is how one is
+ * told from another tool's folder named n<letters> (nvim, node); a day after
+ * its runner is gone it is a leftover.
+ */
+function nodeTestRoots(input: CountInput, context: Context): string[] {
+  const owner = (dir: string) => { try { return Number(readFileSync(join(dir, OWNER_MARK), "utf8").trim().split(" ")[0]); } catch { return null; } };
+  const running = (pid: number | null) => { if (!pid) return false; try { process.kill(pid, 0); return true; } catch (error) { return (error as NodeJS.ErrnoException).code === "EPERM"; } };
+  const left = folders(input.cache).filter(entry => /^n[0-9a-z]{2,7}$/.test(entry.name)
+    && readdirSync(entry.path).every(name => name === OWNER_MARK || name.startsWith(".tmp."))
+    && input.now - entry.mtimeMs > DAY && !running(owner(entry.path)));
+  return left.length ? [`~/.cache/n<pid>: ${aged(left, context)}, NODE_TEST_DIR roots left by tooling/conformance/node-environment.ts; a runner removes its own`] : [];
+}
+
 function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]): void {
   const context: Context = { cache: input.cache, main: input.main, verified: input.verified, now: input.now, root: input.root };
   for (const entry of folders(input.cache).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
@@ -223,6 +241,7 @@ function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);
     else red.push(...judgeFolder(entry, rule, context));
   }
+  red.push(...nodeTestRoots(input, context));
 }
 
 export function count(input: CountInput, keep: Record<string, Keep> = readKeep()): CountResult {
