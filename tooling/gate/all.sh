@@ -1165,6 +1165,15 @@ backend_examples() {
     awk -F'\t' '/^partial /{ sub(/^partial /, "", $1); printf "    %-40s %s\n", $1, $2 }' \
       "$results"
   fi
+  # **`pending` is in no count, and passes.** An example with no oracle record
+  # yet compared nothing at landing; the full check records its population
+  # (tooling/records/record-pending.ts) and holds it from then on. agree.mjs
+  # holds the claim to the record store, so a recorded example cannot get here.
+  pending=$(grep -c '^pending ' "$results" || true)
+  if [ "$pending" -gt 0 ]; then
+    printf '  %s not compared until the full check records them:\n' "$pending"
+    awk -F'\t' '/^pending /{ printf "    %s\n", $2 }' "$results"
+  fi
   if [ "$unmeasured" -gt 0 ]; then
     # **Not counted against the floor, and the step fails anyway.** A case that
     # could not be run is not evidence in either direction, and scoring it as a
