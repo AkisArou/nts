@@ -76,7 +76,7 @@ import { dirname, join, normalize, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { preciseChange } from "./precise-changes.ts";
 import { mergeRuleMetadata } from "./rule-metadata.ts";
-import { selectRange, SelectionInfrastructureError, selectionInfrastructure } from "./owed-range.ts";
+import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
 export {parseNameStatus} from "./change-paths.ts";
@@ -914,6 +914,10 @@ export function allSteps() {
   });
 }
 
+// Explicit transfers of a removed step's checks to current steps. An empty
+// steps list retires the check and requires a reviewable reason.
+export const STEP_SUCCESSORS = {};
+
 /** Production/build dependency reach; workspace tests cover dev dependencies. */
 function cargoCrates(execute = execFileSync) {
   const args = ["metadata", "--format-version", "1", "--no-deps", "--offline"];
@@ -1503,6 +1507,8 @@ export function gateSteps(rules) {
 
 // **Seen to select before it is trusted**, on the three changes that motivated it.
 export function selfTest() {
+  const successorProblem = stepSuccessorProblem(STEP_SUCCESSORS, allSteps());
+  if (successorProblem) return successorProblem;
   try {
     cargoCrates(() => { throw Object.assign(new Error("Cargo control failure"), { stderr: "metadata control stderr" }); });
     return "a failed Cargo metadata command granted a crate graph";

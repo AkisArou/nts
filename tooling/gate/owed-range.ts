@@ -12,7 +12,8 @@ import {committedChanges,type PathChange} from "./change-paths.ts";
 
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
-export type RuleView = { revision: string; checks: Checks; catalogue: string[]; strict: boolean; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
+export type StepSuccessors = Record<string, { steps: string[]; reason?: string }>;
+export type RuleView = { revision: string; checks: Checks; catalogue: string[]; successors?: StepSuccessors; strict: boolean; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
 export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] } };
 const SELF = fileURLToPath(import.meta.url);
 const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
@@ -92,6 +93,8 @@ function readView(text: string, revision: string): RuleView {
       || !Array.isArray(view.rules) || view.rules.some(r => !r || typeof r.name !== "string" || !strings(r.paths) || !strings(r.steps) || !Array.isArray(r.arms))) {
     throw new Error(`invalid owed selection at ${revision}`);
   }
+  const problem = stepSuccessorProblem(view.successors, view.catalogue);
+  if (problem) throw new Error(`invalid owed selection at ${revision}: ${problem}`);
   if(view.selector){
     if(view.selector.identity!==null&&(typeof view.selector.identity!=="string"||!/^[a-f0-9]{64}$/.test(view.selector.identity)))throw new Error(`invalid selector identity at ${revision}`);
     if(view.selector.existing?.selector)throw new Error(`recursive selector view at ${revision}`);
@@ -100,10 +103,40 @@ function readView(text: string, revision: string): RuleView {
   return view;
 }
 
+/** A removal is reviewed in the tip's policy, never inferred from its absence. */
+export function stepSuccessorProblem(value: unknown, catalogue: readonly string[]): string | null {
+  if (value === undefined) return null; // Historical endpoints have no declarations.
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "step successors must be a table";
+  for (const [old, declaration] of Object.entries(value)) {
+    if (!old || catalogue.includes(old)) return `step successor key ${old} is still a current step`;
+    if (!declaration || typeof declaration !== "object" || Array.isArray(declaration)
+        || Object.keys(declaration).some(key => key !== "steps" && key !== "reason")) return `invalid step successor declaration for ${old}`;
+    const { steps, reason } = declaration as { steps?: unknown; reason?: unknown };
+    if (!Array.isArray(steps) || steps.some(step => typeof step !== "string") || new Set(steps).size !== steps.length) return `invalid step successors for ${old}`;
+    for (const step of steps) if (!catalogue.includes(step)) return `step successor ${step} for ${old} is not a current step`;
+    if (reason !== undefined && (typeof reason !== "string" || !reason.trim())) return `step retirement ${old} needs a nonempty reason`;
+    if (!steps.length && reason === undefined) return `step retirement ${old} needs a reason`;
+  }
+  return null;
+}
+
 export function unionViews(views: RuleView[]): Checks {
   if (views.length !== 2) throw new Error("range selection needs both endpoint views");
-  // Expand before union so a step removed by the candidate stays an obligation.
+  const tip = views[1], problem = stepSuccessorProblem(tip.successors, tip.catalogue);
+  if (problem) throw new Error(problem);
+  // Expand before union. Only the tip's explicit declaration can transfer a
+  // removed base obligation; absence alone can never discard a check.
   const expanded = views.map(v => ({ ...v.checks, steps: v.checks.steps === "all" ? v.catalogue : v.checks.steps }));
+  expanded[0].steps = expanded[0].steps.flatMap(step => {
+    if (tip.catalogue.includes(step)) return [step];
+    if (!tip.successors || !Object.hasOwn(tip.successors, step)) throw new Error(`step ${step} is owed by main's rules and removed by this change with no declared successor`);
+    const successors = tip.successors[step].steps;
+    // A replacement carries the whole check, regardless of an independently
+    // selected project/crate subset in either endpoint.
+    if (successors.includes("interop")) expanded[0].interop = null;
+    if (successors.includes("doctests")) expanded[0].doctests = null;
+    return successors;
+  });
   const joined = unionChecks(expanded[0], expanded[1]);
   const every = views.some(v => v.checks.steps === "all");
   if (every && joined.steps !== "all" && joined.steps.every(s => views[1].catalogue.includes(s))) joined.steps = "all";
@@ -208,7 +241,8 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
     return { revision, checks: { steps: rules.some(r => r.full && r.wide) ? "all" : m.gateSteps(rules),
       interop: Array.isArray(projects) && projects.length ? projects.join(" ") : null,
       doctests: doctests.length ? doctests.join(" ") : null },
-      catalogue: m.allSteps(), strict: typeof m.isStrictPath!=="function" || changes.some(c => m.isStrictPath(c.path)), rules };
+      catalogue: m.allSteps(), ...(m.STEP_SUCCESSORS === undefined ? {} : { successors: m.STEP_SUCCESSORS }),
+      strict: typeof m.isStrictPath!=="function" || changes.some(c => m.isStrictPath(c.path)), rules };
   };
   const full=select(changes);
   const declared=Array.isArray(m.SELECTOR_POLICY_DATA);

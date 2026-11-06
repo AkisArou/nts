@@ -69,7 +69,7 @@ test("an explicit retirement needs a reason and invalid successor targets are re
   const tip = view(["build"], null, null, ["build"]);
   assert.deepEqual(unionViews([base, { ...tip, successors: { retired: { steps: [], reason: "covered outside this gate" } } }]).steps, ["build"]);
   for (const successors of [{ retired: { steps: [] } }, { retired: { steps: ["missing"] } }, { build: { steps: ["build"] } }]) {
-    assert.throws(() => unionViews([base, { ...tip, successors }]), /successor/);
+    assert.throws(() => unionViews([base, { ...tip, successors }]), /successor|retirement/);
   }
 });
 
