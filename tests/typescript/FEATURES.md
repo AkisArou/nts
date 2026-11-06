@@ -2077,6 +2077,17 @@ Maintainers record backend results separately. Strict-rejected matrix
 forms are listed with their diagnostics in the pull request.
 
 
+### Recursive type route contracts
+
+| source | concepts |
+| --- | --- |
+| [TypeScript Object Types](https://www.typescriptlang.org/docs/handbook/2/objects.html) | recursive declarations and generic containers |
+| [ECMAScript Ordinary Objects](https://tc39.es/ecma262/multipage/ordinary-and-exotic-objects-behaviours.html) | reference identity, stored leaf values, links and traversal |
+
+| area | cases | controls | typed routes |
+| --- | ---: | ---: | --- |
+| `lists` | 27 | 27 | nullable and optional links, generic cons tuples, shared tails, deep values and bounded traversal |
+
 ### Nullish route contracts
 
 | source | concepts |
@@ -3983,6 +3994,8 @@ land without another open Unicode pull request.
 | `ts-nullish-route-calls` | optional function and method calls retain their object receivers, skip arguments on absent callees and invoke getter-held callbacks once | Nullish route contracts; ECMAScript, OptionalChaining | 48 | 0 |
 | `ts-nullish-route-assignments` | nullish and truthy logical assignment preserve short-circuit reads, writes, getter/setter order, typed-array conversions and expression values | Nullish route contracts; ECMAScript, Assignment Operators | 60 | 0 |
 | `ts-nullish-route-defaults` | parameter and constructor defaults versus nullish coalescing through typed arguments, option fields, and generic helpers | Nullish route contracts; ECMAScript, FunctionDeclarationInstantiation | 52 | 0 |
+| `ts-recursive-type-routes` | recursive typed structures retain leaf values, identity, depth and order beside finite nonrecursive controls | Recursive type route contracts; typed paths | 54 | 0 |
+| `ts-recursive-type-route-lists` | linked lists, optional next fields, cons tuples and shared tails through recursive declarations | Recursive type route contracts; TypeScript recursive interfaces and aliases | 54 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
