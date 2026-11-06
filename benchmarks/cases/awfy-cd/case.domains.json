@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "iterations": {
+        "max": 250,
+        "allowNaN": true,
+        "reason": "Bound generated aircraft counts within the Node oracle CPU and address-space budgets while retaining upstream benchmark seed250, NaN, negatives and fractions. No kernel or verification branch is changed."
+      }
+    }
+  }
+}
