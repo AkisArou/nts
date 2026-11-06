@@ -37,8 +37,11 @@ test("compile observations retain defects and reject incomplete instruments", as
     { kind: "refused", diagnostic: "declined: NTS4001 shape at <path>" });
   assert.deepEqual(compileOutcome(completed(1, "error: /scratch/program.c:21: invalid operand 37"), "link"),
     { kind: "build-failure", stage: "link", diagnostic: "error: <path> invalid operand N" });
-  assert.deepEqual(compileOutcome(completed(101, "thread 'main' panicked at /compiler/foo.rs:17"), "emit"),
-    { kind: "build-failure", stage: "compiler-crash", diagnostic: "thread 'main' panicked at <path>" });
+  assert.deepEqual(compileOutcome(completed(101, "NTS1001 an earlier refusal\nthread 'main' (24) panicked at /compiler/foo.rs:17:3:\nbroken route\n"), "emit"),
+    { kind: "build-failure", stage: "compiler-crash", diagnostic: "thread 'main' panicked: broken route" });
+  assert.deepEqual(compileOutcome({ ...completed(), status: null, signal: "SIGABRT" }, "emit"),
+    { kind: "build-failure", stage: "compiler-crash", diagnostic: "stopped by SIGABRT" });
+  assert.throws(() => compileOutcome({ ...completed(), status: null, signal: "SIGABRT" }, "link"), /NOT MEASURED/);
   for (const result of [{ ...completed(), signal: "SIGKILL", status: null }, { ...completed(137) },
     { ...completed(1), memoryKilled: true }, completed(1, "the toolchain did not survive"),
     { ...completed(1), error: new Error("spawn failed") }, { ...completed(1), hung: "idle guard" }]) {
@@ -77,6 +80,7 @@ const leaked = ['BENCH_SHELL_ONLY', 'NTS_RC_NAIVE'].filter(key => process.env[ke
 if (leaked.length) { console.error('NTS4999: shell-only settings reached the compiler: ' + leaked.join(', ')); process.exit(0); }
 const testMode = 'normal';
 if (testMode === 'kill') process.kill(process.pid, 'SIGKILL');
+if (testMode === 'abort') process.kill(process.pid, 'SIGABRT');
 if (testMode === 'crash') { console.error("thread 'main' panicked at /source/compiler.rs:27"); process.exit(101); }
 const config = JSON.parse(fs.readFileSync(project, 'utf8'));
 if (!config.include[0].endsWith('.ts') && fs.existsSync(path.join(config.include[0], 'unimported.ts'))) {
@@ -113,7 +117,7 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   assert.equal(scope.rows.find(row => row.path.endsWith("/root-coverage"))!.outcome.kind, "refused",
     "the compile scope retains benches.sh's whole-directory roots, including an unimported sibling");
   const reproduced = invoke("--check", first); assert.equal(reproduced.status, 0, reproduced.stdout + reproduced.stderr);
-  function changedCompiler(mode: "fixed" | "kill") {
+  function changedCompiler(mode: "fixed" | "kill" | "abort") {
     const source = join(scratch, `${mode}-compiler`); writeFileSync(source, readFileSync(binary, "utf8").replace("const testMode = 'normal';", `const testMode = '${mode}';`)); chmodSync(source, 0o755);
     return publishPin(source, join(scratch, `${mode}-pin`), { sha: git(["rev-parse", "HEAD"]), clean: true, applied: null });
   }
@@ -121,6 +125,11 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   const killed = invoke("--record", join(scratch, "killed"), {}, changedCompiler("kill"));
   assert.equal(killed.status, 124, killed.stdout + killed.stderr); assert.match(killed.stderr, /NOT MEASURED/);
   assert.equal(existsSync(join(scratch, "killed/c/outcomes.tsv")), false, "a killed emitter publishes no record");
+  const aborted = invoke("--record", join(scratch, "aborted"), {}, changedCompiler("abort"));
+  assert.equal(aborted.status, 0, aborted.stdout + aborted.stderr);
+  const crash = parseBenchmarkRecord(readFileSync(join(scratch, "aborted/c/outcomes.tsv"), "utf8")).rows[0]!.outcome;
+  assert.equal(crash.kind, "build-failure");
+  assert.ok(crash.kind === "build-failure"); assert.equal(crash.stage, "compiler-crash");
   writeFileSync(meminfo, "MemAvailable: 0 kB\n");
   const heldOutput = join(scratch, "held"), held = spawn(process.execPath, ["tooling/bench/build-records.ts", "--record", "--backend", "c", "--output", heldOutput],
     { cwd: root, env: environment({}), stdio: ["ignore", "pipe", "pipe"] });
