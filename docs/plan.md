@@ -30,32 +30,52 @@ one page that changes as work goes; the designs it builds are in
 
 ## Now
 
-- **The switch to [how we work](workflow.md).** The fresh start is done
-  (11-06): branches, worktrees, archives and the agents' evidence folders are
-  cut to what the tasks below need. Next, in order: the landing check, the
-  full check after landing, the records it writes and the worktree pool;
-  then agents restart on the tasks below, one agent per task.
-- **In flight, held for the switch.** Each lands through the old lander
-  until the landing check exists:
-  - the shared TypeScript oracle (#193, `node/oracle-e039`) and Node 26
-    (#124, `node/node26-finished`), landed straight on `main` with Node 24
-    dropped (user, 11-06), then the oracle's disk defect: it prepares every
-    case's snapshot before running the first, about 17 GB at once. The other
-    `node/*` branches are those two tasks' earlier rounds;
+- **The switch to [how we work](workflow.md).** The fresh start and the
+  [branch triage](records/notebooks/branch-triage-20261106.md) are done
+  (11-06): every branch left is in flight or named by a task below. Next, in
+  order: the landing check, the full check after landing, the records it
+  writes and the worktree pool; then agents restart on the tasks below, one
+  agent per task.
+- **In flight.** Each lands through the old lander until the landing check
+  exists:
+  - the shared TypeScript oracle (#193, `node/oracle-e039`, carrying #324's
+    compile-cache move) and Node 26 (#124, `node/node26-finished`), landed
+    straight on `main` with Node 24 dropped (user, 11-06), then the oracle's
+    disk use: it prepares every case's snapshot before running the first,
+    about 17 GB at once. The other `node/*` branches are their earlier rounds,
+    deleted after;
   - managed-type coercion inside the compile-time budget (#159,
-    `compiler/managed-coercion-main102-r10`; the other
-    `compiler/managed-coercion*` and `compiler/receiver-*-2d` branches are
-    its earlier rounds);
-  - the gate's memory admission (#335, `tsrs/335-gate-memory`);
-  - the synchronous benchmark ports (#315,
-    `coordinator/benchmark-ports-315`, with tsrs2's records on
-    `tsrs/benchmark-outcomes`), once two things are settled: whether ARES-6
-    lands as the ports have it or restored to upstream
-    (`helper4/ares6-family`), and Octane's provenance files
-    (`helper4/octane-namespace`);
-  - steps started by their work, not their last wall time (#333,
-    `coordinator/gate-order-333`);
-  - Chromium, paused by the user (`chromium/*`).
+    `compiler/managed-coercion-main102-r10`), which also carries #185's fix
+    and re-records its outcome; the other `compiler/managed-coercion*` and
+    `compiler/receiver-*-2d` branches are its earlier rounds;
+  - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
+  - Chromium, paused by the user (`chromium/counter-tree-profile`).
+- **Landing now, from the triage:**
+  - the synchronous benchmark ports (#315, `coordinator/benchmark-ports-315`),
+    with ARES-6 restored to upstream from `helper4/ares6-family`, Octane's
+    provenance, domains and RayTrace helpers from `helper4/octane-namespace`,
+    and the records still missing (two CLBG provenance files, oracle counts
+    for 37 cases, compile rows for 46 cases on three backends);
+  - the AWFY macro rows (#26) as refused rows:
+    `helper/awfy-cd-havlak-qualification-evidence-20261030` and
+    `helper/awfy-ports-parked`;
+  - Octane's loose equality and `Object.assign` (#147,
+    `compiler/octane-equality-assign`);
+  - one commit each: the comparison fold on known non-NaN values
+    (`compiler/runtime-raise-effects-submit`), a Java `float` range that
+    includes the infinities (`jvm/exact-region-certificates`), a JVM refusal
+    of a fixed view over a shrunk buffer (#113 E,
+    `runtime3/jvm-fixed-view-resize`), and the gate's overflow checks in the
+    `nts-dev` profile (`compiler/implicit-member-call-effects`);
+  - tests only: #18's indirect-throw guards and outcome
+    (`compiler/exceptional-transfer-producer`), the C memory declaration
+    tests (`tsrs/c-memory-after-capture-repair`), a write-once module
+    function refusal (`helper/write-once-module-function`), a Node-API
+    function export refusal (`runtime3/napi-function-exports`), and #181's
+    LLVM addon class test (`runtime3/llvm-addon-class-main29107`);
+  - tooling: steps started by their work (#333, `coordinator/gate-order-333`)
+    and every tool's report delivered before its exit (#329,
+    `coordinator/exit-after-output`).
 - **The machine:** one shared 32 GB box; CPUs 4–5 are kept for measurement
   ([`../AGENTS.md`](../AGENTS.md)).
 
@@ -70,20 +90,17 @@ ids, kept so the records that cite them still resolve.
 **Wrong answers**
 - Decorators are compiled away; refuse them by name until the standard
   semantics exist (#14).
-- Stored callbacks and catch roles (#188): `tsrs/3b-mainac1b-namespace-source-preview`
-  (rebase the #188 commit alone), `tsrs/3b-source-refusal-correction`.
+- Stored callbacks and catch roles (#188):
+  `tsrs/3b-mainac1b-namespace-source-preview`; apply 3e8c1cab3 alone (three
+  conflicts), build, record, and check the schema version.
 - Writes inside implicit calls are lost (#113 A), with Navier-Stokes' build
-  (#138): `compiler/implicit-member-call-effects-025`; its earlier round
-  `compiler/implicit-member-call-effects` also holds the gate profile's
-  overflow checks for `nts-dev`.
+  (#138): `compiler/implicit-member-call-effects-025`, about 7k lines to
+  rebase; skip its evidence commit.
 - A program's own Math, `Number.isNaN`, `parseInt` or typed-array class is
   replaced by the builtin (#129).
-- Two literals with the same fields and different getters share a descriptor
-  (#185): `compiler/getter185-on276`, `compiler/getter-identity-fix`.
-- Map and Set contents (#158, with #203's typed Map view):
-  `compiler/collection-tagged-semantics` and its earlier rounds
-  `compiler/collection-tagged-semantics-pre-view-landing`,
-  `compiler/map-semantics-before-licence-rebase` (#47).
+- Map and Set contents (#158, with #203's typed Map view): the writer planner
+  on `compiler/collection-tagged-semantics`, after a design note; it should
+  fix the two `a-widened-map-read-through-its-original-view` outcomes.
 - Generics: a generic called from a generic is instantiated at its constraint
   (#212), private fields across instantiations (#237), invalid HIR from two
   instantiations (#231), a record's number field reads 0 on the second call
@@ -97,8 +114,6 @@ ids, kept so the records that cite them still resolve.
   same-spelled private names (#236).
 - Numbers: wide integers in power-of-two bases (#262), a definite-assignment
   assertion taken as a write (#263), a TypeError node does not throw (#264).
-- The JVM's fixed view over a shrunk resizable buffer (#113 E):
-  `runtime3/jvm-fixed-view-resize`.
 - The rest of #190's wrong answers, by reach.
 
 **Aborts and failed builds**
@@ -107,27 +122,25 @@ ids, kept so the records that cite them still resolve.
   class called with `.call` through a construct signature (#222).
 - The compiler stops: recursive aliases through Map/Set (#200), `parseInt`
   through a widened interface (#260), property names that are not C
-  identifiers (#165, #227), `new Array(-1)` (#312).
+  identifiers (#165, #227), an export name with no C spelling (#134: refuse
+  it in a public `program.h`, escape it in Node-API's private one),
+  `new Array(-1)` (#312).
 - Generated code is rejected: C for constrained generics (#310), LLVM's
   missing declaration (#311), a JVM VerifyError (#265) and ClassCastException
   (#215).
 - Array holes have no representation (#143).
-- An LLVM addon exporting a class fails to load (#181):
-  `runtime3/llvm-addon-class-main29107`.
+- A class exported from an LLVM addon makes it fail to load (#181).
 
 **Refusals, by reach**
-- Exceptional transfer through indirect calls (#18):
-  `compiler/exceptional-transfer-producer`.
-- Octane's loose equality and `Object.assign` (#147):
-  `compiler/octane-equality-assign`; then `Error()` without `new` and
-  `new.target`.
+- Exceptional transfer through indirect calls (#18): build the producer per
+  [the design](records/notebooks/exceptional-transfer-and-activation-design.md).
+- Octane: `Error()` without `new`, and `new.target` (#147's rest).
 - Undefined reads: uninitialized-field occupancy (#33), then value-owned
   property attributes (#229).
-- Node-API function exports and naming (#149, #134):
-  `runtime3/napi-function-exports`, `runtime3/napi-function-values-d2c`,
-  `runtime3/addon-private-names`, `runtime3/napi-publication-manifest`.
-- A module-scope function installed by a static block: the refusal fixture on
-  `helper/write-once-module-function`.
+- Function values exported through Node-API (#149), after the shared reader
+  fact and both backends' switch: a real `napi_create_function` holding the
+  native closure, one reference owned by the JS function's finalizer, one JS
+  identity per closure.
 - Strict-mode unmapped `arguments` (#55), `instanceof` a const alias (#182),
   `bigint[]` push (#189), object statics over unknown layouts (#187),
   typed-array subclass species (#186), the absent-routes refusals (#178), key
@@ -135,27 +148,32 @@ ids, kept so the records that cite them still resolve.
   JVM interface field accessors (#327), generic methods on generic classes
   (#267), printer admission (#146), Math gaps (#206), `parseInt` whitespace
   (#214), runtime library statements cut (#16).
+- A lib.dom alias returned as a different opaque type must refuse (#275), with
+  Chromium's fixture on `chromium/svg-value-types`.
 - Node: native `process` conformance (#287) and the nine held node tests
   (#238).
 
 **Foundations and performance**
-- Memory: stage 1 (#12); the arena API lands with its first caller
-  (`compiler/arena-api`); a field overwritten in a loop leaks (#126,
-  `helper4/lifetime-field-overwrite-finding`).
-- LLVM at least as fast as C (#97): nsw and internal linkage
-  (`compiler/llvm-linkage-nsw`); descriptor initializers from one renderer
+- Memory: stage 1 (#12); stage 3's arena API comes from
+  `refs/cited/252b3ba25611` with its first caller; a field overwritten in a
+  loop leaks (#126), its fixture on `helper4/lifetime-field-overwrite-finding`
+  landing with the fix.
+- LLVM at least as fast as C (#97): `compiler/llvm-linkage-nsw`; land
+  7858d092d (nsw and final-link preemption) with LLVM benchmark rows, then
+  rebuild linkage by product and emission pruning on today's
+  `SourceSymbols::is_public`; descriptor initializers from one renderer
   (#248).
-- Proved-integer arithmetic (#28): `jvm/exact-region-certificates`,
-  `jvm/integral-producer-evidence`; the bounds relational domain (#96).
-- The builtins mechanism (#42, #137): `jvm/provider-package-identity`;
-  canonical path observations on `tsrs/builtins-observed-roots-qualified`,
-  unless main's real-path records already cover them.
-  Capture by value (#184), identical instantiations sharing one body (#192),
-  per-site copies for union parameters (#154), the verifier (#257, #266,
-  #285), the view kind as an integer (#207).
-- Calling C stage 2 (#91): `runtime3/c-number-kinds-clean-stack` first,
-  `runtime3/c-number-kinds` for review; the C memory declaration tests
-  (`tsrs/c-memory-after-capture-repair`).
+- Proved-integer arithmetic (#28): the integral producer and its two passes,
+  rebuilt from
+  [its notebook](records/notebooks/integral-arithmetic-regions.md); the
+  bounds relational domain (#96).
+- The builtins mechanism (#42, #137), capture by value (#184), identical
+  instantiations sharing one body (#192), per-site copies for union
+  parameters (#154), the verifier (#257, #266, #285), the view kind as an
+  integer (#207).
+- Calling C stage 2 (#91): `runtime3/c-number-kinds-clean-stack`, about 8k
+  lines in 12 conflicting files, renamed after the native naming change, then
+  the five C records.
 - Every row at the bar (#94): `parseInt` (#243), the JVM's int-cursor reads
   (`refs/archive/jvm/jvm/int-unit-at`), the comparators as standing columns
   (#89).
@@ -165,37 +183,30 @@ ids, kept so the records that cite them still resolve.
   toolchain (#44, a product decision for the user).
 
 **Benchmarks and the web platform**
-- Brotli and Web Crypto (#71): `helper/brotli-native-111`,
-  `helper/web-crypto-pr110` and its earlier rounds
-  (`helper/web-crypto-pr109-*`, `helper/crypto-pr109-before-liveness-20261029`),
-  `helper/base64-after-crypto-replay-20261030`.
-- Web tests decide by completion (#49): `helper/web-test-completion`,
-  `helper/web-chain-pr14`; then the WebSocket server goes (#52) and the
-  interface tag sweep (#53).
-- AWFY macro rows (#26):
-  `helper/awfy-cd-havlak-qualification-evidence-20261030`,
-  `helper/awfy-ports-parked`.
+- The four Brotli rows, compress and decompress at 1 KiB and 1 MiB (#71),
+  after one build driver for the CLI and `nts-bench` (#196).
 - The asynchronous benchmark harness (#56), then the parked JetStream pull
-  requests #69 to #74 and #118 (a licence decision).
-- One build driver for the CLI and `nts-bench` (#196).
+  requests #69 to #74; #118 after its licence check.
+- Whether `main` bootstraps the source globals another way, or the
+  `chatgpt/source-globals-bootstrap` branch is still needed.
+- The WebSocket server goes (#52); the interface tag sweep (#53).
 
 **Tooling**
-- The quiet-window batch (#46): `tsrs/gate-window-preparation`,
-  `tsrs/build-failure-summary`; ratchets that record their own progress
-  (#74).
-- Wall-clock deadlines replaced (#83): `tsrs/timeout-callers`,
-  `compiler/runtime-raise-effects-submit`,
-  `helper/source-oracle-plans-before-landed-ingress-20261029`; a definite
-  failure outranks a hang (#87).
-- Record integrity (#174): `tsrs/174-record-integrity`.
-- Step inputs by recording what each check reads (#245):
-  `tsrs/245-recording-filesystem`.
-- Tool reports lose their tail (#329): `coordinator/exit-after-output`.
-- Node's compile cache out of `/tmp` (#324): `tsrs/node-cache-retention`,
-  `tsrs/node-cache-retention-unfolded90`.
+- A candidate that does not compile is held, not refused: the landing check
+  reports it red (#46).
+- One format rule for all owned C; the web-platform suite as a landing-check
+  step (#46).
+- Thirteen tools still stop work on fixed wall-clock deadlines (#83):
+  definitions, messages, erased-calls, semantic-codes, assembles,
+  emitted-diff, attempt262, outcomes-check, test262, layouts-link, agreement,
+  blocker-reach and blockers-check move to the active-command observer.
+  A definite failure outranks a hang (#87).
+- Benchmark records cover compile outcomes only; whether each workload runs
+  correctly on each backend is not recorded yet.
 - The TypeScript families the new oracle can judge (#195, #276); tests leak a
   temp folder per case (#197); the JVM jar built from `JAVA_HOME` (#194);
-  type-check coverage of tooling (#281).
+  type-check coverage of tooling (#281); ratchets that record their own
+  progress (#74).
 - The old lander's open defects fold into the landing check: #120, #121,
   #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
   #330, #332.
