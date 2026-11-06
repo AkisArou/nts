@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: OperandType { func: \"module#init\", op: \"an integer coercion of something that is not a number\", found: BigInt }",
+  "node": "exit 1; nts: uncaught Observed: not=-6;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}
