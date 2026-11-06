@@ -6,6 +6,26 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { publishPin } from "../conformance/pin.ts";
+import { FIXED_AMBIENT, gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
+
+test("compile children use the canonical ambient environment and retain its owned handoff", async t => {
+  const { compileEnvironment } = await import("./build-records.ts");
+  const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
+  const root = mkdtempSync(join(base, "environment-")); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const home = join(root, "home"); mkdirSync(home);
+  const launcher = { PATH: process.env.PATH, HOME: home, DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
+    NODE_OPTIONS: "--trace-warnings", LD_PRELOAD: "/shell/not-an-input.so", FORCE_COLOR: "3", TZ: "Pacific/Honolulu", CFLAGS: "-Dbad", NTS_RC_NAIVE: "1" };
+  const raw = compileEnvironment(launcher, root, "/compiler/nts");
+  for (const [key, value] of Object.entries(FIXED_AMBIENT)) assert.equal(raw[key], value);
+  for (const key of ["NODE_OPTIONS", "LD_PRELOAD", "CFLAGS", "NTS_RC_NAIVE"]) assert.equal(raw[key], undefined);
+  assert.equal(raw.TMPDIR, join(root, "tmp")); assert.equal(raw.NTS_BIN, "/compiler/nts"); assert.equal(raw.NTS_CHECKERS, "1");
+  const canonical = gateEnvironment(launcher, { run: root, owned: { NTS_GATE_STEP_SLICE: "owned-step.slice" } });
+  const inherited = compileEnvironment(canonical.env, join(root, "unused"), "/compiler/other");
+  assert.equal(inherited.NTS_GATE_STEP_SLICE, "owned-step.slice"); assert.equal(inherited.NTS_BIN, "/compiler/other");
+  assert.equal(inherited.TMPDIR, canonical.env.TMPDIR);
+  assert.equal(inherited.DBUS_SESSION_BUS_ADDRESS, launcher.DBUS_SESSION_BUS_ADDRESS);
+  assert.ok(inherited[ENVIRONMENT_CONTEXT]);
+});
 
 test("compile observations retain defects and reject incomplete instruments", async () => {
   const { compileOutcome } = await import("./build-records.ts");
@@ -53,13 +73,14 @@ test("the compile CLI records twice, checks changed outcomes, and refuses non-pi
   writeFileSync(binary, `#!/usr/bin/env node
 const fs = require('node:fs'), path = require('node:path');
 const [mode, project, ...args] = process.argv.slice(2);
-if (process.env.BENCH_FIXTURE_MODE === 'kill') process.kill(process.pid, 'SIGKILL');
-if (process.env.BENCH_FIXTURE_MODE === 'crash') { console.error("thread 'main' panicked at /source/compiler.rs:27"); process.exit(101); }
+const testMode = 'normal';
+if (testMode === 'kill') process.kill(process.pid, 'SIGKILL');
+if (testMode === 'crash') { console.error("thread 'main' panicked at /source/compiler.rs:27"); process.exit(101); }
 const config = JSON.parse(fs.readFileSync(project, 'utf8'));
 if (!config.include[0].endsWith('.ts') && fs.existsSync(path.join(config.include[0], 'unimported.ts'))) {
   console.error('NTS4001: unimported case sibling refused'); process.exit(0);
 }
-if (config.include[0].includes('/subject/') && process.env.BENCH_FIXTURE_MODE !== 'fixed') {
+if (config.include[0].includes('/subject/') && testMode !== 'fixed') {
   console.error('NTS4001: unsupported benchmark shape'); process.exit(0);
 }
 if (mode === 'emit-llvm') console.log('define i32 @control() { ret i32 1 }');
@@ -72,6 +93,7 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   const environment = (env: NodeJS.ProcessEnv, bin = pinned): NodeJS.ProcessEnv => {
     const selected = { ...process.env, NTS_BIN: bin, NTS_MEMINFO: meminfo, TMPDIR: scratch, ...env };
     delete selected.NTS_GATE_STEP_RESULT; // A planted stop belongs to this fixture, never the outer tooling step.
+    delete selected[ENVIRONMENT_CONTEXT]; delete selected.NTS_GATE_RUN_DIR;
     return selected;
   };
   const invoke = (mode: string, output: string, env: NodeJS.ProcessEnv = {}, bin = pinned) => spawnSync(process.execPath,
@@ -87,8 +109,12 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   assert.equal(scope.rows.find(row => row.path.endsWith("/root-coverage"))!.outcome.kind, "refused",
     "the compile scope retains benches.sh's whole-directory roots, including an unimported sibling");
   const reproduced = invoke("--check", first); assert.equal(reproduced.status, 0, reproduced.stdout + reproduced.stderr);
-  const moved = invoke("--check", first, { BENCH_FIXTURE_MODE: "fixed" }); assert.equal(moved.status, 1, moved.stdout + moved.stderr); assert.match(moved.stdout, /FIXED.*subject/);
-  const killed = invoke("--record", join(scratch, "killed"), { BENCH_FIXTURE_MODE: "kill" });
+  function changedCompiler(mode: "fixed" | "kill") {
+    const source = join(scratch, `${mode}-compiler`); writeFileSync(source, readFileSync(binary, "utf8").replace("const testMode = 'normal';", `const testMode = '${mode}';`)); chmodSync(source, 0o755);
+    return publishPin(source, join(scratch, `${mode}-pin`), { sha: git(["rev-parse", "HEAD"]), clean: true, applied: null });
+  }
+  const moved = invoke("--check", first, {}, changedCompiler("fixed")); assert.equal(moved.status, 1, moved.stdout + moved.stderr); assert.match(moved.stdout, /FIXED.*subject/);
+  const killed = invoke("--record", join(scratch, "killed"), {}, changedCompiler("kill"));
   assert.equal(killed.status, 124, killed.stdout + killed.stderr); assert.match(killed.stderr, /NOT MEASURED/);
   assert.equal(existsSync(join(scratch, "killed/c/outcomes.tsv")), false, "a killed emitter publishes no record");
   writeFileSync(meminfo, "MemAvailable: 0 kB\n");
