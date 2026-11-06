@@ -18,7 +18,7 @@ import { jvmRun } from "../jvm/launch.ts";
 import { compileSync } from "./worker-memory.ts";
 import { bundledDependencies } from "../conformance/node-deps.mjs";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
-import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/observation-text.ts";
+import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/compile-diagnostics.ts";
 import { outputOracle } from "./output-oracle.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */

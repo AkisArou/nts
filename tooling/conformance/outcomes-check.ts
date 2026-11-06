@@ -150,7 +150,7 @@ import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts"
 import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { improves } from "./outcome-transition.ts";
-import { compilerExternalStop, compilerStop, compilerStopped } from "./observation-text.ts";
+import { compilerExternalStop, compilerStop, compilerStopped } from "./compile-diagnostics.ts";
 import { judge, outcomeInventory, outcomeRecord, RECORD } from "./outcomes-verdict.ts";
 import { provenanceOf } from "./pin.ts";
 import { improvedLine, pendingLine } from "../records/pending.ts";

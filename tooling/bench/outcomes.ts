@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
 import type { Backend } from "../census/typescript-record.ts";
-import { compilerStopped, stableBuildDiagnostic } from "../conformance/observation-text.ts";
+import { compilerStopped, stableBuildDiagnostic } from "../conformance/compile-diagnostics.ts";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { inventory } from "../records/pending.ts";
 

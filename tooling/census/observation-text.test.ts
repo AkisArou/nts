@@ -1,9 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { constants } from "node:os";
-import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableBuildDiagnostic, stableCheckText } from "../conformance/observation-text.ts";
-import * as observations from "../conformance/observation-text.ts";
-const { compilerExternalStop } = observations;
+import { compilerExternalStop, compilerStop, compilerStopped, stableBuildDiagnostic } from "../conformance/compile-diagnostics.ts";
+import { normalizeGeneratedNumbers, stableCheckText } from "../conformance/observation-text.ts";
 
 test("diagnostic normalization retains source names, positions, arity and widths", () => {
   assert.equal(normalizeGeneratedNumbers('Queue<35>#push Wrapper<37, 42>#map type 99 BlockId(12) at: 14 bits: 64 OwnType35'),

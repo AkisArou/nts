@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
-import { normalizeGeneratedNumbers, stableBuildDiagnostic, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
+import { stableBuildDiagnostic } from "../conformance/compile-diagnostics.ts";
+import { normalizeGeneratedNumbers, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
 import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformance/output-prefix.ts";
 import { inventory } from "../records/pending.ts";
 import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "./line-record.ts";

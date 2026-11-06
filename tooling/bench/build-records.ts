@@ -2,101 +2,27 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
-import { existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as poll } from "node:timers/promises";
-import { compileSync, memoryRun } from "../census/worker-memory.ts";
+import { memoryRun } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
-import { compilerExternalStop, compilerStop, compilerStopped, stableBuildDiagnostic } from "../conformance/observation-text.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { Admission } from "../gate/admission.ts";
-import { gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
 import { withToken } from "../gate/tokens.mjs";
-import { CommandNotMeasuredError, type ActiveResult } from "../gate/active-command.ts";
+import { CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
 import { improves } from "../conformance/outcome-transition.ts";
 import { improvedLine, pendingLine } from "../records/pending.ts";
+import { compileEnvironment, compileKey, observeCompile, projectFor, regularFiles } from "./compile-producer.ts";
 import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkRecord, requireBenchmarkScopes,
-  serializeBenchmarkRecord, type BenchmarkOutcome, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
+  serializeBenchmarkRecord, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
-type Result = ActiveResult & { memoryKilled?: boolean };
-type Command = (binary: string, args: string[], options: { cwd: string; env: NodeJS.ProcessEnv }) => Promise<Result>;
-
-export function compileEnvironment(launcher: NodeJS.ProcessEnv, scratch: string, binary: string): NodeJS.ProcessEnv {
-  const run = launcher[ENVIRONMENT_CONTEXT] ? launcher.NTS_GATE_RUN_DIR : scratch;
-  assert.ok(run, "benchmark canonical handoff is missing its owned run directory");
-  return gateEnvironment(launcher, { run, owned: { NTS_BIN: binary, NTS_CHECKERS: "1" } }).env;
-}
-
-/** A process stop is never an expected compiler defect, including an OOM SIGKILL. */
-export function compileOutcome(result: Result, stage: "emit" | "link"): BenchmarkOutcome | null {
-  // LLVM and C can emit arbitrary program strings on stdout. Only stderr is
-  // a diagnostic channel on success; a failed command may use either channel.
-  const diagnostic = result.stderr.trim() || (result.status === 0 ? "" : result.stdout.trim());
-  if (result.error || result.memoryKilled || result.hung || result.runaway ||
-    /toolchain did not survive|out of memory|memory limit|INSTRUMENT FAILURE|NOT MEASURED|disk quota exceeded|no space left on device|\b(?:EDQUOT|ENOSPC)\b/i.test(diagnostic)) {
-    throw new ToolingInstrumentError("tooling-setup", `benchmark NOT MEASURED: ${result.error?.message ?? result.signal ?? result.hung ?? result.runaway ?? (result.out.trim() || `exit ${result.status}`)}`);
-  }
-  const stop = compilerStop(result.out, result.status, result.signal);
-  if (stage === "emit" && compilerStopped(result.status, result.signal)) return { kind: "build-failure", stage: "compiler-crash", diagnostic: stop };
-  if (compilerExternalStop(result.status, result.signal) || (stage === "link" && compilerStopped(result.status, result.signal)) || result.status === null || result.status === 126 || result.status === 127) {
-    throw new ToolingInstrumentError("tooling-setup", `benchmark ${stage === "link" ? "link tool" : "compiler"} NOT MEASURED: ${stop}`);
-  }
-  if (stage === "emit") {
-    const refusal = diagnostic.split("\n").find(line => /(?:declined:|\bNTS\d{4}\b|\bTS\d{4,}\b)/.test(line));
-    if (refusal) return { kind: "refused", diagnostic: stableBuildDiagnostic(refusal) };
-  }
-  if (result.status === 0) return null;
-  assert.ok(diagnostic, "benchmark NOT MEASURED: failed command supplied no diagnostic");
-  return { kind: "build-failure", stage,
-    diagnostic: stableBuildDiagnostic(diagnostic) };
-}
-
-function commandLine(value: string): [string, ...string[]] {
-  // CC is a whitespace-separated command, as in benches.sh (e.g. ccache clang).
-  const parts = value.trim().split(/\s+/); assert.ok(parts[0], "empty benchmark build tool");
-  return parts as [string, ...string[]];
-}
-function regularFiles(directory: string): string[] {
-  const result: string[] = [];
-  for (const entry of readdirSync(directory, { withFileTypes: true })) {
-    const path = join(directory, entry.name);
-    assert.ok(!entry.isSymbolicLink(), `benchmark identity rejects symlink: ${path}`);
-    if (entry.isDirectory()) result.push(...regularFiles(path));
-    else { assert.ok(entry.isFile(), `benchmark identity requires a regular file: ${path}`); result.push(path); }
-  }
-  return result.sort();
-}
-
-export async function observeCompile({ backend, project, output, binary, root, env, command = async (binary, args, options) => {
-  const began = performance.now();
-  const result = compileSync({ memoryCapKb: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 6_000_000 * 1024) / 1024 }, binary, args,
-    { ...options, encoding: "utf8", maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
-  return { ...result, stdout: result.stdout ?? "", stderr: result.stderr ?? "", out: `${result.stdout ?? ""}${result.stderr ?? ""}`, elapsedMs: performance.now() - began };
-} }:
-  { backend: Backend; project: string; output: string; binary: string; root: string; env: NodeJS.ProcessEnv; command?: Command }): Promise<BenchmarkOutcome> {
-  rmSync(output, { recursive: true, force: true }); mkdirSync(output, { recursive: true });
-  const options = { cwd: root, env: { ...env, NTS_CHECKERS: "1" } };
-  const emitted = await command(binary, [`emit-${backend}`, project, ...(backend === "llvm" ? ["--rc"] : ["--out", output, ...(backend === "c" ? ["--rc"] : [])])], options);
-  const refusal = compileOutcome(emitted, "emit"); if (refusal) return refusal;
-  if (backend === "jvm") {
-    return regularFiles(output).some(path => path.endsWith(".class")) ? { kind: "pass" }
-      : { kind: "build-failure", stage: "emit", diagnostic: "emit-jvm produced no class files" };
-  }
-  const [tool, ...prefix] = commandLine(backend === "c" ? env.CC ?? "clang" : env.NTS_LLVM_CC ?? "clang");
-  const program = join(output, backend === "c" ? "program.c" : "program.ll");
-  if (backend === "llvm") writeFileSync(program, emitted.stdout);
-  if (!existsSync(program) || lstatSync(program).size === 0) return { kind: "build-failure", stage: "emit", diagnostic: `emit-${backend} produced no program` };
-  const flags = backend === "c" ? ["-O2", "-Wall", "-Wextra", "-Werror", "-std=c11", "-DNTS_PROVIDER_RC", `-I${output}`]
-    : ["-x", "ir", "-w", "-O2"];
-  const built = await command(tool, [...prefix, ...flags, "-c", "-o", "/dev/null", program], options);
-  return compileOutcome(built, "link") ?? { kind: "pass" };
-}
 
 /** Measured compile cells against their rows: what got worse or changed fails; what got better is listed. */
 export interface CompileComparison { changed: string[]; improved: { row: BenchmarkRow; line: string }[] }
@@ -162,18 +88,6 @@ export async function benchmarkIdentities(root: string, paths: string[], scratch
   return identities;
 }
 
-function projectFor(root: string, path: string, scratch: string): string {
-  const own = join(root, path, "tsconfig.json"); if (existsSync(own)) return own;
-  const config = join(scratch, `${basename(path)}.tsconfig.json`);
-  // Keep the compile gate's whole-directory roots. The scalar consumer's
-  // case.ts-only project is a distinct scope and cannot narrow this one.
-  writeFileSync(config, JSON.stringify({ extends: join(root, "tsconfig.fixtures.json"), include: [join(root, path) + "/"] }));
-  return config;
-}
-function driverIdentity(root: string): string {
-  return hash(JSON.stringify(["tooling/bench/build-records.ts", "tooling/bench/outcomes.ts", "tooling/census/line-record.ts", "tooling/conformance/observation-text.ts",
-    "tooling/conformance/outcome-transition.ts", "pnpm-lock.yaml"].map(path => [path, hash(readFileSync(join(root, path)))])));
-}
 function publish(file: string, contents: string): void {
   mkdirSync(dirname(file), { recursive: true }); const temporary = `${file}.partial-${randomUUID()}`;
   try { writeFileSync(temporary, contents, { flag: "wx" }); renameSync(temporary, file); }
@@ -215,7 +129,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     const environment = compileEnvironment(process.env, scratch, binary);
     const all = benchmarkCases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
     assert.ok(paths.length > 0, `unknown benchmark case: ${only}`);
-    const identities = await benchmarkIdentities(ROOT, all, scratch), driver = driverIdentity(ROOT);
+    const identities = await benchmarkIdentities(ROOT, all, scratch), driver = compileKey(ROOT);
     const records = new Map<Backend, BenchmarkRecord>(), pending = new Map<Backend, Set<string>>(), actual = new Map<Backend, BenchmarkRow[]>();
     for (const backend of backends) {
       if (mode !== "--record") {
@@ -242,7 +156,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       console.log(`${backend} ${path}: ${outcome.kind}`);
     }
     assert.equal(hash(readFileSync(binary)), compiler, "compiler bytes changed during recording");
-    assert.equal(driverIdentity(ROOT), driver, "benchmark driver changed during recording");
+    assert.equal(compileKey(ROOT), driver, "benchmark compile producer changed during recording");
     assert.deepEqual(await benchmarkIdentities(ROOT, all, scratch), identities, "benchmark sources changed during recording");
     let changed = 0, improved = 0, waiting = 0;
     const updates = new Map<Backend, BenchmarkRow[]>();

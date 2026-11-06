@@ -9,7 +9,7 @@ import { publishPin } from "../conformance/pin.ts";
 import { FIXED_AMBIENT, gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
 
 test("compile children use the canonical ambient environment and retain its owned handoff", async t => {
-  const { compileEnvironment } = await import("./build-records.ts");
+  const { compileEnvironment } = await import("./compile-producer.ts");
   const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
   const root = mkdtempSync(join(base, "environment-")); t.after(() => rmSync(root, { recursive: true, force: true }));
   const home = join(root, "home"); mkdirSync(home);
@@ -28,7 +28,7 @@ test("compile children use the canonical ambient environment and retain its owne
 });
 
 test("compile observations retain defects and reject incomplete instruments", async () => {
-  const { compileOutcome } = await import("./build-records.ts");
+  const { compileOutcome } = await import("./compile-producer.ts");
   const completed = (status = 0, stderr = "") => ({ status, signal: null, stdout: "", stderr, out: stderr, elapsedMs: 1 });
   assert.deepEqual(compileOutcome(completed(), "emit"), null);
   assert.deepEqual(compileOutcome({ ...completed(), stdout: 'NTS4001: out of memory', out: 'NTS4001: out of memory' }, "emit"), null,
@@ -61,7 +61,6 @@ test("the compile CLI records twice, checks changed outcomes, and refuses non-pi
     else symlinkSync(join(repository, "tooling/bench", entry), join(root, "tooling/bench", entry));
   }
   symlinkSync(join(repository, "node_modules"), join(root, "node_modules"));
-  copyFileSync(join(repository, "pnpm-lock.yaml"), join(root, "pnpm-lock.yaml"));
   writeFileSync(join(root, "tsconfig.fixtures.json"), '{"compilerOptions":{"target":"ESNext","noEmit":true}}');
   for (const name of ["control", "subject", "root-coverage"]) {
     mkdirSync(join(root, "benchmarks/cases", name), { recursive: true });
@@ -191,7 +190,8 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
 });
 
 test("recorded compile cells execute every backend and expose outcome movement", async t => {
-  const { observeCompile, checkCompileRecord } = await import("./build-records.ts");
+  const { observeCompile } = await import("./compile-producer.ts");
+  const { checkCompileRecord } = await import("./build-records.ts");
   const { serializeBenchmarkRecord, parseBenchmarkRecord } = await import("./outcomes.ts");
   const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
   const root = mkdtempSync(join(base, "run-")); t.after(() => rmSync(root, { recursive: true, force: true }));
