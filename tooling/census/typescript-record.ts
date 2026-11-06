@@ -4,7 +4,8 @@ import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { normalizeGeneratedNumbers, stableBuildDiagnostic, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
 import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformance/output-prefix.ts";
-import { parseLineRecord, serializeLineRecord, type LineRecordFormat } from "./line-record.ts";
+import { inventory } from "../records/pending.ts";
+import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "./line-record.ts";
 
 // Version 4 excludes external compiler stops from measured observations.
 // Published TSV version 3 stays compatible; old raw checkpoints are remeasured.
@@ -182,12 +183,22 @@ const recordFormat: LineRecordFormat<RecordMetadata, TypeScriptObservation> = {
   key: path => path,
 };
 
-/** Check source identity before --recorded can narrow the executed population. */
-export function assertRecordedInventory(record: TypeScriptRecord, sourcePaths: readonly string[]): void {
-  const source = new Set(sourcePaths);
-  assert.equal(source.size, sourcePaths.length, "duplicate source case");
-  for (const path of source) assert.ok(record.cases.has(path), `new case has no record: ${path}`);
-  for (const path of record.cases.keys()) assert.ok(source.has(path), `recorded case gone missing: ${path}`);
+/**
+ * Check source identity before --recorded can narrow the executed population.
+ * A case with no row yet is pending, returned rather than failed: it is not
+ * measured at landing and the full check records it. A recorded case whose
+ * source is gone still fails: the change that deletes a case deletes its row.
+ */
+export function pendingCases(record: TypeScriptRecord, sourcePaths: readonly string[]): string[] {
+  assert.equal(new Set(sourcePaths).size, sourcePaths.length, "duplicate source case");
+  const { pending, stale } = inventory(record.cases.keys(), sourcePaths);
+  for (const path of stale) assert.fail(`recorded case gone missing: ${path}`);
+  return pending;
+}
+
+/** Write these cases' rows into a record, every other line byte for byte. */
+export function mergeTypeScriptRecord(contents: string, updates: ReadonlyMap<string, TypeScriptObservation>): string {
+  return mergeLineRecord(contents, [...updates].map(([path, value]) => ({ path, value })), recordFormat);
 }
 
 export function compareTypeScriptObservation(before: TypeScriptObservation, after: TypeScriptObservation): OutcomeTransition {

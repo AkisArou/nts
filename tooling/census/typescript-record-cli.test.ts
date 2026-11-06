@@ -103,6 +103,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     assert.equal(report.record_version, 3);
     assert.deepEqual(report.observations[target], parseObservation(after));
     assert.equal(report.comparison[word]?.length ?? 0, word === "reproduces" ? 0 : 1);
+    if (word === "FIXED" || word === "REFUSES NOW") assert.ok(result.stdout.includes(`improved, record pending: ${target} `), result.stdout);
   }
   for (const stage of ["emit", "link", "compiler-crash"] as const) {
     const failure: TypeScriptObservation = { kind: "build-failure", stage, diagnostic: "error: invalid generated operand" };
@@ -143,8 +144,12 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.doesNotMatch(resumed.stderr,/memory:|waiting for|holding new cases/);
   assert.match(resumed.stdout,/needed 0 to start/);
 
+  // A case the record has no row for is pending: listed, and not a failure.
+  const pending = invoke(contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), row(pass));
+  assert.equal(pending.status, 0, pending.stdout + pending.stderr);
+  assert.ok(pending.stdout.includes(`pending: ${target} has no row in ${expected}`), pending.stdout);
+  assert.equal(JSON.parse(readFileSync(json, "utf8")).comparison.pending.length, 1);
   for (const [mutated, message] of [
-    [contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), "new case has no record"],
     [contents + "tests/typescript/missing-source.ts\t{\"kind\":\"pass\"}\n", "recorded case gone missing"],
     [contents + contents.split("\n")[1] + "\n", "duplicate recorded case"],
     [contents.replace(/"version":[23]/, '"version":99'), "unsupported TypeScript record version"],
@@ -176,25 +181,54 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const output = join(scratch, "written.tsv");
   const failure: TypeScriptObservation = { kind: "build-failure", stage: "link", diagnostic: "error: invalid generated operand" };
   const observed = new Map(family); observed.set(target, failure);
-  function writeAndRead(mode: "--record" | "--recorded") {
+  function run(mode: "--record" | "--recorded" | "--record-pending", file: string, saved: ReadonlyMap<string, TypeScriptObservation>, extra: string[] = []) {
     writeFileSync(rows, JSON.stringify({ fingerprint, under, harness: harnessHashOf("ts"), observations: TYPESCRIPT_OBSERVATIONS_VERSION,
-      output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" + [...observed].map(([path, value]) => JSON.stringify({ path, ...row(value) })).join("\n") + "\n");
+      output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" + [...saved].map(([path, value]) => JSON.stringify({ path, ...row(value) })).join("\n") + "\n");
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
-      "--under", under, mode, output, "--jobs", "1", "--rows", rows, "--resume"],
+      "--under", under, mode, file, "--jobs", "1", "--rows", rows, "--resume", ...extra],
       { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
         env: { ...process.env, NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "writer") } });
   }
-  const written = writeAndRead("--record");
+  const written = run("--record", output, observed);
   assert.equal(written.status, 0, written.stdout + written.stderr);
   assert.deepEqual(parseTypeScriptRecord(readFileSync(output, "utf8")).cases.get(target), failure);
-  const reproduced = writeAndRead("--recorded");
+  const reproduced = run("--recorded", output, observed);
   assert.equal(reproduced.status, 0, reproduced.stdout + reproduced.stderr);
   assert.match(reproduced.stdout, /reconciled/);
+
+  // The gate's mode, with a case the record has no row for yet: pending, listed and not run.
+  const other = family.map(([path]) => path).find(path => path !== target)!;
+  const partial = join(scratch, "partial.tsv");
+  writeFileSync(partial, readFileSync(output, "utf8").split("\n").filter(line => !line.startsWith(other + "\t")).join("\n"));
+  const gate = run("--recorded", partial, observed, ["--json", json]);
+  assert.equal(gate.status, 0, gate.stdout + gate.stderr);
+  assert.ok(gate.stdout.includes(`pending: ${other} has no row in ${partial}`), gate.stdout);
+  assert.deepEqual(Object.keys(JSON.parse(readFileSync(json, "utf8")).observations), [target], "a pending case is not measured at landing");
+  // The full check's writer: the pending row and the improved one, every other line byte for byte.
+  const header = readFileSync(partial, "utf8").split("\n")[0];
+  const better = new Map(observed); better.set(target, pass);
+  const recordedPending = run("--record-pending", partial, better);
+  assert.equal(recordedPending.status, 0, recordedPending.stdout + recordedPending.stderr);
+  assert.match(recordedPending.stdout, /recorded 2 pending or improved row\(s\)/);
+  const after = readFileSync(partial, "utf8");
+  assert.equal(after.split("\n")[0], header, "the header is kept");
+  assert.deepEqual(parseTypeScriptRecord(after).cases, new Map([[target, pass], [other, observed.get(other)!]]));
+  assert.equal(run("--record-pending", partial, better).status, 0);
+  assert.equal(readFileSync(partial, "utf8"), after, "nothing pending or improved changes nothing");
+  const worse = new Map(better); worse.set(target, wrong);
+  const blocked = run("--record-pending", partial, worse);
+  assert.equal(blocked.status, 1, blocked.stdout + blocked.stderr);
+  assert.match(blocked.stdout, /REGRESSED[\s\S]*not recorded/, "a regression still fails, and blocks the write");
+  assert.equal(readFileSync(partial, "utf8"), after);
+
   const bare = join(scratch, "non-pin"); mkdirSync(bare); copyFileSync(binary, join(bare, "nts"));
-  const unpinned = spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--under", under,
-    "--record", join(scratch, "must-not-publish.tsv")], { cwd: root, encoding: "utf8",
-    env: { ...process.env, NTS_BIN: join(bare, "nts"), NTS_CENSUS_DIR: join(scratch, "negative") } });
-  assert.equal(unpinned.status, 2, unpinned.stdout + unpinned.stderr);
-  assert.match(unpinned.stdout, /not a pin/);
+  for (const [writer, file] of [["--record", join(scratch, "must-not-publish.tsv")], ["--record-pending", partial]]) {
+    const unpinned = spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--under", under,
+      writer, file], { cwd: root, encoding: "utf8",
+      env: { ...process.env, NTS_BIN: join(bare, "nts"), NTS_CENSUS_DIR: join(scratch, "negative") } });
+    assert.equal(unpinned.status, 2, unpinned.stdout + unpinned.stderr);
+    assert.match(unpinned.stdout, /not a pin/);
+  }
   assert.equal(existsSync(join(scratch, "must-not-publish.tsv")), false);
+  assert.equal(readFileSync(partial, "utf8"), after);
 });

@@ -2,9 +2,10 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parseDiagnostics } from "./attempt262.ts";
 import { populationOf } from "./project.ts";
-import { assertRecordedInventory, compareTypeScriptObservation, observationFromRow,
-  parseObservation, parseTypeScriptRecord, serializeTypeScriptRecord,
+import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow,
+  parseObservation, parseTypeScriptRecord, pendingCases, serializeTypeScriptRecord,
   type TypeScriptObservation, type TypeScriptRecord } from "./typescript-record.ts";
+import { improves } from "../conformance/outcome-transition.ts";
 
 const observations: TypeScriptObservation[] = [
   { kind: "pass" },
@@ -69,14 +70,45 @@ test("malformed, legacy, incomplete and contradictory observations cannot be rec
   ]) assert.throws(() => parseTypeScriptRecord(mutate(contents)));
 });
 
-test("source inventory is checked before a record can hide a new or deleted case", () => {
-  assertRecordedInventory(record(), paths);
-  assert.throws(() => assertRecordedInventory(record(), [...paths, "tests/typescript/new.ts"]), /new case has no record/);
-  assert.throws(() => assertRecordedInventory(record(), paths.slice(1)), /recorded case gone missing/);
-  assert.throws(() => assertRecordedInventory(record(), [...paths, paths[0]]), /duplicate source/);
+test("a case with no row is pending, and a record cannot hide a deleted case", () => {
+  assert.deepEqual(pendingCases(record(), paths), []);
+  assert.deepEqual(pendingCases(record(), [...paths, "tests/typescript/new.ts"]), ["tests/typescript/new.ts"], "a new case passes as pending");
+  assert.throws(() => pendingCases(record(), paths.slice(1)), /recorded case gone missing: tests\/typescript\/records\/case-0\.ts/, "a stale row still fails");
+  assert.throws(() => pendingCases(record(), [...paths, paths[0]]), /duplicate source/);
   const missing = record();
   missing.cases.delete(paths[0]);
-  assert.throws(() => assertRecordedInventory(missing, paths), /new case has no record/);
+  assert.deepEqual(pendingCases(missing, paths), [paths[0]]);
+});
+
+test("an improvement passes and a regression fails, by the shared ratchet", () => {
+  const [pass, wrong, refused, invalid, abort] = observations;
+  for (const [before, after] of [[wrong, pass], [refused, pass], [invalid, refused], [abort, refused]]) {
+    const verdict = compareTypeScriptObservation(before, after);
+    assert.ok(verdict.ok && improves(verdict), `${before.kind} -> ${after.kind}: ${verdict.word}`);
+  }
+  for (const [before, after] of [[pass, wrong], [pass, refused], [refused, wrong], [refused, invalid], [wrong, abort]]) {
+    const verdict = compareTypeScriptObservation(before, after);
+    assert.ok(!verdict.ok && !improves(verdict), `${before.kind} -> ${after.kind}: ${verdict.word}`);
+  }
+});
+
+test("the full check's writer adds pending rows and rewrites improved ones, every other line byte for byte", () => {
+  // A row in an older spelling (diagnostics unsorted) is kept as it was written.
+  const legacy = `${paths[2]}\t{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1001","where":"body"}]}`;
+  const contents = serializeTypeScriptRecord(record()).split("\n").map(line => line.startsWith(paths[2] + "\t") ? legacy : line).join("\n");
+  const added = "tests/typescript/records/case-10.ts";
+  const merged = mergeTypeScriptRecord(contents, new Map([[paths[3]!, { kind: "pass" }], [added, observations[1]!]]));
+  const expected = record();
+  expected.cases.set(paths[2]!, { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }, { code: "NTS1005", where: "body" }] });
+  expected.cases.set(paths[3]!, { kind: "pass" }).set(added, observations[1]!);
+  assert.deepEqual(parseTypeScriptRecord(merged), parseTypeScriptRecord(serializeTypeScriptRecord(expected)));
+  const before = contents.split("\n"), after = merged.split("\n");
+  assert.deepEqual(after.map(line => line.split("\t")[0]), serializeTypeScriptRecord(expected).split("\n").map(line => line.split("\t")[0]),
+    "a new row goes where a full record would put it");
+  assert.deepEqual(after.filter(line => !line.startsWith(paths[3] + "\t") && !line.startsWith(added + "\t")),
+    before.filter(line => !line.startsWith(paths[3] + "\t")), "header and every other row, byte for byte");
+  assert.ok(after.includes(legacy), "an older spelling of an untouched row survives");
+  assert.equal(mergeTypeScriptRecord(contents, new Map()), contents, "nothing pending changes nothing");
 });
 
 test("observations use the unredacted producer facts, never the display summary", () => {

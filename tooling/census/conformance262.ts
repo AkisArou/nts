@@ -5,7 +5,7 @@
 //        [--sample N] [--rows <jsonl>] [--sites N] [--json <file>]
 //        [--record <tsv>] [--check <tsv>] [--recorded <tsv>] [--resume]
 //        [--backend c|llvm|jvm] [--paths-from <tsv> ...] [--fresh]
-//        [--suite test262|typescript]
+//        [--suite test262|typescript] [--record-pending <tsv>]
 //
 // `--resume` continues a `--rows` file instead of truncating it. Long node runs
 // die on this box -- a full run was killed twice at ~4,800 of 8,005, detached
@@ -33,8 +33,16 @@
 // invalid HIR with generated numbers normalized, or runtime abort. Raw prose
 // remains in the run's rows and rankings. The outcomes corpus's shared
 // progress policy holds transitions; a timeout or tool failure cannot be a
-// recorded result. Before --recorded selects a population, the record must
-// match the complete source inventory. Rankings remain a display projection.
+// recorded result. Before --recorded selects a population, the record is
+// checked against the complete source inventory: a case with no row yet is
+// pending, listed and not run, and a row whose case is gone fails. An
+// improvement passes and is listed. Rankings remain a display projection.
+//
+// `--record-pending <tsv>` is the full check's TypeScript writer, after
+// landing (tooling/records/record-pending.ts): from a clean pin it runs the
+// whole selection, holds every recorded case to its row, and on a clean
+// comparison writes the rows of the pending and the improved cases, every
+// other line byte for byte.
 //
 // # Why this exists beside `run262.ts`
 //
@@ -122,8 +130,10 @@ import { fileURLToPath } from "node:url";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
-import { assertRecordedInventory, compareTypeScriptObservation, observationFromRow,
-  parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION } from "./typescript-record.ts";
+import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow, parseTypeScriptRecord, pendingCases,
+  serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION } from "./typescript-record.ts";
+import { improves } from "../conformance/outcome-transition.ts";
+import { improvedLine, pendingLine } from "../records/pending.ts";
 import { selectTypescript } from "./suites/typescript.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
@@ -174,7 +184,8 @@ const jsonFile = flag("--json", null);
 const sites = Number(flag("--sites", "25"));
 const recordFile = flag("--record", null);
 const recordedFile = flag("--recorded", null);
-const checkFile = flag("--check", recordedFile);
+const recordPendingFile = flag("--record-pending", null);
+const checkFile = flag("--check", recordedFile ?? recordPendingFile);
 // The cases other records name, run without comparing against them: how a
 // backend's first record is made from C's, so the two cover the same cases and
 // "passes on C and not here" is a row-for-row question. Repeatable, for the
@@ -198,12 +209,18 @@ if (!existsSync(SUITE)) cannotMeasure("no test262 checkout; tooling/bootstrap/bo
 // 2026-09-30 a record written from target/release/nts came out "written
 // before records named their commit", undoing the age line by the shape of
 // an invocation. So --record refuses anything else, before the run, not after it.
-if (recordFile && !recordCommit()) {
+for (const [writer, file] of [["--record", recordFile], ["--record-pending", recordPendingFile]]) {
+  if (!file || recordCommit()) continue;
   const record = provenanceOf(NTS);
   cannotMeasure(
-    `--record writes a claim about a commit, and ${NTS} is ${record ? (record.applied ? "a pin with a patch applied" : "a pin of a tree that was not clean") : "not a pin"}; ` +
+    `${writer} writes a claim about a commit, and ${NTS} is ${record ? (record.applied ? "a pin with a patch applied" : "a pin of a tree that was not clean") : "not a pin"}; ` +
       "pin a commit of main (node tooling/conformance/pin.ts <rev>) and pass NTS_BIN=<that pin>",
   );
+}
+// The pending writer measures the whole selection: a sample or another
+// record's paths would leave cases unmeasured, and it writes no full record.
+if (recordPendingFile && (!TYPESCRIPT || sample > 0 || pathsFrom.length > 0 || recordFile || recordedFile || flag("--check", null))) {
+  cannotMeasure("--record-pending runs the whole TypeScript selection against its own record, with no other selection or record flag");
 }
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
@@ -315,12 +332,15 @@ if (TYPESCRIPT) {
 if (records.length === 0) cannotMeasure(`${under} selected no test`);
 
 // A recorded-only population must not hide a newly added or deleted case.
-// TypeScript records contain every outcome, so their inventory is the source's.
+// TypeScript records contain every outcome, so their inventory is the source's:
+// a case with no row yet is pending, listed and left to the full check's
+// writer; a row whose case is gone fails here.
+let pendingPaths = [];
 if (TYPESCRIPT && checkFile) {
   try {
     const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
     if (expected.metadata.under !== under) throw new Error(`record selection ${expected.metadata.under} differs from ${under}`);
-    assertRecordedInventory(expected, records.map(record => record.path));
+    pendingPaths = pendingCases(expected, records.map(record => record.path));
   } catch (error) { cannotMeasure(`${checkFile}: ${error.message}`); }
 }
 
@@ -904,7 +924,10 @@ if (recordFile && TYPESCRIPT) {
     cases: typeScriptObserved,
   };
   try {
-    assertRecordedInventory(record, records.map(one => one.path));
+    // A full record names every case: one that left some unmeasured would
+    // turn them pending rather than recording them.
+    const unmeasured = pendingCases(record, records.map(one => one.path));
+    if (unmeasured.length > 0) throw new Error(`a full record names every case; ${unmeasured.length} were not measured, first ${unmeasured[0]}`);
     const contents = serializeTypeScriptRecord(record);
     writeFileSync(recordFile, contents);
   } catch (error) { cannotMeasure(`${recordFile}: not recorded: ${error.message}`); }
@@ -918,16 +941,26 @@ if (recordFile && TYPESCRIPT) {
   );
 }
 let comparison = null;
+// What fails a comparison: REGRESSED, CHANGED and, for test262's partial
+// records, a recorded case missing or newly failing. A TypeScript case with no
+// row is pending, and FIXED and REFUSES NOW are improvements: both pass.
+const COMPARISON_FAILURES = TYPESCRIPT ? ["REGRESSED", "CHANGED"] : ["REGRESSED", "MISSING", "CHANGED", "NEW FAIL"];
+// The rows --record-pending writes: the pending cases' and the improved ones'.
+const recordUpdates = new Map();
 const resourceRegressions=[];
 if (checkFile && TYPESCRIPT) {
   const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
-  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], MISSING: [], "NEW FAIL": [] };
+  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], pending: pendingPaths.map(path => pendingLine(path, checkFile)) };
   for (const [path, now] of typeScriptObserved) {
     const was = expected.cases.get(path);
-    if (was === undefined) { comparison.MISSING.push(`${path}: no recorded outcome`); continue; }
+    // Pending, and listed above: measured only by the full check's writer.
+    if (was === undefined) { recordUpdates.set(path, now); continue; }
     const verdict = compareTypeScriptObservation(was, now);
     if (verdict.word === "holds" || verdict.word === "reproduces") continue;
-    comparison[verdict.word].push(`${path}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
+    if (improves(verdict)) recordUpdates.set(path, now);
+    comparison[verdict.word].push(improves(verdict)
+      ? improvedLine(path, JSON.stringify(was), JSON.stringify(now))
+      : `${path}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
   }
 } else if (checkFile) {
   const before = new Map(
@@ -1126,13 +1159,21 @@ if (summed !== population.length) problems.push(`outcomes sum to ${summed}, not 
 if (rows.size !== toAttempt.length) problems.push(`${toAttempt.length - rows.size} attempted case(s) came back with no row`);
 if (audit.withoutReason.length + audit.naming_nothing.length + audit.unknownKind.length > 0) problems.push("the exclusion audit failed");
 if (overrideAudit.some((a) => a.faults.length > 0)) problems.push("the evidence-override audit failed");
-const comparisonFailures=comparison ? comparison.REGRESSED.length+comparison.MISSING.length+comparison.CHANGED.length+comparison["NEW FAIL"].length : 0;
+const comparisonFailures=comparison ? COMPARISON_FAILURES.reduce((sum, kind) => sum + comparison[kind].length, 0) : 0;
 const reconciliationFailures=problems.length;
 if (comparisonFailures > 0) {
   problems.push("the recorded outcomes changed; see above, then re-record with --record if intended");
 }
 say();
 say(problems.length === 0 ? "  reconciled" : problems.map((p) => `  NOT RECONCILED: ${p}`).join("\n"));
+// The full check's writer: only from a reconciled run, so an improvement a
+// red commit caused is never recorded ahead of that commit's revert.
+if (recordPendingFile && problems.length > 0) say(`  not recorded: ${recordPendingFile} is written only from a reconciled run`);
+else if (recordPendingFile && recordUpdates.size > 0) {
+  try { writeFileSync(recordPendingFile, mergeTypeScriptRecord(readFileSync(recordPendingFile, "utf8"), recordUpdates)); }
+  catch (error) { cannotMeasure(`${recordPendingFile}: not recorded: ${error.message}`); }
+  say(`  recorded ${recordUpdates.size} pending or improved row(s) into ${recordPendingFile}`);
+}
 console.log(out.join("\n"));
 
 if (jsonFile) {
