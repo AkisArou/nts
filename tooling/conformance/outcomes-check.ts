@@ -4,12 +4,21 @@
 //   node tooling/conformance/outcomes-check.ts [name ...]
 //   node tooling/conformance/outcomes-check.ts --record <name> [name ...]
 //   NTS_BIN=<a pinned copy> node tooling/conformance/outcomes-check.ts
+//   NTS_BIN=<main's pin> node tooling/conformance/outcomes-check.ts --record-pending
 //
 // **A record is a claim about main, so --record runs on main's binary**: built
 // from a clean tree at a named commit, never a worktree carrying an unlanded
 // change and never a shared tree with someone's edits in it. A pin gives
 // stability, not provenance. Measure a change *against* the records from its
 // own worktree; re-record only once the change is on main.
+//
+// **A fixture with no outcome.json yet is pending**: listed, not measured, and
+// not a failure. The full check records it after landing with
+// `--record-pending` (tooling/records/record-pending.ts), which from a clean
+// pin measures every fixture, holds the recorded ones, and only when none
+// needs a person writes the pending fixtures' records and the improved ones'
+// (FIXED, REFUSES NOW). An outcome.json whose program is gone is STALE and
+// fails: the change that deletes a fixture deletes its record.
 //
 // # Why a third fixture kind
 //
@@ -135,13 +144,16 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runConsumer as supervisedCheck, finishCheckStep, checkOutcome, sameCheckOutcome, validateStoredCheckOutcome, reportCheckFailure } from "../differential/check-report.ts";
+import { runConsumer as supervisedCheck, finishCheckStep, checkOutcome, validateStoredCheckOutcome, reportCheckFailure } from "../differential/check-report.ts";
 
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
 import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
-import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
-import { compilerExternalStop, compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
+import { improves } from "./outcome-transition.ts";
+import { compilerExternalStop, compilerStop, compilerStopped } from "./observation-text.ts";
+import { judge, outcomeInventory, outcomeRecord, RECORD } from "./outcomes-verdict.ts";
+import { provenanceOf } from "./pin.ts";
+import { improvedLine, pendingLine } from "../records/pending.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 
@@ -160,11 +172,20 @@ const TOOLS = {
 
 const argv = process.argv.slice(2);
 const recording = argv.includes("--record");
+// The full check's writer: every fixture, recording the pending and improved ones.
+const recordingPending = argv.includes("--record-pending");
 const named = argv.filter((a) => !a.startsWith("--"));
 
 if (!existsSync(NTS)) {
   console.log(`  NOT MEASURED: no compiler at ${NTS}; set NTS_BIN`);
   process.exit(2);
+}
+if (recordingPending) {
+  const pin = provenanceOf(NTS);
+  if (recording || named.length > 0 || !pin?.clean || pin.applied) {
+    console.log(`  NOT MEASURED: --record-pending writes claims about main: it takes no names, and ${NTS} must be a clean, unpatched pin of main (node tooling/conformance/pin.ts <rev>)`);
+    process.exit(2);
+  }
 }
 serialRun(TOOLS);
 const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex").slice(0, 16);
@@ -453,7 +474,7 @@ function selfCheck() {
   };
   // Exercise ASan's actual compile/cache/run path independently of the
   // compiler defect. Fixing escape analysis must not invalidate this oracle.
-  if (chosen.some((name) => memoryOptions(name).address)) {
+  if (measured.some((name) => memoryOptions(name).address)) {
     const out = join(SCRATCH, "self-asan");
     mkdirSync(out, { recursive: true });
     const asan = (source) => {
@@ -465,7 +486,7 @@ function selfCheck() {
     const fault = asan("__attribute__((noinline)) static volatile int *returned(void) { volatile int value = 7; return &value; }\nint main(void) { return *returned(); }\n");
     if (fault.category !== "aborted" || fault.nts !== "AddressSanitizer: stack-use-after-return") return `ASan fault: ${JSON.stringify(fault)}`;
   }
-  if (chosen.some((name) => memoryOptions(name).function)) {
+  if (measured.some((name) => memoryOptions(name).function)) {
     const out = join(SCRATCH, "self-function");
     mkdirSync(out, { recursive: true });
     const instrument = (source) => {
@@ -517,11 +538,18 @@ for (const name of chosen) {
     process.exit(1);
   }
 }
+// Fixtures against their records: a pending one runs only to be recorded, and
+// a stale one, a record whose program is gone, never runs.
+const inventory = outcomeInventory(FIXTURES, chosen);
+const unrecorded = new Set(inventory.pending), gone = new Set(inventory.stale);
+const measured = chosen.filter((name) => !gone.has(name) && (recording || recordingPending || !unrecorded.has(name)));
+const fixturePath = (name) => `tests/outcomes/${name}`;
 
 if (!recording) {
   try {
     for (const name of chosen) {
-      const record=JSON.parse(readFileSync(join(FIXTURES,name,"outcome.json"),"utf8"));
+      if (unrecorded.has(name)) continue;
+      const record=JSON.parse(readFileSync(join(FIXTURES,name,RECORD),"utf8"));
       if(record.run==="check")validateStoredCheckOutcome(record);
     }
   } catch(error) {
@@ -538,41 +566,50 @@ if (broken) {
   process.exit(2);
 }
 console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run, a fixture's options reach the compiler" +
-  (chosen.some((name) => memoryOptions(name).address) ? "; ASan control clean, use-after-return fault detected" : ""));
+  (measured.some((name) => memoryOptions(name).address) ? "; ASan control clean, use-after-return fault detected" : ""));
 
 let unexpected = 0;
 let loud = 0;
 const tally = new Map();
+// --record-pending: the pending and improved fixtures' measurements, written
+// only when no fixture needs a person.
+const toRecord = new Map();
+function writeRecord(name, now) {
+  writeFileSync(join(FIXTURES, name, RECORD), `${JSON.stringify(outcomeRecord(now, FINGERPRINT), null, 2)}\n`);
+  console.log(`  recorded      ${name}: ${now.category} -- ${now.nts}${now.ran !== undefined ? `; ran: ${now.ran}` : ""}${now.node ? `  (node: ${now.node})` : ""}`);
+}
+for (const name of inventory.stale) {
+  console.log(`  STALE         ${name}: ${RECORD} has no src/main.ts -- the change that deletes a fixture deletes its record`);
+  tally.set("STALE", (tally.get("STALE") ?? 0) + 1);
+  unexpected += 1;
+}
 for (const name of chosen) {
+  if (gone.has(name)) continue;
+  if (!measured.includes(name)) {
+    console.log(`  ${pendingLine(fixturePath(name), `${fixturePath(name)}/${RECORD}`)}`);
+    tally.set("pending", (tally.get("pending") ?? 0) + 1);
+    continue;
+  }
   let now;
   try { now = await measure(name); }
   catch (error) {
     console.error(`  NOT MEASURED ${name}: ${error instanceof Error ? error.message : String(error)}`);
     process.exit(finishCheckStep(unexpected));
   }
-  const recordFile = join(FIXTURES, name, "outcome.json");
-  if (recording) {
+  if (recording || unrecorded.has(name)) {
     if (now.category === "not-measured") {
       console.log(`  NOT MEASURED  ${name}: ${now.nts} -- not recorded`);
       unexpected += 1;
       continue;
     }
-    const record = {
-      ...(now.check ? { version: 1, check: now.check } : {}),
-      run: now.run, category: now.category, nts: now.nts,
-      ...(now.category === "refused" && now.run === "build" ? { ran: now.ran } : {}),
-      node: now.node, measured_with: FINGERPRINT, source: "measured",
-    };
-    writeFileSync(recordFile, `${JSON.stringify(record, null, 2)}\n`);
-    console.log(`  recorded      ${name}: ${now.category} -- ${now.nts}${now.ran !== undefined ? `; ran: ${now.ran}` : ""}${now.node ? `  (node: ${now.node})` : ""}`);
+    if (recording) writeRecord(name, now);
+    else {
+      toRecord.set(name, now);
+      console.log(`  pending       ${name}: ${now.category} -- ${now.nts}`);
+    }
     continue;
   }
-  if (!existsSync(recordFile)) {
-    console.log(`  NOT MEASURED  ${name}: no outcome.json; run with --record ${name}`);
-    unexpected += 1;
-    continue;
-  }
-  const was = JSON.parse(readFileSync(recordFile, "utf8"));
+  const was = JSON.parse(readFileSync(join(FIXTURES, name, RECORD), "utf8"));
   let verdict;
   try { verdict = judge(was, now); }
   catch(error) {
@@ -582,45 +619,17 @@ for (const name of chosen) {
   tally.set(verdict.word, (tally.get(verdict.word) ?? 0) + 1);
   if (!verdict.ok) unexpected += 1;
   if (verdict.loud) loud += 1;
-  console.log(`  ${verdict.word.padEnd(14)}${name}: ${verdict.why}`);
+  if (improves(verdict)) {
+    if (recordingPending) toRecord.set(name, now);
+    console.log(`  ${improvedLine(fixturePath(name), `${was.category} (${was.nts})`, `${now.category} (${now.nts})`)}`);
+  } else console.log(`  ${verdict.word.padEnd(14)}${name}: ${verdict.why}`);
 }
 
-function judge(was, now) {
-  if (now.category === "not-measured") return { word: "NOT MEASURED", ok: false, why: now.nts };
-  if (was.run !== now.run) return { word: "CHANGED", ok: false, why: `recorded under ${was.run}, measured under ${now.run}` };
-  if (now.node !== was.node && was.node !== null && now.node !== null && now.category !== "refused") {
-    return { word: "ORACLE CHANGED", ok: false, why: `node said ${was.node}, now ${now.node}` };
-  }
-  // A refused build record says what its artefact did; one written before it
-  // did has no `ran`, and reads as CHANGED until re-recorded, never as the same.
-  const ranTo = (r) => (r.category === "refused" && r.run === "build" ? r.ran : undefined);
-  // Old records retain their original spelling and provenance. Apply the same
-  // normalization to them that new check measurements use.
-  const textOf = (r) => {
-    const text = r.run === "check" ? stableCheckText(r.nts) : r.nts;
-    return r.category === "invalid-hir" || r.category === "refused" ? normalizeGeneratedNumbers(text) : text;
-  };
-  const sameObservation = was.run === "check" ? sameCheckOutcome(was, now) : textOf(was) === textOf(now);
-  const same = was.category === now.category && sameObservation && ranTo(was) === ranTo(now);
-  const transition = outcomeTransition(outcomeDisposition(was.category), outcomeDisposition(now.category), same);
-  const past = ranTo(now) !== undefined && ranTo(now) !== now.node && /^exit /.test(ranTo(now))
-    ? ` -- and the program still ran, answering ${ranTo(now)} where node answers ${now.node}`
-    : "";
-  if (same) return { ...transition, why: `${now.category} -- ${now.nts}${past}` };
-  if (transition.word === "REGRESSED") return { ...transition, why: `agreed with node; now ${now.category} -- ${now.nts}` };
-  if (transition.word === "FIXED") {
-    return { ...transition, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to tests/programs/ or re-record it as a guard` };
-  }
-  if (transition.word === "REFUSES NOW") {
-    return {
-      ...transition,
-      why: `was ${was.category}; hand it to tests/refusals/ with\n                // expect: ${now.nts}`,
-    };
-  }
-  if (was.category === now.category && sameObservation) {
-    return { ...transition, why: `refused as before; its artefact ran to ${ranTo(was) ?? "(not recorded)"}, now ${ranTo(now)}` };
-  }
-  return { ...transition, why: `${was.category} (${was.nts}) -> ${now.category} (${now.nts})` };
+let written = recording ? chosen : [];
+if (recordingPending && unexpected > 0) console.log(`  not recorded: ${unexpected} fixture(s) need a person; records are written only when none does`);
+else if (recordingPending) {
+  for (const [name, now] of toRecord) writeRecord(name, now);
+  written = [...toRecord.keys()];
 }
 
 // **A recorded fixture is an input to `integrity`**, which reads every outcomes
@@ -630,8 +639,8 @@ function judge(was, now) {
 // parameter, a-teed-stream-read-back). So a record is not finished until
 // integrity passes over it: run here, on the same pinned compiler, and any
 // violation it does not already know is printed as owed.
-if (recording && chosen.length > 0) {
-  const recorded = chosen.map((name) => join("tests/outcomes", name));
+if (written.length > 0) {
+  const recorded = written.map(fixturePath);
   const check = spawnSync("node", [join(HERE, "integrity.ts"), ...recorded], {
     cwd: ROOT,
     encoding: "utf8",
@@ -654,7 +663,8 @@ console.log();
 console.log(
   `  ${chosen.length} fixture(s)` +
     (recording ? " recorded" : `: ${[...tally].map(([w, n]) => `${n} ${w}`).join(", ")}`) +
-    (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now -- move or re-record` : "") +
+    (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now -- improved, record pending` : "") +
+    (recordingPending && written.length > 0 ? `; recorded ${written.length} pending or improved` : "") +
     (unexpected > 0 ? `; ${unexpected} need a person` : ""),
 );
 exitAfterOutput(unexpected > 0 ? 1 : 0);
