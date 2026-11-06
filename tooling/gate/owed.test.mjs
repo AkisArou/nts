@@ -611,6 +611,29 @@ test("the landing check owes its own tests, not the full gate", () => {
   owes("tooling/landing/queue.test.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "interop"] });
 });
 
+test("every step has one landing form, and the tree checks are the nine", () => {
+  const { LANDING, landingTableProblem } = policy;
+  assert.equal(landingTableProblem(LANDING, allSteps()), null);
+  const { tests: _tests, ...missing } = LANDING;
+  assert.match(landingTableProblem(missing, allSteps()), /defines step "tests", which LANDING does not place/);
+  assert.match(landingTableProblem({ ...LANDING, retired: { form: "after" } }, allSteps()), /places "retired", which all.sh does not define/);
+  assert.match(landingTableProblem({ ...LANDING, outcomes: { form: "fixtures", corpora: ["the nothing"] } }, allSteps()), /corpus "the nothing"/);
+  assert.match(landingTableProblem({ ...LANDING, outcomes: { form: "fixtures" } }, allSteps()), /names no corpora/);
+  assert.match(landingTableProblem({ ...LANDING, "typescript-c": { form: "sample" } }, allSteps()), /names no sample step/);
+  assert.match(landingTableProblem({ ...LANDING, "typescript-c": { form: "sample", sample: "typescript-llvm" } }, allSteps()), /itself sampled/);
+  assert.match(landingTableProblem({ ...LANDING, rustfmt: { form: "as-is" } }, allSteps()), /are not TREE_CHECKS/);
+  assert.match(landingTableProblem({ ...LANDING, build: { form: "bogus" } }, allSteps()), /no landing form/);
+  assert.match(landingTableProblem({ ...LANDING, build: { form: "as-is", corpora: [] } }, allSteps()), /fields its form does not read/);
+});
+
+test("a fixture is in its corpus by its path, so a deleted one still is", () => {
+  const { inCorpus } = policy;
+  assert.ok(inCorpus("the outcomes", "tests/outcomes/gone/src/main.ts"));
+  assert.ok(inCorpus("the examples", "tests/programs/new/tsconfig.json"));
+  assert.ok(!inCorpus("the examples", "tests/refusals/x/src/main.ts"));
+  assert.throws(() => inCorpus("the nothing", "tests/x"), /no corpus named/);
+});
+
 test("a range is the same change as the commits in it", () => {
   // e936aecf4 is one commit, so its range and the commit agree.
   const one = (argv) => changedPaths(argv).map((c) => `${c.path}:${c.added}:${c.deleted}`).sort();

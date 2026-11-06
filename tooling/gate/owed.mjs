@@ -167,6 +167,115 @@ export const WIDE = new Set([
   "bench-agree",
 ]);
 
+/**
+ * **How each gate step runs in the landing check** (docs/workflow.md,
+ * "Landing: the landing check"; tooling/landing/selection.ts applies it). The
+ * rules below say which steps a change owes; this table says which of those
+ * run before it lands, in ten minutes or less, and which the full check runs
+ * after it has landed:
+ *
+ *   tree      a tree check: reads the tree and takes seconds
+ *   as-is     runs as it is: a broken build, lint, unit test or gate tool on
+ *             main would stop everyone, so it is never moved
+ *   fixtures  runs as it is when the change touches one of `corpora` (owed.mjs's
+ *             CORPORA): a fixture is checked by its own step before it lands.
+ *             Owed for any other reason, it runs after landing
+ *   sample    runs as `sample`, a sampled step on C, once all.sh defines it;
+ *             after landing until then
+ *   after     the full check runs it, after landing
+ *
+ * A `fixtures` or `sample` step that does not fit the ten minutes moves to the
+ * full check, costliest first. Every step all.sh defines has a row, and the
+ * self-test says so: a new step is placed when it is added.
+ */
+export const LANDING = {
+  rustfmt: { form: "tree" },
+  format: { form: "tree" },
+  reformat: { form: "tree" },
+  records: { form: "tree" },
+  "old-paths": { form: "tree" },
+  primitives: { form: "tree" },
+  config: { form: "tree" },
+  licenses: { form: "tree" },
+  audit: { form: "tree" },
+  build: { form: "as-is" },
+  clippy: { form: "as-is" },
+  tests: { form: "as-is" },
+  // The form of `tests` a change to a crate's comments owes.
+  doctests: { form: "as-is" },
+  tooling: { form: "as-is" },
+  // The pin, the inventory and the features audit: seconds, and what a change
+  // to a feature's classification owes for what it classified.
+  test262: { form: "as-is" },
+  outcomes: { form: "fixtures", corpora: ["the outcomes"] },
+  blockers: { form: "fixtures", corpora: ["the blockers"] },
+  examples: { form: "fixtures", corpora: ["the examples"] },
+  llvm: { form: "fixtures", corpora: ["the examples"] },
+  "llvm-rc": { form: "fixtures", corpora: ["the examples"] },
+  jvm: { form: "fixtures", corpora: ["the examples"] },
+  rc: { form: "fixtures", corpora: ["the examples"] },
+  "expect-ir": { form: "fixtures", corpora: ["the examples", "the bench cases"] },
+  "example-refusals": { form: "fixtures", corpora: ["the examples"] },
+  benches: { form: "fixtures", corpora: ["the bench cases"] },
+  memory: { form: "fixtures", corpora: ["the memory cases"] },
+  "typescript-c": { form: "sample", sample: "typescript-sample" },
+  "typescript-llvm": { form: "sample", sample: "typescript-sample" },
+  "typescript-jvm": { form: "sample", sample: "typescript-sample" },
+  "test262-cases": { form: "sample", sample: "test262-sample" },
+  "test262-builtins-cases": { form: "sample", sample: "test262-sample" },
+  "test262-rest-cases": { form: "sample", sample: "test262-sample" },
+  "test262-jvm": { form: "sample", sample: "test262-sample" },
+  "test262-llvm": { form: "sample", sample: "test262-sample" },
+  integrity: { form: "after" },
+  "integrity-runtime": { form: "after" },
+  definitions: { form: "after" },
+  "compile-time": { form: "after" },
+  "compile-time-rc": { form: "after" },
+  assembles: { form: "after" },
+  "c-compiles": { form: "after" },
+  types: { form: "after" },
+  "jvm-verifies": { form: "after" },
+  corpus: { form: "after" },
+  "frontend-tsrs": { form: "after" },
+  "react-sources": { form: "after" },
+  profile: { form: "after" },
+  sweep: { form: "after" },
+  dex: { form: "after" },
+  "on-device": { form: "after" },
+  "bench-agree": { form: "after" },
+  addons: { form: "after" },
+  divergence: { form: "after" },
+  interop: { form: "after" },
+};
+const LANDING_FORMS = new Set(["tree", "as-is", "fixtures", "sample", "after"]);
+
+/** What is wrong with a landing table over the steps all.sh defines, or null. */
+export function landingTableProblem(table, catalogue) {
+  for (const step of catalogue) if (!Object.hasOwn(table, step)) return `all.sh defines step "${step}", which LANDING does not place`;
+  for (const [step, row] of Object.entries(table)) {
+    if (!catalogue.includes(step)) return `LANDING places "${step}", which all.sh does not define`;
+    if (!row || !LANDING_FORMS.has(row.form)) return `LANDING gives "${step}" no landing form`;
+    const keys = Object.keys(row).sort().join(",");
+    if (row.form === "fixtures") {
+      if (keys !== "corpora,form" || !Array.isArray(row.corpora) || row.corpora.length === 0) return `LANDING's fixtures step "${step}" names no corpora`;
+      for (const name of row.corpora) if (!CORPORA.some((c) => c.name === name)) return `LANDING's "${step}" names corpus "${name}", which CORPORA does not define`;
+    } else if (row.form === "sample") {
+      if (keys !== "form,sample" || typeof row.sample !== "string" || !/^[a-z][a-z0-9-]*$/.test(row.sample)) return `LANDING's sampled step "${step}" names no sample step`;
+      if (table[row.sample]?.form === "sample") return `LANDING samples "${step}" as "${row.sample}", which is itself sampled`;
+    } else if (keys !== "form") return `LANDING's "${step}" has fields its form does not read`;
+  }
+  const tree = Object.keys(table).filter((step) => table[step].form === "tree").sort().join(" ");
+  if (tree !== [...TREE_CHECKS].sort().join(" ")) return `LANDING's tree checks (${tree}) are not TREE_CHECKS`;
+  return null;
+}
+
+/** Whether `path` is in the corpus `name` by its path, as a deleted or renamed fixture still is. */
+export function inCorpus(name, path) {
+  const corpus = CORPORA.find((c) => c.name === name);
+  if (!corpus) throw new Error(`no corpus named ${name}`);
+  return corpus.member.test(path);
+}
+
 export const ASKS = {
   build: ["hygiene", "does it build"],
   clippy: ["hygiene", "does it lint clean"],
@@ -1602,6 +1711,8 @@ export function selfTest() {
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;
   for (const st of allSteps()) if (!ASKS[st]) return `all.sh defines step "${st}", which ASKS does not describe`;
+  const landingProblem = landingTableProblem(LANDING, allSteps());
+  if (landingProblem) return landingProblem;
   const lowering = owed([{ path: "compiler/core/src/hir/lower.rs", added: false }]).find((r) => r.name === "lowering");
   const asked = new Set(lowering.arms.filter((a) => !a.if).map((a) => a.kind));
   if (!asked.has("answers") || !asked.has("whether")) return `a lowering change owes only ${[...asked].join(", ")}`;
