@@ -11,7 +11,7 @@
 // when none is named. Each is recorded by its own recorder, in its pending
 // mode, with the compiler NTS_BIN names:
 //
-//   oracle-counts  tooling/differential/record-oracles.ts <pending fixtures>
+//   oracle-counts  tooling/differential/record-oracles.ts <pending fixture>, per fixture
 //   typescript     tooling/census/conformance262.ts --record-pending, per backend
 //   benchmarks     tooling/bench/build-records.ts --record-pending
 //   outcomes       tooling/conformance/outcomes-check.ts --record-pending
@@ -80,7 +80,10 @@ export function findPending(root: string, kind: Kind): Pending[] {
 export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][] {
   switch (kind) {
     case "oracle-counts":
-      return pending.length ? [["tooling/differential/record-oracles.ts", ...new Set(pending.map(one => one.name))]] : [];
+      // One run per fixture: the recorder writes nothing when any fixture it
+      // was given cannot be measured, so one such fixture would keep every
+      // other pending one unrecorded.
+      return [...new Set(pending.map(one => one.name))].map(name => ["tooling/differential/record-oracles.ts", name]);
     case "typescript":
       return BACKENDS.map(backend => ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
     case "benchmarks":

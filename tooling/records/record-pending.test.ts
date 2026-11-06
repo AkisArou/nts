@@ -91,7 +91,7 @@ test("it records the pending and improved rows, every other byte as it was, and 
   const { run, ran } = recorders(root);
   assert.equal(recordPending(root, ["oracle-counts", "typescript", "benchmarks", "outcomes"], run, line => lines.push(line)), 0, lines.join("\n"));
   assert.deepEqual(ran.map(args => args.join(" ")), [
-    "tooling/differential/record-oracles.ts benchmarks/cases/new tests/programs/new",
+    "tooling/differential/record-oracles.ts benchmarks/cases/new", "tooling/differential/record-oracles.ts tests/programs/new",
     ...BACKENDS.map(backend => `tooling/census/conformance262.ts --suite typescript --backend ${backend} --record-pending results/typescript/${backend}/cases.tsv`),
     "tooling/bench/build-records.ts --record-pending", "tooling/conformance/outcomes-check.ts --record-pending"]);
   const recorded = lines.filter(line => line.startsWith("  recorded "));
@@ -115,6 +115,16 @@ test("it records the pending and improved rows, every other byte as it was, and 
   assert.equal(idle.ran.some(args => args[0] === "tooling/differential/record-oracles.ts"), false, "no oracle fixture to record, so no recorder");
   assert.deepEqual(files(root), after);
   assert.match(quiet.at(-1)!, /^record-pending: 0 row\(s\) recorded; nothing is committed$/);
+});
+
+test("a pending fixture that cannot be measured keeps no other pending fixture from its record", t => {
+  const root = tree(t), lines: string[] = [];
+  const { run: record } = recorders(root);
+  const run: Runner = (args, at) => args[0] === "tooling/differential/record-oracles.ts" && args[1] === "benchmarks/cases/new" ? 1 : record(args, at);
+  assert.equal(recordPending(root, ["oracle-counts"], run, line => lines.push(line)), 1, lines.join("\n"));
+  assert.ok(lines.includes("  oracle-counts: the recorder exited 1"), lines.join("\n"));
+  assert.ok(lines.includes("  recorded results/oracle-counts/tests/programs/new.json: tests/programs/new (pending)"), lines.join("\n"));
+  assert.deepEqual(findPending(root, "oracle-counts").map(one => one.name), ["benchmarks/cases/new"], "only the fixture that could not be measured stays pending");
 });
 
 test("a recorder that rewrites a recorded row without improving it, or records a case that was not pending, is refused and put back", t => {
