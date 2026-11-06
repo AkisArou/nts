@@ -2090,6 +2090,7 @@ forms are listed with their diagnostics in the pull request.
 | `coalesce` | 24 | 24 | falsy versus nullish values, fallback laziness, chained coalescing and typed reads |
 | `chains` | 22 | 22 | skipped chain tails and keys, chain boundaries, falsy bases, narrowing, typeof and delete |
 | `calls` | 24 | 24 | optional function and method calls, receivers, argument skipping, private/static and generic callbacks |
+| `assignments` | 30 | 30 | logical assignment selection, accessor order, typed-array values, caches, counters and tuple growth |
 
 ### Promise combinator route contracts
 
@@ -3975,10 +3976,11 @@ land without another open Unicode pull request.
 | `ts-hole-route-reading` | array iteration and text serialization including holes | Hole route contracts; ECMAScript, Array objects | 44 | 0 |
 | `ts-hole-route-copying` | sparse slot retention, densification and flattening across array copies | Hole route contracts; ECMAScript, Array.prototype | 46 | 0 |
 | `ts-hole-route-changing` | array mutation preserves and moves absent indexes distinct from undefined | Hole route contracts; ECMAScript, Array.prototype | 54 | 0 |
-| `ts-nullish-routes` | Nullish operators and truthiness across typed carriers beside equivalent explicit controls | Nullish route contracts; typed paths | 140 | 0 |
+| `ts-nullish-routes` | Nullish operators and truthiness across typed carriers beside equivalent explicit controls | Nullish route contracts; typed paths | 200 | 0 |
 | `ts-nullish-route-coalesce` | coalescing and logical OR preserve or replace signed zero, NaN, zero bigint and other typed values, with lazy fallbacks | Nullish route contracts; ECMAScript, CoalesceExpression | 48 | 0 |
 | `ts-nullish-route-chains` | optional chains skip all subsequent reads, keys and calls on nullish bases while retaining falsy bases, chain boundaries and receiver values | Nullish route contracts; ECMAScript, OptionalChaining | 44 | 0 |
 | `ts-nullish-route-calls` | optional function and method calls retain their object receivers, skip arguments on absent callees and invoke getter-held callbacks once | Nullish route contracts; ECMAScript, OptionalChaining | 48 | 0 |
+| `ts-nullish-route-assignments` | nullish and truthy logical assignment preserve short-circuit reads, writes, getter/setter order, typed-array conversions and expression values | Nullish route contracts; ECMAScript, Assignment Operators | 60 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
