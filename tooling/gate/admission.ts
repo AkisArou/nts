@@ -90,7 +90,21 @@ export class Admission {
   }
 }
 
-export type FedWorker = { write: (path: string) => void; end: () => void; exited: () => boolean };
+/**
+ * One case's gate token: resolves to its release, or to `null` when `signal`
+ * aborts first (`tokens.mjs`'s `acquireToken`).
+ */
+export type CaseToken = (path: string, signal: AbortSignal) => Promise<(() => void) | null>;
+
+/**
+ * `release` returns the case's token; the worker calls it once, when the case
+ * is answered or lost. `signal` aborts the worker's wait for a token when the
+ * worker stops.
+ */
+export type FedWorker = { write: (path: string, release: () => void) => void; end: () => void; exited: () => boolean; signal?: AbortSignal };
+
+const untokened: CaseToken = () => Promise.resolve(() => {});
+const never = new AbortController().signal;
 
 /**
  * The conformance runner's feed: one queue of paths shared by its workers,
@@ -98,22 +112,50 @@ export type FedWorker = { write: (path: string) => void; end: () => void; exited
  * memory allows, or closes its input when no path is left -- at once, since a
  * finished worker waits for nothing. A worker that exits while its feed waits
  * is never written to, and a path is taken only when it is written.
+ *
+ * **Inside a gate each case holds one of its tokens**, from the write until
+ * the worker returns it, so the step's share of the machine follows its work
+ * the way an elastic step's does. No token is held through the memory wait: a
+ * worker waits for admission first, then reserves its path and asks for the
+ * token, then reads admission again before it writes. A reserved path whose
+ * worker stops while it waits, or that memory turns away, goes back to the
+ * queue, so no worker waits for a token while no path is left for it.
  */
-export function createFeed(paths: readonly string[], admission: Admission, everyMs = 2000) {
+export function createFeed(paths: readonly string[], admission: Admission, everyMs = 2000, token: CaseToken = untokened) {
   let next = 0;
-  const remaining = () => next < paths.length;
+  let written = 0;
+  const returned: number[] = [];
+  const remaining = () => returned.length > 0 || next < paths.length;
   return {
     get dispatched() {
-      return next;
+      return written;
     },
     async feed(worker: FedWorker): Promise<void> {
-      if (worker.exited()) return;
-      if (!remaining()) return worker.end();
-      const admitted = await admission.ready(everyMs, () => worker.exited() || !remaining());
-      if (worker.exited()) return;
-      // Another worker may have taken the last path while this one waited.
-      if (!admitted || !remaining()) return worker.end();
-      worker.write(paths[next++]);
+      for (;;) {
+        if (worker.exited()) return;
+        if (!remaining()) return worker.end();
+        const admitted = await admission.ready(everyMs, () => worker.exited() || !remaining());
+        if (worker.exited()) return;
+        // Another worker may have taken the last path while this one waited.
+        if (!admitted || !remaining()) return worker.end();
+        const reserved = returned.pop() ?? next++;
+        const release = await token(paths[reserved], worker.signal ?? never);
+        if (release === null || worker.exited()) {
+          release?.();
+          returned.push(reserved);
+          if (worker.exited()) return;
+          continue;
+        }
+        // Memory may have fallen while the token was awaited.
+        if (!admission.open()) {
+          release();
+          returned.push(reserved);
+          continue;
+        }
+        written++;
+        worker.write(paths[reserved], release);
+        return;
+      }
     },
   };
 }

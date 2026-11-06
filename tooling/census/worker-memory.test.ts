@@ -1,4 +1,4 @@
-import { spawnTest, testProcessResult, TEST_HANG_MS } from "../gate/test-wait.ts";
+import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { constants, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -7,6 +7,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { capped } from "./attempt262.ts";
 import { Admission } from "../gate/admission.ts";
+import { createTokenPool } from "../gate/tokenpool.mjs";
+import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 
@@ -20,6 +22,33 @@ const scratch = () => {
 };
 const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(join(CGROUP, group, "memory.events"), "utf8"))![1]);
 
+/**
+ * A real gate token pool of `n` (tokenpool.mjs, as run.mjs serves it) and a
+ * client of it as the resident pool's token policy, with the pool's own
+ * request, grant, release and cancel counts.
+ */
+async function gatePool(n: number) {
+  const seen = { request: 0, grant: 0, release: 0, cancel: 0 };
+  const pool: any = createTokenPool({
+    free: () => n - pool.total,
+    claim: (_step: string, { waitedS }: { waitedS: number }) => waitedS,
+    observe: ({ event }: { event: string }) => {
+      const key = event.replace(/^token\./, "") as keyof typeof seen;
+      if (key in seen) seen[key]++;
+    },
+  });
+  await pool.start();
+  const client = tokenClient(pool.addr, "typescript-c");
+  return {
+    seen,
+    waiting: () => pool.waiting.length as number,
+    token: (path: string, signal: AbortSignal) => client.acquire({ project: path }, signal),
+    /** Every control ends here: no token held, no request waiting. */
+    settled: () => waitFor("every token returned and no request waiting", () => pool.total === 0 && pool.waiting.length === 0),
+    close: () => pool.close(),
+  };
+}
+
 test("a resident pool requires an explicit admission policy before setup", async () => {
   let closed = 0, setup = 0;
   const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
@@ -27,6 +56,16 @@ test("a resident pool requires an explicit admission policy before setup", async
   // Model an untyped caller; typed callers must supply the required policy.
   await assert.rejects(runMemoryWorkers(options as Parameters<typeof runMemoryWorkers>[0]), /resident workers require an explicit admission policy/);
   assert.equal(setup, 0, "missing admission fails before any worker or memory setup");
+  assert.equal(closed, 1, "the pool still closes the run it owns");
+});
+
+test("a resident pool requires an explicit token policy before setup", async () => {
+  let closed = 0, setup = 0;
+  const memory = { effectiveBudgetBytes: () => { setup++; return 1; }, close: () => { closed++; } } as unknown as MemoryRun;
+  const options = { paths: [], jobs: 1, memory, workerBytes: 1, args: () => [], onRow: () => {}, admission: new Admission({ read: () => 32 }) };
+  // Model an untyped caller; typed callers must supply the required policy.
+  await assert.rejects(runMemoryWorkers(options as Parameters<typeof runMemoryWorkers>[0]), /resident workers require an explicit token policy/);
+  assert.equal(setup, 0, "a missing token policy fails before any worker or memory setup");
   assert.equal(closed, 1, "the pool still closes the run it owns");
 });
 
@@ -108,15 +147,19 @@ test("a compiler OOM loses only its in-flight case and restarts that worker", { 
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "worker-oom-control" });
+  const gate = await gatePool(1);
+  t.after(gate.close);
   const rows: any[] = [];
   await runMemoryWorkers({
     paths: ["before", "oom", "after"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }),
+    admission: new Admission({ read: () => 32 }), token: gate.token,
     args: () => [fixture, directory], onRow: (row) => rows.push(row),
   });
   assert.deepEqual(rows.map((row) => [row.path, row.bucket]), [["before", "strict-pass"], ["oom", "memory-cap"], ["after", "strict-pass"]]);
   assert.notEqual(rows[0].pid, rows[2].pid, "next case uses a fresh process");
   assert.equal(existsSync(join(CGROUP, memory.group)), false, "run cgroup is removed");
+  await gate.settled();
+  assert.equal(gate.seen.grant, 3, "each case, the lost one included, held one token");
 });
 
 test("aggregate OOM retains a survivor verdict and per-worker counters outlive scopes", { timeout: TEST_HANG_MS }, async (t) => {
@@ -127,11 +170,13 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
     assert.equal(fifo.status, 0, fifo.stderr);
   }
   const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "aggregate-oom-control" });
+  const gate = await gatePool(2);
+  t.after(gate.close);
   const rows: any[] = [];
   const reports: string[] = [];
   const summary = await runMemoryWorkers({
     paths: ["pressure-a", "pressure-b"], jobs: 2, memory, workerBytes: 640 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }),
+    admission: new Admission({ read: () => 32 }), token: gate.token,
     args: (index) => [fixture, directory, String(index)],
     onRow: (row) => rows.push(row),
     report: message => {
@@ -153,6 +198,11 @@ test("aggregate OOM retains a survivor verdict and per-worker counters outlive s
   for (const row of rows) assert.equal(row.held, 400 * 2 ** 20, "replay does the same allocation");
   assert.ok(reports.some(message => message.startsWith("resident pressure requeues:")), reports.join("\n"));
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
+  // A requeued case returned its parallel token; its isolated replay took
+  // one fresh token, and nothing below the worker asked for another.
+  await gate.settled();
+  assert.equal(gate.seen.grant, 2 + summary.isolatedReplays, JSON.stringify({ seen: gate.seen, summary }));
+  assert.equal(gate.seen.cancel, 0);
 });
 
 // Counter origins, not the location of an OOM victim, decide whether a cap
@@ -178,10 +228,12 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   const rows: any[] = [];
   const reports: string[] = [];
   const memory = new MemoryRun({ budgetBytes: 768 * 2 ** 20, id: "idle-pressure-control" });
+  const gate = await gatePool(2);
+  t.after(gate.close);
   const summary = await runMemoryWorkers({
     paths: ["idle-holder", "idle-trigger", "after"], jobs: 2, memory, workerBytes: 768 * 2 ** 20,
     args: index => [fixture, directory, String(index)],
-    admission: new Admission({ read: () => admitting ? 32 : 0 }),
+    admission: new Admission({ read: () => admitting ? 32 : 0 }), token: gate.token,
     onRow: row => {
       rows.push(row);
       if (row.path === "idle-holder") {
@@ -206,6 +258,8 @@ test("aggregate pressure restarts an idle worker without losing or replaying its
   assert.ok(summary.aggregatePressureKills >= 1);
   assert.equal(summary.systemPressureKills, 0);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
+  await gate.settled();
+  assert.equal(gate.seen.grant, 3 + summary.isolatedReplays, JSON.stringify({ seen: gate.seen, summary }));
 });
 
 test("a worker death without any OOM evidence is an instrument failure", async t => {
@@ -213,12 +267,101 @@ test("a worker death without any OOM evidence is an instrument failure", async t
   t.after(() => rmSync(directory, { recursive: true, force: true }));
   const rows: any[] = [];
   const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "lost-worker-control" });
+  const gate = await gatePool(1);
+  t.after(gate.close);
   await assert.rejects(runMemoryWorkers({ paths: ["lost"], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
-    admission: new Admission({ read: () => 32 }),
+    admission: new Admission({ read: () => 32 }), token: gate.token,
     args: () => [fixture, directory], onRow: row => rows.push(row) }), /no OOM kill recorded/);
   assert.deepEqual(rows, []);
   assert.equal(existsSync(join(CGROUP, memory.group)), false);
+  await gate.settled();
+  assert.equal(gate.seen.grant, 1, "the lost case's token came back with its worker");
 });
+
+test("a worker lost while it waits for a token cancels the wait, and the failed pool holds nothing", { timeout: TEST_HANG_MS }, async t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "token-wait-loss-control" });
+  const gate = await gatePool(1);
+  t.after(gate.close);
+  // One token, two workers, two cases that hold it: one worker runs its case
+  // and the other waits for the token with its case reserved.
+  const run = runMemoryWorkers({ paths: ["hold-a", "hold-b"], jobs: 2, memory, workerBytes: 96 * 2 ** 20,
+    admission: new Admission({ read: () => 32 }), token: gate.token,
+    args: index => [fixture, directory, String(index)], onRow: () => {} });
+  const busy = () => readdirSync(directory).filter(name => name.startsWith("busy-"));
+  await waitFor("one worker holding the token and one waiting for it", () => busy().length === 1 && gate.waiting() === 1);
+  const waiter = busy()[0] === "busy-0" ? 1 : 0;
+  writeFileSync(join(directory, `exit-${waiter}`), "x");
+  await assert.rejects(run, new RegExp(`worker ${waiter} exited 19 without an in-flight case; no OOM kill recorded`));
+  assert.equal(existsSync(join(CGROUP, memory.group)), false);
+  await gate.settled();
+  assert.deepEqual({ request: gate.seen.request, grant: gate.seen.grant, cancel: gate.seen.cancel }, { request: 2, grant: 1, cancel: 1 });
+});
+
+test("no worker asks for a token once every case is taken", { timeout: TEST_HANG_MS }, async t => {
+  const directory = scratch();
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const memory = new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: "no-remaining-token-control" });
+  const gate = await gatePool(2);
+  t.after(gate.close);
+  const rows: any[] = [];
+  await runMemoryWorkers({ paths: ["one", "two", "three"], jobs: 2, memory, workerBytes: 96 * 2 ** 20,
+    admission: new Admission({ read: () => 32 }), token: gate.token,
+    args: index => [fixture, directory, String(index)], onRow: row => rows.push(row) });
+  assert.deepEqual(rows.map(row => row.path).sort(), ["one", "three", "two"]);
+  await gate.settled();
+  assert.deepEqual({ request: gate.seen.request, grant: gate.seen.grant, cancel: gate.seen.cancel }, { request: 3, grant: 3, cancel: 0 });
+});
+
+/** A real run whose workers' `method` throws on its `call`th use. */
+function failingWorkerCall(memory: MemoryRun, method: "counters" | "stop", call: number, message: string): MemoryRun {
+  const forward = (target: object, key: string | symbol) => {
+    const value = Reflect.get(target, key, target);
+    return typeof value === "function" ? value.bind(target) : value;
+  };
+  return new Proxy(memory, {
+    get(run, key) {
+      if (key !== "worker") return forward(run, key);
+      return (index: string | number, bytes: number) => {
+        const worker = run.worker(index, bytes);
+        let uses = 0;
+        return new Proxy(worker, {
+          get(inner, name) {
+            if (name !== method) return forward(inner, name);
+            return (...args: unknown[]) => {
+              if (++uses === call) throw new Error(message);
+              return Reflect.apply(Reflect.get(inner, method) as (...args: unknown[]) => unknown, inner, args);
+            };
+          },
+        });
+      };
+    },
+  });
+}
+
+// A fault after a case's token is granted must still return it, and the pool
+// still reports the fault itself: once at dispatch (the second counter read),
+// once in the close of a worker lost with its case in flight (its first stop).
+for (const [control, method, call, path, message] of [
+  ["dispatch-failure-control", "counters", 2, "one", "control: the counter read at dispatch failed"],
+  ["close-failure-control", "stop", 1, "lost", "control: stopping the lost worker's scope failed"],
+] as const) {
+  test(`a fault after a token is granted returns it: ${control}`, { timeout: TEST_HANG_MS }, async t => {
+    const directory = scratch();
+    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const memory = failingWorkerCall(new MemoryRun({ budgetBytes: 192 * 2 ** 20, id: control }), method, call, message);
+    const gate = await gatePool(1);
+    t.after(gate.close);
+    await assert.rejects(runMemoryWorkers({ paths: [path], jobs: 1, memory, workerBytes: 96 * 2 ** 20,
+      admission: new Admission({ read: () => 32 }), token: gate.token,
+      args: index => [fixture, directory, String(index)], onRow: () => {} }), new RegExp(message));
+    assert.equal(existsSync(join(CGROUP, memory.group)), false);
+    await gate.settled();
+    assert.deepEqual({ request: gate.seen.request, grant: gate.seen.grant, release: gate.seen.release, cancel: gate.seen.cancel },
+      { request: 1, grant: 1, release: 1, cancel: 0 });
+  });
+}
 
 test("compileSync reads the explicit aggregate across intermediate worker ancestors", () => {
   const module = new URL("./worker-memory.ts", import.meta.url).href;

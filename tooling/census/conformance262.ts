@@ -129,6 +129,7 @@ import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 import { Admission, RESUME_AT_GB } from "../gate/admission.ts";
+import { acquireToken, withToken } from "../gate/tokens.mjs";
 import {beginComparison,digest,resourceStop,RECORD_COMPARISON_STEPS} from "../lanes/resource-comparison.ts";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 
@@ -496,6 +497,8 @@ async function runAll(all) {
     try {
       await runMemoryWorkers({
         paths, jobs: workers, admission, memory: memoryRun(), workerBytes: MEMORY_CAP_KB * 1024,
+        // One gate token per in-flight case: an elastic step's share follows its work.
+        token: (path, signal) => acquireToken({ project: path, binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "" }, signal),
         args: (index) => [join(HERE, "attempt262-worker.ts"), join(SCRATCH, `w${index}`), PINNED, CC, SUITE, String(MEMORY_CAP_KB), OBJECT_CACHE, BACKEND, FRESH ? "fresh" : "roots", LANGUAGE],
         report,
         onRow: (row) => {
@@ -691,7 +694,8 @@ function judgeNegative(row, negative) {
 // Roots no run has used in a week, before this one adds its own: what bounds
 // their directory (`collectCaseRoots`). A root in use is never collected.
 if (!FRESH) collectCaseRoots();
-const checks = selfChecks(SCRATCH, TOOLS, cannotMeasure);
+// The self-checks are this step's work too, one process at a time: one token.
+const checks = await withToken(() => selfChecks(SCRATCH, TOOLS, cannotMeasure), { project: "self-checks", binary: process.env.NTS_GATE_CASE_BINARY_SHA ?? "" });
 
 const cases = population.map((record) => {
   const source = readFileSync(join(SUITE, record.path), "utf8");

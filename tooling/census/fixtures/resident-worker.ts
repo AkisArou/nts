@@ -1,14 +1,28 @@
 import { waitFor, testProcessResult, TEST_HANG_MS } from "../../gate/test-wait.ts";
 // Fake compiler input for the real resident worker pool's kernel controls.
 import { createInterface } from "node:readline";
-import { closeSync, constants, existsSync, openSync, readFileSync, readSync, writeFileSync } from "node:fs";
+import { closeSync, constants, existsSync, openSync, readFileSync, readSync, watch, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { compileSync, inResidentWorker } from "../worker-memory.ts";
 if (!inResidentWorker()) throw new Error("fixture outside resident scope");
 const directory = process.argv[2];
 const deadlineWait = (path: string) => waitFor(`resident fixture barrier ${path}`,()=>existsSync(path));
+// `exit-<index>` ends this worker between cases, with no OOM and no case in
+// flight: a worker lost while its pool waits on its behalf.
+if (process.argv[3] !== undefined) {
+  const marker = `exit-${process.argv[3]}`;
+  watch(directory, (_, name) => { if (name === marker) process.exit(19); }).unref();
+  // The pool may wait on this worker's behalf before it has loaded: a marker
+  // written before the watch began is found here.
+  if (existsSync(join(directory, marker))) process.exit(19);
+}
 for await (const path of createInterface({ input: process.stdin })) {
   let held: Buffer | undefined;
+  if (path.startsWith("hold")) {
+    // Holds its case, and with it the case's token, until its scope is stopped.
+    writeFileSync(join(directory, `busy-${process.argv[3]}`), path);
+    await new Promise(() => {});
+  }
   if (path === "idle-holder") {
     const release = openSync(join(directory, "release-idle"), constants.O_RDWR);
     const released = Buffer.alloc(1);

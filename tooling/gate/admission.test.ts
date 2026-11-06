@@ -183,3 +183,100 @@ test("conformance feed: two workers waiting for the last path -- one gets it, th
   await Promise.all([a, b]);
   assert.deepEqual([...one, ...two].sort(), ["<end>", "last"]);
 });
+
+/** Gate tokens a test grants by hand: `held` counts the ones not yet returned. */
+function tokens() {
+  const asked: string[] = [];
+  const waiting: { path: string; grant: () => void }[] = [];
+  const state = { held: 0 };
+  const token = (path: string, signal: AbortSignal) => new Promise<(() => void) | null>((resolve) => {
+    asked.push(path);
+    const entry = {
+      path,
+      grant: () => {
+        signal.removeEventListener("abort", abort);
+        waiting.splice(waiting.indexOf(entry), 1);
+        state.held++;
+        let out = true;
+        resolve(() => { if (out) { out = false; state.held--; } });
+      },
+    };
+    const abort = () => {
+      waiting.splice(waiting.indexOf(entry), 1);
+      resolve(null);
+    };
+    signal.addEventListener("abort", abort, { once: true });
+    waiting.push(entry);
+  });
+  return { token, asked, waiting, state };
+}
+
+test("conformance feed: a case holds its token from its write until its worker returns it", async () => {
+  const { admission } = scripted(20);
+  const gate = tokens();
+  const writes: [string, () => void][] = [];
+  const queue = createFeed(["a"], admission, 10, gate.token);
+  const fed = queue.feed({ write: (p, release) => writes.push([p, release]), end: () => {}, exited: () => false });
+  await waitFor("a token request", () => gate.waiting.length === 1);
+  assert.deepEqual(writes, [], "nothing is written before the token is granted");
+  gate.waiting[0].grant();
+  await fed;
+  assert.deepEqual(writes.map(([p]) => p), ["a"]);
+  assert.equal(gate.state.held, 1, "the written case holds its token");
+  writes[0][1]();
+  writes[0][1]();
+  assert.equal(gate.state.held, 0, "the release returns it once, however often it is called");
+});
+
+test("conformance feed: a worker that stops while it waits for a token cancels the wait and gives its path back", async () => {
+  const { admission } = scripted(20);
+  const gate = tokens();
+  const stopped = new AbortController();
+  let exited = false;
+  const writes: string[] = [];
+  const queue = createFeed(["only"], admission, 10, gate.token);
+  const a = queue.feed({ write: (p) => writes.push(`a:${p}`), end: () => writes.push("a:<end>"), exited: () => exited, signal: stopped.signal });
+  await waitFor("the reserved path's token request", () => gate.waiting.length === 1);
+  exited = true;
+  stopped.abort();
+  await a;
+  assert.deepEqual(gate.waiting, [], "the abandoned wait left the pool's queue");
+  assert.equal(queue.dispatched, 0);
+  const b = queue.feed({ write: (p) => writes.push(`b:${p}`), end: () => writes.push("b:<end>"), exited: () => false });
+  await waitFor("the returned path's token request", () => gate.waiting.length === 1);
+  gate.waiting[0].grant();
+  await b;
+  assert.deepEqual(writes, ["b:only"], "the path went back to the queue, and the next worker took it");
+});
+
+test("conformance feed: memory that falls while a token is awaited turns the case back, with its token", async () => {
+  const { gb, admission } = scripted(20);
+  const gate = tokens();
+  const writes: string[] = [];
+  const queue = createFeed(["a"], admission, 10, gate.token);
+  const fed = queue.feed({ write: (p) => writes.push(p), end: () => writes.push("<end>"), exited: () => false });
+  await waitFor("a token request", () => gate.waiting.length === 1);
+  gb.value = 5;
+  gate.waiting[0].grant();
+  await waitFor("the token returned after the memory check", () => gate.state.held === 0 && gate.asked.length === 1);
+  assert.deepEqual(writes, [], "a case is never written below the hold line");
+  gb.value = 20;
+  await waitFor("the case asked for a token again", () => gate.waiting.length === 1);
+  gate.waiting[0].grant();
+  await fed;
+  assert.deepEqual(writes, ["a"]);
+  assert.deepEqual(gate.asked, ["a", "a"]);
+});
+
+test("conformance feed: no worker asks for a token while no path is left for it", async () => {
+  const { admission } = scripted(20);
+  const gate = tokens();
+  const ends: string[] = [];
+  const queue = createFeed(["one"], admission, 10, gate.token);
+  const a = queue.feed({ write: () => {}, end: () => ends.push("a"), exited: () => false });
+  const b = queue.feed({ write: () => {}, end: () => ends.push("b"), exited: () => false });
+  await waitFor("one request and one closed input", () => gate.waiting.length === 1 && ends.length === 1);
+  gate.waiting[0].grant();
+  await Promise.all([a, b]);
+  assert.deepEqual(gate.asked, ["one"], "the worker with nothing to take never asked");
+});

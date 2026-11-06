@@ -49,13 +49,18 @@ export function calibration(inputs: { train: string; summary: any; sha256: strin
       const record = summary.steps.find((s: any) => s.name === step);
       const aggregate = summary.case_costs?.steps?.[step]?.aggregate_memory;
       if (!record || aggregate?.max_scope_peak_bytes == null) return [];
-      return [{ train, verdict: summary.verdict, workers: record.slots, elastic: record.elastic === true,
+      // An elastic step starts all its workers, and its tokens decide how many
+      // cases ran at once: its peak is normalized by the tokens it held, and
+      // the reservation is still sized for every worker it may run (`slots`).
+      const elastic = record.elastic === true;
+      return [{ train, verdict: summary.verdict, workers: elastic ? record.peak_tokens : record.slots, slots: record.slots, elastic,
         peak_bytes: aggregate.max_scope_peak_bytes, scope_peaks_bytes: aggregate.scopes.map((s: any) => s.peak_bytes),
         reserved_bytes: aggregate.reserved_step_mem_bytes }];
     });
     const retained = previous?.rows.find((r: any) => r.step === step)?.observations ?? [];
     const observations: typeof fresh = [...new Map([...retained, ...fresh].map(o => [o.train, o])).values()];
-    const workers = Math.max(...observations.map(o => o.workers));
+    // Observations recorded before `slots` was kept were all fixed grants.
+    const workers = Math.max(...observations.map(o => o.slots ?? o.workers));
     return { step, workers, mem_gib: recommendation(observations, workers), observations };
   });
   return { version: 1, rule: "ceil(max(2 * peak, peak + 1 GiB)); normalize elastic workers; retain every historical peak",

@@ -132,17 +132,21 @@ const STEPS = [
   { name: "doctests", slots: 4, min: 1, mem: 4, lock: "cargo", after: ["build"], doc: "touched crates' doc examples compile and pass" },
   { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },
   // Whole-group measured headroom: results/gate-memory-calibration.json.
-  { name: "test262-cases", slots: 8, min: 4, mem: 4, nts: true, fe: true, doc: "test/language rows reproduce" },
-  { name: "test262-builtins-cases", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
-  { name: "test262-rest-cases", slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
+  // The conformance steps are elastic: the resident pool starts all its
+  // workers, and each case holds one token from dispatch to answer
+  // (worker-pool.ts), so a step's share follows its work instead of the
+  // grant it happened to start with.
+  { name: "test262-cases", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "test/language rows reproduce" },
+  { name: "test262-builtins-cases", elastic: true, slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "test/built-ins rows reproduce" },
+  { name: "test262-rest-cases", elastic: true, slots: 4, min: 2, mem: 2, nts: true, fe: true, doc: "annexB, staging, harness rows reproduce" },
   // The five records on one backend each (all.sh's test262_backend): one
   // frontend per case as on C, plus the backend's own run -- a JVM per case
   // under its fixed -Xmx.
-  { name: "test262-jvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on the JVM",
+  { name: "test262-jvm", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on the JVM",
     capabilities: ["jvm"],
   },
-  { name: "test262-llvm", slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
-  { name: "typescript-cases", slots: 8, min: 8, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
+  { name: "test262-llvm", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
+  { name: "typescript-cases", elastic: true, slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
     capabilities: ["jvm"],
   },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },

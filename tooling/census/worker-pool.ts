@@ -1,10 +1,15 @@
 // One in-flight case per kernel-bounded worker, preserving survivor verdicts.
 // A dead worker's persistent slice retains its oom_kill count until this run
 // closes. A restart starts a fresh scope and takes a new baseline per case.
+//
+// Each in-flight case holds one gate token (`token`, via the feed) from its
+// dispatch until it is answered, requeued or lost, or its worker fails; a
+// worker that stops while it waits for one cancels the wait. The workers
+// themselves never ask: what they run is already counted.
 import { PressureError, ToolingInstrumentError } from "../gate/step-result.ts";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
-import { Admission, createFeed } from "../gate/admission.ts";
+import { Admission, createFeed, type CaseToken } from "../gate/admission.ts";
 import { MemoryRun, memoryCause, memoryDisposition, caseBudgetMessage, type MemoryCounters } from "./worker-memory.ts";
 
 export type ResidentPoolOptions = {
@@ -17,15 +22,16 @@ export type ResidentPoolOptions = {
   onRow: (row: any) => void;
   report?: (message: string) => void;
   admission: Admission;
+  token: CaseToken;
 };
 
 type Dispatch = { path: string; ordinal: number };
 type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
 
-async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission }: ResidentPoolOptions,
+async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission, token }: ResidentPoolOptions,
   work: Dispatch[], isolated: boolean, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
-  const queue = createFeed(work.map((_, index) => String(index)), admission);
+  const queue = createFeed(work.map((_, index) => String(index)), admission, undefined, (entry, signal) => token(work[Number(entry)].path, signal));
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
@@ -41,12 +47,21 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         const scope = bound.scope(command, args(index + indexOffset));
         scope.env.NTS_CENSUS_POOL_WORKER = "1";
         scope.env.NTS_CENSUS_CASE_CONCURRENCY = exclusive ? "exclusive" : "parallel";
+        scope.env.NTS_GATE_TOKEN_HELD = "1";
         const child = spawn("systemd-run", scope.argv, { stdio: ["pipe", "pipe", "inherit"], env: scope.env });
+        const stopped = new AbortController();
         let exited = false;
         let restarting = false;
         let active: Dispatch | undefined;
+        let release: (() => void) | undefined;
+        const returnToken = () => {
+          const held = release;
+          release = undefined;
+          held?.();
+        };
         const finish = (row?: any) => {
           if (!active) throw new Error(`worker ${index} answered without an in-flight case`);
+          returnToken();
           const dispatch = active;
           const dispatchedBefore = before;
           const after = bound.counters();
@@ -73,19 +88,27 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         };
         const fail = (error: unknown) => {
           exited = true;
+          stopped.abort();
+          returnToken();
           try { bound.stop(scope); } catch {}
           reject(error);
         };
         const feed = () => queue.feed({
-          write: (token) => {
-            if (active !== undefined) throw new Error(`worker ${index} already owns ${active}`);
+          write: (entry, granted) => {
+            if (active !== undefined) {
+              granted();
+              throw new Error(`worker ${index} already owns ${active.path}`);
+            }
+            // Owned before anything here can throw, so a failure returns it.
+            release = granted;
             before = bound.counters();
             aggregateBefore = memory.aggregateOoms();
-            active = work[Number(token)];
+            active = work[Number(entry)];
             child.stdin.write(`${active.path}\n`);
           },
           end: () => child.stdin.end(),
           exited: () => exited || restarting,
+          signal: stopped.signal,
         }).catch(fail);
         child.on("error", fail);
         child.stdin.on("error", (error) => { if (!exited && !restarting) fail(error); });
@@ -109,6 +132,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         // must be consumed before deciding whether the process lost a case.
         child.on("close", (code, signal) => {
           exited = true;
+          stopped.abort();
           try {
             const entered = bound.ready(scope);
             bound.stop(scope);
@@ -130,6 +154,9 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             }
             resolve(restarting && queue.dispatched < work.length);
           } catch (error) { reject(error); }
+          // Its process is gone, so no case of this worker runs any more,
+          // whichever way the classification above ended.
+          finally { returnToken(); }
         });
         const start = async () => {
           const deadline = Date.now() + 15_000;
@@ -168,6 +195,10 @@ export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<Re
   if (!(options.admission instanceof Admission)) {
     options.memory.close();
     throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit admission policy");
+  }
+  if (typeof options.token !== "function") {
+    options.memory.close();
+    throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit token policy");
   }
   const { paths, jobs, memory, report = () => {} } = options;
   let budgetBytes: number;

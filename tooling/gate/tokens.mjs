@@ -16,6 +16,10 @@
 // A runner that is gone -- unreachable, or closing the connection without
 // `go` -- rejects: inside a gate that is the runner having died, and running
 // untokened would start every waiting worker at once (see token.sh).
+//
+// `acquireToken` is the same token for a tool whose unit of work is not one
+// function call -- a resident worker's case, answered later on its stdout --
+// so it hands back the release instead of running a callback.
 import { connect } from "node:net";
 
 const WHERE = process.env.NTS_GATE_TOKENS ?? "";
@@ -23,42 +27,81 @@ const STEP = process.env.NTS_GATE_STEP ?? "?";
 const ENABLED = WHERE !== "" && !process.env.NTS_GATE_TOKEN_HELD;
 process.env.NTS_GATE_TOKEN_HELD = "1";
 
-function acquire(context) {
-  return new Promise((resolve, reject) => {
-    const i = WHERE.lastIndexOf(":");
-    const sock = connect({ host: WHERE.slice(0, i), port: Number(WHERE.slice(i + 1)) });
-    let settled = false;
-    let buf = "";
-    const fail = (why) => {
-      if (settled) return;
-      settled = true;
-      sock.destroy();
-      reject(new Error(`tokens.mjs: the gate runner at ${WHERE} ${why}`));
-    };
-    sock.setEncoding("utf8");
-    sock.on("connect", () => {
-      const label = process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
-      sock.write(`want ${STEP} ${process.pid}${label}\n`);
+/**
+ * A client of the token pool at `where` (`host:port`) asking for `step`.
+ * `acquire(context, signal)` resolves to the release of one granted token:
+ * calling it closes the connection, and calling it again does nothing.
+ * `signal` aborting while the request waits closes the pending connection --
+ * the runner counts it cancelled, never granted -- and resolves to `null`.
+ */
+export function tokenClient(where, step) {
+  const i = where.lastIndexOf(":");
+  const address = { host: where.slice(0, i), port: Number(where.slice(i + 1)) };
+  const acquire = (context, signal) => {
+    if (signal?.aborted) return Promise.resolve(null);
+    return new Promise((resolve, reject) => {
+      const sock = connect(address);
+      let settled = false;
+      let buf = "";
+      const settle = () => {
+        settled = true;
+        signal?.removeEventListener("abort", abort);
+      };
+      const abort = () => {
+        if (settled) return;
+        settle();
+        sock.destroy();
+        resolve(null);
+      };
+      const fail = (why) => {
+        if (settled) return;
+        settle();
+        sock.destroy();
+        reject(new Error(`tokens.mjs: the gate runner at ${where} ${why}`));
+      };
+      signal?.addEventListener("abort", abort, { once: true });
+      sock.setEncoding("utf8");
+      sock.on("connect", () => {
+        const label = process.env.NTS_GATE_CASE_COSTS_DIR ? ` json64:${Buffer.from(JSON.stringify(context ?? {})).toString("base64url")}` : "";
+        sock.write(`want ${step} ${process.pid}${label}\n`);
+      });
+      sock.on("data", (d) => {
+        buf += d;
+        if (settled || !buf.includes("\n")) return;
+        if (buf.split("\n")[0] !== "go") return fail(`answered ${JSON.stringify(buf.split("\n")[0])}`);
+        settle();
+        let held = true;
+        resolve(() => {
+          if (!held) return;
+          held = false;
+          sock.destroy();
+        });
+      });
+      sock.on("error", (e) => fail(`cannot be reached (${e.code ?? e.message})`));
+      sock.on("close", () => fail("went away before granting a token"));
     });
-    sock.on("data", (d) => {
-      buf += d;
-      if (settled || !buf.includes("\n")) return;
-      if (buf.split("\n")[0] !== "go") return fail(`answered ${JSON.stringify(buf.split("\n")[0])}`);
-      settled = true;
-      resolve(sock);
-    });
-    sock.on("error", (e) => fail(`cannot be reached (${e.code ?? e.message})`));
-    sock.on("close", () => fail("went away before granting a token"));
-  });
+  };
+  return { acquire };
+}
+
+const gate = ENABLED ? tokenClient(WHERE, STEP) : null;
+
+/**
+ * This process's step's token from the gate's pool (`tokenClient`'s
+ * `acquire`). Outside a gate it resolves at once to a release that does
+ * nothing.
+ */
+export function acquireToken(context, signal) {
+  return gate ? gate.acquire(context, signal) : Promise.resolve(() => {});
 }
 
 export async function withToken(fn, context) {
   if (!ENABLED) return fn();
-  const sock = await acquire(context);
+  const release = await acquireToken(context);
   try {
     return await fn();
   } finally {
-    sock.destroy();
+    release();
   }
 }
 

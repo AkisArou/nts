@@ -48,6 +48,22 @@ test("only whole census aggregates qualify, with three green observations for ev
   assert.throws(() => calibration(inputs), /three distinct/);
 });
 
+test("an elastic census step's peak is normalized by the tokens it held, and sized for every worker it may run", () => {
+  const inputs = ["a", "b", "c"].map(train => ({ train, sha256: train, summary: {
+    verdict: "green", identities: { commit: train },
+    steps: CENSUS_STEPS.map(name => ({ name, slots: 8, elastic: true, peak_tokens: 2 })),
+    case_costs: { steps: Object.fromEntries(CENSUS_STEPS.map(name => [name, {
+      aggregate_memory: { max_scope_peak_bytes: GIB, scopes: [{ peak_bytes: GIB }], reserved_step_mem_bytes: 8 * GIB } }])) },
+  } }));
+  const report = calibration(inputs);
+  // 1 GiB with 2 cases at once is 4 GiB with the 8 its workers may run.
+  for (const row of report.rows) {
+    assert.equal(row.workers, 8, row.step);
+    assert.ok(row.observations.every(o => o.workers === 2), row.step);
+    assert.equal(row.mem_gib, 8, row.step);
+  }
+});
+
 test("regeneration retains historical peaks and rejects a changed historical summary", () => {
   const inputs = (prefix: string, peak: number) => ["1", "2", "3"].map(id => ({ train: prefix + id, sha256: prefix + id,
     summary: { verdict: "green", identities: { commit: prefix + id }, steps: CENSUS_STEPS.map(name => ({ name, slots: 8 })),
