@@ -1,0 +1,16 @@
+/*---
+description: "A nullable method skips its argument when null. Route: interface with null method field"
+features: [ts-nullish-routes, ts-nullish-route-calls, ts-null-undefined, ts-optional-chaining]
+---*/
+
+// A nullable method skips its argument when null. Route: interface with null method field. Node prints calls-method-null-skips-argument:ok.
+const log: string[] = [];
+interface Host { method: ((x: number) => number) | null }
+function arg(): number { log.push("arg"); return 2; }
+function read(host: Host): number | undefined {
+  const result = host.method?.(arg());
+  return result;
+}
+assert.sameValue(read({ method: null }), undefined);
+assert.compareArray(log, []);
+console.log("calls-method-null-skips-argument:ok");
