@@ -106,7 +106,7 @@ export const SELECTOR_POLICY_DATA = [
  * Tree-only changes have already passed their entire owed gate; they never
  * need the future optimistic path either. Keep this routing policy in one list. */
 export const STRICT_PATHS = [
-  "tooling/gate/", "tooling/lanes/", "tooling/conformance/", "tooling/census/", "tooling/differential/",
+  "tooling/gate/", "tooling/lanes/", "tooling/full-check/", "tooling/conformance/", "tooling/census/", "tooling/differential/",
   "tooling/memory/", "tooling/licenses/", "tooling/config/", "tooling/primitives/", "tooling/jvm/", "tooling/android/",
   "results/", "compiler/frontend-tsrs/vendor.ts",
 ];
@@ -898,6 +898,16 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does a dry run still name what a range owes", run: "node tooling/lanes/land.ts HEAD --dry-run; node tooling/lanes/lane.ts status" }],
   },
   {
+    // The full check after landing (tooling/full-check/service.ts): a service
+    // that runs the gate, as the landing tools do, so no gate step runs it.
+    // Its tests, which drive it over scratch repositories, run in `tooling`.
+    name: "the full check",
+    when: (p) => p.startsWith("tooling/full-check/"),
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does the service still read its state and count the machine", run: "node tooling/full-check/service.ts --status; node tooling/full-check/count.ts" }],
+  },
+  {
     // Read by `land.ts` (a platform lane's `not_run`) and by the gate's own
     // rules, so a change to it owes the gate's own tests.
     name: "the lane registry",
@@ -1271,8 +1281,11 @@ export function stepInputs() {
         // record validator and session bridge. They read fixture evidence,
         // not this tree's benchmark data. Production readers keep their reach
         // in their own steps. Imports/beside-file dependencies stay additive.
+        // The full check names a results-only commit's paths to check that
+        // commit, and its fixture writes stand-in records; neither reads these.
         const fixtureBenchmarks = input === "tooling/lanes/branches.test.ts" ||
-          step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input));
+          step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input)
+            || /^tooling\/full-check\/(?:bench|repository-fixture)\.ts$/.test(input));
         const referenced = named(body).filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
         queue.push(...referenced, ...imports(input, body), ...beside);
       }

@@ -251,6 +251,7 @@ test("the standalone ICU driver has an explicit validation obligation", () => {
 
 test("verdict machinery and every verifier entry point stay strict", () => {
   for (const path of ["tooling/gate/run.mjs", "tooling/lanes/land.ts", "tooling/lanes/verify.ts", "tooling/lanes/verify-unit.ts", "tooling/lanes/gate-resource.ts", "tooling/lanes/verification-ledger.ts",
+    "tooling/full-check/service.ts", "tooling/full-check/culprit.ts",
     "tooling/lanes/revert.ts", "tooling/lanes/notify.ts", "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",
     "tooling/differential/agree.mjs", "tooling/memory/run.sh", "results/test262/c/language.tsv"]) assert.ok(isStrictPath(path), path);
   for (const path of ["compiler/core/src/hir/lower.rs", "runtime/c/nts_runtime.c", "docs/architecture.md"]) assert.equal(isStrictPath(path), false, path);
@@ -778,6 +779,17 @@ test("land.ts and the registry owe tooling tests; lane.ts owes the baseline; the
   assert.ok(stepsFor("tooling/lanes/lanes.json").length < landing().length, "lanes.json owes the full gate");
   // pinned.sh builds every gate tree through it.
   assert.equal(stepsFor("tooling/lanes/inputs.sh").length, allSteps().length);
+});
+
+test("the full check owes its own tests, not the full gate", () => {
+  for (const path of ["tooling/full-check/service.ts", "tooling/full-check/count.ts", "tooling/full-check/service.test.ts"]) {
+    for (const added of [false, true]) {
+      const rules = owed([{ path, added }]);
+      assert.ok(!rules.some(rule => rule.full), `${path} owes the full gate`);
+      assert.ok(gateSteps(rules).includes("tooling"), `${path} owes tooling`);
+    }
+  }
+  owes("tooling/full-check/culprit.ts", ["tooling"]);
 });
 
 test("the stable TypeScript sample stays core; full population enforcement is deferred", () => {
