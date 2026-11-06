@@ -72,7 +72,7 @@
 import { instrumentPolicy, readStepInstrument } from "./step-result.ts";
 import { definiteFailure } from "./train/red-stop.ts";
 import { GateScopes } from "./train/step-scope.ts";
-import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, writeStepCpuHistory } from "./step-scheduling.ts";
+import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory } from "./step-scheduling.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -577,8 +577,9 @@ function preflight(step) {
 function order(names) {
   // Start the longest uncontended steps first: a step's work over the slots it
   // can use, the same work estimate that weighs its claims on tokens.
-  return orderStepStarts(names, (name) => workEstimate(name) / Math.min(BY_NAME.get(name)?.slots ?? 1, SLOTS));
+  return orderStepStarts(names, (name) => workEstimate(name) / width(name));
 }
+const width = (name) => usableWidth(BY_NAME.get(name) ?? {}, { slots: SLOTS, frontends: FRONTENDS });
 // A step that takes a minute or so rides free beside the budget (up to a
 // quarter over it), at its minimum slots: the run's first verdicts arrive in
 // its first minutes, and the long steps are not cut down to a sliver of the
@@ -646,7 +647,7 @@ let withhold = 0;
 function workEstimate(name) {
   const own = CPU_HISTORY.get(name) ?? INHERITED_WORK.get(name) ?? BASE.get(name)?.cpu;
   if (own > 0) return own;
-  return estimate(name) * Math.min(BY_NAME.get(name)?.slots ?? 1, SLOTS);
+  return estimate(name) * width(name);
 }
 
 // A token is a case starting, so the pool is where the run stops starting

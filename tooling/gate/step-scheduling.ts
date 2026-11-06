@@ -59,10 +59,15 @@ export function readPreviousStepCpu(file: string): ReadonlyMap<string, number> {
  * and equally otherwise. Giving each successor the whole total would multiply
  * the work a split step is estimated to bring. A retired check (no successors)
  * passes its work to nobody.
+ *
+ * **A successor named by two measured predecessors inherits nothing.** Two
+ * removed steps may be distinct checks merged into one (their work adds) or
+ * one check renamed twice (it does not), and the table does not say which; the
+ * successor's baseline is the estimate until its own run is measured.
  */
 export function inheritedStepWork(history: ReadonlyMap<string, number>, baseline: (name: string) => number | undefined,
   successors: StepSuccessors): ReadonlyMap<string, number> {
-  const shares = new Map<string, number>();
+  const shares = new Map<string, number>(), ambiguous = new Set<string>();
   for (const [predecessor, { steps }] of Object.entries(successors)) {
     const total = history.get(predecessor);
     if (!measured(total) || steps.length === 0) continue;
@@ -71,10 +76,18 @@ export function inheritedStepWork(history: ReadonlyMap<string, number>, baseline
     const sum = proportional ? weights.reduce((a, b) => a + (b as number), 0) : steps.length;
     steps.forEach((step, i) => {
       if (measured(history.get(step))) return;
+      if (shares.has(step)) ambiguous.add(step);
       shares.set(step, total * (proportional ? (weights[i] as number) : 1) / sum);
     });
   }
+  for (const step of ambiguous) shares.delete(step);
   return shares;
+}
+
+/** The slots a step can use at once: its own width, the run's slots, and the
+ * run's frontends when its workers start frontends. */
+export function usableWidth(step: { readonly slots?: number; readonly fe?: boolean }, budget: { readonly slots: number; readonly frontends: number }): number {
+  return Math.max(1, Math.min(step.slots ?? 1, budget.slots, step.fe ? budget.frontends : Infinity));
 }
 
 /** Start the longest uncontended steps first. Equal and absent estimates use

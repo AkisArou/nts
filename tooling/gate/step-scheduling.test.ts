@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gateEnvironment } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
-import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, writeStepCpuHistory } from "./step-scheduling.ts";
+import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory } from "./step-scheduling.ts";
 
 test("equal and missing estimates have a deterministic name tie-break", () => {
   const names = ["typescript-c", "tests", "blockers", "integrity"];
@@ -55,6 +55,21 @@ test("a split step's measured work is shared among its successors, never copied 
   const measured = inheritedStepWork(new Map([["typescript-cases", 6000], ["typescript-c", 2663]]), name => baseline.get(name), successors);
   assert.deepEqual([...measured].sort(), [["typescript-jvm", 1000], ["typescript-llvm", 2000]], "a successor's own completed run wins");
   assert.equal(inheritedStepWork(new Map(), name => baseline.get(name), successors).size, 0);
+  const merge = { "old-a": { steps: ["merged"] }, "old-b": { steps: ["merged"] } };
+  assert.equal(inheritedStepWork(new Map([["old-a", 10], ["old-b", 20]]), () => undefined, merge).size, 0,
+    "two measured predecessors of one step may be a merge or a rename chain, so neither is inherited");
+  assert.deepEqual([...inheritedStepWork(new Map([["old-a", 10]]), () => undefined, merge)], [["merged", 10]]);
+});
+
+test("a step's usable width counts the frontend cap, so a capped step is not ranked as if it ran at full width", () => {
+  const steps: Record<string, { slots: number; fe?: boolean }> = { frontend: { slots: 8, fe: true }, other: { slots: 2 } };
+  const budget = { slots: 24, frontends: 2 };
+  assert.equal(usableWidth(steps.frontend!, budget), 2);
+  assert.equal(usableWidth(steps.other!, budget), 2);
+  assert.equal(usableWidth({ slots: 8, fe: true }, { slots: 24, frontends: 24 }), 8);
+  assert.equal(usableWidth({}, budget), 1);
+  const work: Record<string, number> = { frontend: 800, other: 400 };
+  assert.deepEqual(orderStepStarts(["other", "frontend"], name => work[name]! / usableWidth(steps[name]!, budget)), ["frontend", "other"]);
 });
 
 test("measured CPU work starts TypeScript at full width against a competing fixed grant", t => {
@@ -90,7 +105,9 @@ fi
   } });
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(actual.status, 0, actual.stdout + actual.stderr);
-  const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as { steps: { name: string; slots: number }[] };
+  const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
+    environment?: { canonical?: boolean }; steps: { name: string; slots: number; cpu?: number }[];
+  };
   assert.equal(summary.steps.find(step => step.name === "typescript-c")?.slots, 8, "the census starts its whole pool of workers");
   const starts = readFileSync(observed, "utf8").trim().split("\n").map(line => JSON.parse(line) as { step: string; slots: number });
   assert.deepEqual(starts.map(row => row.step).sort(), ["tests", "typescript-c"]);
@@ -99,5 +116,10 @@ fi
   assert.equal(readFileSync(join(gate, "times.tsv"), "utf8"), baseline, "scheduling must never rewrite timing-verdict baselines");
   const history = JSON.parse(readFileSync(join(target, "gate-costs/steps.json"), "utf8")) as { version: number; steps: Record<string, number> };
   assert.equal(history.version, 2);
-  assert.ok(history.steps["typescript-c"]! > 0 && history.steps["typescript-c"]! < 8000, "the completed run's CPU is retained");
+  // Only a canonical run writes the history (run.mjs); this test's run is
+  // canonical alone and not inside a gate, whose variables make it an experiment.
+  const measured = summary.steps.find(step => step.name === "typescript-c")?.cpu;
+  const written = summary.environment?.canonical === true && typeof measured === "number" && measured > 0;
+  assert.equal(history.steps["typescript-c"], written ? measured : 8000,
+    "a canonical run records the step's measured CPU; any other run leaves the history as it was");
 });
