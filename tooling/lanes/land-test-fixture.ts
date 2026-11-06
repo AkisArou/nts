@@ -296,7 +296,7 @@ JS
 export function resourceGate(s:Scratch,mode:"candidate-red"|"both-red"|"both-pass"|"mixed"|"mismatch"):void {
   const completed=Array.from({length:39},(_,i)=>`done-${i}`),names=[...completed,"resource-c","resource-llvm"];
   writeFileSync(join(s.root,"tooling/gate/run.mjs"),`process.stdout.write(JSON.stringify(${JSON.stringify(Object.fromEntries(names.map(name=>[name,[]])))}));\n`);
-  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),selectorFixture({steps:JSON.stringify(names),projects:"null"}));
+  writeFileSync(join(s.root,"tooling/gate/owed.mjs"),selectorFixture({steps:JSON.stringify(names),projects:"null",catalogue:JSON.stringify(names)}));
   writeFileSync(join(s.root,"tooling/gate/pinned.sh"),controls(s,STAND_IN_GATE.slice(0,STAND_IN_GATE.indexOf("verdict=green step=PASS"))+`
 node --input-type=module - "$sha" <<'RESOURCE'
 import {appendFileSync,existsSync,writeFileSync} from 'node:fs';

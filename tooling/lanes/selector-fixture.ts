@@ -3,7 +3,10 @@ export function selectorFixture({
   steps = 'existsSync("INTEROP") ? ["fake", "interop"] : ["fake"]',
   projects = 'existsSync("INTEROP") ? readFileSync("INTEROP", "utf8").trim().split(/\\s+/) : null',
   body = "",
-}: { steps?: string; projects?: string; body?: string } = {}): string {
+  // Every step the stand-in can owe, as the real module's allSteps() lists
+  // its gate's steps: the selector refuses an owed step outside it.
+  catalogue = '["fake","interop","tree-check","other","memory","dex","format","on-device"]',
+}: { steps?: string; projects?: string; body?: string; catalogue?: string } = {}): string {
   return `import {execFileSync} from "node:child_process";
 import {existsSync,readFileSync} from "node:fs";
 import {resolve} from "node:path";
@@ -17,7 +20,7 @@ export function owed(changes) {
   return [{name:"scratch selector",paths:changes.map(c=>c.path),steps:${steps},interop:${projects},arms:[]}];
 }
 export const gateSteps=rules=>[...new Set(rules.flatMap(r=>r.steps))];
-export const allSteps=()=>["fake","interop","tree-check","other","memory","dex","format","on-device"];
+export const allSteps=()=>${catalogue};
 export const interopOwed=rules=>rules.find(r=>r.steps.includes("interop"))?.interop??null;
 export const isStrictPath=()=>true;
 export const selfTest=()=>null;
