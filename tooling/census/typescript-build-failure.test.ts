@@ -63,7 +63,8 @@ const dir=workspace(${JSON.stringify(join(scratch, "project"))},'ts');
 const tools={nts:'controlled-compiler',cc:'controlled-linker',fresh:true,language:'ts'};
 const run=()=>attempt(dir,'const value:number=1;',tools);
 const result=[];
-for(const [status,stderr] of [[1,'/controlled/program.ll:12:3: error: invalid operand 42'],[101,"thread 'main' (42) panicked at /controlled/lower.rs:12:3: broken route"]]){
+for(const [status,stderr] of [[1,'/controlled/program.ll:12:3: error: invalid operand 42'],[101,"thread 'main' (42) panicked at /controlled/lower.rs:12:3: broken route"],
+  [101,"/controlled/src/main.ts:1:1: NTS1001 a refusal printed first\\nthread 'nts' (7) panicked at compiler/lower.rs:3:4:\\nbroken route\\n"]]){
  emitted={status,signal:null,stdout:'',stderr};const raw=run();
  result.push({raw,observation:observationFromRow(raw)});
 }
@@ -86,13 +87,14 @@ console.log(JSON.stringify(result));
   const result = spawnTest(process.execPath, ["--experimental-test-module-mocks", helper], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const rows = JSON.parse(result.stdout) as { raw: { buildDiagnostic?: string }; observation: { stage: string }; silent: object }[];
-  assert.deepEqual(rows.slice(0, 3).map(row => row.observation.stage), ["emit", "compiler-crash", "link"]);
+  assert.deepEqual(rows.slice(0, 4).map(row => row.observation.stage), ["emit", "compiler-crash", "compiler-crash", "link"]);
   assert.match(rows[0]!.raw.buildDiagnostic!, /\/controlled\/program.ll:12:3/);
-  assert.match(rows[1]!.raw.buildDiagnostic!, /panicked at \/controlled\/lower.rs:12:3/);
-  assert.match(rows[2]!.raw.buildDiagnostic!, /\/controlled\/program.c:12:3/);
-  assert.deepEqual(rows[3], { raw: { bucket: "infrastructure-error", why: "the toolchain did not survive the link" }, rejected: true });
-  assert.deepEqual(rows[4], rows[3], "a silent toolchain signal is infrastructure too");
-  assert.deepEqual(rows.slice(5).map(row => row.silent), [
+  assert.equal(rows[1]!.raw.buildDiagnostic, "thread 'main' panicked: broken route");
+  assert.equal(rows[2]!.raw.buildDiagnostic, "thread 'nts' panicked: broken route", "the stop, not the refusal printed before it");
+  assert.match(rows[3]!.raw.buildDiagnostic!, /\/controlled\/program.c:12:3/);
+  assert.deepEqual(rows[4], { raw: { bucket: "infrastructure-error", why: "the toolchain did not survive the link" }, rejected: true });
+  assert.deepEqual(rows[5], rows[4], "a silent toolchain signal is infrastructure too");
+  assert.deepEqual(rows.slice(6).map(row => row.silent), [
     { kind: "build-failure", stage: "emit", diagnostic: "emitter exited N" },
     { kind: "build-failure", stage: "link", diagnostic: "linker exited N" },
   ]);

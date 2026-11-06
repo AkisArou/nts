@@ -1,4 +1,4 @@
-# nts-typescript-outcomes {"version":3,"backend":"c","commit":"4dc15835703dc5f0e9c9ab44fb6016cc8bdb2061","compiler":"1c4825476e64cde1","harness":"548840731a98c13d","under":"tests/typescript"}
+# nts-typescript-outcomes {"version":3,"backend":"c","commit":"e0395d27506b7bc83a6c7207313a6cd72ea57a1b","compiler":"1c4825476e64cde1","harness":"548840731a98c13d","under":"tests/typescript"}
 tests/typescript/absent-routes-controls/bounds-array-generic-relative-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-array-index-signature-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/absent-routes-controls/bounds-generic-grown-holes-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -2908,12 +2908,12 @@ tests/typescript/enum-routes-controls/object-string-field-aliases-control.ts	{"k
 tests/typescript/enum-routes-controls/object-structural-return-hidden-members-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/enum-routes-controls/string-generic-holder-absent-reverse-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/enum-routes-controls/string-heterogeneous-map-kinds-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
-tests/typescript/enum-routes-controls/string-heterogeneous-record-coercion-control.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"<path> NTS1100 `Object.freeze` (es:Object) is not provided by this compiler"}
+tests/typescript/enum-routes-controls/string-heterogeneous-record-coercion-control.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"thread 'nts' panicked: invalid emitted C identifier \"\" from \"\""}
 tests/typescript/enum-routes-controls/string-heterogeneous-tuple-return-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/enum-routes-controls/string-heterogeneous-typeof-branches-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/enum-routes-controls/string-live-field-comparisons-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/enum-routes-controls/string-map-alias-reinsert-control.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"},{"code":"NTS1100","where":"body"}]}
-tests/typescript/enum-routes-controls/string-record-alias-order-control.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"<path> NTS1100 `Object.freeze` (es:Object) is not provided by this compiler"}
+tests/typescript/enum-routes-controls/string-record-alias-order-control.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"thread 'nts' panicked: invalid emitted C identifier \"\" from \"\""}
 tests/typescript/enum-routes/flags-closure-state-population.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enum-routes/flags-generic-field-requests.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enum-routes/flags-high-bit-return-map.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
@@ -2949,12 +2949,12 @@ tests/typescript/enum-routes/object-string-field-aliases.ts	{"kind":"refused","d
 tests/typescript/enum-routes/object-structural-return-hidden-members.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enum-routes/string-generic-holder-absent-reverse.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enum-routes/string-heterogeneous-map-kinds.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/enum-routes/string-heterogeneous-record-coercion.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"<path> NTS1001 indexing an object type, which is not an array is not supported by this lowering yet"}
+tests/typescript/enum-routes/string-heterogeneous-record-coercion.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"thread 'nts' panicked: invalid emitted C identifier \"\" from \"\""}
 tests/typescript/enum-routes/string-heterogeneous-tuple-return.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/enum-routes/string-heterogeneous-typeof-branches.ts	{"kind":"pass"}
 tests/typescript/enum-routes/string-live-field-comparisons.ts	{"kind":"pass"}
 tests/typescript/enum-routes/string-map-alias-reinsert.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/enum-routes/string-record-alias-order.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"<path> NTS1001 indexing an object type, which is not an array is not supported by this lowering yet"}
+tests/typescript/enum-routes/string-record-alias-order.ts	{"kind":"build-failure","stage":"compiler-crash","diagnostic":"thread 'nts' panicked: invalid emitted C identifier \"\" from \"\""}
 tests/typescript/enums/as-parameter-type.ts	{"kind":"pass"}
 tests/typescript/enums/combination-enum-keyed-class.ts	{"kind":"invalid-hir","validator":"StoreType { func: \"PerChannel<N>#constructor\", what: \"a field\", expected: Float { bits: 64 }, found: Managed(String) }"}
 tests/typescript/enums/computed-members.ts	{"kind":"pass"}

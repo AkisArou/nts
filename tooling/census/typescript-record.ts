@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
-import { normalizeGeneratedNumbers, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
+import { normalizeGeneratedNumbers, stableBuildDiagnostic, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
 import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformance/output-prefix.ts";
 
 // Version 3 checks printed output before native declines against Node.
@@ -87,19 +87,6 @@ function refusalDiagnostic(value: unknown): RefusalDiagnostic {
   assert.match(code, /^(?:NTS\d{4}|TS\d{4,5})$/, "invalid refusal code");
   return { code,
     where: oneOf(row.where, ["body", "harness", "other", "none"], "unknown refusal location") };
-}
-
-/** Build diagnostics describe a generated artifact, not program output.
- * Their first line keeps the defect text while locations and generated
- * numbers move independently between otherwise identical attempts. */
-export function stableBuildDiagnostic(value: string): string {
-  const first = value.split("\n").map(line => line.trim()).find(Boolean);
-  assert.ok(first, "a build failure needs its first diagnostic");
-  return first
-    .replace(/(["'])(?:\/|[A-Za-z]:[\\/])[^"'\r\n]*\1/g, "$1<path>$1")
-    .replace(/(?:\/|[A-Za-z]:[\\/])[^\s"'<>]+/g, "<path>")
-    .replace(/\b(?:[\w.+-]+[\\/])*[\w.+-]+\.(?:c|cc|cpp|h|hpp|rs|ts|tsx|js|mjs|ll|bc|o|a|so|class)(?::\d+(?::\d+)?)?\b/g, "<path>")
-    .replace(/\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?)\b/g, "N");
 }
 
 export function parseObservation(input: unknown): TypeScriptObservation {

@@ -18,6 +18,7 @@ import { jvmRun } from "../jvm/launch.ts";
 import { compileSync } from "./worker-memory.ts";
 import { bundledDependencies } from "../conformance/node-deps.mjs";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
+import { compilerStop, compilerStopped } from "../conformance/observation-text.ts";
 import { outputOracle } from "./output-oracle.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
@@ -469,10 +470,11 @@ export function attempt(dir, body, tools, origin?) {
   if (emit.error || emit.status !== 0) {
     if (emit.signal === "SIGTERM") return { bucket: "timeout", why: "emit" };
     // Only the resident controller above can attribute an OOM to its limit.
-    // A native panic/abort belongs to the compiler, never an unsupported case.
-    if (emit.signal || emit.status === 101 || (emit.status >= 128 && emit.status <= 255)) {
+    // A native panic/abort belongs to the compiler, never an unsupported case,
+    // and its record is the stop itself, not a refusal printed before it.
+    if (compilerStopped(emit.status, emit.signal)) {
       return { bucket: "crash", why: "emit", first: emit.signal ?? `exit ${emit.status}`,
-        buildDiagnostic: diagnostics.split("\n").map(line => line.trim()).find(Boolean) ?? `compiler terminated: ${emit.signal ?? `exit ${emit.status}`}` };
+        buildDiagnostic: compilerStop(diagnostics, emit.status, emit.signal) };
     }
     const type_error = FIRST_TYPE_ERROR.exec(diagnostics);
     if (type_error) {

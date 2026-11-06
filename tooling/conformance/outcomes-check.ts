@@ -72,7 +72,7 @@
 //          cases declined ... agreed on every case" while the program aborted.
 //          So a declined line is part of the record, never filtered.
 //
-// # Five categories, each one a way a defect has hidden before
+// # Six categories, each one a way a defect has hidden before
 //
 //   wrong-answer    ran to the end and answered differently from node
 //   invalid-hir     the verifier refused to emit; `emit-c` writes nothing, so
@@ -85,6 +85,12 @@
 //                   `!== "string"` then `.length` refuses by name -- so a
 //                   refusing variant is not evidence the family is handled
 //   uncompilable-c  `emit-c` exited 0 and `cc` rejected what it wrote
+//   compiler-crash  the compiler itself stopped: a panic, a stack overflow, an
+//                   allocation it could not make, a signal. The record is the
+//                   line that names the stop (`compilerStop`), never a refusal
+//                   printed before it or the panic's location, which moves
+//                   with any edit. This read NOT MEASURED until 2026-11-06, so
+//                   no compiler crash could be pinned as a fixture
 //   aborted         the program died without an uncaught throw -- a signal, a
 //                   runtime refusal (`nts: refused: index 1 is outside [0, 1)`)
 //   refused         a compile-time refusal: `blockers/` holds these, so a case
@@ -135,7 +141,7 @@ import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts"
 import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
-import { normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
+import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -189,7 +195,10 @@ function runBuild(dir, options = { rc: false, address: false }) {
   });
   if (emit.memoryKilled) return { category: "not-measured", nts: "the resident memory cap" };
   const said = `${emit.stdout ?? ""}${emit.stderr ?? ""}`;
-  if (emit.error || emit.signal) return { category: "not-measured", nts: `emit-c ${emit.signal ?? emit.error?.message}` };
+  // A spawn failure and this harness's own timeout kill measure nothing; any
+  // other stop is the compiler's, and the defect the fixture pins.
+  if (emit.error || emit.signal === "SIGTERM") return { category: "not-measured", nts: `emit-c ${emit.signal ?? emit.error?.message}` };
+  if (compilerStopped(emit.status, emit.signal)) return { category: "compiler-crash", nts: compilerStop(said, emit.status, emit.signal) };
   const invalid = /^invalid HIR: (.*)$/m.exec(said);
   if (invalid) return { category: "invalid-hir", nts: `invalid HIR: ${invalid[1].trim()}` };
   const roots = rawRoots(said);
@@ -296,15 +305,17 @@ export function rootOfTheProgram(said, roots, main) {
 }
 
 /**
- * `program.c:147:5: error: 'v1' undeclared` -> `error: 'vN' undeclared`, and
- * `'NtsObj_Iterable_15_'` -> `'NtsObj_Iterable_N_'`: a local's number and a
- * generated layout's are both where codegen reached, which any unrelated type
- * or statement moves.
+ * `program.c:147:5: error: '__nts_v1' undeclared` -> `error: '__nts_vN'
+ * undeclared`, and `'NtsObj_Iterable_15_'` -> `'NtsObj_Iterable_N_'`: a local's
+ * number and a generated layout's are both where codegen reached, which any
+ * unrelated type or statement moves. Every generated name lives in the
+ * reserved `__nts_` namespace, so its digits are positions, never source.
  */
 function firstCError(text) {
   const line = text.split("\n").find((l) => /\berror\b/.test(l)) ?? text.trim().split("\n")[0] ?? "";
   return line
     .replace(/^\S*?:\d+:\d+:\s*/, "")
+    .replace(/\b__nts_\w+/g, (name) => name.replace(/\d+/g, "N"))
     .replace(/\bv\d+\b/g, "vN")
     .replace(/\b(NtsObj_[A-Za-z]\w*?)\d+(_?)(?![\w])/g, "$1N$2")
     .replace(/[‘’]/g, "'")

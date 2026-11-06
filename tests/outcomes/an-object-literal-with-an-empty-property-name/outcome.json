@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "compiler-crash",
+  "nts": "thread 'nts' panicked: invalid emitted C identifier \"\" from \"\"",
+  "node": "exit 1; nts: uncaught Observed: empty=1;a=2;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}

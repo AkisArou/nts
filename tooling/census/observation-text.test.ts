@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { normalizeGeneratedNumbers, stableCheckText } from "../conformance/observation-text.ts";
+import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "../conformance/observation-text.ts";
 
 test("diagnostic normalization retains source names, positions, arity and widths", () => {
   assert.equal(normalizeGeneratedNumbers('Queue<35>#push Wrapper<37, 42>#map type 99 BlockId(12) at: 14 bits: 64 OwnType35'),
@@ -12,4 +12,28 @@ test("scratch-location normalization never changes an answer's numbers", () => {
   assert.equal(stableCheckText('refused: /scratch/src/main.ts:12:5: NTS1001 Queue<35>'), 'refused: NTS1001 Queue<35>');
   assert.equal(stableCheckText('not rendered: /scratch/src/main.ts:12:5: NTS4001'), 'not rendered: NTS4001');
   assert.equal(stableCheckText('observed <35> type 42 at 17'), 'observed <35> type 42 at 17');
+});
+
+test("a compiler stop is named by the stop itself, never by a refusal printed first", () => {
+  const panic = "/scratch/src/main.ts:11:1: NTS1001 `Object.defineProperty` is not supported by this lowering yet\n" +
+    "thread 'nts' (1010068) panicked at compiler/codegen/common/src/symbols.rs:649:5:\n" +
+    "invalid emitted C identifier \"\" from \"\"\n" +
+    "note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace\n";
+  assert.equal(compilerStop(panic, 101, null), "thread 'nts' panicked: invalid emitted C identifier \"\" from \"\"");
+  assert.equal(compilerStop(panic.replace("1010068", "77").replace("649:5", "702:9"), 101, null), compilerStop(panic, 101, null),
+    "the thread id and the panic's location are not the defect's identity");
+  assert.notEqual(compilerStop(panic.replace("invalid emitted C identifier", "index out of bounds"), 101, null), compilerStop(panic, 101, null));
+  assert.equal(compilerStop("thread 'main' (42) panicked at /first/compiler/lower.rs:12:3: invalid operand", 101, null),
+    "thread 'main' panicked: invalid operand", "a panic whose message shares its location's line");
+  assert.equal(compilerStop("NTS1100 `Object.freeze`\nthread 'nts' (9) has overflowed its stack\nfatal runtime error: stack overflow\n", 134, null),
+    "thread 'nts' (N) has overflowed its stack");
+  assert.equal(compilerStop("memory allocation of 103079215080 bytes failed\n", null, "SIGABRT"), "memory allocation of N bytes failed");
+  assert.equal(compilerStop("", null, "SIGSEGV"), "stopped by SIGSEGV");
+  assert.equal(compilerStop("NTS1001 a refusal\n", 139, null), "stopped with exit 139");
+});
+
+test("only a signal, Rust's panic status or a shell's signal status is a compiler stop", () => {
+  for (const [status, signal] of [[101, null], [134, null], [null, "SIGABRT"]] as const) assert.equal(compilerStopped(status, signal), true);
+  assert.equal(compilerStopped(1, null), false, "invalid HIR and type errors exit 1: answers, not stops");
+  assert.equal(compilerStopped(0, null), false);
 });

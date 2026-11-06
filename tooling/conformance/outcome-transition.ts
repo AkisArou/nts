@@ -6,7 +6,7 @@ export interface OutcomeTransition { word: TransitionWord; ok: boolean; loud: bo
 export function outcomeDisposition(kind: string): OutcomeDisposition {
   if (kind === "pass" || kind === "agrees") return "pass";
   if (kind === "refused") return "refused";
-  if (["wrong", "wrong-output", "wrong-answer", "invalid-hir", "runtime-abort", "aborted", "uncompilable-c", "build-failure"].includes(kind)) return "defect";
+  if (["wrong", "wrong-output", "wrong-answer", "invalid-hir", "runtime-abort", "aborted", "uncompilable-c", "compiler-crash", "build-failure"].includes(kind)) return "defect";
   throw new Error(`unknown outcome kind: ${kind}`);
 }
 
