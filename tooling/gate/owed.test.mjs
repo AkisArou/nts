@@ -146,12 +146,13 @@ test("offline Unicode generators leave conformance obligations with their fixtur
     const generator = owed([{ path: "tooling/unicode-cases/case-mapping.ts", added }]);
     assert.ok(!generator.some(rule => rule.full), "an offline generator is not an unplaced instrument");
     assert.ok(generator.some(rule => rule.name === "the standalone Unicode fixture generators"));
-    assert.ok(!gateSteps(generator).includes("typescript-cases"), "no gate step executes the generator");
+    assert.ok(!["typescript-c", "typescript-llvm", "typescript-jvm"].some(step => gateSteps(generator).includes(step)), "no gate step executes the generator");
     for (const path of ["tests/typescript/unicode/case-mapping-final-sigma.ts", "results/typescript/c/cases.tsv"]) {
       const rules = owed([{ path, added }]);
       assert.ok(!rules.some(rule => rule.full), path);
-      superset(gateSteps(rules), ["typescript-cases"], path);
-      superset(changeOwes([{ path: "tooling/unicode-cases/case-mapping.ts", added }, { path, added }]), ["typescript-cases"], "the generator does not suppress its output");
+      const typescript = path.startsWith("results/typescript/c/") ? ["typescript-c"] : ["typescript-c", "typescript-llvm", "typescript-jvm"];
+      superset(gateSteps(rules), typescript, path);
+      superset(changeOwes([{ path: "tooling/unicode-cases/case-mapping.ts", added }, { path, added }]), typescript, "the generator does not suppress its output");
     }
   }
   assert.ok(owed([{ path: "tooling/unclassified-generator.ts", added: true }]).some(rule => rule.full), "unrelated tooling keeps its unknown-reach obligation");
@@ -268,7 +269,7 @@ test("tool-written result outputs owe tree checks while recorded baselines retai
     ["results/test262/c/staging.tsv","test262-rest-cases"],
     ["results/test262/jvm/language.tsv","test262-jvm"],
     ["results/test262/llvm/language.tsv","test262-llvm"],
-    ["results/typescript/jvm/cases.tsv","typescript-cases"],
+    ["results/typescript/jvm/cases.tsv","typescript-jvm"],
   ]) assert.ok(stepsFor(path).includes(expected), path);
 });
 
@@ -482,12 +483,13 @@ test("what a step runs owes that step", () => {
   // A backend's records owe that backend's step alone.
   owes("results/test262/jvm/language.tsv", ["test262-jvm"], { not: ["test262-cases", "examples"] });
   owes("results/test262/llvm/staging.tsv", ["test262-llvm"], { not: ["test262-jvm", "test262-cases", "examples"] });
-  // The TypeScript suite: a case or a record owes its step alone, on every backend at once.
-  owes("results/typescript/jvm/cases.tsv", ["typescript-cases"], { not: ["test262-jvm", "test262-cases", "examples"] });
+  // The TypeScript suite: a record owes its own backend's step alone; a case
+  // owes every backend's.
+  owes("results/typescript/jvm/cases.tsv", ["typescript-jvm"], { not: ["typescript-c", "typescript-llvm", "test262-jvm", "test262-cases", "examples"] });
   // A case is also an input of the runner every test262 step drives (its
   // default directory), so stepInputs owes those too: broad, never short.
-  owes("tests/typescript/enums/numeric-members.ts", ["typescript-cases"], { not: ["examples"] });
-  owes("tests/typescript-pending/decorators/README.md", ["typescript-cases"], { not: ["examples", "test262-cases"] });
+  owes("tests/typescript/enums/numeric-members.ts", ["typescript-c", "typescript-llvm", "typescript-jvm"], { not: ["examples"] });
+  owes("tests/typescript-pending/decorators/README.md", ["typescript-c", "typescript-llvm", "typescript-jvm"], { not: ["examples", "test262-cases"] });
   owes("tooling/gate/compile-times.tsv", ["compile-time"]);
 });
 
@@ -607,7 +609,7 @@ test("documentation owes its two readers, not the gate", () => {
 test("the hand-written rules still decide what they name", () => {
   owes("tests/programs/strings/src/main.ts", ["examples", "llvm", "llvm-rc", "jvm", "rc"]);
   owes("runtime/c/nts_runtime.h", ["tests", "bench-agree", "format"]);
-  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-llvm", "typescript-cases", "jvm-verifies", "benches"]);
+  owes("compiler/core/src/hir/lower.rs", ["test262-cases", "test262-jvm", "test262-llvm", "typescript-c", "typescript-llvm", "typescript-jvm", "jvm-verifies", "benches"]);
   // The JVM runtime owes the program step that runs it and the JVM's test262
   // rows, not only the lane's wide trio. (It owes the other test262 steps too,
   // but through their shared runner, which names the jar: `stepInputs`.)

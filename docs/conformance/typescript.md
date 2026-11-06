@@ -7,7 +7,7 @@ whether the compiler survives code nobody wrote for it. What nts compiles,
 feature by feature, is the [feature table](../language/README.md); what it
 declines on principle is [boundaries](../language/boundaries.md). For anyone
 adding a case, reading a record, or changing what the gate's
-`typescript-cases` and `corpus` steps hold.
+`typescript-c`, `typescript-llvm`, `typescript-jvm` and `corpus` steps hold.
 
 ## The conformance suite
 
@@ -104,9 +104,9 @@ source inventory: a new case with no row, or a row whose case is gone, fails
 the run. Missing, duplicate, orphaned and malformed rows fail closed, and a
 timeout or an infrastructure failure is never recorded as an outcome.
 
-The gate's `typescript-cases` step, a core step, runs every case on each
-backend and compares it with its record under the outcomes corpus's
-transition policy:
+The gate's `typescript-c`, `typescript-llvm` and `typescript-jvm` steps, core
+steps, run every case on their backend and compare it with that backend's
+record under the outcomes corpus's transition policy:
 
 - a pass that does anything else is `REGRESSED`;
 - a different defect, a different set of refusal codes, or a defect where

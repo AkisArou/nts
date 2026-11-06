@@ -148,7 +148,10 @@ const STEPS = [
     capabilities: ["jvm"],
   },
   { name: "test262-llvm", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, doc: "every recorded test262 row reproduces on LLVM" },
-  { name: "typescript-cases", elastic: true, slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on every backend",
+  // The TypeScript records on one backend each (all.sh's typescript_backend).
+  { name: "typescript-c", elastic: true, slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on C" },
+  { name: "typescript-llvm", elastic: true, slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on LLVM" },
+  { name: "typescript-jvm", elastic: true, slots: 8, min: 2, mem: 2, nts: true, fe: true, doc: "every recorded TypeScript conformance case reproduces on the JVM",
     capabilities: ["jvm"],
   },
   { name: "outcomes", slots: 1, mem: 1, nts: true, fe: true, doc: "pinned defects still do what they did" },

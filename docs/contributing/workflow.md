@@ -193,8 +193,8 @@ at the TypeScript commit the frontend records: a shallow, sparse checkout of
 `/tsc/testdata/tests/`, unedited, and linked into lane and gate trees by
 `inputs.sh`. The gate's `corpus` step compiles the manifest in
 `tooling/suite/corpus-core.json` and requires no invalid HIR, no uncompilable C
-and no unverifiable class. Its `typescript-cases` step reproduces every
-recorded case on every backend ([conformance](../conformance/typescript.md)).
+and no unverifiable class. Its `typescript-c`, `typescript-llvm` and `typescript-jvm` steps reproduce
+every recorded case, one backend each ([conformance](../conformance/typescript.md)).
 
 ## Decisions
 

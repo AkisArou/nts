@@ -29,7 +29,7 @@ test("classification prose owes audit without record replay, class/match edits o
     if (old.features) updated.features["AggregateError"].class = "supported";
     else updated.exclusions[0].match = "other.js";
     const meaning = steps(path, text, JSON.stringify(updated));
-    for (const name of ["audit", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-cases"]) assert.ok(meaning.includes(name), name);
+    for (const name of ["audit", "test262", "test262-cases", "test262-builtins-cases", "test262-rest-cases", "test262-jvm", "test262-llvm", "typescript-c", "typescript-llvm", "typescript-jvm"]) assert.ok(meaning.includes(name), name);
   }
 });
 
@@ -61,7 +61,8 @@ test("ordinary C/TypeScript comments narrow; fixtures and unknown syntax stay gu
 });
 
 test("fixture front matter still owes TypeScript records and backend markers owe outcomes", () => {
-  assert.ok(steps("tests/typescript/enums/main.ts", "/*--- features: [ts-enum] ---*/\n", "/*--- features: [ts-namespace] ---*/\n").includes("typescript-cases"));
+  const frontMatter = steps("tests/typescript/enums/main.ts", "/*--- features: [ts-enum] ---*/\n", "/*--- features: [ts-namespace] ---*/\n");
+  for (const step of ["typescript-c", "typescript-llvm", "typescript-jvm"]) assert.ok(frontMatter.includes(step), step);
   assert.ok(steps("tests/outcomes/example/main.ts", "// backend: c\n", "// backend: llvm\n").includes("outcomes"));
   assert.ok(steps("tooling/example.ts", "// backend: c\n", "// backend: llvm\n").includes("build"));
 });

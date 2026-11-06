@@ -9,7 +9,7 @@ export type ResourceStop={path:string;kind:"timeout"|"memory-cap";phase:string};
 export type ComparisonIdentity={suite:string;under:string;backend:string;record:string;selection:string;policy:string;compiler:string};
 type Report={version:1;id:string;step:string;attempt:string;state:"running"|"complete";identity?:ComparisonIdentity;failures?:number;resources?:ResourceStop[]};
 export type ComparisonEvidence={reports:Report[];resourceOnly:boolean};
-export const RECORD_COMPARISON_STEPS=["test262-cases","test262-builtins-cases","test262-rest-cases","test262-jvm","test262-llvm","typescript-cases"];
+export const RECORD_COMPARISON_STEPS=["test262-cases","test262-builtins-cases","test262-rest-cases","test262-jvm","test262-llvm","typescript-c","typescript-llvm","typescript-jvm"];
 export const digest=(value:string)=>createHash("sha256").update(value).digest("hex");
 const directory=(result:string)=>`${result}.comparisons`;
 const hash=(value:unknown)=>typeof value==="string"&&/^[a-f0-9]{64}$/.test(value);

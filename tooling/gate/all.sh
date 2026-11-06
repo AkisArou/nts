@@ -2052,25 +2052,31 @@ test262_llvm() {
 
 # The TypeScript conformance suite (`tests/typescript/`, run by the test262
 # runner with node as the oracle: tooling/census/suites/typescript.ts), held
-# to its record on every backend: TypeScript's runtime-bearing features and
-# the typed paths, which test262's untyped JavaScript never reaches. First
-# recorded 2026-10-19 on a pin of 362b32f13: 23 of 34 on each backend.
-# Seconds, not minutes: 12 s for the four at eight workers.
-typescript_cases() {
+# to its record on each backend: TypeScript's runtime-bearing features and
+# the typed paths, which test262's untyped JavaScript never reaches. One step
+# per backend, as test262's are: the three run side by side, and a change
+# owes only the backends it reaches (owed.mjs).
+typescript_backend() {
+  backend=$1
   if [ ! -d third_party/test262/.git ]; then
     echo "  SKIP: no test262 checkout for the harness the cases assert with; tooling/bootstrap/bootstrap.sh clones it"
     return 77
   fi
-  failed=""
-  for backend in c llvm jvm; do
-    record=results/typescript/$backend/cases.tsv
-    echo "  tests/typescript on $backend, against $record:"
-    held_to_record "$record" --suite typescript --backend "$backend" || failed="$failed $backend"
-  done
-  if [ -n "$failed" ]; then
-    echo "  not held to their records on:$failed"
-    return 1
-  fi
+  record=results/typescript/$backend/cases.tsv
+  echo "  tests/typescript on $backend, against $record:"
+  held_to_record "$record" --suite typescript --backend "$backend"
+}
+
+typescript_c() {
+  typescript_backend c
+}
+
+typescript_llvm() {
+  typescript_backend llvm
+}
+
+typescript_jvm() {
+  typescript_backend jvm
 }
 
 # Defects pinned to what they do: `tests/outcomes/`, where a wrong
@@ -2538,7 +2544,9 @@ step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
 step "test262-jvm" test262_jvm
 step "test262-llvm" test262_llvm
-step "typescript-cases" typescript_cases
+step "typescript-c" typescript_c
+step "typescript-llvm" typescript_llvm
+step "typescript-jvm" typescript_jvm
 step "outcomes" outcomes
 step "expect-ir" expect_ir
 step "integrity" integrity

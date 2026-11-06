@@ -168,7 +168,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(existsSync(json), false, "old diagnostic locations cannot become a current record");
 
   // Write a complete real family through --record, then consume that exact
-  // file through --recorded, the mode used by typescript-cases. Saved raw
+  // file through --recorded, the mode each typescript-<backend> step uses. Saved raw
   // observations isolate the record protocol from the compiler defect itself.
   const under = target.slice(0, target.lastIndexOf("/"));
   const family = [...recorded.cases].filter(([path]) => path.startsWith(under + "/"));
