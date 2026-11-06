@@ -11,6 +11,9 @@
   "nts-toolchains": { "kind": "kept", "writer": "tooling/lanes/package-manager.ts", "why": "the pinned package-manager toolchains" },
   "nts-comparators": { "kind": "kept", "writer": "tooling/bench/comparator-pins.ts", "why": "the pinned comparator engines the benchmarks run" },
   "nts-react": { "kind": "kept", "writer": "runtime/react/bench/compare.mjs", "why": "React's upstream sources and its benchmark builds" },
+  "nts-android": { "kind": "scratch", "writer": "tooling/android/dexes.sh" },
+  "nts-agrees-with-c": { "kind": "scratch", "writer": "tooling/jvm/agrees-with-c.sh" },
+  "nts-arrays": { "kind": "scratch", "writer": "tooling/jvm/arrays-vs-ref.sh" },
 
   "nts": { "kind": "folders", "why": "the root of the tools' own caches", "folders": {
     "apple": { "kind": "kept", "writer": "tooling/apple/build-libuv.sh", "why": "the Apple libuv builds" },
@@ -29,6 +32,7 @@
     "swift": { "kind": "kept", "writer": "build/src/swift.rs", "why": "the Swift toolchain" },
     "swift-kept": { "kind": "kept", "writer": "tooling/cli/src/swift.rs", "why": "what is kept per Swift toolchain" },
     "swiftpm-manifests": { "kind": "kept", "writer": "build/src/dependencies/swiftpm.rs", "why": "SwiftPM manifests, by what they read" },
+    "types": { "kind": "kept", "writer": "tooling/surfaces/src/lib.rs", "why": "the platform type surfaces nts generates" },
     "windows": { "kind": "kept", "writer": "tooling/cli/src/main.rs", "why": "the Windows SDK metadata" },
     "worker-memory": { "kind": "scratch", "writer": "tooling/census/worker-memory.ts" }
   } },
@@ -49,7 +53,7 @@
   "nts-emitted-diff": { "kind": "scratch", "writer": "tooling/conformance/emitted-diff.ts" },
   "nts-erased-calls": { "kind": "scratch", "writer": "tooling/census/erased-calls.ts" },
   "nts-integrity": { "kind": "scratch", "writer": "tooling/conformance/integrity.ts" },
-  "nts-jvm-verifies": { "kind": "scratch", "writer": "tooling/conformance/jvm-verifies.ts" },
+  "nts-jvm-verifies": { "kind": "scratch", "writer": "tooling/conformance/jvm-verifies.ts", "days": 7 },
   "nts-messages": { "kind": "scratch", "writer": "tooling/census/messages.ts" },
   "nts-oracle-record": { "kind": "scratch", "writer": "tooling/differential/record-oracles.ts" },
   "nts-owed-range": { "kind": "scratch", "writer": "tooling/gate/owed-range.ts" },

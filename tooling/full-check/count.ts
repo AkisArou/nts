@@ -132,7 +132,7 @@ function folders(dir: string): Entry[] {
  *   pool     only pool slots, ~/.cache/nts-pool/<n>;
  *   runs     its runs/ hold three days of logs;
  *   pins     pin.ts's tree, target and lock, and the pins of main and verified;
- *   scratch  a tool's scratch root: what a run leaves for a day is a leftover;
+ *   scratch  a tool's scratch root: what a run leaves for a day (or `days`) is a leftover;
  *   folders  each folder in it kept by a rule of its own.
  * `writer` is the file that writes the folder; a writer that no longer names
  * it makes its entry red, so the list cannot outlive the tools it describes.
@@ -140,7 +140,7 @@ function folders(dir: string): Entry[] {
 export type Keep =
   | { kind: "kept" | "pool" | "pins"; why: string; writer?: string }
   | { kind: "runs"; who: string; why: string; writer?: string }
-  | { kind: "scratch"; writer: string }
+  | { kind: "scratch"; writer: string; days?: number }
   | { kind: "folders"; why: string; folders: Record<string, Keep> };
 
 export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
@@ -203,7 +203,7 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context): string[] {
       break;
     }
     case "scratch": {
-      const left = children.filter(child => context.now - child.mtimeMs > DAY);
+      const left = children.filter(child => context.now - child.mtimeMs > (keep.days ?? 1) * DAY);
       if (left.length) lines.push(`${display(entry.path, context)}: ${aged(left, context)} left by ${keep.writer}; a run removes its own folder`);
       break;
     }

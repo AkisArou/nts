@@ -42,6 +42,7 @@ const KEEP: Record<string, Keep> = {
   } },
   "nts-gate": { kind: "folders", why: "the gate's", folders: { "bin": { kind: "kept", writer: "tooling/run.mjs", why: "binaries" } } },
   "nts-messages": { kind: "scratch", writer: "tooling/messages.ts" },
+  "nts-jvm-verifies": { kind: "scratch", writer: "tooling/verifies.ts", days: 7 },
   "nts-gone-tool": { kind: "kept", writer: "tooling/gone.ts", why: "a tool since deleted" },
 };
 
@@ -54,6 +55,7 @@ function rootFixture(t: TestContext): string {
   writeFileSync(join(root, "tooling/outcomes.ts"), 'const SCRATCH = join(homedir(), ".cache/nts/outcomes", String(process.pid));\n');
   writeFileSync(join(root, "tooling/run.mjs"), 'const PIN_ROOT = join(cache, "nts-gate", "bin");\n');
   writeFileSync(join(root, "tooling/messages.ts"), 'const base = join(homedir(), ".cache/nts-messages");\n');
+  writeFileSync(join(root, "tooling/verifies.ts"), 'const base = join(homedir(), ".cache/nts-jvm-verifies");\n');
   return root;
 }
 
@@ -73,6 +75,8 @@ function cacheFixture(t: TestContext): string {
   folder("nts-landing/runs/last-week", 7);
   folder("nts-full-check/runs/four-days", 4);
   folder("nts-messages/run-stopped", 2);
+  folder("nts-jvm-verifies/failed-kept-a-week", 3);
+  folder("nts-jvm-verifies/failed-past-its-week", 8);
   folder("nts/outcomes/12345", 9);
   folder(`nts-pins/${OTHER.slice(0, 12)}`);
   folder("nts-pool/scratch");
@@ -172,13 +176,14 @@ test("the count names every branch, worktree and cache folder outside its rules,
   has(/^~\/\.cache\/nts-messages: 1 folder\(s\), 2\.0 days old \(run-stopped\) left by tooling\/messages\.ts/);
   has(/^~\/\.cache\/nts-gone-tool: keep\.json keeps it for tooling\/gone\.ts, which no longer writes it; take the entry out$/);
   lacks(/nts-messages\/run-now/);
+  has(/^~\/\.cache\/nts-jvm-verifies: 1 folder\(s\), 8\.0 days old \(failed-past-its-week\) left by tooling\/verifies\.ts/);
   lacks(/runs\/(today|yesterday)/);
   lacks(/not-nts-at-all|ntsc-is-not-nts|nts-land\.lock/);
   lacks(/nts-chromium-checkpoint|nts\/apple|nts\/node-deps|nts-gate\/bin/);
   has(/^~\/\.cache\/n<pid>: 2 folder\(s\), 2\.0 to 3\.0 days old \(n1a6c, n26d\), NODE_TEST_DIR roots left by tooling\/conformance\/node-environment\.ts; a runner removes its own$/);
   lacks(/^~\/\.cache\/(?:n2zz|nvim|node)\b/); // fresh, or another tool's
   lacks(new RegExp(`nts-pins/(${MAIN.slice(0, 12)}|${VERIFIED.slice(0, 12)}|tree|target)`));
-  assert.equal(red.length, 18, red.join("\n"));
+  assert.equal(red.length, 19, red.join("\n"));
 });
 
 test("a machine within the rules is green; one the count could not read is not", t => {
