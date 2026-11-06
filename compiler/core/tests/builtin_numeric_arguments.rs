@@ -155,3 +155,41 @@ fn constant_digits_reach_the_formatter_without_a_conversion_merge() {
     )));
     assert!(live(dynamic).any(|op| matches!(op, OpKind::Unary { op: UnOp::Abs, .. })));
 }
+
+#[test]
+fn fixed_digit_domains_remove_only_the_impossible_raise_edges() {
+    let snapshot = snapshot();
+    let options = hir::Options {
+        roots: hir::reachable::Roots::EveryExport,
+        ..hir::Options::default()
+    };
+    let prepared = hir::prepare_with(&snapshot, &options).expect("valid prepared HIR");
+    for (name, raises) in [
+        ("fixedThree", false),
+        ("fixedNegativeFraction", false),
+        ("fixedPositiveFraction", false),
+        ("fixedZero", false),
+        ("fixedNegativeZero", false),
+        ("fixedNan", false),
+        ("fixedInfinity", true),
+        ("fixedNegativeInfinity", true),
+        ("fixedDynamic", true),
+    ] {
+        let copies: Vec<_> = prepared
+            .program
+            .funcs
+            .iter()
+            .filter(|func| func.name == name || func.name.starts_with(&format!("{name}#")))
+            .collect();
+        assert!(!copies.is_empty(), "{name} must be emitted");
+        for func in copies {
+            let has_raise = live(func).any(|op| {
+                matches!(op,
+                    OpKind::Call { callee: hir::Callee::External(name), .. }
+                    if name == "nts_raise" || name == "nts_uncaught"
+                )
+            });
+            assert_eq!(has_raise, raises, "{}", func.name);
+        }
+    }
+}

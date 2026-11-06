@@ -44,6 +44,11 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         if super::may_stop(&func.values[index]) || hole_reads.contains(&id) {
             continue;
         }
+        if let Some(answer) = numeric_comparison(func, analysis, id) {
+            func.values[index].kind = OpKind::ConstBool(answer);
+            folded += 1;
+            continue;
+        }
         // Two string constants joined are a string constant. Values come in
         // definition order, so a chain folds from its first link outward.
         if let OpKind::Binary {
@@ -76,6 +81,34 @@ pub fn fold(func: &mut Func, analysis: &Analysis) -> usize {
         folded += 1;
     }
     folded
+}
+
+/// Machine numeric comparisons of proven singleton values. String facts can
+/// describe lengths, so a singleton fact alone never licenses this fold.
+fn numeric_comparison(func: &Func, analysis: &Analysis, id: ValueId) -> Option<bool> {
+    let OpKind::Binary { op, lhs, rhs } = func.value(id).kind else {
+        return None;
+    };
+    let numeric = |id| {
+        matches!(
+            func.value(id).ty,
+            HirType::Int { .. } | HirType::Float { .. }
+        )
+    };
+    if !numeric(lhs) || !numeric(rhs) {
+        return None;
+    }
+    let (left, right) = (analysis.get(lhs), analysis.get(rhs));
+    if !left.is_singleton() || !right.is_singleton() || left.maybe_nan || right.maybe_nan {
+        return None;
+    }
+    match op {
+        BinOp::Lt => Some(left.lo < right.lo),
+        BinOp::Le => Some(left.lo <= right.lo),
+        BinOp::Gt => Some(left.lo > right.lo),
+        BinOp::Ge => Some(left.lo >= right.lo),
+        _ => None,
+    }
 }
 
 /// The longest string constant a fold will write.

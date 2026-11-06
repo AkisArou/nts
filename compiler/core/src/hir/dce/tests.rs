@@ -285,6 +285,38 @@ fn effects_keep_their_operands_while_unplaced_arena_entries_do_not_seed_them() {
 }
 
 #[test]
+fn an_unread_reads_only_runtime_call_is_collected_and_an_unread_effect_is_not() {
+    // `new ArrayBuffer(8, { maxByteLength: 16 })` once its `length > max`
+    // comparison has folded: the two `NTS_READS_ONLY` conversions it read are
+    // dead, and C rejects an ignored pure result. A call that may do anything
+    // stays, with its operand.
+    let mut func = function();
+    let call = |func: &mut Func, name: &str, arg: ValueId| {
+        value(
+            func,
+            OpKind::Call {
+                callee: crate::hir::Callee::External(name.to_owned()),
+                args: vec![arg],
+                frame: None,
+            },
+        )
+    };
+    let length = value(&mut func, OpKind::ConstFloat(8.0));
+    let max = value(&mut func, OpKind::ConstFloat(16.0));
+    let length_index = call(&mut func, "nts_to_index", length);
+    let max_index = call(&mut func, "nts_to_index", max);
+    let observed = call(&mut func, "observe", length);
+    func.blocks.push(Block {
+        params: Vec::new(),
+        ops: vec![length, max, length_index, max_index, observed],
+        terminator: Terminator::Return(None),
+    });
+    assert!(crate::hir::runtime::reads_only("nts_to_index"));
+    super::collect(&mut func);
+    assert_eq!(func.blocks[0].ops, [length, observed]);
+}
+
+#[test]
 fn a_store_into_an_external_object_remains_an_effect() {
     let mut func = function();
     let ty = HirType::Managed(crate::hir::ManagedType::Object(

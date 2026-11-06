@@ -179,6 +179,18 @@ pub(super) fn has_effects(op: &Op) -> bool {
             callee: super::Callee::External(name),
             ..
         } if PURE_RUNTIME_CALLS.contains(&name.as_str()) => false,
+        // A helper the header marks `NTS_READS_ONLY` reads and stores nothing
+        // (`runtime::READS_ONLY`, checked against the header), so a call
+        // nothing reads is dead -- and C must not be handed one as a
+        // statement: an ignored `__attribute__((pure))` result is
+        // `-Wunused-value`, an error under the generated file's flags. A fold
+        // orphans such calls: `new ArrayBuffer(8, { maxByteLength: 16 })`
+        // compares two `nts_to_index` conversions, and once that comparison
+        // folds to a constant nothing reads either of them.
+        OpKind::Call {
+            callee: super::Callee::External(name),
+            ..
+        } if super::runtime::reads_only(name) => false,
         // A call may do anything. A store certainly does. A suspension hands
         // the frame to the runtime, which is both.
         // The guard's whole purpose is to end the program, which is the
