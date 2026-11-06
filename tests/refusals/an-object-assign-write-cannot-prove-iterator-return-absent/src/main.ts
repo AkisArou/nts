@@ -1,7 +1,8 @@
-// expect: onto something other than a dictionary
-// Object.assign to a fixed record remains refused. Its opaque write still
-// prevents proving return absent in the exported walker. The control changes
-// the installation to an ordinary write at a separate contextual owner.
+// expect: into fields from a source without string-record storage
+// Object.assign from an object literal into a fixed record remains refused.
+// Its opaque write still prevents proving return absent in the exported
+// walker. The control changes the installation to an ordinary write at a
+// separate contextual owner.
 // expect-ir: all: count call.extern(nts_access_key_description) in assignWalk >= 1
 interface AssignSource {
  count:number;closed:number;
