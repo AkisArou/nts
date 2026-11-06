@@ -194,7 +194,7 @@ the first node task.
 | The full gate (7–33 min) before every landing, one train at a time | a landing check of ten minutes or less, then the full check after landing |
 | Agents prove a change for hours or days before submitting | agents add tests and submit; the checks are the proof |
 | Records recorded by hand, twice, on a pinned compiler | the full check writes records |
-| Lanes owning areas for weeks; multi-day branches | tasks that land within a day; agents per task |
+| Lanes owning areas for weeks (`tooling/lanes/lanes.json`); multi-day branches | tasks that land within a day; agents per task; a change's checks follow the files it touches, not who touched them |
 | Coordinator approval and evidence packets per landing | design agreement before work; risky diffs read |
 | Benchmarks and landings competing for the machine | benchmarks nightly on `verified` |
 | A separate path for tests-only and docs-only changes | one landing check, which is seconds for them |
@@ -210,7 +210,11 @@ the first node task.
    becomes a task naming the branch.
 2. **The landing check:** the path-scoped check of ten minutes or less, and
    direct landing from it, which deletes the task's branch and resets its
-   worktree.
+   worktree. The old lander goes, and the lane machinery with it:
+   `tooling/lanes/lanes.json`, the lane view in `lane.ts`, `branches.ts`,
+   `cleanup.ts`, `archive.ts` and its table. The one setting `lanes.json`
+   holds beyond lanes, which platforms may stay unrun, moves to
+   `tooling/gate/verdict-policy.ts`.
 3. **The full check after landing:** run continuously, the `verified` marker,
    the automatic revert through the culprit search, and the step that counts
    branches, worktrees and cache folders.

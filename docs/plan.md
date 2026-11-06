@@ -36,46 +36,41 @@ one page that changes as work goes; the designs it builds are in
   order: the landing check, the full check after landing, the records it
   writes and the worktree pool; then agents restart on the tasks below, one
   agent per task.
-- **In flight.** Each lands through the old lander until the landing check
-  exists:
-  - the shared TypeScript oracle (#193, `node/oracle-e039`, carrying #324's
-    compile-cache move) and Node 26 (#124, `node/node26-finished`), landed
-    straight on `main` with Node 24 dropped (user, 11-06), then the oracle's
-    disk use: it prepares every case's snapshot before running the first,
-    about 17 GB at once. The other `node/*` branches are their earlier rounds,
-    deleted after;
-  - managed-type coercion inside the compile-time budget (#159,
-    `compiler/managed-coercion-main102-r10`), which also carries #185's fix
-    and re-records its outcome; the other `compiler/managed-coercion*` and
-    `compiler/receiver-*-2d` branches are its earlier rounds;
+- **Landing next, as one train:** pending records
+  (`coordinator/pending-records`). A test or benchmark case with no record
+  yet is pending rather than red, an improvement passes and is listed,
+  getting worse stays red, and `tooling/records/record-pending.ts` writes the
+  missing and improved rows after landing (user, 11-06: tests and benchmarks
+  land directly, with no records made by hand). It also narrows the benchmark
+  compile key to what decides a compile outcome, ranks a silent wrong answer
+  below a loud defect, and makes the gate's temporary-folder tests
+  independent of the machine's free disk. In the same train:
+  - the compiler batch (`coordinator/triage-compiler-fixes`): Octane's loose
+    equality and `Object.assign` (#147), the comparison fold on known non-NaN
+    values, a Java `float` range that includes the infinities, a JVM refusal
+    of a fixed view over a shrunk buffer (#113 E), and the gate's overflow
+    checks in the `nts-dev` profile;
+  - the tests batch (`coordinator/triage-tests-only`): #18's indirect-throw
+    guards and outcome, the C memory declaration tests, a write-once module
+    function refusal, a Node-API function export refusal, and #181's LLVM
+    addon class test;
+  - the synchronous benchmark ports (#315,
+    `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
+    and Octane's provenance; the 46 pull requests it replaces close when it
+    lands;
+  - the AWFY macro benchmarks (#26, `coordinator/awfy-macro-26`).
+
+  The fourteen source branches the triage marked for landing are deleted when
+  it lands.
+- **In flight:**
+  - the shared TypeScript oracle (#193, `node/oracle-e039`). Its train held on
+    five defects (11-06), which nodejs repairs in place, each worker now
+    preparing only its own case instead of every case first. Then Node 26
+    (#124, `node/node26-finished`), landed straight on `main` with Node 24
+    dropped (user, 11-06). The other `node/*` branches are their earlier
+    rounds, deleted after;
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`).
-- **Landing now, from the triage:**
-  - the synchronous benchmark ports (#315, `coordinator/benchmark-ports-315`),
-    with ARES-6 restored to upstream from `helper4/ares6-family`, Octane's
-    provenance, domains and RayTrace helpers from `helper4/octane-namespace`,
-    and the records still missing (two CLBG provenance files, oracle counts
-    for 37 cases, compile rows for 46 cases on three backends);
-  - the AWFY macro rows (#26) as refused rows:
-    `helper/awfy-cd-havlak-qualification-evidence-20261030` and
-    `helper/awfy-ports-parked`;
-  - Octane's loose equality and `Object.assign` (#147,
-    `compiler/octane-equality-assign`);
-  - one commit each: the comparison fold on known non-NaN values
-    (`compiler/runtime-raise-effects-submit`), a Java `float` range that
-    includes the infinities (`jvm/exact-region-certificates`), a JVM refusal
-    of a fixed view over a shrunk buffer (#113 E,
-    `runtime3/jvm-fixed-view-resize`), and the gate's overflow checks in the
-    `nts-dev` profile (`compiler/implicit-member-call-effects`);
-  - tests only: #18's indirect-throw guards and outcome
-    (`compiler/exceptional-transfer-producer`), the C memory declaration
-    tests (`tsrs/c-memory-after-capture-repair`), a write-once module
-    function refusal (`helper/write-once-module-function`), a Node-API
-    function export refusal (`runtime3/napi-function-exports`), and #181's
-    LLVM addon class test (`runtime3/llvm-addon-class-main29107`);
-  - tooling: steps started by their work (#333, `coordinator/gate-order-333`)
-    and every tool's report delivered before its exit (#329,
-    `coordinator/exit-after-output`).
 - **The machine:** one shared 32 GB box; CPUs 4–5 are kept for measurement
   ([`../AGENTS.md`](../AGENTS.md)).
 
@@ -179,6 +174,11 @@ ids, kept so the records that cite them still resolve.
   (#89).
 - Compile time: quadratic loops (#115), the 237x regression (#122),
   ai-astar on the JVM (#334).
+- Managed-type coercion inside the compile-time budget (#159, with #185's
+  fix): `compiler/managed-coercion-main102-r10`, its clean history on
+  `compiler/managed-coercion-history-draft-r1`, whose last commit records
+  the measurement that put it far over the budget (11-06). Parked until
+  compiler work restarts; the cost is not yet attributed.
 - The JVM class archive (#148), JVM interop (#21), Zig as the bundled C
   toolchain (#44, a product decision for the user).
 
@@ -203,10 +203,14 @@ ids, kept so the records that cite them still resolve.
   A definite failure outranks a hang (#87).
 - Benchmark records cover compile outcomes only; whether each workload runs
   correctly on each backend is not recorded yet.
-- The TypeScript families the new oracle can judge (#195, #276); tests leak a
-  temp folder per case (#197); the JVM jar built from `JAVA_HOME` (#194);
-  type-check coverage of tooling (#281); ratchets that record their own
-  progress (#74).
+- The TypeScript families the new oracle can judge (#195, #276); the JVM jar
+  built from `JAVA_HOME` (#194); type-check coverage of tooling (#281);
+  ratchets that record their own progress (#74).
+- Every tool's scratch folder lives under the run's `TMPDIR` and is removed
+  on every exit path, so a stopped run leaves nothing behind (on 11-06,
+  stopped runs had left 167 GB): `conformance262.ts` in #193, then
+  `outcomes-check.ts` and the rest; it includes the per-case temp folders
+  tests leak (#197).
 - The old lander's open defects fold into the landing check: #120, #121,
   #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
   #330, #332.
