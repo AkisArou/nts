@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "iterations": {
+        "max": 1,
+        "allowNaN": true,
+        "reason": "Bound generated extra loop-finding passes within the Node oracle CPU and address-space budgets while retaining upstream benchmark seed1, NaN, negatives and fractions. The graph construction and verification remain upstream."
+      }
+    }
+  }
+}
