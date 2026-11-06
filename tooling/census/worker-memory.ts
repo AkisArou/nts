@@ -205,14 +205,14 @@ export class MemoryWorker {
   }
   kills() { return events(this.group).kills; }
   counters(): MemoryCounters { return events(this.group); }
-  scope(command: string, args: readonly string[]): MemoryScope {
+  scope(command: string, args: readonly string[], environment: NodeJS.ProcessEnv = process.env): MemoryScope {
     if (this.#closed) throw new Error("resident worker is closed");
     const unit = `${this.slice.slice(0, -6)}-g${this.#generation++}.scope`;
     const ready = join(this.run.directory, `${unit}.ready`);
     const scope = {
       unit, ready,
       argv: ["--user", "--scope", "--collect", "--quiet", `--unit=${unit}`, `--slice=${this.slice}`, "-p", `MemoryMax=${this.bytes}`, "-p", "MemorySwapMax=0", "-p", "OOMPolicy=continue", "sh", "-c", ENTRY, "nts-resident-worker", ready, this.group, String(this.bytes), command, ...args],
-      env: { ...process.env, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
+      env: { ...environment, NTS_CENSUS_WORKER_GROUP: this.group, NTS_CENSUS_WORKER_MAX_BYTES: String(this.bytes), NTS_CENSUS_RUN_GROUP: this.run.group, NTS_CENSUS_RUN_MAX_BYTES: String(this.run.budgetBytes) },
     };
     this.#scopes.add(scope);
     return scope;
@@ -317,12 +317,12 @@ function compilerInvocation(tools, command: string, args: readonly string[], opt
     worker = direct!.run.worker(`direct${direct.workers.size}`, bytes);
     direct!.workers.set(bytes, worker);
   }
-  const scope = worker.scope("sh", noAddressLimit);
+  const scope = worker.scope("sh", noAddressLimit, options.env);
   const before = worker.counters();
   const aggregateBefore = worker.run.aggregateOoms();
   let closed=false;
   const close=()=>{if(!closed){closed=true;worker.stop(scope);}};
-  return {command:"systemd-run",args:scope.argv,options:{...options,env:{...scope.env,...options.env}},close,finish:(result)=>{
+  return {command:"systemd-run",args:scope.argv,options:{...options,env:scope.env},close,finish:(result)=>{
     try{
       if (!worker.ready(scope)) throw new Error(`resident cap: compiler scope failed before entry: ${result.stderr ?? result.error?.message ?? "no diagnostic"}`);
     }finally{close();}

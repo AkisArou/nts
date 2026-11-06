@@ -73,6 +73,8 @@ test("the compile CLI records twice, checks changed outcomes, and refuses non-pi
   writeFileSync(binary, `#!/usr/bin/env node
 const fs = require('node:fs'), path = require('node:path');
 const [mode, project, ...args] = process.argv.slice(2);
+const leaked = ['BENCH_SHELL_ONLY', 'NTS_RC_NAIVE'].filter(key => process.env[key]);
+if (leaked.length) { console.error('NTS4999: shell-only settings reached the compiler: ' + leaked.join(', ')); process.exit(0); }
 const testMode = 'normal';
 if (testMode === 'kill') process.kill(process.pid, 'SIGKILL');
 if (testMode === 'crash') { console.error("thread 'main' panicked at /source/compiler.rs:27"); process.exit(101); }
@@ -91,7 +93,7 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   const meminfo = join(scratch, "meminfo"); writeFileSync(meminfo, "MemAvailable: 33554432 kB\n");
   const first = join(scratch, "first"), second = join(scratch, "second");
   const environment = (env: NodeJS.ProcessEnv, bin = pinned): NodeJS.ProcessEnv => {
-    const selected = { ...process.env, NTS_BIN: bin, NTS_MEMINFO: meminfo, TMPDIR: scratch, ...env };
+    const selected = { ...process.env, NTS_BIN: bin, NTS_MEMINFO: meminfo, TMPDIR: scratch, BENCH_SHELL_ONLY: "must be dropped", NTS_RC_NAIVE: "1", ...env };
     delete selected.NTS_GATE_STEP_RESULT; // A planted stop belongs to this fixture, never the outer tooling step.
     delete selected[ENVIRONMENT_CONTEXT]; delete selected.NTS_GATE_RUN_DIR;
     return selected;
@@ -106,6 +108,8 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   for (const backend of ["c", "llvm", "jvm"]) assert.equal(readFileSync(join(first, backend, "outcomes.tsv"), "utf8"), readFileSync(join(second, backend, "outcomes.tsv"), "utf8"));
   const { parseBenchmarkRecord } = await import("./outcomes.ts");
   const scope = parseBenchmarkRecord(readFileSync(join(first, "c/outcomes.tsv"), "utf8"));
+  const control = scope.rows.find(row => row.path.endsWith("/control"))!;
+  assert.equal(control.outcome.kind, "pass", `the memory scope resurrected a shell-only compiler setting: ${JSON.stringify(control.outcome)}`);
   assert.equal(scope.rows.find(row => row.path.endsWith("/root-coverage"))!.outcome.kind, "refused",
     "the compile scope retains benches.sh's whole-directory roots, including an unimported sibling");
   const reproduced = invoke("--check", first); assert.equal(reproduced.status, 0, reproduced.stdout + reproduced.stderr);
