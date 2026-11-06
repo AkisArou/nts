@@ -92,7 +92,8 @@ test("a token comes back when its holder is SIGKILLed", async () => {
 test("exit status, signals and stdin are the command's own", async () => {
   const p = await pool(2);
   assert.equal((await run(TOKEN, ["sh", "-c", "exit 7"], tokenEnv(p))).status, 7);
-  assert.equal((await run(TOKEN, ["sh", "-c", "kill -SEGV $$"], tokenEnv(p))).signal, "SIGSEGV");
+  // A deliberate fault leaves no core file, whatever limit the caller set.
+  assert.equal((await run(TOKEN, ["sh", "-c", "ulimit -c 0; kill -SEGV $$"], tokenEnv(p))).signal, "SIGSEGV");
   assert.equal((await run(TOKEN, ["cat"], tokenEnv(p), "from stdin\n")).out, "from stdin\n");
   p.close();
 });
