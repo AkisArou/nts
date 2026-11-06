@@ -49,9 +49,62 @@ test("scope union keeps both project/crate subsets and either whole-step obligat
   }
 });
 
-test("a removed step remains explicit instead of disappearing behind candidate all", () => {
-  const got = unionViews([view("all", null, null, ["build", "retired"]), view("all", null, null, ["build"])]);
-  assert.deepEqual(got.steps, ["build", "retired"]);
+test("a removed step remains an obligation without a declared successor", () => {
+  assert.throws(() => unionViews([view("all", null, null, ["build", "retired"]), view("all", null, null, ["build"])]),
+    /step retired is owed by main's rules and removed by this change with no declared successor/);
+});
+
+test("the tip's declared split carries every base obligation to its current steps", () => {
+  const base = view(["typescript-cases"], null, null, ["typescript-cases"]);
+  const tip = { ...view([], null, null, ["typescript-c", "typescript-llvm", "typescript-jvm"]),
+    successors: { "typescript-cases": { steps: ["typescript-c", "typescript-llvm", "typescript-jvm"] } } };
+  assert.deepEqual(unionViews([base, tip]).steps, ["typescript-c", "typescript-llvm", "typescript-jvm"]);
+  assert.equal(unionViews([{ ...base, checks: { ...base.checks, steps: "all" } }, tip]).steps, "all");
+  assert.throws(() => unionViews([{ ...base, successors: tip.successors }, { ...tip, successors: undefined }]),
+    /no declared successor/, "the base cannot authorize a tip's removal");
+});
+
+test("an explicit retirement needs a reason and invalid successor targets are refused", () => {
+  const base = view(["retired"], null, null, ["retired"]);
+  const tip = view(["build"], null, null, ["build"]);
+  assert.deepEqual(unionViews([base, { ...tip, successors: { retired: { steps: [], reason: "covered outside this gate" } } }]).steps, ["build"]);
+  for (const successors of [{ retired: { steps: [] } }, { retired: { steps: ["missing"] } }, { build: { steps: ["build"] } }]) {
+    assert.throws(() => unionViews([base, { ...tip, successors }]), /successor/);
+  }
+});
+
+test("a successor's project or crate scope is whole even beside narrower current selection", () => {
+  const base = view(["old"], "unrelated", "unrelated", ["old"]);
+  const tip = { ...view(["interop", "doctests"], "selected", "selected"),
+    successors: { old: { steps: ["interop", "doctests"] } } };
+  const got = unionViews([base, tip]);
+  assert.equal(got.interop, null);
+  assert.equal(got.doctests, null);
+});
+
+test("immutable endpoint selection carries the tip's successor table and rejects undeclared deletion", t => {
+  const repo = mkdtempSync(join(tmpdir(), "owed-successors-"));
+  t.after(() => rmSync(repo, { recursive: true, force: true }));
+  const env = { ...process.env, GIT_AUTHOR_NAME: "t", GIT_AUTHOR_EMAIL: "t@t", GIT_COMMITTER_NAME: "t", GIT_COMMITTER_EMAIL: "t@t" };
+  const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
+  const file = join(repo, "tooling/gate/owed.mjs");
+  mkdirSync(dirname(file), { recursive: true });
+  const policy = (steps: string[], successors?: unknown) => `
+export const allSteps=()=>${JSON.stringify(steps)};
+export const selfTest=()=>null;
+export const owed=()=>[{name:'control',paths:[],steps:allSteps(),arms:[]}];
+export const gateSteps=rules=>rules.flatMap(rule=>rule.steps);
+${successors === undefined ? "" : `export const STEP_SUCCESSORS=${JSON.stringify(successors)};`}\n`;
+  writeFileSync(file, policy(["typescript-cases"]));
+  git("init", "-qb", "main"); git("add", "."); git("commit", "-qm", "base");
+  const base = git("rev-parse", "HEAD"), steps = ["typescript-c", "typescript-llvm", "typescript-jvm"];
+  const successors = { "typescript-cases": { steps } };
+  writeFileSync(file, policy(steps, successors)); git("add", "."); git("commit", "-qm", "split");
+  const split = selectRange(repo, `${base}..HEAD`);
+  assert.deepEqual(split.checks.steps, steps);
+  assert.deepEqual(split.views[1].successors, successors);
+  writeFileSync(file, policy(steps)); git("add", "."); git("commit", "-qm", "undeclared removal");
+  assert.throws(() => selectRange(repo, `${base}..HEAD`), /step typescript-cases is owed by main's rules and removed by this change with no declared successor/);
 });
 
 test("historical rules receive the same committed changes without modern metadata exports", t => {

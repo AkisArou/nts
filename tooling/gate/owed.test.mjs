@@ -12,7 +12,8 @@ import { chmodSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writ
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, stepInputs, targetFiles, WIDE } from "./owed.mjs";
+import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
+import * as policy from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
@@ -30,6 +31,24 @@ test("every new or changed program fixture owes the complete native capture inva
 });
 /** What a landing runs when it owes the full gate: every step but the wide ones. */
 const landing = () => allSteps().filter((s) => !WIDE.has(s));
+
+test("the rule self-test rejects missing successors, current keys and unexplained retirements", () => {
+  const { STEP_SUCCESSORS } = policy;
+  assert.ok(STEP_SUCCESSORS, "the endpoint policy declares its step successors");
+  try {
+    STEP_SUCCESSORS.retired = { steps: ["missing-successor"] };
+    assert.match(selfTest(), /successor.*missing-successor/);
+    STEP_SUCCESSORS.retired = { steps: [] };
+    assert.match(selfTest(), /retir.*reason/);
+    delete STEP_SUCCESSORS.retired;
+    STEP_SUCCESSORS.build = { steps: ["build"] };
+    assert.match(selfTest(), /successor.*build.*current/);
+  } finally {
+    delete STEP_SUCCESSORS.retired;
+    delete STEP_SUCCESSORS.build;
+  }
+  assert.equal(selfTest(), null);
+});
 /**
  * What the rules reach, the wide steps included: a landing runs the core of it
  * and the full run the rest, so a claim of reach is a claim about the rules.
