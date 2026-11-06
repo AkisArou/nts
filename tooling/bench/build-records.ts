@@ -8,7 +8,8 @@ import { basename, dirname, isAbsolute, join, relative, resolve } from "node:pat
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { setTimeout as poll } from "node:timers/promises";
 import { compileActive, memoryRun } from "../census/worker-memory.ts";
-import { type Backend, stableBuildDiagnostic } from "../census/typescript-record.ts";
+import type { Backend } from "../census/typescript-record.ts";
+import { stableBuildDiagnostic } from "../conformance/observation-text.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { Admission } from "../gate/admission.ts";
 import { gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
@@ -151,7 +152,7 @@ function projectFor(root: string, path: string, scratch: string): string {
   return config;
 }
 function driverIdentity(root: string): string {
-  return hash(JSON.stringify(["tooling/bench/build-records.ts", "tooling/bench/outcomes.ts", "tooling/census/line-record.ts", "tooling/census/typescript-record.ts",
+  return hash(JSON.stringify(["tooling/bench/build-records.ts", "tooling/bench/outcomes.ts", "tooling/census/line-record.ts", "tooling/conformance/observation-text.ts",
     "tooling/conformance/outcome-transition.ts", "pnpm-lock.yaml"].map(path => [path, hash(readFileSync(join(root, path)))])));
 }
 function publish(file: string, contents: string): void {

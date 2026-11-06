@@ -2,7 +2,8 @@
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
 import { parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
-import { stableBuildDiagnostic, type Backend } from "../census/typescript-record.ts";
+import type { Backend } from "../census/typescript-record.ts";
+import { stableBuildDiagnostic } from "../conformance/observation-text.ts";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 
 export const BENCHMARK_SCOPES = ["compile", "scalar", "workload"] as const;
