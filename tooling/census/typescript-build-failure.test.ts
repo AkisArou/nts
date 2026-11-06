@@ -45,6 +45,36 @@ test("existing pass records keep their bytes and observation", () => {
   assert.equal(serializeTypeScriptRecord(parseTypeScriptRecord(contents)), contents);
 });
 
+test("the attempt records a compiler fault, rejects an outside kill and retains memory attribution", t => {
+  const base = join(homedir(), ".cache/nts/build-failure-tests"); mkdirSync(base, { recursive: true });
+  const scratch = mkdtempSync(join(base, "origin-")); t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const helper = join(scratch, "origin.mjs");
+  writeFileSync(helper, `
+import {mock} from 'node:test';
+import {workspace} from ${JSON.stringify(new URL("./project.ts", import.meta.url).href)};
+import {observationFromRow} from ${JSON.stringify(new URL("./typescript-record.ts", import.meta.url).href)};
+const location=${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)},real=await import(location);
+let emitted;
+mock.module(location,{namedExports:{...real,compileSync(){return emitted;}}});
+const {attempt}=await import(${JSON.stringify(new URL("./attempt262.ts", import.meta.url).href)});
+const dir=workspace(${JSON.stringify(join(scratch, "project"))},'ts');
+const result=[];
+for(const [signal,memoryKilled] of [['SIGABRT',false],['SIGKILL',false],['SIGKILL',true]]){
+ emitted={status:null,signal,memoryKilled,stdout:'',stderr:'NTS1001 a refusal printed first',residentLimitBytes:134217728,residentRunBytes:805306368};
+ const raw=attempt(dir,'const value:number=1;',{nts:'controlled-compiler',cc:'controlled-linker',fresh:true,language:'ts'});
+ let observation,rejected=false;try{observation=observationFromRow(raw);}catch{rejected=true;}
+ result.push({raw,observation,rejected});
+}
+console.log(JSON.stringify(result));
+`);
+  const child = spawnTest(process.execPath, ["--experimental-test-module-mocks", helper], { encoding: "utf8" });
+  assert.equal(child.status, 0, child.stdout + child.stderr);
+  const [fault, external, memory] = JSON.parse(child.stdout);
+  assert.deepEqual(fault.observation, { kind: "build-failure", stage: "compiler-crash", diagnostic: "stopped by SIGABRT" });
+  assert.equal(external.raw.bucket, "infrastructure-error"); assert.match(external.raw.why, /SIGKILL/); assert.equal(external.rejected, true);
+  assert.equal(memory.raw.bucket, "memory-cap"); assert.equal(memory.rejected, true);
+});
+
 test("the attempt retains the diagnostic and keeps toolchain loss separate", t => {
   const base = join(homedir(), ".cache/nts/build-failure-tests"); mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "run-"));
