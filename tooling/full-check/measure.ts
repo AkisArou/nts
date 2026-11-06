@@ -1,0 +1,97 @@
+// A measurement: gate steps at one commit, run the way the full run runs them
+// -- pinned.sh in the full check's own tree and target, in the gate's
+// canonical environment -- and read back from the run's summary.json.
+import { spawnSync } from "node:child_process";
+import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
+import { join } from "node:path";
+import { fullEnvironment } from "../census/full-plan.ts";
+import type { Layout } from "./state.ts";
+
+/** A step's result as the full check reads it: a skip the policy accepts is a pass. */
+export type StepResult = "PASS" | "FAIL" | "HELD";
+
+export type Measurement = {
+  commit: string;
+  run: string;
+  steps: Record<string, StepResult>;
+  reasons: Record<string, string>;
+  verdict: "green" | "red" | "held";
+};
+
+export function verdictOf(steps: Record<string, StepResult>): Measurement["verdict"] {
+  const values = Object.values(steps);
+  return values.includes("FAIL") ? "red" : values.every(v => v === "PASS") ? "green" : "held";
+}
+
+type Summary = {
+  verdict?: string;
+  identities?: { commit?: string };
+  environment?: { canonical?: boolean };
+  steps?: { name: string; verdict: string; reason?: string; accepted?: boolean }[];
+};
+
+/** What a run's summary says of each requested step; anything it cannot vouch for is held. */
+export function readSummary(run: string, commit: string, requested: readonly string[]): Pick<Measurement, "steps" | "reasons"> {
+  const steps: Record<string, StepResult> = {}, reasons: Record<string, string> = {};
+  const hold = (why: string) => { for (const name of requested) { steps[name] = "HELD"; reasons[name] = why; } return { steps, reasons }; };
+  const file = join(run, "summary.json");
+  if (!existsSync(file)) return hold("the run wrote no summary");
+  let summary: Summary;
+  try { summary = JSON.parse(readFileSync(file, "utf8")) as Summary; } catch (error) { return hold(`unreadable summary: ${String(error)}`); }
+  if (!summary.identities?.commit || !commit.startsWith(summary.identities.commit)) return hold(`the summary is of ${summary.identities?.commit ?? "no commit"}, not ${commit.slice(0, 12)}`);
+  if (summary.environment?.canonical !== true) return hold("the run was not in the canonical environment");
+  const by = new Map((summary.steps ?? []).map(step => [step.name, step]));
+  for (const name of requested) {
+    const step = by.get(name);
+    if (!step) { steps[name] = "HELD"; reasons[name] = "not in the summary"; continue; }
+    steps[name] = step.verdict === "PASS" || (step.verdict === "SKIPPED" && step.accepted) ? "PASS" : step.verdict === "FAIL" ? "FAIL" : "HELD";
+    if (steps[name] !== "PASS") reasons[name] = `${step.verdict}${step.reason ? `: ${step.reason}` : ""}`;
+  }
+  return { steps, reasons };
+}
+
+export type Gate = {
+  /** Every step the commit's all.sh defines, and the wide ones its owed.mjs names. */
+  steps(commit: string): { all: string[]; wide: string[] };
+  /** Run `steps` at `commit`; `label` names the run's folder. */
+  run(commit: string, steps: readonly string[], label: string): Measurement;
+};
+
+const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
+
+/** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
+export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void): Gate {
+  const pinned = join(controller, "tooling/gate/pinned.sh");
+  const launch = (commit: string, run: string, steps: readonly string[], extra: NodeJS.ProcessEnv) => {
+    mkdirSync(run, { recursive: true });
+    const env = { ...fullEnvironment({ candidate: false, commit, label: "MAIN", run, tree: layout.tree, target: layout.target }, [...steps], process.env), ...extra };
+    const out = openSync(join(run, "full-check.log"), "a");
+    try {
+      return spawnSync("sh", [pinned, commit], { cwd: controller, env, stdio: ["ignore", out, out] });
+    } finally { closeSync(out); }
+  };
+  return {
+    // The commit's own lists, read in the tree pinned.sh sets up for it
+    // (NTS_GATE_SETUP_ONLY: checked out, inputs linked, nothing built).
+    steps(commit) {
+      const setup = join(layout.runs, `setup-${commit.slice(0, 12)}-${stamp()}`);
+      const ready = launch(commit, setup, [], { NTS_GATE_SETUP_ONLY: "1" });
+      if (ready.status !== 0) throw new Error(`pinned.sh could not set ${commit.slice(0, 12)} up (exit ${ready.status}); see ${setup}`);
+      const list = spawnSync("sh", ["tooling/gate/all.sh", "--list"], { cwd: layout.tree, encoding: "utf8" });
+      if (list.status !== 0) throw new Error(`all.sh --list at ${commit.slice(0, 12)}: ${list.stderr.trim()}`);
+      const wide = spawnSync(process.execPath, ["--input-type=module", "-e", 'const { WIDE } = await import("./tooling/gate/owed.mjs"); process.stdout.write(JSON.stringify([...WIDE]))'], { cwd: layout.tree, encoding: "utf8" });
+      if (wide.status !== 0) throw new Error(`owed.mjs's WIDE at ${commit.slice(0, 12)}: ${wide.stderr.trim()}`);
+      rmSync(setup, { recursive: true, force: true });
+      return { all: list.stdout.split("\n").filter(Boolean), wide: JSON.parse(wide.stdout) as string[] };
+    },
+    run(commit, steps, label) {
+      if (!steps.length) throw new Error("no steps to run: an empty NTS_GATE_STEPS is every step");
+      const run = join(layout.runs, `${label}-${commit.slice(0, 12)}-${stamp()}`);
+      log(`measuring ${steps.join(" ")} at ${commit.slice(0, 12)}; logs ${run}`);
+      const result = launch(commit, run, steps, {});
+      if (result.error) log(`pinned.sh did not start: ${result.error.message}`);
+      const read = readSummary(run, commit, steps);
+      return { commit, run, ...read, verdict: verdictOf(read.steps) };
+    },
+  };
+}
