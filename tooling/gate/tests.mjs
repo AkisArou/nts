@@ -27,6 +27,8 @@
 // lander's opt-level 1, line tables and CARGO_INCREMENTAL=0, avoiding a
 // second variant in standalone runs. Explicit standalone overrides still work;
 // old incremental/feature variants are reclaimed after a successful run too.
+// NTS_TEST_PROFILE names another Cargo profile to build and run them in: the
+// landing check's `nts-dev`, in which it also builds the compiler it drives.
 
 import { spawn, spawnSync } from "node:child_process";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -39,6 +41,12 @@ import { exitAfterOutput } from "./exit.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
+const PROFILE = process.env.NTS_TEST_PROFILE ?? "";
+if (PROFILE !== "" && !/^[a-z][a-z0-9-]*$/.test(PROFILE)) {
+  console.log(`  NOT MEASURED: NTS_TEST_PROFILE=${PROFILE} is not a Cargo profile name`);
+  process.exit(2);
+}
+const TEST_ARGS = ["test", "--workspace", "--no-fail-fast", ...(PROFILE ? ["--profile", PROFILE] : [])];
 const work = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "nts-tests-"));
 process.on("exit", () => rmSync(work, { recursive: true, force: true }));
 for (const sig of ["SIGINT", "SIGTERM"]) process.on(sig, () => process.exit(130));
@@ -65,7 +73,7 @@ node -e 'const fs=require("fs");fs.writeFileSync(process.argv[1], JSON.stringify
 chmodSync(recorder, 0o755);
 
 const started = Date.now();
-const first = spawnSync("cargo", ["test", "--workspace", "--no-fail-fast"], {
+const first = spawnSync("cargo", TEST_ARGS, {
   cwd: ROOT,
   env: {
     ...process.env,
@@ -87,7 +95,7 @@ const compiled = (Date.now() - started) / 1000;
 if (first.status !== 0) {
   // A compile error, or a doctest that failed: cargo's own output says which.
   console.log(firstOut.split("\n").filter((l) => /^(error|warning: unused|test .* FAILED|failures:|---- )/.test(l)).slice(0, 60).join("\n"));
-  console.log(`  cargo test --workspace --no-fail-fast (building, doctests, recording) exited ${first.status ?? first.signal}`);
+  console.log(`  cargo ${TEST_ARGS.join(" ")} (building, doctests, recording) exited ${first.status ?? first.signal}`);
   process.exit(1);
 }
 const doctests = (firstOut.match(/^\s+Doc-tests /gm) ?? []).length;
