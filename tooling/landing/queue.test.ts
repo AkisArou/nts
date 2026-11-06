@@ -8,7 +8,8 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { acquire, holder, withLock } from "./lock.ts";
-import { Queue } from "./queue.ts";
+import { ensureService, Queue, serviceRunning, submit } from "./queue.ts";
+import { scratchRepo } from "./scratch-repo.ts";
 
 const home = (t: { after: (f: () => void) => void }) => {
   const dir = mkdtempSync(join(process.env.TMPDIR ?? tmpdir(), "landing-queue-"));
@@ -85,6 +86,22 @@ test("the status says what the service does, and since when", t => {
   q.setStatus({ state: "held", id: "x", message: "memory: 10.0 GB" });
   assert.equal(q.status().since, since, "the same hold keeps its start");
   assert.equal(q.status().message, "memory: 10.0 GB");
+});
+
+test("submit, as the full check calls it, puts a revert first and starts no second service", t => {
+  const s = scratchRepo(t, "landing-submit");
+  const home = join(s.dir, "landing");
+  const q = new Queue(home);
+  const waiting = q.submit(s.git(["rev-parse", "HEAD"]), { branch: "fix/a" });
+  const revert = s.commit({ "docs/workflow.md": "reverted\n" }, "Revert \"something\"");
+  const lock = acquire(join(home, "serve.lock"))!; // a service is draining
+  t.after(() => lock.release());
+  const entry = submit("HEAD", { first: true, note: `revert of ${"f".repeat(12)}`, root: s.root, home });
+  assert.equal(entry.sha, revert);
+  assert.equal(entry.by, "full-check");
+  assert.deepEqual(q.waiting().map(e => e.id), [entry.id, waiting.id]);
+  assert.ok(serviceRunning(home));
+  assert.equal(ensureService(s.root, home), "running");
 });
 
 test("one owner holds the lock; a dead owner's lock is taken over", t => {

@@ -12,10 +12,18 @@
 //
 // Every write is durable (durable-record.ts): a crash leaves either the old
 // file or the new one, never half of one, and the service resumes from them.
+//
+// `submit` queues a change and makes sure a service drains the queue; the
+// full check calls it with `first` to put a revert ahead of every change.
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
+import { systemdEnvironment } from "../gate/environment.ts";
 import { durableRecord } from "../lanes/durable-record.ts";
+import { revParse, sharedCheckout } from "./git.ts";
+import { holder } from "./lock.ts";
 
 export type Entry = {
   version: 1; id: string; sha: string;
@@ -155,4 +163,52 @@ export class Queue {
     const since = previous.state === fields.state && previous.id === fields.id ? previous.since ?? previous.at : now();
     durableRecord(this.path("status.json"), { version: 1, at: now(), since, ...fields });
   }
+}
+
+// ---------------------------------------------------------------------------
+// Joining the queue: what an agent's `check.ts <commit>` and the full check's
+// revert call.
+// ---------------------------------------------------------------------------
+
+/** The landing check's state on this machine: its queue and answers, its runs (kept three days), its tree and target. */
+export const LANDING_HOME = join(homedir(), ".cache/nts-landing");
+export const SERVICE_UNIT = "nts-landing-check";
+
+/** Whether a service holds the queue now. */
+export function serviceRunning(home = LANDING_HOME): boolean {
+  return holder(join(home, "serve.lock")) !== null;
+}
+
+/**
+ * Start the service unless one is draining: a user unit of its own, run from
+ * the shared checkout, so it runs main's code with the host capabilities the
+ * steps need, and outlives the process that asked. Without systemd it is a
+ * detached process logging to the landing home.
+ */
+export function ensureService(root: string, home = LANDING_HOME, env: NodeJS.ProcessEnv = process.env): string {
+  if (serviceRunning(home)) return "running";
+  const script = join(root, "tooling/landing/check.ts");
+  if (spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0) {
+    const r = spawnSync("systemd-run", ["--user", `--unit=${SERVICE_UNIT}`, "--collect", "--quiet", "-p", "LimitCORE=0",
+      `--working-directory=${root}`, ...systemdEnvironment(env), process.execPath, script, "serve"], { encoding: "utf8" });
+    // A unit that exists already is one starting or draining: the lock says which soon.
+    return r.status === 0 ? `started ${SERVICE_UNIT}` : /already (exists|loaded)/.test(r.stderr ?? "") ? "starting" : `could not start ${SERVICE_UNIT}: ${(r.stderr ?? "").trim()}`;
+  }
+  mkdirSync(home, { recursive: true });
+  const log = openSync(join(home, "serve.log"), "a");
+  const child = spawn(process.execPath, [script, "serve"], { cwd: root, env, detached: true, stdio: ["ignore", log, log] });
+  child.unref();
+  return `started process ${child.pid}`;
+}
+
+/**
+ * Queue `commit` to land, and make sure a service drains the queue. The full
+ * check submits a revert with `first`, ahead of every change waiting.
+ */
+export function submit(commit: string, options: { first?: boolean; branch?: string | null; tree?: string | null; by?: string; note?: string; root?: string; home?: string } = {}): Entry {
+  const root = options.root ?? sharedCheckout(), home = options.home ?? LANDING_HOME;
+  const sha = revParse({ root }, commit);
+  const entry = new Queue(home).submit(sha, { branch: options.branch ?? null, tree: options.tree ?? null, first: options.first, by: options.by ?? (options.first ? "full-check" : "agent"), note: options.note });
+  ensureService(root, home);
+  return entry;
 }

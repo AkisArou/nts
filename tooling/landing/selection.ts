@@ -39,7 +39,7 @@ export type Form =
   | { form: "after" };
 export type Table = Readonly<Record<string, Form>>;
 /** A step's row in tooling/gate/step-table.mjs, as far as the selection reads it. */
-export type StepRow = { readonly name: string; readonly slots?: number; readonly fe?: boolean; readonly needs?: readonly string[] };
+export type StepRow = { readonly name: string; readonly slots?: number; readonly fe?: boolean; readonly needs?: readonly string[]; readonly treeOnly?: boolean };
 /**
  * What the rules select for a range (owed-range.ts): the steps a landing owes,
  * or every step all.sh defines, and `reach`, every step the rules name, the
@@ -223,6 +223,8 @@ export const COMPILES = new Set(["build", "clippy", "tests", "doctests"]);
 export type ChangeKind = "rust" | "other";
 type Measured = { cpu: number; wall?: number };
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
+/** A measured CPU: a check that takes no measurable time measured 0. */
+const measuredCpu = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
 
 /** The landing check's own record: `{ version: 1, steps: { "<step>" | "<step>:<kind>": { cpu, wall } } }`. */
 export function readLandingCosts(file: string): Map<string, Measured> {
@@ -232,7 +234,7 @@ export function readLandingCosts(file: string): Map<string, Measured> {
     const out = new Map<string, Measured>();
     for (const [key, row] of Object.entries(value.steps)) {
       const r = row as { cpu?: unknown; wall?: unknown };
-      if (!/^[a-z][a-z0-9-]*(?::(?:rust|other))?$/.test(key) || !positive(r?.cpu)) continue;
+      if (!/^[a-z][a-z0-9-]*(?::(?:rust|other))?$/.test(key) || !measuredCpu(r?.cpu)) continue;
       out.set(key, positive(r.wall) ? { cpu: r.cpu, wall: r.wall } : { cpu: r.cpu });
     }
     return out;
@@ -250,13 +252,17 @@ export function readBaseline(text: string): Map<string, Measured> {
   for (const line of text.split("\n")) {
     if (line === "" || line.startsWith("#")) continue;
     const [name, wall, cpu] = line.split("\t");
-    if (!name || !positive(Number(cpu))) continue;
+    if (!name || cpu === undefined || cpu.trim() === "" || !measuredCpu(Number(cpu))) continue;
     out.set(name, positive(Number(wall)) ? { cpu: Number(cpu), wall: Number(wall) } : { cpu: Number(cpu) });
   }
   return out;
 }
 
-/** A cost for every step: the landing check's own, else the baseline, else a minute at full width. */
+/**
+ * A cost for every step: the landing check's own, else the baseline, else
+ * the default: seconds for a step the table says reads only the tree, and the
+ * gate's minute at full width for any other.
+ */
 export function costLookup(own: ReadonlyMap<string, Measured>, baseline: ReadonlyMap<string, Measured>, kind: ChangeKind,
   rows: ReadonlyMap<string, StepRow>, budget: Budget): (step: string) => StepCost {
   return step => {
@@ -264,7 +270,8 @@ export function costLookup(own: ReadonlyMap<string, Measured>, baseline: Readonl
     if (mine) return { ...mine, measured: true, source: "landing" };
     const base = baseline.get(step);
     if (base) return { ...base, measured: true, source: "baseline" };
-    return { cpu: 60 * usableWidth(rows.get(step) ?? {}, budget), measured: false, source: "default" };
+    const row = rows.get(step);
+    return { cpu: row?.treeOnly ? 5 : 60 * usableWidth(row ?? {}, budget), measured: false, source: "default" };
   };
 }
 
@@ -297,7 +304,7 @@ export function describeSelection(selection: Selection): string {
   const rank = (s: Landing) => s.step === "build" ? 0 : ["as-is", "fixtures", "sample", "prerequisite", "tree"].indexOf(s.form) + 1;
   for (const step of [...selection.landing].sort((a, b) => rank(a) - rank(b) || (a.step < b.step ? -1 : 1))) {
     const stands = step.for ? ` for ${step.for.join(" ")}` : "";
-    const cost = step.cost.measured ? `cpu ${Math.round(step.cost.cpu)} s (${step.cost.source})` : "not measured: a minute at full width";
+    const cost = step.cost.measured ? `cpu ${Math.round(step.cost.cpu)} s (${step.cost.source})` : `not measured: ${step.form === "tree" ? "seconds, as the step table says" : "a minute at full width"}`;
     lines.push(`  ${step.step.padEnd(24)} ${step.form.padEnd(8)} ~${minutes(step.seconds).padEnd(8)} ${cost}${stands}`);
   }
   const groups = new Map<Why, Deferred[]>();
