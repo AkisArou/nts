@@ -157,9 +157,21 @@ regression becomes a task. Benchmarks never block a landing.
   each with its own build folder kept warm. A task takes a free one at the
   newest `main` and gives it back when it lands, so the next task's build is
   incremental rather than cold, and the disk holds the pool and nothing
-  else. The shared checkout `~/Projects/nts` stays on `main`.
+  else. Agents do not make worktrees of their own. The shared checkout
+  `~/Projects/nts` stays on `main`.
+- **One branch per task, deleted when it lands.** A task works on one branch
+  named after it. When the change lands, the landing check deletes the
+  branch, on the machine and on GitHub, and resets the task's worktree to the
+  newest `main` for the next task. An agent rewrites its one branch; it does
+  not keep rounds of it (`-r2`, `-before`, `-fold`).
 - **No evidence folders.** The landing check's and the full check's logs are
   the evidence; the lander keeps three days of them.
+- **The full check counts them.** One of its steps is red when a branch is
+  named by no task in [`plan.md`](plan.md), a worktree is outside the pool,
+  or `~/.cache` holds an nts folder other than the pool's, the lander's last
+  three days, the pins `main` uses, the inputs and the Chromium caches. Rules
+  alone let 1,364 branches, 185 worktrees and 120 GB of evidence folders pile
+  up by 11-06; a red step does not.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
 - **CPUs 4 and 5 stay reserved for measurement;** heavy work runs at low
@@ -186,6 +198,7 @@ the first node task.
 | Coordinator approval and evidence packets per landing | design agreement before work; risky diffs read |
 | Benchmarks and landings competing for the machine | benchmarks nightly on `verified` |
 | A separate path for tests-only and docs-only changes | one landing check, which is seconds for them |
+| Branches, worktrees and evidence folders that piled up | one branch and one pool worktree per task, deleted on landing, and counted by the full check |
 
 ## Getting there
 
@@ -196,9 +209,11 @@ the first node task.
    read first: landed or obsolete work goes, and anything still worth doing
    becomes a task naming the branch.
 2. **The landing check:** the path-scoped check of ten minutes or less, and
-   direct landing from it.
+   direct landing from it, which deletes the task's branch and resets its
+   worktree.
 3. **The full check after landing:** run continuously, the `verified` marker,
-   and the automatic revert through the culprit search.
+   the automatic revert through the culprit search, and the step that counts
+   branches, worktrees and cache folders.
 4. **Records written by the full check,** and the worktree pool.
 5. **Restart** with agents on the first tasks, as many as the task list
    holds work for in different areas.
