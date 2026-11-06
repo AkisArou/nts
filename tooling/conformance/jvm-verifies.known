@@ -25,6 +25,8 @@
 # (J): a branch to bytecode offset 0 with no explicit frame.
 # (K): `Object.is` of a string and a boolean compares the string reference with the boolean
 # primitive (`if_acmpeq`, "Bad type on operand stack").
+# (L): a string method given an argument typed `any` passes the erased value where the method takes
+# a string (`invokestatic`, "'nts/rt/NtsValue' is not assignable to 'java/lang/String'").
 # (C) and most of the closure-slot declines: one abstract root every callable class extends
 # (`types::callable_class`) -- 81 closure-store declines -> 32, and readline verifies whole.
 # Then the heterogeneous tuple (602f496c8, lowering): dns, dgram, net, http and process verify whole, and
@@ -39,3 +41,4 @@ runtime/node/cluster	(E) ChildWritable, as child_process's: lowering refuses its
 runtime/node/perf_hooks	(E) PerformanceNodeTiming and PerformanceResourceTiming, declined under NTS4009 and never written: their `toJSON` returns a JSON record that repeats PerformanceEntryJSON's fields with no `extends`, so the covariant return has no class relation to bridge. The agreed fix is an inferred parent (override-keyed, assignability-only, its own field), after the tuple; the tuple that stood in front of it cleared in 602f496c8 (jvm lane, 2026-09-30)
 tests/outcomes/a-method-loop-at-entry-misses-its-jvm-stackmap	(J) AWFY Json: the entry loop in Parser#skipWhiteSpace branches to bytecode offset 0 without its stackmap frame; the one-call-site inline-loop control verifies.	pin: invalid=[["Program","¢nts$body$Parser$23$skipWhiteSpace"]]
 tests/outcomes/object-is-of-a-string-and-a-boolean	(K) Object.is("", true): module init compares the string reference with the boolean primitive (if_acmpeq, "Bad type on operand stack"); C rejects the same call as uncompilable C (nts_string_eq given an int); the two-string control verifies.
+tests/outcomes/an-any-argument-to-a-string-method	(L) "lego".concat(missing) with `missing: any`: module init passes the NtsValue to concat's String parameter (invokestatic, "Bad type on operand stack"); C rejects the same call as uncompilable C (nts_concat given an erased value); the control, converting with String() first, verifies.
