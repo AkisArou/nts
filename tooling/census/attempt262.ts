@@ -18,7 +18,7 @@ import { jvmRun } from "../jvm/launch.ts";
 import { compileSync } from "./worker-memory.ts";
 import { bundledDependencies } from "../conformance/node-deps.mjs";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "../conformance/output-prefix.ts";
-import { compilerStop, compilerStopped } from "../conformance/observation-text.ts";
+import { compilerExternalStop, compilerStop, compilerStopped } from "../conformance/observation-text.ts";
 import { outputOracle } from "./output-oracle.ts";
 
 /** The text of a refusal, after the code: `… NTS1001 <this part>`. */
@@ -468,7 +468,8 @@ export function attempt(dir, body, tools, origin?) {
   const stdout = emit.stdout ?? "";
   const diagnostics = `${stdout}${emit.stderr ?? ""}`;
   if (emit.error || emit.status !== 0) {
-    if (emit.signal === "SIGTERM") return { bucket: "timeout", why: "emit" };
+    if (emit.error?.code === "ETIMEDOUT") return { bucket: "timeout", why: `emit ${compilerStop(diagnostics, emit.status, emit.signal)}` };
+    if (compilerExternalStop(emit.status, emit.signal)) return { bucket: "infrastructure-error", why: `compiler ${compilerStop(diagnostics, emit.status, emit.signal)}` };
     // Only the resident controller above can attribute an OOM to its limit.
     // A native panic/abort belongs to the compiler, never an unsupported case,
     // and its record is the stop itself, not a refusal printed before it.

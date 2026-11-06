@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { constants } from "node:os";
 
 /** Compiler-generated identities move independently of a case's behaviour.
  * Keep source names, source positions, representation widths and observed
@@ -43,12 +44,19 @@ export function stableBuildDiagnostic(value: string): string {
     .replace(/\b(?:0[xX][0-9a-fA-F]+|\d+(?:\.\d+)?)\b/g, "N");
 }
 
-/** Whether the compiler stopped instead of answering: a signal, Rust's panic
- * status 101, or the status above 127 a shell reports for a signal. Exit 1 is
- * an answer (invalid HIR, a type error), never a stop, and a timeout's kill is
- * the harness's own, so callers decide that before asking. */
+const compilerFaultSignals = new Set(["SIGSEGV", "SIGBUS", "SIGILL", "SIGFPE", "SIGABRT", "SIGTRAP", "SIGSYS"]);
+const signalNumbers: Readonly<Record<string, number>> = constants.signals;
+
+/** Fault signals and Rust's panic are compiler defects. KILL, TERM, INT, HUP
+ * and other outside stops do not measure the compiler. A resident-controller
+ * memory attribution always takes precedence over this classification. */
 export function compilerStopped(status: number | null, signal: string | null): boolean {
-  return signal !== null || status === 101 || (status !== null && status >= 128 && status <= 255);
+  if (signal !== null) return compilerFaultSignals.has(signal);
+  return status === 101 || [...compilerFaultSignals].some(name => signalNumbers[name] !== undefined && status === 128 + signalNumbers[name]!);
+}
+
+export function compilerExternalStop(status: number | null, signal: string | null): boolean {
+  return (signal !== null || (status !== null && status >= 128 && status <= 255)) && !compilerStopped(status, signal);
 }
 
 /** The stop itself, as one stable line: what a record of a compiler crash
@@ -58,6 +66,10 @@ export function compilerStopped(status: number | null, signal: string | null): b
  * message; the location moves with any edit to that file, so the message is
  * the defect's identity, and the thread id changes on every run. */
 export function compilerStop(output: string, status: number | null, signal: string | null): string {
+  if (compilerExternalStop(status, signal)) {
+    const name = signal ?? Object.entries(signalNumbers).find(([, number]) => status === 128 + number)?.[0];
+    return name ? `stopped by ${name}${signal === null ? ` (exit ${status})` : ""}` : `stopped with exit ${status}`;
+  }
   const lines = output.split("\n").map(line => line.trim());
   const at = lines.findIndex(line => /^thread '[^']*'(?: \(\d+\))? panicked at /.test(line));
   if (at !== -1) {

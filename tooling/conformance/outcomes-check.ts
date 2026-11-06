@@ -141,7 +141,7 @@ import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts"
 import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
-import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
+import { compilerExternalStop, compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -198,6 +198,7 @@ function runBuild(dir, options = { rc: false, address: false }) {
   // A spawn failure and this harness's own timeout kill measure nothing; any
   // other stop is the compiler's, and the defect the fixture pins.
   if (emit.error || emit.signal === "SIGTERM") return { category: "not-measured", nts: `emit-c ${emit.signal ?? emit.error?.message}` };
+  if (compilerExternalStop(emit.status, emit.signal)) return { category: "not-measured", nts: `emit-c ${compilerStop(said, emit.status, emit.signal)}` };
   if (compilerStopped(emit.status, emit.signal)) return { category: "compiler-crash", nts: compilerStop(said, emit.status, emit.signal) };
   const invalid = /^invalid HIR: (.*)$/m.exec(said);
   if (invalid) return { category: "invalid-hir", nts: `invalid HIR: ${invalid[1].trim()}` };
