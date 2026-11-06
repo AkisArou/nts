@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, readRecordsAt, recordPath, writeRecords, type OracleRow, type OracleTable } from "../differential/oracle-records.ts";
+import { GENERATOR, fixtureOf, parseLegacyTable, pendingFixtures, readRecords, readRecordsAt, recordPath, writeRecords, type OracleRow, type OracleTable } from "../differential/oracle-records.ts";
 
 const header = { version: 1, generator_version: 1, generator_digest: "a".repeat(32), seed: null } as const;
 function row(name: string): OracleRow {
@@ -40,11 +40,12 @@ test("fixture records round-trip without changing any population metadata", () =
   }
 }));
 
-test("missing records fail except for a recorder's explicitly named new fixture", () => fixture((root, table) => {
+test("a fixture with no record is pending, not a failure", () => fixture((root, table) => {
+  assert.deepEqual(pendingFixtures(root), []);
   subject(root, "second");
-  assert.throws(() => readRecords(root), /missing fixture record tests\/programs\/second/);
-  assert.deepEqual(readRecords(root, new Set(["tests/programs/second"])), table);
-  assert.throws(() => writeRecords(root, table), /incomplete fixture inventory/);
+  assert.deepEqual(readRecords(root), table, "the recorded fixtures read as before");
+  assert.deepEqual(pendingFixtures(root), ["tests/programs/second"]);
+  assert.throws(() => writeRecords(root, table), /incomplete fixture inventory/, "a full publish still names every fixture");
 }));
 
 test("recording a fixture changes only its record and leaves a matching header alone", () => fixture((root, table) => {

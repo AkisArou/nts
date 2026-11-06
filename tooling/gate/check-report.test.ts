@@ -7,7 +7,7 @@ import test from "node:test";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
-  checkArguments, decodeCheck, formatFromHelp, Outcome, parseJsonReport, projectCheck,
+  checkArguments, consumerExit, decodeCheck, formatFromHelp, Outcome, parseJsonReport, projectCheck,
 } from "../differential/check-report.ts";
 
 function report(status = "agrees", overrides: Partial<CheckCounts> = {}): MeasuredReport {
@@ -114,6 +114,22 @@ test("failure stages and diagnostic codes determine their own categories", () =>
   assert.equal(missing.missingPopulation, value.error.source);
   value.error.kind = "made_up";
   assert.throws(() => decodeCheck("json-v1", 1, JSON.stringify(value)), /failure kind/);
+});
+
+test("a source with no oracle record is pending: compared nothing, failed nothing", () => {
+  const pending = { version: 2, status: "pending", counts: null, oracle: null, refusals: [] as { stage: string; code: string; message: string }[],
+    disagreements: [], aborts: [], incomplete: [], error: null };
+  const decoded = decodeCheck("json-v1", 0, JSON.stringify(pending));
+  assert.equal(decoded.outcome, Outcome.PENDING);
+  assert.equal(decoded.checked, 0);
+  for (const consumer of ["program", "benchmark"] as const) assert.equal(consumerExit(decoded, consumer), 4, "pending is neither agreement nor failure");
+  assert.equal(consumerExit(decoded, "refusal"), 1, "a refusal fixture with no record must still refuse");
+  pending.refusals.push({ stage: "lowering", code: "NTS1001", message: "a refused shape" });
+  assert.equal(consumerExit(decodeCheck("json-v1", 0, JSON.stringify(pending)), "refusal"), 0);
+  assert.throws(() => decodeCheck("json-v1", 1, JSON.stringify(pending)), /contradicts/, "pending exits 0");
+  for (const claim of [{ counts: report().counts }, { oracle: report().oracle }, { aborts: ["stopped"] }]) {
+    assert.throws(() => decodeCheck("json-v1", 0, JSON.stringify({ ...pending, ...claim })), "a pending check claims no measurement");
+  }
 });
 
 test("only an old compiler capability chooses legacy text decoding", () => {

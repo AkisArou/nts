@@ -180,7 +180,12 @@ function files(directory: string, prefix = ""): string[] {
   }).sort();
 }
 
-export function readRecords(root: string, recording: ReadonlySet<string> = new Set()): OracleTable {
+/**
+ * Every fixture record, checked against the corpus: a record whose fixture or
+ * source is gone fails. A fixture with no record yet is pending, not an error:
+ * the full check records it after landing (see pendingFixtures).
+ */
+export function readRecords(root: string): OracleTable {
   const header = parseGenerator(JSON.parse(readFileSync(join(root, GENERATOR), "utf8")));
   const expected = inventory(root), found = new Set<string>(), rows: OracleRow[] = [];
   for (const relative of files(join(root, RECORDS))) {
@@ -193,10 +198,24 @@ export function readRecords(root: string, recording: ReadonlySet<string> = new S
     for (const row of shard.rows) if (!existsSync(join(root, row.source))) fail(`orphaned source record ${row.source}`);
     rows.push(...shard.rows);
   }
-  // Only the recorder's explicitly named new subjects may lack records while
-  // they are being measured. Ordinary readers never supply this set.
-  for (const fixture of expected) if (!found.has(fixture) && !recording.has(fixture)) fail(`missing fixture record ${fixture}; run: node tooling/differential/record-oracles.ts ${fixture}`);
   return { ...header, rows: unique(rows) };
+}
+
+/** The fixtures with no record yet: pending, recorded after landing by the full check. */
+export function pendingFixtures(root: string): string[] {
+  return [...inventory(root)].filter(fixture => !existsSync(join(root, recordPath(fixture)))).sort();
+}
+
+/**
+ * Why a check that called this fixture pending is wrong, or null when the
+ * fixture has no record yet. `nts check` answers pending only then, and a
+ * consumer holds it to that: an answer of pending for a recorded fixture would
+ * skip a recorded case at landing.
+ */
+export function pendingContradiction(root: string, fixture: string | undefined): string | null {
+  if (fixture === undefined) return "reported pending, but it is no oracle fixture";
+  const record = recordPath(fixture);
+  return existsSync(join(root, record)) ? `reported pending, but ${record} exists` : null;
 }
 
 function atomic(root: string, path: string, value: unknown): void {

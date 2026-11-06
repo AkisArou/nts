@@ -1,6 +1,6 @@
 import type { activeCommand, ActiveResult } from "../gate/active-command.ts";
 
-export const CHECK_STATUSES = ["nothing", "agrees", "partial", "all_unavailable", "all_declined",
+export const CHECK_STATUSES = ["pending", "nothing", "agrees", "partial", "all_unavailable", "all_declined",
   "disagrees", "aborted", "not_measured", "error"] as const;
 export type CheckStatus = typeof CHECK_STATUSES[number];
 export const FAILURE_KINDS = ["capture", "typecheck", "source_plan", "preparation", "backend_declined",

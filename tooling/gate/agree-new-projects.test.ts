@@ -51,11 +51,12 @@ function fixture(t:{after(fn:()=>void):void}) {
 if(process.argv[2]==="--help"){console.log("  check        compile, run, and compare against node (--json)");process.exit(0);}
 if(!process.argv.includes("--json"))throw new Error("test double requires structured checks");
 const role=${JSON.stringify(role)},name=process.argv[3].split("/")[2];
-const mode=process.env[role==="before"?(name==="new-fixture"?"TEST_NEW_BEFORE":"TEST_EXISTING_BEFORE"):"TEST_AFTER"]??(role==="before"&&name==="new-fixture"?"population":"agree");
+const mode=(role==="before"?process.env[name==="new-fixture"?"TEST_NEW_BEFORE":"TEST_EXISTING_BEFORE"]:process.env[name==="new-fixture"?"TEST_NEW_AFTER":"TEST_EXISTING_AFTER"]??process.env.TEST_AFTER)??(role==="before"&&name==="new-fixture"?"population":"agree");
 if(process.env.TEST_CHECK_LOG)require("node:fs").appendFileSync(process.env.TEST_CHECK_LOG,role+" "+name+"\\n");
 const value={version:1,status:"agrees",counts:{functions:1,expected:2,compared:2,unavailable:0,runtime_declined:0,timeouts:0,approximated:0,disagreements:0,aborts:0},oracle:{expected:2,received:2,complete:true},refusals:[],disagreements:[],aborts:[],error:null};
 if(mode==="population"||mode==="capture"||mode==="execution"){value.status="error";value.counts=null;value.oracle=null;value.error={kind:mode==="population"?"oracle_coverage":mode,source:mode==="population"?"tests/programs/"+name+"/src/main.ts":null,message:role+" fixture error"};process.exitCode=1;}
 else if(mode==="partial"){value.status="partial";value.counts.compared=1;value.counts.runtime_declined=1;}
+else if(mode==="pending"){value.status="pending";value.counts=null;value.oracle=null;}
 else if(mode==="panic"){console.error(role+" thread panicked during capture");process.exit(101);}
 else if(mode==="wrong"){value.status="disagrees";value.counts.disagreements=1;value.disagreements.push({compiled:"f 1 -> 2",node:"f 1 -> 3"});process.exitCode=1;}
 else if(mode==="text"){console.log("checked 2 cases across 1 function(s)\\nagreed on every case");process.exit(0);}
@@ -123,6 +124,22 @@ test("new fixtures still require complete agreeing after arms",t=>{
       if(TEST_AFTER!=="partial") assert.doesNotMatch(instrument.reason,/before thread panicked/);
     } else assert.equal(result.status,1);
   }
+});
+
+test("a new fixture with no oracle record yet is pending: listed, and not a failure",t=>{
+  const f=fixture(t);
+  rmSync(join(f.root,"results/oracle-counts/tests/programs/new-fixture.json"));
+  const result=f.run({TEST_NEW_BEFORE:"pending",TEST_NEW_AFTER:"pending"});
+  assert.equal(result.status,0,result.stdout+result.stderr);
+  assert.match(result.stdout,/PENDING\s+new-fixture\s+pending: tests\/programs\/new-fixture is not recorded in results\/oracle-counts\/tests\/programs\/new-fixture\.json yet/);
+  assert.match(result.stdout,/ 1 pending, in /);
+});
+
+test("a recorded fixture reported pending is not measured, never skipped",t=>{
+  const f=fixture(t),result=f.run({TEST_EXISTING_AFTER:"pending"});
+  assert.notEqual(result.status,0,result.stdout+result.stderr);
+  assert.match(result.stdout,/NOT MEASURED\s+existing/);
+  assert.match(result.stdout,/reported pending, but results\/oracle-counts\/tests\/programs\/existing\.json exists/);
 });
 
 test("unknown or mismatched before-pin provenance fails before any comparison runs",t=>{

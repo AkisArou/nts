@@ -12,7 +12,7 @@ const source = dirname(fileURLToPath(import.meta.url));
 function sandbox(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "nts-check-consumers-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const directory of ["tooling/gate", "tooling/jvm", "tooling/differential", "tooling/conformance", "tooling/sweep", "tooling/npm-survey",
+  for (const directory of ["tooling/gate", "tooling/jvm", "tooling/differential", "tooling/conformance", "tooling/sweep", "tooling/npm-survey", "tooling/records",
     "tooling/conformance/web-platform/compiled", "tests/programs/control",
     "tests/programs/invalid", "tests/programs/unsupported", "benchmarks/cases/control"]) {
     mkdirSync(join(root, directory), { recursive: true });
@@ -24,6 +24,8 @@ function sandbox(t: TestContext) {
   copyFileSync(join(source, "../differential/check-report.ts"), join(root, "tooling/differential/check-report.ts"));
   copyFileSync(join(source, "../differential/check-report-types.ts"), join(root, "tooling/differential/check-report-types.ts"));
   copyFileSync(join(source, "../differential/check-consumers.ts"), join(root, "tooling/differential/check-consumers.ts"));
+  copyFileSync(join(source, "../differential/oracle-records.ts"), join(root, "tooling/differential/oracle-records.ts"));
+  copyFileSync(join(source, "../records/pending.ts"), join(root, "tooling/records/pending.ts"));
   copyFileSync(join(source, "active-command.ts"), join(root, "tooling/gate/active-command.ts"));
   copyFileSync(join(source, "step-result.ts"), join(root, "tooling/gate/step-result.ts"));
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
@@ -67,6 +69,8 @@ if (name === 'invalid') {
     report.status='disagrees';report.counts.disagreements=1;
     report.disagreements=[{compiled:'f 0 1',node:'f 0 2'}];
   }
+} else if (process.env.CHECK_MUTATION === 'pending' && name === 'control') {
+  report.status='pending'; report.counts=null; report.oracle=null;
 } else if (process.env.CHECK_MUTATION === 'unavailable') {
   report.status='all_unavailable'; report.counts.compared=0; report.counts.unavailable=2;
 } else if (process.env.CHECK_MUTATION === 'contradiction') {
@@ -164,6 +168,22 @@ for (const script of ["gate.sh", "rc.sh", "bench-agree.sh"]) {
     }
   });
 }
+
+test("gate.sh lists a program with no oracle record as pending, and fails one with a record", t => {
+  const { root, compiler } = sandbox(t);
+  mkdirSync(join(root, "tests/programs/second")); writeFileSync(join(root, "tests/programs/second/tsconfig.json"), "{}");
+  const run = () => spawnTest("sh", [join(root, "tooling/gate/gate.sh")], { cwd: root, encoding: "utf8",
+    env: { ...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "pending" } });
+  const pending = run();
+  assert.equal(pending.status, 0, pending.stdout + pending.stderr);
+  assert.match(pending.stdout, /pending: tests\/programs\/control is not recorded in results\/oracle-counts\/tests\/programs\/control\.json yet/);
+  assert.match(pending.stdout, /^1 of 1 agree with node$/m, "a pending program is neither agreement nor failure");
+  mkdirSync(join(root, "results/oracle-counts/tests/programs"), { recursive: true });
+  writeFileSync(join(root, "results/oracle-counts/tests/programs/control.json"), "{}\n");
+  const contradicted = run();
+  assert.equal(contradicted.status, 1, contradicted.stdout + contradicted.stderr);
+  assert.match(contradicted.stdout, /DIS  control: reported pending, but results\/oracle-counts\/tests\/programs\/control\.json exists/);
+});
 
 test("the npm survey reads diagnostic fields and refuses a broken report", t => {
   const {root, compiler} = sandbox(t), pkg = join(root, "survey-package"); mkdirSync(pkg);

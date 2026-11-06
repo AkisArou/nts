@@ -70,6 +70,11 @@
 // both* and does not fail an attribution run -- that is not this change's
 // answer -- but it is never hidden.
 //
+// An example with no oracle record yet is PENDING: `nts check` compares
+// nothing until the full check records its population after landing
+// (tooling/records/record-pending.ts). It is listed and passes, with one or two
+// binaries; its verdict line is `pending`.
+//
 // Exit 0: nothing wrong (one binary) or nothing made worse (two). Exit 1: a
 // wrong answer, or a change. Exit 2: something could not be measured, or the
 // tool could not start.
@@ -89,6 +94,8 @@ import { candidateAddedProjects, fullyMeasuredAgreement } from "./new-projects.t
 import { runCheck, reportCheckFailure, checkFailurePolicy, decodeCheck, Outcome } from "./check-report.ts";
 export { Outcome } from "./check-report.ts";
 import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
+import { pendingContradiction, recordPath } from "./oracle-records.ts";
+import { pendingLine } from "../records/pending.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -123,8 +130,9 @@ function unmeasuredRecord(status, error) {
 
 /**
  * The line `tooling/gate/all.sh`'s `backend_examples` reads for one example:
- * `ok`, `partial <tab> why`, `bare`, `no` or `unmeasured <tab> why`, each
- * followed by the name.
+ * `ok`, `partial <tab> why`, `bare`, `no`, `pending <tab> why` or
+ * `unmeasured <tab> why`, each followed by the name. `pending` is in no count:
+ * the example has no oracle record yet, so nothing was compared.
  *
  * A projection of the record, and deliberately no more permissive than the
  * shell classifier it replaced. `no` counts against a floor that may have
@@ -150,6 +158,8 @@ export function verdict(name, r) {
         : `ok ${name}`;
     case Outcome.NOTHING:
       return `bare ${name}`;
+    case Outcome.PENDING:
+      return `pending ${name}\t${pendingLine(`tests/programs/${name}`, recordPath(`tests/programs/${name}`))}`;
     case Outcome.UNAVAILABLE:
       return `unavailable ${name}\t${r.unavailable} calls without compiled bindings; ${r.expected} Node calls measured`;
     case Outcome.DISAGREES:
@@ -206,7 +216,7 @@ export function describe(r) {
     parts.push(`${r.refusedRoots} refused in lowering${cascades > 0 ? ` (${r.refused} with cascades)` : ""}`);
   }
   if (r.oracleStopped > 0) parts.push("node stopped part-way");
-  if (r.outcome === Outcome.NOT_MEASURED) parts.push(r.first);
+  if (r.outcome === Outcome.NOT_MEASURED || r.outcome === Outcome.PENDING) parts.push(r.first);
   return parts.join(", ");
 }
 
@@ -238,6 +248,10 @@ function selfTest() {
   if (attribute(agreed, unavailable) !== "REGRESSED") return "lost bindings were not attributed as regression";
   if (attribute(partial, wrong) !== "REGRESSED") return "a disagreement was not attributed as regression";
   if (attribute(wrong, {...wrong, answers: ["different"]}) !== "CHANGED") return "changed answers were ignored";
+  const pending = classify(0, JSON.stringify({version: 2, status: "pending", counts: null, oracle: null, refusals: [],
+    disagreements: [], aborts: [], incomplete: [], error: null}));
+  if (pending.outcome !== Outcome.PENDING || !verdict("x", pending).startsWith("pending x\t")) return "a pending example was not read as pending";
+  if (WRONG.has(pending.outcome) || AGREEING.has(pending.outcome)) return "a pending example was counted as an answer";
   for (const mutation of ["agreed on every case\n", JSON.stringify({...value("agrees", 3, 3), version: 2}),
     JSON.stringify(value("agrees", 3, 0, 3))]) {
     let refused = false;
@@ -402,9 +416,12 @@ const check = async (pinned, example) => {
   const checkEnv = {...env, NTS_GATE_CASE_BINARY_SHA: pinned.hash};
   delete checkEnv.NTS_GATE_STEP_RESULT;
   try {
+    const root = oracleRoot.forBinary(binaries[pins.indexOf(pinned)]);
     const {record, incomplete} = await runCheck(pinned.pinned, join("tests/programs", example, "tsconfig.json"), {
-      cwd: oracleRoot.forBinary(binaries[pins.indexOf(pinned)]), env: checkEnv,
+      cwd: root, env: checkEnv,
     });
+    const contradiction = record.outcome === Outcome.PENDING ? pendingContradiction(root, `tests/programs/${example}`) : null;
+    if (contradiction) return unmeasuredRecord(null, new Error(contradiction));
     return {...record, incomplete};
   } catch (error) { return unmeasuredRecord(null, error); }
 };
@@ -466,7 +483,8 @@ function summarise(records) {
   const wrong = records.filter((r) => WRONG.has(r.outcome)).length;
   const stopped = records.filter((r) => r.oracleStopped > 0).length;
   console.log(`  ${by(Outcome.AGREES)} agree, ${by(Outcome.PARTIAL)} agree on part of their cases, ` +
-    `${by(Outcome.NOTHING)} compared nothing, ${wrong} wrong, ${by(Outcome.NOT_MEASURED)} not measured`);
+    `${by(Outcome.NOTHING)} compared nothing, ${wrong} wrong, ${by(Outcome.NOT_MEASURED)} not measured, ` +
+    `${by(Outcome.PENDING)} pending`);
   console.log(`  ${sum("checked")} of ${sum("expected")} case(s) compared; not compared: ${sum("declined")} declined, ` +
     `${sum("timeouts")} timed out, ${unreached} unreached` +
     (stopped > 0 ? ` (node stopped part-way in ${stopped} example(s))` : ""));
@@ -486,6 +504,7 @@ if (pins.length === 1) {
   }
   for (const [example, r] of all) if (r.outcome === Outcome.PARTIAL) print("partial", example, describe(r));
   for (const [example, r] of all) if (r.outcome === Outcome.NOTHING) print("nothing", example, "exports nothing the differential can drive");
+  for (const [example, r] of all) if (r.outcome === Outcome.PENDING) print("pending", example, verdict(example, r).split("\t")[1]);
   for (const [example, r] of all) if (r.outcome === Outcome.NOT_MEASURED) print("NOT MEASURED", example, r.first);
   summarise(all.map(([, r]) => r));
   const wrong = all.filter(([, r]) => WRONG.has(r.outcome)).length;
@@ -508,6 +527,11 @@ for (const example of differing) {
     verdicts.push({example, tag: "NOT MEASURED", before, after, unfinished});
     continue;
   }
+  // No oracle record yet: the after binary compared nothing, by design.
+  if (after.outcome === Outcome.PENDING && again[1].outcome === Outcome.PENDING) {
+    verdicts.push({ example, tag: "PENDING", before, after, note: verdict(example, after).split("\t")[1] });
+    continue;
+  }
   if ((!isNew && !same(before, again[0])) || !same(after, again[1])) {
     verdicts.push({ example, tag: "UNSTABLE", before, after, note: !same(before, again[0]) ? "before disagrees with itself" : "after disagrees with itself" });
     continue;
@@ -521,7 +545,7 @@ for (const example of differing) {
   const tag = before.outcome === Outcome.NOT_MEASURED || after.outcome === Outcome.NOT_MEASURED ? "NOT MEASURED" : attribute(before, after);
   verdicts.push({ example, tag, before, after });
 }
-const ORDER = ["REGRESSED", "CHANGED", "UNSTABLE", "NOT MEASURED", "FIXED", "NEW"];
+const ORDER = ["REGRESSED", "CHANGED", "UNSTABLE", "NOT MEASURED", "FIXED", "NEW", "PENDING"];
 verdicts.sort((a, b) => ORDER.indexOf(a.tag) - ORDER.indexOf(b.tag) || a.example.localeCompare(b.example));
 for (const v of verdicts) {
   print(v.tag, v.example, v.note ?? "");
@@ -533,8 +557,10 @@ for (const v of verdicts) {
 // Unchanged, and wrong or unmeasurable under both: not this change's answer,
 // and not a silence either.
 const bothWrong = examples.filter((e) => !differing.includes(e) && WRONG.has(runs.get(e)[1].outcome));
+const bothPending = examples.filter((e) => !differing.includes(e) && runs.get(e)[1].outcome === Outcome.PENDING);
 const bothUnmeasured = examples.filter((e) => !differing.includes(e) && runs.get(e)[1].outcome === Outcome.NOT_MEASURED);
 for (const e of bothWrong) print("wrong, both", e, describe(runs.get(e)[1]));
+for (const e of bothPending) print("pending", e, verdict(e, runs.get(e)[1]).split("\t")[1]);
 for (const e of bothUnmeasured) print("NOT MEASURED", e, `under both: ${runs.get(e)[1].first}`);
 console.log("  after:");
 summarise(examples.map((e) => runs.get(e)[1]));
@@ -542,7 +568,8 @@ const count = (tag) => verdicts.filter((v) => v.tag === tag).length;
 const failing = count("REGRESSED") + count("CHANGED") + count("UNSTABLE");
 const unmeasured = count("NOT MEASURED") + bothUnmeasured.length;
 console.log(`  ${examples.length - differing.length} unchanged, ${count("FIXED")} fixed, ${count("REGRESSED")} regressed, ` +
-  `${count("CHANGED")} changed, ${count("UNSTABLE")} unstable, ${count("NEW")} not comparable (new), ${unmeasured} not measured, in ${seconds()} s`);
+  `${count("CHANGED")} changed, ${count("UNSTABLE")} unstable, ${count("NEW")} not comparable (new), ${unmeasured} not measured, ` +
+  `${count("PENDING") + bothPending.length} pending, in ${seconds()} s`);
 const unfinishedRecords = [
   ...verdicts.filter(v => v.tag === "NOT MEASURED").flatMap(v => v.unfinished ?? [v.before, v.after]),
   ...bothUnmeasured.map(example => runs.get(example)[1]),

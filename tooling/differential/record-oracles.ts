@@ -331,7 +331,7 @@ async function recordNamed(names: string[]) {
   const plans = (json(join(evidence, "plans.json")) as Manifest).plans;
   const selected = new Set(plans.map(plan => plan.source));
   const fixtures = new Set([...selected].map(fixtureOf));
-  const before = readRecords(root, fixtures);
+  const before = readRecords(root);
   const originalHeader = readFileSync(join(root, GENERATOR));
   const original = new Map([...fixtures].map(fixture => {
     const path = join(root, recordPath(fixture));

@@ -12,7 +12,7 @@ import {activeCommand, CommandNotMeasuredError} from "../gate/active-command.ts"
 import {CaseBudgetError, PressureError, ToolingInstrumentError, instrumentPolicy,
   publishHung, publishRunaway, publishToolingFailure, publishPressure, readStepInstrument} from "../gate/step-result.ts";
 
-const SUCCESS = new Set<string>(['nothing', 'agrees', 'partial', 'all_unavailable']);
+const SUCCESS = new Set<string>(['pending', 'nothing', 'agrees', 'partial', 'all_unavailable']);
 const capabilities = new Map<string, CheckFormat>();
 
 function object(value: unknown, label: string): Record<string, unknown> {
@@ -117,6 +117,14 @@ export function parseJsonReport(input: string, exitStatus: number | null): Check
     } };
   }
   assert.equal(value.error, null, 'measured check cannot carry a stage error');
+  // A source with no oracle record yet compared nothing: no counts, no oracle,
+  // no findings. The full check records it after landing.
+  if (status === 'pending') {
+    assert.equal(value.counts, null, 'a pending check cannot claim measured counts');
+    assert.equal(value.oracle, null, 'a pending check cannot claim an oracle population');
+    assert.equal(disagreements.length + aborts.length + incomplete.length, 0, 'a pending check cannot carry findings');
+    return { version, ...(version === 2 ? {incomplete} : {}), status, counts: null, oracle: null, refusals, disagreements, aborts, error: null };
+  }
   const rawCounts = object(value.counts, 'missing check counts');
   exactKeys(rawCounts, COUNT_NAMES, 'check count fields');
   const counts: CheckCounts = {
@@ -164,7 +172,7 @@ export function decodeCheck(format: unknown, status: number | null, stdout: stri
   const counts = report.counts;
   const error = report.error;
   const byStatus = {
-    nothing: Outcome.NOTHING, agrees: Outcome.AGREES, partial: Outcome.PARTIAL,
+    pending: Outcome.PENDING, nothing: Outcome.NOTHING, agrees: Outcome.AGREES, partial: Outcome.PARTIAL,
     all_unavailable: Outcome.UNAVAILABLE, all_declined: Outcome.ALL_DECLINED,
     disagrees: Outcome.DISAGREES, aborted: Outcome.ABORTED, not_measured: Outcome.NOT_MEASURED,
   };
@@ -189,20 +197,27 @@ export function decodeCheck(format: unknown, status: number | null, stdout: stri
     refusals: report.refusals,
     oracleStopped: error?.kind === 'oracle_execution' ? 1 : 0,
     missingPopulation: error?.kind === 'oracle_coverage' ? error.source : null,
-    first: unresolved ? 'needs an installed workspace; cannot resolve here' : error?.message ?? outcome,
+    first: unresolved ? 'needs an installed workspace; cannot resolve here'
+      : report.status === 'pending' ? 'no oracle record yet; the full check records it after landing' : error?.message ?? outcome,
     report,
   };
 }
 
+// A refusal-only fixture has no oracle record by design, so it is pending (a
+// compiler from before pending reports an oracle_coverage error instead).
+// Either way the compilation completed, and its lowering refusals are the answer.
 function completedCompilationRefusal(record: DecodedCheck): boolean {
-  return record.report?.error?.kind === 'oracle_coverage' &&
+  return (record.report?.error?.kind === 'oracle_coverage' || record.report?.status === 'pending') &&
     record.refusals.some(one => one.stage === 'lowering');
 }
 
-/** Consumer dispositions: 0 compared/refused as requested, 2 empty, 3 unavailable, 1 bad. */
+/** Consumer dispositions: 0 compared/refused as requested, 2 empty, 3 unavailable, 4 pending, 1 bad. */
 export function consumerExit(record: DecodedCheck, consumer: CheckConsumer): number {
   assert.ok(['program', 'benchmark', 'refusal'].includes(consumer), 'unknown check consumer');
   if (consumer === 'refusal' && completedCompilationRefusal(record)) return 0;
+  // Not measured at landing, and not a failure: the full check records it. A
+  // refusal fixture still has to refuse.
+  if (consumer !== 'refusal' && record.outcome === Outcome.PENDING) return 4;
   if (record.outcome === Outcome.NOT_MEASURED) throw new ToolingInstrumentError('tooling-setup', `check not measured: ${record.first}`);
   if (consumer === 'refusal') {
     return record.refused > 0 || record.outcome === Outcome.NO_TYPECHECK ||
@@ -229,6 +244,9 @@ export function checkOutcome(format: CheckFormat, status: number | null, stdout:
   assert.ok(report);
   const check = stableReport(report);
   const {counts, error} = check;
+  // An outcomes fixture is never oracle-covered, so it cannot be pending; if
+  // it were, it measured nothing.
+  if (check.status === 'pending') return { category: 'not-measured', nts: 'no oracle record yet', check };
   if (error) {
     const category = error.kind === 'preparation' ? 'invalid-hir'
       : error.kind === 'backend_declined' ? 'refused'
@@ -475,6 +493,7 @@ export function projectCheck(record: DecodedCheck, projection: 'compiled-answers
 }
 
 export const Outcome = Object.freeze({
+  PENDING: "pending",
   AGREES: "agrees",
   PARTIAL: "agrees on what it compared",
   UNAVAILABLE: "compiled bindings unavailable",

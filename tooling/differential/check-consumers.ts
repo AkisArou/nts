@@ -8,9 +8,11 @@ import {withToken} from "../gate/tokens.mjs";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {checkFailurePolicy, reportCheckFailure, runConsumer} from "./check-report.ts";
 import type {CheckConsumer, DecodedCheck} from "./check-report-types.ts";
+import {pendingContradiction, recordPath} from "./oracle-records.ts";
+import {pendingLine} from "../records/pending.ts";
 
 type Mode = "programs" | "rc" | "benchmarks" | "compiled-web";
-type Entry = {name: string; project: string; consumer: CheckConsumer; backend?: string};
+type Entry = {name: string; project: string; consumer: CheckConsumer; backend?: string; fixture?: string};
 type Completed = {entry: Entry; record: DecodedCheck; disposition: number};
 type Incomplete = {entry: Entry; error: unknown};
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -31,7 +33,7 @@ function entries(mode: Mode, only: string | undefined, scratch: string): Entry[]
         writeFileSync(project, JSON.stringify({extends: join(ROOT, "tsconfig.fixtures.json"), include: [join(ROOT, fixture, "case.ts")]}));
       }
     } else if (!existsSync(join(ROOT, project))) continue;
-    result.push({name, project, consumer: benchmarks ? "benchmark" : ["invalid", "unsupported"].includes(name) ? "refusal" : "program"});
+    result.push({name, project, fixture, consumer: benchmarks ? "benchmark" : ["invalid", "unsupported"].includes(name) ? "refusal" : "program"});
   }
   if (only) assert.equal(result.length, 1, `unknown check fixture ${only}`);
   assert.ok(result.length > 0, "check corpus contains no projects");
@@ -47,6 +49,8 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
   const agreed = completed.filter(row => row.disposition === 0 && row.entry.consumer !== "refusal").length;
   const bare = completed.filter(row => row.disposition === 2).length;
   const declined = completed.filter(row => row.disposition === 3).length;
+  // No oracle record yet: not compared at landing, and not a failure.
+  const pending = completed.filter(row => row.disposition === 4 && row.entry.fixture);
   const failed = completed.filter(row => completedFailure(row, mode));
   for (const row of failed) {
     console.log(`DIS  ${row.entry.name}: ${row.record.first}`);
@@ -64,6 +68,7 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
       : `${agreed} of ${agreed + failed.length} agree with node`);
   }
   if (bare) console.log(`  ${bare} compared nothing (no drivable source exports)`);
+  for (const row of pending) console.log(`  ${pendingLine(row.entry.fixture!, recordPath(row.entry.fixture!))}`);
   if (declined) console.log(`  ${declined} source populations measured, but no compiled bindings were available`);
   return failed.length;
 }
@@ -85,7 +90,8 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
       try {
         const {record, exitCode} = await withToken(() => runConsumer(binary, entry.project, entry.consumer, {cwd: ROOT,
           env: entry.backend ? {...env, NTS_BACKEND: entry.backend} : env}), {project: entry.project});
-        completed.push({entry, record, disposition: exitCode});
+        const contradiction = exitCode === 4 ? pendingContradiction(ROOT, entry.fixture) : null;
+        completed.push(contradiction ? {entry, record: {...record, first: contradiction}, disposition: 1} : {entry, record, disposition: exitCode});
       } catch (error) { incomplete.push({entry, error}); }
     }
   }));
