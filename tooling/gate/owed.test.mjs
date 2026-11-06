@@ -602,6 +602,10 @@ test("a gate test owes the tooling step, not the full gate", () => {
   }
 });
 
+test("the step table owes what the runner owes: every step", () => {
+  assert.equal(stepsFor("tooling/gate/step-table.mjs").length, allSteps().length);
+});
+
 test("the landing check owes its own tests, not the full gate", () => {
   owes("tooling/landing/selection.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "interop"] });
   owes("tooling/landing/queue.test.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "interop"] });

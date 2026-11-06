@@ -534,7 +534,7 @@ export const RULES = [
     // The runner decides what every step is given and how a verdict is read:
     // a change to it can change any step's answer.
     name: "the gate's runner",
-    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
+    when: (p) => /^tooling\/gate\/(all\.sh|run\.mjs|step-table\.mjs|token\.sh|tokens\.mjs|tokenpool\.mjs|pinned\.sh)$/.test(p),
     // Every step, the wide ones too: it runs them all, the full run's among them.
     full: true,
     wide: true,
