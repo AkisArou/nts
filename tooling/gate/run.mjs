@@ -46,9 +46,9 @@
 // takes a token around the process it runs, so a step's share of the machine
 // follows its work while it runs. The rest -- cargo, nts-suite, the test
 // binaries, parallel inside one process -- hold a fixed grant of slots from
-// start to end. Steps start longest first (cpu seconds in times.tsv); short
-// fixed steps ride beside the budget so the first verdicts arrive in the
-// first minutes.
+// start to end. Steps start longest first: their CPU seconds over the slots
+// they can use (`workEstimate`); short fixed steps ride beside the budget so
+// the first verdicts arrive in the first minutes.
 //
 // Environment:
 //   NTS_GATE_STEPS        steps to run, space separated (default: all)
@@ -72,7 +72,8 @@
 import { instrumentPolicy, readStepInstrument } from "./step-result.ts";
 import { definiteFailure } from "./train/red-stop.ts";
 import { GateScopes } from "./train/step-scope.ts";
-import { orderStepStarts, readStepWallHistory, readPreviousStepWalls, writeStepWallHistory } from "./step-scheduling.ts";
+import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, writeStepCpuHistory } from "./step-scheduling.ts";
+import { STEP_SUCCESSORS } from "./step-successors.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -393,8 +394,11 @@ function readTimes() {
 }
 const BASE = readTimes();
 const estimate = (name) => BASE.get(name)?.wall ?? 60;
-const WALL_HISTORY_FILE = join(target, "gate-costs", "steps.json");
-const WALL_HISTORY = new Map([...readPreviousStepWalls(join(dirname(RUN_DIR), "latest", "summary.json")), ...readStepWallHistory(WALL_HISTORY_FILE)]);
+// The CPU seconds each step's checks took when they last passed, retained
+// across runs; separate from the committed timing-verdict baseline.
+const CPU_HISTORY_FILE = join(target, "gate-costs", "steps.json");
+const CPU_HISTORY = new Map([...readPreviousStepCpu(join(dirname(RUN_DIR), "latest", "summary.json")), ...readStepCpuHistory(CPU_HISTORY_FILE)]);
+const INHERITED_WORK = inheritedStepWork(CPU_HISTORY, (name) => BASE.get(name)?.cpu, STEP_SUCCESSORS);
 
 // ---------------------------------------------------------------------------
 // Identities, so a summary says which binary and which tree it is about.
@@ -571,9 +575,9 @@ function preflight(step) {
 }
 
 function order(names) {
-  // Start the longest measured wall paths first. This history is separate
-  // from the committed timing-verdict baseline and from token claim weights.
-  return orderStepStarts(names, WALL_HISTORY, estimate);
+  // Start the longest uncontended steps first: a step's work over the slots it
+  // can use, the same work estimate that weighs its claims on tokens.
+  return orderStepStarts(names, (name) => workEstimate(name) / Math.min(BY_NAME.get(name)?.slots ?? 1, SLOTS));
 }
 // A step that takes a minute or so rides free beside the budget (up to a
 // quarter over it), at its minimum slots: the run's first verdicts arrive in
@@ -629,7 +633,7 @@ function admit(step, u) {
 // token cannot leak. Waiting costs nothing: a worker blocks on a read.
 //
 // Who gets a freed token: the step with the most estimated work left per token
-// it holds (times.tsv's cpu seconds minus the token-seconds it has used), plus
+// it holds (`workEstimate` minus the token-seconds it has used), plus
 // the seconds its oldest worker has waited, so a short step is never starved
 // by a long one; the favoured step's claim counts double. Tokens are kept back
 // for the first fixed step that waits only for slots (`withhold`).
@@ -637,10 +641,12 @@ function admit(step, u) {
 const ELASTIC_CAP = Math.max(6, Math.ceil(SLOTS * 0.75));
 let withhold = 0;
 
+// A step's work in CPU seconds: its own last passing run, else its share of a
+// predecessor's (step-successors.ts), else the committed baseline.
 function workEstimate(name) {
-  const b = BASE.get(name);
-  const s = BY_NAME.get(name);
-  return b?.cpu > 0 ? b.cpu : estimate(name) * Math.min(s?.slots ?? 1, SLOTS);
+  const own = CPU_HISTORY.get(name) ?? INHERITED_WORK.get(name) ?? BASE.get(name)?.cpu;
+  if (own > 0) return own;
+  return estimate(name) * Math.min(BY_NAME.get(name)?.slots ?? 1, SLOTS);
 }
 
 // A token is a case starting, so the pool is where the run stops starting
@@ -1012,7 +1018,7 @@ function done() {
   }
   if (RECORD_TIMES) recordTimes();
   if (normalized.report.canonical) {
-    const warning = writeStepWallHistory(WALL_HISTORY_FILE, plan.map(name => ({ name, ...results.get(name) })), WALL_HISTORY);
+    const warning = writeStepCpuHistory(CPU_HISTORY_FILE, plan.map(name => ({ name, ...results.get(name) })), CPU_HISTORY);
     if (warning) process.stderr.write(`scheduling history unavailable: ${warning}\n`);
   }
   process.exitCode = interrupted && interrupted.startsWith("signal") ? 130 : green ? 0 : 1;

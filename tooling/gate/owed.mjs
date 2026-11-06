@@ -79,6 +79,7 @@ import { mergeRuleMetadata } from "./rule-metadata.ts";
 import { selectRange, SelectionInfrastructureError, selectionInfrastructure, stepSuccessorProblem } from "./owed-range.ts";
 import {parseNameStatus,contentChanges} from "./change-paths.ts";
 import {discoverToolingTests,isToolingTest,readToolingTestExclusions,toolingTestStep,TOOLING_TEST_EXCLUSIONS} from "./tooling-discovery.ts";
+import { STEP_SUCCESSORS } from "./step-successors.ts";
 export {parseNameStatus} from "./change-paths.ts";
 
 /**
@@ -936,12 +937,9 @@ export function allSteps() {
   });
 }
 
-// Explicit transfers of a removed step's checks to current steps. An empty
-// steps list retires the check and requires a reviewable reason.
-export const STEP_SUCCESSORS = {
-  // One step per backend, each against its own record.
-  "typescript-cases": { steps: ["typescript-c", "typescript-llvm", "typescript-jvm"] },
-};
+// Explicit transfers of a removed step's checks to current steps: the one
+// table, which the gate's scheduler reads too.
+export { STEP_SUCCESSORS };
 
 /** Production/build dependency reach; workspace tests cover dev dependencies. */
 function cargoCrates(execute = execFileSync) {
