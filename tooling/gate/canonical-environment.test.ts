@@ -143,8 +143,13 @@ fi
     assert.equal(summary.steps[0].exit,code===86||code===87||code===88||code===89?1:code>=90?0:code);
     assert.equal(summary.steps[0].reason,code===0?"":code===92?"invalid instrument result for rustfmt":code>=88?"unfinished work with retained results":code===86?"system pressure control":code===87?"named case exceeds the outcomes step budget":"Node/V8 heap out of memory diagnostic; exit 7");
     const observed=JSON.parse(readFileSync(join(directory,"observed.json"),"utf8"));
-    assert.equal(summary.temporary.state,code===0?"removed after green":"retained after red");
-    assert.equal(existsSync(join(directory,"tmp")),code!==0);
+    // A red keeps its temporary folder, unless this run's own summary shows the
+    // disk floor evicted it: then it is gone, and the eviction is logged.
+    const pruning=summary.temporary.pruning,tmp=join(directory,"tmp");
+    const floor=code!==0&&pruning?.free_bytes!==null&&pruning?.free_bytes<pruning?.minimum_free_bytes&&pruning.removed.includes(tmp);
+    assert.equal(summary.temporary.state,code===0?"removed after green":floor?"evicted by failed-temporary bound":"retained after red");
+    assert.equal(existsSync(tmp),code!==0&&!floor);
+    if (floor) assert.ok(actual.stderr.includes(`gate tmp: evicted closed failure ${tmp} `),actual.stderr);
     assert.equal(observed.LANG,"C.UTF-8");assert.equal(observed.NODE_OPTIONS,undefined);assert.equal(observed.PRIVATE_TOKEN,undefined);assert.equal(observed.TMPDIR,join(directory,"tmp"));
     assert.doesNotMatch(actual.stdout,/hidden|8192/);
   }

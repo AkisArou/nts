@@ -30,11 +30,19 @@ function checked(owned:RunTemporary,home:string):void {
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid!==process.getuid?.() || stat.uid!==owned.uid || stat.dev!==owned.dev || stat.ino!==owned.ino || realpathSync(dirname(owned.path))!==owned.parent) throw new Error(`run temporary directory was replaced: ${owned.path}`);
 }
 
+export type PruneOptions={maxBytes?:number;minimumFreeBytes?:number;write?:(line:string)=>void;freeBytes?:()=>number};
+
 /** Bounds apply to closed failures, and may evict them further for admission.
- * An invalid identity is reported and kept; it can never authorize a removal. */
-export function pruneRunTemporaries(home:string,options:{maxBytes?:number;minimumFreeBytes?:number;write?:(line:string)=>void;freeBytes?:()=>number}={}) {
+ * An invalid identity is reported and kept; it can never authorize a removal.
+ * The result names the bounds and the free-disk reading the last decision
+ * used (null when no closed failure needed one), so a caller can tell an
+ * eviction by the disk floor from one by the size bound. */
+export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
   const directory=registry(home),removed:string[]=[],protectedPaths:string[]=[];
-  if (!existsSync(directory)) return {removed,protected:protectedPaths,retained_bytes:0};
+  const maxBytes=options.maxBytes??FAILED_TEMP_MAX_BYTES,minimumFreeBytes=options.minimumFreeBytes??TEMP_DISK_FLOOR_BYTES;
+  let freeBytes:number|null=null;
+  const bounds=()=>({free_bytes:freeBytes,minimum_free_bytes:minimumFreeBytes,max_bytes:maxBytes});
+  if (!existsSync(directory)) return {removed,protected:protectedPaths,retained_bytes:0,...bounds()};
   const write=options.write ?? (text=>process.stderr.write(text+"\n"));
   const entries:{file:string;owned:RunTemporary;closed:number;bytes:number}[]=[];
   for (const name of readdirSync(directory).filter(name=>name.endsWith(".json"))) {
@@ -53,17 +61,19 @@ export function pruneRunTemporaries(home:string,options:{maxBytes?:number;minimu
   let total=entries.reduce((sum,entry)=>sum+entry.bytes,0);
   const free=options.freeBytes ?? (()=>{const stat=statfsSync(directory);return stat.bavail*stat.bsize;});
   for (const entry of entries) {
-    if (total<=(options.maxBytes??FAILED_TEMP_MAX_BYTES) && free()>=(options.minimumFreeBytes??TEMP_DISK_FLOOR_BYTES)) break;
+    freeBytes=free();
+    if (total<=maxBytes && freeBytes>=minimumFreeBytes) break;
     try {
       checked(entry.owned,home);
       rmSync(entry.owned.path,{recursive:true});rmSync(entry.file);
       total-=entry.bytes;removed.push(entry.owned.path);write(`gate tmp: evicted closed failure ${entry.owned.path} (${entry.bytes} allocated bytes); logs retained`);
     } catch(error) {protectedPaths.push(entry.owned.path);write(`gate tmp: kept ${entry.owned.path}: ${(error as Error).message}`);}
   }
-  return {removed,protected:protectedPaths,retained_bytes:total};
+  return {removed,protected:protectedPaths,retained_bytes:total,...bounds()};
 }
 
-export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean) {
+/** Remove a green run's temporary folder, or close a red one's and prune the closed failures with `prune`. */
+export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,prune:PruneOptions={}) {
   try {
     checked(owned,home);
     const directory=registry(home),file=join(directory,key(owned));
@@ -71,7 +81,7 @@ export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean)
     mkdirSync(directory,{recursive:true});
     const next=file+"."+process.pid;
     writeFileSync(next,JSON.stringify({owned,closed:Date.now()})+"\n");renameSync(next,file);
-    const pruning=pruneRunTemporaries(home);
+    const pruning=pruneRunTemporaries(home,prune);
     return {path:owned.path,state:existsSync(owned.path)?"retained after red":"evicted by failed-temporary bound",pruning};
   } catch(error) {return {path:owned.path,state:"kept: cleanup guard or operation failed",error:(error as Error).message};}
 }
