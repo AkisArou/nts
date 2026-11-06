@@ -99,21 +99,29 @@ A record pins what a case did, never how the compiler phrased or numbered it:
   normalizer the outcomes corpus shares;
 - names and the case's own source positions are kept.
 
-Before `--recorded` selects what to run, the record must match the complete
-source inventory: a new case with no row, or a row whose case is gone, fails
-the run. Missing, duplicate, orphaned and malformed rows fail closed, and a
-timeout or an infrastructure failure is never recorded as an outcome.
+Before `--recorded` selects what to run, the record is checked against the
+complete source inventory. A case with no row yet is pending: it is listed,
+not run and not a failure, and the full check writes its row after landing
+(`tooling/records/record-pending.ts`). A row whose case is gone fails the run.
+Duplicate, orphaned and malformed rows fail closed, and a timeout or an
+infrastructure failure is never recorded as an outcome.
 
 The gate's `typescript-c`, `typescript-llvm` and `typescript-jvm` steps, core
-steps, run every case on their backend and compare it with that backend's
-record under the outcomes corpus's transition policy:
+steps, run every recorded case on their backend and compare it with that
+backend's record under the transition policy the outcomes corpus shares,
+which orders outcomes pass > refused > loud defect (invalid HIR, a runtime
+abort, a build failure) > silent wrong answer, the last because nothing
+reports it:
 
-- a pass that does anything else is `REGRESSED`;
-- a different defect, a different set of refusal codes, or a defect where
-  there was a refusal is `CHANGED`;
+- a pass that does anything else, or any move down that order (a refusal to
+  a defect, a loud defect to a wrong answer), is `REGRESSED`;
+- a different defect of the same rank, or a different set of refusal codes,
+  is `CHANGED`;
 - either fails the step;
-- a defect or refusal that now passes is `FIXED`, and a defect that is now
-  refused is `REFUSES NOW`. Both pass, loudly, with a note to re-record.
+- a defect or refusal that now passes is `FIXED`, a defect that is now
+  refused is `REFUSES NOW`, and a wrong answer that now stops loudly is
+  `LOUD NOW`. All three pass, are listed as improved, and the full check
+  rewrites their rows.
 
 There is no floor, because the record is the ratchet. The step needs the
 test262 checkout, whose harness the cases assert with.
@@ -135,6 +143,10 @@ node tooling/census/conformance262.ts --suite typescript --under tests/typescrip
 NTS_BIN=$(node tooling/conformance/pin.ts <rev> | tail -1) \
   node tooling/census/conformance262.ts --suite typescript \
   --record results/typescript/c/cases.tsv
+
+# Write only the pending and improved rows, as the full check does
+NTS_BIN=<main's pin> node tooling/census/conformance262.ts --suite typescript \
+  --record-pending results/typescript/c/cases.tsv
 ```
 
 ## TypeScript's own tests

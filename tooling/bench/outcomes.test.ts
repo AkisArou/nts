@@ -40,11 +40,14 @@ test("benchmark records bind every case and scope without making compiler change
   const failed = { kind: "build-failure", stage: "link", diagnostic: "undefined symbol work" };
   assert.equal(compareBenchmarkOutcome(pass, pass).ok, true);
   assert.equal(compareBenchmarkOutcome(refusal, refusal).ok, true);
-  for (const [before, after, word] of [[refusal, pass, "FIXED"], [failed, pass, "FIXED"], [failed, refusal, "REFUSES NOW"]] as const) {
+  const wrong = { kind: "wrong", node: "3ff0000000000000", compiled: "4000000000000000" };
+  for (const [before, after, word] of [[refusal, pass, "FIXED"], [failed, pass, "FIXED"], [failed, refusal, "REFUSES NOW"],
+    [wrong, refusal, "REFUSES NOW"], [wrong, failed, "LOUD NOW"]] as const) {
     assert.deepEqual(compareBenchmarkOutcome(before, after), { word, ok: true, loud: true }, "an improvement passes; the full check records it");
   }
-  for (const [before, after] of [[pass, refusal], [pass, failed], [refusal, failed], [failed, { ...failed, diagnostic: "undefined symbol rest" }]]) {
-    assert.equal(compareBenchmarkOutcome(before, after).ok, false, "a regression or a change still fails");
+  for (const [before, after, word] of [[pass, refusal, "REGRESSED"], [pass, failed, "REGRESSED"], [refusal, failed, "REGRESSED"],
+    [refusal, wrong, "REGRESSED"], [failed, wrong, "REGRESSED"], [failed, { ...failed, diagnostic: "undefined symbol rest" }, "CHANGED"]] as const) {
+    assert.deepEqual(compareBenchmarkOutcome(before, after), { word, ok: false, loud: false }, "a regression or a change still fails");
   }
   const build = cell("compile", { kind: "build-failure", stage: "emit", diagnostic: "/scratch/a/program.c:17:2: invalid value 42" });
   const normalized = parseBenchmarkRecord(serializeBenchmarkRecord({ metadata, rows: [build, ...rows.slice(1)] }));

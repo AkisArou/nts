@@ -139,7 +139,7 @@ export function benchmarkInventory<T extends Identity>(record: BenchmarkRecord, 
   return expected.filter(row => !recorded.has(benchmarkKey(row)));
 }
 
-/** A defect or refusal that passes now, or a defect that refuses now, is better and passes; any other movement fails. */
+/** Better by the shared ratchet (a pass now, a refusal where there was a defect, a build that fails where it built a wrong answer) passes; any other movement fails. */
 export function compareBenchmarkOutcome(before: BenchmarkOutcome, after: BenchmarkOutcome): OutcomeTransition {
   const unchanged = isDeepStrictEqual(parseBenchmarkOutcome(before), parseBenchmarkOutcome(after));
   if (before.kind === "no-scalar-exports" || after.kind === "no-scalar-exports")

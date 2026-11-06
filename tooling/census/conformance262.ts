@@ -943,14 +943,14 @@ if (recordFile && TYPESCRIPT) {
 let comparison = null;
 // What fails a comparison: REGRESSED, CHANGED and, for test262's partial
 // records, a recorded case missing or newly failing. A TypeScript case with no
-// row is pending, and FIXED and REFUSES NOW are improvements: both pass.
+// row is pending, and FIXED, REFUSES NOW and LOUD NOW are improvements: all pass.
 const COMPARISON_FAILURES = TYPESCRIPT ? ["REGRESSED", "CHANGED"] : ["REGRESSED", "MISSING", "CHANGED", "NEW FAIL"];
 // The rows --record-pending writes: the pending cases' and the improved ones'.
 const recordUpdates = new Map();
 const resourceRegressions=[];
 if (checkFile && TYPESCRIPT) {
   const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
-  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], pending: pendingPaths.map(path => pendingLine(path, checkFile)) };
+  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], "LOUD NOW": [], pending: pendingPaths.map(path => pendingLine(path, checkFile)) };
   for (const [path, now] of typeScriptObserved) {
     const was = expected.cases.get(path);
     // Pending, and listed above: measured only by the full check's writer.

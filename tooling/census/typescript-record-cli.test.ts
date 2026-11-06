@@ -89,7 +89,8 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
           ...(lowMemory?{NTS_MEMINFO:meminfo,NTS_CENSUS_MIN_AVAILABLE_GB:"1000000"}:{}) } });
   }
   for (const [before, after, word, status] of [
-    [pass, wrong, "REGRESSED", 1], [refused, wrong, "CHANGED", 1], [invalid, abort, "CHANGED", 1],
+    [pass, wrong, "REGRESSED", 1], [refused, wrong, "REGRESSED", 1], [invalid, abort, "CHANGED", 1],
+    [wrong, abort, "LOUD NOW", 0], [abort, wrong, "REGRESSED", 1],
     [wrong, { ...wrong, failure: { ...wrong.failure, output: wrong.failure.output + "9" } }, "CHANGED", 1],
     [wrong, refused, "REFUSES NOW", 0], [invalid, pass, "FIXED", 0], [refused, refused, "reproduces", 0],
     [host("Cell$29$", "Type27", 42), host("Cell$39$", "Type37", 52), "reproduces", 0],
@@ -103,7 +104,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     assert.equal(report.record_version, 3);
     assert.deepEqual(report.observations[target], parseObservation(after));
     assert.equal(report.comparison[word]?.length ?? 0, word === "reproduces" ? 0 : 1);
-    if (word === "FIXED" || word === "REFUSES NOW") assert.ok(result.stdout.includes(`improved, record pending: ${target} `), result.stdout);
+    if (word === "FIXED" || word === "REFUSES NOW" || word === "LOUD NOW") assert.ok(result.stdout.includes(`improved, record pending: ${target} `), result.stdout);
   }
   for (const stage of ["emit", "link", "compiler-crash"] as const) {
     const failure: TypeScriptObservation = { kind: "build-failure", stage, diagnostic: "error: invalid generated operand" };

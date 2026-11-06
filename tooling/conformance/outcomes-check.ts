@@ -17,8 +17,8 @@
 // `--record-pending` (tooling/records/record-pending.ts), which from a clean
 // pin measures every fixture, holds the recorded ones, and only when none
 // needs a person writes the pending fixtures' records and the improved ones'
-// (FIXED, REFUSES NOW). An outcome.json whose program is gone is STALE and
-// fails: the change that deletes a fixture deletes its record.
+// (FIXED, REFUSES NOW, LOUD NOW). An outcome.json whose program is gone is
+// STALE and fails: the change that deletes a fixture deletes its record.
 //
 // # Why a third fixture kind
 //
@@ -113,24 +113,35 @@
 //
 // # Verdicts, in the test262 step's vocabulary
 //
+// The categories are ordered agrees > refused > loud defect (invalid-hir,
+// uncompilable-c, compiler-crash, aborted) > wrong-answer, the shared ratchet's
+// order (outcome-transition.ts): a wrong answer is the worst because nothing
+// reports it. Up the order is progress, down it a regression.
+//
 //   holds / reproduces   the record still describes the case
 //   FIXED                it agrees with node now -- loud, because the fixture
 //                        should move to `tests/programs/` or be re-recorded as a guard
-//   REFUSES NOW          hand it to `blockers/` with the printed expect line
-//   REGRESSED            a guard that agreed stopped agreeing
-//   CHANGED              still wrong, differently -- a person decides which way
+//   REFUSES NOW          a defect refuses now: hand it to `blockers/` with the
+//                        printed expect line
+//   LOUD NOW             a wrong answer stops loudly now: an abort, a crash,
+//                        invalid HIR or C that does not compile
+//   REGRESSED            a guard that agreed stopped agreeing, or the case moved
+//                        down the order: a refusal to a defect, a loud defect
+//                        to a wrong answer
+//   CHANGED              still wrong in the same way, differently -- a person
+//                        decides which way
 //   ORACLE CHANGED       node's own answer moved; the record is stale, not nts
 //   NOT MEASURED         the harness could not produce a verdict; never a pass
 //
-// **FIXED and REFUSES NOW print and pass; the rest fail.** `tooling/gate/
+// **FIXED, REFUSES NOW and LOUD NOW print and pass; the rest fail.** `tooling/gate/
 // example-refusals` says why in its header -- "a gate that goes red when you fix
 // something teaches people to stop fixing things" -- and `blockers-check` keeps
 // the same rule, so three harnesses give one answer to "what happens when
 // someone fixes this". The cost is the one that header also names: a stale
-// record can let a regression back in unnoticed. So the count of both is in
-// the summary line, `N fixed, M refusing now -- move or re-record`, where a
-// run cannot be scrolled past it; `array-from-unsupported` sat stale for
-// twelve days in a harness whose summary did not say so.
+// record can let a regression back in unnoticed. So their count is in the
+// summary line, `N fixed, M refusing now, K loud now -- improved, record
+// pending`, where a run cannot be scrolled past it; `array-from-unsupported`
+// sat stale for twelve days in a harness whose summary did not say so.
 //
 // **REGRESSED is written and has never been seen to fire.** Every other verdict
 // was driven with a sabotaged record before this landed; REGRESSED needs nts to
@@ -663,7 +674,7 @@ console.log();
 console.log(
   `  ${chosen.length} fixture(s)` +
     (recording ? " recorded" : `: ${[...tally].map(([w, n]) => `${n} ${w}`).join(", ")}`) +
-    (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now -- improved, record pending` : "") +
+    (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now, ${tally.get("LOUD NOW") ?? 0} loud now -- improved, record pending` : "") +
     (recordingPending && written.length > 0 ? `; recorded ${written.length} pending or improved` : "") +
     (unexpected > 0 ? `; ${unexpected} need a person` : ""),
 );

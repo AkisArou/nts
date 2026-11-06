@@ -54,7 +54,13 @@ export function judge(was, now) {
     ? ` -- and the program still ran, answering ${ranTo(now)} where node answers ${now.node}`
     : "";
   if (same) return { ...transition, why: `${now.category} -- ${now.nts}${past}` };
-  if (transition.word === "REGRESSED") return { ...transition, why: `agreed with node; now ${now.category} -- ${now.nts}` };
+  if (transition.word === "REGRESSED") {
+    return { ...transition, why: was.category === "agrees" ? `agreed with node; now ${now.category} -- ${now.nts}`
+      : `was ${was.category} (${was.nts}); now ${now.category} (${now.nts}), lower in the ratchet's order` };
+  }
+  if (transition.word === "LOUD NOW") {
+    return { ...transition, why: `was a wrong answer (${was.nts}); now stops loudly: ${now.category} -- ${now.nts}` };
+  }
   if (transition.word === "FIXED") {
     return { ...transition, why: `was ${was.category} (${was.nts}); agrees with node now -- move it to tests/programs/ or re-record it as a guard` };
   }

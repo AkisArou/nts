@@ -82,13 +82,13 @@ test("a case with no row is pending, and a record cannot hide a deleted case", (
 
 test("an improvement passes and a regression fails, by the shared ratchet", () => {
   const [pass, wrong, refused, invalid, abort] = observations;
-  for (const [before, after] of [[wrong, pass], [refused, pass], [invalid, refused], [abort, refused]]) {
+  for (const [before, after] of [[wrong, pass], [refused, pass], [invalid, refused], [abort, refused], [wrong, abort], [wrong, invalid]]) {
     const verdict = compareTypeScriptObservation(before, after);
     assert.ok(verdict.ok && improves(verdict), `${before.kind} -> ${after.kind}: ${verdict.word}`);
   }
-  for (const [before, after] of [[pass, wrong], [pass, refused], [refused, wrong], [refused, invalid], [wrong, abort]]) {
+  for (const [before, after] of [[pass, wrong], [pass, refused], [refused, wrong], [refused, invalid], [abort, wrong], [invalid, wrong]]) {
     const verdict = compareTypeScriptObservation(before, after);
-    assert.ok(!verdict.ok && !improves(verdict), `${before.kind} -> ${after.kind}: ${verdict.word}`);
+    assert.ok(!verdict.ok && !improves(verdict) && verdict.word === "REGRESSED", `${before.kind} -> ${after.kind}: ${verdict.word}`);
   }
 });
 
@@ -139,18 +139,19 @@ test("observations use the unredacted producer facts, never the display summary"
 });
 
 test("the complete kind transition matrix holds regressions and permits progress", () => {
+  // pass, wrong (silent), refused, invalid-hir (loud), runtime-abort (loud)
   const words = [
     ["holds", "REGRESSED", "REGRESSED", "REGRESSED", "REGRESSED"],
-    ["FIXED", "reproduces", "REFUSES NOW", "CHANGED", "CHANGED"],
-    ["FIXED", "CHANGED", "reproduces", "CHANGED", "CHANGED"],
-    ["FIXED", "CHANGED", "REFUSES NOW", "reproduces", "CHANGED"],
-    ["FIXED", "CHANGED", "REFUSES NOW", "CHANGED", "reproduces"],
+    ["FIXED", "reproduces", "REFUSES NOW", "LOUD NOW", "LOUD NOW"],
+    ["FIXED", "REGRESSED", "reproduces", "REGRESSED", "REGRESSED"],
+    ["FIXED", "REGRESSED", "REFUSES NOW", "reproduces", "CHANGED"],
+    ["FIXED", "REGRESSED", "REFUSES NOW", "CHANGED", "reproduces"],
   ];
   for (let i = 0; i < observations.length; i++) for (let j = 0; j < observations.length; j++) {
     const decision = compareTypeScriptObservation(observations[i], observations[j]);
     assert.equal(decision.word, words[i][j], `${observations[i].kind} -> ${observations[j].kind}`);
-    assert.equal(decision.ok, ["holds", "reproduces", "FIXED", "REFUSES NOW"].includes(words[i][j]));
-    assert.equal(decision.loud, ["FIXED", "REFUSES NOW"].includes(words[i][j]));
+    assert.equal(decision.ok, ["holds", "reproduces", "FIXED", "REFUSES NOW", "LOUD NOW"].includes(words[i][j]));
+    assert.equal(decision.loud, ["FIXED", "REFUSES NOW", "LOUD NOW"].includes(words[i][j]));
   }
   for (const index of [1, 2, 3, 4]) {
     const changed = JSON.stringify(observations[index]).replace("7", "9").replace("NTS1001", "TS2322")
