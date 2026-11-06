@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "agrees",
+  "nts": "exit 1; nts: uncaught Observed: three ** two=9;",
+  "node": "exit 1; nts: uncaught Observed: three ** two=9;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}
