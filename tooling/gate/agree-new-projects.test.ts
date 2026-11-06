@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { createHash } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { candidateAddedProjects, fullyMeasuredAgreement } from "../differential/new-projects.ts";
 import { spawnTest } from "./test-wait.ts";
 import { writeRecords } from "../differential/oracle-records.ts";
@@ -38,8 +38,11 @@ function fixture(t:{after(fn:()=>void):void}) {
   for(const name of ["differential","conformance","gate"]) mkdirSync(join(root,"tooling",name),{recursive:true});
   const agree=new URL("../differential/agree.mjs",import.meta.url).pathname;
   put("tooling/differential/agree.mjs",readFileSync(agree,"utf8"));
-  for(const path of ["differential/new-projects.ts","differential/legacy-oracle-root.ts","differential/oracle-records.ts","differential/check-report.ts","differential/check-report-types.ts",
-    "conformance/observation-text.ts","conformance/pin.ts","gate/tokens.mjs","gate/active-command.ts","gate/step-result.ts"]) {
+  // agree.mjs's own relative imports, read from it so this tree keeps pace with
+  // what it loads; a symlinked module resolves its own imports from the repo.
+  const imported=new Set([...readFileSync(agree,"utf8").matchAll(/\bfrom\s+["'](\.\.?\/[^"']+)["']/g)].map(([,specifier])=>posix.normalize(posix.join("differential",specifier!))));
+  for(const path of imported) {
+    mkdirSync(dirname(join(root,"tooling",path)),{recursive:true});
     symlinkSync(new URL(`../${path}`,import.meta.url).pathname,join(root,"tooling",path));
   }
   const binaries=["before","after"].map(role=>{

@@ -51,6 +51,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "../conformance/pin.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -261,4 +262,4 @@ if (moved.length === 0) {
   }
 }
 const unmeasured = before.unmeasured.length + after.unmeasured.length;
-process.exit(unmeasured > 0 ? 2 : 0);
+exitAfterOutput(unmeasured > 0 ? 2 : 0);

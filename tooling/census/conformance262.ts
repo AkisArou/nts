@@ -132,6 +132,7 @@ import { Admission, RESUME_AT_GB } from "../gate/admission.ts";
 import { acquireToken, withToken } from "../gate/tokens.mjs";
 import {beginComparison,digest,resourceStop,RECORD_COMPARISON_STEPS} from "../lanes/resource-comparison.ts";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const comparisonOwner=RECORD_COMPARISON_STEPS.includes(process.env.NTS_GATE_STEP??"");
 const comparisonReport=beginComparison(comparisonOwner&&(process.argv.includes("--recorded")||process.argv.includes("--check"))?process.env:{});
@@ -1153,4 +1154,4 @@ if(checkFile)comparisonReport.complete({suite:SUITE_NAME,under,backend:BACKEND,c
   policy:digest(JSON.stringify({jobs,workerBytes:MEMORY_CAP_KB*1024,runBytes:Number(process.env.NTS_GATE_STEP_MEMORY_BYTES??8*2**30),harness:HARNESS_HASH,
     sources:["conformance262.ts","attempt262.ts","worker-memory.ts","worker-pool.ts","project.ts","../jvm/launch.ts"].map(file=>readFileSync(join(HERE,file),"utf8"))})),
 },comparisonFailures+reconciliationFailures,resourceRegressions);
-process.exit(problems.length === 0 ? 0 : 1);
+exitAfterOutput(problems.length === 0 ? 0 : 1);

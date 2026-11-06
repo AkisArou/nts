@@ -9,6 +9,7 @@ import { createContext, runInContext } from "node:vm";
 import { MessageChannel } from "node:worker_threads";
 import { UpstreamWptExecution } from "./upstream-liveness.ts";
 import { WptHungError, recordWptHung, publishWptHangs } from "../../../runtime/web-platform/test/wpt/hung.ts";
+import { exitAfterOutput } from "../../gate/exit.ts";
 let hungFixtures = 0;
 
 // This is the deliberately small testharness.js surface required by the complete,
@@ -845,4 +846,4 @@ if (fixtureFilter !== undefined && fixtureFilterMatched === 0) {
   console.error(`NTS_WEB_PLATFORM_FIXTURE=${fixtureFilter} selected no fixtures.`);
   process.exit(1);
 }
-process.exit(publishWptHangs(hungObservations, failed));
+exitAfterOutput(publishWptHangs(hungObservations, failed));

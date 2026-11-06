@@ -49,6 +49,7 @@ import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { withToken } from "../gate/tokens.mjs";
 import { fileURLToPath } from "node:url";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 
 const HERE = dirname(fileURLToPath(import.meta.url));
@@ -203,4 +204,4 @@ for (const n of notes) console.log(`  up            ${n}`);
 for (const f of failures) console.log(`  DOWN          ${f}`);
 const ok = failures.length === 0 && unmeasured.length === 0 && measured.size > 0;
 console.log(ok ? "  no module emits fewer functions than its row" : `  ${failures.length} failure(s), ${unmeasured.length} not measured`);
-process.exit(ok ? 0 : 1);
+exitAfterOutput(ok ? 0 : 1);

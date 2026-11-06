@@ -29,6 +29,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -154,4 +155,4 @@ for (const c of selected) {
   }
 }
 console.log(`expect-ir: ${selected.length} case(s), ${facts} fact(s) hold, ${failed} case(s) fail`);
-process.exit(failed === 0 ? 0 : 1);
+exitAfterOutput(failed === 0 ? 0 : 1);

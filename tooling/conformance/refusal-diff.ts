@@ -83,6 +83,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines, oneChange } from "./pin.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -290,4 +291,4 @@ for (const { project, moved, refusals } of results.sort((a, b) => a.project.loca
 }
 for (const u of unmeasured) console.log(`  NOT MEASURED  ${u}`);
 console.log(`  ${results.length} of ${projects.length} project(s) compared; ${losses} move(s) to a loss`);
-process.exit(unmeasured.length > 0 ? 2 : losses > 0 ? 1 : 0);
+exitAfterOutput(unmeasured.length > 0 ? 2 : losses > 0 ? 1 : 0);

@@ -33,6 +33,7 @@ import { fullPlan, fullEnvironment } from "./full-plan.ts";
 import { WIDE } from "../gate/owed.mjs";
 import { gateEnvironmentError } from "../gate/environment.ts";
 import { branchHealth, healthLines } from "../lanes/health.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HOME = join(homedir(), ".cache/nts-full");
@@ -101,4 +102,4 @@ const verdicts = (report.steps ?? []) as { name: string; verdict: string }[];
 const red = verdicts.filter((s) => s.verdict !== "PASS" && s.verdict !== "SKIPPED");
 const green = report.verdict === "green" && gated.status === 0;
 console.log(green ? `  ${label} full run of ${short}: green` : `  ${label} full run of ${short}: RED -- ${red.map((s) => `${s.name} ${s.verdict}`).join(", ")}; ${candidate ? "fix the candidate before landing" : "bisect over the landings since the last green full run"}`);
-process.exit(green ? 0 : 1);
+exitAfterOutput(green ? 0 : 1);

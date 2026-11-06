@@ -165,6 +165,7 @@ import { COMPILE_WORK_PROFILE, compileWorkSettings, compileCommand } from "../ga
 import { measuredCompileEnvironment } from "../gate/canonical-environment.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {runIntegrityListing,integrityListingFailure,finishIntegrity} from "./integrity-command.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -1474,4 +1475,4 @@ console.log(ok ? `  whole: no violation beyond the ${held.length} known`
   : measured === 0 ? `  NOT MEASURED: none of ${projects.length} project(s) was measured, so no violation count means anything`
   : `  ${fresh.length} violation(s), ${unmeasured.length} project(s) not measured`);
 if(measured===0&&!incomplete.length)incomplete.push(new ToolingInstrumentError("tooling-setup","integrity measured no projects"));
-process.exit(finishIntegrity(incomplete,fresh.length));
+exitAfterOutput(finishIntegrity(incomplete,fresh.length));

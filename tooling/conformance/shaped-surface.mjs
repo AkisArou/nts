@@ -22,6 +22,7 @@
 import { createRequire } from "node:module";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const req = createRequire(join(process.cwd(), "x.js"));
 const addons = process.argv[2];
@@ -60,4 +61,4 @@ for (const m of names) {
   console.log(`  ${m.padEnd(20)} ${String(keys).padEnd(6)} ${keys === 0 ? "PUBLISHES NOTHING" : ""}`);
 }
 console.log(`\n  ${empty} module(s) publish nothing on this lane.`);
-process.exit(empty === 0 ? 0 : 1);
+exitAfterOutput(empty === 0 ? 0 : 1);

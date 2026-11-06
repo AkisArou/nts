@@ -55,6 +55,7 @@ import {
   runOracle,
   scratch,
 } from "./fuzz-runtime.mjs";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const CASES = Number(process.argv[2] ?? 200);
 const SEED = Number(process.argv[3] ?? 1);
@@ -810,4 +811,4 @@ for (const f of found) {
     console.log(`    module: ${c.module.code}   fn: ${c.fn.code}`);
   }
 }
-process.exit(found.length > 0 ? 1 : 0);
+exitAfterOutput(found.length > 0 ? 1 : 0);

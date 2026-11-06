@@ -35,6 +35,7 @@
 import { readdirSync, existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { execFileSync } from "node:child_process";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = import.meta.dirname;
 const ROOT = join(HERE, "../..");
@@ -104,4 +105,4 @@ if (!run) {
   process.exit(0);
 }
 console.log(`\n  ${disagreeing} file(s) disagree between the lanes that claim them.`);
-process.exit(disagreeing === 0 ? 0 : 1);
+exitAfterOutput(disagreeing === 0 ? 0 : 1);

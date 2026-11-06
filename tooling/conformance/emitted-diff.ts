@@ -76,6 +76,7 @@ import { readAxis, axisFailure } from "./compiled-axis-rows.mjs";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { reportCheckFailure, checkFailurePolicy } from "../differential/check-report.ts";
 import { armLines, oneChange } from "./pin.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -509,4 +510,4 @@ if (axisIncomplete.length) {
   const failure = axisIncomplete.find(error => checkFailurePolicy(error, axisCompletedFailures).disposition === "operator-hold") ?? axisIncomplete.find(error => checkFailurePolicy(error, axisCompletedFailures).disposition !== "verdict") ?? axisIncomplete[0];
   process.exit(reportCheckFailure(failure, process.env, axisCompletedFailures));
 }
-process.exit(lost === 0 && axisUnmeasured === 0 && axisFailed === 0 && unmeasured.length === 0 ? 0 : 1);
+exitAfterOutput(lost === 0 && axisUnmeasured === 0 && axisFailed === 0 && unmeasured.length === 0 ? 0 : 1);

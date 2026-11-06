@@ -45,6 +45,7 @@ import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
 import { artifactShadow, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -172,4 +173,4 @@ for (const p of expired) console.log(`  ^ ${p} assembles now: remove it from too
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED       ${u}`);
 const ok = fresh.length === 0 && unmeasured.length === 0 && assembled + held.length > 0;
 console.log(ok ? `  every module assembles, or is known not to (${held.length})` : `  ${fresh.length} new failure(s), ${unmeasured.length} not measured`);
-process.exit(ok ? 0 : 1);
+exitAfterOutput(ok ? 0 : 1);

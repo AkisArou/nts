@@ -20,6 +20,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -135,4 +136,4 @@ console.log(
   `\n${checked} module(s) measured, ${flagged} vacuous, ` +
     `${undefinedNames} exported name(s) bound to undefined.`,
 );
-process.exit(flagged > 0 || undefinedNames > 0 ? 1 : 0);
+exitAfterOutput(flagged > 0 || undefinedNames > 0 ? 1 : 0);

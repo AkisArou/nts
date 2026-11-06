@@ -39,6 +39,7 @@ import { spawn } from "node:child_process";
 import { existsSync, readdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -238,4 +239,4 @@ console.log(
     ? "  no phantom refusals"
     : `  ${phantoms.length} phantom(s), ${unmeasured.length} project(s) not measured`,
 );
-process.exit(phantoms.length === 0 && unmeasured.length === 0 && measured > 0 ? 0 : 1);
+exitAfterOutput(phantoms.length === 0 && unmeasured.length === 0 && measured > 0 ? 0 : 1);

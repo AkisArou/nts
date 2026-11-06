@@ -113,6 +113,7 @@ import { withToken } from "../gate/tokens.mjs";
 import { artifactFiles, fileDigest, toolIdentity } from "../gate/artifact-shadow.ts";
 import { artifactResult, completeVerifier, verifierEnvironment, verifierExecution } from "../gate/artifact-reuse.ts";
 import { createFailureRun, retainRecentFailures } from "./jvm-failure-retention.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -709,4 +710,4 @@ if (named.length === 0) {
 const ok = fresh.length === 0 && pinned.length === 0 && unresolved.length === 0 && shadowed.length === 0 && unmeasured.length === 0 && classes > 0 && unclassified.length === 0;
 const pinsHeld = held.filter((f) => known.get(f.project).pin).length;
 console.log(ok ? `  every module verifies, or is known not to (${held.length}, ${pinsHeld} pinned and holding); every JVM dispatch decline classified` : `  ${fresh.length} new failure(s), ${pinned.length} broken pin(s), ${unresolved.length} with unresolved refs, ${shadowed.length} with shadowed raising copies, ${unmeasured.length} not measured, ${unclassified.length} unclassified decline shape(s)`);
-process.exit(ok ? 0 : 1);
+exitAfterOutput(ok ? 0 : 1);

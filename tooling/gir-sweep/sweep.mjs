@@ -37,6 +37,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync, existsSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, "../..");
@@ -161,4 +162,4 @@ for (const namespace of namespaces) {
   for (const line of [...result.typeErrors, ...result.named]) console.log(`  ${line}`);
   failed += result.typeErrors.length + result.named.length;
 }
-process.exit(failed === 0 ? 0 : 1);
+exitAfterOutput(failed === 0 ? 0 : 1);

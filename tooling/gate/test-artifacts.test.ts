@@ -16,11 +16,26 @@ test("cache admission preserves one measured live set and leaves disk working sp
   assert.match(testBuildAdmissionProblem(50 * gib, 80 * gib)!, /50.0 GiB working space/);
 });
 
+/** The same-directory modules `entry` loads through static imports. The copied
+ * tree is whatever tests.mjs reaches, not a list kept by hand that drifts when
+ * an import is added. */
+function localImportClosure(entry: string): string[] {
+  const seen = new Set<string>(), todo = [entry];
+  while (todo.length) {
+    const file = todo.pop()!;
+    if (seen.has(file)) continue;
+    seen.add(file);
+    const text = readFileSync(new URL(file, import.meta.url), "utf8");
+    for (const match of text.matchAll(/\bfrom\s+["']\.\/([^"'/]+)["']/g)) todo.push(match[1]!);
+  }
+  return [...seen].sort();
+}
+
 test("the gate tests helper builds at opt-level 1 and replays Cargo's environment", () => {
   const root = mkdtempSync(join(tmpdir(), "nts-test-build-env-"));
   try {
     mkdirSync(join(root, "tooling/gate"), { recursive: true });
-    for (const file of ["tests.mjs", "test-artifacts.ts", "costs.mjs"]) {
+    for (const file of localImportClosure("tests.mjs")) {
       copyFileSync(new URL(file, import.meta.url), join(root, "tooling/gate", file));
     }
     mkdirSync(join(root, "src"));

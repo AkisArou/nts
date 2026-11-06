@@ -143,6 +143,7 @@ import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, ru
 import { outcomeDisposition, outcomeTransition } from "./outcome-transition.ts";
 import { compilerExternalStop, compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "./observation-text.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -656,4 +657,4 @@ console.log(
     (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now -- move or re-record` : "") +
     (unexpected > 0 ? `; ${unexpected} need a person` : ""),
 );
-process.exit(unexpected > 0 ? 1 : 0);
+exitAfterOutput(unexpected > 0 ? 1 : 0);

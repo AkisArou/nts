@@ -48,6 +48,7 @@ import { readFileSync, existsSync, readdirSync } from "node:fs";
 import { createRequire } from "node:module";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
@@ -171,4 +172,4 @@ console.log(
   " whatever the build publishes; those are skipped rather than dropped, because a reason" +
   "\n  mentioning sabotage *and* a real absence would hide behind the same words.",
 );
-process.exit(stale === 0 ? 0 : 1);
+exitAfterOutput(stale === 0 ? 0 : 1);

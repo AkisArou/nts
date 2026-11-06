@@ -35,6 +35,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { longestFirst, recordCosts } from "./costs.mjs";
 import { pruneTestArtifacts, TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
+import { exitAfterOutput } from "./exit.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const JOBS = Math.max(1, Number(process.env.NTS_TESTS_JOBS ?? process.env.NTS_GATE_JOBS ?? Math.min(8, cpus().length)));
@@ -167,4 +168,4 @@ if (bad.length === 0) {
   const pruned = pruneTestArtifacts(recorded.map((r) => r.argv[0]));
   console.log(`  test cache: removed ${pruned.binaries} obsolete executable(s), ${(pruned.bytes / 2 ** 30).toFixed(2)} GiB; current run kept`);
 }
-process.exit(bad.length === 0 ? 0 : 1);
+exitAfterOutput(bad.length === 0 ? 0 : 1);

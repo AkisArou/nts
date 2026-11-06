@@ -47,6 +47,7 @@ import { fileURLToPath } from "node:url";
 
 import { longestFirst } from "../gate/costs.mjs";
 import { withToken } from "../gate/tokens.mjs";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -422,4 +423,4 @@ for (const [rule, vs] of byRule) {
 for (const u of unmeasured.sort()) console.log(`  NOT MEASURED  ${u}`);
 const ok = found.length === 0 && unmeasured.length === 0 && measured > 0;
 console.log(ok ? "  every table consistent" : `  ${found.length} violation(s), ${unmeasured.length} project(s) not measured`);
-process.exit(ok ? 0 : 1);
+exitAfterOutput(ok ? 0 : 1);

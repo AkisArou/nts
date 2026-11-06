@@ -89,6 +89,7 @@ import { candidateAddedProjects, fullyMeasuredAgreement } from "./new-projects.t
 import { runCheck, reportCheckFailure, checkFailurePolicy, decodeCheck, Outcome } from "./check-report.ts";
 export { Outcome } from "./check-report.ts";
 import { comparisonOracleRoot } from "./legacy-oracle-root.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -546,4 +547,4 @@ const unfinishedRecords = [
   ...verdicts.filter(v => v.tag === "NOT MEASURED").flatMap(v => v.unfinished ?? [v.before, v.after]),
   ...bothUnmeasured.map(example => runs.get(example)[1]),
 ];
-process.exit(unmeasured > 0 ? incompleteExit(unfinishedRecords, failing) : failing > 0 ? 1 : 0);
+exitAfterOutput(unmeasured > 0 ? incompleteExit(unfinishedRecords, failing) : failing > 0 ? 1 : 0);

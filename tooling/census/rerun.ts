@@ -55,6 +55,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { armLines } from "../conformance/pin.ts";
 import { filterFrom, readRows } from "./rows.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -215,4 +216,4 @@ for (const v of ["WORSE", "FIXED", "MOVED", "not measured"]) {
   for (const item of items.slice(0, Number(opts.list ?? 15))) console.log(`    ${item}`);
   if (items.length > Number(opts.list ?? 15)) console.log(`    ... ${items.length - Number(opts.list ?? 15)} more`);
 }
-process.exit((tally.get("WORSE") ?? 0) > 0 ? 1 : 0);
+exitAfterOutput((tally.get("WORSE") ?? 0) > 0 ? 1 : 0);

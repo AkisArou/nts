@@ -77,6 +77,7 @@
 import { readFileSync } from "node:fs";
 import { execSync } from "node:child_process";
 import { loadOurs } from "./surface-load.mjs";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 // **One module per invocation.** A first version swept all twenty-two in one
 // process and hung with no output for eleven minutes: constructing a class can
@@ -206,4 +207,4 @@ for (const m of MODULES) {
 console.log(`\n  ${live} live, ${latent} latent, among ${classes} no-argument-constructible published class(es)`);
 // A constructed class can hold the loop open, so the answer is printed and the
 // process is ended rather than waited on.
-process.exit(0);
+exitAfterOutput(0);

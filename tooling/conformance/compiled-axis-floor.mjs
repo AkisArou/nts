@@ -51,6 +51,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { readAxis, AXIS_PREFIX, axisFailure } from "./compiled-axis-rows.mjs";
 import { nodeEnvironment } from "./node-environment.ts";
+import { exitAfterOutput } from "../gate/exit.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -197,4 +198,4 @@ if (incomplete.length) {
 }
 if (failures.length === 0 && runScratch) rmSync(runScratch, { recursive: true, force: true });
 else if (runScratch) console.log(`  kept axis artifacts: ${runScratch}`);
-process.exit(failures.length === 0 ? 0 : 1);
+exitAfterOutput(failures.length === 0 ? 0 : 1);
