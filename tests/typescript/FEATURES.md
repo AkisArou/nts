@@ -2010,6 +2010,7 @@ forms are listed with their diagnostics in the pull request.
 | `coalesce` | 24 | 24 | falsy versus nullish values, fallback laziness, chained coalescing and typed reads |
 | `chains` | 22 | 22 | skipped chain tails and keys, chain boundaries, falsy bases, narrowing, typeof and delete |
 | `calls` | 24 | 24 | optional function and method calls, receivers, argument skipping, private/static and generic callbacks |
+| `assignments` | 30 | 30 | logical assignment selection, accessor order, typed-array values, caches, counters and tuple growth |
 
 ### Promise combinator route contracts
 
@@ -3577,7 +3578,7 @@ aliases use only one-byte element kinds.
 | `ts-never` | the `never` type: an unreachable value or a function that does not return | conformance/types/never | 19 | 0 |
 | `ts-new-target` | `new.target` | conformance/es6/newTarget | 241 | 0 |
 | `ts-non-null` | a non-null assertion (`x!`), erased, never a check | conformance/expressions (non-null assertions); ts-eslint TSNonNullExpression | 9 | 0 |
-| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 2682 | 0 |
+| `ts-null-undefined` | `null`, `undefined` and `T | undefined` under strictNullChecks | conformance/types/primitives; typed paths | 2742 | 0 |
 | `ts-number-format-route-fixed-notation` | binary-value rounding and ties, exact fixed digits, signed zero, exponent fallback and digit-count validation through typed numbers with exact values and observations | Number-format route contracts; typed paths | 18 | 0 |
 | `ts-number-format-route-partial-parsing` | longest valid prefixes, optional and wrapped radices, signed zero and explicit number-to-text pipelines through typed parser inputs with exact values and observations | Number-format route contracts; typed paths | 20 | 0 |
 | `ts-number-format-route-precision-exponent` | significant digits, exponent carries, padding, omitted arguments and range precedence through generic and interface routes with exact values and observations | Number-format route contracts; typed paths | 20 | 0 |
@@ -3814,10 +3815,11 @@ aliases use only one-byte element kinds.
 | `ts-hole-route-reading` | array iteration and text serialization including holes | Hole route contracts; ECMAScript, Array objects | 44 | 0 |
 | `ts-hole-route-copying` | sparse slot retention, densification and flattening across array copies | Hole route contracts; ECMAScript, Array.prototype | 46 | 0 |
 | `ts-hole-route-changing` | array mutation preserves and moves absent indexes distinct from undefined | Hole route contracts; ECMAScript, Array.prototype | 54 | 0 |
-| `ts-nullish-routes` | Nullish operators and truthiness across typed carriers beside equivalent explicit controls | Nullish route contracts; typed paths | 140 | 0 |
+| `ts-nullish-routes` | Nullish operators and truthiness across typed carriers beside equivalent explicit controls | Nullish route contracts; typed paths | 200 | 0 |
 | `ts-nullish-route-coalesce` | coalescing and logical OR preserve or replace signed zero, NaN, zero bigint and other typed values, with lazy fallbacks | Nullish route contracts; ECMAScript, CoalesceExpression | 48 | 0 |
 | `ts-nullish-route-chains` | optional chains skip all subsequent reads, keys and calls on nullish bases while retaining falsy bases, chain boundaries and receiver values | Nullish route contracts; ECMAScript, OptionalChaining | 44 | 0 |
 | `ts-nullish-route-calls` | optional function and method calls retain their object receivers, skip arguments on absent callees and invoke getter-held callbacks once | Nullish route contracts; ECMAScript, OptionalChaining | 48 | 0 |
+| `ts-nullish-route-assignments` | nullish and truthy logical assignment preserve short-circuit reads, writes, getter/setter order, typed-array conversions and expression values | Nullish route contracts; ECMAScript, Assignment Operators | 60 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
