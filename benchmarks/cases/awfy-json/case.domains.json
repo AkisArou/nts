@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "functions": {
+    "work": {
+      "iterations": {
+        "max": 16,
+        "allowNaN": true,
+        "reason": "Bound generated repeated document parses within the Node oracle CPU and address-space budgets while retaining upstream seed1, NaN, negatives and fractions."
+      }
+    }
+  }
+}
