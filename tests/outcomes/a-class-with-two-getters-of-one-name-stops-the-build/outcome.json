@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "invalid-hir",
+  "nts": "invalid HIR: DuplicateFunction { name: \"C#get a\" }",
+  "node": "exit 1; nts: uncaught Observed: a=second;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}
