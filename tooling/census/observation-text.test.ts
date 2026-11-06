@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { constants } from "node:os";
 import { compilerStop, compilerStopped, normalizeGeneratedNumbers, stableCheckText } from "../conformance/observation-text.ts";
+import * as observations from "../conformance/observation-text.ts";
+const { compilerExternalStop } = observations;
 
 test("diagnostic normalization retains source names, positions, arity and widths", () => {
   assert.equal(normalizeGeneratedNumbers('Queue<35>#push Wrapper<37, 42>#map type 99 BlockId(12) at: 14 bits: 64 OwnType35'),
@@ -32,8 +35,23 @@ test("a compiler stop is named by the stop itself, never by a refusal printed fi
   assert.equal(compilerStop("NTS1001 a refusal\n", 139, null), "stopped with exit 139");
 });
 
-test("only a signal, Rust's panic status or a shell's signal status is a compiler stop", () => {
+test("only a self-raised signal or Rust panic belongs to the compiler", () => {
   for (const [status, signal] of [[101, null], [134, null], [null, "SIGABRT"]] as const) assert.equal(compilerStopped(status, signal), true);
+  for (const signal of ["SIGSEGV", "SIGBUS", "SIGILL", "SIGFPE", "SIGABRT", "SIGTRAP", "SIGSYS"] as const) {
+    assert.equal(compilerStopped(null, signal), true, signal);
+    const number = constants.signals[signal];
+    if (number !== undefined) assert.equal(compilerStopped(128 + number, null), true, `exit ${128 + number}`);
+  }
+  for (const signal of ["SIGKILL", "SIGTERM", "SIGINT", "SIGHUP"] as const) {
+    assert.equal(compilerStopped(null, signal), false, signal);
+    assert.equal(compilerExternalStop(null, signal), true, signal);
+    assert.match(compilerStop("NTS1001 earlier refusal\nthread 'nts' panicked at a.rs:1:2: earlier panic", null, signal), new RegExp(signal));
+    assert.equal(compilerStopped(128 + constants.signals[signal], null), false, signal);
+    assert.equal(compilerExternalStop(128 + constants.signals[signal], null), true, signal);
+    assert.match(compilerStop("", 128 + constants.signals[signal], null), new RegExp(signal));
+  }
   assert.equal(compilerStopped(1, null), false, "invalid HIR and type errors exit 1: answers, not stops");
   assert.equal(compilerStopped(0, null), false);
+  assert.equal(compilerExternalStop(1, null), false);
+  assert.equal(compilerExternalStop(0, null), false);
 });
