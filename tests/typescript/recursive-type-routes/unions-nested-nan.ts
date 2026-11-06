@@ -1,0 +1,11 @@
+/*---
+description: "An inner recursive array retains NaN. Route: nested-nan"
+features: [ts-recursive-type-routes, ts-recursive-type-route-unions]
+---*/
+
+// An inner recursive array retains NaN. Route: nested-nan. Node prints unions-nested-nan:ok.
+type Nested=number|Nested[];type View=Nested;
+function flatten(v:View):number[]{if(typeof v==='number')return [v];const out:number[]=[];for(const child of v)out.push(...flatten(child));return out;}
+const input:View=[0,[[NaN]]];
+assert.compareArray(flatten(input),[0,NaN]);
+console.log("unions-nested-nan:ok");
