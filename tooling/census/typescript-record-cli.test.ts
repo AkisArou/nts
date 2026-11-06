@@ -147,7 +147,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   // A case the record has no row for is pending: listed, and not a failure.
   const pending = invoke(contents.split("\n").filter(line => !line.startsWith(target + "\t")).join("\n"), row(pass));
   assert.equal(pending.status, 0, pending.stdout + pending.stderr);
-  assert.ok(pending.stdout.includes(`pending: ${target} has no row in ${expected}`), pending.stdout);
+  assert.ok(pending.stdout.includes(`pending: ${target} is not recorded in ${expected} yet`), pending.stdout);
   assert.equal(JSON.parse(readFileSync(json, "utf8")).comparison.pending.length, 1);
   for (const [mutated, message] of [
     [contents + "tests/typescript/missing-source.ts\t{\"kind\":\"pass\"}\n", "recorded case gone missing"],
@@ -202,7 +202,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   writeFileSync(partial, readFileSync(output, "utf8").split("\n").filter(line => !line.startsWith(other + "\t")).join("\n"));
   const gate = run("--recorded", partial, observed, ["--json", json]);
   assert.equal(gate.status, 0, gate.stdout + gate.stderr);
-  assert.ok(gate.stdout.includes(`pending: ${other} has no row in ${partial}`), gate.stdout);
+  assert.ok(gate.stdout.includes(`pending: ${other} is not recorded in ${partial} yet`), gate.stdout);
   assert.deepEqual(Object.keys(JSON.parse(readFileSync(json, "utf8")).observations), [target], "a pending case is not measured at landing");
   // The full check's writer: the pending row and the improved one, every other line byte for byte.
   const header = readFileSync(partial, "utf8").split("\n")[0];

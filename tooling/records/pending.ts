@@ -23,9 +23,10 @@ export function inventory(recorded: Iterable<string>, sources: Iterable<string>)
   };
 }
 
-/** The line a check prints for a case its record has no row for yet. */
+/** The line a check prints for a case its record has no row for yet: a line of a
+ * shared record, or a record file of its own. */
 export function pendingLine(name: string, record: string): string {
-  return `pending: ${name} has no row in ${record}`;
+  return `pending: ${name} is not recorded in ${record} yet`;
 }
 
 /** The line a check prints for a recorded case that got better. */

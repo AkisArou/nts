@@ -140,7 +140,7 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   const without = (path: string) => (backend: string, text: string) => backend === "c" ? text.split("\n").filter(line => !line.startsWith(path + "\t")).join("\n") : text;
   const waiting = invoke("--check", variant("pending", without("benchmarks/cases/subject")));
   assert.equal(waiting.status, 0, waiting.stdout + waiting.stderr);
-  assert.match(waiting.stdout, /^c pending: benchmarks\/cases\/subject has no row in \S*pending\/c\/outcomes\.tsv$/m);
+  assert.match(waiting.stdout, /^c pending: benchmarks\/cases\/subject is not recorded in \S*pending\/c\/outcomes\.tsv yet$/m);
   assert.doesNotMatch(waiting.stdout, /^c benchmarks\/cases\/subject: /m, "a pending case is not measured at landing");
   assert.match(waiting.stdout, /^llvm benchmarks\/cases\/subject: refused$/m, "a recorded case is");
   const staleRow = (backend: string, text: string) => backend === "c" ? text + text.split("\n")[1]!.replace("benchmarks/cases/control", "benchmarks/cases/deleted") + "\n" : text;
