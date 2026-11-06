@@ -11,7 +11,7 @@ const steps = (path: string, before: string, after: string) => gateSteps(owed([c
 test("documentation and notebook records owe only declared tree checks", () => {
   const listed = spawnSync(process.execPath, ["tooling/gate/run.mjs", "--tree-only"], { encoding: "utf8" });
   assert.equal(listed.status, 0);
-  for (const path of ["docs/architecture.md", "docs/records/notebooks/new.md", "AGENTS.md", "README.md"]) {
+  for (const path of ["docs/architecture.md", "docs/records/notebooks/new.md", "AGENTS.md", "CLAUDE.md", "README.md"]) {
     const got = gateSteps(owed([{ path, added: true }]));
     assert.deepEqual(got, TREE_CHECKS);
     for (const name of got) assert.ok(listed.stdout.split(/\s+/).includes(name), name);

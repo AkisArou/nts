@@ -11,9 +11,6 @@ The user's standing rules for this project:
 - **Features and conformance come first; compile time is guarded, not chased.**
   Each module has a compile-time tripwire in the gate. Fix only super-linear
   blow-ups until told otherwise.
-- **Codex is retired.** Its work survives as archived branches
-  (`refs/archive/codex/...`), a quarry: port an independent fix to `main` on its
-  own, with its own fixture and gate. Never land that work wholesale.
 - **Tooling is written in TypeScript**, run with node; not new `.mjs` files.
 - **Keep upstream code as upstream wrote it** (node's tests, React, test262) and
   report the gap, rather than editing their code to pass.

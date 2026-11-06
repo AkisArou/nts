@@ -27,7 +27,7 @@ function classification(path: string, text: string): string | null {
 
 export function preciseChange(change: ContentChange): "documentation" | "classification prose" | "classification meaning" | "comments" | null {
   const { path, before, after } = change;
-  if (/^docs\//.test(path) || path === "AGENTS.md" || path === "README.md") return "documentation";
+  if (/^docs\//.test(path) || path === "AGENTS.md" || path === "CLAUDE.md" || path === "README.md") return "documentation";
   if (change.added || change.deleted || change.sameMode !== true || before === undefined || after === undefined || before.includes("\0") || after.includes("\0")) return null;
   if (/^tooling\/census\/(features|test262-exclusions)\.json$/.test(path)) {
     try {
