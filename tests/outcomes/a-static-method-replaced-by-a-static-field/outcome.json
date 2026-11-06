@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "wrong-answer",
+  "nts": "exit 1; nts: uncaught Observed: method replaced=function g() { [native code] };field from another method=45;",
+  "node": "exit 1; nts: uncaught Observed: method replaced=45;field from another method=45;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}
