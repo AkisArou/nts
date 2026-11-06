@@ -153,19 +153,19 @@ commits them to `main` without a gate, but **only while no train is running**:
   docs-only commit is checked on its own tree and fast-forwarded at the next
   train boundary, with no gate.
 
-**Test fixtures go straight to main too** (user, 2026-11-05). A change that
-only adds or edits test fixtures, with the records the gate checks them
-against, needs no gate run: the records are the gate's verdict on them, made
-by its own recorders. The coordinator lands it like documentation, holding
-the landing lock while no train runs (`git merge --ff-only` in
-`~/Projects/nts`), after:
-- recording it with those recorders on main's official pin, twice and
-  byte-identical, where only the new rows differ from main's records. A
-  changed row means main's records are stale: stop and report it;
-- running the nine tree checks on it (`land.ts <commit> --dry-run`).
+**Test fixtures go straight to main too, without records** (user, 2026-11-05
+and 11-06). A change that only adds or edits test fixtures needs no gate run
+and no records made by hand. Every record check lists a case that has no row
+yet as pending and does not fail it, and `tooling/records/record-pending.ts`
+writes those rows after landing. The coordinator lands such a change like
+documentation, holding the landing lock while no train runs
+(`git merge --ff-only` in `~/Projects/nts`), after running the nine tree
+checks on it (`land.ts <commit> --dry-run`).
 
-A fixture without its record, or with a wrong one, turns the next train red
-for whoever is in it. Lanes hand their tests-only commits to the coordinator.
+A record that exists and disagrees still fails, so an edit that changes a
+recorded fixture's cases deletes that fixture's record in the same commit,
+which makes it pending. Lanes hand their tests-only commits to the
+coordinator.
 
 **A page in `docs/` is a specification, not a notebook** (user, 2026-10-27).
 It states the current design and contract, with no dates, history or running
@@ -222,13 +222,13 @@ then a guard once fixed), `tests/memory/`.
   the same commit.
 - Run a new fixture against the previous compiler too: if it passes on both, it
   does not test the fix.
-- A new `tests/programs/` or `benchmarks/cases/` fixture, or one whose
-  generated cases change, records its node oracle count in the same commit:
-  `node tooling/differential/record-oracles.ts tests/programs/<name> …`. It
-  measures complete node runs and writes only those rows; the gate's
-  "oracle not measured" error prints the command. A change to a function
-  body with the same cases needs no new record, since every run still checks
-  that all cases arrive.
+- A new `tests/programs/` or `benchmarks/cases/` fixture lands without its
+  node oracle count: the checks list it as pending, and
+  `NTS_BIN=<main's pin> node tooling/records/record-pending.ts` writes the
+  count after landing, one fixture at a time. One whose generated cases
+  change deletes its count in the same commit. A change to a function body
+  with the same cases keeps its count, since every run still checks that all
+  cases arrive.
 
 ## Compiler contracts
 

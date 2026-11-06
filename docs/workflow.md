@@ -232,7 +232,9 @@ Until a part is built, the old lander keeps doing that part's job.
 - **Documentation and test fixtures** go straight to `main`: the coordinator
   commits them holding the landing lock (`~/.cache/nts-land.lock`) while no
   landing runs, after the tree checks (`land.ts <commit> --dry-run`). A
-  fixture comes with its records, made twice on main's official pin.
+  fixture comes without records: its cases are pending until
+  `NTS_BIN=<main's pin> node tooling/records/record-pending.ts` writes them
+  after landing.
 - **A control or a bisect** is a pinned compiler, not a tree:
   `node tooling/conformance/pin.ts <rev>` builds
   `~/.cache/nts-pins/<12 hex>/nts`.

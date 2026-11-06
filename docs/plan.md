@@ -36,32 +36,33 @@ one page that changes as work goes; the designs it builds are in
   order: the landing check, the full check after landing, the records it
   writes and the worktree pool; then agents restart on the tasks below, one
   agent per task.
-- **Landing next, as one train:** pending records
-  (`coordinator/pending-records`). A test or benchmark case with no record
-  yet is pending rather than red, an improvement passes and is listed,
-  getting worse stays red, and `tooling/records/record-pending.ts` writes the
-  missing and improved rows after landing (user, 11-06: tests and benchmarks
-  land directly, with no records made by hand). It also narrows the benchmark
-  compile key to what decides a compile outcome, ranks a silent wrong answer
-  below a loud defect, and makes the gate's temporary-folder tests
-  independent of the machine's free disk. In the same train:
-  - the compiler batch (`coordinator/triage-compiler-fixes`): Octane's loose
-    equality and `Object.assign` (#147), the comparison fold on known non-NaN
-    values, a Java `float` range that includes the infinities, a JVM refusal
-    of a fixed view over a shrunk buffer (#113 E), and the gate's overflow
-    checks in the `nts-dev` profile;
-  - the tests batch (`coordinator/triage-tests-only`): #18's indirect-throw
-    guards and outcome, the C memory declaration tests, a write-once module
-    function refusal, a Node-API function export refusal, and #181's LLVM
-    addon class test;
-  - the synchronous benchmark ports (#315,
-    `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
-    and Octane's provenance; the 46 pull requests it replaces close when it
-    lands;
-  - the AWFY macro benchmarks (#26, `coordinator/awfy-macro-26`).
-
-  The fourteen source branches the triage marked for landing are deleted when
-  it lands.
+- **Landed (11-07):** pending records. A test or benchmark case with no
+  record yet is pending rather than red, a better outcome passes and is
+  listed, getting worse stays red, and `tooling/records/record-pending.ts`
+  writes the missing and improved rows after landing (user, 11-06: tests and
+  benchmarks land directly, with no records made by hand). The ratchet ranks
+  a silent wrong answer below a loud defect, and the benchmark compile key
+  covers only what decides a compile outcome. With it landed the tests
+  batch: #18's indirect-throw guards and outcome, the C memory declaration
+  tests, a write-once module function refusal, a Node-API function export
+  refusal, and #181's LLVM addon class test.
+- **In the train now:** the path rules of the landing check and the full
+  check; the records follow-ups (each oracle fixture recorded on its own; a
+  case refused before and after, for other reasons, is accepted); the
+  synchronous benchmark ports (#315, `coordinator/benchmark-ports-315-r2`),
+  with ARES-6 as upstream wrote it and Octane's provenance, whose 46 replaced
+  pull requests close when it lands; and the AWFY macro benchmarks CD,
+  Havlak, Json and Storage (#26, `coordinator/awfy-macro-26`).
+- **Next:** the compiler batch (`coordinator/triage-compiler-fixes`): Octane's
+  loose equality and `Object.assign` (#147), the comparison fold on known
+  non-NaN values, a Java `float` range that includes the infinities, a JVM
+  refusal of a fixed view over a shrunk buffer (#113 E), and the gate's
+  overflow checks in the `nts-dev` profile. Its first train went red on a
+  case that refuses for another reason, which the follow-ups now accept, and
+  it is checked on the three TypeScript suites before it goes again. With it
+  go the landing check (`workflow/landing-check`) and the full check
+  (`workflow/full-check`), then the switch. The source branches the triage
+  marked for landing are deleted as each batch lands.
 - **In flight:**
   - the shared TypeScript oracle (#193, `node/oracle-e039`). Its train held on
     five defects (11-06), which nodejs repairs in place, each worker now
@@ -187,6 +188,14 @@ ids, kept so the records that cite them still resolve.
   after one build driver for the CLI and `nts-bench` (#196).
 - The asynchronous benchmark harness (#56), then the parked JetStream pull
   requests #69 to #74; #118 after its licence check.
+- AWFY Richards and DeltaBlue stay off `main` until a licence allows
+  redistribution: their only one, an archived Sun Labs page, grants none
+  (`refs/cited/0afcc5667` keeps their ports). Octane's BSD versions cover
+  both workloads.
+- 37 benchmark ports (the 35 JetStream ones, `clbg-pidigits` and
+  `clbg-regex-redux`) need a `case.domains.json` before their oracle counts
+  can be recorded: the recorder's pool reaches inputs outside their
+  workloads, so they stay pending.
 - Whether `main` bootstraps the source globals another way, or the
   `chatgpt/source-globals-bootstrap` branch is still needed.
 - The WebSocket server goes (#52); the interface tag sweep (#53).
