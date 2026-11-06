@@ -1,0 +1,8 @@
+{
+  "run": "build",
+  "category": "uncompilable-c",
+  "nts": "error: passing argument 2 of 'nts_string_eq' makes pointer from integer without a cast [-Wint-conversion]",
+  "node": "exit 1; nts: uncaught Observed: string and boolean=false;",
+  "measured_with": "1c4825476e64cde1",
+  "source": "measured"
+}
