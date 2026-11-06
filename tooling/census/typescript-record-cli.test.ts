@@ -130,8 +130,9 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.deepEqual(JSON.parse(readFileSync(json, "utf8")).observations[target], refused);
   const checkerRefusal: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "TS2322", where: "body" }] };
   const changedCode = invoke(serializeTypeScriptRecord({ metadata: recorded.metadata, cases: withRefusal }), row(checkerRefusal));
-  assert.equal(changedCode.status, 1, changedCode.stdout + changedCode.stderr);
-  assert.equal(JSON.parse(readFileSync(json, "utf8")).comparison.CHANGED.length, 1);
+  assert.equal(changedCode.status, 0, changedCode.stdout + changedCode.stderr);
+  assert.equal(JSON.parse(readFileSync(json, "utf8")).comparison["REFUSES DIFFERENTLY"].length, 1, "a refusal for other reasons is accepted");
+  assert.ok(changedCode.stdout.includes(`refuses differently, record pending: ${target} `), changedCode.stdout);
   const withValidator = new Map(recorded.cases);
   withValidator.set(target, { kind: "invalid-hir", validator: "Queue<35>#push TypeId(42) type 43 at: 7" });
   const shifted = invoke(serializeTypeScriptRecord({ metadata: recorded.metadata, cases: withValidator }),

@@ -115,13 +115,15 @@ reports it:
 
 - a pass that does anything else, or any move down that order (a refusal to
   a defect, a loud defect to a wrong answer), is `REGRESSED`;
-- a different defect of the same rank, or a different set of refusal codes,
-  is `CHANGED`;
+- a different defect of the same rank is `CHANGED`;
 - either fails the step;
 - a defect or refusal that now passes is `FIXED`, a defect that is now
   refused is `REFUSES NOW`, and a wrong answer that now stops loudly is
   `LOUD NOW`. All three pass, are listed as improved, and the full check
-  rewrites their rows.
+  rewrites their rows;
+- a case refused before and after with a different set of refusal codes is
+  `REFUSES DIFFERENTLY`: accepted, listed and rewritten the same way, because
+  a refusal is safe whatever its reasons, and lifting one exposes the next.
 
 There is no floor, because the record is the ratchet. The step needs the
 test262 checkout, whose harness the cases assert with.

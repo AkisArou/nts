@@ -132,8 +132,8 @@ import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
 import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow, parseTypeScriptRecord, pendingCases,
   serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION } from "./typescript-record.ts";
-import { improves } from "../conformance/outcome-transition.ts";
-import { improvedLine, pendingLine } from "../records/pending.ts";
+import { acceptedChange } from "../conformance/outcome-transition.ts";
+import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { selectTypescript } from "./suites/typescript.ts";
 import { provenanceOf } from "../conformance/pin.ts";
 import { memoryRun } from "./worker-memory.ts";
@@ -943,23 +943,25 @@ if (recordFile && TYPESCRIPT) {
 let comparison = null;
 // What fails a comparison: REGRESSED, CHANGED and, for test262's partial
 // records, a recorded case missing or newly failing. A TypeScript case with no
-// row is pending, and FIXED, REFUSES NOW and LOUD NOW are improvements: all pass.
+// row is pending; FIXED, REFUSES NOW and LOUD NOW are improvements, and REFUSES
+// DIFFERENTLY a refusal for other reasons: all pass, and are rewritten.
 const COMPARISON_FAILURES = TYPESCRIPT ? ["REGRESSED", "CHANGED"] : ["REGRESSED", "MISSING", "CHANGED", "NEW FAIL"];
-// The rows --record-pending writes: the pending cases' and the improved ones'.
+// The rows --record-pending writes: the pending cases' and the accepted changes'.
 const recordUpdates = new Map();
 const resourceRegressions=[];
 if (checkFile && TYPESCRIPT) {
   const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
-  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], "LOUD NOW": [], pending: pendingPaths.map(path => pendingLine(path, checkFile)) };
+  comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], "LOUD NOW": [], "REFUSES DIFFERENTLY": [],
+    pending: pendingPaths.map(path => pendingLine(path, checkFile)) };
   for (const [path, now] of typeScriptObserved) {
     const was = expected.cases.get(path);
     // Pending, and listed above: measured only by the full check's writer.
     if (was === undefined) { recordUpdates.set(path, now); continue; }
     const verdict = compareTypeScriptObservation(was, now);
     if (verdict.word === "holds" || verdict.word === "reproduces") continue;
-    if (improves(verdict)) recordUpdates.set(path, now);
-    comparison[verdict.word].push(improves(verdict)
-      ? improvedLine(path, JSON.stringify(was), JSON.stringify(now))
+    if (acceptedChange(verdict)) recordUpdates.set(path, now);
+    comparison[verdict.word].push(acceptedChange(verdict)
+      ? acceptedLine(verdict, path, JSON.stringify(was), JSON.stringify(now))
       : `${path}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}`);
   }
 } else if (checkFile) {

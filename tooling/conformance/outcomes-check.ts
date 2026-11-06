@@ -16,9 +16,10 @@
 // not a failure. The full check records it after landing with
 // `--record-pending` (tooling/records/record-pending.ts), which from a clean
 // pin measures every fixture, holds the recorded ones, and only when none
-// needs a person writes the pending fixtures' records and the improved ones'
-// (FIXED, REFUSES NOW, LOUD NOW). An outcome.json whose program is gone is
-// STALE and fails: the change that deletes a fixture deletes its record.
+// needs a person writes the pending fixtures' records and those of the
+// changes the ratchet accepts (FIXED, REFUSES NOW, LOUD NOW, REFUSES
+// DIFFERENTLY). An outcome.json whose program is gone is STALE and fails: the
+// change that deletes a fixture deletes its record.
 //
 // # Why a third fixture kind
 //
@@ -125,23 +126,27 @@
 //                        printed expect line
 //   LOUD NOW             a wrong answer stops loudly now: an abort, a crash,
 //                        invalid HIR or C that does not compile
+//   REFUSES DIFFERENTLY  refused as before, for other reasons, or with its
+//                        artefact running differently: a refusal is safe
+//                        whatever its reasons, and lifting one exposes the next
 //   REGRESSED            a guard that agreed stopped agreeing, or the case moved
 //                        down the order: a refusal to a defect, a loud defect
 //                        to a wrong answer
-//   CHANGED              still wrong in the same way, differently -- a person
-//                        decides which way
+//   CHANGED              a defect still as loud or as silent, differently -- a
+//                        person decides which way
 //   ORACLE CHANGED       node's own answer moved; the record is stale, not nts
 //   NOT MEASURED         the harness could not produce a verdict; never a pass
 //
-// **FIXED, REFUSES NOW and LOUD NOW print and pass; the rest fail.** `tooling/gate/
-// example-refusals` says why in its header -- "a gate that goes red when you fix
-// something teaches people to stop fixing things" -- and `blockers-check` keeps
-// the same rule, so three harnesses give one answer to "what happens when
-// someone fixes this". The cost is the one that header also names: a stale
-// record can let a regression back in unnoticed. So their count is in the
-// summary line, `N fixed, M refusing now, K loud now -- improved, record
-// pending`, where a run cannot be scrolled past it; `array-from-unsupported`
-// sat stale for twelve days in a harness whose summary did not say so.
+// **FIXED, REFUSES NOW, LOUD NOW and REFUSES DIFFERENTLY print and pass; the
+// rest fail.** `tooling/gate/example-refusals` says why in its header -- "a
+// gate that goes red when you fix something teaches people to stop fixing
+// things" -- and `blockers-check` keeps the same rule, so three harnesses give
+// one answer to "what happens when someone fixes this". The cost is the one
+// that header also names: a stale record can let a regression back in
+// unnoticed. So their count is in the summary line, `N fixed, M refusing now,
+// K loud now, J refusing differently -- record pending`, where a run cannot be
+// scrolled past it; `array-from-unsupported` sat stale for twelve days in a
+// harness whose summary did not say so.
 //
 // **REGRESSED is written and has never been seen to fire.** Every other verdict
 // was driven with a sabotaged record before this landed; REGRESSED needs nts to
@@ -160,11 +165,11 @@ import { runConsumer as supervisedCheck, finishCheckStep, checkOutcome, validate
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
 import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
 import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
-import { improves } from "./outcome-transition.ts";
+import { acceptedChange } from "./outcome-transition.ts";
 import { compilerExternalStop, compilerStop, compilerStopped } from "./compile-diagnostics.ts";
 import { judge, outcomeInventory, outcomeRecord, RECORD } from "./outcomes-verdict.ts";
 import { provenanceOf } from "./pin.ts";
-import { improvedLine, pendingLine } from "../records/pending.ts";
+import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 
@@ -630,9 +635,9 @@ for (const name of chosen) {
   tally.set(verdict.word, (tally.get(verdict.word) ?? 0) + 1);
   if (!verdict.ok) unexpected += 1;
   if (verdict.loud) loud += 1;
-  if (improves(verdict)) {
+  if (acceptedChange(verdict)) {
     if (recordingPending) toRecord.set(name, now);
-    console.log(`  ${improvedLine(fixturePath(name), `${was.category} (${was.nts})`, `${now.category} (${now.nts})`)}`);
+    console.log(`  ${acceptedLine(verdict, fixturePath(name), `${was.category} (${was.nts})`, `${now.category} (${now.nts})`)}`);
   } else console.log(`  ${verdict.word.padEnd(14)}${name}: ${verdict.why}`);
 }
 
@@ -674,7 +679,7 @@ console.log();
 console.log(
   `  ${chosen.length} fixture(s)` +
     (recording ? " recorded" : `: ${[...tally].map(([w, n]) => `${n} ${w}`).join(", ")}`) +
-    (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now, ${tally.get("LOUD NOW") ?? 0} loud now -- improved, record pending` : "") +
+    (loud > 0 ? `; ${tally.get("FIXED") ?? 0} fixed, ${tally.get("REFUSES NOW") ?? 0} refusing now, ${tally.get("LOUD NOW") ?? 0} loud now, ${tally.get("REFUSES DIFFERENTLY") ?? 0} refusing differently -- record pending` : "") +
     (recordingPending && written.length > 0 ? `; recorded ${written.length} pending or improved` : "") +
     (unexpected > 0 ? `; ${unexpected} need a person` : ""),
 );

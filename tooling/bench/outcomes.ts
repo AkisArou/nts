@@ -139,7 +139,7 @@ export function benchmarkInventory<T extends Identity>(record: BenchmarkRecord, 
   return expected.filter(row => !recorded.has(benchmarkKey(row)));
 }
 
-/** Better by the shared ratchet (a pass now, a refusal where there was a defect, a build that fails where it built a wrong answer) passes; any other movement fails. */
+/** What the shared ratchet accepts passes: better (a pass now, a refusal where there was a defect, a build that fails where it built a wrong answer), or a refusal for other reasons. Any other movement fails. */
 export function compareBenchmarkOutcome(before: BenchmarkOutcome, after: BenchmarkOutcome): OutcomeTransition {
   const unchanged = isDeepStrictEqual(parseBenchmarkOutcome(before), parseBenchmarkOutcome(after));
   if (before.kind === "no-scalar-exports" || after.kind === "no-scalar-exports")

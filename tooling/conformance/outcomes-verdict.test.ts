@@ -3,7 +3,7 @@ import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
-import { improves } from "./outcome-transition.ts";
+import { acceptedChange, improves } from "./outcome-transition.ts";
 import { judge, outcomeInventory, outcomeRecord } from "./outcomes-verdict.ts";
 
 test("a fixture with no record is pending, and a record whose program is gone is stale", t => {
@@ -42,6 +42,13 @@ test("an improvement passes and is listed; a regression or a change still fails"
     assert.ok(!verdict.ok && !improves(verdict), `${was.category} -> ${now.category}`);
   }
   assert.match(judge(stored(refused), wrong).why, /^was refused \(NTS1001 a shape\); now wrong-answer/, "a regression from a refusal says so");
+  // Refused before and after, for other reasons or with its artefact running
+  // differently: accepted, listed and rewritten, though no improvement.
+  for (const now of [{ ...refused, nts: "NTS1100 a later shape" }, { ...refused, ran: "exit 1" }]) {
+    const verdict = judge(stored(refused), now);
+    assert.equal(verdict.word, "REFUSES DIFFERENTLY", JSON.stringify(now));
+    assert.ok(verdict.ok && acceptedChange(verdict) && !improves(verdict), verdict.why);
+  }
   assert.equal(judge(stored(wrong), wrong).word, "reproduces");
   assert.equal(judge(stored(agrees), { ...agrees, category: "not-measured" }).ok, false);
 });

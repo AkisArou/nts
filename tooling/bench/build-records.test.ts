@@ -212,18 +212,18 @@ test("recorded compile cells execute every backend and expose outcome movement",
     if (backend === "llvm") assert.equal(readFileSync(join(out, "program.ll"), "utf8"), "; IR");
     const row = { path, scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64), outcome: { kind: "pass" as const } };
     const record = parseBenchmarkRecord(serializeBenchmarkRecord({ metadata: { version: 1, backend, commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] }, rows: [row] }));
-    assert.deepEqual(checkCompileRecord(record, [row]), { changed: [], improved: [] });
+    assert.deepEqual(checkCompileRecord(record, [row]), { changed: [], accepted: [] });
     refused = true;
     const outcome = await observeCompile({ backend, project, output: out, binary: "nts", root, env: {}, command });
     assert.equal(outcome.kind, "refused");
     assert.equal(checkCompileRecord(record, [{ ...row, outcome }]).changed.length, 1, "a pass that refuses now is a regression");
     const held = parseBenchmarkRecord(serializeBenchmarkRecord({ ...record, rows: [{ ...row, outcome }] }));
-    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }]), { changed: [], improved: [] });
+    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }]), { changed: [], accepted: [] });
     const fixed = checkCompileRecord(held, [row]);
     assert.equal(fixed.changed.length, 0, "a fix passes");
-    assert.deepEqual(fixed.improved.map(({ row }) => row), [row], "and is listed for the full check to record");
+    assert.deepEqual(fixed.accepted.map(({ row }) => row), [row], "and is listed for the full check to record");
     const unrecorded = { ...row, path: "benchmarks/cases/new" };
-    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }, unrecorded]), { changed: [], improved: [] }, "a case with no row is pending");
+    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }, unrecorded]), { changed: [], accepted: [] }, "a case with no row is pending");
     refused = false;
   }
   assert.ok(calls.some(row => row[1] === "emit-c" && row.includes("--rc")));

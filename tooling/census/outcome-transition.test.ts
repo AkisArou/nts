@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { improves, outcomeDisposition, outcomeTransition, type OutcomeDisposition } from "../conformance/outcome-transition.ts";
+import { acceptedChange, improves, outcomeDisposition, outcomeTransition, type OutcomeDisposition } from "../conformance/outcome-transition.ts";
 
 test("outcomes and TypeScript observations share the progress vocabulary", () => {
   for (const [corpus, suite] of [["agrees", "pass"], ["wrong-answer", "wrong"],
@@ -22,7 +22,7 @@ test("the ratchet orders pass > refused > loud defect > silent wrong answer", ()
   const words: Record<string, string> = {
     "silent silent": "CHANGED", "silent loud": "LOUD NOW", "silent refused": "REFUSES NOW", "silent pass": "FIXED",
     "loud silent": "REGRESSED", "loud loud": "CHANGED", "loud refused": "REFUSES NOW", "loud pass": "FIXED",
-    "refused silent": "REGRESSED", "refused loud": "REGRESSED", "refused refused": "CHANGED", "refused pass": "FIXED",
+    "refused silent": "REGRESSED", "refused loud": "REGRESSED", "refused refused": "REFUSES DIFFERENTLY", "refused pass": "FIXED",
     "pass silent": "REGRESSED", "pass loud": "REGRESSED", "pass refused": "REGRESSED", "pass pass": "REGRESSED",
   };
   const order: OutcomeDisposition[] = ["silent", "loud", "refused", "pass"];
@@ -31,8 +31,9 @@ test("the ratchet orders pass > refused > loud defect > silent wrong answer", ()
     for (const after of order) {
       const transition = outcomeTransition(before, after, false);
       assert.equal(transition.word, words[`${before} ${after}`], `${before} -> ${after}`);
-      assert.equal(transition.ok, improves(transition), `${before} -> ${after}: only an improvement passes`);
-      assert.equal(transition.loud, improves(transition), `${before} -> ${after}: and every improvement is listed`);
+      assert.equal(transition.ok, acceptedChange(transition), `${before} -> ${after}: only an accepted change passes`);
+      assert.equal(transition.loud, acceptedChange(transition), `${before} -> ${after}: and every accepted change is listed`);
+      assert.equal(improves(transition), ["FIXED", "REFUSES NOW", "LOUD NOW"].includes(transition.word), `${before} -> ${after}: a refusal for other reasons is no improvement`);
     }
   }
 });

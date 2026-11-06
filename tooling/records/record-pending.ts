@@ -1,9 +1,10 @@
 // The full check's recorder (docs/workflow.md, Records: "The full check writes
 // them. Nobody records by hand."). A case whose source exists and whose record
 // has no row yet is pending: every record check lists it and does not fail on
-// it, and this writes its row after landing. A recorded case that got better,
-// by its check's own ordering, has its row rewritten too. Every other row stays
-// byte for byte. It prints what it recorded, and it does not commit.
+// it, and this writes its row after landing. A recorded case whose change the
+// shared ratchet accepts (an improvement, or a refusal for other reasons) has
+// its row rewritten too. Every other row stays byte for byte. It prints what it
+// recorded, and it does not commit.
 //
 //   NTS_BIN=<main's pin> node tooling/records/record-pending.ts [kind ...]
 //
@@ -16,15 +17,15 @@
 //   benchmarks     tooling/bench/build-records.ts --record-pending
 //   outcomes       tooling/conformance/outcomes-check.ts --record-pending
 //
-// The pending cases come from the tree alone. Improvements need a measurement,
-// so the last three recorders run whether or not anything is pending. Each
-// writes only from a comparison with nothing worse, so run this on `verified`
-// main: an improvement that a red commit caused is then never recorded ahead
-// of that commit's revert.
+// The pending cases come from the tree alone. Accepted changes need a
+// measurement, so the last three recorders run whether or not anything is
+// pending. Each writes only from a comparison with nothing worse, so run this on
+// `verified` main: a change that a red commit caused is then never recorded
+// ahead of that commit's revert.
 //
 // What the recorders wrote is then audited against the rule: a removed row, a
-// row added for a case that was not pending, or a rewritten row that is not an
-// improvement is refused, and that record's bytes are put back.
+// row added for a case that was not pending, or a rewritten row whose change
+// the ratchet does not accept is refused, and that record's bytes are put back.
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
@@ -35,7 +36,7 @@ import { benchmarkCases } from "../bench/build-records.ts";
 import { compareBenchmarkOutcome, parseBenchmarkOutcome, parseBenchmarkRecord } from "../bench/outcomes.ts";
 import { selectTypescript } from "../census/suites/typescript.ts";
 import { compareTypeScriptObservation, parseObservation, parseTypeScriptRecord, pendingCases } from "../census/typescript-record.ts";
-import { improves } from "../conformance/outcome-transition.ts";
+import { acceptedChange, improves, type OutcomeTransition } from "../conformance/outcome-transition.ts";
 import { outcomeFixtures } from "../conformance/outcomes-project.ts";
 import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
 import { pendingFixtures, recordPath, RECORDS } from "../differential/oracle-records.ts";
@@ -124,21 +125,27 @@ function rows(text: string, kind: "typescript" | "benchmarks"): { header: string
   return { header, rows: result };
 }
 
-function improvedRow(kind: "typescript" | "benchmarks", before: string, after: string): string | null {
+/** How the ratchet takes a rewrite, as the audit's label: an improvement, or a refusal for other reasons. */
+const label = (transition: OutcomeTransition) => improves(transition) ? "improved" : "refuses differently";
+
+/** A rewritten row the ratchet accepts, described, or null when it does not accept it. */
+function acceptedRow(kind: "typescript" | "benchmarks", before: string, after: string): string | null {
   const value = (line: string) => JSON.parse(line.split("\t")[1]!);
   if (kind === "typescript") {
-    const was = parseObservation(value(before)), now = parseObservation(value(after));
-    return improves(compareTypeScriptObservation(was, now)) ? `${JSON.stringify(was)} -> ${JSON.stringify(now)}` : null;
+    const was = parseObservation(value(before)), now = parseObservation(value(after)), change = compareTypeScriptObservation(was, now);
+    return acceptedChange(change) ? `${JSON.stringify(was)} -> ${JSON.stringify(now)} (${label(change)})` : null;
   }
   const was = value(before), now = value(after);
   if (was.source !== now.source || was.driver !== now.driver) return null;
   const outcome = (cell: { outcome: unknown }) => parseBenchmarkOutcome(cell.outcome);
-  return improves(compareBenchmarkOutcome(outcome(was), outcome(now))) ? `${JSON.stringify(was.outcome)} -> ${JSON.stringify(now.outcome)}` : null;
+  const change = compareBenchmarkOutcome(outcome(was), outcome(now));
+  return acceptedChange(change) ? `${JSON.stringify(was.outcome)} -> ${JSON.stringify(now.outcome)} (${label(change)})` : null;
 }
 
 /**
  * What changed in one record file, as the rows it recorded. Throws when the
- * change breaks the rule: only pending rows added, only improvements rewritten.
+ * change breaks the rule: only pending rows added, and only rows rewritten
+ * whose change the ratchet accepts.
  */
 export function auditRecord(kind: Kind, file: string, before: string | null, after: string | null, pending: ReadonlySet<string>): string[] {
   if (before === after) return [];
@@ -152,9 +159,9 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
       const next = now.rows.get(key);
       assert.ok(next, `${file}: the row of ${row.name} was removed`);
       if (next.line === row.line) continue;
-      const change = improvedRow(kind, row.line, next.line);
-      assert.ok(change, `${file}: the row of ${row.name} was rewritten, and it is no improvement`);
-      recorded.push(`${row.name} ${change} (improved)`);
+      const change = acceptedRow(kind, row.line, next.line);
+      assert.ok(change, `${file}: the row of ${row.name} was rewritten, and the ratchet does not accept it`);
+      recorded.push(`${row.name} ${change}`);
     }
     for (const [key, row] of now.rows) {
       if (was.rows.has(key)) continue;
@@ -174,15 +181,15 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
     assert.ok(pending.has(fixture), `${file} was written for ${fixture}, which was not pending`);
     return [`${fixture} ${now.category} (pending)`];
   }
-  const was = JSON.parse(before);
-  assert.ok(improves(judge(was, now)), `${file} was rewritten, and it is no improvement`);
-  return [`${fixture} ${was.category} -> ${now.category} (improved)`];
+  const was = JSON.parse(before), change = judge(was, now);
+  assert.ok(acceptedChange(change), `${file} was rewritten, and the ratchet does not accept it`);
+  return [`${fixture} ${was.category} -> ${now.category} (${label(change)})`];
 }
 
 export type Runner = (args: string[], root: string) => number;
 const runNode: Runner = (args, root) => spawnSync(process.execPath, args, { cwd: root, stdio: "inherit", env: process.env }).status ?? 1;
 
-/** Record every pending and improved row of the named kinds. Returns the exit status. */
+/** Record every pending row of the named kinds, and every change the ratchet accepts. Returns the exit status. */
 export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line)): number {
   let failed = 0, recorded = 0;
   for (const kind of kinds) {

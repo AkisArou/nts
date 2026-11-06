@@ -14,8 +14,8 @@ import { Admission } from "../gate/admission.ts";
 import { withToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
-import { improves } from "../conformance/outcome-transition.ts";
-import { improvedLine, pendingLine } from "../records/pending.ts";
+import { acceptedChange } from "../conformance/outcome-transition.ts";
+import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { compileEnvironment, compileKey, observeCompile, projectFor, regularFiles } from "./compile-producer.ts";
 import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkRecord, requireBenchmarkScopes,
   serializeBenchmarkRecord, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
@@ -24,8 +24,8 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const hash = (value: string | Uint8Array) => createHash("sha256").update(value).digest("hex");
 
-/** Measured compile cells against their rows: what got worse or changed fails; what got better is listed. */
-export interface CompileComparison { changed: string[]; improved: { row: BenchmarkRow; line: string }[] }
+/** Measured compile cells against their rows: what the ratchet does not accept fails; what it accepts is listed. */
+export interface CompileComparison { changed: string[]; accepted: { row: BenchmarkRow; line: string }[] }
 
 /** Hold measured cells to their recorded rows. A cell with no row yet is pending: not compared here. */
 export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow[]): CompileComparison {
@@ -33,12 +33,12 @@ export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow
   const expected = record.rows.filter(row => row.scope === "compile");
   const pending = new Set(benchmarkInventory({ ...record, rows: expected }, actual).map(benchmarkKey));
   const byKey = new Map(expected.map(row => [benchmarkKey(row), row]));
-  const result: CompileComparison = { changed: [], improved: [] };
+  const result: CompileComparison = { changed: [], accepted: [] };
   for (const row of actual) {
     if (pending.has(benchmarkKey(row))) continue;
     const before = byKey.get(benchmarkKey(row))!.outcome, change = compareBenchmarkOutcome(before, row.outcome);
     if (!change.ok) result.changed.push(`${change.word} ${row.path}: ${JSON.stringify(before)} -> ${JSON.stringify(row.outcome)}; re-record this outcome`);
-    else if (improves(change)) result.improved.push({ row, line: improvedLine(row.path, JSON.stringify(before), JSON.stringify(row.outcome)) });
+    else if (acceptedChange(change)) result.accepted.push({ row, line: acceptedLine(change, row.path, JSON.stringify(before), JSON.stringify(row.outcome)) });
   }
   return result;
 }
@@ -99,7 +99,7 @@ function publish(file: string, contents: string): void {
  * each recorded row and reports a case with no row yet as pending, without
  * measuring it. `--record-pending` is the full check's writer, after landing:
  * from a clean pin it measures every case, holds the recorded ones, and on a
- * clean comparison writes the pending and improved rows, every other line byte
+ * clean comparison writes the pending rows and the accepted changes, every other line byte
  * for byte.
  */
 export async function runBuildRecords(args = process.argv.slice(2)): Promise<number> {
@@ -158,7 +158,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     assert.equal(hash(readFileSync(binary)), compiler, "compiler bytes changed during recording");
     assert.equal(compileKey(ROOT), driver, "benchmark compile producer changed during recording");
     assert.deepEqual(await benchmarkIdentities(ROOT, all, scratch), identities, "benchmark sources changed during recording");
-    let changed = 0, improved = 0, waiting = 0;
+    let changed = 0, accepted = 0, waiting = 0;
     const updates = new Map<Backend, BenchmarkRow[]>();
     for (const backend of backends) {
       const rows = actual.get(backend)!;
@@ -170,11 +170,11 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       const record = records.get(backend)!, unrecorded = pending.get(backend)!;
       const comparison = checkCompileRecord({ ...record, rows: record.rows.filter(row => paths.includes(row.path)) }, rows.filter(row => !unrecorded.has(row.path)));
       for (const message of comparison.changed) console.log(`${backend} ${message}`);
-      for (const { line } of comparison.improved) console.log(`${backend} ${line}`);
+      for (const { line } of comparison.accepted) console.log(`${backend} ${line}`);
       const waits = paths.filter(path => unrecorded.has(path));
       for (const path of waits) console.log(`${backend} ${pendingLine(path, shown(recordFile(backend)))}`);
-      changed += comparison.changed.length; improved += comparison.improved.length; waiting += waits.length;
-      updates.set(backend, [...rows.filter(row => unrecorded.has(row.path)), ...comparison.improved.map(({ row }) => row)]);
+      changed += comparison.changed.length; accepted += comparison.accepted.length; waiting += waits.length;
+      updates.set(backend, [...rows.filter(row => unrecorded.has(row.path)), ...comparison.accepted.map(({ row }) => row)]);
     }
     if (mode === "--record-pending" && changed) console.log(`not recorded: ${changed} recorded outcome(s) changed; records are written only from a clean comparison`);
     else if (mode === "--record-pending") for (const [backend, rows] of updates) {
@@ -182,7 +182,7 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
       publish(recordFile(backend), mergeBenchmarkRecord(readFileSync(recordFile(backend), "utf8"), rows));
       console.log(`${backend} recorded ${rows.length} row(s) into ${shown(recordFile(backend))}`);
     }
-    console.log(`${paths.length} benchmark cases, ${backends.length} backends, compile-only coverage; ${changed} changed outcomes, ${improved} improved, ${waiting} pending`);
+    console.log(`${paths.length} benchmark cases, ${backends.length} backends, compile-only coverage; ${changed} changed outcomes, ${accepted} accepted, ${waiting} pending`);
     return changed ? 1 : 0;
   } finally {
     try { if (resident) memoryRun().close(); }

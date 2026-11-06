@@ -4,10 +4,13 @@
  * loud defect > silent wrong answer: a wrong answer ranks lowest because
  * nothing reports it, which is also why the plan's queue takes wrong answers
  * first. Moving up the order is progress, and passes; moving down is a
- * regression; a different outcome of the same rank is a change.
+ * regression. A case refused before and after, for other reasons, is accepted:
+ * a refusal is safe whatever its reasons, and lifting one refusal exposes the
+ * next on every compiler improvement. Any other different outcome of the same
+ * rank is a change, and fails.
  */
 export type OutcomeDisposition = "pass" | "refused" | "loud" | "silent";
-export type TransitionWord = "holds" | "reproduces" | "FIXED" | "REFUSES NOW" | "LOUD NOW" | "REGRESSED" | "CHANGED";
+export type TransitionWord = "holds" | "reproduces" | "FIXED" | "REFUSES NOW" | "LOUD NOW" | "REFUSES DIFFERENTLY" | "REGRESSED" | "CHANGED";
 export interface OutcomeTransition { word: TransitionWord; ok: boolean; loud: boolean; }
 
 const RANK: Readonly<Record<OutcomeDisposition, number>> = { silent: 0, loud: 1, refused: 2, pass: 3 };
@@ -35,10 +38,20 @@ export function outcomeTransition(
   if (after === "pass") return { word: "FIXED", ok: true, loud: true };
   if (after === "refused" && before !== "refused") return { word: "REFUSES NOW", ok: true, loud: true };
   if (after === "loud" && before === "silent") return { word: "LOUD NOW", ok: true, loud: true };
+  if (after === "refused" && before === "refused") return { word: "REFUSES DIFFERENTLY", ok: true, loud: true };
   return { word: "CHANGED", ok: false, loud: false };
 }
 
-/** A recorded case got better: it passes and is listed, and the full check rewrites its row. */
+/** A recorded case got better: a pass, a refusal or a loud stop where it was worse. */
 export function improves(transition: OutcomeTransition): boolean {
   return transition.word === "FIXED" || transition.word === "REFUSES NOW" || transition.word === "LOUD NOW";
+}
+
+/**
+ * A change the ratchet accepts: an improvement, or a case refused as before
+ * for other reasons, which is not one. It passes, is listed, and the full
+ * check rewrites its row; any other change fails.
+ */
+export function acceptedChange(transition: OutcomeTransition): boolean {
+  return improves(transition) || transition.word === "REFUSES DIFFERENTLY";
 }

@@ -45,8 +45,11 @@ test("benchmark records bind every case and scope without making compiler change
     [wrong, refusal, "REFUSES NOW"], [wrong, failed, "LOUD NOW"]] as const) {
     assert.deepEqual(compareBenchmarkOutcome(before, after), { word, ok: true, loud: true }, "an improvement passes; the full check records it");
   }
+  assert.deepEqual(compareBenchmarkOutcome(refusal, { ...refusal, diagnostic: "NTS1100 a later shape" }), { word: "REFUSES DIFFERENTLY", ok: true, loud: true },
+    "a refusal for other reasons is accepted");
   for (const [before, after, word] of [[pass, refusal, "REGRESSED"], [pass, failed, "REGRESSED"], [refusal, failed, "REGRESSED"],
-    [refusal, wrong, "REGRESSED"], [failed, wrong, "REGRESSED"], [failed, { ...failed, diagnostic: "undefined symbol rest" }, "CHANGED"]] as const) {
+    [refusal, wrong, "REGRESSED"], [failed, wrong, "REGRESSED"], [failed, { ...failed, diagnostic: "undefined symbol rest" }, "CHANGED"],
+    [wrong, { ...wrong, compiled: "4008000000000000" }, "CHANGED"]] as const) {
     assert.deepEqual(compareBenchmarkOutcome(before, after), { word, ok: false, loud: false }, "a regression or a change still fails");
   }
   const build = cell("compile", { kind: "build-failure", stage: "emit", diagnostic: "/scratch/a/program.c:17:2: invalid value 42" });

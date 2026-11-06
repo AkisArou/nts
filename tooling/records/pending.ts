@@ -7,10 +7,12 @@
 //   stale     a row whose case no longer exists. Still an error: the change that
 //             deletes a case deletes its row.
 //
-// A recorded case that got better, by the check's own ordering of outcomes,
-// passes too and is listed; record-pending.ts rewrites its row. A recorded case
-// that got worse stays red. Each check keeps its own vocabulary for "better";
-// this module only names the two lines every check prints.
+// A recorded case whose change the shared ratchet accepts (an improvement, or a
+// refusal for other reasons) passes too and is listed; record-pending.ts
+// rewrites its row. A recorded case that got worse stays red. This module only
+// names the lines every check prints.
+
+import type { OutcomeTransition } from "../conformance/outcome-transition.ts";
 
 /** Cases of a corpus against its record, by key: what has no row, and what has no case. */
 export interface Inventory { pending: string[]; stale: string[] }
@@ -32,4 +34,14 @@ export function pendingLine(name: string, record: string): string {
 /** The line a check prints for a recorded case that got better. */
 export function improvedLine(name: string, before: string, after: string): string {
   return `improved, record pending: ${name} ${before} -> ${after}`;
+}
+
+/** The line a check prints for a recorded case refused as before, for other reasons: accepted, not an improvement. */
+export function refusesDifferentlyLine(name: string, before: string, after: string): string {
+  return `refuses differently, record pending: ${name} ${before} -> ${after}`;
+}
+
+/** The line for a change the ratchet accepts (acceptedChange), by what it is. */
+export function acceptedLine(transition: OutcomeTransition, name: string, before: string, after: string): string {
+  return (transition.word === "REFUSES DIFFERENTLY" ? refusesDifferentlyLine : improvedLine)(name, before, after);
 }

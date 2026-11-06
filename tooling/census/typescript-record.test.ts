@@ -5,7 +5,7 @@ import { populationOf } from "./project.ts";
 import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow,
   parseObservation, parseTypeScriptRecord, pendingCases, serializeTypeScriptRecord,
   type TypeScriptObservation, type TypeScriptRecord } from "./typescript-record.ts";
-import { improves } from "../conformance/outcome-transition.ts";
+import { acceptedChange, improves } from "../conformance/outcome-transition.ts";
 
 const observations: TypeScriptObservation[] = [
   { kind: "pass" },
@@ -92,6 +92,20 @@ test("an improvement passes and a regression fails, by the shared ratchet", () =
   }
 });
 
+test("a case refused before and after, for other reasons, is accepted but no improvement", () => {
+  // tests/typescript/implicit-calls/order-entry-key-assign-setter-union.ts: the
+  // Object.assign fix lifted NTS1001, and the case reached a later refusal.
+  const before: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }, { code: "NTS1003", where: "body" }] };
+  const after: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1003", where: "body" }, { code: "NTS1100", where: "body" }] };
+  const verdict = compareTypeScriptObservation(before, after);
+  assert.deepEqual(verdict, { word: "REFUSES DIFFERENTLY", ok: true, loud: true });
+  assert.ok(acceptedChange(verdict) && !improves(verdict));
+  const [, wrong, , invalid, abort] = observations;
+  for (const [was, now] of [[wrong, { ...wrong!, errorClass: "TypeError" }], [invalid, abort]] as const) {
+    assert.equal(compareTypeScriptObservation(was!, now!).word, "CHANGED", `${was!.kind} -> ${now!.kind} stays red`);
+  }
+});
+
 test("the full check's writer adds pending rows and rewrites improved ones, every other line byte for byte", () => {
   // A row in an older spelling (diagnostics unsorted) is kept as it was written.
   const legacy = `${paths[2]}\t{"kind":"refused","diagnostics":[{"code":"NTS1005","where":"body"},{"code":"NTS1001","where":"body"}]}`;
@@ -156,7 +170,9 @@ test("the complete kind transition matrix holds regressions and permits progress
   for (const index of [1, 2, 3, 4]) {
     const changed = JSON.stringify(observations[index]).replace("7", "9").replace("NTS1001", "TS2322")
       .replace("Float64", "Int32").replace("index 2", "index 3");
-    assert.equal(compareTypeScriptObservation(observations[index], parseObservation(JSON.parse(changed))).word, "CHANGED");
+    // A refusal for other reasons is accepted; a wrong answer or a loud defect, changed, is not.
+    assert.equal(compareTypeScriptObservation(observations[index], parseObservation(JSON.parse(changed))).word,
+      observations[index]!.kind === "refused" ? "REFUSES DIFFERENTLY" : "CHANGED");
   }
 });
 
@@ -168,8 +184,9 @@ test("a refusal's prose and order do not change its sorted code/location identit
     { code: "NTS1001", raw: "new reason Queue<47>", where: "body" },
     { code: "NTS1001", raw: "another reason", where: "body" }]);
   assert.equal(compareTypeScriptObservation(before, after).word, "reproduces");
+  // A different code is a different refusal: accepted, and its row rewritten.
   const changed = observed([{ code: "TS2322", raw: "same prose", where: "body" }]);
-  assert.equal(compareTypeScriptObservation(before, changed).word, "CHANGED");
+  assert.equal(compareTypeScriptObservation(before, changed).word, "REFUSES DIFFERENTLY");
 });
 
 test("generated validator numbers move without changing names, positions or outcomes", () => {

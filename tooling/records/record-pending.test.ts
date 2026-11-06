@@ -139,11 +139,22 @@ test("a recorder that rewrites a recorded row without improving it, or records a
   assert.equal(recordPending(root, ["oracle-counts", "typescript", "outcomes"], run, line => lines.push(line)), 1);
   const refusals = lines.filter(line => line.startsWith("  REFUSED "));
   assert.equal(refusals.length, 3, lines.join("\n"));
-  assert.ok(refusals.some(line => line.includes("results/typescript/c/cases.tsv: the row of tests/typescript/family/recorded.ts was rewritten, and it is no improvement")));
+  assert.ok(refusals.some(line => line.includes("results/typescript/c/cases.tsv: the row of tests/typescript/family/recorded.ts was rewritten, and the ratchet does not accept it")));
   assert.ok(refusals.some(line => line.includes("results/oracle-counts/tests/programs/recorded.json: a recorded population was rewritten")));
-  assert.ok(refusals.some(line => line.includes("tests/outcomes/recorded/outcome.json was rewritten, and it is no improvement")));
+  assert.ok(refusals.some(line => line.includes("tests/outcomes/recorded/outcome.json was rewritten, and the ratchet does not accept it")));
   const after = files(root);
   for (const path of ["results/typescript/c/cases.tsv", "results/oracle-counts/tests/programs/recorded.json", "tests/outcomes/recorded/outcome.json"]) {
     assert.equal(after.get(path), before.get(path), `${path} is put back as it was`);
   }
+});
+
+test("a row refused as before for other reasons is accepted and labelled so, not as an improvement", t => {
+  const root = tree(t), lines: string[] = [];
+  const edit = (path: string, change: (text: string) => string) => writeFileSync(join(root, path), change(readFileSync(join(root, path), "utf8")));
+  const later: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1003", where: "body" }, { code: "NTS1100", where: "body" }] };
+  const { run } = recorders(root, {
+    "tooling/census/conformance262.ts": () => edit("results/typescript/c/cases.tsv", text => mergeTypeScriptRecord(text, new Map([["tests/typescript/family/recorded.ts", later]]))),
+  });
+  assert.equal(recordPending(root, ["typescript"], run, line => lines.push(line)), 0, lines.join("\n"));
+  assert.ok(lines.includes(`  recorded results/typescript/c/cases.tsv: tests/typescript/family/recorded.ts ${JSON.stringify(refused)} -> ${JSON.stringify(later)} (refuses differently)`), lines.join("\n"));
 });
