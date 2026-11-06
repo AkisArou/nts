@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/pidigits-gpp-4.html"
+      ]
+    },
+    "ref.java": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/pidigits-graalvmaot-1.html"
+      ]
+    }
+  }
+}

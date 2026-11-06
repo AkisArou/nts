@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "references": {
+    "ref.cpp": {
+      "kind": "third-party",
+      "upstream": [
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/regexredux-gpp-1.html",
+        "https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/fasta-gpp-1.html"
+      ]
+    }
+  }
+}
