@@ -1299,8 +1299,11 @@ if (disorder) {
 // are queued longest first (tooling/gate/costs.mjs), so the expensive ones
 // start while every worker is still free.
 const slot = limiter(WORKERS);
-// Each process holds one of the gate's tokens while it runs (tokens.mjs).
+// Each process holds one of the gate's tokens while it runs (tokens.mjs), and
+// is timed from the moment it holds it: `own_s` is its own work, never its
+// wait for a worker or a token.
 const run = (args) => slot(() => withToken(() => {
+    const began = performance.now();
     // The native producer captures anew; there is no producer-cache mode.
     // Only a kept prepared listing supplies the compile-time step's counters.
     const timedRun = KEEP && ADDON.test(args.at(-1)) && args[0] === "hir" && args[1] === "--prepared";
@@ -1308,7 +1311,7 @@ const run = (args) => slot(() => withToken(() => {
     const work_settings=timedRun?compileWorkSettings(measuredEnvironment):undefined;
     return runIntegrityListing(NTS,timedRun?compileCommand("nogc",args.at(-1)):args,{cwd:ROOT,env:measuredEnvironment,
       ...(timedRun?{counterFile:join(KEEP,`${args.at(-1).replaceAll("/", "_")}.perf`)}:{})})
-      .then(result=>timedRun?{...result,work_settings}:result);
+      .then(result=>({...(timedRun?{...result,work_settings}:result),own_s:(performance.now()-began)/1000}));
   }));
 
 const found = [];
@@ -1343,10 +1346,14 @@ const cost = {};
 async function scan(project) {
   const listings = {};
   const at = pathOf.get(project) ?? project;
-  const began = Date.now();
   const commands = [["prepared", ["hir", "--prepared", at]], ["plain", ["hir", at]], ["layouts", ["layouts", at]], ["refusals", ["refusals", at]]];
   const results = await Promise.all(commands.map(([, args]) => run(args).catch(error=>({error,stdout:"",stderr:""}))));
-  cost[project] = (Date.now() - began) / 1000;
+  // A project's cost is its longest listing's own time, the critical path the
+  // next run schedules longest first. Every scan starts at once and queues on
+  // the pool, so a clock started here records when the project finished, and
+  // the next run would draw the last to finish first.
+  const own = results.flatMap((result) => (typeof result.own_s === "number" ? [result.own_s] : []));
+  if (own.length > 0) cost[project] = Math.max(...own);
   keep(project, results[0]);
   let projectIncomplete=false;
   for (const [i, [, args]] of commands.entries()) {

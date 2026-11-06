@@ -117,11 +117,16 @@ async function main() {
     while (!held && next < queue.length) {
       const index = next++;
       const project = queue[index];
-      const began = Date.now();
-      const result = await withToken(() => measure({
-        project, root: ROOT, compiler, env, cc,
-        work: join(scratch, String(index)), cached: cachedEmission(project, cached, hash),
-      }));
+      // Timed from the moment it holds its token: the next run's order is by
+      // work, never by the wait for a token.
+      let began = 0;
+      const result = await withToken(() => {
+        began = Date.now();
+        return measure({
+          project, root: ROOT, compiler, env, cc,
+          work: join(scratch, String(index)), cached: cachedEmission(project, cached, hash),
+        });
+      });
       results.set(project, result);
       if (result.category === "hung" || result.category === "runaway") held = {kind:result.category,why:`${project}: ${result.why}`};
       timed[project] = (Date.now() - began) / 1000;

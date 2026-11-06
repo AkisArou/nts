@@ -77,3 +77,40 @@ child.on("close",status=>{
     rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// Every project's four listings queue on one pool, so a project's recorded
+// cost must be its own work: the longest of its listings, each timed while it
+// holds its token. Timed from when its scan began -- all scans begin at once --
+// it would be the moment the project finished, and the next run, drawing the
+// longest first, would start whatever finished last. One worker draws the
+// heavy project first, so the light one waits behind all of its work.
+test("integrity records a project's own listing time, not when it finished", () => {
+  const base = join(homedir(), ".cache/nts-scratch");
+  mkdirSync(base, { recursive: true });
+  const dir = mkdtempSync(join(base, "integrity-cost-order-"));
+  try {
+    const bin = join(dir, "bin");
+    mkdirSync(bin);
+    const compiler = join(bin, "nts");
+    writeFileSync(compiler, `#!/usr/bin/env node
+const argv=process.argv.slice(2);
+if(argv[0]==="hir"&&argv[1]==="--prepared"&&argv.at(-1).endsWith("cost-heavy")){let sum=0;for(let i=0;i<1e9;i++)sum+=i;if(sum<0)process.stderr.write(String(sum));}
+if(argv[0]==="hir") process.stdout.write("func control() -> void {\\n}\\n\\n1 function(s), nothing refused\\n");
+`);
+    chmodSync(compiler, 0o755);
+    const costs = join(dir, "costs");
+    mkdirSync(costs);
+    const heavy = "runtime/node/cost-heavy", light = "runtime/node/cost-light";
+    writeFileSync(join(costs, "integrity.json"), JSON.stringify({ [heavy]: 100, [light]: 1 }) + "\n");
+    const env = { ...process.env, NTS_BIN: compiler, LC_ALL: "C", NTS_INTEGRITY_JOBS: "1", NTS_GATE_COSTS_DIR: costs };
+    delete env.NTS_INTEGRITY_KEEP;
+    delete env.NTS_GATE_TOKENS;
+    const result = spawnTest(process.execPath, ["tooling/conformance/integrity.ts", heavy, light], { cwd: ROOT, env, encoding: "utf8" });
+    assert.equal(result.status, 0, `${result.stdout}\n${result.stderr}`);
+    assert.match(result.stdout, /2 of 2 project\(s\) measured/);
+    const recorded = JSON.parse(readFileSync(join(costs, "integrity.json"), "utf8"));
+    assert.ok(recorded[light] < recorded[heavy], `the light project waited behind the heavy one, so only its own work may count: ${JSON.stringify(recorded)}`);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});

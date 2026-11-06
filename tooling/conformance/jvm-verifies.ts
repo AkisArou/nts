@@ -654,9 +654,10 @@ const timed = {};
 await Promise.all(Array.from({ length: Math.min(WORKERS, queue.length) }, async (_, slot) => {
   while (next < queue.length) {
     const project = queue[next++];
-    const began = Date.now();
-    // One of the gate's tokens per project (tokens.mjs).
-    await withToken(() => check(project, slot));
+    // One of the gate's tokens per project (tokens.mjs), timed from the moment
+    // it holds it: the next run's order is by work, never by the wait.
+    let began = 0;
+    await withToken(() => { began = Date.now(); return check(project, slot); });
     timed[project] = (Date.now() - began) / 1000;
   }
 }));
