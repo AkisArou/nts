@@ -21,3 +21,8 @@ export function outcomeTransition(
   if (after === "refused" && before !== "refused") return { word: "REFUSES NOW", ok: true, loud: true };
   return { word: "CHANGED", ok: false, loud: false };
 }
+
+/** A recorded case got better: it passes and is listed, and the full check rewrites its row. */
+export function improves(transition: OutcomeTransition): boolean {
+  return transition.word === "FIXED" || transition.word === "REFUSES NOW";
+}

@@ -16,7 +16,9 @@ import { gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environm
 import { withToken } from "../gate/tokens.mjs";
 import { CommandNotMeasuredError, type ActiveResult } from "../gate/active-command.ts";
 import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-result.ts";
-import { assertBenchmarkInventory, benchmarkKey, compareBenchmarkOutcome, parseBenchmarkRecord, requireBenchmarkScopes,
+import { improves } from "../conformance/outcome-transition.ts";
+import { improvedLine, pendingLine } from "../records/pending.ts";
+import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkRecord, requireBenchmarkScopes,
   serializeBenchmarkRecord, type BenchmarkOutcome, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -96,19 +98,27 @@ export async function observeCompile({ backend, project, output, binary, root, e
   return compileOutcome(built, "link") ?? { kind: "pass" };
 }
 
-export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow[]): string[] {
+/** Measured compile cells against their rows: what got worse or changed fails; what got better is listed. */
+export interface CompileComparison { changed: string[]; improved: { row: BenchmarkRow; line: string }[] }
+
+/** Hold measured cells to their recorded rows. A cell with no row yet is pending: not compared here. */
+export function checkCompileRecord(record: BenchmarkRecord, actual: BenchmarkRow[]): CompileComparison {
   requireBenchmarkScopes(record, ["compile"]);
   const expected = record.rows.filter(row => row.scope === "compile");
-  assertBenchmarkInventory({ ...record, rows: expected }, actual);
+  const pending = new Set(benchmarkInventory({ ...record, rows: expected }, actual).map(benchmarkKey));
   const byKey = new Map(expected.map(row => [benchmarkKey(row), row]));
-  return actual.flatMap(row => {
-    const before = byKey.get(benchmarkKey(row))!;
-    const change = compareBenchmarkOutcome(before.outcome, row.outcome);
-    return change.ok ? [] : [`${change.word} ${row.path}: ${JSON.stringify(before.outcome)} -> ${JSON.stringify(row.outcome)}; re-record this outcome`];
-  });
+  const result: CompileComparison = { changed: [], improved: [] };
+  for (const row of actual) {
+    if (pending.has(benchmarkKey(row))) continue;
+    const before = byKey.get(benchmarkKey(row))!.outcome, change = compareBenchmarkOutcome(before, row.outcome);
+    if (!change.ok) result.changed.push(`${change.word} ${row.path}: ${JSON.stringify(before)} -> ${JSON.stringify(row.outcome)}; re-record this outcome`);
+    else if (improves(change)) result.improved.push({ row, line: improvedLine(row.path, JSON.stringify(before), JSON.stringify(row.outcome)) });
+  }
+  return result;
 }
 
-function cases(root: string): string[] {
+/** Every benchmark case: a directory under benchmarks/cases with a case.ts. */
+export function benchmarkCases(root: string): string[] {
   const paths = readdirSync(join(root, "benchmarks/cases"), { withFileTypes: true }).filter(entry => entry.isDirectory() && existsSync(join(root, "benchmarks/cases", entry.name, "case.ts")))
     .map(entry => `benchmarks/cases/${entry.name}`).sort();
   assert.ok(paths.length > 0, "no benchmark cases found; an empty run is not passing"); return paths;
@@ -170,8 +180,16 @@ function publish(file: string, contents: string): void {
   finally { rmSync(temporary, { force: true }); }
 }
 
+/**
+ * `--record` writes every case's row from a clean pin of main. `--check` holds
+ * each recorded row and reports a case with no row yet as pending, without
+ * measuring it. `--record-pending` is the full check's writer, after landing:
+ * from a clean pin it measures every case, holds the recorded ones, and on a
+ * clean comparison writes the pending and improved rows, every other line byte
+ * for byte.
+ */
 export async function runBuildRecords(args = process.argv.slice(2)): Promise<number> {
-  const mode = args.shift(); assert.ok(mode === "--record" || mode === "--check", "usage: build-records.ts --record|--check [--backend c|llvm|jvm] [--output directory] [case]");
+  const mode = args.shift(); assert.ok(mode === "--record" || mode === "--check" || mode === "--record-pending", "usage: build-records.ts --record|--check|--record-pending [--backend c|llvm|jvm] [--output directory] [case]");
   let backends: readonly Backend[] = BACKENDS, output = join(ROOT, "results/benchmarks"), only: string | undefined;
   while (args.length) {
     const flag = args.shift();
@@ -183,33 +201,38 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   assert.ok(existsSync(binary), `benchmark compiler missing: ${binary}; set NTS_BIN`);
   const compiler = hash(readFileSync(binary)), pin = provenanceOf(binary);
   let commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: ROOT, encoding: "utf8" }).trim();
-  if (mode === "--record") {
-    assert.ok(pin?.clean && !pin.applied && /^[0-9a-f]{40}$/.test(pin.sha), "--record requires a clean, unpatched pin of main; build it with tooling/conformance/pin.ts");
-    assert.equal(pin.binary_sha256, compiler, "--record pin binary differs from its recorded bytes");
+  if (mode !== "--check") {
+    assert.ok(pin?.clean && !pin.applied && /^[0-9a-f]{40}$/.test(pin.sha), `${mode} requires a clean, unpatched pin of main; build it with tooling/conformance/pin.ts`);
+    assert.equal(pin.binary_sha256, compiler, `${mode} pin binary differs from its recorded bytes`);
     execFileSync("git", ["merge-base", "--is-ancestor", pin.sha, "main"], { cwd: ROOT, stdio: "pipe" }); commit = pin.sha;
   }
+  const recordFile = (backend: Backend) => join(output, backend, "outcomes.tsv");
+  const shown = (file: string) => { const local = relative(ROOT, file); return local.startsWith("..") || isAbsolute(local) ? file : local; };
   const base = process.env.TMPDIR ?? join(homedir(), ".cache/nts/benchmark-records"); mkdirSync(base, { recursive: true });
   const scratch = mkdtempSync(join(base, "compile-"));
   let resident = false;
   try {
     const environment = compileEnvironment(process.env, scratch, binary);
-    const all = cases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
+    const all = benchmarkCases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
     assert.ok(paths.length > 0, `unknown benchmark case: ${only}`);
     const identities = await benchmarkIdentities(ROOT, all, scratch), driver = driverIdentity(ROOT);
-    const records = new Map<Backend, BenchmarkRecord>(), actual = new Map<Backend, BenchmarkRow[]>();
+    const records = new Map<Backend, BenchmarkRecord>(), pending = new Map<Backend, Set<string>>(), actual = new Map<Backend, BenchmarkRow[]>();
     for (const backend of backends) {
-      if (mode === "--check") {
-        const file = join(output, backend, "outcomes.tsv");
+      if (mode !== "--record") {
+        const file = recordFile(backend);
         assert.ok(existsSync(file), `no benchmark compile record: ${file}; run build-records.ts --record on main's official pin`);
         const record = parseBenchmarkRecord(readFileSync(file, "utf8")); assert.equal(record.metadata.backend, backend, "foreign benchmark backend");
         requireBenchmarkScopes(record, ["compile"]);
-        assertBenchmarkInventory({ ...record, rows: record.rows.filter(row => row.scope === "compile") }, all.map(path => ({ path, scope: "compile", source: identities.get(path)!, driver })));
+        const cells = all.map(path => ({ path, scope: "compile" as const, source: identities.get(path)!, driver }));
+        pending.set(backend, new Set(benchmarkInventory({ ...record, rows: record.rows.filter(row => row.scope === "compile") }, cells).map(row => row.path)));
         records.set(backend, record);
       }
       actual.set(backend, []);
     }
     const admission = new Admission({ report: message => console.error(message) });
     for (const path of paths) for (const backend of backends) {
+      // A case with no row yet is not measured at landing: the full check records it.
+      if (mode === "--check" && pending.get(backend)!.has(path)) continue;
       // The standalone recorder has no resident worker keeping it alive.
       // Keep this admission wait referenced, as the calibration recorder does.
       while (!admission.open()) await poll(2000);
@@ -221,19 +244,31 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     assert.equal(hash(readFileSync(binary)), compiler, "compiler bytes changed during recording");
     assert.equal(driverIdentity(ROOT), driver, "benchmark driver changed during recording");
     assert.deepEqual(await benchmarkIdentities(ROOT, all, scratch), identities, "benchmark sources changed during recording");
-    let changed = 0;
+    let changed = 0, improved = 0, waiting = 0;
+    const updates = new Map<Backend, BenchmarkRow[]>();
     for (const backend of backends) {
       const rows = actual.get(backend)!;
       if (mode === "--record") {
         const contents = serializeBenchmarkRecord({ metadata: { version: 1, backend, commit, compiler: compiler.slice(0, 16), harness: driver.slice(0, 16), under: "benchmarks/cases", scopes: ["compile"] }, rows });
-        publish(join(output, backend, "outcomes.tsv"), contents);
-      } else {
-        const record = records.get(backend)!;
-        const failures = checkCompileRecord({ ...record, rows: record.rows.filter(row => paths.includes(row.path)) }, rows);
-        for (const message of failures) console.log(`${backend} ${message}`); changed += failures.length;
+        publish(recordFile(backend), contents);
+        continue;
       }
+      const record = records.get(backend)!, unrecorded = pending.get(backend)!;
+      const comparison = checkCompileRecord({ ...record, rows: record.rows.filter(row => paths.includes(row.path)) }, rows.filter(row => !unrecorded.has(row.path)));
+      for (const message of comparison.changed) console.log(`${backend} ${message}`);
+      for (const { line } of comparison.improved) console.log(`${backend} ${line}`);
+      const waits = paths.filter(path => unrecorded.has(path));
+      for (const path of waits) console.log(`${backend} ${pendingLine(path, shown(recordFile(backend)))}`);
+      changed += comparison.changed.length; improved += comparison.improved.length; waiting += waits.length;
+      updates.set(backend, [...rows.filter(row => unrecorded.has(row.path)), ...comparison.improved.map(({ row }) => row)]);
     }
-    console.log(`${paths.length} benchmark cases, ${backends.length} backends, compile-only coverage; ${changed} changed outcomes`);
+    if (mode === "--record-pending" && changed) console.log(`not recorded: ${changed} recorded outcome(s) changed; records are written only from a clean comparison`);
+    else if (mode === "--record-pending") for (const [backend, rows] of updates) {
+      if (!rows.length) continue;
+      publish(recordFile(backend), mergeBenchmarkRecord(readFileSync(recordFile(backend), "utf8"), rows));
+      console.log(`${backend} recorded ${rows.length} row(s) into ${shown(recordFile(backend))}`);
+    }
+    console.log(`${paths.length} benchmark cases, ${backends.length} backends, compile-only coverage; ${changed} changed outcomes, ${improved} improved, ${waiting} pending`);
     return changed ? 1 : 0;
   } finally {
     try { if (resident) memoryRun().close(); }

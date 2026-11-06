@@ -10,7 +10,7 @@ test("benchmark records bind every case and scope without making compiler change
   assert.equal(serializeTypeScriptRecord(parseTypeScriptRecord(old)), old, "the existing line format stays byte-compatible");
   const module = new URL("./outcomes.ts", import.meta.url);
   assert.ok(existsSync(module), "benchmark consumers need one versioned outcome record authority");
-  const { parseBenchmarkRecord, serializeBenchmarkRecord, assertBenchmarkInventory, compareBenchmarkOutcome } = await import(module.href);
+  const { parseBenchmarkRecord, serializeBenchmarkRecord, benchmarkInventory, compareBenchmarkOutcome } = await import(module.href);
   const path = "benchmarks/cases/control";
   const cell = (scope: string, outcome: object) => ({ path, scope, source: "1".repeat(64), driver: "2".repeat(64), outcome });
   const metadata = { version: 1, backend: "c", commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile", "scalar", "workload"] };
@@ -20,13 +20,15 @@ test("benchmark records bind every case and scope without making compiler change
   const parsed = parseBenchmarkRecord(text);
   assert.equal(serializeBenchmarkRecord(parsed), text);
   assert.deepEqual(parsed.rows, rows);
-  assertBenchmarkInventory(parsed, rows);
+  assert.deepEqual(benchmarkInventory(parsed, rows), []);
   const laterCompiler = parseBenchmarkRecord(text.replace(metadata.compiler, "d".repeat(16)));
-  assertBenchmarkInventory(laterCompiler, rows);
-  for (const changed of [rows.slice(1), [...rows, { ...rows[0], path: "benchmarks/cases/new" }],
-    rows.map((row, index) => index ? row : { ...row, source: "3".repeat(64) }),
-    rows.map((row, index) => index ? row : { ...row, driver: "4".repeat(64) })]) {
-    assert.throws(() => assertBenchmarkInventory(parsed, changed));
+  assert.deepEqual(benchmarkInventory(laterCompiler, rows), []);
+  const added = { ...rows[0], path: "benchmarks/cases/new" };
+  assert.deepEqual(benchmarkInventory(parsed, [...rows, added]), [added], "a case with no row yet is pending, not a failure");
+  for (const [changed, message] of [[rows.slice(1), /recorded benchmark scope gone missing: benchmarks\/cases\/control compile/],
+    [rows.map((row, index) => index ? row : { ...row, source: "3".repeat(64) }), /source changed/],
+    [rows.map((row, index) => index ? row : { ...row, driver: "4".repeat(64) }), /driver changed/]] as const) {
+    assert.throws(() => benchmarkInventory(parsed, changed), message);
   }
   for (const malformed of [text + text.split("\n")[1] + "\n", text.replace('"scope":"compile"', '"scope":"unknown"'),
     text.replace('"source":"' + "1".repeat(64) + '"', '"source":"short"'),
@@ -38,10 +40,12 @@ test("benchmark records bind every case and scope without making compiler change
   const failed = { kind: "build-failure", stage: "link", diagnostic: "undefined symbol work" };
   assert.equal(compareBenchmarkOutcome(pass, pass).ok, true);
   assert.equal(compareBenchmarkOutcome(refusal, refusal).ok, true);
-  for (const [before, after] of [[pass, refusal], [refusal, pass], [failed, pass], [failed, refusal]]) {
-    assert.equal(compareBenchmarkOutcome(before, after).ok, false, "every movement requires an explicit record update");
+  for (const [before, after, word] of [[refusal, pass, "FIXED"], [failed, pass, "FIXED"], [failed, refusal, "REFUSES NOW"]] as const) {
+    assert.deepEqual(compareBenchmarkOutcome(before, after), { word, ok: true, loud: true }, "an improvement passes; the full check records it");
   }
-  assert.equal(compareBenchmarkOutcome(failed, pass).word, "FIXED");
+  for (const [before, after] of [[pass, refusal], [pass, failed], [refusal, failed], [failed, { ...failed, diagnostic: "undefined symbol rest" }]]) {
+    assert.equal(compareBenchmarkOutcome(before, after).ok, false, "a regression or a change still fails");
+  }
   const build = cell("compile", { kind: "build-failure", stage: "emit", diagnostic: "/scratch/a/program.c:17:2: invalid value 42" });
   const normalized = parseBenchmarkRecord(serializeBenchmarkRecord({ metadata, rows: [build, ...rows.slice(1)] }));
   assert.equal(normalized.rows[0].outcome.diagnostic, "<path> invalid value N");
@@ -76,4 +80,19 @@ test("no scalar exports needs a measured canonical workload beside it", async ()
   for (const outcome of [{ kind: "refused", diagnostic: "NTS4001 refused" }, { kind: "build-failure", stage: "link", diagnostic: "cannot build" }]) {
     assert.throws(() => serializeBenchmarkRecord({ metadata, rows: [cell("scalar", { kind: "no-scalar-exports" }), cell("workload", outcome)] }), /measured workload/);
   }
+});
+
+test("the full check's writer adds pending rows and rewrites improved ones, every other line byte for byte", async () => {
+  const { mergeBenchmarkRecord, serializeBenchmarkRecord } = await import("./outcomes.ts");
+  const metadata = { version: 1 as const, backend: "c" as const, commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases" as const, scopes: ["compile" as const] };
+  const cell = (name: string, outcome: { kind: "pass" } | { kind: "refused"; diagnostic: string }) =>
+    ({ path: `benchmarks/cases/${name}`, scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64), outcome });
+  const refused = { kind: "refused" as const, diagnostic: "NTS4001 unsupported shape" };
+  const before = serializeBenchmarkRecord({ metadata, rows: [cell("alpha", { kind: "pass" }), cell("gamma", refused), cell("omega", refused)] });
+  const after = serializeBenchmarkRecord({ metadata, rows: [cell("alpha", { kind: "pass" }), cell("beta", { kind: "pass" }), cell("gamma", { kind: "pass" }), cell("omega", refused)] });
+  const lines = before.split("\n"), merged = mergeBenchmarkRecord(before, [cell("gamma", { kind: "pass" }), cell("beta", { kind: "pass" })]);
+  assert.equal(merged, after, "the merge writes what a full record would");
+  assert.deepEqual(merged.split("\n").filter(line => lines.includes(line)), [lines[0], lines[1], lines[3], ""], "header and untouched rows stay byte for byte");
+  assert.equal(mergeBenchmarkRecord(before, []), before, "nothing pending changes nothing");
+  assert.throws(() => mergeBenchmarkRecord(before, [cell("beta", { kind: "pass" }), cell("beta", refused)]), /duplicate/);
 });

@@ -122,7 +122,51 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
     const source = join(scratch, `${mode}-compiler`); writeFileSync(source, readFileSync(binary, "utf8").replace("const testMode = 'normal';", `const testMode = '${mode}';`)); chmodSync(source, 0o755);
     return publishPin(source, join(scratch, `${mode}-pin`), { sha: git(["rev-parse", "HEAD"]), clean: true, applied: null });
   }
-  const moved = invoke("--check", first, {}, changedCompiler("fixed")); assert.equal(moved.status, 1, moved.stdout + moved.stderr); assert.match(moved.stdout, /FIXED.*subject/);
+  const fixedPin = changedCompiler("fixed");
+  const moved = invoke("--check", first, {}, fixedPin); assert.equal(moved.status, 0, moved.stdout + moved.stderr);
+  assert.match(moved.stdout, /^c improved, record pending: benchmarks\/cases\/subject \{"kind":"refused".*\} -> \{"kind":"pass"\}$/m, "an improvement passes and is listed");
+  const fixedRecord = join(scratch, "fixed-record");
+  assert.equal(invoke("--record", fixedRecord, {}, fixedPin).status, 0);
+  const regressed = invoke("--check", fixedRecord); assert.equal(regressed.status, 1, regressed.stdout + regressed.stderr);
+  assert.match(regressed.stdout, /^c REGRESSED benchmarks\/cases\/subject: /m, "a regression still fails");
+  // A copy of a record with one line changed, to hold pending and stale cases.
+  const variant = (name: string, edit: (backend: string, text: string) => string) => {
+    for (const backend of ["c", "llvm", "jvm"]) {
+      mkdirSync(join(scratch, name, backend), { recursive: true });
+      writeFileSync(join(scratch, name, backend, "outcomes.tsv"), edit(backend, readFileSync(join(first, backend, "outcomes.tsv"), "utf8")));
+    }
+    return join(scratch, name);
+  };
+  const without = (path: string) => (backend: string, text: string) => backend === "c" ? text.split("\n").filter(line => !line.startsWith(path + "\t")).join("\n") : text;
+  const waiting = invoke("--check", variant("pending", without("benchmarks/cases/subject")));
+  assert.equal(waiting.status, 0, waiting.stdout + waiting.stderr);
+  assert.match(waiting.stdout, /^c pending: benchmarks\/cases\/subject has no row in \S*pending\/c\/outcomes\.tsv$/m);
+  assert.doesNotMatch(waiting.stdout, /^c benchmarks\/cases\/subject: /m, "a pending case is not measured at landing");
+  assert.match(waiting.stdout, /^llvm benchmarks\/cases\/subject: refused$/m, "a recorded case is");
+  const staleRow = (backend: string, text: string) => backend === "c" ? text + text.split("\n")[1]!.replace("benchmarks/cases/control", "benchmarks/cases/deleted") + "\n" : text;
+  const stale = invoke("--check", variant("stale", staleRow)); assert.equal(stale.status, 124, stale.stdout + stale.stderr);
+  assert.match(stale.stderr, /recorded benchmark scope gone missing: benchmarks\/cases\/deleted compile/, "a row whose case is gone still fails");
+  // The full check's writer: pending and improved rows only, from a clean pin and a clean comparison.
+  const writer = variant("writer", without("benchmarks/cases/root-coverage"));
+  const original = Object.fromEntries(["c", "llvm", "jvm"].map(backend => [backend, readFileSync(join(writer, backend, "outcomes.tsv"), "utf8")]));
+  const notPinned = invoke("--record-pending", writer, {}, binary); assert.equal(notPinned.status, 124, notPinned.stdout + notPinned.stderr);
+  assert.match(notPinned.stderr, /--record-pending requires a clean, unpatched pin/);
+  const untouched = readFileSync(join(fixedRecord, "c/outcomes.tsv"), "utf8");
+  const blocked = invoke("--record-pending", fixedRecord); assert.equal(blocked.status, 1, blocked.stdout + blocked.stderr);
+  assert.match(blocked.stdout, /not recorded: 3 recorded outcome\(s\) changed/, "a regression blocks every write");
+  assert.equal(readFileSync(join(fixedRecord, "c/outcomes.tsv"), "utf8"), untouched);
+  const recorded = invoke("--record-pending", writer, {}, fixedPin); assert.equal(recorded.status, 0, recorded.stdout + recorded.stderr);
+  for (const backend of ["c", "llvm", "jvm"]) {
+    const before = original[backend]!.split("\n"), after = readFileSync(join(writer, backend, "outcomes.tsv"), "utf8").split("\n");
+    const subject = after.find(line => line.startsWith("benchmarks/cases/subject\t"))!;
+    assert.match(subject, /"outcome":\{"kind":"pass"\}/, `${backend}: the improved row is rewritten`);
+    const rest = (lines: string[]) => lines.filter(line => !line.startsWith("benchmarks/cases/subject\t") && !(backend === "c" && line.startsWith("benchmarks/cases/root-coverage\t")));
+    assert.deepEqual(rest(after), rest(before), `${backend}: every other line stays byte for byte`);
+    assert.equal(after.some(line => line.startsWith("benchmarks/cases/root-coverage\t")), true, `${backend}: the pending row is written`);
+  }
+  const written = Object.fromEntries(["c", "llvm", "jvm"].map(backend => [backend, readFileSync(join(writer, backend, "outcomes.tsv"), "utf8")]));
+  const again = invoke("--record-pending", writer, {}, fixedPin); assert.equal(again.status, 0, again.stdout + again.stderr);
+  for (const backend of ["c", "llvm", "jvm"]) assert.equal(readFileSync(join(writer, backend, "outcomes.tsv"), "utf8"), written[backend], "nothing pending changes nothing");
   const killed = invoke("--record", join(scratch, "killed"), {}, changedCompiler("kill"));
   assert.equal(killed.status, 124, killed.stdout + killed.stderr); assert.match(killed.stderr, /NOT MEASURED/);
   assert.equal(existsSync(join(scratch, "killed/c/outcomes.tsv")), false, "a killed emitter publishes no record");
@@ -168,14 +212,18 @@ test("recorded compile cells execute every backend and expose outcome movement",
     if (backend === "llvm") assert.equal(readFileSync(join(out, "program.ll"), "utf8"), "; IR");
     const row = { path, scope: "compile" as const, source: "1".repeat(64), driver: "2".repeat(64), outcome: { kind: "pass" as const } };
     const record = parseBenchmarkRecord(serializeBenchmarkRecord({ metadata: { version: 1, backend, commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] }, rows: [row] }));
-    assert.equal(checkCompileRecord(record, [row]).length, 0);
+    assert.deepEqual(checkCompileRecord(record, [row]), { changed: [], improved: [] });
     refused = true;
     const outcome = await observeCompile({ backend, project, output: out, binary: "nts", root, env: {}, command });
     assert.equal(outcome.kind, "refused");
-    assert.equal(checkCompileRecord(record, [{ ...row, outcome }]).length, 1);
+    assert.equal(checkCompileRecord(record, [{ ...row, outcome }]).changed.length, 1, "a pass that refuses now is a regression");
     const held = parseBenchmarkRecord(serializeBenchmarkRecord({ ...record, rows: [{ ...row, outcome }] }));
-    assert.equal(checkCompileRecord(held, [{ ...row, outcome }]).length, 0);
-    assert.equal(checkCompileRecord(held, [row]).length, 1, "a fix asks for a new record too");
+    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }]), { changed: [], improved: [] });
+    const fixed = checkCompileRecord(held, [row]);
+    assert.equal(fixed.changed.length, 0, "a fix passes");
+    assert.deepEqual(fixed.improved.map(({ row }) => row), [row], "and is listed for the full check to record");
+    const unrecorded = { ...row, path: "benchmarks/cases/new" };
+    assert.deepEqual(checkCompileRecord(held, [{ ...row, outcome }, unrecorded]), { changed: [], improved: [] }, "a case with no row is pending");
     refused = false;
   }
   assert.ok(calls.some(row => row[1] === "emit-c" && row.includes("--rc")));

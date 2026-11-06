@@ -1,10 +1,11 @@
 /** Correctness records are distinct from benchmark timing run records. */
 import assert from "node:assert/strict";
 import { isDeepStrictEqual } from "node:util";
-import { parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
+import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "../census/line-record.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { compilerStopped, stableBuildDiagnostic } from "../conformance/observation-text.ts";
 import { outcomeDisposition, outcomeTransition, type OutcomeTransition } from "../conformance/outcome-transition.ts";
+import { inventory } from "../records/pending.ts";
 
 export const BENCHMARK_SCOPES = ["compile", "scalar", "workload"] as const;
 export type BenchmarkScope = typeof BENCHMARK_SCOPES[number];
@@ -109,22 +110,39 @@ export function serializeBenchmarkRecord(record: BenchmarkRecord): string {
   parseBenchmarkRecord(contents); return contents;
 }
 
-/** Metadata's compiler is provenance, never a row-validity key. */
-export function assertBenchmarkInventory(record: BenchmarkRecord, expected: readonly Pick<BenchmarkRow, "path" | "scope" | "source" | "driver">[]): void {
+/** Write these rows into a record, every other line byte for byte. */
+export function mergeBenchmarkRecord(contents: string, rows: readonly BenchmarkRow[]): string {
+  const merged = mergeLineRecord(contents, rows.map(({ path, ...value }) => ({ path, value })), format);
+  parseBenchmarkRecord(merged); return merged;
+}
+
+type Identity = Pick<BenchmarkRow, "path" | "scope" | "source" | "driver">;
+
+/**
+ * The cells a record has no row for yet: pending, recorded after landing. A
+ * recorded cell whose case is gone, or whose source or driver changed, is an
+ * error. Metadata's compiler is provenance, never a row-validity key.
+ */
+export function benchmarkInventory<T extends Identity>(record: BenchmarkRecord, expected: readonly T[]): T[] {
   const current = new Map(expected.map(row => [benchmarkKey(row), row]));
   assert.equal(current.size, expected.length, "duplicate benchmark inventory member");
-  assert.equal(current.size, record.rows.length, "benchmark record population changed; re-record all affected cases");
+  const recorded = new Map(record.rows.map(row => [benchmarkKey(row), row]));
+  for (const key of inventory(recorded.keys(), current.keys()).stale) {
+    const row = recorded.get(key)!;
+    assert.fail(`recorded benchmark scope gone missing: ${row.path} ${row.scope}`);
+  }
   for (const row of record.rows) {
-    const now = current.get(benchmarkKey(row)); assert.ok(now, `recorded benchmark scope gone missing: ${row.path} ${row.scope}`);
+    const now = current.get(benchmarkKey(row))!;
     assert.equal(now.source, row.source, `benchmark source changed: ${row.path}`);
     assert.equal(now.driver, row.driver, `benchmark driver changed: ${row.path} ${row.scope}`);
   }
+  return expected.filter(row => !recorded.has(benchmarkKey(row)));
 }
 
+/** A defect or refusal that passes now, or a defect that refuses now, is better and passes; any other movement fails. */
 export function compareBenchmarkOutcome(before: BenchmarkOutcome, after: BenchmarkOutcome): OutcomeTransition {
   const unchanged = isDeepStrictEqual(parseBenchmarkOutcome(before), parseBenchmarkOutcome(after));
   if (before.kind === "no-scalar-exports" || after.kind === "no-scalar-exports")
     return { word: unchanged ? "reproduces" : "CHANGED", ok: unchanged, loud: !unchanged };
-  const result = outcomeTransition(outcomeDisposition(before.kind), outcomeDisposition(after.kind), unchanged);
-  return { ...result, ok: unchanged };
+  return outcomeTransition(outcomeDisposition(before.kind), outcomeDisposition(after.kind), unchanged);
 }
