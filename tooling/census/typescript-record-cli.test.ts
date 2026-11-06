@@ -165,6 +165,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   }
   const oldRows = invoke(contents, row(pass), TYPESCRIPT_OBSERVATIONS_VERSION - 1);
   assert.equal(oldRows.status, 2, oldRows.stdout + oldRows.stderr);
+  assert.match(oldRows.stdout + oldRows.stderr, /versioned raw observations/);
   assert.equal(existsSync(json), false, "old diagnostic locations cannot become a current record");
 
   // Write a complete real family through --record, then consume that exact
