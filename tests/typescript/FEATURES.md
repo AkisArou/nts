@@ -2008,6 +2008,7 @@ forms are listed with their diagnostics in the pull request.
 | --- | ---: | ---: | --- |
 | `lists` | 27 | 27 | nullable and optional links, generic cons tuples, shared tails, deep values and bounded traversal |
 | `trees` | 27 | 27 | binary, n-ary, mutual, generic and shared recursive trees with exact traversal orders |
+| `unions` | 26 | 26 | JSON-like recursive values, nested arrays and discriminated expression trees |
 
 ### Nullish route contracts
 
@@ -3834,9 +3835,10 @@ aliases use only one-byte element kinds.
 | `ts-nullish-route-calls` | optional function and method calls retain their object receivers, skip arguments on absent callees and invoke getter-held callbacks once | Nullish route contracts; ECMAScript, OptionalChaining | 48 | 0 |
 | `ts-nullish-route-assignments` | nullish and truthy logical assignment preserve short-circuit reads, writes, getter/setter order, typed-array conversions and expression values | Nullish route contracts; ECMAScript, Assignment Operators | 60 | 0 |
 | `ts-nullish-route-defaults` | parameter and constructor defaults versus nullish coalescing through typed arguments, option fields, and generic helpers | Nullish route contracts; ECMAScript, FunctionDeclarationInstantiation | 52 | 0 |
-| `ts-recursive-type-routes` | recursive typed structures retain leaf values, identity, depth and order beside finite nonrecursive controls | Recursive type route contracts; typed paths | 108 | 0 |
+| `ts-recursive-type-routes` | recursive typed structures retain leaf values, identity, depth and order beside finite nonrecursive controls | Recursive type route contracts; typed paths | 160 | 0 |
 | `ts-recursive-type-route-lists` | linked lists, optional next fields, cons tuples and shared tails through recursive declarations | Recursive type route contracts; TypeScript recursive interfaces and aliases | 54 | 0 |
 | `ts-recursive-type-route-trees` | binary and n-ary recursive trees preserve depth, values, shared identity and traversal orders | Recursive type route contracts; recursive interfaces | 54 | 0 |
+| `ts-recursive-type-route-unions` | recursive union leaves retain numeric signs and kinds through JSON-like objects, nested arrays and expression trees | Recursive type route contracts; TypeScript union aliases | 52 | 0 |
 <!-- tags:end -->
 
 ## Iterator helper route contracts
