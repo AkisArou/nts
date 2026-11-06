@@ -601,6 +601,11 @@ test("a gate test owes the tooling step, not the full gate", () => {
   }
 });
 
+test("the landing check owes its own tests, not the full gate", () => {
+  owes("tooling/landing/selection.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "interop"] });
+  owes("tooling/landing/queue.test.ts", ["tooling"], { not: ["examples", "outcomes", "typescript-c", "interop"] });
+});
+
 test("a range is the same change as the commits in it", () => {
   // e936aecf4 is one commit, so its range and the commit agree.
   const one = (argv) => changedPaths(argv).map((c) => `${c.path}:${c.added}:${c.deleted}`).sort();

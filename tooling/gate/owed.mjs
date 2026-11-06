@@ -875,6 +875,18 @@ export const RULES = [
     arms: [],
   },
   {
+    // The landing check: its queue, the worktree pool, and the selection that
+    // maps what a change owes to what runs before it lands. It runs the gate's
+    // steps; no step runs it, so a change to it owes its own tests, in the
+    // tooling step, and whatever a step that imports one of its modules owes
+    // through `stepInputs`.
+    name: "the landing check",
+    when: (p) => p.startsWith("tooling/landing/"),
+    settled: true,
+    steps: ["tooling"],
+    arms: [{ kind: "answers", asks: "does a dry run still name a change's landing steps, its deferred steps and the estimate", run: "node tooling/landing/check.ts HEAD --dry-run" }],
+  },
+  {
     // The landing and lane tools. No gate step runs `land.ts` or `lane.ts`:
     // they run the gate rather than the other way round, so a change to one
     // is checked by running it -- a dry run names what a range owes and
