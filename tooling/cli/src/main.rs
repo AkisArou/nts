@@ -236,7 +236,20 @@ fn check(rest: &[String]) -> Result<()> {
     if rest.iter().any(|argument| argument == "--json") {
         return print_check_json(measured);
     }
-    let report = measured?;
+    print_check_text(&measured?)
+}
+
+/// The report a person reads: what was compared, and what was not.
+fn print_check_text(report: &nts_differential::Report) -> Result<()> {
+    if let Some(pending) = &report.pending {
+        // Not a failure: the full check records the population after landing.
+        println!(
+            "pending: {} is not recorded in {} yet, so nothing was compared; \
+             to compare it now, record it: {}",
+            pending.source, pending.record, pending.command
+        );
+        return Ok(());
+    }
     if report.functions == 0 {
         println!(
             "nothing to check: no exported function has scalar arguments \

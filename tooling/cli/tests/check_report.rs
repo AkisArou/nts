@@ -125,3 +125,58 @@ fn a_checker_failure_has_a_structured_stage_and_nonzero_exit() {
             .any(|row| { row["stage"] == "typecheck" && row["code"] == "TS2322" })
     );
 }
+
+/// A fixture whose repository records no oracle population for it yet is
+/// pending: nothing is compared and nothing fails, and the full check records
+/// it after landing. The stand-in repository has the two marker files that
+/// make a source an oracle subject, a record store, and no record.
+#[test]
+fn a_fixture_with_no_oracle_record_is_pending_and_succeeds() {
+    let root = std::env::temp_dir().join(format!("nts-check-pending-{}", std::process::id()));
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+        .join("../..")
+        .canonicalize()
+        .unwrap();
+    let fixture = root.join("tests/programs/new");
+    std::fs::create_dir_all(fixture.join("src")).unwrap();
+    std::fs::create_dir_all(root.join("tooling/differential")).unwrap();
+    std::fs::create_dir_all(root.join("results/oracle-counts")).unwrap();
+    std::fs::write(root.join("tooling/differential/Cargo.toml"), "").unwrap();
+    let extends = serde_json::json!({"extends": repository.join("tsconfig.fixtures.json")});
+    std::fs::write(root.join("tsconfig.fixtures.json"), extends.to_string()).unwrap();
+    let generator = serde_json::json!({"version": 1, "generator_version": 1,
+        "generator_digest": "a".repeat(32), "seed": null});
+    std::fs::write(
+        root.join("results/oracle-counts/_generator.json"),
+        generator.to_string(),
+    )
+    .unwrap();
+    let config = serde_json::json!({"extends": root.join("tsconfig.fixtures.json"), "files": ["src/main.ts"]});
+    std::fs::write(fixture.join("tsconfig.json"), config.to_string()).unwrap();
+    std::fs::write(fixture.join("src/main.ts"), CONTROL).unwrap();
+    let run = |json: bool| {
+        Command::new(env!("CARGO_BIN_EXE_nts"))
+            .args(["check", "--no-acquire"])
+            .args(json.then_some("--json"))
+            .arg(fixture.join("tsconfig.json"))
+            .env("NTS_BACKEND", "c")
+            .env("NTS_CHECKERS", "1")
+            .env_remove("NTS_RC")
+            .env_remove("NTS_KEEP_TEMP")
+            .output()
+            .unwrap()
+    };
+    let output = run(true);
+    let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert!(output.status.success(), "{report}");
+    assert_eq!(report["status"], "pending");
+    assert!(report["counts"].is_null() && report["oracle"].is_null() && report["error"].is_null());
+    let human = run(false);
+    let said = String::from_utf8_lossy(&human.stdout);
+    assert!(human.status.success(), "{said}");
+    assert!(
+        said.contains("pending: tests/programs/new/src/main.ts is not recorded in results/oracle-counts/tests/programs/new.json yet"),
+        "{said}"
+    );
+    std::fs::remove_dir_all(&root).unwrap();
+}

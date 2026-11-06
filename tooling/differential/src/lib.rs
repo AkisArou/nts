@@ -33,6 +33,7 @@
 //! or a missing row is not measured, never a smaller passing comparison.
 
 use std::fmt::Write as _;
+use std::ops::ControlFlow;
 
 use anyhow::{Context, Result, bail};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -488,6 +489,38 @@ fn c_type(ty: &HirType) -> String {
     .to_owned()
 }
 
+/// The recorded oracle population a check measures, or the report of one that
+/// measures nothing: no exported function to drive, or a source whose fixture
+/// has no oracle record yet. That one is pending, not measured at landing; the
+/// full check records its population, and checks it from then on.
+fn population(
+    entry: &Utf8Path,
+    backend: Backend,
+    testable: &[Testable],
+    refusals: &[check_report::Refusal],
+) -> Result<ControlFlow<Report, oracle_coverage::Coverage>> {
+    let resolution = oracle_coverage::resolve(entry, backend, testable).map_err(|error| {
+        with_failure(
+            error,
+            FailureKind::OracleCoverage,
+            refusals.to_vec(),
+            oracle_coverage::root_and_source(entry).map(|(_, source)| source),
+        )
+    })?;
+    let nothing = |pending| Report {
+        refusals: refusals.to_vec(),
+        pending,
+        ..Report::default()
+    };
+    Ok(match resolution {
+        oracle_coverage::Resolution::Pending(pending) => ControlFlow::Break(nothing(Some(pending))),
+        oracle_coverage::Resolution::Recorded(_) if testable.is_empty() => {
+            ControlFlow::Break(nothing(None))
+        }
+        oracle_coverage::Resolution::Recorded(coverage) => ControlFlow::Continue(coverage),
+    })
+}
+
 /// Compile a program, run it, run the same source on node, and compare.
 ///
 /// The caller supplies the project's configured frontend, including its
@@ -507,20 +540,12 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
         testable,
         ..
     } = prepare_check(tsconfig, source, backend)?;
-    let coverage = oracle_coverage::resolve(&entry, backend, &testable).map_err(|error| {
-        with_failure(
-            error,
-            FailureKind::OracleCoverage,
-            prepared.diagnostics.iter().map(Into::into).collect(),
-            oracle_coverage::root_and_source(&entry).map(|(_, source)| source),
-        )
-    })?;
-    if testable.is_empty() {
-        return Ok(Report {
-            refusals: prepared.diagnostics.iter().map(Into::into).collect(),
-            ..Report::default()
-        });
-    }
+    let refusals: Vec<check_report::Refusal> =
+        prepared.diagnostics.iter().map(Into::into).collect();
+    let coverage = match population(&entry, backend, &testable, &refusals)? {
+        ControlFlow::Continue(coverage) => coverage,
+        ControlFlow::Break(report) => return Ok(report),
+    };
 
     let dir = Scratch::for_check()?;
     let dir = &dir.path;
@@ -597,7 +622,7 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     report.checked += output_comparison.rejected_declines;
     report.unavailable = unavailable;
     report.node_received = engine.results.len();
-    report.refusals = prepared.diagnostics.iter().map(Into::into).collect();
+    report.refusals = refusals;
     report.aborts = aborts;
     report.timeouts = timeouts;
     report.incomplete.clone_from(&native.incomplete);
@@ -3051,6 +3076,9 @@ pub struct Report {
     pub timeouts: usize,
     /// The supervisor's liveness observations, retained even after every answer.
     pub incomplete: Vec<check_report::Incomplete>,
+    /// A source the oracle records have no row for yet: nothing was compared,
+    /// and the full check records it after landing.
+    pub pending: Option<check_report::Pending>,
 }
 
 impl Report {
@@ -3193,6 +3221,7 @@ fn report(
         aborts: Vec::new(),
         timeouts: 0,
         incomplete: Vec::new(),
+        pending: None,
     }
 }
 

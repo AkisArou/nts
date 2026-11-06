@@ -70,10 +70,28 @@ impl Refusal {
     }
 }
 
+/// A source the checked-in oracle records have no row for yet.
+///
+/// Not measured at landing and not a failure: the full check records it after
+/// landing (`tooling/records/record-pending.ts`). A recorded population that no
+/// longer matches is a [`FailureKind::OracleCoverage`] error instead.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Pending {
+    /// The source, relative to the repository.
+    pub source: String,
+    /// The record that has no row for it, relative to the repository.
+    pub record: String,
+    /// The command that records it now.
+    pub command: String,
+}
+
 /// Distinct dispositions, including a source population with no compiled binding.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Status {
+    /// The source has no recorded oracle population yet, so nothing was
+    /// compared; the full check records it after landing.
+    Pending,
     /// The source declares no export the differential harness can drive.
     Nothing,
     /// Every generated case was compared and agreed.
@@ -100,7 +118,7 @@ impl Status {
     pub const fn succeeds(self) -> bool {
         matches!(
             self,
-            Self::Nothing | Self::Agrees | Self::Partial | Self::AllUnavailable
+            Self::Pending | Self::Nothing | Self::Agrees | Self::Partial | Self::AllUnavailable
         )
     }
 }
@@ -193,7 +211,9 @@ impl Report {
     /// The disposition of this measured source population.
     #[must_use]
     pub fn status(&self) -> Status {
-        if self.functions == 0 {
+        if self.pending.is_some() {
+            Status::Pending
+        } else if self.functions == 0 {
             Status::Nothing
         } else if self.node_received != self.expected {
             Status::NotMeasured
@@ -224,6 +244,20 @@ impl Report {
     /// Machine-readable check result. All counts describe the shared source plan.
     #[must_use]
     pub fn json(&self) -> serde_json::Value {
+        // A pending source compared nothing, so it claims no counts and no oracle.
+        if self.pending.is_some() {
+            return serde_json::json!({
+                "version": VERSION,
+                "status": Status::Pending,
+                "counts": null,
+                "oracle": null,
+                "refusals": self.refusals,
+                "disagreements": [],
+                "aborts": [],
+                "incomplete": [],
+                "error": null,
+            });
+        }
         serde_json::json!({
             "version": VERSION,
             "status": self.status(),
@@ -285,6 +319,24 @@ mod tests {
         let error = annotate(anyhow::anyhow!(text), FailureKind::Preparation);
         assert_eq!(error_json(&error)["error"]["message"], text);
         assert_eq!(error_json(&error)["error"]["kind"], "preparation");
+    }
+
+    #[test]
+    fn a_pending_source_compares_nothing_and_fails_nothing() {
+        let report = Report {
+            pending: Some(Pending {
+                source: "tests/programs/new/src/main.ts".into(),
+                record: "results/oracle-counts/tests/programs/new.json".into(),
+                command: "node tooling/differential/record-oracles.ts tests/programs/new".into(),
+            }),
+            ..Report::default()
+        };
+        assert_eq!(report.status(), Status::Pending);
+        assert!(report.status().succeeds());
+        assert!(!report.agreed());
+        let json = report.json();
+        assert_eq!(json["status"], "pending");
+        assert!(json["counts"].is_null() && json["oracle"].is_null() && json["error"].is_null());
     }
 
     #[test]

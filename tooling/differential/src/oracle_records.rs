@@ -98,19 +98,29 @@ fn record(bytes: &[u8], expected: &str) -> Result<Value> {
     Ok(serde_json::json!({"version":1,"rows":record.rows}))
 }
 
-pub(super) fn read(root: &Utf8Path, source: &str) -> Result<Value> {
+/// The record a source's fixture is held to, relative to the repository.
+pub(super) fn record_path(source: &str) -> Result<String> {
+    Ok(format!(
+        "results/oracle-counts/{}.json",
+        fixture_of(source)?
+    ))
+}
+
+/// The source's fixture record, or `None` when the fixture has none yet: a
+/// pending fixture, recorded after landing by the full check.
+pub(super) fn read(root: &Utf8Path, source: &str) -> Result<Option<Value>> {
     let fixture = fixture_of(source)?;
-    let directory = root.join("results/oracle-counts");
-    let generator = directory.join("_generator.json");
+    let generator = root.join("results/oracle-counts/_generator.json");
     header(
         &std::fs::read(&generator)
             .with_context(|| format!("missing generator header {generator}"))?,
     )?;
-    let path = directory.join(format!("{fixture}.json"));
-    record(
-        &std::fs::read(&path).with_context(|| format!("missing fixture record {path}"))?,
-        &fixture,
-    )
+    let path = root.join(record_path(source)?);
+    let bytes = match std::fs::read(&path) {
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        bytes => bytes.with_context(|| format!("reading fixture record {path}"))?,
+    };
+    record(&bytes, &fixture).map(Some)
 }
 
 #[cfg(test)]
@@ -118,6 +128,38 @@ mod tests {
     #![allow(clippy::unwrap_used)]
     use super::*;
     use serde_json::json;
+
+    #[test]
+    fn a_fixture_without_a_record_is_pending_but_a_missing_header_is_not() {
+        let root = camino::Utf8PathBuf::from_path_buf(
+            std::env::temp_dir().join(format!("nts-oracle-records-{}", std::process::id())),
+        )
+        .unwrap();
+        let source = "tests/programs/example/src/main.ts";
+        assert!(read(&root, source).is_err(), "no generator header");
+        let fixtures = root.join("results/oracle-counts/tests/programs");
+        std::fs::create_dir_all(&fixtures).unwrap();
+        let generator = json!({"version":1,"generator_version":1,"generator_digest":"a".repeat(32),"seed":null});
+        std::fs::write(
+            root.join("results/oracle-counts/_generator.json"),
+            serde_json::to_vec(&generator).unwrap(),
+        )
+        .unwrap();
+        assert!(read(&root, source).unwrap().is_none(), "no fixture record");
+        let row = json!({"source":source,"signature":"one","keys":{"c":"key"}});
+        let shard = json!({"version":1,"fixture":"tests/programs/example","rows":[row]});
+        std::fs::write(
+            fixtures.join("example.json"),
+            serde_json::to_vec(&shard).unwrap(),
+        )
+        .unwrap();
+        assert!(read(&root, source).unwrap().is_some());
+        assert_eq!(
+            record_path(source).unwrap(),
+            "results/oracle-counts/tests/programs/example.json"
+        );
+        std::fs::remove_dir_all(&root).unwrap();
+    }
 
     #[test]
     fn header_is_strict_and_versioned() {

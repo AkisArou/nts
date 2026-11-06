@@ -5,10 +5,17 @@
 //! change needs no new row: every gate run measures delivery again and detects
 //! shortfalls or disagreements. Only a no-oracle row needs a source digest,
 //! because no execution checks its empty-population exception.
+//!
+//! A source no row names yet is pending: not measured at landing and not a
+//! failure, because the full check records it after landing
+//! (`tooling/records/record-pending.ts`). A source whose rows exist but do not
+//! match is a recorded case that changed, and stays an error.
 use anyhow::{Context, Result, bail, ensure};
 use camino::{Utf8Path, Utf8PathBuf};
 use nts_codegen_common::Backend;
 use serde_json::Value;
+
+use super::check_report::Pending;
 
 pub(super) const CPU_SECONDS: u64 = 15;
 pub(super) const IDLE_MILLIS: u64 = 300_000;
@@ -16,6 +23,14 @@ pub(super) const IDLE_MILLIS: u64 = 300_000;
 pub(super) struct Coverage {
     pub(super) count: usize,
     pub(super) key: String,
+}
+
+/// What the checked-in records promise for one source on one backend.
+pub(super) enum Resolution {
+    /// A recorded population, which the check measures and holds to its row.
+    Recorded(Coverage),
+    /// No row names the source yet.
+    Pending(Pending),
 }
 
 pub(super) fn source_digest(entry: &Utf8Path) -> Result<String> {
@@ -42,7 +57,7 @@ pub(super) fn resolve(
     entry: &Utf8Path,
     backend: Backend,
     cases: &[super::Testable],
-) -> Result<Coverage> {
+) -> Result<Resolution> {
     let (ids, signature) = super::oracle_population(cases);
     let key = super::oracle_case_key(backend, &ids, &signature)?;
     let count = ids.len();
@@ -50,16 +65,41 @@ pub(super) fn resolve(
         let command = record_command(&source);
         let table = super::oracle_records::read(&root, &source)
             .with_context(|| format!("oracle not measured: {source}; run: {command}"))?;
-        validate(
-            &table,
+        if !recorded(
+            table.as_ref(),
             &source,
             backend.name(),
             &key,
             count,
             &source_digest(entry)?,
-        )?;
+        )? {
+            return Ok(Resolution::Pending(Pending {
+                record: super::oracle_records::record_path(&source)?,
+                source,
+                command,
+            }));
+        }
     }
-    Ok(Coverage { count, key })
+    Ok(Resolution::Recorded(Coverage { count, key }))
+}
+
+/// Whether the source is recorded, holding a recorded one to its row. `false`
+/// is pending: its fixture has no record yet. A record that has no row for the
+/// source is stale, not pending -- every consumer can check pending against the
+/// record store, so no other answer may stand for it.
+fn recorded(
+    table: Option<&Value>,
+    source: &str,
+    backend: &str,
+    key: &str,
+    generated: usize,
+    digest: &str,
+) -> Result<bool> {
+    let Some(table) = table else {
+        return Ok(false);
+    };
+    validate(table, source, backend, key, generated, digest)?;
+    Ok(true)
 }
 
 fn record_command(source: &str) -> String {
@@ -169,6 +209,28 @@ mod tests {
         assert!(validate(&table, "a", "c", "changed", 2, "digest").is_err());
         table["rows"][0]["count"] = json!(1);
         assert!(validate(&table, "a", "c", "key", 2, "digest").is_err());
+    }
+
+    #[test]
+    fn a_fixture_with_no_record_is_pending_and_a_changed_row_still_fails() {
+        let table = json!({"version":1,"rows":[{"kind":"measured","source":"a",
+            "keys":{"c":"key"},"complete":true,"count":2}]});
+        assert!(
+            !recorded(None, "a", "c", "key", 2, "digest").unwrap(),
+            "no fixture record"
+        );
+        assert!(recorded(Some(&table), "a", "c", "key", 2, "digest").unwrap());
+        for (source, backend, key, count) in [
+            ("a", "c", "changed", 2),
+            ("a", "c", "key", 3),
+            ("a", "llvm", "key", 2),
+            ("b", "c", "key", 2),
+        ] {
+            assert!(
+                recorded(Some(&table), source, backend, key, count, "digest").is_err(),
+                "a recorded fixture that changed still fails: {source} {backend} {key} {count}"
+            );
+        }
     }
 
     #[test]
