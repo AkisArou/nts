@@ -45,16 +45,24 @@ one page that changes as work goes; the designs it builds are in
     answer per program from a `program-oracles` step (`outcomes` and
     `bench-agree` too), before it lands. Then Node 26 (#124,
     `node/node26-finished`), landed with Node 24 dropped (user, 11-06). The
-    other `node/*` branches are their earlier rounds, deleted after;
+    other `node/*` branches are their earlier rounds, deleted after, and their
+    trees from before the pool (`~/Projects/nts-lanes/node-oracle-on-input`,
+    `~/Projects/nts-lanes/node`) go when Node 26 lands;
   - the synchronous benchmark ports (#315,
     `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
     and Octane's provenance. They land whole once every gate step and every
     single compile has a time bound and `bench-agree` records outcomes per
     backend (Tooling, below): the JVM spins forever compiling
     `jetstream-threejs` and rejects some ports' bytecode (#265). The 46 pull
-    requests they replace close when they land;
+    requests they replace (#9, #11, #19 to #23, #31 to #34, #44, #46, #48 to
+    #50, #53, #55 to #68, #75 to #80, #101 to #108, #119, #120) close when they
+    land, and their earlier rounds `helper4/ares6-family` and
+    `helper4/octane-namespace` are deleted;
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
-  - Chromium, paused by the user (`chromium/counter-tree-profile`).
+  - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
+    kept with it: `~/Projects/nts-lanes/chromium`,
+    `~/.cache/nts-chromium-checkpoint1/context-control` and
+    `~/.cache/nts-chromium-checkpoint1/scoped-harness-61e0020e9`.
 - **The machine:** one shared 32 GB box; CPUs 4–5 are kept for measurement
   ([`../AGENTS.md`](../AGENTS.md)).
 
@@ -193,7 +201,8 @@ ids, kept so the records that cite them still resolve.
 **Tooling**
 - Every gate step and every single compile has a time bound, and a timeout is
   a recorded outcome, never a stall: on 11-07 the `dex` step compiled
-  `jetstream-threejs` for 4.6 hours and the queue waited.
+  `jetstream-threejs` for 4.6 hours and the queue waited
+  (`gate/time-bounds`).
 - The TypeScript and test262 suites as sampled landing steps
   (`typescript-sample`, `test262-sample`), so a compiler change runs a slice
   of them before it lands.
@@ -220,7 +229,8 @@ ids, kept so the records that cite them still resolve.
   on every exit path, so a stopped run leaves nothing behind (on 11-06,
   stopped runs had left 167 GB): `conformance262.ts` in #193, then
   `outcomes-check.ts` and the rest; it includes the per-case temp folders
-  tests leak (#197).
+  tests leak (#197). A gate run by hand keeps three days of its logs
+  (`~/.cache/nts-gate/runs`), as the landing and full checks keep theirs.
 - The old lander's open defects fold into the landing check: #120, #121,
   #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
   #330, #332.
