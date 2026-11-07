@@ -4572,7 +4572,7 @@ tests/typescript/implicit-calls/json-root-interface.ts	{"kind":"refused","diagno
 tests/typescript/implicit-calls/json-root-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/implicit-calls/order-await-then-getter-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS4009","where":"none"}]}
 tests/typescript/implicit-calls/order-compound-assignment-union.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/implicit-calls/order-entry-key-assign-setter-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/implicit-calls/order-entry-key-assign-setter-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/implicit-calls/order-getter-addition-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/implicit-calls/order-getter-short-circuit-union.ts	{"kind":"pass"}
 tests/typescript/implicit-calls/order-getter-template-generic.ts	{"kind":"pass"}
@@ -7146,7 +7146,7 @@ tests/typescript/proofs/bounds-alias-typed-array-buffer-transfer.ts	{"kind":"run
 tests/typescript/proofs/bounds-alias-typed-array-resize-write.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-variable-length.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-view-fixed-uint16-surviving-subview.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-alias-view-fixed-uint8-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-alias-view-fixed-uint8-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-view-tracking-float64-regrow-zero.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-alias-view-tracking-int32-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-alias-view-transfer-uint16-rebound-destination.ts	{"kind":"pass"}
@@ -7154,7 +7154,7 @@ tests/typescript/proofs/bounds-alias-view-transfer-uint8-detached-source.ts	{"ki
 tests/typescript/proofs/bounds-call-closure-length-zero.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-call-dataview-resize-range-error.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-direct-pop.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 3)"}}
-tests/typescript/proofs/bounds-call-fixed-view-resize-regrow.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-call-fixed-view-resize-regrow.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 7 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-call-for-of-generator-next.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-call-for-of-iterator-acquisition.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-call-interface-method-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 3)"}}
@@ -7168,7 +7168,7 @@ tests/typescript/proofs/bounds-call-static-this-destructuring-default.ts	{"kind"
 tests/typescript/proofs/bounds-call-static-this-generator-resume.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-call-string-index-writer.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-typed-array-transfer-write.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a TypeError: the ArrayBuffer is detached"}}
-tests/typescript/proofs/bounds-call-view-fixed-float64-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-call-view-fixed-float64-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-call-view-fixed-uint8-surviving-subview.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-view-tracking-int32-regrow-rewrite.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-call-view-tracking-uint16-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 1)"}}
@@ -7185,7 +7185,7 @@ tests/typescript/proofs/bounds-callback-sort-comparator-pops.ts	{"kind":"runtime
 tests/typescript/proofs/bounds-callback-string-index-map.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-callback-typed-array-for-each-resize.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/proofs/bounds-callback-view-fixed-int32-surviving-subview.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-callback-view-fixed-uint16-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-callback-view-fixed-uint16-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-callback-view-tracking-float64-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 1)"}}
 tests/typescript/proofs/bounds-callback-view-tracking-uint8-regrow-rewrite.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-callback-view-transfer-int32-rebound-destination.ts	{"kind":"pass"}
@@ -7197,7 +7197,7 @@ tests/typescript/proofs/bounds-chain-loop-carried-24-index.ts	{"kind":"runtime-a
 tests/typescript/proofs/bounds-chain-string-loop-carried-24-index.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-chain-typed-array-loop-carried-24-index.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-chain-view-fixed-float64-surviving-subview.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-chain-view-fixed-int32-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-chain-view-fixed-int32-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-chain-view-tracking-uint16-regrow-zero.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-chain-view-tracking-uint8-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 1)"}}
 tests/typescript/proofs/bounds-chain-view-transfer-float64-rebound-destination.ts	{"kind":"pass"}
@@ -7225,7 +7225,7 @@ tests/typescript/proofs/bounds-exception-getter-throws-after-resize.ts	{"kind":"
 tests/typescript/proofs/bounds-exception-throw-after-index-change.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-exception-throw-after-pop-before-write.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-exception-view-fixed-uint16-surviving-subview.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-exception-view-fixed-uint8-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-exception-view-fixed-uint8-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-exception-view-tracking-float64-regrow-zero.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-exception-view-tracking-int32-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 1)"}}
 tests/typescript/proofs/bounds-exception-view-transfer-uint16-rebound-destination.ts	{"kind":"pass"}
@@ -7233,7 +7233,7 @@ tests/typescript/proofs/bounds-exception-view-transfer-uint8-detached-source.ts	
 tests/typescript/proofs/bounds-loop-back-edge-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-loop-continue-shifts.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-loop-do-while-shrink-before-write.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-loop-fixed-view-resize-back-edge.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-loop-fixed-view-resize-back-edge.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-loop-labelled-break-index.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/proofs/bounds-loop-nested-inner-shrinks.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 3)"}}
 tests/typescript/proofs/bounds-loop-replaced-class-iterable-body.ts	{"kind":"runtime-abort","failure":{"exit":1,"signal":null,"output":"java.lang.NoSuchMethodError: 'void nts.gen.erased.Callable.call()'"}}
@@ -7243,7 +7243,7 @@ tests/typescript/proofs/bounds-loop-string-char-at-continue.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-loop-string-char-code-back-edge.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-loop-typed-array-detach-do-while.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a TypeError: the ArrayBuffer is detached"}}
 tests/typescript/proofs/bounds-loop-view-fixed-uint16-surviving-subview.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-loop-view-fixed-uint8-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-loop-view-fixed-uint8-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-loop-view-tracking-float64-regrow-zero.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-loop-view-tracking-int32-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 1)"}}
 tests/typescript/proofs/bounds-loop-view-transfer-uint16-rebound-destination.ts	{"kind":"pass"}
@@ -7262,7 +7262,7 @@ tests/typescript/proofs/bounds-merge-try-catch-index.ts	{"kind":"runtime-abort",
 tests/typescript/proofs/bounds-merge-typed-array-detach-switch.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a TypeError: the ArrayBuffer is detached"}}
 tests/typescript/proofs/bounds-merge-typed-array-resize-branch.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 3 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-merge-view-fixed-int32-surviving-subview.ts	{"kind":"pass"}
-tests/typescript/proofs/bounds-merge-view-fixed-uint16-tail-shrink.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/proofs/bounds-merge-view-fixed-uint16-tail-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 1 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-merge-view-tracking-float64-offset-shrink.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 0)"}}
 tests/typescript/proofs/bounds-merge-view-tracking-uint8-regrow-rewrite.ts	{"kind":"pass"}
 tests/typescript/proofs/bounds-merge-view-transfer-int32-rebound-destination.ts	{"kind":"pass"}
@@ -10374,7 +10374,7 @@ tests/typescript/type-operators/this-type-in-literal.ts	{"kind":"refused","diagn
 tests/typescript/type-operators/typeof-function-and-class.ts	{"kind":"pass"}
 tests/typescript/type-operators/typeof-type-query.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents-controls/buffers-empty-class-offset-recovery-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0 is outside [0, 0)"}}
-tests/typescript/typed-array-contents-controls/buffers-fixed-interface-resize-history-control.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/typed-array-contents-controls/buffers-fixed-interface-resize-history-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/typed-array-contents-controls/buffers-float64-generic-tracking-zeroes-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 2)"}}
 tests/typescript/typed-array-contents-controls/buffers-tracking-interface-partial-elements-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/typed-array-contents-controls/buffers-transfer-generic-fixed-view-control.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a TypeError: the ArrayBuffer is detached"}}
@@ -10475,7 +10475,7 @@ tests/typescript/typed-array-contents-controls/views-signed-bytes-union-paramete
 tests/typescript/typed-array-contents-controls/views-slice-generic-copy-control.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents-controls/views-subarray-interface-alias-control.ts	{"kind":"pass"}
 tests/typescript/typed-array-contents/buffers-empty-class-offset-recovery.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0 is outside [0, 0)"}}
-tests/typescript/typed-array-contents/buffers-fixed-interface-resize-history.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/typed-array-contents/buffers-fixed-interface-resize-history.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0 is outside [0, 0)"}}
 tests/typescript/typed-array-contents/buffers-float64-generic-tracking-zeroes.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 2 is outside [0, 2)"}}
 tests/typescript/typed-array-contents/buffers-tracking-interface-partial-elements.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 4 is outside [0, 4)"}}
 tests/typescript/typed-array-contents/buffers-transfer-generic-fixed-view.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: a TypeError: the ArrayBuffer is detached"}}

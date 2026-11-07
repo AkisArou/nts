@@ -4572,7 +4572,7 @@ tests/typescript/implicit-calls/json-root-interface.ts	{"kind":"refused","diagno
 tests/typescript/implicit-calls/json-root-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/implicit-calls/order-await-then-getter-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/implicit-calls/order-compound-assignment-union.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
-tests/typescript/implicit-calls/order-entry-key-assign-setter-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
+tests/typescript/implicit-calls/order-entry-key-assign-setter-union.ts	{"kind":"refused","diagnostics":[{"code":"NTS1003","where":"body"},{"code":"NTS1100","where":"body"}]}
 tests/typescript/implicit-calls/order-getter-addition-interface.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/implicit-calls/order-getter-short-circuit-union.ts	{"kind":"pass"}
 tests/typescript/implicit-calls/order-getter-template-generic.ts	{"kind":"pass"}

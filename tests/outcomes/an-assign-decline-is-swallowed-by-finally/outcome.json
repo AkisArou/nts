@@ -2,16 +2,16 @@
   "version": 1,
   "check": {
     "version": 1,
-    "status": "disagrees",
+    "status": "all_declined",
     "counts": {
       "functions": 1,
       "expected": 29,
-      "compared": 29,
+      "compared": 0,
       "unavailable": 0,
-      "runtime_declined": 0,
+      "runtime_declined": 29,
       "timeouts": 0,
       "approximated": 0,
-      "disagreements": 28,
+      "disagreements": 0,
       "aborts": 0
     },
     "oracle": {
@@ -20,127 +20,14 @@
       "complete": true
     },
     "refusals": [],
-    "disagreements": [
-      {
-        "compiled": "probe 1 0000000000000000",
-        "node": "probe 1 8000000000000000"
-      },
-      {
-        "compiled": "probe 2 0000000000000000",
-        "node": "probe 2 3ff0000000000000"
-      },
-      {
-        "compiled": "probe 3 0000000000000000",
-        "node": "probe 3 bff0000000000000"
-      },
-      {
-        "compiled": "probe 4 0000000000000000",
-        "node": "probe 4 4000000000000000"
-      },
-      {
-        "compiled": "probe 5 0000000000000000",
-        "node": "probe 5 4008000000000000"
-      },
-      {
-        "compiled": "probe 6 0000000000000000",
-        "node": "probe 6 3fe0000000000000"
-      },
-      {
-        "compiled": "probe 7 0000000000000000",
-        "node": "probe 7 bfe0000000000000"
-      },
-      {
-        "compiled": "probe 8 0000000000000000",
-        "node": "probe 8 3ff8000000000000"
-      },
-      {
-        "compiled": "probe 9 0000000000000000",
-        "node": "probe 9 bff8000000000000"
-      },
-      {
-        "compiled": "probe 10 0000000000000000",
-        "node": "probe 10 400d99999999999a"
-      },
-      {
-        "compiled": "probe 11 0000000000000000",
-        "node": "probe 11 c00d99999999999a"
-      },
-      {
-        "compiled": "probe 12 0000000000000000",
-        "node": "probe 12 401c000000000000"
-      },
-      {
-        "compiled": "probe 13 0000000000000000",
-        "node": "probe 13 403b000000000000"
-      },
-      {
-        "compiled": "probe 14 0000000000000000",
-        "node": "probe 14 4059000000000000"
-      },
-      {
-        "compiled": "probe 15 0000000000000000",
-        "node": "probe 15 406fe00000000000"
-      },
-      {
-        "compiled": "probe 16 0000000000000000",
-        "node": "probe 16 4070000000000000"
-      },
-      {
-        "compiled": "probe 17 0000000000000000",
-        "node": "probe 17 408f400000000000"
-      },
-      {
-        "compiled": "probe 18 0000000000000000",
-        "node": "probe 18 40b0000000000000"
-      },
-      {
-        "compiled": "probe 19 0000000000000000",
-        "node": "probe 19 40efffe000000000"
-      },
-      {
-        "compiled": "probe 20 0000000000000000",
-        "node": "probe 20 41dfffffffc00000"
-      },
-      {
-        "compiled": "probe 21 0000000000000000",
-        "node": "probe 21 c1e0000000000000"
-      },
-      {
-        "compiled": "probe 22 0000000000000000",
-        "node": "probe 22 41e0000000000000"
-      },
-      {
-        "compiled": "probe 23 0000000000000000",
-        "node": "probe 23 41efffffffe00000"
-      },
-      {
-        "compiled": "probe 24 0000000000000000",
-        "node": "probe 24 433fffffffffffff"
-      },
-      {
-        "compiled": "probe 25 0000000000000000",
-        "node": "probe 25 c33fffffffffffff"
-      },
-      {
-        "compiled": "probe 26 0000000000000000",
-        "node": "probe 26 3e45798ee2308c3a"
-      },
-      {
-        "compiled": "probe 27 0000000000000000",
-        "node": "probe 27 40c81c8000000000"
-      },
-      {
-        "compiled": "probe 28 0000000000000000",
-        "node": "probe 28 nan"
-      }
-    ],
+    "disagreements": [],
     "aborts": [],
     "error": null
   },
   "run": "check",
-  "category": "wrong-answer",
-  "nts": "disagrees: 29 compared, 29 expected, 28 disagreements",
+  "category": "aborted",
+  "nts": "29 runtime declines",
   "node": null,
-  "measured_with": "85124a00bf305e36",
+  "measured_with": "6eb5bd0acc52bfc4",
   "source": "measured"
 }

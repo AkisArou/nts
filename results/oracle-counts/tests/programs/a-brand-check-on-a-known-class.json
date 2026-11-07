@@ -1,0 +1,30 @@
+{
+  "version": 1,
+  "fixture": "tests/programs/a-brand-check-on-a-known-class",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "tests/programs/a-brand-check-on-a-known-class/src/main.ts",
+      "signature": "3b82c8bc35fd526bea7eed04891245ab2ebd58bc6246230936c3e0c96a8a0dc6",
+      "keys": {
+        "c": "47fe460c69464434eba054e62f69668d",
+        "jvm": "1b902b9d685a46d8c9cf07eb17e2f678",
+        "llvm": "abd85d7e3fe2855c9d8fcb2d58118532"
+      },
+      "cases_sha256": "ed4eaa8cfd7643c7777483ad87b00044cfa5011907d998bd0d26bcee320ad6da",
+      "driver_sha256": "58cc1caffdeb411ea0e1be589f1e051c26b12a58b69d91688e561a4807937f71",
+      "populations": {
+        "known": {
+          "count": 29,
+          "cases_sha256": "95950acc85ddbded8459aa3b5713ce02a7e90089db26a5dce5421e32f6afff8d"
+        },
+        "untyped": {
+          "count": 29,
+          "cases_sha256": "ef46b8e4d125b8fda79d88d58fdc476083fcc45aba9df1dff508808c709c854e"
+        }
+      },
+      "complete": true,
+      "count": 58
+    }
+  ]
+}

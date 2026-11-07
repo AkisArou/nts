@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/awfy-cd",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/awfy-cd/case.ts",
+      "signature": "b0d2a0f2e7f0f227113313e0d98b01cce70472995ed063b8cea4b145419a6e7d",
+      "keys": {
+        "c": "8bc1c1746c342ecd281e7e666988815a",
+        "jvm": "d35a7f9e5f65417c25af65326894f65a",
+        "llvm": "6a61e68243497ab312d5a1c5e98dba40"
+      },
+      "cases_sha256": "c6ba6297ba5c4ab9110f2a481fcdfa9e5c9f23d4eb73de9cac3805621b818b7e",
+      "driver_sha256": "fa4b3c5c2011aa89c437e106929c9870fdc6b10ca77b07f2dba70649cc636b60",
+      "input_domain": {
+        "identity": "18533e63c2a37fbda5260de20b94aaa7",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "iterations": {
+                "reason": "Bound generated aircraft counts within the Node oracle CPU and address-space budgets while retaining upstream benchmark seed250, NaN, negatives and fractions. No kernel or verification branch is changed.",
+                "max": 250,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 20,
+          "cases_sha256": "c6ba6297ba5c4ab9110f2a481fcdfa9e5c9f23d4eb73de9cac3805621b818b7e"
+        }
+      },
+      "complete": true,
+      "count": 20
+    }
+  ]
+}

@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/awfy-havlak",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/awfy-havlak/case.ts",
+      "signature": "1ad756c3622880a1f9af76e27d8e818926bb22975d0f4ebda29bda25de6a75a3",
+      "keys": {
+        "c": "60f5ace06fb009b0165ddcb805c4a917",
+        "jvm": "cf9cb85bf6778f8825828b6ac5905181",
+        "llvm": "4f0826d6b12c89aa85ff9e52ad18c56c"
+      },
+      "cases_sha256": "a7d3bdca204cd76d1da4cb579a8e1d8aac1b69ca041be7bf5e46714faef5399e",
+      "driver_sha256": "cf3f1928479612c1e424a5c0a4beb623762c789ba4c45e3942155901a6881e1a",
+      "input_domain": {
+        "identity": "1f1402ccd3884a7a6951b4cf5d40e1ea",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "iterations": {
+                "reason": "Bound generated extra loop-finding passes within the Node oracle CPU and address-space budgets while retaining upstream benchmark seed1, NaN, negatives and fractions. The graph construction and verification remain upstream.",
+                "max": 1,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 12,
+          "cases_sha256": "a7d3bdca204cd76d1da4cb579a8e1d8aac1b69ca041be7bf5e46714faef5399e"
+        }
+      },
+      "complete": true,
+      "count": 12
+    }
+  ]
+}
