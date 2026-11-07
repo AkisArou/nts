@@ -26,8 +26,8 @@ silently falls back to another heap or to JavaScript.
 `nts emit-wasm` and `nts build --target wasm` exit with "the Wasm backend is
 being rebuilt on Binaryen; see docs/targets/wasm.md". The first, direct
 implementation, its tests, its browser runner and its comparison benchmarks (C++ to
-WASI, AssemblyScript) are kept at `refs/archive/wasm/direct-backend`, with
-their catalogue row in `tooling/lanes/archive.tsv`. The rest of this page is
+WASI, AssemblyScript) are kept at `refs/archive/wasm/direct-backend`
+(`ffd693ae4dec`). The rest of this page is
 the design the Binaryen backend is built to.
 
 ## A module and its glue

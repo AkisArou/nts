@@ -79,7 +79,7 @@ already maps them. Examples:
 | Chromium (`runtime/chromium`, `tooling/chromium`) | Chromium's own tests and binding checks |
 | `runtime/node` | the node module tests and their conformance cases |
 | the compiler (`compiler/`, `runtime/c`) | build, lint, the unit tests of the crates it touches and of the backends, and a smoke sample of the conformance suites on C |
-| the gate or the lander (`tooling/gate`, `tooling/lanes`) | their own tests |
+| the gate or the landing tools (`tooling/gate`, `tooling/landing`, `tooling/full-check`) | their own tests |
 | tests only | the new or changed tests, on every backend |
 | docs only | the tree checks, which take seconds |
 
@@ -91,9 +91,21 @@ The smoke sample is a few hundred TypeScript and test262 cases and the
 examples, on C; the full suites, LLVM, the JVM and the wide steps run after
 landing.
 
-**One queue, no trains.** Changes are checked one at a time, each rebased
-onto the newest `main`. Green: `main` fast-forwards and is pushed. Red: the
-change goes back to its agent with the failing check's log.
+**How it chooses.** Each gate step has a landing form in `LANDING` beside the
+rules in `owed.mjs`: the tree checks, the build, lint, unit tests, tooling and
+the test262 inventory run as they are; a fixture corpus's steps run when the
+change touches that corpus; the TypeScript and test262 suites run as a
+sample; everything else runs after landing. A change's landing steps are what
+it owes, mapped through that table. An estimate from each step's measured
+cost keeps them under ten minutes, moving the costliest deferrable ones to
+the full check. `node tooling/landing/check.ts <commit> --dry-run` prints the
+landing steps, the deferred ones and the estimate.
+
+**One queue, no trains.** One service, `nts-landing-check`, checks changes
+one at a time, each rebased onto the newest `main`. Green: `main`
+fast-forwards and is pushed, the task's branch is deleted here and on
+GitHub, and its pool tree is reset. Red: the change goes back to its agent
+with the failing check's log.
 
 **No per-landing approval.** A green landing check lands. The exceptions are
 changes to the compiler's core, the gate and the lander: those wait for the
@@ -121,8 +133,9 @@ What follows from a run:
 - **Green core:** the commit is marked `verified` (a branch of that name,
   pushed). Recordings, benchmarks and anything that needs a known-good
   compiler use `verified`, not the tip of `main`.
-- **Red:** the culprit search finds the commit that broke it, among those
-  since that part's last green run. The lander reverts that commit (the
+- **Red:** the tip and the last green commit are measured again first, so a
+  flaky or machine red reverts nothing. Then the culprit search finds the
+  commit that broke it, among those since that part's last green run. The lander reverts that commit (the
   revert passes the landing check like any change), and re-landing it with a
   fix becomes a task.
 - **What can be wrong on `main`, and for how long:** only a heavy suite's
@@ -164,12 +177,21 @@ regression becomes a task. Benchmarks never block a landing.
   branch, on the machine and on GitHub, and resets the task's worktree to the
   newest `main` for the next task. An agent rewrites its one branch; it does
   not keep rounds of it (`-r2`, `-before`, `-fold`).
+- **Where things live:** the pool is `~/.cache/nts-pool/<n>`
+  (`node tooling/landing/pool.ts status`); the landing check keeps
+  `~/.cache/nts-landing/{tree,target,runs}`; the full check, one user unit
+  `nts-full-check` running from a tree at `verified`, keeps
+  `~/.cache/nts-full-check/`. A tree's cargo target is its own: two trees
+  sharing one run each other's compiled crates.
 - **No evidence folders.** The landing check's and the full check's logs are
-  the evidence; the lander keeps three days of them.
-- **The full check counts them.** One of its steps is red when a branch is
-  named by no task in [`plan.md`](plan.md), a worktree is outside the pool,
-  or `~/.cache` holds an nts folder other than the pool's, the lander's last
-  three days, the pins `main` uses, the inputs and the Chromium caches. Rules
+  the evidence; each keeps three days of them. A control or a bisect is a
+  pinned compiler, not a tree: `node tooling/conformance/pin.ts <rev>` builds
+  `~/.cache/nts-pins/<12 hex>/nts`.
+- **The full check counts them.** Its hourly count
+  (`tooling/full-check/count.ts`) is red when a branch is named by no task in
+  [`plan.md`](plan.md), a worktree is outside the pool, or `~/.cache` holds an
+  nts folder that `tooling/full-check/keep.json` does not name with its
+  reason. It deletes nothing; it reports. Rules
   alone let 1,364 branches, 185 worktrees and 120 GB of evidence folders pile
   up by 11-06; a red step does not.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
@@ -200,54 +222,22 @@ the first node task.
 | A separate path for tests-only and docs-only changes | one landing check, which is seconds for them |
 | Branches, worktrees and evidence folders that piled up | one branch and one pool worktree per task, deleted on landing, and counted by the full check |
 
-## Getting there
-
-1. **Fresh start.** Agents are on hold with their work committed. The
-   branch list, on the machine and on GitHub, is cut to `main` and the
-   branches tasks name; worktrees to the shared checkout; agents' evidence
-   folders, old pins and run folders are deleted. Every unmerged branch is
-   read first: landed or obsolete work goes, and anything still worth doing
-   becomes a task naming the branch.
-2. **The landing check:** the path-scoped check of ten minutes or less, and
-   direct landing from it, which deletes the task's branch and resets its
-   worktree. The old lander goes, and the lane machinery with it:
-   `tooling/lanes/lanes.json`, the lane view in `lane.ts`, `branches.ts`,
-   `cleanup.ts`, `archive.ts` and its table. The one setting `lanes.json`
-   holds beyond lanes, which platforms may stay unrun, moves to
-   `tooling/gate/verdict-policy.ts`.
-3. **The full check after landing:** run continuously, the `verified` marker,
-   the automatic revert through the culprit search, and the step that counts
-   branches, worktrees and cache folders.
-4. **Records written by the full check,** and the worktree pool.
-5. **Restart** with agents on the first tasks, as many as the task list
-   holds work for in different areas.
-
-Until a part is built, the old lander keeps doing that part's job.
-
-## Until the switch is built
-
-- **Landing:** `node tooling/lanes/land.ts <commit> --dry-run` says what a
-  change owes; `node tooling/lanes/land.ts <commit>`, run in the background,
-  gates it and lands it.
-- **Documentation and test fixtures** go straight to `main`: the coordinator
-  commits them holding the landing lock (`~/.cache/nts-land.lock`) while no
-  landing runs, after the tree checks (`land.ts <commit> --dry-run`). A
-  fixture comes without records: its cases are pending until
-  `NTS_BIN=<main's pin> node tooling/records/record-pending.ts` writes them
-  after landing.
-- **A control or a bisect** is a pinned compiler, not a tree:
-  `node tooling/conformance/pin.ts <rev>` builds
-  `~/.cache/nts-pins/<12 hex>/nts`.
-- **What is going on:** `node tooling/lanes/lane.ts status`.
-- **A tree's cargo target is its own `target/`:** two trees sharing one run
-  each other's compiled crates.
-
 ## Decisions
 
 - **This workflow** (11-06): the landing check, the full check after
   landing, tasks that land within a day, agents per task, and the fresh start
   ([log](records/notebooks/decisions-log.md#fresh-start-11-06)). It replaces
   the lane model of record 0355.
+- **The landing check is its own tool** (11-07): `tooling/landing/` checks one
+  change at a time against the newest `main`, with no trains, halving or
+  attribution, and reuses the step runner, the path rules and the canonical
+  environment. The old lander and the lane machinery went with the switch;
+  which platforms may stay unrun is standing policy in
+  `tooling/gate/verdict-policy.ts`
+  ([log](records/notebooks/decisions-log.md#the-switch-11-07)).
+- **Counting is the full check's own hourly step** (11-07), never a gate step:
+  the machine's state must not turn a landing red or start a culprit search
+  with no culprit ([log](records/notebooks/decisions-log.md#the-switch-11-07)).
 - **A cloud agent works through pull requests** under
   [cloud-agents.md](contributing/cloud-agents.md) (10-28,
   [log](records/notebooks/decisions-log.md#contributors-and-packages-10-28)).

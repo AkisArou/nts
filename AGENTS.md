@@ -20,95 +20,91 @@ the right one; it is work to undo. nts has no users yet, so nothing is fixed:
 refactor or replace representations, runtimes and code outright. If the best
 design isn't known, measure until it is, then build it.
 
-## Lanes
+## Tasks
 
-Several sessions work at once, each in a lane. [`tooling/lanes/lanes.json`](tooling/lanes/lanes.json)
-says who owns which paths and which branch prefix each uses.
+Work is a task in [`docs/plan.md`](docs/plan.md): one agent per task, small
+enough to land within a day ([`docs/workflow.md`](docs/workflow.md)).
 
-- Edit only your lane's paths. Announce an edit to a shared or another lane's
-  path to its owner before making it: two sessions editing one file lose hunks.
-- The compiler lane reviews every change to `compiler/` or `runtime/c/` from
-  another lane before it lands.
-- Report a compiler defect as a gated fixture (below), then a one-line pointer
-  to the compiler lane, not as prose.
+- Two tasks editing one file lose hunks: before editing a file another open
+  task is changing, say so to that task's agent.
+- A change to the compiler's core (`compiler/`, `runtime/c/`), the gate or the
+  landing tools is read by the coordinator before it is submitted.
+- Report a compiler defect as a fixture (below), then a task line in
+  `docs/plan.md`, not as prose.
 
 ## Your tree, and the shared checkout
 
-Work in your lane's own worktree, `~/Projects/nts-lanes/<lane>`, on branches
-`<lane>/<topic>` ([`docs/workflow.md`](docs/workflow.md)). `~/Projects/nts` is `main` and is
-landing-only: nobody edits there. The exception is the coordinator's
-documentation, which the user reads there (see "Documentation goes straight to
-main" below). It supplies the inputs no commit carries (`third_party/*`
-corpora); the native checker is compiled into nts, and every tree shares the
-object store.
+A task works on one branch named after it, in a worktree from the pool:
 
-- `git stash` is shared by every worktree: commit work in progress as a `WIP:`
-  commit instead.
+```sh
+node tooling/landing/pool.ts take <branch>   # a free tree at the newest main, on a new branch
+node tooling/landing/pool.ts status          # which task holds which tree
+```
+
+Never make a worktree of your own: the pool's trees keep their build folders
+warm, and the full check counts every tree outside it as red. Landing gives
+the tree back. `~/Projects/nts` is `main`, and nobody edits there. It
+supplies the inputs no commit carries (`third_party/*` corpora); the native
+checker is compiled into nts, and every tree shares the object store.
+
+- `git stash` is shared by every worktree: commit work in progress instead.
 - Sabotage and control experiments run only after the fix is committed:
   restoring the "before" state with `git checkout` has destroyed the fix
   itself. A control is usually a pin (`tooling/conformance/pin.ts`), not a tree.
 - **Stop your own work by its systemd unit, never by a list of PIDs.** Start
-  every long run in a named unit (`systemd-run --user --scope --unit=<name>` or
-  `land-unit.ts`) and stop it with `systemctl --user stop <name>`: the cgroup
-  holds exactly its processes. Never send a signal to PIDs worked out from
-  `ps`, and never `pkill -f` or `pgrep -f` a pattern. On 2026-10-27 a
-  descendant walk over `ps` started from PID 1, and its `kill -TERM` reached
-  the systemd user manager, which ended the session and every agent, tmux
-  pane and gate with it. A pattern matches other lanes' processes and your
-  own shell the same way.
-
-Until your lane has moved into its tree, you share the checkout's one git
-index with everyone still in it: commit with
-`tooling/gate/commit-mine.sh -F <msg-file> -- <paths>`, never `git add -A` or
-`git commit -a` (either sweeps a peer's uncommitted work into your commit),
-and never `git checkout --`, `git reset --hard` or `git stash` paths you did
-not change.
+  every long run in a named unit (`systemd-run --user --unit=<name>`) and stop
+  it with `systemctl --user stop <name>`: the cgroup holds exactly its
+  processes. Never send a signal to PIDs worked out from `ps`, and never
+  `pkill -f` or `pgrep -f` a pattern. On 2026-10-27 a descendant walk over
+  `ps` started from PID 1, and its `kill -TERM` reached the systemd user
+  manager, which ended the session and every agent, tmux pane and gate with
+  it. A pattern matches other agents' processes and your own shell the same
+  way.
+- **A test that starts a real gate runner gives that run its own memory
+  reading and its own unit.** Pass `NTS_MEMINFO` through `gateEnvironment`'s
+  owned values, so the host's free memory never decides the result, and run
+  it under `systemd-run --user --unit=<name>`, so a runner that outlives its
+  test is stopped by name. On 2026-11-07 an inner run waited silently for
+  host memory inside a full gate, and an orphaned runner spun a core in the
+  tmux pane's own cgroup.
 
 ## Landing
 
-Nothing reaches `main` except a fast-forward to a commit that passed the gate
-steps it owes. `land` does the whole of it (see [`docs/workflow.md`](docs/workflow.md)):
+Nothing reaches `main` except through the landing check
+([`docs/workflow.md`](docs/workflow.md)). From your pool tree:
 
 ```sh
-node tooling/lanes/land.ts <commit> --dry-run   # the steps it owes
-node tooling/lanes/land.ts <commit>             # gate and land, ~30 min: run it in the background
+node tooling/landing/check.ts <commit> --dry-run   # the steps it runs, the deferred ones, the estimate
+node tooling/landing/check.ts <commit> --here      # run them now, in your tree
+node tooling/landing/check.ts <commit>             # queue it; run it in the background
 ```
 
-Run it from your tree at that commit, **bare**: never inside a `flock` or a
-lock of your own. A wrapper holding the lock while `land` waited stopped every
-lane's landing for most of an hour, and `land` now refuses to run under one.
-It records the landing in a durable queue and waits for its answer. A **train
-service** that the lander owns (one systemd unit, `nts-land-train-<id>`,
-started when a landing needs it) holds the locks and gates every compatible
-queued landing as **one train**: replayed onto `main` in turn, gated once for
-exactly what `owed.mjs` says the range owes (choosing steps by hand is how
-`main` went red), and landed together on a green summary. A red train is
-halved until the red landing is alone, and only it is refused. One gate is
-half an hour whether it carries one landing or six, so queue a change as soon
-as it is reviewed and ready. `lane status` lists the queue and the running
-train, and the service's log names every landing it leaves out, with the
-reason. Never `git merge` onto `main` yourself.
+One service, `nts-landing-check`, checks one change at a time against the
+newest `main`, in ten minutes or less. A conflict refuses it, naming the
+files. Green fast-forwards and pushes `main`, deletes your branch here and on
+GitHub, and resets your pool tree. Red names the failing steps and the run's
+logs. Memory pressure retries by itself; any other unfinished run holds the
+change (`check.ts retry <id>`). Withdraw with `check.ts withdraw <id|commit>`,
+never by stopping a unit. `check.ts status` lists the queue. Documentation
+and fixtures land the same way, in seconds. A new gate step needs a
+`LANDING` row in `owed.mjs`, and a new tooling directory a rule, so that a
+change owes only what it reaches.
 
-**Withdraw a landing with `land.ts --withdraw <commit>`, never by stopping a
-unit.** Stopping the submitting process withdraws nothing, and the request is
-honoured before the next train is composed. A train that stalls holds every
-lane's landing: stop the train's unit by name, then record why with
-`land.ts --abandon-frozen <owner-id> --because=<reason> --run=<run dir>`, which
-answers its members and frees the queue. On 2026-10-28 a withdrawal made by
-stopping a landing's unit killed a running train, and a test that never exited
-held the locks.
+**After landing, the full check** (`nts-full-check`) runs the core on every
+new `main` and the wide steps on `verified` a few times a day. A red there is
+measured again at the tip and at the last green commit, then bisected to its
+first red commit, which is reverted ahead of other landings and becomes a
+task. Record, benchmark and bisect against `verified`. Stop it only with
+`systemctl --user stop nts-full-check`. A tool that keeps a folder in
+`~/.cache` adds it to `tooling/full-check/keep.json`.
 
-**A train whose measurement could not finish is held, not red, and a hold
-never passes by itself.** A step that memory pressure kept from measuring runs
-again on the same train once memory allows, keeping the results that
-completed. A hung tooling file, a broken instrument, a missing, unreadable or
-wrong-commit summary, or an unmeasured baseline holds only that train's
-members, and a landing stacked on one waits with it: nothing is attributed or
-halved, and other landings keep going. `lane status` prints each hold with its
-reason, its run directory and both answers, `land.ts --retry-held <identity>
---because=<note>` and `--refuse-held`. Until 2026-10-29 a neighbour's memory
-pressure could turn a good landing red, and a test that never exited held
-every lane's landing.
+**Tests and benchmarks land without records** (user, 2026-11-05 and 11-06).
+Every record check lists a case that has no row yet as pending and does not
+fail it, and the full check writes those rows after landing
+(`tooling/records/record-pending.ts`). A better outcome passes and is
+rewritten; getting worse is red. A record that exists and disagrees still
+fails, so an edit that changes a recorded fixture's cases deletes that
+fixture's record in the same commit, which makes it pending.
 
 **Never cap the gate's parallelism for a landing:** no `NTS_JOBS`,
 `NTS_GATE_SLOTS` or `NTS_GATE_JOBS` in its environment. The gate sizes itself
@@ -117,55 +113,17 @@ switch's official runs set `NTS_JOBS=4` and took 72–100 minutes for the full
 gate (2026-10-25 to 10-27). The same gate took 26–32 minutes at 24 slots on
 10-24.
 
-**The gate's environment is its own, not your shell's.** Every step of
-`land`, `pinned.sh` and `full.ts` runs in one canonical environment
-(`tooling/gate/canonical-environment.ts`): host tools passed by name, locale,
-time zone and node options fixed, and a temporary directory inside the run.
-`land` refuses any verdict-policy variable your shell sets (the caps above,
-floors, step selectors, `NTS_BIN`), naming it; unset it and run again. On
-`pinned.sh` and `full.ts` such a variable is allowed, but it makes the run a
-recorded experiment that can never serve as landing evidence. Standing
-policy, such as the accepted on-device skip, lives in
-`tooling/gate/verdict-policy.ts`, so a launcher never has to remember it.
-
-**Keep the full gate out of urgent work.** Before asking for review, run
-`land.ts --dry-run` and say what the change owes. A sweep of comments over the
-gate's own scripts, or over a path with no rule in `owed.mjs`, owes the full
-gate (about 100 minutes), and it delays every landing queued behind it. Keep
-such a change in a landing of its own; the coordinator schedules it into a
-quiet window. Give an unmatched path a rule in `owed.mjs`, so that next time it
-owes only what it reaches.
-
-**Documentation goes straight to main** (user, 2026-10-27). The coordinator
-writes docs-only changes (`docs/`, `AGENTS.md`) in `~/Projects/nts` itself and
-commits them to `main` without a gate, but **only while no train is running**:
-- commit holding the landing lock (`flock -n ~/.cache/nts-land.lock`). If the
-  lock is held, a train is gating against `main`, and moving `main` would make
-  `land` refuse it at the end;
-- while a train runs, leave uncommitted edits only on files that train does
-  not change. A dirty file the fast-forward must update aborts the landing;
-- first run the nine tree checks on it: commit it in a detached scratch
-  tree and run `land.ts <commit> --dry-run` there, which takes seconds.
-  The `audit` check reads the section headings the census cites, and on
-  2026-11-05 a docs commit that removed three of them turned `main` red;
-- while the queue is busy, submit the commit with `land-unit.ts` from a
-  detached tree at it, after staging the same files in `~/Projects/nts`. A
-  docs-only commit is checked on its own tree and fast-forwarded at the next
-  train boundary, with no gate.
-
-**Test fixtures go straight to main too, without records** (user, 2026-11-05
-and 11-06). A change that only adds or edits test fixtures needs no gate run
-and no records made by hand. Every record check lists a case that has no row
-yet as pending and does not fail it, and `tooling/records/record-pending.ts`
-writes those rows after landing. The coordinator lands such a change like
-documentation, holding the landing lock while no train runs
-(`git merge --ff-only` in `~/Projects/nts`), after running the nine tree
-checks on it (`land.ts <commit> --dry-run`).
-
-A record that exists and disagrees still fails, so an edit that changes a
-recorded fixture's cases deletes that fixture's record in the same commit,
-which makes it pending. Lanes hand their tests-only commits to the
-coordinator.
+**The gate's environment is its own, not your shell's.** Every step of the
+landing check, `pinned.sh` and the full check runs in one canonical
+environment (`tooling/gate/canonical-environment.ts`): host tools passed by
+name, locale, time zone and node options fixed, and a temporary directory
+inside the run. The landing check refuses any verdict-policy variable your
+shell sets (the caps above, floors, step selectors, `NTS_BIN`), naming it;
+unset it and run again. On `pinned.sh` such a variable is allowed, but it
+makes the run a recorded experiment that can never serve as landing
+evidence. Standing policy, such as the accepted on-device skip and the
+platforms that may stay unrun, lives in `tooling/gate/verdict-policy.ts`, so a
+launcher never has to remember it.
 
 **A page in `docs/` is a specification, not a notebook** (user, 2026-10-27).
 It states the current design and contract, with no dates, history or running
@@ -176,15 +134,8 @@ long notes go to `docs/records/` (long notes in `docs/records/notebooks/`).
 A decision is written into the page it governs, in its `## Decisions` section;
 its dated entry goes in `docs/records/notebooks/decisions-log.md`.
 
-A landing runs the core steps. The wide ones -- integrity, the profile,
-addons, interop, counting, memory and the rest (`WIDE` in `tooling/gate/owed.mjs`
-says which, and why) -- run in the **full run**, `node tooling/census/full.ts`,
-on a pin of main, started by hand when the queue is quiet. A step red there is
-red on main: bisect it over the landings since the last green full run and fix
-it before new work.
-
-Before a lowering change goes to the gate, also run the five test262 records
-the gate checks (all.sh's `test262_cases`, `test262_builtins_cases`,
+Before a lowering change is submitted, also run the five test262 records the
+full check holds it to (all.sh's `test262_cases`, `test262_builtins_cases`,
 `test262_rest_cases`: `conformance262.ts --under <dir> --recorded <tsv>`
 against a pin). They take minutes, and they caught seventeen regressions that
 fixtures, examples and blockers did not.
@@ -237,7 +188,7 @@ then a guard once fixed), `tests/memory/`.
   commit, to the next number even if another lane bumped it today.
 - A new C runtime helper owes a row in four tables in four crates, each checked
   by a test in *its* crate: follow the checklist at the top of the helper block in
-  `runtime/c/nts_runtime.h`. A forgotten row reds a lane that never calls the
+  `runtime/c/nts_runtime.h`. A forgotten row reds a change that never calls the
   helper.
 - A new `OpKind` reaches every `_ =>` match over ops; audit them before the
   first probe.
@@ -265,7 +216,7 @@ then a guard once fixed), `tests/memory/`.
   `debug/incremental` after a test run and check `df -h /` before starting one.
   Keep only the profiles your workflow builds (tests run in `nts-dev`), and
   delete one you no longer build whole: on 2026-10-29 a forgotten 77 GB
-  `target/debug` held every lane's landing on the disk floor.
+  `target/debug` held every landing on the disk floor.
 - A native snapshot of a large program can take gigabytes: cap parallel frontends,
   and check `journalctl -k` for OOM kills before blaming a crash.
 - **Gates run back to back, so heavy work runs beside them:** `nice -n 19`, one
@@ -287,8 +238,9 @@ then a guard once fixed), `tests/memory/`.
   applies a change, `daemon-reexec` does not), so a unit inherits it. That
   does not cover a process started before the managers took it, or one that
   widens its own mask, and one light monitor on CPU 5 is enough to make
-  `with-lock.sh` time out. `land.ts` and `pinned.sh`
-  apply the exclusion without widening their inherited affinity. A user scope
+  `with-lock.sh` time out. `pinned.sh` applies the exclusion without
+  widening its inherited affinity, and the landing and full checks run in
+  units that inherit the managers' default. A user scope
   with `AllowedCPUs` enforces a kernel ceiling when cpuset is delegated and a
   widening probe proves it. Otherwise the log says `best-effort`: a library
   such as Mesa can widen a taskset mask. Never change an in-flight gate's mask.
@@ -304,8 +256,8 @@ then a guard once fixed), `tests/memory/`.
   `nts-bench` links the compiler crates directly: run a plain
   `cargo build --release` (no `-p`) before measuring a compiler change.
 - A gate or bench run drives `target/release/nts` unless told otherwise: pass
-  `NTS_BIN` for any other build (on `pinned.sh` and `full.ts` that marks the
-  run an experiment, above).
+  `NTS_BIN` for any other build (on `pinned.sh` that marks the run an
+  experiment, above).
 - Never edit a gate script (`all.sh` and its helpers) while a run of it is
   executing from that tree: the shell reads a running script incrementally.
 - System packages come from `paru`.

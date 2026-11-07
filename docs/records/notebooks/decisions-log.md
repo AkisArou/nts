@@ -1406,3 +1406,31 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   month, and a bug it fixed that still exists shows up as a failing case.
   The quarry rule left `CLAUDE.md` and
   [the workflow page](../../workflow.md), which replaced the old one.
+
+## The switch (11-07)
+
+- **Records follow landing** (user, 11-06: "shouldn't tests and benchmarks
+  land directly?"). Every record check lists a case with no row as pending
+  and does not fail it; `tooling/records/record-pending.ts` writes the rows
+  after landing. The ratchet ranks a silent wrong answer below a loud defect,
+  so a wrong answer that becomes an abort passes as an improvement; a case
+  refused before and after, for other reasons, is accepted, because lifting
+  one refusal exposes the next on every compiler improvement. Any other
+  change within a rank still fails.
+- **The landing check is its own tool**, `tooling/landing/`, not a mode of the
+  old lander: one change at a time against the newest `main`, so trains,
+  halving, attribution and holds had nothing left to do. It reuses the step
+  runner, the path rules and the canonical environment. The old lander and
+  the lane machinery were removed with the switch.
+- **Counting is the full check's own hourly step**, not a gate step: inside a
+  landing, the machine's state would turn a good change red, and inside the
+  core it would start a culprit search with no culprit.
+- **A test that starts a real gate runner owns its memory reading and its
+  unit.** On 11-07 a stacked train went red on a tooling test whose inner run
+  read the host's memory inside a full gate and waited silently past the
+  tooling runner's watchdog, and a runner orphaned by a proof spun a core in
+  the tmux pane's own cgroup, where no unit could stop it.
+- **A gate step may not wait forever.** On 11-07 the `dex` step compiled one
+  benchmark port for 4.6 hours at full CPU, and the queue waited with it.
+  Every step and every per-case compile gets a time bound, and a timeout is
+  a recorded outcome.
