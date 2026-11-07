@@ -103,3 +103,38 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+
+
+// BEGIN ASYNC FS: complete asynchronous filesystem output checks.
+{
+  const name = "jetstream-async-fs";
+  if (modules.has(name)) {
+    checked.add(name);
+    const {render, seed, work} = await import("./cases/jetstream-async-fs/case.ts");
+    test(`${name}: all original final paths and bytes are preserved`, async () => {
+      const result = await render(1);
+      assert.equal(result.totalFileCount, 739);
+      assert.equal(result.totalDirCount, 2501);
+      assert.equal(result.lastFileHash, 436945457);
+      const text = JSON.stringify(result);
+      assert.equal(text.length, 2868860);
+      assert.equal(sha256(text), "1e59cf6f7cd3000017c5f73b0fb814545a4641f593b230a4831cd1e9243c08da");
+    });
+    test(`${name}: the complete async call has a stable checksum`, async () => {
+      assert.equal(seed, 1);
+      assert.equal(await work(1), 437733167);
+      assert.equal(await work(2), 438520877);
+      await assert.rejects(work(0), /Invalid file hash/);
+      assert.equal(await work(1), 437733167);
+    });
+  }
+}
+// END ASYNC FS.
+
+
+
+
+
+
+
