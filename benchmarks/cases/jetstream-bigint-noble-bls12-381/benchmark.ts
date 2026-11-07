@@ -1,0 +1,133 @@
+// The MIT License (MIT)
+
+// Copyright (c) 2019 Paul Miller (https://paulmillr.com)
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy
+// of this software and associated documentation files (the "Software"), to deal
+// in the Software without restriction, including without limitation the rights
+// to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+// copies of the Software, and to permit persons to whom the Software is
+// furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in
+// all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+// IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+// FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+// AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+// LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+// THE SOFTWARE.
+
+// Source: https://github.com/WebKit/JetStream/blob/3967678fa8ab98d847ab33cf3728dba726fa854b/bigint/noble-bls12-381-bundle.js
+
+
+import * as bls from './bls.ts';
+
+
+export const G2_VECTORS = `db29a6e1db5d6dcb485f26c174d11dd0ab1ecc54125e31dde2949b03e925ef23::8e49a02dc374bb1702ec4c8aa514c6d72e0884d3611334ae749462eb545a4d0a6086ef0a6b1bbc5db2934d297bf766c60dbe665dfc33d3aa765d071712075b4102a71f518e16376fc58c982d30a6196fdd8319090bcb2728c9bbbd8045fc7863
+28b90deaf189015d3a325908c5e0e4bf00f84f7e639b056ff82d7e70b6eede4c:09:8647aa9680cd0cdf065b94e818ff2bb948cc97838bcee987b9bc1b76d0a0a6e0d85db4e9d75aaedfc79d4ea2733a21ae0579014de7636dd2943d45b87c82b1c66a289006b0b9767921bb8edd3f6c5c5dec0d54cd65f61513113c50cc977849e5
+177c50ec35b1da25f68b9f7bad8f1c443a01fa2b20de37be0caec8b62db5c902:d2:8166ef48e7c1de5f8256a670511aad114f956382eed36f3bb45a7a1bf473e982f0e399924b4dc92795d043d9475402aa0d065e10f05a2026a0961882b6c2e6c6ae429edd17c7a43586a814121044e41c5c1d3397452b2fc61fdc523cc943ef68
+e99d0f7a4f8a9e3f74a6bd9677b3fd5be32f7cea4e5b898ed3dea735fa647632:0d98:a70b42352845ca47713a20a243ec2aeb63bab7c4126d9cbd390b6f59372de383b93698c66f7e75452cbc569147b1f9f70be3b03539a4d110c65082f7918942b962543494469a5271208cdec9c234689bcae9c88c7cdc3ef9eefdf11a522794c6
+2c864f383cd664839ce6d7d049f8083870b628d7bb8a4539cc84a35bbd723736:4a35:88c76ed5872fb011f4fc0fc8ff2751513dd6f22a9b7cb125ed39bdfffdd996ba1b5d9ea6332e8b4c34e591cb9dcf4efe112a096754db0d723269bb1a758f986d5e0cfbdcc22f8678f72f1804459c98be59ee7632c666206255dcaa816188cf2b
+cd8ccf5c229e37a4a4b5490c84882af890cdc4c70170ad5f0ee2f3a86ffa3080:05caf3:83b4087858c3585a2f978fe1c79b94d9eb927500066e6c793392f1d5be2eff1ebfdd893555f6a89934f4e27ec810489a07f0740124c065fb82246a6d6f924f70069edfaf04fc4d1021f3314b9d09dfadc344fd2dcafaeb09586b194b3ea73374
+43a5b55a3823acebca9e55face42697b5cd0e2398a44a56ebc22d936a05c3893:94b0b9:8b4f817e0815a9ca1fb91a5fd9e88714d72c2d6b4ea037ab43cde4149691109336edca72fb55936b5ba8f4576ffd49780dde24d48f9a9d5a07d1527ac3a9bc38c05a0fc58bac710cd4983c6cd21e56175a6e597954ac68207db1a8b86efe84cf
+e2654a38c0148b5f0de1b8266737fdb6706fedc436d5fb70dc34bebe25b43d01:06a63bfb:b4a224ac879b67d20f452c40adac0b993560842e4dce928ace30751bc38d2a3a46e1f84dd1c04c0417ebaf069f5618f210c0dce7ae478f83a664f231e141b3fc677842bae20df43409476dde8c6a81cd1067999e6fae2896afe9630bc7441d3a
+736057053101fbb9240808bfe83121382a8cd559a97f8633ae170b3e1ac9efee:0d83b078:b028a3c5877113519d0da87fd67edebcb80b37869f58505997c459fad745194407e004503fb49f4d9e0ea289d5cd9c63151c2d40e09cd3988cf7b0191718d4f4d07fa149c965fdc4a25fece97efd72fb9337099b5f47979c6acb9b30f0c2fbe3
+dc7f613ec82e641c58d8390963ccb4cd307da37417aca9eec15b060fccdf73f3:0611983835:b4d7a115e96b4da4616b54bff471d5a9f7002100b61214337662f0aabf08a45ecdcdb581325cba3b5141a4083c301dcc10eeac2da4cd430ab1882e44cec5f8f08a789eb670653ab8072795e3d5724405bb6ffebde2e73229b353b17119f46e9c
+ba4eeeefe05a4515509d64f21639c24dde05122815a9d89f1d8d31ba90f7e7aa:64726e3da8:8d6d9d1ee5febfb549e1f7a2f3e69f01918fc105ea710bae881b60fec8dcdbbb2ae3e00249d5b82eb4c598f557c139e00bcc5dd098afc74303a54937a81e98b4d2e75ee792021200f291918980ea274ef8ea2d712e265089230042348dd4b872
+5737b8adab24e7ec10fdd0a420c603392cb2c43f6466d6033eb14d1012470dbb:07d6e7a31a2f:99d2bc134b268397759e77b7f59c26862264454a659b90664cd7ff9fd5701b083ef6aee3df959643816958515059e42205abf0c959ea64910c3bdbb447a1afca4caf271f7dbd50085d886c2e3f5294167ea3631767acfee5d89cb6e04def2dd8
+ecca05ab2c52c1b4861357c01d628a8a7b0ca0b6c72219cf47822e72858752bc:aa07552a7358:9023090506aa3ec0b14b0650d302baa54976e26104d011f3e131a066f3f7dacbd8831e4bcefe5702e4c83323e4e6f7700b343a29e7d4cb7277712c59e83fe6ee788967c4721f783b81024c8317b4042e0f4fad3c41fd861b6050654bc529af70
+b54f380ef6485006e52c279335e9aeb7adcf1dd24b02f6be0a25b6d0a70627b0:04583025f1b7da:897da4929a4ed71b70ba65e68f39f6f7967dbecbb97b610bd3ab23f6a08906ca44661523212a598f9a1e12e128c184440d1a56c2b64260c871e25ae5135b53944f7820aa74d20d48d90976cf60090427a442fa61e20f45ec6d0f348f6684fd32
+7865bb94878bac2960a60393588ce3c0e92d6d8eda6c4ac2da5fd4d2fbffa48f:9398f8937e1821:b8d60310a2c5cc322ed412f340c3fc05723c446c47cc529f7e914916a5cb7d78e8af8400a6d07d62bc280daca12988cb1073a88ea7b4aa2dff821ae011342aa8a8de691ddd370a8ba942fd5cc6892acec84db889f6421bb1d71f02f5b7830a0a
+97ec105f9f2487fa4b360eb484c4398add4c1fe8e274853e530292290e9b7a59:00dd6efc58fcd4ee:86c7fd60798ddc58d59de487a1ac4221e61efe70c188e78ac50b4d89ea022b592e472895595aa4725c9be82770cc05050fb0feacd6e1a3c062dfed9e6e63ae58838025cae35dcd8b1eaa90a3714e800b2cd0740d7262119e7abec3b5822d4497
+8e9b0e1280b0433182df7eca995a7279e704f728a88ad0b26518ed0a19f62113:1b3d4c68e007f478:ab1832ae67d695f941decf959ebbce93bb33e70d60dfb53321f582f81be7d4177d0aef680c56a587e905c051355a78ad14574e0adcb083e2d6c972dbc54b68290abfc8c7abb9472ee210078eb62a3148764defb967768ab5be36d36c5aaf6455
+281c1297034c8aaa2ea6368dd038833429673b99dd4da4622908de8d9674f99d:033d69a90f6073fceb:8bd05333f0d076558b8a25a75b76b14af7454f69452918d363a905a49089663e23c0ede69b4882790178a02ff83b8a3d0c945e6ce0e18c5c3abfb22c32e2bee71145fd319f4daef46463471df9691a372a8f30427c427fb025155109269ef363
+6fbbae45973a06226abf29b6d978429cc2775b4af6c736f6fa1eecb042c3b089:b28bfd61695d25590c:90f9298f281b350add0e8b1789e99d38a42021ea971d1a0b1a28f8d11906602bd0a22eeee4b149443541f149721a926b0ddd2a496a88ac47a9f59e0a80aa91f88baa129035d2f2d38028ab024ac38ec0ae1768c1bcd156c2349a26e01b94a516
+91a60d4b2440622e10f5ba7dc9585894b2125980fd5072cec4bbcd47ea49c57a:00581bba4bc7f26227a7:a95a631b6ea74646d9659f0d27a1e8c877e4018d47f81a32d0d0b203a724b980597880a84cdbe88cf41be05a58101e7a11b6de7b9bf7433e6c947e571b595b4496fff37f8a48d3eccab904ee824b31dd984c3f6c2a19acb52e895f1e326e788e
+b211045d27b3c191a7961f521dedbb6ac8f6a362ab19ec28969d583c9a2eb128:e02c048d0609137492b9:a1e3e50c7a70c9d1028996c5bc79343c5780b16310a8b930704d3107e93bc92f7b927393fcf55d64461369f95aff557d0f346db8d83d02f0d914b50b706908cb631114c279be622bbc801bf5bd93245827a3c7ac06a30fa88e579ba2c5adbf99
+342fb513e70e2a7cdee072a9d8c1cfc86aa9691687dbef91fca2d15870e4adaa:011ddb2e7d45df2e05fb8a:96324a72624c99ae74fc334cb8fe70885d7e9c840e4608e5b19a8a5ef8fe68277e7cac7c4b6889e206f6244dc49fc19a0a3ac2992e51d0f0076a528fa6c11afb4a3f127286714c1548a3c4c9eac7e67eb32bcd2c480e2c7d36504a5fa52d6ea1
+498f8139fa03ac326e5ff321a9c8083d22eb048de74fcec128de3621a1dd5675:64024e14b436cb94e3209c:8723e4effda2455dd5d552bcf6116f88dd70187b031edb7660fa673ce22bd0fbe9ccaf28be6d9c78b783fa6310a0fda00b29cbce1adcef4204d31694bb47cc84de102d2dfab833e907887bcc8371119244b5b69b791c9dcd667e899971a37295
+e5bcc31a88b1d23772bb5a282b8d8f7c0dd645b45b940027c1111ee13e62cfdf:00ca1d50caa232ab9ad64644:ab1e90fecee91a4c12537041281e91190e8bba02d503c491da48ab7b2fc9af11b01b168c83154c04f59c3e6d815665d6120d2547f7fba57d43ad9993c99e54c0b5488166c41416e29e9588d6b7e6d67c7d93c9be7ba3c7d769e0ccedec71b3a4
+e5bfacb0667cd3db0634fd1eaa35b362d827a205db6cdce6daecbd83413ac6cf:3f1e6ffc1d7ec3e890d52615:ac3dcdb2751d982d80b77a749cf2f1f698f4dee8c9007043766c602104cbb0f633a4ce437098775062bf64aff77b2d66071dbc770e6ea04b11809f24ef50e6ec3ae5a58d58896bf9e78de80194eb67ce0d44e0232014ec300b63f90ef5c335bb
+055873520343a11f937aa23abfdfee0d1929c461bd2fcfc85d8d07ef44230c69:04f00076b77983d6ee7ab6979d:afd0d6908f62ce579dde390b463d535dcfd1f5ee6664d46a583952c50178a61f15cf072153a21b4e6044dece53a755b1025170d84046c57252ea6c0a9c45ca42b0c77544e80856634e552c1e2b86eabf1f92535e1b27ea43281f8dc3a8672211
+d58dd7364d214cd9ca9a5188ff8ad95486f65bf642d857c902fc6fd32a843510:49c83ddfa5b465abca1a8b5c78:a087f6bb963265cb95ff4914d4bae832a4fc89ff0616bcd8a529badca39a2c85b0ff3e1c418ec7979bcaf93a6d3dfc35108c420956c0795bdd81d2ce6f53a2f0a0bc37876db80bd0b59ce2210404a5c84d16330621aaaaad718e518dff1ef3cb
+13ed1173e146edb9ae6a77e289155354d6e0107aa2fcd4dc89441619553448a3:07c50e920e060f06243084d32afe:a89faa2c99e76386d80f709e1af822e830385d07b0cc4bf8b46315273f0b11c9f77845e431d5bbb86d07e4b0e15c66bb1958e8d0728a0a0961e5f233fcba72278f5b0ffbbd67fbf62aa7b7a1572d9dababed755a60d37906dc30bdfc3d9d4c2e
+5c3f7aef904cd9aa5cf093f993f49d46c3f20b7450552d52b23569239849f31b:6f455d61ee48d1990ec61dd70dbd:aaede5d58e5c71c170b2fbff350cb596bf43f2d0ee6b0e83f8863350ea4fd756129150e856c83e45734db8649a3617150c4a7a37ec596d89ff6cc6749dbe6d54f41cb36662279b3a82335e3f4b946afd94740e3214e93a45643bbabdac93a25c
+00cc17223e74b58d2e465bad2f5d0ecc5a85081d143fc4b8ab8eb10b44c6c45f:0800350f624966388e327b17cbb9fa:8333c0c7d9da5f79c67ed5fd13d92bbc91c5680837cd0cf816f2876106720a93323477ba28dbce0f554ffc0f37db9fc20386aa12d005be7a2ce5a660ef8ff46c7381bd0446cabcc4a3f4b8b75b9608615ab2497beb425415c778c278f38a6d81
+21fa64295c0fc47d81f69ba31d4661604c4d9eae6d2077c094ff758b1757e3c1::845c89e3bc5350275cc5b2669bda8ae127b8bf731517bb1bd5ebf0670add6df037f6b8c382aa03f729c5e8049e817dab0cc310e8af80d78cff447f034d32e7e7a1e8f27c8df390c5b640a7e341d6ab94311c4ae35a754f3990371c9186f97f0e
+dd7466232c0fc5581e319721d4e0c7b773417432b0a0b756c3dc4e5cdff4723b:06:95f8a6c56e2de4742144e2213e13411f1a2d03ca783e509353276292fc97e087062b3050e967593e569e6ef80741adae0c5a7ab5bf0b0f0e7cd92d5e17181176ec2fe111e8306b9643901e228f0187bc9d429ca8cbd23a39be4bbb99bf29d84b`
+  .split('\n')
+  .map((l) => l.split(':'));
+
+export interface BenchmarkResult {
+  pairing: bls.Fp12;
+  publicKey: Uint8Array;
+  signature: bls.PointG2;
+  verified: boolean;
+  aggregatePublicKey: bls.PointG1;
+  aggregateSignature: bls.PointG2;
+  hashG1: bls.PointG1;
+  hashG2: bls.PointG2;
+  vectorPublicKeys: Uint8Array[];
+}
+
+export async function runNobleBenchmark(): Promise<BenchmarkResult> {
+  let lastPairing: bls.Fp12 | undefined;
+  let lastPublicKey: Uint8Array | undefined;
+  let lastSignature: bls.PointG2 | undefined;
+  let lastVerified: boolean | undefined;
+  let lastAggregatePublicKey: bls.PointG1 | undefined;
+  let lastAggregateSignature: bls.PointG2 | undefined;
+  const x = 1;
+
+  const priv = '28b90deaf189015d3a325908c5e0e4bf00f84f7e639b056ff82d7e70b6eede4c';
+  const pubs = G2_VECTORS.map((v) => bls.getPublicKey(v[0]));
+  const sigs = G2_VECTORS.map((v) => v[2]);
+
+  const p1 = bls.PointG1.BASE.multiply(0x28b90deaf189015d3a325908c5e0e4bf00f84f7e639b056ff82d7e70b6eede4cn);
+  const p2 = bls.PointG2.BASE.multiply(0x28b90deaf189015d3a325908c5e0e4bf00f84f7e639b056ff82d7e70b6eede4dn);
+
+  for (var i = 0; i < x * 4; i++) {
+    lastPairing = bls.pairing(p1, p2);
+  }
+
+  for (var i = 0; i < x * 50; i++) {
+    lastPublicKey = bls.getPublicKey(priv);
+  }
+
+  const pubp = bls.PointG1.fromPrivateKey(priv);
+  const msgp = await bls.PointG2.hashToCurve('09');
+  const sigp = bls.PointG2.fromSignature(await bls.sign('09', priv));
+
+  for (var i = 0; i < x * 4; i++) {
+    lastSignature = await bls.sign(msgp, priv);
+  }
+
+  for (var i = 0; i < x * 4; i++) {
+    lastVerified = await bls.verify(sigp, msgp, pubp);
+  }
+
+  const pub32 = pubs.map(bls.PointG1.fromHex);
+  const sig32 = sigs.map(bls.PointG2.fromSignature);
+
+  for (var i = 0; i < x * 50; i++) {
+    lastAggregatePublicKey = bls.aggregatePublicKeys(pub32);
+  }
+
+  for (var i = 0; i < x * 50; i++) {
+    lastAggregateSignature = bls.aggregateSignatures(sig32);
+  }
+
+  const hashG1 = await bls.PointG1.hashToCurve('abcd');
+  const hashG2 = await bls.PointG2.hashToCurve('abcd');
+  if (lastPairing === undefined || lastPublicKey === undefined || lastSignature === undefined ||
+      lastVerified === undefined || lastAggregatePublicKey === undefined || lastAggregateSignature === undefined)
+    throw new Error('Noble benchmark did not produce all operation results');
+  return {
+    pairing: lastPairing, publicKey: lastPublicKey, signature: lastSignature,
+    verified: lastVerified, aggregatePublicKey: lastAggregatePublicKey,
+    aggregateSignature: lastAggregateSignature, hashG1, hashG2, vectorPublicKeys: pubs
+  };
+}
