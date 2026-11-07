@@ -33,6 +33,8 @@ import { TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "../gate/test-artifacts.t
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { cpus } from "node:os";
 import { machineBudget } from "./selection.ts";
+import { nodePin } from "../bootstrap/node.ts";
+import { nodeToolchain } from "../gate/toolchain.ts";
 
 export const PROFILE = "nts-dev";
 export type StepResult = {
@@ -57,6 +59,8 @@ export type RunOptions = {
   owned?: Readonly<Record<string, string>>;
   /** How many times memory pressure may send a step back before a person is asked. */
   attempts?: number;
+  /** Installed toolchains; private fixtures supply their own installation root. */
+  nodeInstallations?: string;
   /** The most any step may run, in seconds: the landing check's ceiling (step-bound.ts's landingCeiling). */
   ceiling?: number;
 };
@@ -82,7 +86,6 @@ export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJ
 export function runLanding(options: RunOptions): Ran {
   const started = Date.now();
   const { tree, target, run } = options;
-  const launcher = launcherEnvironment(options.env);
   mkdirSync(run, { recursive: true });
   const results: StepResult[] = [];
   const finish = (state: Ran["state"], message: string): Ran => {
@@ -90,6 +93,10 @@ export function runLanding(options: RunOptions): Ran {
     writeFileSync(join(run, "landing.json"), JSON.stringify(ran, null, 2) + "\n");
     return ran;
   };
+  let selected: ReturnType<typeof nodeToolchain>;
+  try { selected=nodeToolchain(nodePin(tree),launcherEnvironment(options.env),options.nodeInstallations); }
+  catch(error) { return finish("held", String(error)); }
+  const launcher=selected.env;
   const owned = {
     NTS_GATE_RUN_DIR: run, CARGO_TARGET_DIR: target, CARGO_INCREMENTAL: "1", NTS_TEST_PROFILE: PROFILE,
     NTS_BIN: join(target, PROFILE, "nts"), NTS_SUITE_BIN: join(target, PROFILE, "nts-suite"), NTS_CHECKERS: "1",

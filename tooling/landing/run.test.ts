@@ -21,6 +21,7 @@ import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.t
 import {moduleClosure} from "../gate/module-closure-fixture.ts";
 import {launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
+import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 
 const GATE = fileURLToPath(new URL("../gate/", import.meta.url));
 
@@ -37,6 +38,7 @@ function fixture(t: TestContext) {
     else symlinkSync(original, target);
   }
   oracleWorkspaceFixture(t,tree);
+  writeFileSync(join(tree,".tool-versions"),`nodejs ${process.versions.node}\n`);
   symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
   const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], { encoding: "utf8" }).trim();
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh
@@ -81,8 +83,33 @@ exec node "$(dirname "$0")/run.mjs" "$@"
     tree, target, run, commit, steps, build: [build], env: { ...process.env, HOME: home }, memory: () => 64, pause: () => {},
     owned: { NTS_GATE_SLOTS: "4", NTS_GATE_MEM_GB: "8", NTS_MEMINFO: meminfo }, ...extra,
   });
-  return { tree, target, run, controls, control, options, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
+  return { own, tree, target, run, controls, control, options, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
 }
+
+test("a landing launches the candidate's pinned Node and forwards it to the build and child commands",t=>{
+  const f=fixture(t),pin="99.1.0",installations=join(f.own,"installed"),log=join(f.own,"node-launches.jsonl");
+  const node=nodeInstallation(installations,pin,log);
+  writeFileSync(join(f.tree,".tool-versions"),`nodejs ${pin}\n`);
+  const ran=runLanding(f.options(["build","rustfmt"],{nodeInstallations:installations,
+    build:["sh","-c",`node --version > "$CARGO_TARGET_DIR/build-node"; mkdir -p "$CARGO_TARGET_DIR/${PROFILE}"; printf '#!/bin/sh\\n' > "$NTS_BIN"; chmod +x "$NTS_BIN"`]}));
+  assert.equal(ran.state,"green",ran.message);
+  assert.equal(readFileSync(join(f.target,"build-node"),"utf8"),"v"+pin+"\n");
+  const calls=readFileSync(log,"utf8").trim().split("\n").map(line=>JSON.parse(line) as string[]);
+  assert.ok(calls.some(args=>args[0]===join(f.tree,"tooling/gate/run.mjs")),"the runner is launched through the selected absolute binary");
+  const environment=JSON.parse(readFileSync(join(f.run,"summary.json"),"utf8")).environment;
+  assert.equal(environment.host.PATH.split(":")[0],dirname(node));
+});
+
+test("missing and wrong-version candidate Node installations hold without a launcher fallback",async t=>{
+  for(const present of [false,true])await t.test(present?"wrong version":"not installed",()=>{
+    const f=fixture(t),pin="99.1.0",installations=join(f.own,"installed");
+    writeFileSync(join(f.tree,".tool-versions"),`nodejs ${pin}\n`);
+    if(present)nodeInstallation(installations,pin,join(f.own,"node-launches.jsonl"),"98.0.0");
+    const ran=runLanding(f.options(["rustfmt"],{nodeInstallations:installations}));
+    assert.equal(ran.state,"held");assert.match(ran.message,/pinned Node 99\.1\.0/);
+    assert.match(ran.message,/asdf install nodejs 99\.1\.0/);assert.deepEqual(f.calls(),[]);
+  });
+});
 
 test("a candidate gate replaces old main's foreign oracle handoff but holds its own changed seal",async t=>{
   for(const foreign of [true,false])await t.test(foreign?"foreign root gets a fresh capture":"same-root corruption holds",async()=>{

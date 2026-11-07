@@ -8,8 +8,9 @@ import {pathToFileURL} from 'node:url';
 const ROOT=resolve(import.meta.dirname,'../..');
 export const DEPENDENCIES=['openssl','brotli','zlib','zstd','uv'] as const;
 export const digest=(bytes:Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
-export function nodePin(root=ROOT):string {
- const entries=readFileSync(join(root,'.tool-versions'),'utf8').split('\n').filter(line=>/^nodejs\s/.test(line));
+export function nodePin(root=ROOT,revision?:string):string {
+ const text=revision===undefined?readFileSync(join(root,'.tool-versions'),'utf8'):execFileSync('git',['-C',root,'show',revision+':.tool-versions'],{encoding:'utf8'});
+ const entries=text.split('\n').filter(line=>/^nodejs\s/.test(line));
  const pin=entries.length===1?/^nodejs\s+(\d+\.\d+\.\d+)\s*$/.exec(entries[0])?.[1]:undefined;
  if(!pin)throw Error('.tool-versions must name exactly one Node release');
  return pin;

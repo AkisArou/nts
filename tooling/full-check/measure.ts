@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { fullEnvironment } from "../census/full-plan.ts";
 import { PLATFORM_PROGRAMS, PLATFORMS_UNRUN_OK, unrunPlatforms, type UnrunPolicy } from "../gate/verdict-policy.ts";
 import type { Layout } from "./state.ts";
+import {nodePin} from "../bootstrap/node.ts";
+import {nodeToolchain} from "../gate/toolchain.ts";
 
 /**
  * A step's result as the full check reads it: a skip the policy accepts is a
@@ -76,11 +78,12 @@ export type Gate = {
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
 /** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
-export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void): Gate {
+export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string}={}): Gate {
   const pinned = join(controller, "tooling/gate/pinned.sh");
   const launch = (commit: string, run: string, steps: readonly string[], extra: NodeJS.ProcessEnv) => {
     mkdirSync(run, { recursive: true });
-    const env = { ...fullEnvironment({ candidate: false, commit, label: "MAIN", run, tree: layout.tree, target: layout.target }, [...steps], process.env), ...extra };
+    const selected=nodeToolchain(nodePin(controller,commit),process.env,options.nodeInstallations);
+    const env = { ...fullEnvironment({ candidate: false, commit, label: "MAIN", run, tree: layout.tree, target: layout.target }, [...steps], selected.env), ...extra };
     const out = openSync(join(run, "full-check.log"), "a");
     try {
       return spawnSync("sh", [pinned, commit], { cwd: controller, env, stdio: ["ignore", out, out] });
@@ -93,9 +96,10 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       const setup = join(layout.runs, `setup-${commit.slice(0, 12)}-${stamp()}`);
       const ready = launch(commit, setup, [], { NTS_GATE_SETUP_ONLY: "1" });
       if (ready.status !== 0) throw new Error(`pinned.sh could not set ${commit.slice(0, 12)} up (exit ${ready.status}); see ${setup}`);
-      const list = spawnSync("sh", ["tooling/gate/all.sh", "--list"], { cwd: layout.tree, encoding: "utf8" });
+      const selected=nodeToolchain(nodePin(layout.tree),process.env,options.nodeInstallations);
+      const list = spawnSync("sh", ["tooling/gate/all.sh", "--list"], { cwd: layout.tree, env:selected.env, encoding: "utf8" });
       if (list.status !== 0) throw new Error(`all.sh --list at ${commit.slice(0, 12)}: ${list.stderr.trim()}`);
-      const wide = spawnSync(process.execPath, ["--input-type=module", "-e", 'const { WIDE } = await import("./tooling/gate/owed.mjs"); process.stdout.write(JSON.stringify([...WIDE]))'], { cwd: layout.tree, encoding: "utf8" });
+      const wide = spawnSync(selected.node, ["--input-type=module", "-e", 'const { WIDE } = await import("./tooling/gate/owed.mjs"); process.stdout.write(JSON.stringify([...WIDE]))'], { cwd: layout.tree, env:selected.env, encoding: "utf8" });
       if (wide.status !== 0) throw new Error(`owed.mjs's WIDE at ${commit.slice(0, 12)}: ${wide.stderr.trim()}`);
       rmSync(setup, { recursive: true, force: true });
       return { all: list.stdout.split("\n").filter(Boolean), wide: JSON.parse(wide.stdout) as string[] };
@@ -104,7 +108,12 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       if (!steps.length) throw new Error("no steps to run: an empty NTS_GATE_STEPS is every step");
       const run = join(layout.runs, `${label}-${commit.slice(0, 12)}-${stamp()}`);
       log(`measuring ${steps.join(" ")} at ${commit.slice(0, 12)}; logs ${run}`);
-      const result = launch(commit, run, steps, {});
+      let result:ReturnType<typeof spawnSync>;
+      try { result = launch(commit, run, steps, {}); }
+      catch(error) {
+        const reason=String(error);log(reason);
+        return {commit,run,steps:Object.fromEntries(steps.map(step=>[step,"HELD" as const])),reasons:Object.fromEntries(steps.map(step=>[step,reason])),verdict:"held"};
+      }
       if (result.error) log(`pinned.sh did not start: ${result.error.message}`);
       const read = readSummary(run, commit, steps);
       return { commit, run, ...read, verdict: verdictOf(read.steps) };

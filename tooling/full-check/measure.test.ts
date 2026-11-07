@@ -5,11 +5,14 @@
 // step unless the policy lets that platform stay unrun, and a summary of
 // another commit or from a non-canonical environment vouches for nothing.
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { readSummary, verdictOf } from "./measure.ts";
+import { pinnedGate, readSummary, verdictOf } from "./measure.ts";
+import {layout} from "./state.ts";
+import {scratchRepo} from "../landing/scratch-repo.ts";
+import {nodeInstallation} from "../gate/toolchain-fixture.ts";
 
 const COMMIT = "1234567890ab".padEnd(40, "c");
 
@@ -28,6 +31,27 @@ const steps = [
   { name: "rc", verdict: "INSTRUMENT", reason: "memory pre-check" },
   { name: "llvm", verdict: "NOT RUN", reason: "build failed" },
 ];
+
+test("the full check launches each measured commit with its pin, including historical commits",t=>{
+  const repo=scratchRepo(t,"full-check-toolchain"),paths=layout(repo.dir),installations=join(repo.dir,"installed"),log=join(repo.dir,"node-launches.jsonl");
+  for(const pin of ["99.1.0","99.2.0"])nodeInstallation(installations,pin,log);
+  const script=`#!/bin/sh
+node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";const run=process.env.NTS_GATE_RUN_DIR;writeFileSync(join(run,"observed-node"),process.env.PATH);writeFileSync(join(run,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
+`;
+  const old=repo.commit({".tool-versions":"nodejs 99.1.0\n","tooling/gate/pinned.sh":script},"first pin");
+  const next=repo.commit({".tool-versions":"nodejs 99.2.0\n"},"next pin");
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations});
+  for(const [commit,pin] of [[old,"99.1.0"],[next,"99.2.0"]]){
+    const result=gate.run(commit!,["tooling"],pin!);
+    assert.equal(result.verdict,"green",JSON.stringify(result.reasons));
+    assert.equal(readFileSync(join(result.run,"observed-node"),"utf8").split(":")[0],join(installations,pin!,"bin"));
+  }
+  const missing=repo.commit({".tool-versions":"nodejs 99.3.0\n"},"missing pin");
+  const result=gate.run(missing,["tooling"],"missing");
+  assert.equal(result.verdict,"held");assert.match(result.reasons.tooling!,/asdf install nodejs 99\.3\.0/);
+  const invocations=readFileSync(log,"utf8").trim().split("\n").map(line=>JSON.parse(line) as string[]);
+  assert.equal(invocations.filter(args=>args.includes("--input-type=module")).length,2,"both measured pins execute their private binary");
+});
 
 test("each step's verdict, as the full check reads it", t => {
   const run = summary(t, { verdict: "red", identities: { commit: COMMIT.slice(0, 12) }, environment: { canonical: true }, steps });

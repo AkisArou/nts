@@ -5,6 +5,6 @@
     "rootDir": ".",
     "composite": false
   },
-  "files": ["owner-emission-calls.ts", "owner-emission-calls.test.ts", "module-closure-fixture.ts", "module-closure-fixture.test.ts", "account-home-fixture.test.ts"],
+  "files": ["owner-emission-calls.ts", "owner-emission-calls.test.ts", "module-closure-fixture.ts", "module-closure-fixture.test.ts", "account-home-fixture.test.ts", "toolchain.ts", "toolchain-fixture.ts"],
   "include": []
 }
