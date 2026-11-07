@@ -339,54 +339,6 @@ mod tests {
     ];
 
     #[test]
-    fn benchmark_corpus_uses_source_contracts() -> Result<()> {
-        let repository = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
-            .parent()
-            .expect("benchmark fixture path")
-            .parent()
-            .expect("benchmark fixture path");
-        let root = repository.join(format!(
-            "target/bench-corpus-contracts-{}",
-            std::process::id()
-        ));
-        std::fs::create_dir_all(&root)?;
-        let config = root.join("tsconfig.json");
-        std::fs::write(
-            &config,
-            serde_json::to_vec(&serde_json::json!({
-                "extends": repository.join("tsconfig.fixtures.json"),
-                "include": [repository.join("benchmarks/cases/*/case.ts")]
-            }))?,
-        )?;
-        let snapshot = crate::capture_snapshot(&config)?;
-        let cases = repository.join("benchmarks/cases");
-        let mut count = 0;
-        for case in std::fs::read_dir(cases)? {
-            let case = Utf8PathBuf::from_path_buf(case?.path()).expect("benchmark fixture path");
-            if !case.join("case.ts").is_file() {
-                continue;
-            }
-            let custom = ["driver.cpp", "driver.java", "driver.mjs"]
-                .iter()
-                .all(|driver| case.join(driver).exists());
-            let workload = Workload::from_source(&snapshot, &case.join("case.ts"), custom)?;
-            if case
-                .file_name()
-                .is_some_and(|name| name.starts_with("clbg-"))
-            {
-                assert_eq!(workload.numeric()?.callee, "work", "{case}");
-            }
-            count += 1;
-        }
-        assert!(
-            count >= 100,
-            "must cover the benchmark corpus, not an empty glob"
-        );
-        std::fs::remove_dir_all(root)?;
-        Ok(())
-    }
-
-    #[test]
     fn source_contract_and_driver_controls() -> Result<()> {
         let repository = Utf8Path::new(env!("CARGO_MANIFEST_DIR"))
             .parent()

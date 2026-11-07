@@ -108,6 +108,10 @@ ids, kept so the records that cite them still resolve.
 - The JVM backend never finishes compiling `jetstream-threejs`: its compile
   record says `timeout` once the full check writes it. Reduce it to an
   outcome fixture.
+- Type-checking `jetstream-json-stringify-inspector`'s data (7.3 MB of one
+  object literal, as upstream recorded it) takes minutes on the native
+  checker: measure it against `tsc` on the same file, and report it upstream
+  if the cost grows faster than the literal.
 - Array holes have no representation (#143).
 - A class exported from an LLVM addon makes it fail to load (#181).
 
