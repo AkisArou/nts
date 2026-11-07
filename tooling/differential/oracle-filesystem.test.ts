@@ -315,7 +315,7 @@ test('exact captured module files grant no directory or sibling lookup domain',(
     const domain=new OracleResolutionDomain(record),request={nodeMajor,mode:'esm' as const,specifier:file,direct:file,parent:'/capture/app/main.mjs'};
     assert.equal(domain.prove({...request,direct:'/capture/shims/unobserved.mjs'}).complete,false);
     assert.equal(domain.prove({...request,direct:'/capture/shims'}).complete,false);
-    const proof=domain.prove(request);assert.equal(proof.complete,true,proof.reason);
+    const proof=domain.prove(request);assert.equal(proof.complete,true,proof.reason??'exact captured file must resolve');
     assert.ok(proof.queries.some(query=>query.path===file));assert.ok(proof.queries.some(query=>query.path==='/capture/shims/package.json'));
     const missingScope=new OracleResolutionDomain({...record,scopeAbsent:[]});
     assert.equal(missingScope.prove(request).complete,false,'exact bytes cannot replace unknown package scope');
