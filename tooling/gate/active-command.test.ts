@@ -36,7 +36,9 @@ test("the exit probe reads a reaped child and preserves other read errors",t=>{
 test("process activity parses group identity and all user/sys CPU including reaped children",()=>{
   const fields=Array(20).fill("0");fields[0]="S";
   for(const [at,value] of [[2,41],[3,41],[11,5],[12,7],[13,11],[14,13],[19,123]])fields[at]=String(value);
-  assert.deepEqual(processActivity(`41 (a name with ) in it) ${fields.join(" ")}`),{group:41,session:41,cpu:36,own:12,started:123});
+  assert.deepEqual(processActivity(`41 (a name with ) in it) ${fields.join(" ")}`),{group:41,session:41,cpu:36,own:12,started:123,runnable:false});
+  fields[0]="R";
+  assert.equal(processActivity(`41 (waiting for a CPU) ${fields.join(" ")}`).runnable,true,"state R is running or runnable");
   assert.throws(()=>processActivity("unreadable"),/invalid/);
 });
 
@@ -56,6 +58,23 @@ test("one activity snapshot serves concurrent groups without sharing their progr
     records.get(41)!.started++;
     sampler.sample();assert.equal(errors.length,1);assert.match(String(errors[0]),/identity changed/);
     assert.deepEqual(observed,[[17,27],[0,0,0]]);
+  }finally{cancel.forEach(stop=>stop());}
+});
+
+test("a group with a runnable process is reported as runnable, without CPU progress",()=>{
+  // A loaded machine can keep a busy process waiting for a CPU past the idle
+  // guard: it makes no CPU progress then, but its state says it is not idle.
+  const records=new Map([
+    [61,{group:61,session:61,cpu:5,started:300,runnable:false}],
+    [62,{group:62,session:61,cpu:0,started:301,runnable:true}],
+    [71,{group:71,session:71,cpu:5,started:400,runnable:false}],
+  ]);
+  const sampler=new CommandActivitySampler(()=>records);
+  const seen:[number,boolean][][]=[[],[]];
+  const cancel=[61,71].map((group,index)=>sampler.watch({group,started:group===61?300:400,pollMs:5000,sample:(cpu,_own,runnable)=>seen[index].push([cpu,runnable]),broken:error=>{throw error;}}));
+  try{
+    sampler.sample();records.get(62)!.runnable=false;sampler.sample();
+    assert.deepEqual(seen,[[[5,true],[5,false]],[[5,false],[5,false]]]);
   }finally{cancel.forEach(stop=>stop());}
 });
 
@@ -98,7 +117,7 @@ test("CPU-busy work remains live without output beyond the idle guard",async t=>
 test("an idle command is typed NOT RUN hung while completed exits keep their meaning",async t=>{
   const {root,env}=fixture(t);
   const idle=await activeCommand(process.execPath,["-e","Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)"],{cwd:root,env,idleMs:2000,pollMs:50});
-  assert.match(idle.hung!,/no output or process-group CPU activity/);
+  assert.match(idle.hung!,/no output, process-group CPU activity or runnable process/);
   const frame=readStepInstrument(env.NTS_GATE_STEP_RESULT,"c-compiles","active-control");
   assert.equal(frame?.verdict,"NOT RUN");assert.equal(frame?.kind,"hung");
   rmSync(env.NTS_GATE_STEP_RESULT);
