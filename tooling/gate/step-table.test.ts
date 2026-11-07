@@ -40,7 +40,9 @@ test("the runner refuses a table whose steps wait for one another, before any st
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  : > ${JSON.stringify(started)}\nfi\n`);
-  const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: { NTS_GATE_STEPS: "clippy tests", CARGO_TARGET_DIR: join(own, "target") } });
+  // An ample memory reading of its own, as every test that starts a real runner gives it.
+  const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
+  const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: { NTS_GATE_STEPS: "clippy tests", CARGO_TARGET_DIR: join(own, "target"), NTS_MEMINFO: meminfo } });
   const refused = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(refused.status, 2, refused.stdout + refused.stderr);
   assert.match(refused.stderr, /run\.mjs: steps wait for one another: (clippy -> tests -> clippy|tests -> clippy -> tests)/);

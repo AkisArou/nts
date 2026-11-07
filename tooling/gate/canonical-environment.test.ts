@@ -21,6 +21,12 @@ test("upstream Rayon limits belong only to the measured compile environment",t=>
   assert.throws(()=>assertLandingEnvironment({RAYON_NUM_THREADS:"1"}),/RAYON_NUM_THREADS/);
 });
 mkdirSync(scratch,{recursive:true});
+/** An inner run admits against this reading, never the host's memory: inside a
+ * full gate the host can sit below the floor, and admission would wait. */
+function ampleMemory(run:string):string {
+  const meminfo=join(run,"meminfo");writeFileSync(meminfo,"MemAvailable: 64000000 kB\n");return meminfo;
+}
+
 function fixture(t:{after(fn:()=>void):void}) {
   const run=mkdtempSync(join(scratch,"run-"));t.after(()=>rmSync(run,{recursive:true,force:true}));
   return {run,base:{PATH:process.env.PATH,HOME:homedir(),JAVA_HOME:"/jdk with spaces",CARGO_HOME:"/cargo",RUSTUP_HOME:"/rustup"}};
@@ -114,7 +120,7 @@ test("a failed Node heap reports its specific diagnostic",()=>{
 
 
 test("the real runner records the environment and distinguishes verdict failures from instruments",t=>{
-  const {run,base}=fixture(t),root=join(run,"repo"),gate=join(root,"tooling/gate");
+  const {run,base}=fixture(t),meminfo=ampleMemory(run),root=join(run,"repo"),gate=join(root,"tooling/gate");
   mkdirSync(gate,{recursive:true});
   const source=new URL("./",import.meta.url).pathname;
   for (const name of readdirSync(source)) {
@@ -134,7 +140,7 @@ fi
 `);
   for (const code of [0,7,86,87,88,89,90,91,92]) {
     writeFileSync(join(root,"result-code"),String(code));
-    const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:"rustfmt",CARGO_TARGET_DIR:join(run,"target")}});
+    const directory=join(run,"home/.cache",`row-${code}`),planned=gateEnvironment({...base,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,HOME:join(run,"home"),LANG:"en_US.UTF-8",NODE_OPTIONS:"--max-old-space-size=8192",PRIVATE_TOKEN:"hidden"},{run:directory,owned:{NTS_GATE_STEPS:"rustfmt",CARGO_TARGET_DIR:join(run,"target"),NTS_MEMINFO:meminfo}});
     const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:root,env:planned.env,encoding:"utf8"});
     assert.equal(actual.status,code===0?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(directory,"summary.json"),"utf8"));

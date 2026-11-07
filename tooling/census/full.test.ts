@@ -1,4 +1,4 @@
-import { launcherPolicyNames, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
+import { gateEnvironment, launcherPolicyNames, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
 import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
@@ -90,7 +90,10 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
     assert.equal(env.NTS_GATE_ACCEPT_SKIP,STANDING_GATE_POLICY.NTS_GATE_ACCEPT_SKIP);
     assert.equal(env.NTS_GATE_ACCEPT_SKIP,"on-device");
     assert.equal(JSON.parse(env[ENVIRONMENT_CONTEXT]!).report.canonical,true);
-    const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:f.root,env,encoding:"utf8"});
+    // The inner run admits against an ample reading, never the host's memory, which a full gate can hold below the floor.
+    const meminfo=join(f.directory,"meminfo");writeFileSync(meminfo,"MemAvailable: 64000000 kB\n");
+    const admitted=gateEnvironment(env,{run:plan.run,owned:{NTS_MEMINFO:meminfo}}).env;
+    const actual=spawnTest(process.execPath,[join(gate,"run.mjs")],{cwd:f.root,env:admitted,encoding:"utf8"});
     const accepted=step==="on-device";
     assert.equal(actual.status,accepted?0:1,actual.stdout+actual.stderr);
     const summary=JSON.parse(readFileSync(join(plan.run,"summary.json"),"utf8"));

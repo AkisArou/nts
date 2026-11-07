@@ -57,6 +57,9 @@ const EXPERIMENTS = new Set([
   "NTS_RC_NAIVE", "NTS_BENCH_AGREE_FLOOR", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
   "NTS_KEEP_TEMP", "NTS_TRACE_LOWERING", "NTS_ARRIVALS", "NTS_DIFF_OBJECT_CACHE", "NTS_DIFF_NO_OBJECT_CACHE",
   "NTS_CENSUS_MEMORY_CAP_KB", "NTS_CENSUS_MIN_AVAILABLE_GB", "NTS_CENSUS_RUN_MAX_BYTES",
+  // The memory reading admission uses (admission.ts). A test gives its inner
+  // runs an owned one; set by a launcher, it makes the run an experiment.
+  "NTS_MEMINFO",
 ]);
 export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
