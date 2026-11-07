@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { spawnTest } from "../test-wait.ts";
 
-for (const relative of ["./tsconfig.json", "../../lanes/train-attribution/tsconfig.json"]) test(`the pinned checker accepts ${relative} with zero diagnostics`, () => {
+for (const relative of ["./tsconfig.json"]) test(`the pinned checker accepts ${relative} with zero diagnostics`, () => {
   const checker = fileURLToPath(new URL("../../../node_modules/typescript/bin/tsc", import.meta.url));
   const project = fileURLToPath(new URL(relative, import.meta.url));
   const result = spawnTest(process.execPath, [checker, "--project", project], { encoding: "utf8" });

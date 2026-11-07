@@ -11,7 +11,7 @@ export const GATE_ENVIRONMENT: readonly Variable[] = HOST_CAPABILITIES.map(name 
   name, ...(name === "JAVA_HOME" ? {capability:"jvm" as const} : name === "ANDROID_HOME" ? {capability:"android" as const} : name === "DEBUGINFOD_URLS" ? {capability:"valgrind" as const} : {}),
 }));
 
-export const GATE_LAUNCHER = "node tooling/lanes/land-unit.ts <commit> <name>";
+export const GATE_LAUNCHER = "node tooling/landing/check.ts <commit>";
 
 /** Each assignment is one argv element, including values with spaces or $. */
 export function systemdEnvironment(env: NodeJS.ProcessEnv = process.env): string[] {

@@ -1,16 +1,19 @@
-import {launcherPolicyNames} from "../gate/canonical-environment.ts";
-// These gate helpers are exercised by all.sh's existing lanes/*.test.ts glob.
+// The CPUs reserved for measurement (4-5): every gate and heavy job keeps off
+// them, and a measurement waits for them to be quiet.
+//
+//   node --test tooling/gate/measurement-cpus.test.ts
+import {launcherPolicyNames} from "./canonical-environment.ts";
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { cpuList, cpuSubset, defaultCpus, formatCpus, gateCommand, gateCpus, inheritedCpus, selectScope, verifyCeiling } from "../gate/affinity.ts";
-import { coreIsQuiet, coreTicks, waitForQuiet } from "../gate/measurement.ts";
+import { cpuList, cpuSubset, defaultCpus, formatCpus, gateCommand, gateCpus, inheritedCpus, selectScope, verifyCeiling } from "./affinity.ts";
+import { coreIsQuiet, coreTicks, waitForQuiet } from "./measurement.ts";
 
-const WITH_LOCK = new URL("../gate/with-lock.sh", import.meta.url).pathname;
-const PINNED = new URL("../gate/pinned.sh", import.meta.url).pathname;
+const WITH_LOCK = new URL("./with-lock.sh", import.meta.url).pathname;
+const PINNED = new URL("./pinned.sh", import.meta.url).pathname;
 const stat = (at: number, busy: number[] = []) => [0, 4, 5, 16].map((cpu) => {
   const user = busy.includes(cpu) ? at : 0;
   return `cpu${cpu} ${user} 0 0 ${at - user} 0 0 0 0 0 0`;
@@ -35,8 +38,8 @@ test("counted.sh's default perf child inherits the restriction, with an explicit
     copyFileSync(new URL("../../runtime/jvm/test-vm-flags.txt", import.meta.url), join(dir, "runtime/jvm/test-vm-flags.txt"));
     const counted = join(dir, "tooling/bench/counted.sh");
     copyFileSync(new URL("../bench/counted.sh", import.meta.url), counted);
-    copyFileSync(new URL("../gate/affinity.ts", import.meta.url), join(dir, "tooling/gate/affinity.ts"));
-    for(const file of ["tooling-slice.ts","step-result.ts"])copyFileSync(new URL("../gate/"+file,import.meta.url),join(dir,"tooling/gate",file));
+    copyFileSync(new URL("./affinity.ts", import.meta.url), join(dir, "tooling/gate/affinity.ts"));
+    for(const file of ["tooling-slice.ts","step-result.ts"])copyFileSync(new URL("./"+file,import.meta.url),join(dir,"tooling/gate",file));
     writeFileSync(join(dir, "target/bench/probe.jvm/Case.java"), "return nts.gen.Program.work(in0);\nprivate static volatile double in0 = 1;\n");
     writeFileSync(join(dir, "bin/javac"), "#!/bin/sh\nexit 0\n");
     writeFileSync(join(dir, "bin/perf"), `#!/bin/sh
@@ -132,7 +135,7 @@ test("a failed actual scope launch is returned once, never retried as a taskset 
     const fake = join(dir, "systemd-run");
     writeFileSync(fake, '#!/bin/sh\necho attempt >> "$TEST_SCOPE_CALLS"\nexit 19\n');
     chmodSync(fake, 0o755);
-    const result = spawnSync(process.execPath, [new URL("../gate/affinity.ts", import.meta.url).pathname, "--launch-scope", "0-3,6-31", "sh", "-c", 'echo ran > "$1"', "_", ran], {
+    const result = spawnSync(process.execPath, [new URL("./affinity.ts", import.meta.url).pathname, "--launch-scope", "0-3,6-31", "sh", "-c", 'echo ran > "$1"', "_", ran], {
       env: { ...process.env, PATH: `${dir}:${process.env.PATH}`, TEST_SCOPE_CALLS: calls }, encoding: "utf8",
     });
     assert.equal(result.status, 19, result.stderr);

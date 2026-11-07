@@ -1,8 +1,7 @@
 import {spawn,spawnSync} from 'node:child_process';
 import {closeSync,openSync,readFileSync,statfsSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {homedir} from 'node:os';
-import {trainOwner} from '../lanes/train-service.ts';
+import {LANDING_HOME,Queue,serviceRunning} from '../landing/queue.ts';
 import {heapCommand,heapReport} from './layouts-heap.ts';
 import type {Adapter,Arm,Cell} from './layouts-sitting.ts';
 import {parseUserEvents} from '../gate/cputime.mjs';
@@ -25,12 +24,11 @@ export function conditions(directory:string) {
   const memory=/^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync('/proc/meminfo','utf8'));
   if(!memory)throw Error('MemAvailable missing');
   const disk=statfsSync(directory);
-  const owner=trainOwner(join(homedir(),'.cache/nts-land'));
-  let frozen:any=null;
-  try{frozen=JSON.parse(readFileSync(join(homedir(),'.cache/nts-land/frozen-train.json'),'utf8'));}catch(error){if(error.code!=='ENOENT')throw error;}
-  const train=owner?{id:owner.id,ownerPhase:owner.phase,gatePhase:frozen?.phase??null}:null;
+  // The change the landing check is checking, if any: its steps load the machine.
+  const status=serviceRunning()?new Queue(LANDING_HOME).status():null;
+  const landing=status&&status.state!=='idle'?{id:status.id??null,state:status.state}:null;
   return {utc:new Date().toISOString(),memGiB:Number(memory[1])/1024**2,diskGiB:disk.bavail*disk.bsize/1024**3,
-    load:readFileSync('/proc/loadavg','utf8').trim(),train};
+    load:readFileSync('/proc/loadavg','utf8').trim(),landing};
 }
 
 export async function admitted(directory:string) {

@@ -1,10 +1,9 @@
 // The culprit search: the first red commit among those since a part's last
 // green run, found by bisection over main's first parents.
 //
-// It is the prefix replay of tooling/lanes/train-attribution on a line instead
-// of a train: a candidate is measured with every culprit already found taken
-// out of it (reverted on top, in the object store), so one culprit cannot hide
-// another behind it. A culprit is known from two places: a revert of it in the
+// A candidate is measured with every culprit already found taken out of it
+// (reverted on top, in the object store), so one culprit cannot hide another
+// behind it. A culprit is known from two places: a revert of it in the
 // range (from then on the history itself takes it out), and the service's own
 // record of the reverts it has submitted and that have not landed yet.
 //

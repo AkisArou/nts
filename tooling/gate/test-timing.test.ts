@@ -11,8 +11,8 @@ test("every tooling test has only its exact reviewed timing sites", () => {
 });
 
 test("a shared test-fixture module is linted like the test files that import it", () => {
-  for (const name of ["land-fast.test.ts", "integrity.test.mjs", "land-test-fixture.ts", "selector-fixture.ts"]) assert.ok(isTestCode(name), name);
-  for (const name of ["land.ts", "test-timing.ts", "fixture-configs.mjs"]) assert.ok(!isTestCode(name), name);
+  for (const name of ["queue.test.ts", "integrity.test.mjs", "repository-fixture.ts", "registry-inputs-fixture.ts"]) assert.ok(isTestCode(name), name);
+  for (const name of ["queue.ts", "test-timing.ts", "fixture-configs.mjs"]) assert.ok(!isTestCode(name), name);
 });
 
 test("the lint rejects sleeps, aliased timers, clocks and short process deadlines", () => {

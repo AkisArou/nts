@@ -995,33 +995,14 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does a dry run still name a change's landing steps, its deferred steps and the estimate", run: "node tooling/landing/check.ts HEAD --dry-run" }],
   },
   {
-    // The landing and lane tools. No gate step runs `land.ts` or `lane.ts`:
-    // they run the gate rather than the other way round, so a change to one
-    // is checked by running it -- a dry run names what a range owes and
-    // touches nothing.
-    name: "the landing tools",
-    when: (p) => /^tooling\/lanes\/(land|lane|verification-ledger)\.ts$/.test(p),
-    settled: true,
-    steps: [],
-    arms: [{ kind: "answers", asks: "does a dry run still name what a range owes", run: "node tooling/lanes/land.ts HEAD --dry-run; node tooling/lanes/lane.ts status" }],
-  },
-  {
     // The full check after landing (tooling/full-check/service.ts): a service
-    // that runs the gate, as the landing tools do, so no gate step runs it.
+    // that runs the gate, as the landing check does, so no gate step runs it.
     // Its tests, which drive it over scratch repositories, run in `tooling`.
     name: "the full check",
     when: (p) => p.startsWith("tooling/full-check/"),
     settled: true,
     steps: ["tooling"],
     arms: [{ kind: "answers", asks: "does the service still read its state and count the machine", run: "node tooling/full-check/service.ts --status; node tooling/full-check/count.ts" }],
-  },
-  {
-    // Read by `land.ts` (a platform lane's `not_run`) and by the gate's own
-    // rules, so a change to it owes the gate's own tests.
-    name: "the lane registry",
-    when: (p) => p === "tooling/lanes/lanes.json",
-    steps: ["tooling"],
-    arms: [],
   },
 ];
 
@@ -1413,14 +1394,13 @@ export function stepInputs() {
         // exists in the script's directory.
         const beside = [...code(body).matchAll(/["']([A-Za-z0-9_.-]+\.(?:tsv|json|known|txt|csv|ts|mjs|js|sh|py))["']/g)]
           .map((m) => `${dirname(input)}/${m[1]}`).filter((f) => existsSync(join(TREE, f)));
-        // These tooling controls supply private fixture roots to the archive,
-        // record validator and session bridge. They read fixture evidence,
+        // These tooling controls supply private fixture roots to the record
+        // validator and the session bridge. They read fixture evidence,
         // not this tree's benchmark data. Production readers keep their reach
         // in their own steps. Imports/beside-file dependencies stay additive.
         // The full check names a results-only commit's paths to check that
         // commit, and its fixture writes stand-in records; neither reads these.
-        const fixtureBenchmarks = input === "tooling/lanes/branches.test.ts" ||
-          step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input)
+        const fixtureBenchmarks = step === "tooling" && (input === "tooling/gate/records.test.ts" || /^tooling\/bench\/run-(?:record|session)(?:\.test)?\.ts$/.test(input)
             || /^tooling\/full-check\/(?:bench|repository-fixture)\.ts$/.test(input));
         const referenced = named(body).filter(p => !(fixtureBenchmarks && p.startsWith("results/benchmarks/")));
         queue.push(...referenced, ...imports(input, body), ...beside);
@@ -1778,8 +1758,8 @@ function main() {
   const docCrates = selection ? selection.checks.doctests?.split(/\s+/) ?? [] : [...new Set(rules.flatMap(r => r.doctests ?? []))];
   const docEnv = docCrates.length ? ` NTS_DOCTEST_CRATES="${docCrates.join(" ")}"` : "";
   // A bare all.sh is every step there is, which only the runner and the gate
-  // trees' inputs owe; the full gate is every core step, so it is a list, and
-  // `land.ts` runs exactly that list (`WIDE` is the full run's).
+  // trees' inputs owe; the full gate is every core step, so it is a list
+  // (`WIDE` is what the full check adds after landing).
   const every = selection ? selection.checks.steps === "all" : rules.some((r) => r.full && r.wide);
   const gate = every
     ? "sh tooling/gate/all.sh   # the full gate"

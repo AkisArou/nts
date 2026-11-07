@@ -250,9 +250,9 @@ test("the standalone ICU driver has an explicit validation obligation", () => {
 });
 
 test("verdict machinery and every verifier entry point stay strict", () => {
-  for (const path of ["tooling/gate/run.mjs", "tooling/lanes/land.ts", "tooling/lanes/verify.ts", "tooling/lanes/verify-unit.ts", "tooling/lanes/gate-resource.ts", "tooling/lanes/verification-ledger.ts",
+  for (const path of ["tooling/gate/run.mjs", "tooling/lanes/inputs.sh", "tooling/lanes/dependency-inputs.ts", "tooling/lanes/gate-resource.ts", "tooling/lanes/resource-comparison.ts",
     "tooling/full-check/service.ts", "tooling/full-check/culprit.ts",
-    "tooling/lanes/revert.ts", "tooling/lanes/notify.ts", "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",
+    "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",
     "tooling/differential/agree.mjs", "tooling/memory/run.sh", "results/test262/c/language.tsv"]) assert.ok(isStrictPath(path), path);
   for (const path of ["compiler/core/src/hir/lower.rs", "runtime/c/nts_runtime.c", "docs/architecture.md"]) assert.equal(isStrictPath(path), false, path);
 });
@@ -795,15 +795,7 @@ test("an unavailable Cargo toolchain grants no scope for compiled inputs or docu
   }
 });
 
-test("land.ts and the registry owe tooling tests; lane.ts owes the baseline; the inputs owe everything", () => {
-  const always = [...stepsFor("tooling/gate/times.tsv")].sort();
-  // land.ts imports retire.ts and topics.ts, which tooling tests. Its derived
-  // reach now includes tooling as well as the steps every change owes.
-  // The current graph does not execute lane.ts itself in a tooling test.
-  assert.deepEqual([...stepsFor("tooling/lanes/land.ts")].sort(), [...new Set([...always, "tooling"])].sort());
-  assert.deepEqual([...stepsFor("tooling/lanes/lane.ts")].sort(), always);
-  owes("tooling/lanes/lanes.json", ["tooling"]);
-  assert.ok(stepsFor("tooling/lanes/lanes.json").length < landing().length, "lanes.json owes the full gate");
+test("the gate trees' inputs owe every step", () => {
   // pinned.sh builds every gate tree through it.
   assert.equal(stepsFor("tooling/lanes/inputs.sh").length, allSteps().length);
 });

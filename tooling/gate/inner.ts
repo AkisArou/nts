@@ -220,7 +220,7 @@ function main(argv: readonly string[]): number {
     console.log(`  ${status === 0 ? "PASS" : "FAIL"}  ${name.padEnd(12)} ${String(seconds).padStart(5)}s`);
   }
   const red = steps.some((it) => it.status !== 0);
-  console.log(red ? "red: fix it before queueing" : "green: queue it with land.ts");
+  console.log(red ? "red: fix it before queueing" : "green: queue it with node tooling/landing/check.ts <commit>");
   return red ? 1 : 0;
 }
 

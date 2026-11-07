@@ -13,7 +13,7 @@ test('published intervals must match complete raw coverage and signatures',async
   const run=join(root,'run');mkdirSync(run);const directory=join(run,'control-llvm');
   const trials=Array.from({length:20},(_,i)=>({id:'draw-'+i,geometry:{base:'a'+i,changed:'b'+i},heapSeed:{base:i+1,changed:i+101}}));
   const options={primary:'cycles',confidence:0.95,resamples:2000};
-  const metrics=await sampleLayouts(trials,directory,{admit:async()=>({utc:'2026-01-01T00:00:00Z',load:'0.00 0 0',train:null}),
+  const metrics=await sampleLayouts(trials,directory,{admit:async()=>({utc:'2026-01-01T00:00:00Z',load:'0.00 0 0',landing:null}),
    run:async cell=>({signature:'work',metrics:{cycles:cell.arm==='base'?100:80},details:{scope:'test',end:{utc:'2026-01-01T00:01:00Z'}}})},options);
   writeFileSync(join(run,'checkpoint.json'),JSON.stringify({state:'PASS',current:null,pairs:1}));
   writeFileSync(join(run,'summary.json'),JSON.stringify([{name:'control',backend:'llvm',metrics}]));

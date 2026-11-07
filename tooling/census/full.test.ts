@@ -12,7 +12,7 @@ import { fullPlan, fullEnvironment } from "./full-plan.ts";
 const scratch = join(homedir(), ".cache/nts-scratch/full-run-tests");
 mkdirSync(scratch, { recursive: true });
 
-test("missing full-run environment refuses before history, lock or setup", t => {
+test("missing full-run environment refuses before lock or setup", t => {
   const home = mkdtempSync(join(scratch, "missing-env-"));
   t.after(() => rmSync(home, { recursive: true, force: true }));
   const result = spawnTest(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
@@ -21,8 +21,7 @@ test("missing full-run environment refuses before history, lock or setup", t => 
   });
   assert.equal(result.status, 2, result.stdout + result.stderr);
   for (const name of ["ANDROID_HOME", "JAVA_HOME", "DEBUGINFOD_URLS"]) assert.match(result.stdout, new RegExp(`${name} is missing`));
-  assert.match(result.stdout, /node tooling\/lanes\/land-unit.ts/);
-  assert.doesNotMatch(result.stdout, /unlanded branches older/);
+  assert.match(result.stdout, /node tooling\/landing\/check.ts/);
   assert.equal(existsSync(join(home, ".cache/nts-land.lock")), false);
   assert.equal(existsSync(join(home, ".cache/nts-full")), false);
 });

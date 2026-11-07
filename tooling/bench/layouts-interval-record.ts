@@ -62,10 +62,10 @@ export function recordIntervals(input:string,output:string,provenance:unknown=nu
  const loads=allRows.map(r=>Number(r.start?.load?.split(' ')[0]));
  if(loads.some(n=>!Number.isFinite(n)))throw Error('missing machine load');
  const conditions={start:allRows.map(r=>r.start.utc).sort()[0],end:allRows.map(r=>r.observed.details.end.utc).sort().at(-1),
-  loadMin:Math.min(...loads),loadMax:Math.max(...loads),trains:[...new Set(allRows.map(r=>JSON.stringify(r.start.train)))].map(s=>JSON.parse(s))};
+  loadMin:Math.min(...loads),loadMax:Math.max(...loads),landings:[...new Set(allRows.map(r=>JSON.stringify(r.start.landing)))].map(s=>JSON.parse(s))};
  mkdirSync(output,{recursive:true});
  writeFileSync(join(output,'summary.json'),JSON.stringify({conditions,provenance,cases:verified},null,2)+'\n');
- writeFileSync(join(output,'report.md'),intervalTable(verified)+`\nSitting ${conditions.start}–${conditions.end}; load ${conditions.loadMin}–${conditions.loadMax}. Train state and input/control provenance remain in summary.json.\n`);
+ writeFileSync(join(output,'report.md'),intervalTable(verified)+`\nSitting ${conditions.start}–${conditions.end}; load ${conditions.loadMin}–${conditions.loadMax}. Landing-check state and input/control provenance remain in summary.json.\n`);
  copyFileSync(join(input,'checkpoint.json'),join(output,'checkpoint.json'));
  return {cases:verified.length,cells:allRows.length,conditions};
 }

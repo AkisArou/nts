@@ -9,7 +9,8 @@
 # After taking the lock, wait up to 180 seconds for the reserved physical
 # core (CPUs 4-5) to be quiet. Other busy cores do not prevent measurement.
 # nts-bench's timed children use CPU 4, leaving its sibling 5 idle.
-# Gates never use this lock: land.ts and pinned.sh exclude CPUs 4-5 instead.
+# Gates never use this lock: the landing check and pinned.sh exclude CPUs 4-5
+# instead.
 #
 # `--no-quiet-wait` keeps the mutex and skips that wait. It is for
 # instruction counting (`nts-bench --count`), whose numbers do not move with

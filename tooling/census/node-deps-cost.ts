@@ -163,7 +163,7 @@ const summary={protocolCorrection,program_cache_key:programKey,source:command('g
  scope:COUNTER_SCOPE+'; includes GNU time and all compiler, assembler, archiver and linker descendants',
  conditions:{affinity:command('taskset',['-pc',String(process.pid)]).trim(),nice:19,workers:4,
   node:process.version,compiler:command('clang',['--version']).split('\n')[0],archiver:command('llvm-ar',['--version']).split('\n')[0],
-  queue:command('node',['tooling/lanes/lane.ts','status']).split('\n').slice(0,10)},
+  queue:command('node',['tooling/landing/check.ts','status']).split('\n').slice(0,10)},
  payload:{raw_bytes:artifacts.source_raw_bytes,compressed_bytes:artifacts.source_compressed_bytes},
  executable:{baseline:sizes(base),candidate:sizes(nts)},cold,warm,llvm,validation,programs,entries};
 writeFileSync(join(out,'summary.json'),JSON.stringify(summary,null,2)+'\n');

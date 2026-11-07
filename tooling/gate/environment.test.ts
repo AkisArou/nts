@@ -31,7 +31,7 @@ test("only owed capabilities require environment, and empty values are missing",
   const error = gateEnvironmentError(root, ["dex"], null, { ANDROID_HOME: "", JAVA_HOME: " " });
   assert.match(error!, /ANDROID_HOME is missing; required by step dex/);
   assert.match(error!, /JAVA_HOME is missing; required by step dex/);
-  assert.match(error!, /node tooling\/lanes\/land-unit.ts/);
+  assert.match(error!, /node tooling\/landing\/check.ts/);
   assert.equal(gateEnvironmentError(root, ["dex"], null, { ANDROID_HOME: "/sdk", JAVA_HOME: "/jdk" }), null);
 });
 

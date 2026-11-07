@@ -5,8 +5,7 @@ import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync
 import { homedir } from "node:os";
 import { join,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { CaseBudgetError, INSTRUMENT_DISPOSITIONS, PressureError, ToolingInstrumentError, publishHung, publishRunaway, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
-import {needsOperatorHold} from "../lanes/instrument-retry.ts";
+import { CaseBudgetError, INSTRUMENT_DISPOSITIONS, PressureError, ToolingInstrumentError, instrumentPolicy, publishHung, publishRunaway, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
 import { memoryDisposition, caseBudgetMessage } from "../census/worker-memory.ts";
 test("one exhaustive disposition table validates every kind and decides operator holds",t=>{
   const base=join(homedir(),".cache/nts-scratch/step-result");mkdirSync(base,{recursive:true});
@@ -14,7 +13,7 @@ test("one exhaustive disposition table validates every kind and decides operator
   for(const [kind,policy] of Object.entries(INSTRUMENT_DISPOSITIONS)){
     const instrument={version:1,kind,verdict:policy.verdict,step:"control",attempt:"one",reason:"observed result"};
     writeFileSync(path,JSON.stringify(instrument));assert.equal(readStepInstrument(path,"control","one")?.kind,kind);
-    assert.equal(needsOperatorHold({name:"control",verdict:policy.verdict,instrument}),policy.disposition==="operator-hold");
+    assert.deepEqual(instrumentPolicy(kind),policy);
     for(const verdict of ["PASS","FAIL","NOT RUN","INSTRUMENT"].filter(value=>value!==policy.verdict)){
       writeFileSync(path,JSON.stringify({...instrument,verdict}));assert.throws(()=>readStepInstrument(path,"control","one"),/invalid instrument/);
     }
@@ -104,20 +103,20 @@ test("completed failures outrank liveness without converting missing measurement
   for(const publish of [publishHung,publishRunaway]){
     publish("unfinished control",env);
     let row=readStepInstrument(path,"tooling","one")!;
-    assert.equal(row.verdict,"NOT RUN");assert.equal(needsOperatorHold({name:"tooling",verdict:row.verdict,instrument:row}),true);
+    assert.equal(row.verdict,"NOT RUN");assert.equal(instrumentPolicy(row.kind,row.completedFailures)?.disposition,"operator-hold");
     // A completed result can arrive while the aborted test stream drains.
     publish("unfinished control with a completed failure",env,1);
     row=readStepInstrument(path,"tooling","one")!;
     assert.equal(row.verdict,"FAIL");assert.equal(row.completedFailures,1);
-    assert.equal(needsOperatorHold({name:"tooling",verdict:row.verdict,instrument:row}),false);
+    assert.deepEqual(instrumentPolicy(row.kind,row.completedFailures),{verdict:"FAIL",disposition:"verdict"});
     for(const count of [-1,0.5,"1",null]){
       const bad={...row,completedFailures:count};writeFileSync(path,JSON.stringify(bad));
       assert.throws(()=>readStepInstrument(path,"tooling","one"),/invalid instrument/);
-      assert.equal(needsOperatorHold({name:"tooling",verdict:"FAIL",instrument:bad}),true);
+      assert.equal(instrumentPolicy(bad.kind,bad.completedFailures),undefined);
     }
     for(const bad of [{...row,kind:"unknown"},{...row,completedFailures:0},{...row,verdict:"NOT RUN"}]){
       writeFileSync(path,JSON.stringify(bad));assert.throws(()=>readStepInstrument(path,"tooling","one"),/invalid instrument/);
-      assert.equal(needsOperatorHold({name:"tooling",verdict:"FAIL",instrument:bad}),true);
+      assert.notEqual(instrumentPolicy(bad.kind,bad.completedFailures)?.verdict,bad.verdict);
     }
   }
 });

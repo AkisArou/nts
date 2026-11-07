@@ -32,14 +32,13 @@ import { fullPlan, fullEnvironment } from "./full-plan.ts";
 
 import { WIDE } from "../gate/owed.mjs";
 import { gateEnvironmentError } from "../gate/environment.ts";
-import { branchHealth, healthLines } from "../lanes/health.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HOME = join(homedir(), ".cache/nts-full");
 const git = (args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 const steps = [...WIDE];
-// No queue, lock, history walk or worktree setup before required tools can run.
+// No queue, lock or worktree setup before required tools can run.
 try {
   const problem = gateEnvironmentError(ROOT, steps);
   if (problem) { console.log(`  NOT RUN: ${problem}`); process.exit(2); }
@@ -47,7 +46,6 @@ try {
   console.log(`  NOT RUN: environment preflight: ${(error as Error).message}`);
   process.exit(2);
 }
-console.log(healthLines(await branchHealth(ROOT)).join("\n"));
 
 let plan: ReturnType<typeof fullPlan>;
 try { plan = fullPlan(ROOT, HOME, process.argv.slice(2)); }
