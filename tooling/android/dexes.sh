@@ -77,12 +77,12 @@ nts=${NTS_BIN:-$root/target/release/nts}
 # refused, so a lost worker cannot shrink the totals unnoticed.
 one() {
   target=$1
-  dexed=0 refused=0 declined=0 methods=0
+  dexed=0 refused=0 declined=0 methods=0 timedout=0 unmeasured=0
   # Keyed by the whole path: thirteen bench cases share a basename with an
   # example, which a serial loop could reuse one directory for and a parallel one
   # cannot.
   key=$(printf '%s' "$target" | tr '/' '_')
-  record() { printf '%s %s %s %s\n' "$dexed" "$refused" "$declined" "$methods" > "$work/$key.counts"; }
+  record() { printf '%s %s %s %s %s %s\n' "$dexed" "$refused" "$declined" "$methods" "$timedout" "$unmeasured" > "$work/$key.counts"; }
   name=$(basename "$target")
   out="$work/$key"
   rm -rf "$out"; mkdir -p "$out/classes" "$out/dex"
@@ -120,8 +120,23 @@ JSON
   # `agrees-on-device.sh`, which passes `--entry` explicitly -- so the
   # `__@kCount@2` defect that motivated this ratchet was found on a real
   # program, and it is this ratchet that was hollow rather than the finding.
-  if ! NTS_CHECKERS=1 "$nts" emit-jvm "$config" \
-       --out "$out/classes" > "$out/emit.log" 2>&1; then
+  # **Bounded by the shared supervisor** (tooling/gate/case-bound.ts): past its
+  # compile bound the target timed out, which is its outcome -- named, counted
+  # and a failure, as a decline is -- and the next target runs. On 2026-11-07
+  # this compile ran on one benchmark port for 4.6 hours, unbounded, and every
+  # landing waited. A compile that went silent measured nothing: the step holds.
+  emitted=0
+  NTS_CHECKERS=1 node "$root/tooling/gate/case-bound.ts" --compile -- "$nts" emit-jvm "$config" \
+       --out "$out/classes" > "$out/emit.log" 2>&1 || emitted=$?
+  if [ "$emitted" -eq 125 ]; then
+    printf "%-28s emit-jvm timed out: %s\n" "$name" "$(grep '^timed out: ' "$out/emit.log" | tail -1 | cut -c12-140)"
+    timedout=1; record; return
+  fi
+  if [ "$emitted" -eq 124 ]; then
+    printf "%-28s not measured: %s\n" "$name" "$(grep '^not measured: ' "$out/emit.log" | tail -1 | cut -c15-140)"
+    unmeasured=1; record; return
+  fi
+  if [ "$emitted" -ne 0 ]; then
     # A refusal is this backend working. It is counted, not failed: the corpus
     # has programs every backend declines, and a lane that reported those as
     # dex failures would be measuring the wrong thing.
@@ -246,7 +261,7 @@ fi
 # Methods rather than bytes: bytes fall when codegen improves, which would make
 # a real win look like this bug. A method disappears only when a function is
 # pruned, which is the defect itself.
-dexed=0 refused=0 declined=0 methods=0
+dexed=0 refused=0 declined=0 methods=0 timedout=0 unmeasured=0
 jobs=${NTS_DEX_JOBS:-${NTS_GATE_JOBS:-4}}
 NTS_DEX_WORK=$work
 export NTS_DEX_WORK
@@ -260,16 +275,32 @@ for target in $targets; do
   key=$(printf '%s' "$target" | tr '/' '_')
   if [ -f "$work/$key.out" ]; then cat "$work/$key.out"; fi
   if [ -f "$work/$key.counts" ]; then
-    read -r d r c m < "$work/$key.counts"
+    read -r d r c m t u < "$work/$key.counts"
     dexed=$((dexed + d)); refused=$((refused + r)); declined=$((declined + c)); methods=$((methods + m))
+    timedout=$((timedout + t)); unmeasured=$((unmeasured + u))
   else
     printf "%-28s did not finish: no counts were written\n" "$name"
     refused=$((refused + 1))
   fi
 done
 
-printf "\n%s dexed, %s refused, %s declined by the backend\n" "$dexed" "$refused" "$declined"
+printf "\n%s dexed, %s refused, %s declined by the backend, %s timed out compiling\n" "$dexed" "$refused" "$declined" "$timedout"
 printf "%s method(s) across them\n" "$methods"
+
+# A target the supervisor could not measure says nothing either way. With a
+# definite failure beside it the step is red; with none it is held
+# (check-report.ts finish: a definite failure outranks a hang).
+if [ "$unmeasured" -gt 0 ]; then
+  echo "$unmeasured target(s) could not be measured, so this run says nothing about them" >&2
+  finished=0
+  node "$root/tooling/differential/check-report.ts" finish "$((refused + declined + timedout))" || finished=$?
+  exit "$finished"
+fi
+# A timeout is a defect, as a decline is: named above, and red.
+if [ "$timedout" -gt 0 ]; then
+  echo "$timedout target(s) timed out compiling, each named above: a compile past its bound is a defect" >&2
+  exit 1
+fi
 
 # The floor, and it only applies to a full run -- naming targets on the command
 # line is how this is used by hand and would trip it every time.
