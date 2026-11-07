@@ -50,13 +50,11 @@ one page that changes as work goes; the designs it builds are in
     `~/Projects/nts-lanes/node`) go when Node 26 lands;
   - the synchronous benchmark ports (#315,
     `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
-    and Octane's provenance. Every step and case now has a time bound, and
-    `bench-agree` records how each benchmark runs on the JVM. One gap is
-    left: the `dex` step fails on a JVM compile timeout, so it must judge a
-    port's timeout against that port's JVM compile record, as `bench-agree`
-    does. Until then, `jetstream-threejs`, whose JVM compile spins, would
-    turn the full check red. The JVM also rejects some ports' bytecode
-    (#265). The 46 pull
+    and Octane's provenance. Every step and case now has a time bound,
+    `bench-agree` records how each benchmark runs on the JVM, and `dex`
+    judges a port's JVM compile timeout against that port's compile record,
+    so `jetstream-threejs`, whose JVM compile spins, is a recorded finding.
+    The JVM also rejects some ports' bytecode (#265). The 46 pull
     requests they replace (#9, #11, #19 to #23, #31 to #34, #44, #46, #48 to
     #50, #53, #55 to #68, #75 to #80, #101 to #108, #119, #120) close when they
     land, and their earlier rounds `helper4/ares6-family` and
@@ -205,6 +203,9 @@ ids, kept so the records that cite them still resolve.
 - The landing check's own `nts-dev` build (`landing/run.ts`) has no time
   bound yet; `NTS_BENCH_AGREE_FLOOR`, now unread, leaves the canonical
   environment after #193 lands.
+- `bench-agree`'s run record keeps an abort's first line, which can move with
+  unrelated codegen (a `VerifyError` names a method and a bytecode offset):
+  record the abort's identity instead.
 - The TypeScript and test262 suites as sampled landing steps
   (`typescript-sample`, `test262-sample`), so a compiler change runs a slice
   of them before it lands.
