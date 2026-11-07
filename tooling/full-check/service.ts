@@ -15,7 +15,8 @@
 //      has not measured it yet;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
-//   3. the count step (count.ts), once an hour.
+//   3. the count step (count.ts), once an hour, after the pool's upkeep
+//      (tooling/landing/pool.ts's prune: free trees idle past its limit go).
 //
 // What follows a run:
 //   - green core: refs/heads/verified moves to that commit and is pushed;
@@ -35,6 +36,8 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
 import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import { sharedCheckout } from "../landing/git.ts";
+import { Pool, POOL_HOME, pruneLines } from "../landing/pool.ts";
 import { count as countMachine, countLines, gather, type CountResult } from "./count.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
@@ -65,6 +68,8 @@ export type Effects = {
   /** Where pins live (pin.ts's PINS). */
   pins: string;
   count: () => CountResult;
+  /** The pool's upkeep (pool.ts's prune), and the lines that say what it removed. */
+  prunePool: () => string[];
   /** Push a commit to the remote's `verified`. */
   push: (commit: string) => { ok: boolean; line: string };
   /** Return once a heavy phase may start (AGENTS.md: 14 GB available). */
@@ -115,6 +120,7 @@ export async function cycle(fx: Effects): Promise<Part | "benchmarks" | "count" 
     }
   }
   if (!state.count || now.getTime() - Date.parse(state.count.at) >= COUNT_EVERY_MS) {
+    upkeepPool(fx);
     runCount(fx, state);
     return "count";
   }
@@ -399,6 +405,14 @@ function runCount(fx: Effects, state: State): void {
   writeState(fx.layout.state, state);
 }
 
+/** The pool's hourly upkeep, before the count reads the machine; a failure is a line, never a stopped cycle. */
+function upkeepPool(fx: Effects): void {
+  let lines: string[];
+  try { lines = fx.prunePool(); }
+  catch (error) { lines = [`pool: upkeep failed: ${error instanceof Error ? error.message : String(error)}`]; }
+  for (const line of lines) fx.log(line);
+}
+
 /**
  * The refs that keep a submitted revert or records commit reachable go once
  * main holds it -- the landing check rebases a commit, so it is found by its
@@ -492,6 +506,7 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
     bench: benchWithLock(ROOT, layout.target, options.quietWait),
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
     count: () => countMachine(gather(ROOT)),
+    prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
     push: commit => {
       const r = git.try(["push", "--quiet", "origin", `${commit}:refs/heads/verified`]);
       return r.status === 0 ? { ok: true, line: `pushed verified ${short(commit)} to origin` } : { ok: false, line: `could not push verified ${short(commit)}: ${r.stderr.trim()}; trying again next cycle` };

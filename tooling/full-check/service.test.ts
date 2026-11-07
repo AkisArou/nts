@@ -16,7 +16,7 @@ import { Git } from "./git.ts";
 
 type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"] };
 
-function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"] } = {}): Harness {
+function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; prunePool?: Effects["prunePool"] } = {}): Harness {
   const lines: string[] = [];
   const queue = stubQueue();
   return {
@@ -29,6 +29,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     bench: options.bench ?? stubBench(),
     pins: join(repo.root, "pins"),
     count: () => ({ verdict: "PASS", red: [], notes: [] }),
+    prunePool: options.prunePool ?? (() => []),
     push: commit => {
       const r = repo.git.try(["push", "-q", "origin", `${commit}:refs/heads/verified`]);
       return { ok: r.status === 0, line: r.status === 0 ? `pushed ${commit}` : r.stderr };
@@ -331,6 +332,26 @@ test("a machine that is never quiet gives the night up, and the next nightly slo
   assert.equal(await cycle(next), "benchmarks", "the wide steps ran last night on this commit; the benchmarks did not");
   assert.equal(quiet.calls.length, 1);
   assert.equal(readState(repo.layout.state).bench?.measured, true);
+});
+
+test("the hourly count runs the pool's upkeep first, and a failed upkeep is a line, not a stopped cycle", async t => {
+  const repo = repository(t);
+  repo.commit({ "a.txt": "1\n" }, "one");
+  let upkeeps = 0, fail = false;
+  const fx = harness(repo, fakeGate(repo), { prunePool: () => { upkeeps++; if (fail) throw new Error("the pool's lock is held"); return ["pool: removed tree 3, free and idle 4d 2h"]; } });
+  assert.equal(await cycle(fx), "core");
+  assert.equal(upkeeps, 0, "a run comes first");
+  assert.equal(await cycle(fx), "count");
+  assert.equal(upkeeps, 1);
+  assert.ok(fx.lines.includes("pool: removed tree 3, free and idle 4d 2h"), fx.lines.join("\n"));
+  assert.equal(await cycle(fx), "idle", "once an hour, with the count");
+  assert.equal(upkeeps, 1);
+  fail = true;
+  const hourLater = new Date(2026, 10, 6, 13, 1);
+  const later = harness(repo, fakeGate(repo), { now: hourLater, prunePool: fx.prunePool });
+  assert.equal(await cycle(later), "count");
+  assert.ok(later.lines.includes("pool: upkeep failed: the pool's lock is held"), later.lines.join("\n"));
+  assert.equal(readState(repo.layout.state).count?.at, hourLater.toISOString(), "and the count still ran");
 });
 
 test("the parts' steps come from the measured commit's lists", () => {
