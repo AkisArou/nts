@@ -132,7 +132,10 @@ JSON
   NTS_CHECKERS=1 node "$root/tooling/gate/case-bound.ts" --compile -- "$nts" emit-jvm "$config" \
        --out "$out/classes" > "$out/emit.log" 2>&1 || emitted=$?
   if [ "$emitted" -eq 125 ]; then
-    reason=$(grep '^timed out: ' "$out/emit.log" | tail -1 | cut -c12-140)
+    # The whole reason: it names the command by its path, whose length is the
+    # run directory's, so a fixed width would keep or drop the bound by where
+    # the run happens.
+    reason=$(grep '^timed out: ' "$out/emit.log" | tail -1 | cut -c12-)
     # **A bench case's timeout is judged against its compile record**, the
     # same compile the benches step records: a timeout the row records
     # reproduces, a row not written yet (the full check writes it after
@@ -156,7 +159,7 @@ JSON
     record; return
   fi
   if [ "$emitted" -eq 124 ]; then
-    printf "%-28s not measured: %s\n" "$name" "$(grep '^not measured: ' "$out/emit.log" | tail -1 | cut -c15-140)"
+    printf "%-28s not measured: %s\n" "$name" "$(grep '^not measured: ' "$out/emit.log" | tail -1 | cut -c15-)"
     unmeasured=1; record; return
   fi
   if [ "$emitted" -ne 0 ]; then
