@@ -48,6 +48,7 @@ if (process.argv.includes('--help')) {
 }
 if (!process.argv.includes('--json')) { console.error('JSON interface required'); process.exit(78); }
 const name = basename(dirname(process.argv[3]));
+if (process.env.CHECK_MUTATION === 'spin' && name === 'spin') for (;;) {}
 const report = {version:1,status:'agrees',counts:{functions:1,expected:2,compared:2,unavailable:0,
   runtime_declined:0,timeouts:0,approximated:0,disagreements:0,aborts:0},
   oracle:{expected:2,received:2,complete:true},refusals:[],disagreements:[],aborts:[],error:null};
@@ -249,13 +250,33 @@ test("the actual gate owns typed per-call stops including cleanup after all answ
     return spawnTest('sh',[join(root,'tooling/gate/gate.sh'),'control'],{cwd:root,encoding:'utf8',
       env:{...process.env,NTS_BIN:compiler,CHECK_MUTATION:mutation,NTS_GATE_STEP:'examples',NTS_GATE_STEP_ATTEMPT:'call-owner',NTS_GATE_STEP_RESULT:resultPath}});
   };
-  for(const mutation of ['supervisor-hung','supervisor-runaway','supervisor-cleanup']) {
+  for(const mutation of ['supervisor-hung','supervisor-cleanup']) {
     const result=run(mutation);assert.equal(result.status,124,result.stdout+result.stderr);
     const frame=JSON.parse(readFileSync(resultPath,'utf8'));
-    assert.equal(frame.kind,mutation==='supervisor-runaway'?'runaway':'hung');assert.equal(frame.verdict,'NOT RUN');
+    assert.equal(frame.kind,'hung');assert.equal(frame.verdict,'NOT RUN');
   }
+  // A compiled call past its allowance timed out: the case's recorded outcome, red, and no hold.
+  const timedOut=run('supervisor-runaway');assert.equal(timedOut.status,1,timedOut.stdout+timedOut.stderr);
+  assert.match(timedOut.stdout,/^TIMEOUT  control \(run\): owned compiled child stopped$/m);assert.equal(existsSync(resultPath),false);
   const red=run('supervisor-wrong-hung');assert.equal(red.status,1,red.stdout+red.stderr);
   assert.match(red.stdout,/owned compiled child stopped/);assert.equal(existsSync(resultPath),false);
+});
+
+test("a check past its compile bound is a recorded timeout, red and named, with no hold; the next case runs", t => {
+  const {root, compiler} = sandbox(t), bin = join(root, "bin"); mkdirSync(bin);
+  const preload = join(root, "compile-bound.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-command.ts")).href;
+  // The real supervisor, with the compile bound it was asked for made small.
+  writeFileSync(preload, `import {mock} from 'node:test';const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>real.activeCommand(command,args,{...options,...(options.ownCpuSeconds?{ownCpuSeconds:0.5}:{}),pollMs:50})}});\n`);
+  writeFileSync(join(bin, "node"), `#!/bin/sh\nexec '${process.execPath}' --experimental-test-module-mocks --import '${preload}' "$@"\n`, {mode: 0o755});
+  mkdirSync(join(root, "tests/programs/spin")); writeFileSync(join(root, "tests/programs/spin/tsconfig.json"), "{}");
+  const resultPath = join(root, "instrument.json");
+  const result = spawnTest("sh", [join(root, "tooling/gate/gate.sh")], {cwd: root, encoding: "utf8",
+    env: {...process.env, PATH: bin + ":" + process.env.PATH, NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: "spin",
+      NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "compile-bound", NTS_GATE_STEP_RESULT: resultPath}});
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^TIMEOUT  spin \(compile\): .*used its 0\.5 s CPU bound/m);
+  assert.match(result.stdout, /^1 of 2 agree with node$/m, "control, after spin in name order, still ran");
+  assert.equal(existsSync(resultPath), false, "a timeout publishes no hold");
 });
 
 test("the real batch owner publishes typed setup and cleanup failures", t => {

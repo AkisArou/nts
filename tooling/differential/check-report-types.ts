@@ -25,7 +25,13 @@ export interface CheckReport {
 export type CheckFormat = "json-v1" | "legacy";
 export type CheckCommandResult = ActiveResult & {memoryKilled?: boolean; residentLimitBytes?: number; residentRunBytes?: number};
 export type CheckRunner = (...args: Parameters<typeof activeCommand>) => Promise<CheckCommandResult>;
-export type CheckRunOptions = Partial<Parameters<CheckRunner>[2]> & { run?: CheckRunner };
+// `timeoutOutcome`: a case past its bound is a recorded `timeout`, not a hold:
+// its compile past COMPILE_CPU_BOUND_SECONDS of the check's own CPU, or a
+// compiled call past its calibrated allowance. For consumers whose records or
+// verdicts can hold one (the example arms, bench-agree).
+export type CheckRunOptions = Partial<Parameters<CheckRunner>[2]> & { run?: CheckRunner; timeoutOutcome?: boolean };
+/** Which bound a case passed: its compile's, or a compiled call's. */
+export interface CaseTimeout { stage: "compile" | "run"; reason: string; }
 export type CheckConsumer = "program" | "benchmark" | "refusal";
 export interface CheckObservation {
   category: "invalid-hir" | "aborted" | "refused" | "wrong-answer" | "agrees" | "not-measured";
@@ -50,6 +56,7 @@ export interface DecodedCheck {
   missingPopulation: string | null;
   first: string;
   report?: CheckReport;
+  timeout?: CaseTimeout;
 }
 export type LegacyIdentity =
   | { kind: "preparation"; message: string }

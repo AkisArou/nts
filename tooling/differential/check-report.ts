@@ -6,9 +6,9 @@ import {isDeepStrictEqual} from 'node:util';
 
 import { CHECK_STATUSES, FAILURE_KINDS, COUNT_NAMES } from "./check-report-types.ts";
 import type { CheckCommandResult, CheckConsumer, CheckCounts, CheckFormat, CheckObservation, CheckRefusal, CheckReport,
-  CheckRunOptions, DecodedCheck, LegacyIdentity } from "./check-report-types.ts";
+  CheckRunOptions, DecodedCheck, LegacyIdentity, CaseTimeout } from "./check-report-types.ts";
 import { normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
-import {activeCommand, CommandNotMeasuredError} from "../gate/active-command.ts";
+import {activeCommand, CommandNotMeasuredError, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
 import {CaseBudgetError, PressureError, ToolingInstrumentError, instrumentPolicy,
   publishHung, publishRunaway, publishToolingFailure, publishPressure, readStepInstrument} from "../gate/step-result.ts";
 
@@ -215,6 +215,8 @@ function completedCompilationRefusal(record: DecodedCheck): boolean {
 export function consumerExit(record: DecodedCheck, consumer: CheckConsumer): number {
   assert.ok(['program', 'benchmark', 'refusal'].includes(consumer), 'unknown check consumer');
   if (consumer === 'refusal' && completedCompilationRefusal(record)) return 0;
+  // A case past its bound is a defect it reported loudly, for every consumer.
+  if (record.outcome === Outcome.TIMEOUT) return 1;
   // Not measured at landing, and not a failure: the full check records it. A
   // refusal fixture still has to refuse.
   if (consumer !== 'refusal' && record.outcome === Outcome.PENDING) return 4;
@@ -372,8 +374,13 @@ function legacyProjection(identity: LegacyIdentity, report: CheckReport): unknow
 
 /** Shell consumers receive a disposition derived here from fields, never a sentence. */
 export async function runCheck(binary: string, project: string, options: CheckRunOptions = {}) {
-  const format = await checkFormat(binary, options);
-  const result = await checkedCommand(binary, checkArguments(format, project), {...options, maxBuffer: 64 * 1024 * 1024});
+  const {timeoutOutcome = false, ...runOptions} = options;
+  const format = await checkFormat(binary, runOptions);
+  // The check compiles in its own process and runs each compiled call in a
+  // child under that call's allowance, so its own CPU is the compile's.
+  const result = await checkedCommand(binary, checkArguments(format, project), {...runOptions, maxBuffer: 64 * 1024 * 1024,
+    ...(timeoutOutcome ? {ownCpuSeconds: COMPILE_CPU_BOUND_SECONDS} : {})});
+  if (result.timeout) return {record: timedOut(format, {stage: 'compile', reason: result.timeout}), result, format, incomplete: undefined};
   try {
     const record = decodeCheck(format, result.status, result.stdout, result.stderr);
     const stops = record.report?.incomplete ?? [];
@@ -386,6 +393,10 @@ export async function runCheck(binary: string, project: string, options: CheckRu
       // A completed wrong answer remains an ordinary red result with its
       // structured liveness detail. Only a pure liveness observation holds.
       if (policy.disposition === 'verdict') return {record, result, format, incomplete: undefined};
+      // A compiled call past its allowance timed out: the case's outcome.
+      if (timeoutOutcome && chosen.kind === 'runaway') {
+        return {record: {...record, outcome: Outcome.TIMEOUT, timeout: {stage: 'run' as const, reason: chosen.reason}}, result, format, incomplete: undefined};
+      }
       return {record, result, format, incomplete: chosen.kind === 'tooling-setup' ? new ToolingInstrumentError('tooling-setup', chosen.reason) : new CommandNotMeasuredError({...result, [chosen.kind]: chosen.reason})};
     }
     const incomplete = record.outcome !== Outcome.NOT_MEASURED ? undefined
@@ -393,6 +404,13 @@ export async function runCheck(binary: string, project: string, options: CheckRu
       : new ToolingInstrumentError('tooling-setup', `check not measured: ${project}: ${record.first}`);
     return {record, result, format, incomplete};
   } catch (error) { throw checkFailure(error, options.env); }
+}
+
+/** A check stopped at its compile bound: no report, only the bound it passed. */
+function timedOut(format: CheckFormat, timeout: CaseTimeout): DecodedCheck {
+  return {format, outcome: Outcome.TIMEOUT, status: null, checked: 0, expected: 0, unavailable: 0, declined: 0, timeouts: 0,
+    refused: 0, refusedRoots: 0, answers: [], compiledAnswers: [], refusals: [], oracleStopped: 0, missingPopulation: null,
+    first: `timed out (${timeout.stage}): ${timeout.reason}`, timeout};
 }
 
 export async function runConsumer(binary: string, project: string, consumer: CheckConsumer, options: CheckRunOptions = {}) {
@@ -451,6 +469,8 @@ async function checkedCommand(binary: string, args: string[], options: CheckRunO
       }
       throw new CaseBudgetError(`check command exceeded its ${bytes} byte resident budget: ${binary}`);
     }
+    // Stopped at the bound its caller asked for: the caller's outcome.
+    if (result.timeout) return result;
     if (result.hung || result.runaway) throw new CommandNotMeasuredError(result);
     if (result.error || result.signal || result.status === null) {
       throw new ToolingInstrumentError('tooling-setup', `check command did not complete: ${binary}: ${result.error?.message ?? result.signal ?? 'missing status'}`);
@@ -505,6 +525,7 @@ export const Outcome = Object.freeze({
   INVALID_HIR: "invalid HIR",
   NO_TYPECHECK: "does not typecheck",
   NOT_MEASURED: "not measured",
+  TIMEOUT: "timed out",
 });
 
 // Remove this legacy decoder once no pinned compiler or stored check record

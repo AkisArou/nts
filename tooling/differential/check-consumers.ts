@@ -53,6 +53,8 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
   const pending = completed.filter(row => row.disposition === 4 && row.entry.fixture);
   const failed = completed.filter(row => completedFailure(row, mode));
   for (const row of failed) {
+    const timeout = row.record.timeout;
+    if (timeout) { console.log(`TIMEOUT  ${row.entry.name} (${timeout.stage}): ${timeout.reason}`); continue; }
     console.log(`DIS  ${row.entry.name}: ${row.record.first}`);
     for (const answer of row.record.answers) console.log(answer);
   }
@@ -88,7 +90,8 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
     for (;;) {
       const entry = work[next++]; if (!entry) return;
       try {
-        const {record, exitCode} = await withToken(() => runConsumer(binary, entry.project, entry.consumer, {cwd: ROOT,
+        // A case past its bound is a recorded timeout, and the next case runs.
+        const {record, exitCode} = await withToken(() => runConsumer(binary, entry.project, entry.consumer, {cwd: ROOT, timeoutOutcome: true,
           env: entry.backend ? {...env, NTS_BACKEND: entry.backend} : env}), {project: entry.project});
         const contradiction = exitCode === 4 ? pendingContradiction(ROOT, entry.fixture) : null;
         completed.push(contradiction ? {entry, record: {...record, first: contradiction}, disposition: 1} : {entry, record, disposition: exitCode});

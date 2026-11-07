@@ -104,7 +104,7 @@ const CACHE = join(process.env.XDG_CACHE_HOME ?? join(homedir(), ".cache"), "nts
 /** Outcomes that are a wrong or missing answer about the program. */
 const WRONG = new Set([
   Outcome.DISAGREES, Outcome.ABORTED, Outcome.ALL_DECLINED, Outcome.BACKEND_DECLINED, Outcome.INVALID_HIR,
-  Outcome.NO_TYPECHECK,
+  Outcome.NO_TYPECHECK, Outcome.TIMEOUT,
 ]);
 /** Outcomes that compared something and found no difference. */
 const AGREEING = new Set([Outcome.AGREES, Outcome.PARTIAL]);
@@ -168,6 +168,8 @@ export function verdict(name, r) {
     case Outcome.INVALID_HIR:
     case Outcome.NO_TYPECHECK:
       return `no ${name}`;
+    case Outcome.TIMEOUT:
+      return `no ${name}\ttimed out (${r.timeout.stage}): ${r.timeout.reason.slice(0, 90)}`;
     default:
       return `unmeasured ${name}\t${r.outcome === Outcome.ALL_DECLINED ? "no case was checked: every case declined" : r.first.slice(0, 90)}`;
   }
@@ -217,6 +219,7 @@ export function describe(r) {
   }
   if (r.oracleStopped > 0) parts.push("node stopped part-way");
   if (r.outcome === Outcome.NOT_MEASURED || r.outcome === Outcome.PENDING) parts.push(r.first);
+  if (r.outcome === Outcome.TIMEOUT) parts.push(`${r.timeout.stage}: ${r.timeout.reason}`);
   return parts.join(", ");
 }
 
@@ -252,6 +255,8 @@ function selfTest() {
     disagreements: [], aborts: [], incomplete: [], error: null}));
   if (pending.outcome !== Outcome.PENDING || !verdict("x", pending).startsWith("pending x\t")) return "a pending example was not read as pending";
   if (WRONG.has(pending.outcome) || AGREEING.has(pending.outcome)) return "a pending example was counted as an answer";
+  const timedOut = {...agreed, outcome: Outcome.TIMEOUT, timeout: {stage: "compile", reason: "nts used its 600 s CPU bound"}};
+  if (!WRONG.has(timedOut.outcome) || !verdict("x", timedOut).startsWith("no x\ttimed out (compile)")) return "a timeout was not counted as a loud defect";
   for (const mutation of ["agreed on every case\n", JSON.stringify({...value("agrees", 3, 3), version: 2}),
     JSON.stringify(value("agrees", 3, 0, 3))]) {
     let refused = false;
@@ -417,8 +422,9 @@ const check = async (pinned, example) => {
   delete checkEnv.NTS_GATE_STEP_RESULT;
   try {
     const root = oracleRoot.forBinary(binaries[pins.indexOf(pinned)]);
+    // A case past its bound is a recorded timeout, and the next example runs.
     const {record, incomplete} = await runCheck(pinned.pinned, join("tests/programs", example, "tsconfig.json"), {
-      cwd: root, env: checkEnv,
+      cwd: root, env: checkEnv, timeoutOutcome: true,
     });
     const contradiction = record.outcome === Outcome.PENDING ? pendingContradiction(root, `tests/programs/${example}`) : null;
     if (contradiction) return unmeasuredRecord(null, new Error(contradiction));
