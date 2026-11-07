@@ -37,7 +37,7 @@ test("the exit probe reads a reaped child and preserves other read errors",t=>{
 test("process activity parses group identity and all user/sys CPU including reaped children",()=>{
   const fields=Array(20).fill("0");fields[0]="S";
   for(const [at,value] of [[2,41],[3,41],[11,5],[12,7],[13,11],[14,13],[19,123]])fields[at]=String(value);
-  assert.deepEqual(processActivity(`41 (a name with ) in it) ${fields.join(" ")}`),{group:41,session:41,cpu:36,started:123});
+  assert.deepEqual(processActivity(`41 (a name with ) in it) ${fields.join(" ")}`),{group:41,session:41,cpu:36,own:12,started:123});
   assert.throws(()=>processActivity("unreadable"),/invalid/);
 });
 

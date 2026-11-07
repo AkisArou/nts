@@ -8,7 +8,7 @@ test("outcomes and TypeScript observations share the progress vocabulary", () =>
     assert.equal(outcomeDisposition(corpus), outcomeDisposition(suite));
   }
   for (const kind of ["wrong", "wrong-output", "wrong-answer"]) assert.equal(outcomeDisposition(kind), "silent", kind);
-  for (const kind of ["invalid-hir", "runtime-abort", "aborted", "uncompilable-c", "compiler-crash", "build-failure"]) {
+  for (const kind of ["invalid-hir", "runtime-abort", "aborted", "uncompilable-c", "compiler-crash", "build-failure", "timeout"]) {
     assert.equal(outcomeDisposition(kind), "loud", kind);
   }
   assert.throws(() => outcomeDisposition("not-measured"), /unknown outcome/);

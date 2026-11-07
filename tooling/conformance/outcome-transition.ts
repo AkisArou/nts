@@ -16,8 +16,9 @@ export interface OutcomeTransition { word: TransitionWord; ok: boolean; loud: bo
 const RANK: Readonly<Record<OutcomeDisposition, number>> = { silent: 0, loud: 1, refused: 2, pass: 3 };
 /** A defect that answers, wrongly, as if nothing were the matter. */
 const SILENT = ["wrong", "wrong-output", "wrong-answer"];
-/** A defect that stops or says so: a crash, an abort, or output that cannot be built. */
-const LOUD = ["invalid-hir", "runtime-abort", "aborted", "uncompilable-c", "compiler-crash", "build-failure"];
+/** A defect that stops or says so: a crash, an abort, output that cannot be
+ * built, or a case past its bound (a timeout, compiling or running). */
+const LOUD = ["invalid-hir", "runtime-abort", "aborted", "uncompilable-c", "compiler-crash", "build-failure", "timeout"];
 
 export function outcomeDisposition(kind: string): OutcomeDisposition {
   if (kind === "pass" || kind === "agrees") return "pass";
