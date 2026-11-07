@@ -3,15 +3,14 @@ import { test } from "node:test";
 import {spawnTest} from "./test-wait.ts";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { comparisonOracleRoot, legacyOraclePin } from "../differential/legacy-oracle-root.ts";
 import { GENERATOR, writeRecords, type OracleTable } from "../differential/oracle-records.ts";
+import { testScratch } from "./test-scratch.ts";
 
 function fixture(t: { after(fn: () => void): void }, oldUnrecorded = false) {
-  const parent = join(homedir(), ".cache/nts-oracle-bridge-tests"); mkdirSync(parent, { recursive: true });
-  const directory = mkdtempSync(join(parent, "run-")); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = testScratch(t, "oracle-bridge-run");
   const root = join(directory, "repo"), cache = join(directory, "cache"); mkdirSync(root);
   const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
   const git = (...args: string[]) => execFileSync("git", ["-c", "user.name=Bridge test", "-c", "user.email=bridge@example.invalid", ...args], { cwd: root, encoding: "utf8" }).trim();

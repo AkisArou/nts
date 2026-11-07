@@ -2,19 +2,17 @@ import { spawnTest } from "../gate/test-wait.ts";
 // Black-box contracts for the Mac/simulator boundary; no VM or SDK required.
 // NTS_TEST_IOS_RUNNER selects the saved old helper for the negative control.
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, copyFileSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const runner = process.env.NTS_TEST_IOS_RUNNER ?? fileURLToPath(new URL("./run-ios.sh", import.meta.url));
 const quote = (s: string) => `'${s.replaceAll("'", "'\\''")}'`;
 
 function fixture(mode = "ok", initial = "Shutdown") {
-  const cache = join(homedir(), ".cache", "nts-tests");
-  mkdirSync(cache, { recursive: true });
-  const dir = mkdtempSync(join(cache, "ios-readiness-"));
+  const dir = newTestScratch("ios-readiness");
   const bin = join(dir, "bin");
   mkdirSync(bin);
   writeFileSync(join(dir, "state"), initial);
@@ -176,9 +174,7 @@ for (const mode of ["ok", "install-fails", "app-fails", "boot-fails"] as const) 
 }
 
 test("successful interop retains only the named stage clocks", () => {
-  const cache = join(homedir(), ".cache", "nts-tests");
-  mkdirSync(cache, { recursive: true });
-  const dir = mkdtempSync(join(cache, "ios-clock-log-"));
+  const dir = newTestScratch("ios-clock-log");
   const source = fileURLToPath(new URL("../gate/", import.meta.url));
   const gate = join(dir, "tooling", "gate");
   const clocks = [

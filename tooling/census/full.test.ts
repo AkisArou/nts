@@ -3,18 +3,15 @@ import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fullPlan, fullEnvironment } from "./full-plan.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
-const scratch = join(homedir(), ".cache/nts-scratch/full-run-tests");
-mkdirSync(scratch, { recursive: true });
 
 test("missing full-run environment refuses before lock or setup", t => {
-  const home = mkdtempSync(join(scratch, "missing-env-"));
-  t.after(() => rmSync(home, { recursive: true, force: true }));
+  const home = testScratch(t, "full-run-missing-env");
   const result = spawnTest(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
     env: { ...process.env, HOME: home, ANDROID_HOME: "", JAVA_HOME: "", DEBUGINFOD_URLS: "" },
     encoding: "utf8",
@@ -27,8 +24,7 @@ test("missing full-run environment refuses before lock or setup", t => {
 });
 
 function fixture(t: { after(fn: () => void): void }) {
-  const directory = mkdtempSync(join(scratch, "run-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = testScratch(t, "full-run");
   const root = join(directory, "repo"), home = join(directory, "full");
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   mkdirSync(join(root, "tooling/lanes"), { recursive: true });

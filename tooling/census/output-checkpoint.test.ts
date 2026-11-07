@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { HARNESS_HASH } from "./project.ts";
@@ -9,14 +8,13 @@ import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 import { spawnTest } from "../gate/test-wait.ts";
 
 import { test } from "node:test";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 test("a JavaScript checkpoint from before prefix validation cannot be resumed", () => {
   const root = fileURLToPath(new URL("../../", import.meta.url));
   const binary = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
   assert.ok(existsSync(binary), `compiler missing: ${binary}; set NTS_BIN to a built pin`);
-  const base = join(homedir(), ".cache/nts-output-checkpoint-tests");
-  mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "case-"));
+  const scratch = newTestScratch("output-checkpoint-case");
   try {
     const path = "test/language/arguments-object/10.5-1gs.js";
     // Only selection is supplied by this fixture. The real runner performs

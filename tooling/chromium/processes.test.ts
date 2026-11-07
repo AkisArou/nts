@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
 import { processType, scopeProcesses } from "./processes.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const executable = "/engine/nts_shell";
 test("Chromium's packed process title and ordinary argv have the same type", () => {
@@ -17,9 +17,7 @@ test("Chromium's packed process title and ordinary argv have the same type", () 
 });
 
 test("scope membership includes reparented processes and excludes another launch", async () => {
-  const cache = join(homedir(), ".cache", "nts-chromium-tests");
-  await mkdir(cache, { recursive: true });
-  const directory = await mkdtemp(join(cache, "scope-"));
+  const directory = newTestScratch("chromium-scope");
   const proc = join(directory, "proc"), scope = join(directory, "own.scope");
   const fixtureProcess = async (pid: number, type: string, parent: number) => {
     const path = join(proc, String(pid));

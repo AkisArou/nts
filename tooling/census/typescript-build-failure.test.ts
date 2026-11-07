@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { chmodSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, mkdirSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnTest } from "../gate/test-wait.ts";
 import { compareTypeScriptObservation, observationFromRow, parseTypeScriptRecord, serializeTypeScriptRecord } from "./typescript-record.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
 for (const [stage, raw] of [
   ["emit", { bucket: "unsupported", why: "emit", first: "display only", buildDiagnostic: "/first/run/program.ll:12:3: error: invalid operand 42" }],
@@ -46,8 +46,7 @@ test("existing pass records keep their bytes and observation", () => {
 });
 
 test("the attempt records a compiler fault, rejects an outside kill and retains memory attribution", t => {
-  const base = join(homedir(), ".cache/nts/build-failure-tests"); mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "origin-")); t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const scratch = testScratch(t, "build-failure-origin");
   const helper = join(scratch, "origin.mjs");
   writeFileSync(helper, `
 import {mock} from 'node:test';
@@ -76,9 +75,7 @@ console.log(JSON.stringify(result));
 });
 
 test("the attempt retains the diagnostic and keeps toolchain loss separate", t => {
-  const base = join(homedir(), ".cache/nts/build-failure-tests"); mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "run-"));
-  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const scratch = testScratch(t, "build-failure-run");
   const helper = join(scratch, "producer.mjs");
   writeFileSync(helper, `
 import {mock} from 'node:test';
@@ -131,9 +128,7 @@ console.log(JSON.stringify(result));
 });
 
 test("an emit killed by its real memory cap cannot become a compiler-crash record", t => {
-  const base = join(homedir(), ".cache/nts/build-failure-tests"); mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "oom-"));
-  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const scratch = testScratch(t, "build-failure-oom");
   const compiler = join(scratch, "controlled-compiler.mjs"), helper = join(scratch, "oom.mjs");
   writeFileSync(compiler, `#!${process.execPath}
 import {mkdirSync,writeFileSync} from 'node:fs';import {join} from 'node:path';

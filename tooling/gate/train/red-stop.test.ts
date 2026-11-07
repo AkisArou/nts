@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gateEnvironment } from "../canonical-environment.ts";
 import { spawnTest, waitFor } from "../test-wait.ts";
 import { processActivity } from "../active-command.ts";
+import { newTestScratch } from "../test-scratch.ts";
 
 type Row = { name: string; verdict: string; cancelled_by?: string; reason?: string; started_at?: string };
 type Summary = { steps: Row[]; identities?: { commit: string }; train_red_stop?: { trigger: string; cancelled: string[] } };
@@ -14,9 +14,7 @@ type Summary = { steps: Row[]; identities?: { commit: string }; train_red_stop?:
 // The old runner terminates without a timeout: records releases old-paths.
 // A red-stopping runner cancels old-paths and never admits records.
 function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, members: number, hold: boolean, escape?: "double-fork" | "outlive-leader", missing?: "DBUS_SESSION_BUS_ADDRESS" | "XDG_RUNTIME_DIR", control: { launcherFailure?: boolean; repository?: boolean } = {}) {
-  const base = join(homedir(), ".cache/nts/train-red-stop-tests");
-  mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-"));
+  const own = newTestScratch("train-red-stop-run");
   const escaped = join(own, "escape-ready");
   const descendantAlive = () => {
     if (!existsSync(escaped)) return false;

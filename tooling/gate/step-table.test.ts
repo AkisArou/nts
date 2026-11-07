@@ -3,14 +3,14 @@
 //
 //   node --test tooling/gate/step-table.test.ts
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
 import { STEPS, stepTableProblem } from "./step-table.mjs";
 import { spawnTest } from "./test-wait.ts";
+import { testScratch } from "./test-scratch.ts";
 
 test("the table's dependencies all name steps, and none waits for itself", () => {
   assert.equal(stepTableProblem(STEPS), null);
@@ -22,8 +22,7 @@ test("the table's dependencies all name steps, and none waits for itself", () =>
 });
 
 test("the runner refuses a table whose steps wait for one another, before any step starts", t => {
-  const base = join(homedir(), ".cache/nts/step-table-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-")); t.after(() => rmSync(own, { recursive: true, force: true }));
+  const own = testScratch(t, "step-table-run");
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), run = join(own, "home/.cache/gate-run"), started = join(own, "started");
   const source = fileURLToPath(new URL("./", import.meta.url));
   mkdirSync(gate, { recursive: true });

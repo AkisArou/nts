@@ -1,15 +1,14 @@
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
-import {chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readdirSync,readFileSync,readlinkSync,realpathSync,renameSync,rmSync,symlinkSync,unlinkSync,writeFileSync} from 'node:fs';
-import {homedir} from 'node:os';
+import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,readlinkSync,realpathSync,renameSync,rmSync,symlinkSync,unlinkSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {acquire,inventory,link,pairPath,type Records} from './node-inputs.ts';
 import {fixtureInputs} from './node-inputs-test-fixture.ts';
+import {newTestScratch} from '../gate/test-scratch.ts';
 
 function scratch(t:TestContext){
-  const base=join(homedir(),'.cache/nts/node-inputs-tests');mkdirSync(base,{recursive:true});
-  const root=mkdtempSync(join(base,'t-'));
+  const root=newTestScratch('node-inputs');
   t.after(()=>{
     function writable(path:string){if(lstatSync(path).isDirectory()){chmodSync(path,0o755);for(const name of readdirSync(path))writable(join(path,name));}}
     writable(root);rmSync(root,{recursive:true,force:true});

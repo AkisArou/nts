@@ -1,7 +1,6 @@
 import { spawnTest, testProcessResult, TEST_HANG_MS, waitFor } from "../gate/test-wait.ts";
 import assert from "node:assert/strict";
-import { constants, existsSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { constants, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
@@ -11,14 +10,13 @@ import { createTokenPool } from "../gate/tokenpool.mjs";
 import { tokenClient } from "../gate/tokens.mjs";
 import { compileSync, compileActive, memoryCause, MemoryRun, memoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const fixture = join(HERE, "fixtures/resident-worker.ts");
 const CGROUP = "/sys/fs/cgroup";
 const scratch = () => {
-  const root = join(homedir(), ".cache/nts-scratch/resident-tests");
-  mkdirSync(root, { recursive: true });
-  return mkdtempSync(join(root, "run-"));
+  return newTestScratch("resident-run");
 };
 const kills = (group: string) => Number(/^oom_kill (\d+)$/m.exec(readFileSync(join(CGROUP, group, "memory.events"), "utf8"))![1]);
 

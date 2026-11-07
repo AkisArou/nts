@@ -2,12 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createServer} from 'node:http';
-import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {homedir} from 'node:os';
+import {existsSync,mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {DEPENDENCIES,digest,inputFiles,nodePin,prepare,publishedHash,resolveRecipe,verifySource} from './node.ts';
+import {newTestScratch} from '../gate/test-scratch.ts';
 
-function scratch(){const p=process.env.TMPDIR??join(homedir(),'.cache/nts-tests');mkdirSync(p,{recursive:true});return mkdtempSync(join(p,'node-bootstrap-'));}
+function scratch(){return newTestScratch('node-bootstrap');}
 function tree(root:string){
  mkdirSync(join(root,'src'),{recursive:true});
  writeFileSync(join(root,'src/node_version.h'),'#define NODE_MAJOR_VERSION 24\n#define NODE_MINOR_VERSION 20\n#define NODE_PATCH_VERSION 0\n');

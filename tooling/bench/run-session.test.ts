@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { readFileSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 const script = fileURLToPath(new URL("./run-session.ts", import.meta.url));
 const pin = "a".repeat(40),
   sha = "b".repeat(64);
@@ -48,9 +48,7 @@ function fixture() {
   };
 }
 test("actual session CLI renders a header and a typed row, and rejects the old missing-import bridge", () => {
-  const parent = join(homedir(), ".cache/nts-tmp");
-  mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, "bench-session-cli-"));
+  const root = newTestScratch("bench-session-cli");
   try {
     const input = join(root, "raw.json");
     writeFileSync(input, JSON.stringify(fixture()));

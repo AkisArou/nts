@@ -2,18 +2,16 @@ import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS } from "./compile-counter.ts";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
+import { newTestScratch } from "./test-scratch.ts";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 
 test("integrity executes every listing and counts only a kept prepared child", () => {
-  const base = join(homedir(), ".cache/nts-scratch");
-  mkdirSync(base, { recursive: true });
-  const dir = mkdtempSync(join(base, "integrity-child-control-"));
+  const dir = newTestScratch("integrity-child-control");
   try {
     const bin = join(dir, "bin");
     mkdirSync(bin);
@@ -85,9 +83,7 @@ child.on("close",status=>{
 // longest first, would start whatever finished last. One worker draws the
 // heavy project first, so the light one waits behind all of its work.
 test("integrity records a project's own listing time, not when it finished", () => {
-  const base = join(homedir(), ".cache/nts-scratch");
-  mkdirSync(base, { recursive: true });
-  const dir = mkdtempSync(join(base, "integrity-cost-order-"));
+  const dir = newTestScratch("integrity-cost-order");
   try {
     const bin = join(dir, "bin");
     mkdirSync(bin);

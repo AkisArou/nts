@@ -3,12 +3,12 @@ import test from "node:test";
 import { DOMException } from "../src/core/errors.ts";
 import { WptHarness, type WptActivity } from "./wpt/harness.ts";
 import { WptHungError, readWptHungResults, reportWptHung } from "./wpt/hung.ts";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { spawnSync } from "node:child_process";
 import { createContext } from "node:vm";
 import { UpstreamWptExecution } from "../../../tooling/conformance/web-platform/upstream-liveness.ts";
+import { testScratch } from "../../../tooling/gate/test-scratch.ts";
 
 function manualDeadlines() {
   const scheduled: { callback: () => void; cancelled: boolean; activity?: WptActivity }[] = [];
@@ -73,8 +73,7 @@ test("WPT VM spins are hung instruments rather than assertion failures", async (
 });
 
 test("WPT hung transport preserves the typed field and refuses a mutated verdict", t => {
-  const directory = mkdtempSync(join(homedir(), ".cache/nts-wpt-hung-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = testScratch(t, "wpt-hung");
   const observations = join(directory, "observations.jsonl"), step = join(directory, "step.json");
   const env = { ...process.env, NTS_WPT_HUNG_RESULTS: observations, NTS_GATE_STEP_RESULT: step,
     NTS_GATE_STEP: "web-platform", NTS_GATE_STEP_ATTEMPT: "control" };

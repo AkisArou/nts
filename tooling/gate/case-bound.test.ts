@@ -5,19 +5,20 @@
 //
 //   node --test tooling/gate/case-bound.test.ts
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { activeCommand, COMMAND_CPU_BUDGET_SECONDS, COMPILE_CPU_BOUND_SECONDS } from "./active-command.ts";
 import { CASE_TIMEOUT_EXIT, CASE_UNMEASURED_EXIT, parseCaseBound, runCaseBound } from "./case-bound.ts";
+import { testScratch } from "./test-scratch.ts";
 
 const spin = [process.execPath, ["-e", "for(;;){}"]] as const;
 // The parent only waits: the CPU is its child's.
 const spinningChild = [process.execPath, ["-e", "require('node:child_process').spawn(process.execPath,['-e','for(;;){}'],{stdio:'inherit'})"]] as const;
 
 function frame(t: { after: (fn: () => void) => void }) {
-  const dir = mkdtempSync(join(tmpdir(), "case-bound-")); t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = testScratch(t, "case-bound");
   const path = join(dir, "result.json");
   return { path, env: { ...process.env, NTS_GATE_STEP_RESULT: path, NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "one" },
     read: () => existsSync(path) ? JSON.parse(readFileSync(path, "utf8")) as { kind: string; verdict: string } : null };

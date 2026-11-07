@@ -1,20 +1,19 @@
 // Exercise the actual native-stop producer and census classifier together.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { spawnTest } from "../gate/test-wait.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
 
 test("C, LLVM and JVM census rows cannot hide wrong output before a native decline", () => {
   assert.ok(existsSync(binary), `compiler missing: ${binary}; set NTS_BIN to a built pin`);
-  const base = join(homedir(), ".cache/nts-native-output-tests");
-  mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "case-"));
+  const scratch = newTestScratch("native-output-case");
   try {
     const helper = join(scratch, "run.ts");
     writeFileSync(helper, `

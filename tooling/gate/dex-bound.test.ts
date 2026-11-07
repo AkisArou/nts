@@ -5,17 +5,17 @@
 //
 //   node --test tooling/gate/dex-bound.test.ts
 import assert from "node:assert/strict";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { spawnTest } from "./test-wait.ts";
+import { testScratch } from "./test-scratch.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 test("a target past its compile bound timed out: named, counted, red, and the next target runs", t => {
-  const own = mkdtempSync(join(tmpdir(), "dex-bound-")); t.after(() => rmSync(own, { recursive: true, force: true }));
+  const own = testScratch(t, "dex-bound");
   const root = join(own, "repo");
   for (const dir of ["tooling/android", "tooling/gate", "runtime/jvm", "benchmarks/cases/a-spin", "benchmarks/cases/b-declines", "bin", "sdk/build-tools/99.0.0"].map(d => join(d.startsWith("bin") || d.startsWith("sdk") ? own : root, d))) {
     mkdirSync(dir, { recursive: true });

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { test } from "node:test";
@@ -8,10 +8,10 @@ import { cpuList } from "../affinity.ts";
 import { gateEnvironment } from "../canonical-environment.ts";
 import { waitFor } from "../test-wait.ts";
 import { GateScopes, type StepScope } from "./step-scope.ts";
+import { newTestScratch } from "../test-scratch.ts";
 
 test("nested census scopes belong to one step and another run remains live when it drains", async t => {
-  const base = join(homedir(), ".cache/nts/nested-step-scope-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-"));
+  const own = newTestScratch("nested-step-scope-run");
   type Exit = { status: number | null; signal: NodeJS.Signals | null; output: string };
   const owners: GateScopes[] = [];
   const entries: { scope: StepScope; ready: string; release: string; metadata: string; done: Promise<Exit>; stopped: () => string | undefined; drained: boolean }[] = [];

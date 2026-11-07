@@ -1,17 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {chmodSync,copyFileSync,existsSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,rmSync,writeFileSync} from 'node:fs';
+import {chmodSync,copyFileSync,existsSync,mkdirSync,readFileSync,readdirSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
-import {homedir} from 'node:os';
 import {parseCases,publishCases} from '../conformance/native-case-result.ts';
 import {readStepInstrument} from './step-result.ts';
+import {testScratch} from './test-scratch.ts';
 
 function scratch(t) {
- const parent=process.env.TMPDIR??join(homedir(),'.cache/nts-tests');
- mkdirSync(parent,{recursive:true});
- const dir=mkdtempSync(join(parent,'native-result-'));
- t.after(()=>rmSync(dir,{recursive:true,force:true}));
+ const dir=testScratch(t,'native-result');
  return dir;
 }
 

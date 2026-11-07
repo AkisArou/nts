@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {mkdirSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {dirname,join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
@@ -9,6 +8,7 @@ import {COLUMNS,COMPARATORS,POLICY,publishRun,sealRun,renderFull} from "../bench
 import {KNOWN_DUPLICATE_RECORDS,recordNumbers} from "./records.ts";
 // The records step and tooling both exercise the canonical validator controls.
 import "../bench/run-record.test.ts";
+import {newTestScratch} from "./test-scratch.ts";
 
 test("record numbering preserves named collisions and refuses new or stale allowances",()=>{
   const names=KNOWN_DUPLICATE_RECORDS.flatMap(number=>[number+"-first.md",number+"-second.md"]);
@@ -19,8 +19,7 @@ test("record numbering preserves named collisions and refuses new or stale allow
 });
 
 test("the real records step validates benchmark evidence and its rendered table",()=>{
-  const parent=join(homedir(),".cache/nts-scratch/records-step");mkdirSync(parent,{recursive:true});
-  const root=mkdtempSync(join(parent,"test-"));
+  const root=newTestScratch("records-step");
   const runGit=(...args:string[])=>{
     const result=spawnSync("git",args,{cwd:root,encoding:"utf8"});
     assert.equal(result.status,0,result.stderr);return result.stdout;

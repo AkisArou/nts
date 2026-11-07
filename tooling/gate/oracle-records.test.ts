@@ -1,10 +1,10 @@
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { copyFileSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { GENERATOR, fixtureOf, parseLegacyTable, pendingFixtures, readRecords, readRecordsAt, recordPath, writeRecords, type OracleRow, type OracleTable } from "../differential/oracle-records.ts";
+import { newTestScratch } from "./test-scratch.ts";
 
 const header = { version: 1, generator_version: 1, generator_digest: "a".repeat(32), seed: null } as const;
 function row(name: string): OracleRow {
@@ -19,9 +19,7 @@ function subject(root: string, name: string): void {
   writeFileSync(join(root, `tests/programs/${name}/tsconfig.json`), '{"files":["src/main.ts"]}\n');
 }
 function fixture(action: (root: string, table: OracleTable) => void): void {
-  const cache = join(homedir(), ".cache/nts-oracle-record-tests");
-  mkdirSync(cache, { recursive: true });
-  const root = mkdtempSync(join(cache, "records-"));
+  const root = newTestScratch("oracle-records");
   try {
     mkdirSync(join(root, "benchmarks/cases"), { recursive: true });
     subject(root, "first");

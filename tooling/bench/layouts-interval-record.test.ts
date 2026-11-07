@@ -1,14 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {homedir} from 'node:os';
+import {mkdirSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join} from 'node:path';
 import {sampleLayouts} from './layouts-sitting.ts';
 import {checkedIntervalCase,recordIntervals} from './layouts-interval-record.ts';
+import {newTestScratch} from '../gate/test-scratch.ts';
 
 test('published intervals must match complete raw coverage and signatures',async()=>{
- const parent=process.env.TMPDIR??join(homedir(),'.cache/nts-tests');mkdirSync(parent,{recursive:true});
- const root=mkdtempSync(join(parent,'layout-record-'));
+ const root=newTestScratch('layout-record');
  try{
   const run=join(root,'run');mkdirSync(run);const directory=join(run,'control-llvm');
   const trials=Array.from({length:20},(_,i)=>({id:'draw-'+i,geometry:{base:'a'+i,changed:'b'+i},heapSeed:{base:i+1,changed:i+101}}));

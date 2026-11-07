@@ -3,8 +3,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
@@ -12,6 +11,7 @@ import { harnessHashOf } from "./project.ts";
 import { parseObservation, parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, type TypeScriptObservation } from "./typescript-record.ts";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 import { publishPin, provenanceOf } from "../conformance/pin.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(repository, process.env.NTS_BIN ?? "target/release/nts");
@@ -40,10 +40,7 @@ function row(observed: TypeScriptObservation): object {
 
 test("the CLI holds every recorded outcome and fails closed before recorded selection", t => {
   assert.ok(existsSync(binary), `compiler missing: ${binary}; set NTS_BIN to a built pin`);
-  const base = join(homedir(), ".cache/nts/typescript-record-cli-tests");
-  mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "t-"));
-  t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const scratch = testScratch(t, "typescript-record-cli");
   const sourceRoot = repository, fixture = join(scratch, "fixture"), census = join(fixture, "tooling/census");
   mkdirSync(census, { recursive: true });
   for (const name of readdirSync(join(sourceRoot, "tooling/census"))) {

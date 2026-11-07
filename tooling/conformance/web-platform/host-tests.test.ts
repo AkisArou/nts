@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { PassThrough } from "node:stream";
 import { runScopedTooling } from "../../gate/tooling-runner.ts";
@@ -9,11 +8,12 @@ import { readStepInstrument } from "../../gate/step-result.ts";
 import { readWptHungResults } from "../../../runtime/web-platform/test/wpt/hung.ts";
 import { UpstreamWptExecution } from "./upstream-liveness.ts";
 import { finishWebHost } from "./host-tests.ts";
+import { newTestScratch } from "../../gate/test-scratch.ts";
 
 const runner = new URL("../../../runtime/web-platform/test/wpt/runner.ts", import.meta.url).href;
 
 test("completed WPT failures survive a later hang through the real structured host stream", async t => {
-  const directory = mkdtempSync(join(homedir(), ".cache/nts-wpt-failure-priority-"));
+  const directory = newTestScratch("wpt-failure-priority");
   const previous = process.env.NTS_WPT_HUNG_RESULTS;
   t.after(() => { if (previous === undefined) delete process.env.NTS_WPT_HUNG_RESULTS; else process.env.NTS_WPT_HUNG_RESULTS = previous; rmSync(directory, { recursive: true, force: true }); });
   for (const route of ["fail", "pass", "body-cleanup", "harness", "cleanup", "close"] as const) {

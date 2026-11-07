@@ -11,19 +11,18 @@
 import { test, type TestContext } from "node:test";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT, gateEnvironment } from "../gate/canonical-environment.ts";
 import { launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions } from "./run.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const GATE = fileURLToPath(new URL("../gate/", import.meta.url));
 
 function fixture(t: TestContext) {
-  const base = join(homedir(), ".cache/nts/landing-tests"); mkdirSync(base, { recursive: true });
   // A red run keeps read-only captured inputs in its temporary directory: removeRun restores them first.
-  const own = mkdtempSync(join(base, "run-")); t.after(() => removeRun(own));
+  const own = newTestScratch("landing-run"); t.after(() => removeRun(own));
   const tree = join(own, "tree"), gate = join(tree, "tooling/gate"), controls = join(own, "controls"), home = join(own, "home");
   const target = join(home, ".cache/target"), run = join(home, ".cache/runs/one");
   for (const dir of [gate, controls, target]) mkdirSync(dir, { recursive: true });

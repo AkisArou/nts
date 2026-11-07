@@ -1,21 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { stripVTControlCharacters } from "node:util";
 import test from "node:test";
 import { spawnTest } from "./test-wait.ts";
 import { TOOLING_COLLECTOR_COMMAND } from "./tooling-runner.ts";
+import { testScratch } from "./test-scratch.ts";
 
 const shell = readFileSync(process.env.NTS_TOOLING_LOG_SHELL ?? new URL("./all.sh", import.meta.url), "utf8");
 const wrapper = /^tooling_tests\(\) \{\n[\s\S]*?^\}/m.exec(shell)?.[0];
 assert.ok(wrapper, "the test exercises all.sh's actual tooling wrapper");
-const scratch = join(homedir(), ".cache/nts-scratch/tooling-log");
-mkdirSync(scratch, { recursive: true });
 
 function run(t: { after(fn: () => void): void }, failure: boolean, runDirectory: boolean, color: boolean, command: readonly string[] = TOOLING_COLLECTOR_COMMAND) {
-  const root = mkdtempSync(join(scratch, "report-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "tooling-log-report");
   for (const dir of ["bin", "run", "tmp"]) mkdirSync(join(root, dir));
   const fixture = join(root, "fixture.test.ts");
   writeFileSync(fixture, `import test from 'node:test';

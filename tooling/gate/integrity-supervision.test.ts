@@ -1,18 +1,17 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {chmodSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {chmodSync,existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {spawnTest} from "./test-wait.ts";
+import {newTestScratch} from "./test-scratch.ts";
 
 const ROOT=fileURLToPath(new URL("../../",import.meta.url));
 const ACTIVE=new URL("./active-command.ts",import.meta.url).href;
 const INTEGRITY=new URL("../conformance/integrity.ts",import.meta.url).href;
 
 function probe(behavior:string,failed=false,entry=INTEGRITY){
-  const base=join(homedir(),".cache/nts-scratch");mkdirSync(base,{recursive:true});
-  const dir=mkdtempSync(join(base,"integrity-supervision-"));
+  const dir=newTestScratch("integrity-supervision");
   try{
     const compiler=join(dir,"nts"),frame=join(dir,"instrument.json");
     writeFileSync(compiler,`#!/usr/bin/env node

@@ -17,21 +17,20 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { createInterface } from "node:readline";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
+import { testScratch } from "./test-scratch.ts";
 
 const GATE = fileURLToPath(new URL("./", import.meta.url));
 const WAITING = /waiting for 14 GB before the first case/;
 
 function fixture(t: TestContext) {
-  const base = join(homedir(), ".cache/nts/inner-gate-memory-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-")); t.after(() => rmSync(own, { recursive: true, force: true }));
+  const own = testScratch(t, "inner-gate-memory-run");
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), started = join(own, "case-started");
   // The gate's own files, with the runner copied so that it takes the fixture for its tree.
   mkdirSync(gate, { recursive: true });

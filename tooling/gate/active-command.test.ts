@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import {spawnSync} from "node:child_process";
-import {existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {existsSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {test} from "node:test";
 import {activeCommand,processActivity,CommandActivitySampler} from "./active-command.ts";
 import {readStepInstrument} from "./step-result.ts";
 import {waitFor} from "./test-wait.ts";
+import {testScratch} from "./test-scratch.ts";
 
 function fixture(t) {
-  const base=join(homedir(),".cache/nts-active-command-tests");mkdirSync(base,{recursive:true});
-  const root=mkdtempSync(join(base,"case-"));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  const root=testScratch(t,"active-command-case");
   return {root,env:{...process.env,NTS_GATE_STEP:"c-compiles",NTS_GATE_STEP_ATTEMPT:"active-control",NTS_GATE_STEP_RESULT:join(root,"result.json")}};
 }
 

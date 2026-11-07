@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { waitFor } from "../test-wait.ts";
 import { GateScopes, reapGateRoot } from "./step-scope.ts";
 import { reapRunOwner } from "./run-owner.ts";
+import { newTestScratch } from "../test-scratch.ts";
 
 test("a malformed owner start identity cannot make a live process appear dead", () => {
-  const base = join(homedir(), ".cache/nts/run-owner-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "invalid-")), path = join(own, "owner.json");
+  const own = newTestScratch("run-owner-invalid"), path = join(own, "owner.json");
   const stat = readFileSync("/proc/self/stat", "utf8"), start = stat.slice(stat.lastIndexOf(")") + 2).split(" ")[19]!;
   let reaped = 0;
   try {
@@ -25,8 +24,7 @@ test("a malformed owner start identity cannot make a live process appear dead", 
 });
 
 for (const beforeCheckout of [false, true]) test(`the next runner reaps a dead runner's exact root (before checkout=${beforeCheckout})`, async t => {
-  const base = join(homedir(), ".cache/nts/run-owner-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-")), receipt = join(own, "owner.json"), info = join(own, "root.json"), ready = join(own, "ready");
+  const own = newTestScratch("run-owner-run"), receipt = join(own, "owner.json"), info = join(own, "root.json"), ready = join(own, "ready");
   t.after(() => {
     if (existsSync(info)) {
       const { slice } = JSON.parse(readFileSync(info, "utf8")) as { slice: string };
@@ -60,8 +58,7 @@ writeFileSync(${JSON.stringify(info)},JSON.stringify({slice:owner.slice,group:ow
 });
 
 test("a live runner's root cannot be reaped by another runner in its tree", () => {
-  const base = join(homedir(), ".cache/nts/run-owner-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "live-")), receipt = join(own, "owner.json");
+  const own = newTestScratch("run-owner-live"), receipt = join(own, "owner.json");
   const owner = new GateScopes(process.env, receipt);
   let unexpected: GateScopes | undefined;
   try {

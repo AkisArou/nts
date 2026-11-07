@@ -81,15 +81,11 @@ impl Drop for Directory {
 fn effective_no_emit_stays_true_through_checking_without_rewriting_the_config() {
     static NEXT: AtomicU64 = AtomicU64::new(0);
     for count in [1, 4] {
-        let root = Directory(
-            Utf8PathBuf::from(std::env::var("HOME").expect("home"))
-                .join(".cache/nts-no-emit-tests")
-                .join(format!(
-                    "{}-{}",
-                    std::process::id(),
-                    NEXT.fetch_add(1, Ordering::Relaxed)
-                )),
-        );
+        let root = Directory(crate::test_scratch::base().join(format!(
+            "no-emit-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        )));
         std::fs::create_dir_all(&root.0).expect("test directory");
         let config = r#"{"compilerOptions":{"noEmit":false,"types":[],"target":"ESNext"},"files":["main.ts"]}"#;
         let path = root.0.join("tsconfig.json");

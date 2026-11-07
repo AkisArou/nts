@@ -2,13 +2,13 @@
 // which recorders it runs, and what it lets them write. The recorders here are
 // stand-ins that write rows through the same merge helpers the real ones use.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
 import { findPending, recordPending, type Runner } from "./record-pending.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 const refused: TypeScriptObservation = { kind: "refused", diagnostics: [{ code: "NTS1001", where: "body" }] };
@@ -16,10 +16,7 @@ const compileRefused: BenchmarkOutcome = { kind: "refused", diagnostic: "NTS1001
 const node = "exit 0; Observed: x=1;";
 
 function tree(t: { after(fn: () => void): void }): string {
-  const base = join(homedir(), ".cache/nts/record-pending-tests");
-  mkdirSync(base, { recursive: true });
-  const root = mkdtempSync(join(base, "tree-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "record-pending-tree");
   const put = (path: string, text: string) => { mkdirSync(dirname(join(root, path)), { recursive: true }); writeFileSync(join(root, path), text); };
   for (const name of ["recorded", "new"]) put(`tests/typescript/family/${name}.ts`, "/*---\nfeatures: []\n---*/\nassert.sameValue(1, 1);\n");
   for (const backend of BACKENDS) {

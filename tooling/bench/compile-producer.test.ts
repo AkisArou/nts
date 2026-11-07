@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { appendFileSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { appendFileSync, copyFileSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { COMPILE_KEY_INPUTS, compileKey } from "./compile-producer.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 /** What is not compile behaviour: none of these may move a recorded row's key. */
@@ -19,10 +19,7 @@ const NOT_THE_PRODUCER = {
 
 test("the compile key moves with the compile producer and nothing else", t => {
   assert.deepEqual([...COMPILE_KEY_INPUTS], ["tooling/bench/compile-producer.ts", "tooling/conformance/compile-diagnostics.ts"]);
-  const base = join(homedir(), ".cache/nts/compile-key-tests");
-  mkdirSync(base, { recursive: true });
-  const root = mkdtempSync(join(base, "tree-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "compile-key-tree");
   for (const path of [...COMPILE_KEY_INPUTS, ...Object.values(NOT_THE_PRODUCER)]) {
     mkdirSync(dirname(join(root, path)), { recursive: true });
     copyFileSync(join(repository, path), join(root, path));

@@ -1,15 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,mkdirSync,writeFileSync,readFileSync,rmSync,chmodSync} from 'node:fs';
-import {homedir} from 'node:os';
+import {writeFileSync,readFileSync,rmSync,chmodSync} from 'node:fs';
 import {join,dirname} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {spawnSync} from 'node:child_process';
+import {newTestScratch} from './test-scratch.ts';
 
 const helper=join(dirname(fileURLToPath(import.meta.url)),'corpus.ts');
 function fixture(body:(root:string,suite:string)=>void){
-  const cache=process.env.TMPDIR??join(homedir(),'.cache');mkdirSync(cache,{recursive:true});
-  const root=mkdtempSync(join(cache,'nts-corpus-gate-'));
+  const root=newTestScratch('corpus-gate');
   const suite=join(root,'suite.cjs');
   writeFileSync(suite,[
     "#!/usr/bin/env node",

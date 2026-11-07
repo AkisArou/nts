@@ -2,20 +2,17 @@ import { launcherPolicyNames } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import {GateResource} from "../lanes/gate-resource.ts";
+import { testScratch } from "./test-scratch.ts";
 
 const script = readFileSync(new URL("./pinned.sh", import.meta.url), "utf8");
-const scratch = join(homedir(), ".cache/nts-scratch/tsrs-lane/pinned-tests");
-mkdirSync(scratch, { recursive: true });
 
 for (const refuses of [false, true]) for (const inherited of [false,true]) {
   test(`candidate owns input preparation${refuses ? " and its failure is preserved" : ""}${inherited ? " under the inherited tree lock" : ""}`, t => {
-    const directory = mkdtempSync(join(scratch, "candidate-"));
-    t.after(() => rmSync(directory, { recursive: true, force: true }));
+    const directory = testScratch(t, "pinned-candidate");
     const root = join(directory, "repo");
     const tree = join(directory, "gate-tree");
     mkdirSync(join(root, "tooling/gate"), { recursive: true });

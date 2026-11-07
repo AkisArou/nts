@@ -5,9 +5,10 @@ import {homedir,tmpdir} from "node:os";
 import {join} from "node:path";
 import {spawnTest} from "../gate/test-wait.ts";
 import {nodeEnvironment,OWNER_MARK,sweepLeftovers} from "./node-environment.ts";
+import {newTestScratch} from "../gate/test-scratch.ts";
 
 test("node children keep canonical behavior under contaminated launchers",()=>{
-  const root=mkdtempSync(join(homedir(),".cache/node-env-control-"));
+  const root=newTestScratch("node-env-control");
   const paths={TMPDIR:join(root,"tmp"),NODE_TEST_DIR:join(root,"tests")};
   try {
     const clean=nodeEnvironment({PATH:process.env.PATH,HOME:homedir()},paths);

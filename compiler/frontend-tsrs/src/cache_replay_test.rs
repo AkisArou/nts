@@ -11,13 +11,11 @@ struct Scratch(Utf8PathBuf);
 impl Scratch {
     fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
-        let root = Utf8PathBuf::from(std::env::var("HOME").expect("test cache home"))
-            .join(".cache/nts-tsrs-input-tests")
-            .join(format!(
-                "{}-{}",
-                std::process::id(),
-                NEXT.fetch_add(1, Ordering::Relaxed)
-            ));
+        let root = crate::test_scratch::base().join(format!(
+            "tsrs-input-{}-{}",
+            std::process::id(),
+            NEXT.fetch_add(1, Ordering::Relaxed)
+        ));
         std::fs::create_dir_all(&root).expect("scratch directory");
         Self(root)
     }

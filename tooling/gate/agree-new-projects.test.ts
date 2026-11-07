@@ -1,16 +1,15 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHash } from "node:crypto";
-import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
 import { candidateAddedProjects, fullyMeasuredAgreement } from "../differential/new-projects.ts";
 import { spawnTest } from "./test-wait.ts";
 import { writeRecords } from "../differential/oracle-records.ts";
+import { testScratch } from "./test-scratch.ts";
 
-const scratch=join(homedir(),".cache/nts-scratch/agree-new-project-tests");mkdirSync(scratch,{recursive:true});
 function fixture(t:{after(fn:()=>void):void}) {
-  const directory=mkdtempSync(join(scratch,"case-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const directory=testScratch(t, "agree-new-project-case");
   const root=join(directory,"repo"),home=join(directory,"home");mkdirSync(root);mkdirSync(home);
   const env:NodeJS.ProcessEnv=Object.fromEntries(Object.entries(process.env).filter(([key])=>!key.startsWith("GIT_") && !key.startsWith("NTS_")));
   Object.assign(env,{HOME:home,XDG_CACHE_HOME:join(home,".cache"),TMPDIR:directory,NTS_AGREE_JOBS:"1",

@@ -1,17 +1,16 @@
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { spawn, spawnSync } from "node:child_process";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { publishPin } from "../conformance/pin.ts";
 import { FIXED_AMBIENT, gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
 test("compile children use the canonical ambient environment and retain its owned handoff", async t => {
   const { compileEnvironment } = await import("./compile-producer.ts");
-  const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
-  const root = mkdtempSync(join(base, "environment-")); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "benchmark-record-environment");
   const home = join(root, "home"); mkdirSync(home);
   const launcher = { PATH: process.env.PATH, HOME: home, DBUS_SESSION_BUS_ADDRESS: process.env.DBUS_SESSION_BUS_ADDRESS, XDG_RUNTIME_DIR: process.env.XDG_RUNTIME_DIR,
     NODE_OPTIONS: "--trace-warnings", LD_PRELOAD: "/shell/not-an-input.so", FORCE_COLOR: "3", TZ: "Pacific/Honolulu", CFLAGS: "-Dbad", NTS_RC_NAIVE: "1" };
@@ -52,8 +51,7 @@ test("compile observations retain defects and reject incomplete instruments", as
 
 test("the compile CLI records twice, checks changed outcomes, and refuses non-pins and resource stops", async t => {
   const repository = fileURLToPath(new URL("../../", import.meta.url));
-  const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
-  const scratch = mkdtempSync(join(base, "cli-")); t.after(() => rmSync(scratch, { recursive: true, force: true }));
+  const scratch = testScratch(t, "benchmark-record-cli");
   const root = join(scratch, "fixture"); mkdirSync(join(root, "tooling/bench"), { recursive: true });
   for (const entry of readdirSync(join(repository, "tooling"))) if (entry !== "bench") symlinkSync(join(repository, "tooling", entry), join(root, "tooling", entry));
   for (const entry of readdirSync(join(repository, "tooling/bench"))) {
@@ -193,8 +191,7 @@ test("recorded compile cells execute every backend and expose outcome movement",
   const { observeCompile } = await import("./compile-producer.ts");
   const { checkCompileRecord } = await import("./build-records.ts");
   const { serializeBenchmarkRecord, parseBenchmarkRecord } = await import("./outcomes.ts");
-  const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
-  const root = mkdtempSync(join(base, "run-")); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "benchmark-record-run");
   const path = "benchmarks/cases/control", project = join(root, "tsconfig.json"); writeFileSync(project, "{}");
   const calls: string[][] = [];
   let refused = false;
@@ -235,8 +232,7 @@ test("recorded compile cells execute every backend and expose outcome movement",
 
 test("case identities cover imported sources, inherited configs and local data independently of the scratch path", async t => {
   const { benchmarkIdentities } = await import("./build-records.ts");
-  const base = join(homedir(), ".cache/nts/benchmark-record-tests"); mkdirSync(base, { recursive: true });
-  const root = mkdtempSync(join(base, "identity-")); t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "benchmark-record-identity");
   const a = "benchmarks/cases/control", b = "benchmarks/cases/subject";
   for (const path of [a, b, "benchmarks/common", "scratch-a", "scratch-b"]) mkdirSync(join(root, path), { recursive: true });
   writeFileSync(join(root, "tsconfig.fixtures.json"), JSON.stringify({ compilerOptions: { target: "ESNext", noEmit: true } }));

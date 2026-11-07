@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { gateEnvironment } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
 import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory } from "./step-scheduling.ts";
+import { testScratch } from "./test-scratch.ts";
 
 test("equal and missing estimates have a deterministic name tie-break", () => {
   const names = ["typescript-c", "tests", "blockers", "integrity"];
@@ -20,8 +20,7 @@ test("equal and missing estimates have a deterministic name tie-break", () => {
 });
 
 test("completed CPU history survives small trains and corrupt or failed cache writes are harmless", t => {
-  const base = join(homedir(), ".cache/nts/step-scheduling-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "history-")); t.after(() => rmSync(own, { recursive: true, force: true }));
+  const own = testScratch(t, "step-scheduling-history");
   const previous = join(own, "summary.json"), file = join(own, "costs/steps.json");
   writeFileSync(previous, JSON.stringify({ schema: 1, environment: { canonical: true }, steps: [
     { name: "typescript-c", verdict: "PASS", wall: 1067, cpu: 2663 }, { name: "blockers", verdict: "NOT RUN", wall: 900, cpu: 900 },
@@ -73,8 +72,7 @@ test("a step's usable width counts the frontend cap, so a capped step is not ran
 });
 
 test("measured CPU work starts TypeScript at full width against a competing fixed grant", t => {
-  const base = join(homedir(), ".cache/nts/step-scheduling-tests"); mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-")); t.after(() => rmSync(own, { recursive: true, force: true }));
+  const own = testScratch(t, "step-scheduling-run");
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "gate-run");
   mkdirSync(gate, { recursive: true }); mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));

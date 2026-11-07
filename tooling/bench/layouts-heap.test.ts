@@ -1,14 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
-import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from 'node:fs';
-import {homedir} from 'node:os';
+import {readFileSync,rmSync,writeFileSync} from 'node:fs';
 import {join,resolve} from 'node:path';
 import {heapReport} from './layouts-heap.ts';
+import {newTestScratch} from '../gate/test-scratch.ts';
 
 test('heap helper compiles strictly and moves observed main/thread placement',{skip:process.platform!=='linux'||process.arch!=='x64'},()=>{
- const parent=process.env.TMPDIR??join(homedir(),'.cache/nts-tests');mkdirSync(parent,{recursive:true});
- const dir=mkdtempSync(join(parent,'layout-heap-'));
+ const dir=newTestScratch('layout-heap');
  try {
   const source=resolve(import.meta.dirname,'../../tooling/bench/layouts-heap.c'),library=join(dir,'heap.so');
   let r=spawnSync('clang',['-std=c11','-O2','-Wall','-Wextra','-Werror','-fPIC','-shared',source,'-ldl','-pthread','-o',library],{encoding:'utf8'});

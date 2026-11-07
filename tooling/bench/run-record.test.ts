@@ -1,8 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
+import { readFileSync, writeFileSync, rmSync, readdirSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { spawnSync, spawn } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import {
@@ -21,6 +20,7 @@ import {
   type Cell,
   type RunRecord,
 } from "./run-record.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const pin = "a".repeat(40),
   digest = "b".repeat(64);
@@ -72,9 +72,7 @@ function fixture(label = "one", at = "2026-10-29T12:00:00.000Z"): RunRecord {
   });
 }
 function temp(): string {
-  const directory = join(homedir(), ".cache/nts-tmp");
-  mkdirSync(directory, { recursive: true });
-  return mkdtempSync(join(directory, "bench-record-test-"));
+  return newTestScratch("bench-record-test");
 }
 function git(root: string, args: string[]): string {
   const r = spawnSync("git", args, { cwd: root, encoding: "utf8" });

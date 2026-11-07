@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
-import {mkdirSync, mkdtempSync, rmSync, writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {writeFileSync} from "node:fs";
 import {join} from "node:path";
 import test from "node:test";
 import type {TestContext} from "node:test";
@@ -8,6 +7,7 @@ import type {ActiveResult} from "./active-command.ts";
 import type {CheckRunner, CheckCommandResult} from "../differential/check-report-types.ts";
 import {runConsumer} from "../differential/check-report.ts";
 import {CaseBudgetError, readStepInstrument, ToolingInstrumentError} from "./step-result.ts";
+import {testScratch} from "./test-scratch.ts";
 
 const HELP = "  check        compile, run, and compare against node (--json)\n";
 const AGREES = JSON.stringify({version: 1, status: "agrees",
@@ -16,8 +16,7 @@ const AGREES = JSON.stringify({version: 1, status: "agrees",
   oracle: {expected: 1, received: 1, complete: true}, refusals: [], disagreements: [], aborts: [], error: null});
 
 function fixture(t: TestContext) {
-  const cache = join(homedir(), ".cache/nts-check-supervision-tests"); mkdirSync(cache, {recursive: true});
-  const root = mkdtempSync(join(cache, "run-")); t.after(() => rmSync(root, {recursive: true, force: true}));
+  const root = testScratch(t,"check-supervision-run");
   const env = {...process.env, NTS_GATE_STEP: "examples", NTS_GATE_STEP_ATTEMPT: "supervision",
     NTS_GATE_STEP_RESULT: join(root, "result.json")};
   return {root, env, frame: () => readStepInstrument(env.NTS_GATE_STEP_RESULT, env.NTS_GATE_STEP, env.NTS_GATE_STEP_ATTEMPT)};

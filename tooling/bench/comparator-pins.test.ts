@@ -1,16 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { readFileSync, mkdirSync, writeFileSync, mkdtempSync, rmSync } from "node:fs";
+import { readFileSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { homedir } from "node:os";
 import { pinnedComparators, sha256 } from "./comparator-pins.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 const declaration = JSON.parse(
   readFileSync(new URL("./comparators.json", import.meta.url), "utf8"),
 );
 function fixture() {
-  const parent = join(homedir(), ".cache/nts-tmp");
-  mkdirSync(parent, { recursive: true });
-  const root = mkdtempSync(join(parent, "comparator-pin-test-")),
+  const root = newTestScratch("comparator-pin-test"),
     cache = join(root, "cache");
   mkdirSync(join(root, "tooling/bench"), { recursive: true });
   mkdirSync(cache);

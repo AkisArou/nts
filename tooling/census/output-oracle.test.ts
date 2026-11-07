@@ -1,17 +1,15 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
-import { homedir } from "node:os";
+import { rmSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { capped } from "./attempt262.ts";
 import { materialise, workspace } from "./project.ts";
 import { outputOracle } from "./output-oracle.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 for (const language of ["js", "ts"] as const) for (const module of [false, true]) {
   test(`the ${language} output oracle preserves the ${module ? "module" : "script"} source goal and harness`, () => {
-    const base = join(homedir(), ".cache/nts-output-oracle-tests");
-    mkdirSync(base, { recursive: true });
-    const scratch = mkdtempSync(join(base, "case-"));
+    const scratch = newTestScratch("output-oracle-case");
     try {
       const project = workspace(join(scratch, "project"), language);
       const source = `/*---\nflags: [${module ? "module" : ""}]\n---*/\nassert.sameValue(2 + 2, 4); assert.sameValue(this === undefined, ${language === "ts" || module}); console.log("before"); console.error("error"); try { console.log("body"); } finally { console.log("finally"); }`;

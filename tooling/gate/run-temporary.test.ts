@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {existsSync,mkdirSync,mkdtempSync,readdirSync,readFileSync,renameSync,rmSync,symlinkSync,writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {existsSync,mkdirSync,readdirSync,readFileSync,renameSync,symlinkSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
 import {captureRunTemporary,finishRunTemporary,pruneRunTemporaries} from "./run-temporary.ts";
-const scratch=join(homedir(),".cache/nts-scratch/run-temporary-tests");mkdirSync(scratch,{recursive:true});
+import {testScratch} from "./test-scratch.ts";
 // The free-disk reading is injected: what these tests decide must not depend
 // on the machine's own free disk.
 const roomy={freeBytes:()=>Number.MAX_SAFE_INTEGER};
 function fixture(t:{after(fn:()=>void):void}) {
- const home=mkdtempSync(join(scratch,"home-"));t.after(()=>rmSync(home,{recursive:true,force:true}));
+ const home=testScratch(t,"run-temporary-home");
  const run=(name:string)=>join(home,".cache/runs",name);
  return {home,run};
 }

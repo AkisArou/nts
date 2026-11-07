@@ -1,16 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { acceptedChange, improves } from "./outcome-transition.ts";
 import { judge, outcomeInventory, outcomeRecord } from "./outcomes-verdict.ts";
+import { testScratch } from "../gate/test-scratch.ts";
 
 test("a fixture with no record is pending, and a record whose program is gone is stale", t => {
-  const base = join(homedir(), ".cache/nts/outcomes-verdict-tests");
-  mkdirSync(base, { recursive: true });
-  const directory = mkdtempSync(join(base, "fixtures-"));
-  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = testScratch(t, "outcomes-verdict-fixtures");
   for (const [name, files] of [["recorded", ["src/main.ts", "outcome.json"]], ["new", ["src/main.ts"]], ["deleted", ["outcome.json"]]] as const) {
     for (const file of files) {
       mkdirSync(dirname(join(directory, name, file)), { recursive: true });

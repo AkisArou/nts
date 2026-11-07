@@ -4,8 +4,7 @@
 //
 //   node --test tooling/gate/step-bound.test.ts
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -17,6 +16,7 @@ import { instrumentPolicy } from "./step-result.ts";
 import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
 import { spawnTest } from "./test-wait.ts";
+import { newTestScratch } from "./test-scratch.ts";
 
 const baseline = () => readBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
 
@@ -76,7 +76,7 @@ test("no bound would have stopped the committed healthy run", () => {
 /** A real runner in a scratch repository running `steps`: `format` never finishes, `records` finishes at once. */
 function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, owned: Record<string, string> = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
-  const own = mkdtempSync(join(tmpdir(), "step-bound-"));
+  const own = newTestScratch("step-bound");
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); rmSync(own, { recursive: true, force: true }); });
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
   mkdirSync(gate, { recursive: true });

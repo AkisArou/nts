@@ -7,16 +7,14 @@
 // does not -- whatever nts would make of either.
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { extname, join } from "node:path";
 
 import { oracle, selectTypescript } from "./suites/typescript.ts";
+import { newTestScratch } from "../gate/test-scratch.ts";
 
 const scratch = () => {
-  const base = join(homedir(), ".cache/nts/typescript-suite-tests");
-  mkdirSync(base, { recursive: true });
-  return mkdtempSync(join(base, "t-"));
+  return newTestScratch("typescript-suite");
 };
 
 const RIGHT = `/*---

@@ -92,3 +92,7 @@ fn exported_checker_identity_matches_the_vendored_provenance() {
 #[cfg(test)]
 #[path = "yield_diagnostics_test.rs"]
 mod yield_diagnostics_tests;
+
+#[cfg(test)]
+#[path = "test_scratch.rs"]
+mod test_scratch;

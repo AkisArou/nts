@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { mkdirSync, mkdtempSync, rmSync, existsSync, readFileSync, readdirSync, writeFileSync, symlinkSync, utimesSync } from "node:fs";
+import { mkdirSync, existsSync, readFileSync, readdirSync, writeFileSync, symlinkSync, utimesSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { spawnTest } from "./test-wait.ts";
@@ -8,8 +8,8 @@ import {
   assertLandingEnvironment, ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT,
   FIXED_AMBIENT, gateEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,
 } from "./canonical-environment.ts";
+import { testScratch } from "./test-scratch.ts";
 
-const scratch=join(homedir(),".cache/nts-scratch/canonical-environment-tests");
 
 test("upstream Rayon limits belong only to the measured compile environment",t=>{
   const {run,base}=fixture(t);
@@ -20,7 +20,6 @@ test("upstream Rayon limits belong only to the measured compile environment",t=>
   assert.equal(ordinary.env.RAYON_NUM_THREADS,undefined);
   assert.throws(()=>assertLandingEnvironment({RAYON_NUM_THREADS:"1"}),/RAYON_NUM_THREADS/);
 });
-mkdirSync(scratch,{recursive:true});
 /** An inner run admits against this reading, never the host's memory: inside a
  * full gate the host can sit below the floor, and admission would wait. */
 function ampleMemory(run:string):string {
@@ -28,7 +27,7 @@ function ampleMemory(run:string):string {
 }
 
 function fixture(t:{after(fn:()=>void):void}) {
-  const run=mkdtempSync(join(scratch,"run-"));t.after(()=>rmSync(run,{recursive:true,force:true}));
+  const run=testScratch(t, "canonical-environment-run");
   return {run,base:{PATH:process.env.PATH,HOME:homedir(),JAVA_HOME:"/jdk with spaces",CARGO_HOME:"/cargo",RUSTUP_HOME:"/rustup"}};
 }
 

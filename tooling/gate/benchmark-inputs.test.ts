@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import {createHash} from "node:crypto";
-import {cpSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {cpSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath} from "node:url";
 import {test} from "node:test";
 import {checkBenchmarkInputs} from "../licenses/benchmark-inputs.ts";
 import {spawnTest} from "./test-wait.ts";
+import {newTestScratch} from "./test-scratch.ts";
 
 const repository = fileURLToPath(new URL("../..", import.meta.url));
 const casePath = "benchmarks/cases/input-control";
@@ -15,9 +15,7 @@ const inputPath = `${casePath}/data`;
 const licence = "Creative Commons Attribution 4.0 International\nCC-BY-4.0\nLicensed Material\nSection 3\n";
 const sha256 = (text: string) => createHash("sha256").update(text).digest("hex");
 function fixture() {
-  const parent = join(homedir(), ".cache/nts-scratch/benchmark-input-controls");
-  mkdirSync(parent, {recursive: true});
-  const root = mkdtempSync(join(parent, "test-"));
+  const root = newTestScratch("benchmark-input-controls");
   const git = (...args: string[]) => {
     const result = spawnTest("git", args, {cwd: root, encoding: "utf8"});
     assert.equal(result.status, 0, result.stderr); return result.stdout;

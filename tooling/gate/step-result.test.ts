@@ -1,15 +1,14 @@
 import {spawnTest} from "./test-wait.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { existsSync, mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { join,resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { CaseBudgetError, INSTRUMENT_DISPOSITIONS, PressureError, ToolingInstrumentError, instrumentPolicy, publishHung, publishRunaway, publishPressure, publishSelectorFailure, publishToolingFailure, readStepInstrument } from "./step-result.ts";
 import { memoryDisposition, caseBudgetMessage } from "../census/worker-memory.ts";
+import { testScratch } from "./test-scratch.ts";
 test("one exhaustive disposition table validates every kind and decides operator holds",t=>{
-  const base=join(homedir(),".cache/nts-scratch/step-result");mkdirSync(base,{recursive:true});
-  const dir=mkdtempSync(join(base,"policies-")),path=join(dir,"result.json");t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const dir=testScratch(t,"step-result-policies"),path=join(dir,"result.json");
   for(const [kind,policy] of Object.entries(INSTRUMENT_DISPOSITIONS)){
     const instrument={version:1,kind,verdict:policy.verdict,step:"control",attempt:"one",reason:"observed result"};
     writeFileSync(path,JSON.stringify(instrument));assert.equal(readStepInstrument(path,"control","one")?.kind,kind);
@@ -24,8 +23,7 @@ test("one exhaustive disposition table validates every kind and decides operator
 test("the native checker rejects adding an instrument kind without its disposition",t=>{
   const root=fileURLToPath(new URL("../../",import.meta.url)),binary=resolve(root,process.env.NTS_BIN??"target/release/nts");
   assert.ok(existsSync(binary),`compiler missing: ${binary}; set NTS_BIN`);
-  const base=join(homedir(),".cache/nts-scratch/step-result");mkdirSync(base,{recursive:true});
-  const dir=mkdtempSync(join(base,"typed-"));t.after(()=>rmSync(dir,{recursive:true,force:true}));
+  const dir=testScratch(t, "step-result-typed");
   const source=readFileSync(new URL("./step-result.ts",import.meta.url),"utf8");
   const policy=source.slice(source.indexOf("export type InstrumentResult"),source.indexOf("export function instrumentPolicy"));
   writeFileSync(join(dir,"tsconfig.json"),JSON.stringify({compilerOptions:{strict:true,target:"ES2022",module:"ESNext",moduleResolution:"bundler",types:[]},files:["main.ts"]}));
@@ -45,8 +43,7 @@ test("an aggregate kill is a budget verdict only when the case is exclusive", ()
   assert.equal(caseBudgetMessage("mandelbrot", 2 ** 30, "outcomes"), "mandelbrot exceeds the outcomes step's 1 GiB budget");
 });
 test("hung and broken tooling instruments cannot become ordinary assertion failures", t => {
-  const root = join(homedir(), ".cache/nts-scratch/step-result"); mkdirSync(root, { recursive: true });
-  const directory = mkdtempSync(join(root, "tooling-")); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = testScratch(t, "step-result-tooling");
   const path=join(directory,"result.json"),env={NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"one"};
   publishHung("silent test file; prior assertions retained",env);
   assert.equal(readStepInstrument(path,"tooling","one")?.verdict,"NOT RUN");
@@ -61,8 +58,7 @@ test("hung and broken tooling instruments cannot become ordinary assertion failu
   assert.throws(()=>readStepInstrument(path,"tooling","one"),/invalid instrument/);
 });
 test("instrument records bind the step and attempt, and intermediate workers cannot publish", t => {
-  const root = join(homedir(), ".cache/nts-scratch/step-result"); mkdirSync(root, { recursive: true });
-  const directory = mkdtempSync(join(root, "run-")); t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const directory = testScratch(t, "step-result-run");
   const path = join(directory, "result.json"), env = { NTS_GATE_STEP_RESULT: path, NTS_GATE_STEP: "outcomes", NTS_GATE_STEP_ATTEMPT: "one" };
   publishPressure(new PressureError("aggregate pressure"), { ...env, NTS_CENSUS_POOL_WORKER: "1" });
   assert.equal(readStepInstrument(path, "outcomes", "one"), undefined);
@@ -79,7 +75,7 @@ test("instrument records bind the step and attempt, and intermediate workers can
 });
 
 test("a selector infrastructure error is typed while a policy error stays an ordinary failure",t=>{
-  const directory=mkdtempSync(join(homedir(),".cache/nts-scratch/step-result/selector-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const directory=testScratch(t,"step-result-selector");
   const path=join(directory,"result.json"),env={NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"one"};
   publishSelectorFailure(new Error("broken rule self-check"),env);assert.equal(readStepInstrument(path,"tooling","one"),undefined);
   const error=Object.assign(new Error("cargo metadata --no-deps --offline: missing toolchain"),{code:"NTS_SELECTION_INFRASTRUCTURE"});
@@ -89,7 +85,7 @@ test("a selector infrastructure error is typed while a policy error stays an ord
 
 
 test("the real selector preload publishes its infrastructure error before the command exits",t=>{
-  const directory=mkdtempSync(join(homedir(),".cache/nts-scratch/step-result/preload-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const directory=testScratch(t,"step-result-preload");
   const path=join(directory,"result.json");
   const result=spawnTest(process.execPath,["--import",new URL("./step-result.ts",import.meta.url).href,"--input-type=module","-e",`throw Object.assign(new Error('cargo metadata setup control'),{code:'NTS_SELECTION_INFRASTRUCTURE'});`],{encoding:"utf8",env:{...process.env,NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"preload"}});
   assert.notEqual(result.status,0);assert.match(result.stderr,/cargo metadata setup control/);
@@ -98,7 +94,7 @@ test("the real selector preload publishes its infrastructure error before the co
 
 
 test("completed failures outrank liveness without converting missing measurements into failures",t=>{
-  const directory=mkdtempSync(join(homedir(),".cache/nts-scratch/step-result/evidence-"));t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const directory=testScratch(t,"step-result-evidence");
   const path=join(directory,"result.json"),env={NTS_GATE_STEP_RESULT:path,NTS_GATE_STEP:"tooling",NTS_GATE_STEP_ATTEMPT:"one"};
   for(const publish of [publishHung,publishRunaway]){
     publish("unfinished control",env);

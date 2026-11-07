@@ -1,18 +1,15 @@
 import { FIXED_AMBIENT } from "./canonical-environment.ts";
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand, discoverCompileTimeFixtures } from "./compile-counter.ts";
+import { testScratch } from "./test-scratch.ts";
 
 test("compile-time fixture discovery requires a config and includes each configured directory", t => {
-  const cache = join(homedir(), ".cache/nts-counter-tests");
-  mkdirSync(cache, { recursive: true });
-  const root = mkdtempSync(join(cache, "discovery-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "counter-discovery");
   mkdirSync(join(root, "tests/compile-time"), { recursive: true });
   assert.deepEqual(discoverCompileTimeFixtures(root), []);
   mkdirSync(join(root, "tests/compile-time/fixture"), { recursive: true });
@@ -66,10 +63,7 @@ test("baseline publication refuses missing runs/populations and derives its thre
 });
 
 test("the real tripwire reports missed, absent and legacy readings as not measured", { skip: instructionsWork() ?? false }, t => {
-  const cache = join(homedir(), ".cache/nts-counter-tests");
-  mkdirSync(cache, { recursive: true });
-  const root = mkdtempSync(join(cache, "guard-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "counter-guard");
   const gate = join(root, "tooling/gate"), kept = join(root, "kept");
   mkdirSync(gate, { recursive: true });
   mkdirSync(kept);
@@ -139,10 +133,7 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
 });
 
 test("a complete listing followed by a wrapped signal remains not measured", { skip: instructionsWork() ?? false }, t => {
-  const cache = join(homedir(), ".cache/nts-counter-tests");
-  mkdirSync(cache, { recursive: true });
-  const dir = mkdtempSync(join(cache, "listing-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = testScratch(t, "counter-listing");
   const nts = join(dir, "nts");
   writeFileSync(nts, `#!/bin/sh
 if [ "$1" = hir ]; then
@@ -182,10 +173,7 @@ if [ "$2" = --prepared ] && [ "$NTS_COUNTER_TEST_ENDING" = signal ]; then kill -
 });
 
 test("from-exec inheritance counts a late thread and fork, and termination reaches the command", { skip: instructionsWork() ?? false }, async t => {
-  const cache = join(homedir(), ".cache/nts-counter-tests");
-  mkdirSync(cache, { recursive: true });
-  const dir = mkdtempSync(join(cache, "run-"));
-  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const dir = testScratch(t, "counter-run");
   const binary = join(dir, "counter-thread");
   const compiled = spawnTest("cc", ["-O2", "-pthread", "-o", binary, fileURLToPath(new URL("fixtures/counter-thread.c", import.meta.url))], { encoding: "utf8" });
   assert.equal(compiled.status, 0, compiled.stderr);
@@ -248,10 +236,7 @@ test("preparation arms have distinct commands, tables and complete calibration e
 });
 
 test("RC runs fresh with --rc despite a valid NoGC shared measurement, and owns its guard", { skip: instructionsWork() ?? false }, t => {
-  const cache = join(homedir(), ".cache/nts-counter-tests");
-  mkdirSync(cache, { recursive: true });
-  const root = mkdtempSync(join(cache, "rc-"));
-  t.after(() => rmSync(root, { recursive: true, force: true }));
+  const root = testScratch(t, "counter-rc");
   const gate = join(root, "tooling/gate"), kept = join(root, "kept");
   mkdirSync(gate, { recursive: true }); mkdirSync(kept);
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
