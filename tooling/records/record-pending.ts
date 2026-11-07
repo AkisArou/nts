@@ -187,7 +187,20 @@ export function auditRecord(kind: Kind, file: string, before: string | null, aft
 }
 
 export type Runner = (args: string[], root: string) => number;
-const runNode: Runner = (args, root) => spawnSync(process.execPath, args, { cwd: root, stdio: "inherit", env: process.env }).status ?? 1;
+// **Each recorder runs under the shared supervisor** (tooling/gate/case-bound.ts):
+// its cases are bounded one by one inside it, and these bound the recorder
+// itself, so one past them fails here instead of holding the full check.
+export const RECORDER_CPU_SECONDS = 4 * 3600;
+export const RECORDER_IDLE_SECONDS = 30 * 60;
+const CASE_BOUND = fileURLToPath(new URL("../gate/case-bound.ts", import.meta.url));
+/** The command one recorder run is: node, through the supervisor. */
+export function recorderCommand(args: readonly string[]): [string, string[]] {
+  return [process.execPath, [CASE_BOUND, "--cpu", String(RECORDER_CPU_SECONDS), "--idle", String(RECORDER_IDLE_SECONDS), "--", process.execPath, ...args]];
+}
+const runNode: Runner = (args, root) => {
+  const [command, argv] = recorderCommand(args);
+  return spawnSync(command, argv, { cwd: root, stdio: "inherit", env: process.env }).status ?? 1;
+};
 
 /** Record every pending row of the named kinds, and every change the ratchet accepts. Returns the exit status. */
 export function recordPending(root: string, kinds: readonly Kind[], run: Runner = runNode, say = (line: string) => console.log(line)): number {
