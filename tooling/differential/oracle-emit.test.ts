@@ -46,7 +46,7 @@ test('standalone project emission retains owner graphs and module formats withou
       assert.equal(Object.keys(stored.sources).length,format==='commonjs'?1:2);
       const proof=JSON.parse(readFileSync(join(dirname(owner.manifest),'program/transpile-result.json'),'utf8'));
       assert.equal(proof.producer,'transpileModule');
-      assert.equal(proof.proof.sourceEdges.length,2);
+      assert.equal(proof.proof.sourceEdges.length,format==='commonjs'?1:2);
       assert.equal(proof.proof.beforeDiagnostics,undefined,'standalone emission never invents a checking certificate');
       assert.equal(existsSync(join(dirname(owner.manifest),'program/program-request.json')),false);
       const reference=await worker.prepare({entry:join(root,'src/main.ts'),project:join(root,'tsconfig.json'),directory:join(root,'checked')});
@@ -63,6 +63,32 @@ test('standalone project emission refuses a type-directed const enum by name',as
   const worker=new OracleWorker(join(root,'producer'),toolchain);
   try{
     await assert.rejects(worker.prepareTranspiled({entry:join(root,'src/main.ts'),project:join(root,'tsconfig.json'),directory:join(root,'fast')}),/requires type-directed const-enum emission/);
+  }finally{worker.close();}
+});
+
+test('standalone emission visits only the selected import closure in each owner',async t=>{
+  const root=workspace(t,{
+    'src/main.ts':"import {value} from './nested/value.ts';console.log(value);\n",
+    'src/late.ts':'export const late:number=19;\n',
+    'src/unrelated.ts':'const enum Unrelated { Value=23 };export const unused=Unrelated.Value;\n',
+    'src/nested/tsconfig.json':JSON.stringify({compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'Bundler',rootDir:'.',rewriteRelativeImportExtensions:true},include:['*.ts']}),
+    'src/nested/value.ts':"import {late} from '../late.ts';export const value:number=late;\n",
+    'src/nested/unrelated.ts':'const enum Unrelated { Value=29 };export const unused=Unrelated.Value;\n',
+  });
+  const worker=new OracleWorker(join(root,'producer'),toolchain);
+  try{
+    const owner=await worker.prepareTranspiled({entry:join(root,'src/main.ts'),project:join(root,'tsconfig.json'),directory:join(root,'fast')});
+    const stored=JSON.parse(readFileSync(owner.manifest,'utf8'));
+    assert.deepEqual(Object.keys(stored.sources).sort(),['src/late.ts','src/main.ts','src/nested/value.ts'].map(file=>join(root,file)).sort());
+    for(const directory of ['program','owner-1']){
+      const proof=JSON.parse(readFileSync(join(dirname(owner.manifest),directory,'transpile-result.json'),'utf8')) as {inventory:{path:string}[]};
+      assert.equal(proof.inventory.some(file=>file.path.endsWith('/unrelated.ts')),false);
+    }
+    assert.equal(stored.observations.some((fact:HostObservation)=>fact.kind==='file'&&fact.path.endsWith('/unrelated.ts')),false);
+    const execution=oracleExecution(owner),actual=execute(root,execution);
+    assert.equal(actual.status,0,actual.stderr);assert.equal(actual.stdout,'19\n');
+    assert.deepEqual(oracleLoaderReady(execution),{ready:true});
+    assert.deepEqual(oracleOwner.finishOracleSnapshot(execution),{ready:true});
   }finally{worker.close();}
 });
 

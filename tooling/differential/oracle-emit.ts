@@ -960,7 +960,9 @@ export class OracleWorker{
     if(parsed.errors.length)throw new TypeScriptDiagnosticError(2,sdk.formatDiagnostics(parsed.errors,this.api));
     if(parsed.options.emitDecoratorMetadata)throw Error('oracle project requires type-directed decorator metadata emission: '+group.project);
     const resolver=this.api.createModuleResolver(parsed.options as RawCompilerOptions);
-    const queue=[...group.files],visited=new Set<string>(),edges:SourceEdge[]=[],inventory:EmitGroup['sourceInventory']=[];
+    // Standalone emit has no whole-Program obligation: only selected sources
+    // and their import closure belong to this case, even in a broad owner.
+    const queue=[...context.targets],visited=new Set<string>(),edges:SourceEdge[]=[],inventory:EmitGroup['sourceInventory']=[];
     const outputs:ProgramEmission['outputs']=[],relations:CheckerImportRelation[]=[],imports:TranspileImport[]=[];
     try{while(queue.length){
       const file=this.filesystem.realpath(queue.pop()!);if(visited.has(file))continue;visited.add(file);
@@ -1046,7 +1048,10 @@ export class OracleWorker{
       this.reset();signal?.throwIfAborted();
       const job=this.stage(request);
       for(;;){
-        for(const group of job.groups)if(!this.contexts.get(group)!.record){signal?.throwIfAborted();this.transpileOwner(group);}
+        for(const group of job.groups){
+          const context=this.contexts.get(group)!;
+          if(!context.record||[...context.targets].some(file=>!group.sourceInventory.some(fact=>fact.path===file))){signal?.throwIfAborted();this.transpileOwner(group);}
+        }
         for(const group of [...job.groups])this.expandOwners(job,group);
         if(job.groups.every(group=>{const context=this.contexts.get(group)!;return context.record&&[...context.targets].every(file=>context.expanded.has(file));}))break;
       }
