@@ -5203,7 +5203,6 @@ tests/typescript/length-routes/callbacks-for-each-owner.ts	{"kind":"refused","di
 tests/typescript/length-routes/callbacks-map-snapshot-holes.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/length-routes/callbacks-reduce-owner.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/length-routes/callbacks-some-live-owner.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
-tests/typescript/length-routes/callbacks-sort-snapshot-owner.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: compareArray"}}
 tests/typescript/length-routes/indices-arithmetic-field-history.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index -1 is outside [0, 0)"}}
 tests/typescript/length-routes/indices-at-readonly-truncate.ts	{"kind":"pass"}
 tests/typescript/length-routes/indices-closure-rebound-index.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index -1 is outside [0, 0)"}}
