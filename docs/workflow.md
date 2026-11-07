@@ -54,8 +54,8 @@ follows; this page is the why and the whole picture.
 - **As many as the work and the machine allow.** Areas that touch different
   paths run in parallel: for example two or three agents on the compiler,
   and others on `runtime/node`, Chromium, tooling or tests at the same time.
-  The limit is the size of the worktree pool, which the machine's memory and
-  disk set.
+  The limit is the disk: the pool grows while it can host another tree, and
+  each heavy phase waits for memory on its own.
 - **One message per task:** landed, or blocked and why. No progress reports,
   no evidence packets. The landing check is the evidence.
 - **Which agents** (Codex or Claude sessions, started by hand or by
@@ -166,11 +166,14 @@ regression becomes a task. Benchmarks never block a landing.
 
 ## The machine
 
-- **A fixed pool of worktrees,** one for each agent that can work at once,
-  each with its own build folder kept warm. A task takes a free one at the
-  newest `main` and gives it back when it lands, so the next task's build is
-  incremental rather than cold, and the disk holds the pool and nothing
-  else. Agents do not make worktrees of their own. The shared checkout
+- **An elastic pool of worktrees.** A task takes a free tree at the newest
+  `main`, warm first: its build folder is kept, so the build is incremental
+  rather than cold. When every tree is held, the pool grows by one, unless
+  the disk cannot hold another tree's target and the gate's 40 GB floor;
+  then `take` says why and exits 75, so a scheduler waits and retries. A tree
+  goes back warm when its task lands or is discarded, and the full check's
+  hourly upkeep removes free trees idle over three days, keeping two warm.
+  Agents do not make worktrees of their own. The shared checkout
   `~/Projects/nts` stays on `main`.
 - **One branch per task, deleted when it lands.** A task works on one branch
   named after it. When the change lands, the landing check deletes the

@@ -39,7 +39,10 @@ A task works on one branch named after it, in a worktree from the pool:
 ```sh
 node tooling/landing/pool.ts take <branch>   # a free tree at the newest main, on a new branch
 node tooling/landing/pool.ts status          # which task holds which tree
+node tooling/landing/pool.ts give <branch> --discard   # drop a task: its branch, here and on GitHub, goes too
 ```
+
+`take` reuses a warm tree or makes a new one while the disk can host it.
 
 Never make a worktree of your own: the pool's trees keep their build folders
 warm, and the full check counts every tree outside it as red. Landing gives
