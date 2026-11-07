@@ -6,12 +6,13 @@ import {dirname,join,resolve} from 'node:path';
 import {test} from 'node:test';
 import {REPOSITORY,verifyToolchain,oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import * as producer from './program-oracles.ts';
-import {PROGRAM_EMIT_PROJECTS,produceProgramOracles,type ProgramOracleTask} from './program-oracles.ts';
+import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,type ProgramOracleTask} from './program-oracles.ts';
 import {openProgramOracleResults,programOracleHandoff} from './oracle-results.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {readRecords,fixtureOf} from './oracle-records.ts';
-import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {gateEnvironment,hostEnvironment,oracleToolchainLocation,sealOracleRun,type GateEnvironment} from '../gate/canonical-environment.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
+import {finishRunTemporary} from '../gate/run-temporary.ts';
 
 test('the measured example corpus names every type-directed emit project',()=>{
   const location=oracleToolchainLocation(),{compiler}=verifyToolchain(location),require=createRequire(join(location,'package.json'));
@@ -41,7 +42,8 @@ test('the measured example corpus names every type-directed emit project',()=>{
 
 test('program consumers read completed answers from an nts-dev planner after the SDK workers drain',async t=>{
   await setupOracleTestEnvironment();
-  const root=newTestScratch('program-producer');t.after(()=>removeOracleSnapshot(root));
+  const root=newTestScratch('program-producer');let privateRun:GateEnvironment|undefined;
+  t.after(()=>{try{if(privateRun)finishRunTemporary(privateRun.temporary,privateRun.env.HOME!,true);}finally{removeOracleSnapshot(root);}});
   const project=join(root,'input'),source=join(project,'src');mkdirSync(source,{recursive:true});
   writeFileSync(join(project,'package.json'),'{"type":"module"}');
   writeFileSync(join(project,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'Bundler',rootDir:'src',strict:true},include:['src']}));
@@ -64,15 +66,24 @@ appendFileSync(${JSON.stringify(calls)},process.argv[1]+'\\n');
 const result=spawnSync(${JSON.stringify(join(dirname(binary),'oracle-plan'))},process.argv.slice(2),{stdio:'inherit'});
 process.exitCode=result.status??1;
 `,{mode:0o755});
-  await assert.rejects(Reflect.apply(produceProgramOracles,undefined,[{jobs:1,tasks}]),/publication requires an explicit absolute root/);
-  const stepPublication=join(root,'step-publication'),fixturePublication=join(root,'fixture-publication');
+  const meminfo=join(root,'meminfo');writeFileSync(meminfo,'MemAvailable: 64000000 kB\n');
+  privateRun=await sealOracleRun(gateEnvironment(hostEnvironment(process.env),{run:join(root,'run'),standalone:true,
+    oracleAdmissionContext:'gate',owned:{NTS_BIN:join(profile,'nts'),NTS_MEMINFO:meminfo}}));
+  const privateEnv=privateRun.env;
+  const missing=spawnSync(process.execPath,['--input-type=module','-e',`
+import assert from 'node:assert/strict';
+import {produceProgramOracles} from ${JSON.stringify(new URL('./program-oracles.ts',import.meta.url).href)};
+await assert.rejects(produceProgramOracles({jobs:1,tasks:[]}),/publication requires an explicit absolute root/);`],
+    {encoding:'utf8',env:privateEnv});
+  assert.equal(missing.status,0,missing.stdout+missing.stderr);
+  const stepPublication=programOracleDirectory(privateEnv),fixturePublication=join(root,'fixture-publication');
   const launch=`import {produceProgramOracles} from ${JSON.stringify(new URL('./program-oracles.ts',import.meta.url).href)};
 await produceProgramOracles({directory:process.argv[1],jobs:1,tasks:JSON.parse(process.argv[2])});`;
   // Both producers inherit the exact same TMPDIR and run capability. The
   // completed step publication remains present when the fixture publishes.
   for(const directory of [stepPublication,fixturePublication]){
     const produced=spawnSync(process.execPath,['--input-type=module','-e',launch,directory,JSON.stringify(tasks)],
-      {encoding:'utf8',maxBuffer:8*1024**2,env:{...process.env,NTS_BIN:join(profile,'nts')}});
+      {encoding:'utf8',maxBuffer:8*1024**2,env:privateEnv});
     assert.equal(produced.status,0,produced.stdout+produced.stderr);
     assert.equal(openProgramOracleResults(programOracleHandoff(join(directory,'results')),oracleRecipeIdentity()).get(tasks[0]!.subject).kind,'calls');
   }
@@ -85,7 +96,7 @@ await produceProgramOracles({directory:process.argv[1],jobs:1,tasks:JSON.parse(p
   if(observation.kind!=='observation')throw Error('missing observation');
   assert.equal(observation.observation.result,'exit 0');assert.equal(observation.observation.printed.stdout,'23\n');
   const ran=spawnSync(binary,['check',tasks[0]!.project],{encoding:'utf8',maxBuffer:8*1024**2,
-    env:{...process.env,NTS_PROGRAM_ORACLE:JSON.stringify(handoff),NTS_ORACLE_TYPESCRIPT:join(root,'there-is-no-sdk-here'),NODE_OPTIONS:'--no-experimental-strip-types',NTS_BACKEND:'c'}});
+    env:{...privateEnv,NTS_PROGRAM_ORACLE:JSON.stringify(handoff),NTS_ORACLE_TYPESCRIPT:join(root,'there-is-no-sdk-here'),NODE_OPTIONS:'--no-experimental-strip-types',NTS_BACKEND:'c'}});
   assert.equal(ran.status,0,ran.stdout+ran.stderr);
   assert.match(ran.stdout,/agreed on/);
   writeFileSync(join(source,'main.ts'),'export function answer(x:number):number{return x+23;}\n');
