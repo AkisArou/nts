@@ -103,3 +103,32 @@ for (const name of names) {
 test("every installed JetStream case has program-specific correctness checks", () => {
   assert.deepEqual(names.filter(name => !checked.has(name)), []);
 });
+
+// BEGIN DOXBEE PROMISE: complete asynchronous output checks.
+{
+  const name = "jetstream-doxbee-promise";
+  if (modules.has(name)) {
+    checked.add(name);
+    const {render, seed, work} = await import("./cases/jetstream-doxbee-promise/case.ts");
+    test(`${name}: all 10,000 original operations fulfil`, async () => {
+      assert.equal(seed, 1);
+      const results = await render(2);
+      assert.equal(results.length, 2);
+      for (const result of results) assert.deepEqual(result, Array.from({length: 10000}, () => undefined));
+      assert.deepEqual(await render(0), []);
+      assert.equal(await work(0), 0);
+      assert.equal(await work(1), 305109008);
+      assert.equal(await work(2), 1173553664);
+    });
+  }
+}
+// END DOXBEE PROMISE.
+
+
+
+
+
+
+
+
+
