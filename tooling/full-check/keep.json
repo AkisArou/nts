@@ -42,6 +42,7 @@
     "swift": { "kind": "kept", "writer": "build/src/swift.rs", "why": "the Swift toolchain" },
     "swift-kept": { "kind": "kept", "writer": "tooling/cli/src/swift.rs", "why": "what is kept per Swift toolchain" },
     "swiftpm-manifests": { "kind": "kept", "writer": "build/src/dependencies/swiftpm.rs", "why": "SwiftPM manifests, by what they read" },
+    "tests": { "kind": "scratch", "writer": "tooling/gate/test-scratch.ts" },
     "types": { "kind": "kept", "writer": "tooling/surfaces/src/lib.rs", "why": "the platform type surfaces nts generates" },
     "windows": { "kind": "kept", "writer": "tooling/cli/src/main.rs", "why": "the Windows SDK metadata" },
     "worker-memory": { "kind": "scratch", "writer": "tooling/census/worker-memory.ts" }

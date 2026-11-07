@@ -229,7 +229,8 @@ ids, kept so the records that cite them still resolve.
   on every exit path, so a stopped run leaves nothing behind (on 11-06,
   stopped runs had left 167 GB): `conformance262.ts` in #193, then
   `outcomes-check.ts` and the rest; it includes the per-case temp folders
-  tests leak (#197). A gate run by hand keeps three days of its logs
+  tests leak (#197). Tests already keep theirs there through
+  `tooling/gate/test-scratch.ts`. A gate run by hand keeps three days of its logs
   (`~/.cache/nts-gate/runs`), as the landing and full checks keep theirs.
 - The old lander's open defects fold into the landing check: #120, #121,
   #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
