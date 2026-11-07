@@ -112,11 +112,13 @@ function input(t: TestContext, overrides: Partial<CountInput> = {}): CountInput 
   return {
     plan: PLAN,
     local: ["main", "verified", "coordinator/pending-records", "node/oracle-e039", "node/oracle-pre-fold", "helper4/lifetime-field-overwrite-finding", "chatgpt/forgotten"],
-    remote: ["main", "verified", "chatgpt/jetstream-acorn", "chatgpt/octane-crypto", "chatgpt/closed-one", "coordinator/pending-records"],
+    remote: ["main", "verified", "chatgpt/jetstream-acorn", "chatgpt/octane-crypto", "chatgpt/closed-one", "coordinator/pending-records", "chatgpt/stack-base", "chatgpt/unnamed-base"],
     pulls: [
       { number: 70, headRefName: "chatgpt/jetstream-acorn", isCrossRepository: false },
       { number: 315, headRefName: "chatgpt/octane-crypto", isCrossRepository: false },
       { number: 71, headRefName: "chatgpt/closed-one", isCrossRepository: true },
+      { number: 72, headRefName: "chatgpt/stacked-port", baseRefName: "chatgpt/stack-base", isCrossRepository: false },
+      { number: 316, headRefName: "chatgpt/also-stacked", baseRefName: "chatgpt/unnamed-base", isCrossRepository: false },
     ],
     worktrees: [
       { path: "/home/u/Projects/nts", branch: "refs/heads/main" },
@@ -168,6 +170,8 @@ test("the count names every branch, worktree and cache folder outside its rules,
   lacks(/^branch node\/oracle-(e039|pre-fold)/); // named, and covered by `node/*`
   lacks(/^branch helper4\//);
   lacks(/^branch chatgpt\/jetstream-acorn/); // the head of open #70, inside "#69 to #74"
+  lacks(/^branch chatgpt\/stack-base/); // the base of open #72, which the plan names: deleting it would close #72
+  has(/^branch chatgpt\/unnamed-base \(on GitHub\): named by no task in docs\/plan\.md$/); // the base of #316, which the plan does not name
 
   // Worktrees.
   has(/^worktree \/home\/u\/Projects\/nts-lanes\/node \(node\/oracle-e039\): outside the pool \(~\/\.cache\/nts-pool\/<n>\), and docs\/plan\.md does not name it$/);
@@ -197,7 +201,7 @@ test("the count names every branch, worktree and cache folder outside its rules,
   has(/^~\/\.cache\/n<pid>: 2 folder\(s\), 2\.0 to 3\.0 days old \(n1a6c, n26d\), NODE_TEST_DIR roots left by tooling\/conformance\/node-environment\.ts; a runner removes its own$/);
   lacks(/^~\/\.cache\/(?:n2zz|nvim|node)\b/); // fresh, or another tool's
   lacks(new RegExp(`nts-pins/(${MAIN.slice(0, 12)}|${VERIFIED.slice(0, 12)}|tree|target)`));
-  assert.equal(red.length, 19, red.join("\n"));
+  assert.equal(red.length, 20, red.join("\n"));
 });
 
 test("a machine within the rules is green; one the count could not read is not", t => {

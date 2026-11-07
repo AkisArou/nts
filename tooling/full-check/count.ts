@@ -9,8 +9,9 @@
 // What counts as named, kept or in the pool:
 //   - a branch, on the machine or on GitHub, is named when docs/plan.md (on
 //     main) has it in backticks, or a backticked `prefix/*` covering it, or
-//     when it is the head of an open pull request whose number docs/plan.md
-//     names (#N, or a range "#A to #B"): undone work stays visible. `main` and
+//     when it is the head or the base of an open pull request whose number
+//     docs/plan.md names (#N, or a range "#A to #B"): undone work stays
+//     visible, and deleting a base would close the pull request. `main` and
 //     `verified` are exempt; refs/cited/* are not branches;
 //   - a worktree is in the pool at ~/.cache/nts-pool/<n>, or is the shared
 //     checkout, the landing check's tree (~/.cache/nts-landing/), the full
@@ -28,7 +29,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 
-export type Pull = { number: number; headRefName: string; isCrossRepository?: boolean };
+export type Pull = { number: number; headRefName: string; baseRefName?: string; isCrossRepository?: boolean };
 export type Worktree = { path: string; head?: string; branch?: string; prunable?: boolean };
 export type Unavailable = { error: string };
 const unavailable = (x: unknown): x is Unavailable => typeof x === "object" && x !== null && "error" in x;
@@ -81,10 +82,14 @@ function branchLines(input: CountInput, red: string[], notes: string[]): void {
   const named = (branch: string) => plan.names.has(branch) || plan.prefixes.some(prefix => branch.startsWith(prefix));
   const pulls = unavailable(input.pulls) ? [] : input.pulls.filter(pull => !pull.isCrossRepository);
   const pullOf = (branch: string) => pulls.filter(pull => pull.headRefName === branch);
+  // A branch an open pull request is based on is that pull request's: deleting
+  // it would close the pull request (landing/git.ts keeps it the same way).
+  const basedOn = (branch: string) => pulls.filter(pull => pull.baseRefName === branch);
   const judge = (branch: string, where: string) => {
     if (EXEMPT.has(branch) || named(branch)) return;
     const heads = pullOf(branch);
     if (heads.some(pull => plan.pulls.has(pull.number))) return;
+    if (basedOn(branch).some(pull => plan.pulls.has(pull.number))) return;
     const open = heads.length ? `; the head of open pull request ${heads.map(p => `#${p.number}`).join(", ")}, which docs/plan.md does not name either` : "";
     red.push(`branch ${branch} (${where}): named by no task in docs/plan.md${open}`);
   };
@@ -290,7 +295,7 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   };
   const sha = (rev: string) => { const r = read("git", ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`], repo); return r.ok ? r.out.trim() : null; };
   const remote = read("git", ["ls-remote", "--heads", "origin"], repo);
-  const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,isCrossRepository"], repo);
+  const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,baseRefName,isCrossRepository"], repo);
   return {
     plan: git(["show", "main:docs/plan.md"]),
     local: git(["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).map(ref => ref.slice("refs/heads/".length)),

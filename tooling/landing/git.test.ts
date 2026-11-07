@@ -5,7 +5,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { advanceMain, changedPaths, deleteBranch, pushedMain, pushMain, rebaseOnto, worktrees, type Git } from "./git.ts";
+import { advanceMain, changedPaths, deleteBranch, openPullBases, pushedMain, pushMain, rebaseOnto, worktrees, type Git } from "./git.ts";
 import { scratchRepo } from "./scratch-repo.ts";
 
 test("a change is replayed onto the newest main, skipping what main already has", t => {
@@ -119,4 +119,20 @@ test("a landed branch is deleted here and on origin, unless it holds more than l
   const held = deleteBranch(git, "fix/c", c, null);
   assert.deepEqual(held, [{ where: "local", state: "kept", reason: `checked out in ${s.root}` }]);
   assert.throws(() => deleteBranch(git, "main", c, null), /not a task branch/);
+});
+
+test("a branch an open pull request is based on stays on the remote, and so does one when pull requests cannot be read", t => {
+  const s = scratchRepo(t), git: Git = { root: s.root, env: s.env };
+  s.git(["switch", "-q", "-c", "fix/base"]);
+  const submitted = s.commit({ "src/base.txt": "base\n" }, "base");
+  s.git(["push", "-q", "origin", "fix/base"]);
+  s.git(["switch", "-q", "main"]);
+  const stacked = deleteBranch(git, "fix/base", submitted, "origin", { read: new Map([["fix/base", [71, 72]], ["main", [9]]]) });
+  assert.deepEqual(stacked, [{ where: "local", state: "deleted" }, { where: "remote", state: "kept", reason: "open pull request #71, #72 are based on it" }]);
+  assert.notEqual(s.git(["ls-remote", "--heads", "origin", "fix/base"]), "", "deleting it would close #71 and #72");
+  const unread = deleteBranch(git, "fix/base", submitted, "origin", { unreadable: "cannot list open pull requests: offline" });
+  assert.deepEqual(unread.at(-1), { where: "remote", state: "kept", reason: "cannot list open pull requests: offline" });
+  // A remote that is not on GitHub has no pull requests: the scratch origin is a bare directory.
+  assert.deepEqual(openPullBases(git, "origin"), { read: new Map() });
+  assert.deepEqual(deleteBranch(git, "fix/base", submitted, "origin").at(-1), { where: "remote", state: "deleted" });
 });

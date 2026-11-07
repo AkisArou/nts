@@ -147,7 +147,29 @@ export type BranchOutcome = { where: "local" | "remote"; state: "deleted" | "abs
  * its new work. A branch checked out in a tree is kept; the caller frees the
  * tree first. Each deletion is a compare-and-swap on the value checked.
  */
-export function deleteBranch(git: Git, branch: string, submitted: string, remote: string | null): BranchOutcome[] {
+/**
+ * The branches open pull requests on `remote` are based on, with their
+ * numbers, or why they cannot be read. Deleting a branch on GitHub closes every
+ * pull request based on it: on 11-07 deleting 46 landed port branches closed
+ * seven unlanded ports stacked on one of them. A remote that is not on GitHub
+ * has no pull requests.
+ */
+export type PullBases = { read: ReadonlyMap<string, readonly number[]> } | { unreadable: string };
+export function openPullBases(git: Git, remote: string): PullBases {
+  const url = run(git, ["remote", "get-url", remote]);
+  if (url.status !== 0) return { unreadable: `no remote ${remote}: ${url.stderr.trim()}` };
+  if (!/github\.com[:/]/.test(url.stdout)) return { read: new Map() };
+  const r = spawnSync("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,baseRefName,isCrossRepository"], { cwd: git.root, env: git.env, encoding: "utf8" });
+  if (r.error || r.status !== 0) return { unreadable: `cannot list open pull requests: ${(r.error?.message ?? r.stderr ?? "").trim()}` };
+  const bases = new Map<string, number[]>();
+  for (const pull of JSON.parse(r.stdout) as { number: number; baseRefName: string; isCrossRepository?: boolean }[]) {
+    if (pull.isCrossRepository) continue;
+    bases.set(pull.baseRefName, [...(bases.get(pull.baseRefName) ?? []), pull.number]);
+  }
+  return { read: bases };
+}
+
+export function deleteBranch(git: Git, branch: string, submitted: string, remote: string | null, bases?: PullBases): BranchOutcome[] {
   if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch === "main" || branch.startsWith("-")) throw new GitError(`not a task branch: ${branch}`);
   const ref = `refs/heads/${branch}`;
   const out: BranchOutcome[] = [];
@@ -170,6 +192,14 @@ export function deleteBranch(git: Git, branch: string, submitted: string, remote
   if (!hasCommit(git, there)) run(git, ["fetch", "--quiet", "--no-tags", remote, ref]);
   if (!hasCommit(git, there) || !isAncestor(git, there, submitted)) {
     out.push({ where: "remote", state: "kept", reason: `${remote}/${branch} is at ${there.slice(0, 12)}, with commits ${submitted.slice(0, 12)} does not have` });
+    return out;
+  }
+  // An open pull request based on the branch would close with it.
+  const based = bases ?? openPullBases(git, remote);
+  if ("unreadable" in based) { out.push({ where: "remote", state: "kept", reason: based.unreadable }); return out; }
+  const dependents = based.read.get(branch);
+  if (dependents?.length) {
+    out.push({ where: "remote", state: "kept", reason: `open pull request ${dependents.map(n => `#${n}`).join(", ")} ${dependents.length === 1 ? "is" : "are"} based on it` });
     return out;
   }
   const r = run(git, ["push", "--porcelain", `--force-with-lease=${ref}:${there}`, remote, `:${ref}`]);
