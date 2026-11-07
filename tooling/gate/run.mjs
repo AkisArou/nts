@@ -89,7 +89,7 @@ import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
 import { TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
 import { frontendBudget } from "./budget.ts";
 import { fixedReservation } from "./reservation.ts";
-import { STEPS } from "./step-table.mjs";
+import { STEPS, stepTableProblem } from "./step-table.mjs";
 import {finishRunTemporary} from "./run-temporary.ts";
 import { gateEnvironment, reportEnvironment, nodeHeapOomReason, ENVIRONMENT_CONTEXT } from "./canonical-environment.ts";
 
@@ -223,11 +223,9 @@ function checkTable() {
         "  add the row (or the step) so every step is scheduled and reported",
     );
   }
-  for (const s of STEPS) {
-    for (const d of [...(s.needs ?? []), ...(s.after ?? [])]) {
-      if (!BY_NAME.has(d)) usage(`run.mjs: ${s.name} depends on ${d}, which is not a step`);
-    }
-  }
+  // A dependency on no step, or steps that wait for one another, which would wait for ever.
+  const problem = stepTableProblem(STEPS);
+  if (problem) usage(`run.mjs: ${problem}`);
 }
 
 function requested() {

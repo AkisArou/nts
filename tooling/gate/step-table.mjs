@@ -135,3 +135,31 @@ export const STEPS = [
   // contention -- and it ended the run.
   { name: "interop", elastic: true, slots: 6, min: 3, mem: 3, nts: true, fe: true, favoured: true, doc: "interop projects build and run" },
 ];
+
+/**
+ * What is wrong with the table's dependencies, or null: a step that depends on
+ * no step, or steps that wait for one another. The runner waits for a step's
+ * `needs` and `after` while they are requested and unfinished, so a cycle
+ * among them would wait for ever; it refuses such a table before anything runs.
+ */
+export function stepTableProblem(steps = STEPS) {
+  const names = new Set(steps.map((s) => s.name));
+  const deps = new Map(steps.map((s) => [s.name, [...(s.needs ?? []), ...(s.after ?? [])]]));
+  for (const [name, on] of deps) for (const d of on) if (!names.has(d)) return `${name} depends on ${d}, which is not a step`;
+  const done = new Set(), path = [];
+  const visit = (name) => {
+    if (done.has(name)) return null;
+    const at = path.indexOf(name);
+    if (at >= 0) return [...path.slice(at), name];
+    path.push(name);
+    for (const d of deps.get(name)) { const cycle = visit(d); if (cycle) return cycle; }
+    path.pop();
+    done.add(name);
+    return null;
+  };
+  for (const name of deps.keys()) {
+    const cycle = visit(name);
+    if (cycle) return `steps wait for one another: ${cycle.join(" -> ")}`;
+  }
+  return null;
+}
