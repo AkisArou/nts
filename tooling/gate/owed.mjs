@@ -218,6 +218,8 @@ export const LANDING = {
   "example-refusals": { form: "fixtures", corpora: ["the examples"] },
   benches: { form: "fixtures", corpora: ["the bench cases"] },
   memory: { form: "fixtures", corpora: ["the memory cases"] },
+  "typescript-oracles": { form: "sample", sample: "typescript-sample" },
+  "program-oracles": { form: "sample", sample: "program-oracles-sample" },
   "typescript-c": { form: "sample", sample: "typescript-sample" },
   "typescript-llvm": { form: "sample", sample: "typescript-sample" },
   "typescript-jvm": { form: "sample", sample: "typescript-sample" },
@@ -308,6 +310,8 @@ export const ASKS = {
   "test262-rest-cases": ["answers", "the same over test/annexB, test/staging and test/harness"],
   "test262-jvm": ["answers", "does every recorded test262 row on the JVM still do what it did"],
   "test262-llvm": ["answers", "the same on LLVM"],
+  "program-oracles": ["answers", "one authenticated Node answer for each example and outcome program"],
+  "typescript-oracles": ["answers", "one authenticated Node reference for every TypeScript case the backend steps check"],
   "typescript-c": ["answers", "does every recorded TypeScript conformance case still do what it did, on C"],
   "typescript-llvm": ["answers", "does every recorded TypeScript conformance case still do what it did, on LLVM"],
   "typescript-jvm": ["answers", "does every recorded TypeScript conformance case still do what it did, on the JVM"],
@@ -352,6 +356,7 @@ const COMPARE = [
  */
 export const RULES = [
   { name: "tooling test collection policy", when: p => p === TOOLING_TEST_EXCLUSIONS, full: true, wide: true, steps: [], arms: [] },
+  { name: "owner-emission cost reports", when: p => /^tooling\/gate\/owner-emission-calls(?:\.test)?\.ts$/.test(p), settled: true, steps: ["tooling"], arms: [] },
   { name: "tooling test discovery", when: p => p === "tooling/gate/tooling-discovery.ts", settled: true, steps: ["tooling"], arms: [] },
   { name: "shared ignored-input policy", when: p => p === ".gitignore", full: true, steps: [], arms: [] },
   {
@@ -935,6 +940,20 @@ export const RULES = [
     settled: true,
     steps: ["tooling"],
     arms: [{ kind: "answers", asks: "does the inventory preserve exact sources, closure and ownership", run: "node --test tooling/conformance/node-work-list.test.ts" }],
+  },
+  {
+    name: "the node child preload declarations",
+    when: p => p === "tooling/conformance/node-preload-runtime.ts",
+    settled: true,
+    steps: ["tooling", "outcomes"],
+    arms: [],
+  },
+  {
+    name: "the node harness path authority",
+    when: p => p === "tooling/conformance/node-paths.ts",
+    settled: true,
+    steps: ["tooling", "outcomes"],
+    arms: [],
   },
   {
     // The node harness (NODE_HARNESS): the runner node's own tests go
@@ -1662,9 +1681,20 @@ export function interopOwed(rules) {
   return [...new Set(owing.flatMap((r) => r.interop))].sort();
 }
 
+/** A backend cannot run without this run's measured reference population. */
+export function withTypeScriptOracles(steps) {
+  if(steps.some(step=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(step))&&!steps.includes('program-oracles')){
+    steps=[...steps];steps.splice(steps.findIndex(step=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(step)),0,'program-oracles');
+  }
+  if(!steps.some(step=>["typescript-c","typescript-llvm","typescript-jvm"].includes(step))||steps.includes("typescript-oracles"))return steps;
+  const result=[...steps];
+  result.splice(result.findIndex(step=>["typescript-c","typescript-llvm","typescript-jvm"].includes(step)),0,"typescript-oracles");
+  return result;
+}
+
 export function gateSteps(rules) {
   if (rules.length === 0) return [];
-  if (rules.every(r => r.precise)) return [...new Set(rules.flatMap(r => r.steps))];
+  if (rules.every(r => r.precise)) return withTypeScriptOracles([...new Set(rules.flatMap(r => r.steps))]);
   // A wide step is a landing's only where a rule that is its subject owes it.
   const kept = new Set(rules.filter((r) => r.wide).flatMap((r) => r.steps));
   const landing = (s) => !WIDE.has(s) || kept.has(s);
@@ -1673,11 +1703,11 @@ export function gateSteps(rules) {
     // The full gate is every core step; a rule both full and wide (the runner,
     // the gate trees' inputs) owes every step there is.
     const every = rules.some((r) => r.full && r.wide);
-    return ["build", ...ALWAYS.steps, ...all.filter((s) => s !== "build" && !ALWAYS.steps.includes(s) && (every || landing(s)))];
+    return withTypeScriptOracles(["build", ...ALWAYS.steps, ...all.filter((s) => s !== "build" && !ALWAYS.steps.includes(s) && (every || landing(s)))]);
   }
   const always = new Set(ALWAYS.steps);
   const rest = rules.flatMap((r) => r.steps).filter((s) => !always.has(s) && s !== "build" && landing(s));
-  return ["build", ...ALWAYS.steps, ...new Set(rest)];
+  return withTypeScriptOracles(["build", ...ALWAYS.steps, ...new Set(rest)]);
 }
 
 // **Seen to select before it is trusted**, on the three changes that motivated it.
@@ -1713,7 +1743,7 @@ export function selfTest() {
   // Its own steps first, then what the crates that link it add (the CLI, the
   // suite, the bench driver): a crate's own rule never stands in for theirs.
   const order = gateSteps(owed([{ path: "compiler/codegen/llvm/src/lib.rs", added: false }]));
-  if (order.slice(0, 9).join(" ") !== "build clippy tests rustfmt old-paths llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
+  if (order.slice(0, 10).join(" ") !== "build clippy tests rustfmt old-paths program-oracles llvm llvm-rc assembles benches" || !order.includes("corpus") || order.includes("bench-agree")) return `the LLVM backend's steps: ${order.join(" ")}`;
   // A step without its question could not say what it asks.
   for (const r of [...RULES, ALWAYS]) for (const st of r.steps) if (!ASKS[st]) return `rule "${r.name}" names gate step "${st}", which ASKS does not describe`;
   for (const st of ["build"]) if (!ASKS[st]) return `ASKS lacks "${st}"`;

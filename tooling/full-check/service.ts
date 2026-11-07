@@ -29,25 +29,26 @@
 //     way, and the rows full.md marks slower than their own best are a task;
 //   - held (a step that could not finish): nothing moves; it runs again when
 //     main moves, or after half an hour.
-import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
-import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
-import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
-import { sharedCheckout } from "../landing/git.ts";
-import { Pool, POOL_HOME, pruneLines } from "../landing/pool.ts";
-import { count as countMachine, countLines, gather, type CountResult } from "./count.ts";
-import { search, type Measure, type Probe } from "./culprit.ts";
-import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
-import { pinnedGate, type Gate } from "./measure.ts";
-import { landingQueue, submitTo, type LandingQueue } from "./queue.ts";
-import { listedRecords, recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
-import { makeRevert, taskLine, type Finding } from "./revert.ts";
-import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, resultsCommit, slowerRows, type Bench } from "./bench.ts";
-import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State } from "./state.ts";
+import {spawnSync} from "node:child_process";
+import {existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {homedir} from "node:os";
+import {dirname, join, resolve} from "node:path";
+import {fileURLToPath, pathToFileURL} from "node:url";
+import {memAvailableGB, RESUME_AT_GB} from "../gate/admission.ts";
+import {FIXED_AMBIENT, hostEnvironment} from "../gate/canonical-environment.ts";
+import {sharedCheckout} from "../landing/git.ts";
+import {Pool, POOL_HOME, pruneLines} from "../landing/pool.ts";
+import {pruneNodeCompileCache, type NodeCacheRetention} from "./node-cache-retention.ts";
+import {count as countMachine, countLines, gather, type CountResult} from "./count.ts";
+import {search, type Measure, type Probe} from "./culprit.ts";
+import {composeReverts, firstParents, Git, revertedBy, revertsIn} from "./git.ts";
+import {pinnedGate, type Gate} from "./measure.ts";
+import {landingQueue, submitTo, type LandingQueue} from "./queue.ts";
+import {listedRecords, recordAt, recordsMessage, runPin, type Recorder} from "./records.ts";
+import {makeRevert, taskLine, type Finding} from "./revert.ts";
+import {benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, resultsCommit, slowerRows, type Bench} from "./bench.ts";
+import {DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule} from "./schedule.ts";
+import {layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State} from "./state.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
@@ -70,6 +71,8 @@ export type Effects = {
   count: () => CountResult;
   /** The pool's upkeep (pool.ts's prune), and the lines that say what it removed. */
   prunePool: () => string[];
+  /** Recomputable cache upkeep, report-only, on the hourly count cycle. */
+  pruneNodeCache: () => NodeCacheRetention;
   /** Push a commit to the remote's `verified`. */
   push: (commit: string) => { ok: boolean; line: string };
   /** Return once a heavy phase may start (AGENTS.md: 14 GB available). */
@@ -397,6 +400,11 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
 }
 
 function runCount(fx: Effects, state: State): void {
+  try {
+    const cache = fx.pruneNodeCache();
+    fx.log(`Node compile cache: ${cache.state}, removed ${cache.removed} entries / ${cache.removedBytes} bytes, kept ${cache.keptBytes} bytes`);
+    for (const error of cache.errors) fx.log(`Node compile cache warning: ${error}`);
+  } catch (error) { fx.log(`Node compile cache warning: ${String(error)}`); }
   let result: CountResult;
   try { result = fx.count(); }
   catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${error instanceof Error ? error.message : String(error)}`] }; }
@@ -507,6 +515,7 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
     count: () => countMachine(gather(ROOT)),
     prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
+    pruneNodeCache: () => pruneNodeCompileCache(),
     push: commit => {
       const r = git.try(["push", "--quiet", "origin", `${commit}:refs/heads/verified`]);
       return r.status === 0 ? { ok: true, line: `pushed verified ${short(commit)} to origin` } : { ok: false, line: `could not push verified ${short(commit)}: ${r.stderr.trim()}; trying again next cycle` };

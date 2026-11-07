@@ -4,11 +4,12 @@ import {statSync} from 'node:fs';
 import {pathToFileURL} from 'node:url';
 import {isDeepStrictEqual} from 'node:util';
 
-import { CHECK_STATUSES, FAILURE_KINDS, COUNT_NAMES } from "./check-report-types.ts";
+import {CHECK_STATUSES, FAILURE_KINDS, COUNT_NAMES} from "./check-report-types.ts";
 import type { CheckCommandResult, CheckConsumer, CheckCounts, CheckFormat, CheckObservation, CheckRefusal, CheckReport,
   CheckRunOptions, DecodedCheck, LegacyIdentity, CaseTimeout } from "./check-report-types.ts";
-import { normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput } from "../conformance/observation-text.ts";
+import {normalizeGeneratedNumbers, stableCheckText, stableRuntimeAbortOutput} from "../conformance/observation-text.ts";
 import {activeCommand, CommandNotMeasuredError, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
+import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
 import {CaseBudgetError, PressureError, ToolingInstrumentError, instrumentPolicy,
   publishHung, publishRunaway, publishToolingFailure, publishPressure, readStepInstrument} from "../gate/step-result.ts";
 
@@ -64,9 +65,9 @@ export async function checkFormat(binary: string, options: CheckRunOptions = {})
 }
 
 /** Build the command after capability selection; JSON failures never trigger a retry. */
-export function checkArguments(format: CheckFormat, project: string): string[] {
+export function checkArguments(format: CheckFormat, project: string, oraclePrepared?:string): string[] {
   assert.ok(format === 'json-v1' || format === 'legacy', 'unknown check interface');
-  return ['check', project, ...(format === 'json-v1' ? ['--json'] : [])];
+  return ['check', project, ...(format === 'json-v1' ? ['--json'] : []), ...(oraclePrepared?['--oracle-prepared',oraclePrepared]:[])];
 }
 
 /** Liveness observations shared by check reports and corpus verification rows. */
@@ -340,8 +341,8 @@ function legacyIdentity(record: { category: string; nts: string }): LegacyIdenti
   // Old diagnostics contain unescaped unions such as `number | null`.
   // Only known clause prefixes split the historical joined display.
   const lines = text.split(/ \| (?=(?:refused: |\d+ case\(s\) the compiled program declined|Error: \d+ case\(s\) disagree|agreed on every case\b))/);
-  const whole = /^checked (\d+) cases across (\d+) function\(s\)$/.exec(lines[0]);
-  const partial = /^checked (\d+) of (\d+) cases; the rest were not reached(?: \(a pool value in a loop bound will do that\))?$/.exec(lines[0]);
+  const whole = /^checked (\d+) cases across (\d+) function\(s\)$/.exec(lines[0]!);
+  const partial = /^checked (\d+) of (\d+) cases; the rest were not reached(?: \(a pool value in a loop bound will do that\))?$/.exec(lines[0]!);
   assert.ok(whole || partial, 'legacy outcome has no recorded population');
   const found = whole ?? partial;
   assert.ok(found);
@@ -378,7 +379,7 @@ export async function runCheck(binary: string, project: string, options: CheckRu
   const format = await checkFormat(binary, runOptions);
   // The check compiles in its own process and runs each compiled call in a
   // child under that call's allowance, so its own CPU is the compile's.
-  const result = await checkedCommand(binary, checkArguments(format, project), {...runOptions, maxBuffer: 64 * 1024 * 1024,
+  const result = await checkedCommand(binary, checkArguments(format, project, options.oraclePrepared), {...runOptions, maxBuffer: 64 * 1024 * 1024,
     ...(timeoutOutcome ? {ownCpuSeconds: COMPILE_CPU_BOUND_SECONDS} : {})});
   if (result.timeout) return {record: timedOut(format, {stage: 'compile', reason: result.timeout}), result, format, incomplete: undefined};
   try {
@@ -460,8 +461,9 @@ function checkFailure(error: unknown, env = process.env, completedFailures = 0):
 
 async function checkedCommand(binary: string, args: string[], options: CheckRunOptions) {
   const {run = activeCommand, cwd = process.cwd(), env = process.env, ...bounds} = options;
+  const environment={...env,NTS_ORACLE_TYPESCRIPT:env.NTS_ORACLE_TYPESCRIPT??oracleToolchainLocation()};
   try {
-    const result: CheckCommandResult = await run(binary, args, {cwd, env, ...bounds});
+    const result: CheckCommandResult = await run(binary, args, {cwd, env:environment, ...bounds});
     if (result.memoryKilled) {
       const bytes = result.residentLimitBytes;
       if (typeof bytes !== 'number' || !Number.isSafeInteger(bytes) || bytes <= 0) {

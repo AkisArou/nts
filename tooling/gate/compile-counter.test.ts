@@ -1,12 +1,13 @@
-import { FIXED_AMBIENT } from "./canonical-environment.ts";
+import {FIXED_AMBIENT} from "./canonical-environment.ts";
 import assert from "node:assert/strict";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { test } from "node:test";
-import { COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand, discoverCompileTimeFixtures } from "./compile-counter.ts";
-import { testScratch } from "./test-scratch.ts";
+import {chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {join} from "node:path";
+import {fileURLToPath} from "node:url";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
+import {test} from "node:test";
+import {COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand, discoverCompileTimeFixtures} from "./compile-counter.ts";
+import {testScratch} from "./test-scratch.ts";
 
 test("compile-time fixture discovery requires a config and includes each configured directory", t => {
   const root = testScratch(t, "counter-discovery");
@@ -33,8 +34,8 @@ test("counted work requires observed upstream single-threaded and Rayon settings
     {work_profile:COMPILE_WORK_PROFILE,work_settings:{...work_settings,checkers:4}},
   ])assert.ok(compileWorkProblem(row));
 });
-import { instructionsWork, spawnCounted } from "./cputime.mjs";
-import { spawnTest, waitFor, TEST_HANG_MS } from "./test-wait.ts";
+import {instructionsWork, spawnCounted} from "./cputime.mjs";
+import {spawnTest, waitFor, TEST_HANG_MS} from "./test-wait.ts";
 
 test("old attached counts and positive but missed-worker counts fail closed", () => {
   const valid = { work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE, instructions: 590879145142, cpu_s: 45.99, status: 0 };
@@ -69,9 +70,7 @@ test("the real tripwire reports missed, absent and legacy readings as not measur
   mkdirSync(kept);
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
-  for (const name of ["compile-time.mjs", "compile-counter.ts", "cputime.mjs", "tokens.mjs", "canonical-environment.ts", "run-temporary.ts"]) {
-    copyFileSync(fileURLToPath(new URL(name, import.meta.url)), join(gate, name));
-  }
+  copyModuleClosure(["tooling/gate/compile-time.mjs"], root);
   const sha256 = createHash("sha256").update(readFileSync(process.execPath)).digest("hex");
   const meta = { work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE, arm: "nogc", sha256, nts: process.execPath };
   const table = `# counter-scope: ${COUNTER_SCOPE}\n# work-profile: ${COMPILE_WORK_PROFILE}\n# regression-ratio: 1.10\nruntime/node/subject\t100\n`;
@@ -241,9 +240,7 @@ test("RC runs fresh with --rc despite a valid NoGC shared measurement, and owns 
   mkdirSync(gate, { recursive: true }); mkdirSync(kept);
   mkdirSync(join(root, "runtime/node/subject"), { recursive: true });
   writeFileSync(join(root, "runtime/node/subject/tsconfig.json"), "{}");
-  for (const name of ["compile-time.mjs", "compile-counter.ts", "cputime.mjs", "tokens.mjs", "canonical-environment.ts", "run-temporary.ts"]) {
-    copyFileSync(fileURLToPath(new URL(name, import.meta.url)), join(gate, name));
-  }
+  copyModuleClosure(["tooling/gate/compile-time.mjs"], root);
   const commands = join(root, "commands.jsonl"), nts = join(root, "nts");
   writeFileSync(nts, `#!/usr/bin/env node
 require('node:fs').appendFileSync(${JSON.stringify(commands)}, JSON.stringify({args:process.argv.slice(2), ambient:Object.fromEntries(${JSON.stringify([...Object.keys(FIXED_AMBIENT), "RAYON_NUM_THREADS"])}.map(key=>[key,process.env[key]]))})+'\\n');

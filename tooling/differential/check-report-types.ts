@@ -29,7 +29,7 @@ export type CheckRunner = (...args: Parameters<typeof activeCommand>) => Promise
 // its compile past COMPILE_CPU_BOUND_SECONDS of the check's own CPU, or a
 // compiled call past its calibrated allowance. For consumers whose records or
 // verdicts can hold one (the example arms, bench-agree).
-export type CheckRunOptions = Partial<Parameters<CheckRunner>[2]> & { run?: CheckRunner; timeoutOutcome?: boolean };
+export type CheckRunOptions = Partial<Parameters<CheckRunner>[2]> & { run?: CheckRunner; oraclePrepared?: string; timeoutOutcome?: boolean };
 /** Which bound a case passed: its compile's, or a compiled call's. */
 export interface CaseTimeout { stage: "compile" | "run"; reason: string; }
 export type CheckConsumer = "program" | "benchmark" | "refusal";

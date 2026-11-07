@@ -33,8 +33,9 @@ async function locked<T>(path:string,operation:()=>Promise<T>):Promise<T> {
   while(!(lock=GateResource.tryAcquire(path)))await pause(100);
   try{return await operation();}finally{lock.close();}
 }
-type Identity={version:2;key:string;pnpm:string;manager:string;node:string;platform:string;arch:string;inputs:{path:string;sha256:string}[];importers:string[]};
-async function identity(tree:string,manager:PackageManager):Promise<Identity> {
+export type Identity={version:2;key:string;pnpm:string;manager:string;node:string;platform:string;arch:string;inputs:{path:string;sha256:string}[];importers:string[]};
+export const DEPENDENCY_ROOT_INPUTS=["package.json","pnpm-lock.yaml","pnpm-workspace.yaml",".npmrc",".pnpmfile.cjs","pnpmfile.cjs"] as const;
+export async function identity(tree:string,manager:PackageManager):Promise<Identity> {
   const version=(await manager.run(["--version"])).trim();
   const manifest=JSON.parse(readFileSync(join(tree,"package.json"),"utf8"));
   const expected=manager.pin.version;
@@ -45,7 +46,7 @@ async function identity(tree:string,manager:PackageManager):Promise<Identity> {
     if(path===".."||path.startsWith(".."+sep)||resolve(tree,path)===dirname(tree))throw failure("pnpm reported a workspace outside its tree");
     return path||".";
   })])].sort();
-  const files=[...new Set(["pnpm-lock.yaml","pnpm-workspace.yaml",".npmrc",".pnpmfile.cjs","pnpmfile.cjs",...importers.flatMap(path=>[join(path,"package.json"),join(path,".npmrc")])])].sort();
+  const files=[...new Set([...DEPENDENCY_ROOT_INPUTS,...importers.flatMap(path=>[join(path,"package.json"),join(path,".npmrc")])])].sort();
   const inputs=files.map(path=>({path,sha256:existsSync(join(tree,path))?digest(readFileSync(join(tree,path))):"absent"}));
   const value={version:2 as const,pnpm:version,manager:"sha512."+manager.pin.sha512,node:process.versions.node,platform:process.platform,arch:process.arch,inputs,importers};
   return {...value,key:digest(JSON.stringify(value))};
@@ -76,7 +77,7 @@ function removeModules(tree:string,importers:string[]):void {
       if(parent!==tree&&!parent.startsWith(tree+sep))throw failure(`module directory escapes its tree: ${path}`);
     }
     // rm removes a symlink itself. It must never traverse main's old link.
-    if(existsSync(path)||(()=>{try{return lstatSync(path).isSymbolicLink();}catch(error){if(error.code==="ENOENT")return false;throw error;}})())rmSync(path,{recursive:true,force:true});
+    if(existsSync(path)||(()=>{try{return lstatSync(path).isSymbolicLink();}catch(error){if((error as NodeJS.ErrnoException).code==="ENOENT")return false;throw error;}})())rmSync(path,{recursive:true,force:true});
   }
 }
 
@@ -123,20 +124,21 @@ export async function acquireSubmission(root:string,tree:string,sha:string):Prom
 }
 
 /** A composed lock may be new; its acquired content union must resolve offline. */
-export async function installDependencies(root:string,tree:string):Promise<string|undefined> {
+export async function installDependencies(root:string,tree:string,options:{managerWorkers?:1;packageImportMethod?:'copy';expectedIdentityKey?:string}={}):Promise<string|undefined> {
   tree=realpathSync(tree);
   if(!hasDependencies(tree))return;
   assertPrivate(root,tree);
   const cache=dependencyCache(root);
-  return locked(join(cache,"trees",digest(realpathSync(tree))+".lock"),async()=>withPackageManager(tree,{},async manager=>{
+  return locked(join(cache,"trees",digest(realpathSync(tree))+".lock"),async()=>withPackageManager(tree,{workers:options.managerWorkers},async manager=>{
     const id=await identity(tree,manager),state=join(cache,"trees",digest(realpathSync(tree))+".json");
+    if(options.expectedIdentityKey!==undefined&&id.key!==options.expectedIdentityKey)throw failure("archive does not contain the exact selected install inputs");
     let previous:string[]=[];
     if(existsSync(state)) {
       const record=JSON.parse(readFileSync(state,"utf8"));if(record.version!==1)throw failure("unsupported importer inventory");previous=record.importers;
       if(!Array.isArray(previous)||previous.some(p=>typeof p!=="string"||resolve(tree,p)!==tree&&!resolve(tree,p).startsWith(tree+sep)))throw failure("invalid previous importer inventory");
     }
     removeModules(tree,[...new Set([...previous,...id.importers])]);
-    await manager.run(["install","--offline","--frozen-lockfile","--ignore-scripts","--verify-store-integrity","--store-dir",storeAt(root,id),"--reporter=append-only"]);
+    await manager.run(["install","--offline","--frozen-lockfile","--ignore-scripts","--verify-store-integrity","--store-dir",storeAt(root,id),"--reporter=append-only",...(options.packageImportMethod?["--package-import-method="+options.packageImportMethod]:[])]);
     if((await identity(tree,manager)).key!==id.key)throw failure("dependency inputs changed during offline installation");
     durableRecord(state,{version:1,identity:id.key,importers:id.importers});
     durableRecord(recordAt(root,id),{version:1,identity:id,acquired:true});
@@ -147,7 +149,7 @@ export async function installDependencies(root:string,tree:string):Promise<strin
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url) {
   const [mode,root,tree,revision,...extra]=process.argv.slice(2);
   try {
-    if(!root||!tree||extra.length||!['--acquire','--offline'].includes(mode))throw failure("usage: dependency-inputs.ts --acquire <shared> <source> <commit> | --offline <shared> <tree>");
+    if(!root||!tree||extra.length||!['--acquire','--offline'].includes(mode!))throw failure("usage: dependency-inputs.ts --acquire <shared> <source> <commit> | --offline <shared> <tree>");
     if(mode==="--acquire")await acquireSubmission(root,tree,revision??"HEAD");
     else await installDependencies(root,tree);
   }catch(error){const problem=error instanceof ToolingInstrumentError?error:failure(String(error));publishToolingFailure(problem);console.error(`instrument failure: ${problem.message}`);process.exitCode=2;}

@@ -1,14 +1,15 @@
 import assert from "node:assert/strict";
 import {test} from "node:test";
-import {existsSync,mkdirSync,readdirSync,readFileSync,renameSync,symlinkSync,writeFileSync} from "node:fs";
+import {existsSync, mkdirSync, readdirSync, readFileSync, renameSync, symlinkSync, writeFileSync, chmodSync, lstatSync, rmSync} from "node:fs";
+
 import {join} from "node:path";
-import {captureRunTemporary,finishRunTemporary,pruneRunTemporaries} from "./run-temporary.ts";
-import {testScratch} from "./test-scratch.ts";
+import {removable, captureRunTemporary, finishRunTemporary, pruneRunTemporaries} from "./run-temporary.ts";
+import {newTestScratch} from "./test-scratch.ts";
 // The free-disk reading is injected: what these tests decide must not depend
 // on the machine's own free disk.
 const roomy={freeBytes:()=>Number.MAX_SAFE_INTEGER};
 function fixture(t:{after(fn:()=>void):void}) {
- const home=testScratch(t,"run-temporary-home");
+ const home=newTestScratch("run-temporary-home");t.after(()=>{removable(home);rmSync(home,{recursive:true,force:true});});
  const run=(name:string)=>join(home,".cache/runs",name);
  return {home,run};
 }
@@ -58,4 +59,23 @@ test("replaced directories and root symlinks are kept even under pressure",t=>{
   const result=pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:()=>{}});
   assert.equal(result.removed.length,0);assert.ok(result.protected.length>0);assert.ok(existsSync(owned.path));assert.ok(existsSync(owned.path+"-original"));assert.equal(readFileSync(join(peer,"keep"),"utf8"),"peer");
  }
+});
+
+
+test("read-only owned captures are removed on green and closed-red eviction without following links",t=>{
+ const f=fixture(t),peer=join(f.home,'outside');mkdirSync(peer);writeFileSync(join(peer,'keep'),'outside bytes');chmodSync(join(peer,'keep'),0o444);chmodSync(peer,0o555);
+ for(const green of [true,false]){
+  const owned=captureRunTemporary(f.run('readonly-'+green)),nested=join(owned.path,'capture/nested');mkdirSync(nested,{recursive:true});writeFileSync(join(nested,'bytes'),'captured');chmodSync(join(nested,'bytes'),0o444);
+  symlinkSync(peer,join(nested,'outside'));chmodSync(nested,0o555);chmodSync(join(owned.path,'capture'),0o555);
+  if(green)assert.equal(finishRunTemporary(owned,f.home,true).state,'removed after green');
+  else{finishRunTemporary(owned,f.home,false);assert.deepEqual(pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:()=>{}}).removed,[owned.path]);}
+  assert.equal(existsSync(owned.path),false);assert.equal(lstatSync(peer).mode&0o777,0o555);assert.equal(lstatSync(join(peer,'keep')).mode&0o777,0o444);assert.equal(readFileSync(join(peer,'keep'),'utf8'),'outside bytes');
+ }
+ chmodSync(peer,0o755);
+});
+
+test("a failed root ownership check changes no read-only directory permissions",t=>{
+ const f=fixture(t),owned=captureRunTemporary(f.run('ownership')),nested=join(owned.path,'capture');mkdirSync(nested);chmodSync(nested,0o555);
+ const result=finishRunTemporary({...owned,uid:owned.uid+1},f.home,true);assert.match(result.state,/kept/);assert.equal(lstatSync(nested).mode&0o777,0o555);
+ chmodSync(nested,0o755);
 });

@@ -1,17 +1,24 @@
 // Exercise the real consumer with versioned saved observations. No source case
 // or checked-in record is mutated; the compiler still runs its own self-checks.
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { test } from "node:test";
-import { harnessHashOf } from "./project.ts";
-import { parseObservation, parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, type TypeScriptObservation } from "./typescript-record.ts";
-import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
-import { publishPin, provenanceOf } from "../conformance/pin.ts";
-import { testScratch } from "../gate/test-scratch.ts";
+import {execFileSync, spawnSync} from "node:child_process";
+import {createHash} from "node:crypto";
+import {copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync, appendFileSync, cpSync, lstatSync} from "node:fs";
+
+import {join, resolve} from "node:path";
+import {fileURLToPath} from "node:url";
+import {test} from "node:test";
+import {harnessHashOf} from "./project.ts";
+import {parseObservation, parseTypeScriptRecord, serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, type TypeScriptObservation} from "./typescript-record.ts";
+import {OUTPUT_PREFIX_VERSION} from "../conformance/output-prefix.ts";
+import {typescriptOracleIdentity} from "./suites/typescript.ts";
+import {publishPin, provenanceOf} from "../conformance/pin.ts";
+import {newTestScratch} from "../gate/test-scratch.ts";
+import {removable} from "../gate/run-temporary.ts";
+
+import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
+
+await setupOracleTestEnvironment();
 
 const repository = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(repository, process.env.NTS_BIN ?? "target/release/nts");
@@ -25,6 +32,7 @@ const host = (from: string, to: string, frame: number): TypeScriptObservation =>
   failure: { exit: 1, signal: null, output: `Exception in thread "main" java.lang.ClassCastException: class nts.gen.${from} cannot be cast to class nts.gen.${to}\n\tat nts.gen.Program.method${frame}(Unknown Source)` } });
 function row(observed: TypeScriptObservation): object {
   switch (observed.kind) {
+    case "oracle-rejected": return {bucket:"oracle-rejected",why:observed.error,rejection:{exit:observed.exit,error:observed.error}};
     case "pass": return { bucket: "strict-pass" };
     case "wrong": return { bucket: "threw", thrown: observed.errorClass, runtimeFailure: observed.failure };
     case "wrong-output": return { bucket: "wrong-output", printed: observed.printed, nodeOutput: observed.nodeOutput, runtimeFailure: observed.failure };
@@ -38,9 +46,9 @@ function row(observed: TypeScriptObservation): object {
   }
 }
 
-test("the CLI holds every recorded outcome and fails closed before recorded selection", t => {
+test("the CLI holds every recorded outcome and fails closed before recorded selection", async t => {
   assert.ok(existsSync(binary), `compiler missing: ${binary}; set NTS_BIN to a built pin`);
-  const scratch = testScratch(t, "typescript-record-cli");
+  const scratch = newTestScratch("typescript-record-cli");t.after(()=>{removable(scratch);rmSync(scratch,{recursive:true,force:true});});
   const sourceRoot = repository, fixture = join(scratch, "fixture"), census = join(fixture, "tooling/census");
   mkdirSync(census, { recursive: true });
   for (const name of readdirSync(join(sourceRoot, "tooling/census"))) {
@@ -70,20 +78,25 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     harness: harnessHashOf("ts"), under: "tests/typescript" }, cases: new Map(fixturePaths.map(path => [path, pass])) };
   const target = [...recorded.cases.keys()][0];
   const fingerprint = createHash("sha256").update(readFileSync(binary)).digest("hex").slice(0, 16);
-  const one = join(scratch, "one.tsv"), expected = join(scratch, "expected.tsv"), rows = join(scratch, "rows.jsonl"), json = join(scratch, "report.json");
+  const sourceOracle = typescriptOracleIdentity();
+  const one = join(scratch, "one.tsv"), expected = join(scratch, "expected.tsv"), rows = join(scratch, "rows.jsonl"), json = join(scratch, "report.json"),instrumentFile=join(scratch,'instrument.json');
   writeFileSync(one, serializeTypeScriptRecord({ metadata: recorded.metadata, cases: new Map([[target, pass]]) }));
   const meminfo=join(scratch,"low-meminfo");
   writeFileSync(meminfo,"MemAvailable: 0 kB\n");
-  function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION, lowMemory = false) {
+  function invoke(contents: string, observed: object, observations = TYPESCRIPT_OBSERVATIONS_VERSION,
+    oracleIdentity: ReturnType<typeof typescriptOracleIdentity> | null = sourceOracle, consumerRoot=root, lowMemory=false) {
     writeFileSync(expected, contents);
-    writeFileSync(rows, JSON.stringify({ fingerprint, under: "tests/typescript", harness: harnessHashOf("ts"), observations, output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" +
+    writeFileSync(rows, JSON.stringify({ fingerprint, under: "tests/typescript", harness: harnessHashOf("ts"), observations,
+      ...(oracleIdentity === null ? {} : { oracleIdentity }), output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" +
       JSON.stringify({ path: target, ...observed }) + "\n");
     rmSync(json, { force: true });
+    rmSync(instrumentFile,{force:true});
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
-      { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
+      { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
         env: { ...process.env, NTS_BIN: pinned, NTS_CENSUS_DIR: join(scratch, "run"),
-          ...(lowMemory?{NTS_MEMINFO:meminfo,NTS_CENSUS_MIN_AVAILABLE_GB:"1000000"}:{}) } });
+          ...(lowMemory?{NTS_MEMINFO:meminfo,NTS_CENSUS_MIN_AVAILABLE_GB:"1000000"}:{}),
+          NTS_GATE_STEP:'typescript-cases',NTS_GATE_STEP_ATTEMPT:'oracle-record-control',NTS_GATE_STEP_RESULT:instrumentFile } });
   }
   for (const [before, after, word, status] of [
     [pass, wrong, "REGRESSED", 1], [refused, wrong, "REGRESSED", 1], [invalid, abort, "CHANGED", 1],
@@ -98,7 +111,8 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
     const result = invoke(serializeTypeScriptRecord({ metadata: recorded.metadata, cases }), row(after));
     assert.equal(result.status, status, result.stdout + result.stderr);
     const report = JSON.parse(readFileSync(json, "utf8"));
-    assert.equal(report.record_version, 3);
+    assert.equal(report.record_version, TYPESCRIPT_OBSERVATIONS_VERSION);
+    assert.deepEqual(report.oracleIdentity, sourceOracle);
     assert.deepEqual(report.observations[target], parseObservation(after));
     assert.equal(report.comparison[word]?.length ?? 0, word === "reproduces" ? 0 : 1);
     if (word === "FIXED" || word === "REFUSES NOW" || word === "LOUD NOW") assert.ok(result.stdout.includes(`improved, record pending: ${target} `), result.stdout);
@@ -137,7 +151,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(shifted.status, 0, shifted.stdout + shifted.stderr);
   assert.equal(JSON.parse(readFileSync(json, "utf8")).observations[target].validator, "Queue<N>#push TypeId(N) type N at: 7");
   const contents = serializeTypeScriptRecord(recorded);
-  const resumed=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,true);
+  const resumed=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,root,true);
   assert.equal(resumed.status,0,resumed.stdout+resumed.stderr);
   assert.deepEqual(JSON.parse(readFileSync(json,"utf8")).observations[target],pass);
   assert.doesNotMatch(resumed.stderr,/memory:|waiting for|holding new cases/);
@@ -148,10 +162,47 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(pending.status, 0, pending.stdout + pending.stderr);
   assert.ok(pending.stdout.includes(`pending: ${target} is not recorded in ${expected} yet`), pending.stdout);
   assert.equal(JSON.parse(readFileSync(json, "utf8")).comparison.pending.length, 1);
+  // The compiler is unchanged in every arm. Old rows must not bypass a new
+  // source oracle or a changed single-case materialization contract.
+  const changedOracleIdentity = structuredClone(sourceOracle);
+  changedOracleIdentity.oracle.emitterSha256 = "0".repeat(64);
+  const changedRoots = structuredClone(sourceOracle);
+  changedRoots.materializer.roots = ["src/main.ts"];
+  for (const identity of [null, changedOracleIdentity, changedRoots]) {
+    const result = invoke(contents, row(pass), TYPESCRIPT_OBSERVATIONS_VERSION, identity);
+    assert.equal(result.status, 2, result.stdout + result.stderr);
+    assert.match(result.stdout + result.stderr, /missing or different TypeScript oracle identity/);
+    assert.equal(existsSync(json), false, "changed-oracle rows cannot publish a run artifact");
+    assert.equal(readFileSync(rows, "utf8").trim().split("\n").length, 2, "rejected resume leaves its checkpoint intact");
+  }
+  // Change the actual adapter bytes, rather than only a synthetic header hash.
+  // The copied production consumer and its one identity function own both arms.
+  const copied=join(scratch,'copied-consumer');mkdirSync(copied);
+  cpSync(join(sourceRoot,'tooling'),join(copied,'tooling'),{recursive:true,verbatimSymlinks:true});
+  for(const file of ['package.json','.tool-versions','tsconfig.fixtures.json'])cpSync(join(sourceRoot,file),join(copied,file));
+  symlinkSync(join(sourceRoot,'node_modules'),join(copied,'node_modules'),'dir');
+  symlinkSync(join(root,'tests'),join(copied,'tests'),'dir');
+  symlinkSync(join(sourceRoot,'third_party'),join(copied,'third_party'),'dir');
+  symlinkSync(join(sourceRoot,'runtime'),join(copied,'runtime'),'dir');
+  // The real report records its consumer repository's HEAD. Bind the actual
+  // copied files in this isolated fixture, without borrowing the author's Git.
+  execFileSync('git',['init','--quiet',copied]);
+  execFileSync('git',['-C',copied,'add','--','tooling','package.json','.tool-versions','tsconfig.fixtures.json','node_modules','tests','third_party','runtime']);
+  execFileSync('git',['-C',copied,'-c','user.name=nts fixture','-c','user.email=fixture@invalid','-c','commit.gpgsign=false','-c','core.hooksPath=/dev/null','commit','--quiet','-m','Bind copied oracle consumer inputs']);
+  const unchangedAdapter=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);
+  assert.equal(unchangedAdapter.status,0,unchangedAdapter.stdout+unchangedAdapter.stderr);
+  assert.deepEqual(JSON.parse(readFileSync(json,'utf8')).oracleIdentity,sourceOracle);
+  assert.ok(lstatSync(join(copied,'tooling/differential')).isDirectory(),'the adapter mutation owns a physical copy');
+  appendFileSync(join(copied,'tooling/census/typescript-oracle-results.ts'),'\n// changed adapter bytes in the resume control\n');
+  const changedAdapter=invoke(contents,row(pass),TYPESCRIPT_OBSERVATIONS_VERSION,sourceOracle,copied);
+  assert.equal(changedAdapter.status,2,changedAdapter.stdout+changedAdapter.stderr);
+  assert.match(changedAdapter.stdout+changedAdapter.stderr,/missing or different TypeScript oracle identity/);
+  assert.equal(existsSync(json),false,'changed adapter cannot publish a run artifact');
+  assert.equal(readFileSync(rows,'utf8').trim().split('\n').length,2,'changed adapter leaves the checkpoint intact');
   for (const [mutated, message] of [
     [contents + "tests/typescript/missing-source.ts\t{\"kind\":\"pass\"}\n", "recorded case gone missing"],
     [contents + contents.split("\n")[1] + "\n", "duplicate recorded case"],
-    [contents.replace(/"version":[23]/, '"version":99'), "unsupported TypeScript record version"],
+    [contents.replace(/"version":[234]/, '"version":99'), "unsupported TypeScript record version"],
   ]) {
     const result = invoke(mutated, row(pass));
     assert.equal(result.status, 2, result.stdout + result.stderr);
@@ -163,14 +214,38 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   assert.equal(existsSync(json), false, "a timeout cannot become an expected result");
   for (const observed of [{ bucket: "memory-cap", why: "emit resident scope" },
     { bucket: "infrastructure-error", why: "the toolchain did not survive the link" }]) {
-    const stopped = invoke(contents, observed);
-    assert.equal(stopped.status, 2, stopped.stdout + stopped.stderr);
-    assert.equal(existsSync(json), false, "a failed instrument cannot publish a measured report");
+    await t.test(`failed instrument ${observed.bucket}`, () => {
+      const stopped = invoke(contents, observed);
+      assert.equal(stopped.status, 2, stopped.stdout + stopped.stderr);
+      assert.equal(existsSync(json), false, "a failed instrument cannot publish a measured report");
+    });
   }
   const oldRows = invoke(contents, row(pass), TYPESCRIPT_OBSERVATIONS_VERSION - 1);
   assert.equal(oldRows.status, 2, oldRows.stdout + oldRows.stderr);
   assert.match(oldRows.stdout + oldRows.stderr, /versioned raw observations/);
   assert.equal(existsSync(json), false, "old diagnostic locations cannot become a current record");
+
+  const rejected:TypeScriptObservation={kind:'oracle-rejected',exit:1,error:'Test262Error: sameValue'};
+  const beforeCases=new Map(recorded.cases);beforeCases.set(target,wrong);
+  const changedOracle=invoke(serializeTypeScriptRecord({metadata:recorded.metadata,cases:beforeCases}),row(rejected));
+  assert.equal(changedOracle.status,1,changedOracle.stdout+changedOracle.stderr);
+  assert.equal(JSON.parse(readFileSync(json,'utf8')).comparison.CHANGED.length,1);
+  const rejectedCases=new Map(recorded.cases);rejectedCases.set(target,rejected);
+  const rejectedContents=serializeTypeScriptRecord({metadata:{...recorded.metadata,version:4},cases:rejectedCases});
+  const oracleReproduction=invoke(rejectedContents,row(rejected));
+  assert.equal(oracleReproduction.status,0,oracleReproduction.stdout+oracleReproduction.stderr);
+  const reproducedReport=JSON.parse(readFileSync(json,'utf8'));
+  assert.deepEqual(reproducedReport.observations[target],rejected);
+  assert.equal(reproducedReport.outcomes[target]?.outcome,'no-verdict');
+  await t.test('a stopped oracle keeps the typed CLI instrument contract', () => {
+    const instrument=invoke(rejectedContents,{bucket:'oracle',why:'loader failed'});
+    assert.match(instrument.stdout+instrument.stderr,/ToolingInstrumentError|oracle not measured/);
+    assert.equal(existsSync(json),false,'a loader failure cannot satisfy an expected rejection');
+    const heldInstrument=JSON.parse(readFileSync(instrumentFile,'utf8'));
+    assert.equal(heldInstrument.kind,'tooling-setup');assert.equal(heldInstrument.verdict,'INSTRUMENT');
+    t.diagnostic('oracle-stop-proof '+JSON.stringify({status:instrument.status,kind:heldInstrument.kind,verdict:heldInstrument.verdict,reportExists:existsSync(json)}));
+    assert.equal(instrument.status,2,instrument.stdout+instrument.stderr);
+  });
 
   // Write a complete real family through --record, then consume that exact
   // file through --recorded, the mode each typescript-<backend> step uses. Saved raw
@@ -182,7 +257,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
   const observed = new Map(family); observed.set(target, failure);
   function run(mode: "--record" | "--recorded" | "--record-pending", file: string, saved: ReadonlyMap<string, TypeScriptObservation>, extra: string[] = []) {
     writeFileSync(rows, JSON.stringify({ fingerprint, under, harness: harnessHashOf("ts"), observations: TYPESCRIPT_OBSERVATIONS_VERSION,
-      output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" + [...saved].map(([path, value]) => JSON.stringify({ path, ...row(value) })).join("\n") + "\n");
+      oracleIdentity: sourceOracle, output_prefix: OUTPUT_PREFIX_VERSION }) + "\n" + [...saved].map(([path, value]) => JSON.stringify({ path, ...row(value) })).join("\n") + "\n");
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--under", under, mode, file, "--jobs", "1", "--rows", rows, "--resume", ...extra],
       { cwd: root, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,

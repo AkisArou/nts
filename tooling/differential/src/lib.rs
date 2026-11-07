@@ -50,6 +50,7 @@ pub mod check_report;
 mod domains;
 mod objects;
 mod oracle_coverage;
+mod oracle_emit;
 mod oracle_exclusions;
 #[cfg(test)]
 mod oracle_protocol_tests;
@@ -279,8 +280,41 @@ impl Drop for Scratch {
             eprintln!("  kept {} (NTS_KEEP_TEMP)", self.path);
             return;
         }
-        let _ = std::fs::remove_dir_all(&self.path);
+        let _ = remove_snapshot(&self.path);
     }
+}
+
+// Published mirror directories are read-only while children execute. Cleanup
+// owns this root, makes only its directories writable, and never follows links.
+fn remove_snapshot(path: &Utf8Path) -> Result<()> {
+    fn writable(path: &Utf8Path) -> Result<()> {
+        if !std::fs::symlink_metadata(path)?.is_dir() {
+            return Ok(());
+        }
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt as _;
+            let mut permissions = std::fs::metadata(path)?.permissions();
+            permissions.set_mode(permissions.mode() | 0o700);
+            std::fs::set_permissions(path, permissions)?;
+        }
+        for entry in std::fs::read_dir(path)? {
+            let entry = entry?;
+            if entry.file_type()?.is_dir() {
+                let child = Utf8PathBuf::from_path_buf(entry.path()).map_err(|path| {
+                    anyhow::anyhow!("snapshot cleanup path is not utf-8: {}", path.display())
+                })?;
+                writable(&child)?;
+            }
+        }
+        Ok(())
+    }
+    if !path.exists() {
+        return Ok(());
+    }
+    writable(path)?;
+    std::fs::remove_dir_all(path)?;
+    Ok(())
 }
 
 /// A function this can drive, and the shape of its signature.
@@ -531,27 +565,44 @@ fn population(
 /// If the program does not typecheck, does not lower, does not compile, or the
 /// two sides disagree.
 pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
+    check_with_oracle(tsconfig, source, None)
+}
+
+/// Check using the batch owner's completed oracle, or prepare a singleton.
+///
+/// # Errors
+///
+/// Returns an instrument error if the supplied manifest is incomplete, stale,
+/// or does not match this binary's embedded oracle and current project.
+pub fn check_with_oracle(
+    tsconfig: &Utf8Path,
+    source: &mut Frontend,
+    oracle_manifest: Option<&Utf8Path>,
+) -> Result<Report> {
     let _trace_session = case_costs::session(tsconfig);
     let backend = Backend::from_environment()?;
-    let PreparedCheck {
-        snapshot,
-        prepared,
-        entry,
-        testable,
-        ..
-    } = prepare_check(tsconfig, source, backend)?;
+    let check = prepare_check(tsconfig, source, backend)?;
+    let testable = &check.testable;
     let refusals: Vec<check_report::Refusal> =
-        prepared.diagnostics.iter().map(Into::into).collect();
-    let coverage = match population(&entry, backend, &testable, &refusals)? {
+        check.prepared.diagnostics.iter().map(Into::into).collect();
+    let coverage = match population(&check.entry, backend, testable, &refusals)? {
         ControlFlow::Continue(coverage) => coverage,
-        ControlFlow::Break(report) => return Ok(report),
+        ControlFlow::Break(report) => {
+            if let Some(manifest) = oracle_manifest {
+                let prepared = oracle_emit::read_prepared(manifest, &check.entry, tsconfig)
+                    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+                oracle_emit::finish_snapshot(&prepared)
+                    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+            }
+            return Ok(report);
+        }
     };
 
     let dir = Scratch::for_check()?;
     let dir = &dir.path;
 
-    let compiled = source_contracts::compiled(&testable, &prepared.program);
-    let (execution_indices, mut refused) = source_contracts::alignment(&testable, &compiled)?;
+    let compiled = source_contracts::compiled(testable, &check.prepared.program);
+    let (execution_indices, mut refused) = source_contracts::alignment(testable, &compiled)?;
     let unavailable = refused.len();
     let mut runtime_refused = Vec::new();
     let mut aborts = Vec::new();
@@ -562,76 +613,77 @@ pub fn check(tsconfig: &Utf8Path, source: &mut Frontend) -> Result<Report> {
     // `render`, because a JVM program is a directory of classes driven by
     // `java` -- a different artifact *and* a different runner, where C and
     // LLVM differ only in what they hand the same linker.
-    let mut native = if compiled.is_empty() {
-        Run {
-            results: Vec::new(),
-            output: output::Printed::default(),
-            segments: Vec::new(),
-            thrown: Vec::new(),
-            incomplete: Vec::new(),
-        }
-    } else {
-        let execution = match backend {
-            Backend::Jvm => run_jvm(
+    let supplied_oracle = oracle_manifest
+        .map(|manifest| oracle_emit::read_prepared(manifest, &check.entry, tsconfig))
+        .transpose()
+        .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+    let oracle =
+        output::Oracle::prepare(&check, dir, tsconfig, &compiled, &coverage, supplied_oracle)
+            .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+    let provisional = (|| -> Result<Report> {
+        let mut native = if compiled.is_empty() {
+            Run {
+                results: Vec::new(),
+                output: output::Printed::default(),
+                segments: Vec::new(),
+                thrown: Vec::new(),
+                incomplete: Vec::new(),
+            }
+        } else {
+            let execute = match backend {
+                Backend::Jvm => run_jvm,
+                Backend::C | Backend::Llvm => run_native,
+            };
+            execute(
                 dir,
-                &prepared.program,
-                &snapshot.sources,
+                &check.prepared.program,
+                &check.snapshot.sources,
                 &compiled,
                 &mut runtime_refused,
                 &mut aborts,
                 &mut timeouts,
-            ),
-            Backend::C | Backend::Llvm => run_native(
-                dir,
-                &prepared.program,
-                &snapshot.sources,
-                &compiled,
-                &mut runtime_refused,
-                &mut aborts,
-                &mut timeouts,
-            ),
+            )
+            .map_err(|error| annotate(error, FailureKind::Execution))?
         };
-        execution.map_err(|error| annotate(error, FailureKind::Execution))?
-    };
-    refused.extend(
-        runtime_refused
-            .into_iter()
-            .map(|index| execution_indices[index]),
-    );
-    for (index, _) in &mut native.thrown {
-        *index = execution_indices[*index];
-    }
-    refused.sort_unstable();
-    let engine = case_costs::measure("oracle.total", || {
-        run_node(dir, &entry, &testable, &snapshot.sources, &coverage)
-    })
-    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
-    let approximate = nts_core::hir::builtin::approximating(&prepared.program);
-    let output_comparison = output::Oracle {
-        dir,
-        entry: &entry,
-        compiled: &compiled,
-        sources: &snapshot.sources,
-        coverage: &coverage,
-    }
-    .compare(&native, &engine, &aborts)
-    .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
-    let mut report = report(&native, &engine, &testable, &refused, &approximate, false);
-    report.disagreements.extend(output_comparison.disagreements);
-    report.refused -= output_comparison.rejected_declines;
-    report.checked += output_comparison.rejected_declines;
-    report.unavailable = unavailable;
-    report.node_received = engine.results.len();
-    report.refusals = refusals;
-    report.aborts = aborts;
-    report.timeouts = timeouts;
-    report.incomplete.clone_from(&native.incomplete);
-    // A timed-out case still has to leave a gap on this side so the node side
-    // trims to match by index -- so it goes into `refused` for *alignment* and
-    // comes back out of the count, which is a different question. Reporting it
-    // as both is how it read before: one line saying the program declined and
-    // one saying it ran out of time, about the same case.
-    report.refused = report.refused.saturating_sub(timeouts);
+        refused.extend(
+            runtime_refused
+                .into_iter()
+                .map(|index| execution_indices[index]),
+        );
+        for (index, _) in &mut native.thrown {
+            *index = execution_indices[*index];
+        }
+        refused.sort_unstable();
+        let engine = case_costs::measure("oracle.total", || oracle.run(testable))
+            .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+        let approximate = nts_core::hir::builtin::approximating(&check.prepared.program);
+        let output_comparison = oracle
+            .compare(&native, &engine, &aborts)
+            .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+        let mut report = report(&native, &engine, testable, &refused, &approximate, false);
+        report.disagreements.extend(output_comparison.disagreements);
+        report.refused -= output_comparison.rejected_declines;
+        report.checked += output_comparison.rejected_declines;
+        report.unavailable = unavailable;
+        report.node_received = engine.results.len();
+        report.refusals = refusals;
+        report.aborts = aborts;
+        report.timeouts = timeouts;
+        report.incomplete.clone_from(&native.incomplete);
+        // A timed-out case still has to leave a gap on this side so the node side
+        // trims to match by index -- so it goes into `refused` for *alignment* and
+        // comes back out of the count, which is a different question. Reporting it
+        // as both is how it read before: one line saying the program declined and
+        // one saying it ran out of time, about the same case.
+        report.refused = report.refused.saturating_sub(timeouts);
+        Ok(report)
+    })();
+    // An execution error does not bypass the complete original-fact replay.
+    // A changed snapshot takes precedence over any provisional program result.
+    oracle
+        .finish()
+        .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
+    let report = provisional?;
     case_costs::event(
         serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
     );
@@ -800,12 +852,11 @@ pub fn oracle_plan(
     let absolute = checked.entry.canonicalize_utf8()?;
     let mut plan = serde_json::json!({"version":2,"backend":backend.name(),
         "source":corpus_source(&absolute),"source_digest":oracle_coverage::source_digest(&absolute)?,
-        "entry":absolute,"seed":null,
+        "entry":absolute,"tsconfig":tsconfig.canonicalize_utf8()?,"seed":null,
         "generator_version":1,"generator_digest":oracle_generator_digest(),
         "case_key":key,"case_count":cases.len(),"cases":cases,"signature":signature,
         "source_exports":checked.source_exports,
-        "driver":driver(&format!("file://{absolute}"), &checked.testable, Engine::Node),
-        "resolver":RESOLVE_TS});
+        "driver":driver(&format!("file://{absolute}"), &checked.testable, Engine::Node)});
     if let Some(domain) = checked.input_domain {
         plan["input_domain"] = serde_json::to_value(domain)?;
     }
@@ -2895,52 +2946,53 @@ impl Engine {
     }
 }
 
-fn run_node(
-    dir: &Utf8Path,
-    entry: &Utf8Path,
-    testable: &[Testable],
-    sources: &[nts_diagnostics::SourceFile],
-    coverage: &oracle_coverage::Coverage,
-) -> Result<Run> {
-    run_node_cases(dir, entry, &interleaved(testable), sources, coverage)
-}
-
 fn run_node_cases(
     dir: &Utf8Path,
     entry: &Utf8Path,
     cases: &[DriverCase<'_>],
     sources: &[nts_diagnostics::SourceFile],
     coverage: &oracle_coverage::Coverage,
+    emitted: &oracle_emit::Prepared,
 ) -> Result<Run> {
     let absolute = entry
         .canonicalize_utf8()
         .with_context(|| format!("locating {entry}"))?;
+    execute_node_driver(
+        dir,
+        &driver_cases(&format!("file://{absolute}"), cases, Engine::Node),
+        Some(sources),
+        coverage,
+        emitted,
+    )
+}
+
+fn execute_node_driver(
+    dir: &Utf8Path,
+    driver_text: &str,
+    sources: Option<&[nts_diagnostics::SourceFile]>,
+    coverage: &oracle_coverage::Coverage,
+    emitted: &oracle_emit::Prepared,
+) -> Result<Run> {
     let path = dir.join("check_driver.mjs");
-    std::fs::write(
-        &path,
-        driver_cases(&format!("file://{absolute}"), cases, Engine::Node),
-    )?;
-    let hook = dir.join("resolve_ts.mjs");
-    std::fs::write(&hook, RESOLVE_TS)?;
-    let shadow = artifact_shadow::oracle(dir, sources);
+    std::fs::write(&path, driver_text)?;
+    let shadow = sources.and_then(|sources| artifact_shadow::oracle(dir, sources, emitted));
     let results_path = dir.join("results-node.txt");
     let _ = std::fs::remove_file(&results_path);
-    let mut command = std::process::Command::new("prlimit");
+    // This path is never reused; nested children append to the same execution.
+    let mut loader_state = oracle_emit::execution_state(emitted)?;
+    oracle_emit::capture_execution_driver(emitted, &loader_state.path, &path)?;
+    let mut command = oracle_emit::node_command();
     command
-        .arg(format!("--as={}", MEMORY_MB << 20))
-        .arg("--core=0")
-        .arg(format!(
-            "--cpu={}:{}",
-            oracle_coverage::CPU_SECONDS,
-            oracle_coverage::CPU_SECONDS + 1
-        ))
-        .arg("node")
-        .arg("--experimental-transform-types")
+        .args(&emitted.args)
         .arg("--no-warnings")
-        .arg("--import")
-        .arg(format!("file://{hook}"))
         .arg(&path)
-        .env("NTS_DIFF_RESULTS", &results_path);
+        .env("NTS_DIFF_RESULTS", &results_path)
+        .env("NTS_ORACLE_EMIT_STATUS", &loader_state.path)
+        .env("NTS_ORACLE_EMIT_MANIFEST", &emitted.manifest)
+        .env(
+            "NTS_ORACLE_SNAPSHOT",
+            serde_json::to_string(&emitted.snapshot)?,
+        );
     let mut status = serde_json::Value::Null;
     let mut completion = serde_json::Value::Null;
     let result = case_costs::child("oracle.execute", || {
@@ -2952,6 +3004,7 @@ fn run_node_cases(
         Ok::<_, anyhow::Error>(finished.output)
     })
     .and_then(|output| {
+        oracle_emit::ensure_loaded(&mut loader_state)?;
         let mut rows = std::fs::read(&results_path)
             .map(|bytes| lines(&bytes))
             .unwrap_or_default();
@@ -2971,7 +3024,7 @@ fn run_node_cases(
             completion["stdout"] = String::from_utf8_lossy(&output.stdout).into_owned().into();
         }
         case_costs::event(serde_json::json!({"event":"oracle.result","required":coverage.count,
-            "delivered":delivered,"done":done,"case_key":coverage.key,"status":status,"measured":measured.is_ok()}));
+            "delivered":delivered,"done":done,"case_key":coverage.key,"status":status,"provisional":true,"snapshot_finalization":"pending","measured":false,"rows_complete":measured.is_ok()}));
         Ok(Run {
             results: measured?,
             output: output::Printed { stdout: output.stdout, stderr: output.stderr },
@@ -2982,6 +3035,55 @@ fn run_node_cases(
     });
     artifact_shadow::finish_oracle(shadow, &result, &status, &completion);
     result
+}
+
+/// Execute a captured plan with the same supervisor and completion reader as
+/// `check`. The owning producer must finalize the snapshot before publishing
+/// this provisional result. Consumers never need an SDK.
+///
+/// # Errors
+/// Returns an instrument error for a changed plan, prepared image, incomplete
+/// population, or any unmeasured Node execution.
+pub fn execute_oracle_plan(
+    plan_file: &Utf8Path,
+    expected_sha256: &str,
+    manifest: &Utf8Path,
+    directory: &Utf8Path,
+) -> Result<serde_json::Value> {
+    let bytes = std::fs::read(plan_file)?;
+    if oracle_emit::digest(&bytes) != expected_sha256 {
+        bail!("oracle execution plan changed");
+    }
+    let plan: serde_json::Value = serde_json::from_slice(&bytes)?;
+    let text = |key: &str| -> Result<&str> {
+        plan[key]
+            .as_str()
+            .with_context(|| format!("oracle execution plan has no {key}"))
+    };
+    let entry = Utf8Path::new(text("entry")?);
+    let project = Utf8Path::new(text("tsconfig")?);
+    let count = plan["case_count"]
+        .as_u64()
+        .and_then(|count| usize::try_from(count).ok())
+        .context("oracle execution plan has no case count")?;
+    if plan["version"] != 2
+        || !entry.is_absolute()
+        || !project.is_absolute()
+        || plan["cases"].as_array().map(Vec::len) != Some(count)
+    {
+        bail!("oracle execution plan identity is invalid");
+    }
+    let prepared = oracle_emit::read_prepared(manifest, entry, project)?;
+    let coverage = oracle_coverage::Coverage {
+        count,
+        key: text("case_key")?.to_owned(),
+    };
+    std::fs::create_dir_all(directory)?;
+    let run = execute_node_driver(directory, text("driver")?, None, &coverage, &prepared)?;
+    Ok(
+        serde_json::json!({"version":1,"provisional":true,"rows":run.results,
+        "stdout":run.output.stdout,"stderr":run.output.stderr}),
+    )
 }
 
 /// The node oracle, uncoloured whatever shell launched it.
@@ -3000,35 +3102,6 @@ fn without_colour(mut command: std::process::Command) -> std::process::Command {
         .env("NO_COLOR", "1");
     command
 }
-
-/// A resolve hook that follows TypeScript's `.js` specifiers to the `.ts` files
-/// they mean.
-///
-/// TypeScript writes `import { d } from "./geometry.js"` for a file named
-/// `geometry.ts` -- the specifier names the *output*, which is the rule under
-/// `NodeNext` and the convention everywhere else. Node's type stripping does not
-/// apply that rule, so it looked for a `.js` that does not exist and the run
-/// died before comparing anything.
-///
-/// Only for a relative specifier whose `.ts` sibling exists, so a real `.js`
-/// dependency still resolves as itself.
-const RESOLVE_TS: &str = r#"import { registerHooks } from "node:module";
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
-
-registerHooks({
-  resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith(".") && specifier.endsWith(".js") && context.parentURL) {
-      const sibling = new URL(specifier, context.parentURL);
-      sibling.pathname = sibling.pathname.slice(0, -3) + ".ts";
-      if (existsSync(fileURLToPath(sibling))) {
-        return { url: sibling.href, format: "module-typescript", shortCircuit: true };
-      }
-    }
-    return nextResolve(specifier, context);
-  },
-});
-"#;
 
 fn lines(bytes: &[u8]) -> Vec<String> {
     String::from_utf8_lossy(bytes)

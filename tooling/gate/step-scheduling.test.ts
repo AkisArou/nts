@@ -1,12 +1,15 @@
 import assert from "node:assert/strict";
-import { test } from "node:test";
-import { mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { gateEnvironment } from "./canonical-environment.ts";
-import { spawnTest } from "./test-wait.ts";
-import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory } from "./step-scheduling.ts";
-import { testScratch } from "./test-scratch.ts";
+import {moduleClosure} from "./module-closure-fixture.ts";
+import {test} from "node:test";
+import {mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {join, dirname} from "node:path";
+
+import {fileURLToPath} from "node:url";
+import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
+import {removable} from "./run-temporary.ts";
+import {spawnTest} from "./test-wait.ts";
+import {inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory} from "./step-scheduling.ts";
+import {testScratch, newTestScratch} from "./test-scratch.ts";
 
 test("equal and missing estimates have a deterministic name tie-break", () => {
   const names = ["typescript-c", "tests", "blockers", "integrity"];
@@ -72,17 +75,19 @@ test("a step's usable width counts the frontend cap, so a capped step is not ran
 });
 
 test("measured CPU work starts TypeScript at full width against a competing fixed grant", t => {
-  const own = testScratch(t, "step-scheduling-run");
+  const own = newTestScratch("step-scheduling-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "gate-run");
   mkdirSync(gate, { recursive: true }); mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));
-  for (const name of readdirSync(source)) {
-    if (name === "run.mjs") writeFileSync(join(gate, name), readFileSync(join(source, name)));
-    else if (!["all.sh", "times.tsv"].includes(name)) symlinkSync(join(source, name), join(gate, name));
+  for(const file of moduleClosure(["tooling/gate/run.mjs"])){
+    const destination=join(root,file),original=join(source,"../..",file);
+    mkdirSync(dirname(destination),{recursive:true});
+    if(file==="tooling/gate/run.mjs")writeFileSync(destination,readFileSync(original));
+    else symlinkSync(original,destination);
   }
-  const baseline = "tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\n";
+  const baseline = "tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n";
   writeFileSync(join(gate, "times.tsv"), baseline);
-  writeFileSync(join(target, "gate-costs/steps.json"), JSON.stringify({ version: 2, steps: { tests: 100, "typescript-c": 8000 } }) + "\n");
+  writeFileSync(join(target, "gate-costs/steps.json"), JSON.stringify({ version: 2, steps: { tests: 100, "typescript-c": 8000, "typescript-oracles": 16000 } }) + "\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   const observed = join(own, "starts.jsonl");
@@ -92,25 +97,29 @@ cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
 else
-  node --input-type=module -e 'import {appendFileSync} from "node:fs";appendFileSync(${JSON.stringify(observed)},JSON.stringify({step:process.env.NTS_GATE_STEP,slots:Number(process.env.NTS_GATE_JOBS)})+"\\n");'
+  node --input-type=module -e 'import {appendFileSync} from "node:fs";import {createTypeScriptOracleResults,openTypeScriptOracleResults} from ${JSON.stringify(new URL("../census/typescript-oracle-results.ts",import.meta.url).href)};import {typeScriptOracleDirectory} from ${JSON.stringify(new URL("../census/typescript-oracle-capture.ts",import.meta.url).href)};import {join} from "node:path";if(process.env.NTS_GATE_STEP==="typescript-oracles")createTypeScriptOracleResults(join(typeScriptOracleDirectory(),"results"),"a".repeat(64)).publish();if(process.env.NTS_GATE_STEP==="typescript-c"&&openTypeScriptOracleResults(JSON.parse(process.env.NTS_TYPESCRIPT_ORACLE),"a".repeat(64)).count!==0)throw Error("fixture oracle publication differs");appendFileSync(${JSON.stringify(observed)},JSON.stringify({step:process.env.NTS_GATE_STEP,slots:Number(process.env.NTS_GATE_JOBS)})+"\\n");'
 fi
 `);
   const compiler = join(own, "nts"); writeFileSync(compiler, "controlled compiler identity\n");
   const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
-  const planned = gateEnvironment(process.env, { run, owned: {
+  // Publishing the fixture's empty reference must never reuse an outer
+  // TypeScript producer's capture directory.
+  const planned = gateEnvironment(hostEnvironment(process.env), { run, owned: {
     NTS_GATE_STEPS: "tests typescript-c", NTS_GATE_SLOTS: "12", NTS_GATE_MEM_GB: "20",
     NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, NTS_BIN: compiler,
   } });
+  assert.equal(JSON.parse(planned.env.NTS_ORACLE_DEPENDENCIES!).directory,join(run,"tmp/oracle-dependencies"));
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(actual.status, 0, actual.stdout + actual.stderr);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as {
     environment?: { canonical?: boolean }; steps: { name: string; slots: number; cpu?: number }[];
   };
+  assert.equal(summary.steps.find(step => step.name === "typescript-oracles")?.slots, 8, "the shared producer starts its whole pool of workers");
   assert.equal(summary.steps.find(step => step.name === "typescript-c")?.slots, 8, "the census starts its whole pool of workers");
   const starts = readFileSync(observed, "utf8").trim().split("\n").map(line => JSON.parse(line) as { step: string; slots: number });
-  assert.deepEqual(starts.map(row => row.step).sort(), ["tests", "typescript-c"]);
+  assert.deepEqual(starts.map(row => row.step).sort(), ["tests", "typescript-c", "typescript-oracles"]);
   const admissions = [...actual.stderr.matchAll(/^-- ([a-z-]+) started /gm)].map(match => match[1]);
-  assert.deepEqual(admissions, ["typescript-c", "tests"], "measured CPU work takes precedence over the committed baseline");
+  assert.deepEqual(admissions, ["typescript-oracles", "tests", "typescript-c"], "measured CPU work takes precedence over the committed baseline");
   assert.equal(readFileSync(join(gate, "times.tsv"), "utf8"), baseline, "scheduling must never rewrite timing-verdict baselines");
   const history = JSON.parse(readFileSync(join(target, "gate-costs/steps.json"), "utf8")) as { version: number; steps: Record<string, number> };
   assert.equal(history.version, 2);

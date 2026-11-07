@@ -3,11 +3,11 @@
 // copy extracted from the verified cached bytes, never a mutable installation.
 import {createHash} from "node:crypto";
 import {closeSync,existsSync,fsyncSync,mkdirSync,mkdtempSync,openSync,readFileSync,realpathSync,renameSync,rmSync,statSync,writeFileSync} from "node:fs";
-import {userInfo} from "node:os";
+import {availableParallelism,userInfo} from "node:os";
 import {dirname,isAbsolute,join,relative,resolve,sep} from "node:path";
 import {setTimeout as pause} from "node:timers/promises";
 import {activeCommand} from "../gate/active-command.ts";
-import {hostEnvironment,FIXED_AMBIENT} from "../gate/canonical-environment.ts";
+import {ENVIRONMENT_CONTEXT,hostEnvironment,FIXED_AMBIENT,ownedCacheEnvironment} from "../gate/canonical-environment.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {GateResource} from "./gate-resource.ts";
 import {durableRecord} from "./durable-record.ts";
@@ -44,30 +44,35 @@ export function verifiedManagerBytes(pin:ManagerPin,cache=toolchains()):Buffer {
   if(actual!==pin.sha512)throw failure(`cache hash mismatch for ${pin.spec}: ${archive}; observed sha512.${actual}`);
   return bytes;
 }
-async function command(tree:string,program:string,args:string[]):Promise<string> {
-  const result=await activeCommand(program,args,{cwd:tree,env:{...hostEnvironment(process.env),...FIXED_AMBIENT,CI:"true"}});
+async function command(tree:string,program:string,args:string[],storage:{TMPDIR:string;NODE_COMPILE_CACHE:string},workers?:1):Promise<string> {
+  const env:NodeJS.ProcessEnv={...hostEnvironment(process.env),...FIXED_AMBIENT,...storage,CI:"true"};
+  // Pinned pnpm's PNPM_WORKERS counts idle CPUs, not workers. This owned
+  // one-worker mode fits bounded oracle preparation without widening its limit.
+  if(workers===1)env.PNPM_WORKERS=String(availableParallelism());
+  const result=await activeCommand(program,args,{cwd:tree,env});
   if(result.hung||result.runaway)throw failure(result.hung??result.runaway!);
   if(result.error||result.status!==0)throw failure(`${program} ${args.join(" ")}\n${result.error?.message??result.out}`);
   return result.stdout;
 }
 export type PackageManager={pin:ManagerPin;run:(args:string[])=>Promise<string>};
-async function privateManager<T>(tree:string,pin:ManagerPin,bytes:Buffer,cache:string,operation:(manager:PackageManager)=>Promise<T>):Promise<T> {
+async function privateManager<T>(tree:string,pin:ManagerPin,bytes:Buffer,cache:string,operation:(manager:PackageManager)=>Promise<T>,workers?:1):Promise<T> {
   const parent=join(cache,"executing");mkdirSync(parent,{recursive:true});
   const scratch=mkdtempSync(join(parent,"pnpm-")),archive=join(scratch,"pnpm.tgz"),unpacked=join(scratch,"unpacked");
   try {
+    const storage=ownedCacheEnvironment(process.env,{temporary:process.env[ENVIRONMENT_CONTEXT]?process.env.TMPDIR!:scratch});
     // Copy the exact bytes already hashed, so an archive replaced after the
     // verification cannot become the extraction input.
     writeFileSync(archive,bytes,{flag:"wx",mode:0o600});mkdirSync(unpacked);
-    const names=(await command(tree,"tar",["-tzf",archive])).split("\n").filter(Boolean);
+    const names=(await command(tree,"tar",["-tzf",archive],storage)).split("\n").filter(Boolean);
     if(!names.length||names.some(name=>isAbsolute(name)||name.split("/").includes("..")||!/^package(?:\/|$)/.test(name)))throw failure(`unsafe archive paths for ${pin.spec}`);
-    await command(tree,"tar",["-xzf",archive,"--no-same-owner","--no-same-permissions","-C",unpacked]);
+    await command(tree,"tar",["-xzf",archive,"--no-same-owner","--no-same-permissions","-C",unpacked],storage);
     const directory=join(unpacked,"package"),manifest=JSON.parse(readFileSync(join(directory,"package.json"),"utf8"));
     if(manifest.name!=="pnpm"||manifest.version!==pin.version)throw failure(`archive identity for ${pin.spec} is ${manifest.name}@${manifest.version}`);
     const entry=typeof manifest.bin==="string"?manifest.bin:manifest.bin?.pnpm;
     if(typeof entry!=="string"||isAbsolute(entry))throw failure(`archive has no pnpm bin for ${pin.spec}`);
     const binary=realpathSync(resolve(directory,entry)),inside=relative(realpathSync(directory),binary);
     if(inside===".."||inside.startsWith(".."+sep)||!statSync(binary).isFile())throw failure(`archive bin escapes pnpm for ${pin.spec}`);
-    return await operation({pin,run:args=>command(tree,process.execPath,[binary,"--config.manage-package-manager-versions=false",...args])});
+    return await operation({pin,run:args=>command(tree,process.execPath,[binary,"--config.manage-package-manager-versions=false",...args],storage,workers)});
   }finally{rmSync(scratch,{recursive:true,force:true});}
 }
 const DOWNLOAD=`
@@ -86,8 +91,9 @@ async function acquireManager(tree:string,pin:ManagerPin,cache:string):Promise<v
     const parent=dirname(directory);mkdirSync(parent,{recursive:true});
     const staging=mkdtempSync(join(parent,"acquiring-")),downloaded=join(staging,"pnpm.tgz");
     try {
+      const storage=ownedCacheEnvironment(process.env,{temporary:process.env[ENVIRONMENT_CONTEXT]?process.env.TMPDIR!:staging});
       const url=`https://registry.npmjs.org/pnpm/-/pnpm-${pin.version}.tgz`;
-      await command(tree,process.execPath,["--input-type=module","-e",DOWNLOAD,url,downloaded]);
+      await command(tree,process.execPath,["--input-type=module","-e",DOWNLOAD,url,downloaded],storage);
       const bytes=readFileSync(downloaded),actual=hash(bytes);
       if(actual!==pin.sha512)throw failure(`download hash mismatch for ${pin.spec}: ${url}; observed sha512.${actual}`);
       await privateManager(tree,pin,bytes,cache,async manager=>{
@@ -101,8 +107,9 @@ async function acquireManager(tree:string,pin:ManagerPin,cache:string):Promise<v
   }finally{resource.close();}
 }
 /** One private manager per dependency operation; only acquire may fetch. */
-export async function withPackageManager<T>(tree:string,options:{acquire?:boolean;cache?:string},operation:(manager:PackageManager)=>Promise<T>):Promise<T> {
+export async function withPackageManager<T>(tree:string,options:{acquire?:boolean;cache?:string;workers?:1},operation:(manager:PackageManager)=>Promise<T>):Promise<T> {
+  if(options.workers!==undefined&&options.workers!==1)throw failure('unsupported owned package-manager worker count');
   const pin=managerPin(tree),cache=options.cache??toolchains();
   if(options.acquire)await acquireManager(tree,pin,cache);
-  return privateManager(tree,pin,verifiedManagerBytes(pin,cache),cache,operation);
+  return privateManager(tree,pin,verifiedManagerBytes(pin,cache),cache,operation,options.workers);
 }

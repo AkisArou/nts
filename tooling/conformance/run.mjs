@@ -27,13 +27,20 @@
 //   node run.mjs --module path [--addon target/node/path.node] [--only f.js]
 //                              [--verbose] [--json]
 
-import { readdirSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { readdirSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from "node:fs";
 import { join, dirname, resolve as resolvePath } from "node:path";
 import { execFileSync } from "node:child_process";
 import { activeCommand, CommandNotMeasuredError, processActivity } from "../gate/active-command.ts";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { checkFailurePolicy, reportCheckFailure } from "../differential/check-report.ts";
-import { nodeEnvironment } from "./node-environment.ts";
+import {nodePreloadPlan} from './node-preloads.ts';
+import {prepareOracles} from '../differential/oracle-batch.ts';
+import {oracleExecution,oracleLoaderReady,closeOracleExecution,oracleRuntimeFiles,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot} from '../differential/oracle-emit.ts';
+import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import { nodeEnvironment,nodeInputs } from "./node-environment.ts";
+import {gateEnvironment,sealOracleRun} from '../gate/canonical-environment.ts';
+import {finishRunTemporary} from '../gate/run-temporary.ts';
+import {homedir} from 'node:os';
 import process from "node:process";
 import { leftBy, removeTestTmpDir, sweepOrphaned, testTmpDir, testTmpId, testTmpRoot } from "./tmpdir.mjs";
 
@@ -60,7 +67,24 @@ const PARALLEL_SUITE = join(NODE_ROOT, "test/parallel");
 //
 // Build every child from the shared canonical contract, rather than retaining
 // a contaminant in both arms or letting a shell and a unit choose differently.
-const environment = nodeEnvironment(process.env);
+const runParent=process.env.TMPDIR??join(homedir(),'.cache/nts-conformance');mkdirSync(runParent,{recursive:true});
+const ownedRun=mkdtempSync(join(runParent,'job-'));
+const nodePaths=nodeEnvironment(process.env,{TMPDIR:join(ownedRun,'tmp')});
+let planned=gateEnvironment(process.env,{run:ownedRun,owned:{...nodeInputs(process.env),NODE_TEST_DIR:nodePaths.NODE_TEST_DIR,NTS_CHECKERS:'1'}});
+let environment=planned.env;
+let preparedModule=null;
+process.once('exit',code=>{
+  const snapshot=preparedModule?finishOracleSnapshot(preparedModule):null;
+  if(snapshot&&!snapshot.ready)process.exitCode=reportCheckFailure(new ToolingInstrumentError('tooling-setup',snapshot.why),process.env);
+  const outcome=finishRunTemporary(planned.temporary,environment.HOME,code===0&&(!snapshot||snapshot.ready)&&!environment.NTS_KEEP_TEMP);
+  process.stderr.write('Node job temporary: '+JSON.stringify(outcome)+'\n');
+  if(outcome.state==='removed after green')removeOracleSnapshot(ownedRun);
+});
+planned=await sealOracleRun(planned);environment=planned.env;
+// The in-process preparation worker consumes only this canonical owned handoff.
+process.env.NTS_ORACLE_DEPENDENCIES=environment.NTS_ORACLE_DEPENDENCIES;
+process.env.NTS_ORACLE_TYPESCRIPT=environment.NTS_ORACLE_TYPESCRIPT;
+process.env.NTS_GATE_ENV_CONTEXT=environment.NTS_GATE_ENV_CONTEXT;
 const argv = process.argv;
 const arg = (name, fallback = null) => {
   const at = argv.indexOf(name);
@@ -372,7 +396,7 @@ if (!existsSync(nodePackageJson)) {
 // Each file owns a process group so an ordinary exit or timeout also cleans
 // up its children immediately, before the next file starts.
 async function runTestProcess(executable, args, options) {
-  const { idleMs, ...commandOptions } = options;
+  const { idleMs, oracle, ...commandOptions } = options;
   // Only the final module owner publishes its disposition: a definite file
   // failure outranks a later loss of progress, while a broken observer holds.
   const env = { ...commandOptions.env };
@@ -383,6 +407,12 @@ async function runTestProcess(executable, args, options) {
     pollMs: Math.min(5000, idleMs / 4), maxBuffer: 1024 * 1024,
     onActivity: event => process.stderr.write(`node:${moduleName} test activity: ${event.cpu} CPU ticks\n`),
   });
+  // The owned supervisor has drained before either reader sees this stream.
+  // Loader failure is an instrument hold even when a test catches the error.
+  if (oracle) {
+    const health=oracleLoaderReady(oracle);
+    if(!health.ready)throw Object.assign(new ToolingInstrumentError('tooling-setup','Node prepared loader: '+health.why),{stdout:result.stdout,stderr:result.stderr});
+  }
   if (result.error) {
     throw new ToolingInstrumentError("tooling-setup", `could not start test: ${result.error.message}`);
   }
@@ -502,6 +532,7 @@ if (addon !== null && !sabotage && !emptyExports
 }
 
 const rows = [];
+const oracleScopes = [];
 const incomplete = [];
 const processObservations = [];
 const childEnvironment = {
@@ -520,6 +551,25 @@ if (publishesNothing) {
     });
   }
 }
+// One immutable prepared closure per module; executions own separate health
+// streams. Finite roots come from the same decisions run-one consumes.
+let preparationDirectory=null;
+if(!publishesNothing){
+  const own=mkdtempSync(join(environment.TMPDIR,'node-preparation-'));
+  preparationDirectory=own;
+  const plan=nodePreloadPlan(ROOT,moduleName,addon!==null,addon??undefined);
+  let members;
+  try{members=await prepareOracles([{key:moduleName,options:{...plan,project:null,directory:own}}],{
+    directory:own,toolchain:oracleToolchainLocation(),workers:1,env:environment,
+    report:message=>process.stderr.write(message+'\n'),
+  });}catch(error){process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
+  const member=members[moduleName];
+  if(!member||'instrument' in member){
+    process.stderr.write('kept Node preparation after failure: '+own+'\n');
+    throw new ToolingInstrumentError('tooling-setup','Node preparation: '+(member?.instrument??'missing finite member'));
+  }
+  preparedModule=member.prepared;
+}
 for (const test of publishesNothing ? [] : tests) {
   const { name } = test;
   let result;
@@ -536,8 +586,11 @@ for (const test of publishesNothing ? [] : tests) {
     continue;
   }
   const tmpId = testTmpId(process.pid, testOrdinal++);
+  let oracle;
   try {
-    const argv = [...nodeFlags(test.path), join(HERE, "run-one.mjs"), moduleName, test.path, addon ?? "-"];
+    const [driver,,capturedAddon]=oracleRuntimeFiles(preparedModule,[join(HERE,"run-one.mjs"),test.path,...(addon?[addon]:[])]);
+    oracle=oracleExecution(preparedModule,driver,[test.path]);
+    const argv = [...oracle.args,...nodeFlags(test.path),driver,moduleName,test.path,capturedAddon??"-"];
     // `script -qec <command> /dev/null`: quiet, no timing file, run the command under
     // a pty. The command is one string, so each argument is single-quoted; these are
     // absolute paths this file built, not user input.
@@ -549,7 +602,7 @@ for (const test of publishesNothing ? [] : tests) {
         ? ["script", ["-qec", quoted, "/dev/null"]]
         : [process.execPath, argv]),
       {
-        encoding: "utf8",
+        encoding: "utf8",oracle,
         // **A per-test idle guard, overridable for controls.**
         // Breaking a handshake on purpose does not make its tests fail -- it makes them
         // *wait*, and 86 files at 60s each is 80 minutes for a number that is decided in
@@ -566,7 +619,7 @@ for (const test of publishesNothing ? [] : tests) {
         // from the NTS root turns those into unrelated ENOENT failures.
         cwd: NODE_ROOT,
         env: {
-          ...childEnvironment,
+          ...childEnvironment,...oracle.env,
           NTS_TEST_TMPDIR_ID: tmpId,
         },
       },
@@ -656,13 +709,33 @@ for (const test of publishesNothing ? [] : tests) {
     const why = e.killed
       ? "timed out"
       : ((e.stderr || e.message || "").split("\n").find((l) => l.trim()) ?? "child died");
-    result = { kind: "fail", why: why.trim().slice(0, 120) };
+    result = { kind: "fail", why: why.trim().slice(0, 120),
+      detail: [e.stdout, e.stderr, e.stack ?? e.message].filter(Boolean).join("\n") };
   } finally {
+    if(oracle)closeOracleExecution(oracle);
+    if(oracle&&existsSync(oracle.loaderState+'.scope.jsonl')){
+      for(const line of readFileSync(oracle.loaderState+'.scope.jsonl','utf8').trim().split('\n')){
+        const event=JSON.parse(line);
+        if(event?.version!==1||event.scope!=='plain-node'||event.attested!==false||typeof event.path!=='string')throw Error('invalid plain Node scope receipt');
+        oracleScopes.push({test:name,category:'plain node (outside capture)',...event});
+      }
+    }
     if (!keepTemp) removeTestTmpDir(testTmpDir(tmpRoot, tmpId));
     try { processObservations.push({ after: name, remaining: processesAfterFile() }); }
     catch (error) { processObservations.push({ after: name, error: error.message }); }
   }
   rows.push({ name, ...result });
+}
+// Per-file loader readiness is provisional until every original fact behind
+// the shared module snapshot still matches after the complete run drains.
+if(preparedModule)finishOracleSnapshot(preparedModule);
+const snapshotFinalization=preparedModule?oracleSnapshotReady(preparedModule):null;
+if(snapshotFinalization&&!snapshotFinalization.ready){
+  incomplete.push({name:'snapshot-finalization',error:new ToolingInstrumentError('tooling-setup',snapshotFinalization.why)});
+  for(const row of rows){
+    const previous={...row};row.kind='not-measured';row.why=snapshotFinalization.why;
+    row.detail='Provisional observation before finalization: '+JSON.stringify(previous);
+  }
 }
 // **A leak says so.** 89,224 directories built up because nothing counted them, so
 // this runner counts its own after its last test. A note, not a verdict: what the
@@ -676,15 +749,27 @@ if (keepTemp) {
 
 const tally = { pass: 0, fail: 0, skip: 0, "n/a": 0, "not-measured": 0 };
 for (const r of rows) tally[r.kind]++;
+const applicationCapture=preparedModule?JSON.parse(readFileSync(join(dirname(preparedModule.manifest),'application-capture.json'),'utf8')):null;
+let preparationCleanup=null;
+if(preparationDirectory){
+  if(tally.fail||tally['not-measured']||keepTemp){
+    preparationCleanup={path:preparationDirectory,state:'retained after failure or explicit keep'};
+    process.stderr.write('kept Node preparation: '+preparationDirectory+'\n');
+  }else{
+    removeOracleSnapshot(preparationDirectory);preparationCleanup={path:preparationDirectory,state:'removed after success'};
+  }
+}
 
 if (asJson) {
   console.log(JSON.stringify({ version: 1, module: moduleName, addon: addon ?? null, expected: tests.length, rows, tally, environment: childEnvironment,
+    preparation:preparedModule?{manifest:preparedModule.manifest,identity:preparedModule.identity,snapshot:preparedModule.snapshot,finalization:snapshotFinalization,applicationCapture,cleanup:preparationCleanup,temporary:planned.temporary}:null,
     budget: { idleMs: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000), cpuSeconds: Number(process.env.NTS_CONFORMANCE_TIMEOUT_MS ?? 60_000) / 1000,
       scope: "owned session: user/sys and reaped-child CPU, including child groups and worker threads" },
-    supervision: incomplete.map(({ name, error }) => ({ name, kind: error.kind, reason: error.message })), processObservations }, null, 2));
+    supervision: incomplete.map(({ name, error }) => ({ name, kind: error.kind, reason: error.message })), processObservations,oracleScopes }, null, 2));
 } else {
   const label = addon ? addon.replace(`${ROOT}/`, "") : "TypeScript on node";
   console.log(`node:${moduleName} against node's own tests — ${label}\n`);
+  for(const scope of oracleScopes)console.log(`  plain node (outside capture)  ${scope.test}: ${scope.path}`);
   for (const row of rows) {
     const mark = { pass: "pass", fail: "FAIL", skip: "skip", "n/a": " n/a", "not-measured": "NOT MEASURED" }[row.kind];
     console.log(`  ${mark}  ${row.name}${row.why ? `\n          ${row.why}` : ""}`);

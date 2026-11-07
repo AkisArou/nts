@@ -67,6 +67,24 @@ test("a resident pool requires an explicit token policy before setup", async () 
   assert.equal(closed, 1, "the pool still closes the run it owns");
 });
 
+test('a bounded resident pool recycles only after completed cases and returns every token',async t=>{
+  const directory=scratch();t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const memory=new MemoryRun({budgetBytes:192*2**20,id:'completed-case-recycling'}),gate=await gatePool(1);
+  t.after(gate.close);
+  const rows:{path:string;pid:number;bucket:string}[]=[],paths=Array.from({length:8},(_,index)=>'safe-'+index);
+  const options={paths,jobs:1,memory,workerBytes:128*2**20,recycleAfterCases:2,
+    admission:new Admission({read:()=>32}),token:gate.token,
+    args:(index:number)=>[fixture,directory,String(index)],onRow:(row:{path:string;pid:number;bucket:string})=>rows.push(row)};
+  const summary=await runMemoryWorkers(options);
+  assert.deepEqual(rows.map(row=>row.path),paths);
+  const counts=new Map<number,number>();for(const row of rows)counts.set(row.pid,(counts.get(row.pid)??0)+1);
+  assert.deepEqual([...counts.values()],[2,2,2,2],'each fresh process owns exactly its bounded completed window');
+  assert.equal(summary.pressureRequeues,0);assert.equal(summary.idlePressureRestarts,0);
+  assert.equal(rows.every(row=>row.bucket==='strict-pass'),true);
+  await gate.settled();assert.equal(gate.seen.grant,paths.length);assert.equal(gate.seen.release,paths.length);
+  assert.equal(existsSync(join(CGROUP,memory.group)),false,'all worker generations drain before the pool finishes');
+});
+
 test("a real step records its aggregate memory.peak before the cgroup is removed", { timeout: TEST_HANG_MS }, t => {
   const directory = scratch();
   t.after(() => rmSync(directory, { recursive: true, force: true }));

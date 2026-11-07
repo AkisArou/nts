@@ -36,6 +36,7 @@
     "gate-scope-entries": { "kind": "scratch", "writer": "tooling/gate/train/step-scope.ts" },
     "jvm-cds": { "kind": "kept", "writer": "tooling/jvm/launch.ts", "why": "one class-data archive per runtime jar" },
     "linux": { "kind": "kept", "writer": "tooling/linux/build-libuv.sh", "why": "the Linux musl libuv builds" },
+    "node-compile-cache": { "kind": "kept", "writer": "tooling/gate/canonical-environment.ts", "why": "the shared Node compile cache, bounded by hourly age and byte retention in tooling/full-check/node-cache-retention.ts" },
     "node-deps": { "kind": "kept", "writer": "tooling/conformance/node-deps.mjs", "why": "the bundled Node native dependencies" },
     "outcomes": { "kind": "scratch", "writer": "tooling/conformance/outcomes-check.ts" },
     "proxy-app": { "kind": "kept", "writer": "tooling/android/proxy-app.sh", "why": "the Android proxy app's build" },

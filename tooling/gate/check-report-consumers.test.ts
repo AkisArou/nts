@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
-import { spawnTest } from "./test-wait.ts";
-import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { createHash } from "node:crypto";
-import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
-import { fileURLToPath, pathToFileURL } from "node:url";
+import {spawnTest} from "./test-wait.ts";
+import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync} from "node:fs";
+import {createHash} from "node:crypto";
+import {tmpdir} from "node:os";
+import {dirname, join} from "node:path";
+import {fileURLToPath, pathToFileURL} from "node:url";
 import test from "node:test";
 import type { TestContext } from "node:test";
 
@@ -33,6 +33,7 @@ function sandbox(t: TestContext) {
   copyFileSync(join(source, "../conformance/pin.ts"), join(root, "tooling/conformance/pin.ts"));
   copyFileSync(join(source, "active-command.ts"), join(root, "tooling/gate/active-command.ts"));
   copyFileSync(join(source, "step-result.ts"), join(root, "tooling/gate/step-result.ts"));
+  symlinkSync(join(source,"canonical-environment.ts"),join(root,"tooling/gate/canonical-environment.ts"));
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
   copyFileSync(join(source, "../npm-survey/verdict.ts"), join(root, "tooling/npm-survey/verdict.ts"));
   copyFileSync(join(source, "../conformance/web-platform/compiled/check.sh"), join(root, "tooling/conformance/web-platform/compiled/check.sh"));

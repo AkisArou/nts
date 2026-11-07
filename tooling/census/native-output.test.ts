@@ -1,17 +1,21 @@
 // Exercise the actual native-stop producer and census classifier together.
 import assert from "node:assert/strict";
-import { existsSync, rmSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { test } from "node:test";
-import { spawnTest } from "../gate/test-wait.ts";
-import { newTestScratch } from "../gate/test-scratch.ts";
+import {existsSync, writeFileSync} from "node:fs";
+import {homedir} from "node:os";
+import {join, resolve} from "node:path";
+import {fileURLToPath} from "node:url";
+import {test} from "node:test";
+import {spawnTest} from "../gate/test-wait.ts";
+import {newTestScratch} from "../gate/test-scratch.ts";
+import {removeOracleSnapshot} from "../differential/oracle-emit.ts";
+
+import {setupOracleTestEnvironment} from "../differential/oracle-test-fixture.ts";
+await setupOracleTestEnvironment();
 
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const binary = resolve(root, process.env.NTS_BIN ?? "target/release/nts");
 
-test("C, LLVM and JVM census rows cannot hide wrong output before a native decline", () => {
+test("C, LLVM and JVM census rows cannot hide wrong output before a native decline", async t => {
   assert.ok(existsSync(binary), `compiler missing: ${binary}; set NTS_BIN to a built pin`);
   const scratch = newTestScratch("native-output-case");
   try {
@@ -28,9 +32,10 @@ const source=(array,text,method="log")=>\
   "const values="+array+"; console."+method+"(values[0]); const text="+text+\
   "; const claimed=text as unknown as number; console."+method+"(claimed+1); console."+method+"('after');";
 const cases=[source("new Array<number>(1)","'5'"),source("[0]","'5'"),source("[0]","5"),source("new Array<number>(1)","'5'","error"),source("[0]","'5'","error")];
-console.log(JSON.stringify(cases.map(body=>attempt(dir,body,tools))));
+const rows=[];for(const body of cases)rows.push(await attempt(dir,body,tools));
+console.log(JSON.stringify(rows));
 `);
-    for (const backend of ["c", "llvm", "jvm"]) {
+    for (const backend of ["c", "llvm", "jvm"]) await t.test(backend, () => {
       const run = spawnTest(process.execPath, [helper, binary, backend, join(scratch, backend)], {
         encoding: "utf8", maxBuffer: 64 * 1024 * 1024,
       }, `${backend} native output census rows`);
@@ -42,6 +47,6 @@ console.log(JSON.stringify(cases.map(body=>attempt(dir,body,tools))));
       assert.deepEqual(rows[3].printed, { stdout: "", stderr: "0\n" }, backend);
       assert.deepEqual(rows[3].nodeOutput, { stdout: "", stderr: "undefined\n51\nafter\n" }, backend);
       assert.match(rows[1].runtimeFailure.output, /^nts: refused/m, backend);
-    }
-  } finally { rmSync(scratch, { recursive: true, force: true }); }
+    });
+  } finally { removeOracleSnapshot(scratch); }
 });

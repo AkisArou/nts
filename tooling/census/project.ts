@@ -13,9 +13,17 @@ import { dirname, join, normalize, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
+const harnessFiles=new Map<string,string>();
+function harnessSource(name:string):string{
+  const path=join(HERE,name),source=readFileSync(path,'utf8');
+  // Retain the exact bytes actually spliced by this loaded materializer.
+  // The oracle adapter validates these facts before use and on every reuse.
+  harnessFiles.set(path,createHash('sha256').update(source).digest('hex'));return source;
+}
+export function harnessObservations(){return [...harnessFiles].map(([path,value])=>({kind:'file' as const,path,value}));}
 
 /** The lowerable stand-in for the harness entries every non-raw test receives. */
-export const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
+export const HARNESS = harnessSource('harness.ts');
 
 /**
  * Top-level entries appended only for a test that names them, as test262
@@ -23,8 +31,8 @@ export const HARNESS = readFileSync(join(HERE, "harness.ts"), "utf8");
  * (`sta.js`) and `$DONE` (`doneprintHandle.js`). Each file says why.
  */
 const GLOBALS = [
-  { names: /\$DONOTEVALUATE\b/, source: readFileSync(join(HERE, "harness-donotevaluate.ts"), "utf8") },
-  { names: /\$DONE\b/, source: readFileSync(join(HERE, "harness-done.ts"), "utf8") },
+  { names: /\$DONOTEVALUATE\b/, source: harnessSource('harness-donotevaluate.ts') },
+  { names: /\$DONE\b/, source: harnessSource('harness-done.ts') },
 ];
 
 /**
@@ -34,8 +42,8 @@ const GLOBALS = [
  * cost). Each file says why it is one.
  */
 const MEMBERS = [
-  { calls: /\bassert\.throws\s*\(/, source: readFileSync(join(HERE, "harness-throws.ts"), "utf8") },
-  { calls: /\bassert\.compareArray\s*\(/, source: readFileSync(join(HERE, "harness-compare-array.ts"), "utf8") },
+  { calls: /\bassert\.throws\s*\(/, source: harnessSource('harness-throws.ts') },
+  { calls: /\bassert\.compareArray\s*\(/, source: harnessSource('harness-compare-array.ts') },
 ];
 
 /**
@@ -507,9 +515,7 @@ export function collectCaseRoots({ base, now = Date.now(), maxAge = 7 * 86400_00
  * test262_backend).
  */
 export function populationOf(records, { sample = 0, backend = "c", named = null }) {
-  let population = sample > 0
-    ? [...records].sort((a, b) => a.source_hash.localeCompare(b.source_hash)).slice(0, sample)
-    : records;
+  let population = records;
   if (named !== null) {
     const wanted = new Set(
       named.text
@@ -529,5 +535,6 @@ export function populationOf(records, { sample = 0, backend = "c", named = null 
       return { refused: `nothing selected runs on ${backend}: every case is a negative the frontend judges` };
     }
   }
+  if(sample>0)population=[...population].sort((a,b)=>a.source_hash.localeCompare(b.source_hash)).slice(0,sample);
   return { population };
 }

@@ -5,14 +5,14 @@
 // verified on a green core only, reverts the first red commit and submits the
 // revert first, and records after a green run that listed pending cases.
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { test } from "node:test";
-import { assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository } from "./repository-fixture.ts";
+import {existsSync, mkdirSync, readFileSync, writeFileSync} from "node:fs";
+import {join} from "node:path";
+import {test} from "node:test";
+import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
 import type { Recorder } from "./records.ts";
-import { cycle, parseOptions, partSteps, type Effects } from "./service.ts";
-import { readState } from "./state.ts";
-import { Git } from "./git.ts";
+import {cycle, parseOptions, partSteps, type Effects} from "./service.ts";
+import {readState} from "./state.ts";
+import {Git} from "./git.ts";
 
 type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"] };
 
@@ -30,6 +30,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     pins: join(repo.root, "pins"),
     count: () => ({ verdict: "PASS", red: [], notes: [] }),
     prunePool: options.prunePool ?? (() => []),
+    pruneNodeCache: () => ({root:"private fixture",state:"missing",removed:0,removedBytes:0,kept:0,keptBytes:0,changed:0,skipped:0,errors:[]}),
     push: commit => {
       const r = repo.git.try(["push", "-q", "origin", `${commit}:refs/heads/verified`]);
       return { ok: r.status === 0, line: r.status === 0 ? `pushed ${commit}` : r.stderr };
@@ -374,4 +375,30 @@ test("the stand-in tree is a worktree of the scratch repository", async t => {
   const commit = repo.commit({ "a.txt": "1\n" }, "one");
   gate.run(commit, ["tests"], "check");
   assert.equal(new Git(repo.layout.tree, ENV).run(["rev-parse", "HEAD"]), commit);
+});
+
+
+test("cache upkeep runs only on the hourly count and warnings never change its verdict", async t => {
+  const repo = repository(t), fx = harness(repo, fakeGate(repo));
+  repo.commit({"a.txt":"one"}, "one");
+  await cycle(fx); // Verify main first; upkeep is separate from a measured run.
+  let now = new Date(2026, 10, 6, 12), calls = 0;
+  fx.now = () => now;
+  fx.pruneNodeCache = () => {
+    calls++;
+    return {root:"private fixture",state:"warning",removed:2,removedBytes:17,kept:1,keptBytes:9,changed:0,skipped:0,errors:["private cache control"]};
+  };
+  assert.equal(await cycle(fx), "count");
+  assert.equal(calls, 1);
+  assert.equal(readState(repo.layout.state).count?.verdict, "PASS");
+  assert.ok(fx.lines.some(line => line.includes("removed 2 entries / 17 bytes")));
+  assert.ok(fx.lines.some(line => line.includes("private cache control")));
+  assert.equal(await cycle(fx), "idle");
+  assert.equal(calls, 1);
+  now = new Date(2026, 10, 6, 13);
+  fx.pruneNodeCache = () => { calls++; throw new Error("unreadable private cache"); };
+  assert.equal(await cycle(fx), "count");
+  assert.equal(calls, 2);
+  assert.equal(readState(repo.layout.state).count?.verdict, "PASS");
+  assert.ok(fx.lines.some(line => line.includes("unreadable private cache")));
 });

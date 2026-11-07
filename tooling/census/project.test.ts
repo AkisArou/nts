@@ -175,6 +175,8 @@ test("a run's population: a sample, a record's cases, a backend's share", async 
   const named = { file: "r.tsv", text: "# nts-record 1 {}\nc.js\tpass\na.js\tfail\nzzz.js\tpass\n" };
   assert.deepEqual(paths(populationOf(records, { named })), ["a.js", "c.js"], "what the record names, in the selector's order");
   assert.deepEqual(paths(populationOf(records, { named, backend: "jvm" })), ["a.js"], "a frontend-judged negative runs on C alone");
+  assert.deepEqual(paths(populationOf(records, { named, sample: 1 })), ["c.js"], "a named record is sampled too");
+  assert.deepEqual(paths(populationOf(records, { named, sample: 1, backend: "jvm" })), ["a.js"], "sample only the backend's actual members");
 });
 
 test("an empty population is refused, so a step cannot pass having checked nothing", async () => {

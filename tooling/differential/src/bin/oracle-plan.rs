@@ -6,6 +6,21 @@ use nts_frontend_ts::Frontend;
 
 fn main() -> Result<()> {
     let args: Vec<String> = std::env::args().skip(1).collect();
+    if args.first().is_some_and(|arg| arg == "--execute") {
+        ensure!(
+            args.len() == 5,
+            "usage: oracle-plan --execute <plan.json> <sha256> <manifest> <owned output>"
+        );
+        let result = nts_differential::execute_oracle_plan(
+            &Utf8PathBuf::from(&args[1]),
+            &args[2],
+            &Utf8PathBuf::from(&args[3]),
+            &Utf8PathBuf::from(&args[4]),
+        )?;
+        serde_json::to_writer(std::io::stdout(), &result)?;
+        println!();
+        return Ok(());
+    }
     ensure!(
         args.len() == 1,
         "usage: oracle-plan <tsconfig> (NTS_BACKEND selects the backend)"

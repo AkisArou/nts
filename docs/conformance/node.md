@@ -49,6 +49,38 @@ and the file is judged once the event loop is empty, as node judges its
 `mustCall` checks. A run refuses `NODE_NO_WARNINGS` and `NODE_DEBUG` in its
 environment, because tests assert on what they suppress.
 
+Authored JavaScript CommonJS tests run on the plain Node path. Each execution
+names and hashes those inputs and reports them as **plain node (outside
+capture)** with `attested: false`; they are separate from captured reach and
+captured passes. The TypeScript providers use the pinned public TypeScript API
+and their original project options, then run as emitted JavaScript. Node alone
+decides module format. A transition from an authored test into ESM or a
+TypeScript provider requires a captured owner; an unowned transition or an
+unproved governed CommonJS lookup holds by name as `not-measured`. A plain
+CommonJS parent cannot exempt provider code.
+
+The runner delegates an exact child input through its private harness capability
+and frozen launch environment. A Worker receives its private context through
+workerData, with the user's value kept separate and its environment preserved.
+Its driver is a closed producer role bound to captured bytes. Root issuance is
+unchanged, and test or provider code obtains no wrapper handle.
+
+Parent and child share an authenticated append-only event stream. The parent
+reserves a child before launch, and bootstrap writes begin before validating and
+ready afterward. A parent-observed failed launch closes only a reservation whose
+bootstrap never began; begin without ready holds. The supervisor reads the same
+retained stream after the process tree drains and closes it on every exit path.
+An unfinished child or any instrument event holds the parent, including when a
+test catches the error or exit.
+
+Governed modules execute from the published snapshot. Children authenticate
+Node-probed routes and the bytes they load; the parent checks all original
+observations before publication and after execution drains. Child readiness is
+provisional until finalization, which precedes any verdict or cleanup. A
+difference in original facts at finalization, changed loaded bytes or an invalid
+declared handoff holds by name. Authored CommonJS remains in its separate
+plain-Node category.
+
 ### Two lanes
 
 | lane | subject | command |

@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": ".",
+    "composite": false
+  },
+  "files": ["owner-emission-calls.ts", "owner-emission-calls.test.ts", "module-closure-fixture.ts", "module-closure-fixture.test.ts", "account-home-fixture.test.ts"],
+  "include": []
+}

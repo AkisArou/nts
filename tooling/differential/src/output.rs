@@ -22,12 +22,95 @@ impl Printed {
 pub(super) struct Oracle<'a> {
     pub(super) dir: &'a camino::Utf8Path,
     pub(super) entry: &'a camino::Utf8Path,
+    project: &'a camino::Utf8Path,
+    prepared: std::cell::RefCell<Option<super::oracle_emit::Prepared>>,
+    reference: std::cell::RefCell<Option<super::oracle_emit::ProgramReference>>,
+    shared: bool,
     pub(super) compiled: &'a [super::Testable],
     pub(super) sources: &'a [nts_diagnostics::SourceFile],
     pub(super) coverage: &'a super::oracle_coverage::Coverage,
 }
 
-impl Oracle<'_> {
+impl<'a> Oracle<'a> {
+    // Shared answers need no emitter. A selected-window replay opens only the
+    // producer's authenticated executable image, and proves its loader ready.
+    pub(super) fn prepare(
+        check: &'a super::PreparedCheck,
+        dir: &'a camino::Utf8Path,
+        tsconfig: &'a camino::Utf8Path,
+        compiled: &'a [super::Testable],
+        coverage: &'a super::oracle_coverage::Coverage,
+        supplied: Option<super::oracle_emit::Prepared>,
+    ) -> Result<Self> {
+        let absolute = check.entry.canonicalize_utf8()?;
+        let shared = std::env::var_os("NTS_PROGRAM_ORACLE").is_some();
+        let prepared = match (supplied, shared) {
+            (Some(prepared), _) => Some(prepared),
+            (None, true) => None,
+            (None, false) => Some(super::oracle_emit::prepare(dir, &absolute, tsconfig)?),
+        };
+        Ok(Self {
+            dir,
+            entry: &check.entry,
+            project: tsconfig,
+            compiled,
+            sources: &check.snapshot.sources,
+            coverage,
+            prepared: std::cell::RefCell::new(prepared),
+            reference: std::cell::RefCell::new(None),
+            shared,
+        })
+    }
+
+    pub(super) fn finish(self) -> Result<()> {
+        if let Some(prepared) = self.prepared.into_inner() {
+            super::oracle_emit::finish_snapshot(&prepared)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn run(&self, testable: &[super::Testable]) -> Result<Run> {
+        if self.shared {
+            // Native dispatch is complete. Replay the original facts at the
+            // point this answer is actually used, rather than before dispatch.
+            let absolute = self.entry.canonicalize_utf8()?;
+            let reference = super::oracle_emit::program_reference(
+                self.dir,
+                self.project,
+                &absolute,
+                &super::driver(&format!("file://{absolute}"), testable, super::Engine::Node),
+            )?
+            .context("program oracle handoff disappeared")?;
+            anyhow::ensure!(
+                reference.rows.len() == self.coverage.count,
+                "program oracle reference has a different population"
+            );
+            let run = Run {
+                results: reference.rows.clone(),
+                output: Printed {
+                    stdout: reference.stdout.clone(),
+                    stderr: reference.stderr.clone(),
+                },
+                segments: Vec::new(),
+                thrown: Vec::new(),
+                incomplete: Vec::new(),
+            };
+            *self.reference.borrow_mut() = Some(reference);
+            return Ok(run);
+        }
+        let prepared = self.prepared.borrow();
+        super::run_node_cases(
+            self.dir,
+            self.entry,
+            &super::interleaved(testable),
+            self.sources,
+            self.coverage,
+            prepared
+                .as_ref()
+                .context("missing oracle execution image")?,
+        )
+    }
+
     pub(super) fn compare(
         &self,
         native: &Run,
@@ -52,8 +135,35 @@ impl Oracle<'_> {
                 count: selected.len(),
                 key: format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&identity)),
             };
-            super::run_node_cases(self.dir, self.entry, selected, self.sources, &coverage)
-                .map(|run| run.output)
+            if self.prepared.borrow().is_none() {
+                let reference = self.reference.borrow();
+                let reference = reference
+                    .as_ref()
+                    .context("missing program oracle reference")?;
+                anyhow::ensure!(
+                    reference.replay.snapshot["manifestSha256"]
+                        == super::oracle_emit::digest(&std::fs::read(&reference.replay.manifest)?),
+                    "program oracle replay original proof changed"
+                );
+                *self.prepared.borrow_mut() = Some(super::oracle_emit::read_prepared(
+                    &reference.replay.manifest,
+                    self.entry,
+                    self.project,
+                )?);
+            }
+            super::case_costs::event(
+                serde_json::json!({"event":"oracle.window","shared":self.shared,"cases":selected.len()}),
+            );
+            let prepared = self.prepared.borrow();
+            super::run_node_cases(
+                self.dir,
+                self.entry,
+                selected,
+                self.sources,
+                &coverage,
+                prepared.as_ref().context("missing oracle window image")?,
+            )
+            .map(|run| run.output)
         })
     }
 }

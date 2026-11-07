@@ -71,30 +71,35 @@
 //   NTS_GATE_TOKEN_HELD=1 a fixed step: its tools must not ask for tokens
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
-import { instrumentPolicy, readStepInstrument } from "./step-result.ts";
-import { definiteFailure } from "./train/red-stop.ts";
-import { GateScopes } from "./train/step-scope.ts";
-import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory } from "./step-scheduling.ts";
-import { STEP_SUCCESSORS } from "./step-successors.ts";
-import { stepBound, stepBoundReason } from "./step-bound.ts";
-import { spawn, spawnSync } from "node:child_process";
-import { createHash } from "node:crypto";
+import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
+import {definiteFailure} from "./train/red-stop.ts";
+import {GateScopes} from "./train/step-scope.ts";
+import {inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory} from "./step-scheduling.ts";
+import {STEP_SUCCESSORS} from "./step-successors.ts";
+import {stepBound, stepBoundReason} from "./step-bound.ts";
+import {spawn, spawnSync} from "node:child_process";
+import {createHash} from "node:crypto";
 import {
-  chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
+  appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, openSync, readdirSync,
   readFileSync, renameSync, rmSync, statSync, symlinkSync, utimesSync, writeFileSync,
 } from "node:fs";
-import { cpus, homedir, totalmem } from "node:os";
-import { dirname, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
-import { createTokenPool } from "./tokenpool.mjs";
-import { CaseCosts } from "./case-costs.ts";
-import { Admission, memAvailableGB as readMemAvailable } from "./admission.ts";
-import { TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL } from "./test-artifacts.ts";
-import { frontendBudget } from "./budget.ts";
-import { fixedReservation } from "./reservation.ts";
-import { STEPS, stepTableProblem } from "./step-table.mjs";
+import {cpus, homedir, totalmem} from "node:os";
+import {dirname, join, resolve, relative, isAbsolute, sep} from "node:path";
+import {fileURLToPath} from "node:url";
+import {createTokenPool} from "./tokenpool.mjs";
+import {CaseCosts} from "./case-costs.ts";
+import {ownerEmissionCalls} from "./owner-emission-calls.ts";
+import {Admission, memAvailableGB as readMemAvailable} from "./admission.ts";
+import {TEST_BUILD_DEBUG, TEST_BUILD_OPT_LEVEL} from "./test-artifacts.ts";
+import {frontendBudget} from "./budget.ts";
+import {fixedReservation} from "./reservation.ts";
+import {STEPS, stepTableProblem} from "./step-table.mjs";
 import {finishRunTemporary} from "./run-temporary.ts";
-import { gateEnvironment, reportEnvironment, nodeHeapOomReason, ENVIRONMENT_CONTEXT } from "./canonical-environment.ts";
+import {gateEnvironment, sealOracleRun, oracleStepEnvironment, reportEnvironment, nodeHeapOomReason, ENVIRONMENT_CONTEXT} from "./canonical-environment.ts";
+import {typeScriptOracleDirectory} from '../census/typescript-oracle-capture.ts';
+import {typeScriptOracleHandoff} from '../census/typescript-oracle-results.ts';
+import {programOracleHandoff} from '../differential/oracle-results.ts';
+import {programOracleDirectory} from '../differential/oracle-result-scope.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = resolve(HERE, "../..");
@@ -172,7 +177,7 @@ if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
-const normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT] });
+let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate" });
 env = normalized.env;
 reportEnvironment(normalized.report);
 // `NTS_BIN` defaults to the build this run makes, not to `./target/release/nts`:
@@ -248,6 +253,8 @@ function requested() {
     );
   }
   const set = new Set(want);
+  if(want.some(name=>['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(name)))set.add('program-oracles');
+  if(want.some(name=>['typescript-c','typescript-llvm','typescript-jvm'].includes(name)))set.add('typescript-oracles');
   return STEPS.map((s) => s.name).filter((n) => set.has(n));
 }
 
@@ -300,16 +307,31 @@ const results = new Map(); // name -> { verdict, reason, ... }
 const running = new Map(); // name -> { child, slots, started, rider, elastic }
 let interrupted = null;
 let stopping = false;
+const startupAbort = new AbortController();
+let preparingCapture = true;
 let trainRedStop = null;
 let scopes;
 let scopeCleanup = { state: "complete" };
 let summaryWritten = false;
 let caseCosts = null;
+let typeScriptOracleReference;
+let programOracleReference;
 const identities = {};
 let plan = [];
 
 function stepEnv(step, slots, scope) {
-  const e = gateEnvironment(env, { run: RUN_DIR, owned: { NTS_TOOLING_SLICE: scope.slice } }).env;
+  const owned={NTS_TOOLING_SLICE:scope.slice};
+  if(['typescript-c','typescript-llvm','typescript-jvm'].includes(step.name)){
+    // Only the successful prerequisite's run-owned root may issue this
+    // handoff. A caller's shell variable is never a reference authority.
+    if(results.get('typescript-oracles')?.verdict!=='PASS'||!typeScriptOracleReference)throw new ToolingInstrumentError('tooling-setup','TypeScript oracle reference prerequisite did not pass');
+    owned.NTS_TYPESCRIPT_ORACLE=JSON.stringify(typeScriptOracleReference);
+  }
+  if(['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree'].includes(step.name)){
+    if(results.get('program-oracles')?.verdict!=='PASS'||!programOracleReference)throw new ToolingInstrumentError('tooling-setup','program oracle reference prerequisite did not pass');
+    owned.NTS_PROGRAM_ORACLE=JSON.stringify(programOracleReference);
+  }
+  const e = gateEnvironment(env, { run: RUN_DIR, owned }).env;
   // NTS_JOBS sets the run's budget here; inside a step all.sh would read it as
   // "every knob at once" and undo the slot split.
   delete e.NTS_JOBS;
@@ -371,7 +393,7 @@ function stepEnv(step, slots, scope) {
     "NTS_INTEGRITY_JOBS", "NTS_DEFINITIONS_JOBS",
     "NTS_ASSEMBLES_JOBS", "NTS_TYPES_CHECK_JOBS", "NTS_JVM_VERIFIES_JOBS",
   ]) e[knob] = s;
-  return e;
+  return oracleStepEnvironment(e,step.name);
 }
 
 function finish(name, verdict, reason, extra = {}) {
@@ -394,6 +416,71 @@ function report(name) {
   else if (r.verdict === "SKIPPED") block += `${color(33, "SKIPPED")}: ${name} -- ${r.reason}\n`;
   else if (r.verdict === "INSTRUMENT") block += `${color(33, "INSTRUMENT")}: ${name} -- ${r.reason}\n`;
   process.stdout.write(block);
+}
+
+// A test can capture its child's setup stderr on success. The recorded builder
+// still belongs to exactly one step; publish its cost after that owner exits,
+// without attributing the same build to later cached users.
+function dependencyCalls(step = undefined, drained = false) {
+  const capability = env.NTS_ORACLE_DEPENDENCIES && JSON.parse(env.NTS_ORACLE_DEPENDENCIES);
+  const counts = { cold: 0, hits: 0, held: 0, wallMsSum: 0, pnpmSelectionCommands: 0, byNode: {} };
+  if (capability?.admission?.kind !== "gate") return counts;
+  const ledger = join(capability.admission.temporary.parent, "oracle-dependency-calls.jsonl");
+  if (!existsSync(ledger)) return counts;
+  const text = readFileSync(ledger, "utf8"), lines = text.split("\n");
+  const trailing = lines.pop();
+  // Other active steps may still be appending. The final drained read is strict.
+  if (drained && trailing) throw new Error("incomplete oracle capture call record: " + ledger);
+  for (const line of lines) {
+    const row = JSON.parse(line), part = typeof row.directory === "string" ? relative(capability.admission.temporary.path, row.directory) : "..";
+    if (row.version !== 1 || (row.step !== null && typeof row.step !== "string") ||
+        typeof row.nodeVersion !== "string" || !/^\d+\.\d+\.\d+$/.test(row.nodeVersion) ||
+        !["cold", "hit", "held"].includes(row.mode) || !Number.isFinite(row.wallMs) || row.wallMs < 0 || !Number.isSafeInteger(row.pnpmSelectionCommands) || row.pnpmSelectionCommands < 0 ||
+        isAbsolute(part) || part === ".." || part.startsWith(".." + sep) || !row.directory.endsWith(sep + "node-" + row.nodeVersion))
+      throw new Error("invalid oracle capture call record: " + ledger);
+    if (step !== undefined && row.step !== step) continue;
+    const key = row.mode === "hit" ? "hits" : row.mode;
+    counts[key]++; counts.wallMsSum += row.wallMs; counts.pnpmSelectionCommands += row.pnpmSelectionCommands;
+    const node = counts.byNode[row.nodeVersion] ??= { cold: 0, hits: 0, held: 0, wallMsSum: 0, pnpmSelectionCommands: 0 };
+    node[key]++; node.wallMsSum += row.wallMs; node.pnpmSelectionCommands += row.pnpmSelectionCommands;
+  }
+  return counts;
+}
+function ownerCalls(step = undefined, drained = false) {
+  try {
+    const capability = env.NTS_ORACLE_DEPENDENCIES && JSON.parse(env.NTS_ORACLE_DEPENDENCIES);
+    return ownerEmissionCalls(capability, { step, drained });
+  } catch (error) { return { status: "unreadable", reason: error.message }; }
+}
+
+function captureCost(name, log) {
+  const capability = env.NTS_ORACLE_DEPENDENCIES && JSON.parse(env.NTS_ORACLE_DEPENDENCIES);
+  if (capability?.admission?.kind !== "gate") return null;
+  const images = [], calls = dependencyCalls(name), owners = ownerCalls(name), lines = [];
+  for (const item of existsSync(capability.directory) ? readdirSync(capability.directory, {withFileTypes:true}) : []) {
+    if (!item.isDirectory() || !/^node-\d+\.\d+\.\d+$/.test(item.name)) continue;
+    const nodeVersion = item.name.slice(5), record = join(capability.directory, item.name, "ready.json");
+    if (!existsSync(record)) continue;
+    const bytes = readFileSync(record);
+    if (capability.seal?.nodeVersion===nodeVersion && sha256(record)!==capability.seal.readySha256) throw new Error("oracle dependency seal changed: "+record);
+    const image = JSON.parse(bytes.toString("utf8"));
+    if (image.ownerStep !== name) continue;
+    if (image.version !== 1 || image.sourceRevision !== capability.sourceRevision || image.lockfileSha256 !== capability.lockfileSha256 ||
+        image.inputSet?.identity?.node !== nodeVersion || !Number.isFinite(image.cost?.wallMs) || image.cost.wallMs <= 0 ||
+        !Number.isSafeInteger(image.cost?.peakBytes) || image.cost.peakBytes <= 0)
+      throw new Error("invalid oracle dependency capture cost: " + record);
+    images.push({record,nodeVersion,cost:image.cost});
+    lines.push("oracle dependency capture: " + JSON.stringify({context:"gate",nodeVersion,...image.cost}));
+  }
+  if (!images.length && !calls.cold && !calls.hits && !calls.held) return null;
+  lines.push("oracle dependency calls: " + JSON.stringify(calls));
+  lines.push("oracle owner emissions: " + JSON.stringify({ status: owners.status, emits: owners.emits, hits: owners.hits, ownerCount: owners.owners?.length, ledger: owners.ledger }));
+  let text = readFileSync(log, "utf8");
+  for (const line of lines) if (!text.split("\n").includes(line)) {
+    appendFileSync(log, (text && !text.endsWith("\n") ? "\n" : "") + line + "\n");
+    text += "\n" + line + "\n";
+  }
+  return {ownerStep:name,images,calls,owners};
 }
 
 // ---------------------------------------------------------------------------
@@ -698,14 +785,28 @@ function start(step, slots, rider = false) {
     } catch {}
     // After the drain, so no process of the step can still write over it.
     if (owned.overBound) writeFileSync(log, `\n${stepBoundReason(bound.seconds)}: stopped through its scope\n`, { flag: "a" });
+    let oracleCapture, captureProblem;
+    try { oracleCapture = captureCost(step.name, log); } catch (error) { captureProblem = error.message; }
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
     account();
     const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
       bound_s: bound.seconds, bound_basis: bound.basis };
+    if (oracleCapture) extra.oracle_capture = oracleCapture;
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     let instrument;
     try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
     catch (error) { instrument = { kind: "invalid-instrument", reason: error.message }; }
+    if (!instrument && captureProblem) instrument = { kind: "tooling-setup", reason: captureProblem };
+    if(!instrument&&step.name==='typescript-oracles'&&code===0&&!signal){
+      try{
+        typeScriptOracleReference=typeScriptOracleHandoff(join(typeScriptOracleDirectory(env),'results'));
+        extra.oracle_reference=typeScriptOracleReference;
+      }catch(error){instrument={kind:'tooling-setup',reason:'TypeScript oracle reference publication failed: '+error.message};}
+    }
+    if(!instrument&&step.name==='program-oracles'&&code===0&&!signal){
+      try{programOracleReference=programOracleHandoff(join(programOracleDirectory(env),'results'));extra.oracle_reference=programOracleReference;}
+      catch(error){instrument={kind:'tooling-setup',reason:'program oracle reference publication failed: '+error.message};}
+    }
     if (cleanupError || spawnError) {
       const reason = cleanupError ?? `step scope launch failed: ${spawnError.message}`;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "tooling-cleanup", verdict: "INSTRUMENT", reason } });
@@ -748,6 +849,7 @@ function start(step, slots, rider = false) {
 function stop(why) {
   if (stopping) { if (why.startsWith("signal")) interrupted = why; return; }
   stopping = true;
+  startupAbort.abort(new Error(why));
   if (!trainRedStop) interrupted = why;
   for (const name of pending) finish(name, "NOT RUN", why, trainRedStop ? { cancelled_by: trainRedStop.trigger } : {});
   pending = [];
@@ -755,7 +857,7 @@ function stop(why) {
     try { r.scope.kill(); }
     catch (error) { scopeCleanup = { state: "error", reason: `cannot cancel ${r.scope.slice}: ${error.message}` }; }
   }
-  if (running.size === 0) done();
+  if (running.size === 0 && !preparingCapture) done();
 }
 
 // **The binaries every step runs are a copy named by their content**, made once
@@ -849,6 +951,10 @@ function done() {
     red.push(name);
   }
   const green = red.length === 0 && scopeCleanup.state === "complete";
+  let oracleSetup;
+  const setupLog=join(RUN_DIR,"oracle-setup.log");
+  try { if(!existsSync(setupLog))writeFileSync(setupLog,"");oracleSetup=captureCost(null,setupLog); }
+  catch(error){oracleSetup={ownerStep:null,instrument:{kind:"tooling-setup",reason:String(error)}};}
   const temporary = !running.size ? finishRunTemporary(normalized.temporary,env.HOME,green && !interrupted)
     : {path:env.TMPDIR,state:"kept: rows still running"};
   process.stderr.write(`gate tmp: ${temporary.state}: ${temporary.path}${temporary.error ? `; ${temporary.error}` : ""}\n`);
@@ -888,6 +994,7 @@ function done() {
     schema: 1,
     environment: normalized.report,
     temporary,
+    oracle_setup: oracleSetup,
     verdict: green ? "green" : "red",
     fail_fast: FAIL_FAST,
     interrupted,
@@ -906,6 +1013,8 @@ function done() {
     steps: plan.map((name) => ({ name, ...results.get(name) })),
     slower: slow,
     case_costs: costsSummary,
+    oracle_calls: dependencyCalls(null, running.size === 0 && results.size === plan.length),
+    oracle_owners: ownerCalls(undefined, running.size === 0 && results.size === plan.length),
   };
   try {
     writeFileSync(join(RUN_DIR, "summary.json"), JSON.stringify(summary, null, 2) + "\n");
@@ -1018,12 +1127,26 @@ function settings() {
   return `  machine: ${cores} cores, ${(totalmem() / 2 ** 30).toFixed(1)}G total, ${m.toFixed(1)}G available, load ${readFileSync("/proc/loadavg", "utf8").split(" ").slice(0, 3).join(" ")}\n` +
     cgroup + `  environment:\n${lines.join("\n")}\n`;
 }
+let dependencySealFailure;
+try { normalized = await sealOracleRun(normalized,startupAbort.signal); env = normalized.env; }
+catch (error) { dependencySealFailure = error; }
+finally { preparingCapture = false; }
 process.stdout.write(
   `gate: ${plan.length} step(s), ${SLOTS} slots, ${MEM}G, ${FRONTENDS} frontends; logs in ${RUN_DIR}\n` +
     `  nts ${ntsBin}${pinned.nts ? ` (run as ${pinned.nts})` : ""}\n` + settings() +
     `  steps: ${plan.join(" ")}\n`,
 );
-tokenAddr = await tok.start();
-if (!tokenAddr) process.stderr.write("run.mjs: no token server; elastic steps run at fixed slot counts\n");
-pending = order(plan);
-schedule();
+if (stopping) {
+  done();
+} else if (dependencySealFailure) {
+  const kind = dependencySealFailure instanceof CaseBudgetError ? "case-budget"
+    : dependencySealFailure instanceof ToolingInstrumentError ? dependencySealFailure.kind : "tooling-setup";
+  const reason = String(dependencySealFailure), disposition = instrumentPolicy(kind);
+  for (const name of plan) finish(name,disposition.verdict,reason,{instrument:{kind,reason}});
+  done();
+} else {
+  tokenAddr = await tok.start();
+  if (!tokenAddr) process.stderr.write("run.mjs: no token server; elastic steps run at fixed slot counts\n");
+  pending = order(plan);
+  schedule();
+}

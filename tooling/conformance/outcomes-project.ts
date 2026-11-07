@@ -9,12 +9,15 @@
 
 import { spawnSync } from "node:child_process";
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import {sourceAssetPath} from "../differential/oracle-runtime.ts";
+import type {OracleFilesystem} from "../differential/oracle-filesystem.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 export const OUTCOMES = join(HERE, "../../tests/outcomes");
+export const OUTCOME_ORACLE_PRELOADS=Object.freeze([join(HERE,'outcomes-node-preload.ts')]);
 
 /**
  * How a fixture reaches the runtime's own sources: `@nts/runtime/<path>` is
@@ -29,7 +32,11 @@ export const OUTCOMES = join(HERE, "../../tests/outcomes");
  */
 export const RUNTIME_SPECIFIER = "@nts/runtime/";
 export const RUNTIME_ROOT = join(ROOT, "runtime");
-const HARNESS = readFileSync(join(HERE, "outcomes-harness.ts"), "utf8");
+export const outcomeSourceAssets=(root=RUNTIME_ROOT)=>[
+  {root:join(root,'node'),depth:1,name:'bindings.node.mjs'},
+  {root,depth:1,name:'bindings.node.mjs'},
+];
+export const outcomeBindingPath=(source:string,root=RUNTIME_ROOT)=>sourceAssetPath(source,outcomeSourceAssets(root));
 
 /**
  * Every fixture's name, sorted: the ones git tracks, where this is a checkout.
@@ -48,8 +55,12 @@ export const outcomeFixtures = (directory = OUTCOMES) => {
 };
 
 /** `check` when the fixture's main.ts says `// run: check`, else `build`. */
-export const runMode = (name) =>
+export const runMode = (name: string) =>
   /^\/\/\s*run:\s*check\b/m.test(readFileSync(join(OUTCOMES, name, "src/main.ts"), "utf8")) ? "check" : "build";
+
+/** Native output must not change any directory in the prepared source project. */
+export const nativeOutput = (scratch: string, project: string): string =>
+  join(scratch, "native", basename(project), "out");
 
 /**
  * The fixture's sources, copied under `scratch/<name>`, with the harness
@@ -62,13 +73,23 @@ export const runMode = (name) =>
  * under `noUncheckedIndexedAccess` was recorded as agreeing, because this
  * copy wrote its own options and dropped the fixture's.
  */
-export function materialise(scratch, name, sources, mode) {
+export function materialise(scratch: string, name: string, sources: string, mode: string, captured?:OracleFilesystem) {
   const dir = join(scratch, name);
   rmSync(dir, { recursive: true, force: true });
   mkdirSync(dir, { recursive: true });
-  cpSync(sources, join(dir, "src"), { recursive: true });
+  const read=(file:string)=>captured?captured.readFile(file):readFileSync(file,'utf8');
+  if(captured){
+    const copy=(source:string,target:string)=>{
+      const kind=captured.runtimeKind(source);
+      if(kind==='directory'){mkdirSync(target,{recursive:true});for(const entry of captured.runtimeEntries(source))copy(join(source,entry),join(target,entry));}
+      else if(kind==='file'){const bytes=captured.readBytes(source);if(bytes===null)throw Error('outcome input disappeared: '+source);writeFileSync(target,bytes);}
+      else throw Error('outcome input is not a regular source: '+source);
+    };
+    copy(sources,join(dir,'src'));
+  }else cpSync(sources, join(dir, "src"), { recursive: true });
   const config = join(dirname(sources), "tsconfig.json");
-  const own = existsSync(config) ? JSON.parse(readFileSync(config, "utf8")).compilerOptions ?? {} : {};
+  const configuration=captured?read(config):existsSync(config)?read(config):null;
+  const own = configuration===null?{}:JSON.parse(configuration).compilerOptions ?? {};
   const { outDir: _outDir, ...options } = own;
   writeFileSync(
     join(dir, "tsconfig.json"),
@@ -80,7 +101,7 @@ export function materialise(scratch, name, sources, mode) {
   );
   if (mode === "build") {
     const main = join(dir, "src/main.ts");
-    writeFileSync(main, `${HARNESS}\n${readFileSync(main, "utf8")}`);
+    writeFileSync(main, `${read(join(HERE, "outcomes-harness.ts"))}\n${readFileSync(main, "utf8")}`);
   }
   return dir;
 }

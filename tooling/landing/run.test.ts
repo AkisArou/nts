@@ -8,15 +8,17 @@
 // controls says (pass, fail, pressure once, pending lines). The gate's
 // environment drops a launcher's variables, so the controls are files. The
 // fixture has its own HOME, so the runner's binary pins stay in it.
-import { test, type TestContext } from "node:test";
+import {test, type TestContext} from "node:test";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { chmodSync, existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT, gateEnvironment } from "../gate/canonical-environment.ts";
-import { launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions } from "./run.ts";
-import { newTestScratch } from "../gate/test-scratch.ts";
+import {execFileSync} from "node:child_process";
+import {chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
+import {join, dirname} from "node:path";
+
+import {fileURLToPath} from "node:url";
+import {ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT, gateEnvironment} from "../gate/canonical-environment.ts";
+import {moduleClosure} from "../gate/module-closure-fixture.ts";
+import {launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions} from "./run.ts";
+import {newTestScratch} from "../gate/test-scratch.ts";
 
 const GATE = fileURLToPath(new URL("../gate/", import.meta.url));
 
@@ -26,10 +28,13 @@ function fixture(t: TestContext) {
   const tree = join(own, "tree"), gate = join(tree, "tooling/gate"), controls = join(own, "controls"), home = join(own, "home");
   const target = join(home, ".cache/target"), run = join(home, ".cache/runs/one");
   for (const dir of [gate, controls, target]) mkdirSync(dir, { recursive: true });
-  for (const name of readdirSync(GATE)) {
-    if (name === "run.mjs") writeFileSync(join(gate, name), readFileSync(join(GATE, name)));
-    else if (name !== "all.sh") symlinkSync(join(GATE, name), join(gate, name));
+  for (const name of moduleClosure(["tooling/gate/run.mjs"])) {
+    const target = join(tree, name), original = join(GATE, "../..", name);
+    mkdirSync(dirname(target), {recursive: true});
+    if (name === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
+    else symlinkSync(original, target);
   }
+  symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
   const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], { encoding: "utf8" }).trim();
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh
 controls=${JSON.stringify(controls)}
@@ -43,6 +48,9 @@ if [ "$1" = --call ]; then
   step=$2
   control=$(cat "$controls/$step" 2>/dev/null || echo pass)
   instrument() { printf '{"version":1,"verdict":"%s","kind":"%s","step":"%s","attempt":"%s","reason":"%s"}\\n' "$1" "$2" "$step" "$NTS_GATE_STEP_ATTEMPT" "$3" > "$NTS_GATE_STEP_RESULT"; exit 75; }
+  if [ "$step" = program-oracles ]; then
+    node --input-type=module -e 'import {createProgramOracleResults} from ${JSON.stringify(new URL("../differential/oracle-results.ts",import.meta.url).href)};import {programOracleDirectory} from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};import {oracleRecipeIdentity} from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};import {join} from "node:path";createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();' || exit $?
+  fi
   echo "$step $NTS_TEST_PROFILE $NTS_BIN $CARGO_INCREMENTAL" >> "$controls/calls"
   [ "$step" = doctests ] && echo "$NTS_DOCTEST_CRATES" > "$controls/doctest-crates"
   case $control in
@@ -90,7 +98,7 @@ test("the compiler builds first in nts-dev, and the steps drive it through the g
     assert.equal(readFileSync(bin!, "utf8"), "nts 1\n");
   }
   const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
-  assert.deepEqual([...summary.requested].sort(), ["examples", "outcomes", "rustfmt"], "the runner ran the landing steps after the build, and only them");
+  assert.deepEqual([...summary.requested].sort(), ["examples", "outcomes", "program-oracles", "rustfmt"], "the runner ran the landing steps and their required producer");
   assert.equal(summary.environment.canonical, true);
   assert.ok(existsSync(join(f.run, "landing.json")));
 });
@@ -151,7 +159,7 @@ test("a step memory pressure kept from measuring runs again once memory allows, 
   assert.ok(holds.some(h => /memory pressure kept examples from measuring/.test(h)), holds.join("\n"));
   assert.ok(existsSync(join(f.run, "attempt-2/summary.json")));
   const attempt = JSON.parse(readFileSync(join(f.run, "attempt-2/summary.json"), "utf8"));
-  assert.deepEqual(attempt.requested, ["examples"], "only the unmeasured step runs again");
+  assert.deepEqual(attempt.requested, ["program-oracles", "examples"], "only the unmeasured native step and its run-owned producer run again");
   assert.ok(reads >= 2);
 });
 

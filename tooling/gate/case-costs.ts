@@ -293,7 +293,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
       self_peak_rss_kb: distribution(completed.flatMap(c => c.self_peak_rss_kb === null ? [] : [c.self_peak_rss_kb])),
       child_peak_rss_kb: distribution(completed.flatMap(c => c.child_peak_rss_kb === null ? [] : [c.child_peak_rss_kb])),
       last_one_percent_completion_tail_s: completedAt.length && Number.isFinite(end)
-        ? Math.max(0, end - completedAt[Math.max(0, Math.ceil(completedAt.length * .99) - 1)]) : null,
+        ? Math.max(0, end - completedAt[Math.max(0, Math.ceil(completedAt.length * .99) - 1)]!) : null,
       cases: cases.map(c => {
         const token=tokenFor(c);
         return {...c, phase_groups:c.complete?grouped(c):null, token,

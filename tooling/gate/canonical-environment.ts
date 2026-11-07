@@ -1,11 +1,15 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
-import { existsSync } from "node:fs";
+import { existsSync,lstatSync,readFileSync,realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
-import { homedir } from "node:os";
-import { join, relative, resolve, isAbsolute } from "node:path";
-import { pathToFileURL } from "node:url";
-import {captureRunTemporary,pruneRunTemporaries,finishRunTemporary,type RunTemporary} from "./run-temporary.ts";
+import { userInfo } from "node:os";
+import { dirname,join, relative, resolve, isAbsolute } from "node:path";
+import { fileURLToPath,pathToFileURL } from "node:url";
+import {dependencyCapability,sealDependencyCapability,ToolingInstrumentError,CaseBudgetError} from "../differential/oracle-dependencies.ts";
+import {assertRunTemporary,captureRunTemporary,pruneRunTemporaries,finishRunTemporary,type RunTemporary} from "./run-temporary.ts";
+import {nodeProcessBirth,nodeProcessAlive,nodeResolutionOptions} from '../differential/oracle-runtime.ts';
+
+import {startNodeResolutionSession} from '../differential/oracle-resolution.ts';
 
 export const HOST_INFRASTRUCTURE = ["XDG_RUNTIME_DIR", "DBUS_SESSION_BUS_ADDRESS"] as const;
 export const HOST_CAPABILITIES = [
@@ -13,6 +17,7 @@ export const HOST_CAPABILITIES = [
   "JAVA_HOME", "JDK_HOME", "ANDROID_HOME", "ANDROID_SDK_ROOT", "ANDROID_AVD_HOME", "DEBUGINFOD_URLS",
   "CC", "CXX", "RUSTC", "RUSTDOC", "NTS_LLVM_CC", "NTS_LLVM_AS", "NTS_BIND_CC",
   "GI_GIR_PATH", "XDG_DATA_DIRS", "NTS_NAPI_INCLUDE", "NTS_APPLE_ROOT", "NTS_APPLE_SDK",
+  "NTS_ORACLE_TYPESCRIPT", "NTS_ORACLE_DEPENDENCIES",
   "NTS_IOS_SIMULATOR_SDK", "NTS_WINDOWS_ROOT", "NTS_WIN32_WINMD", "NTS_WINRT_METADATA",
   "NTS_APPLE_SSH", "NTS_WINDOWS_SSH", "NTS_IOS_DEVICE", "SSH_AUTH_SOCK",
 ] as const;
@@ -56,7 +61,7 @@ const EXPERIMENTS = new Set([
   // The landing check's ceiling on step bounds (step-bound.ts), owned by it.
   "NTS_GATE_STEP_CEILING_S",
   "NTS_BIN", "NTS_SUITE_BIN", "NTS_CHECKERS", "NTS_INTEROP_PROJECTS", "NTS_DOCTEST_CRATES", "NTS_COREDUMPS",
-  "NTS_RC_NAIVE", "NTS_BENCH_AGREE_FLOOR", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
+  "NTS_RC_NAIVE", "NTS_DEX_METHOD_FLOOR", "NTS_BACKEND", "NTS_RC", "NTS_POISON", "NTS_SANITIZE",
   "NTS_KEEP_TEMP", "NTS_TRACE_LOWERING", "NTS_ARRIVALS", "NTS_DIFF_OBJECT_CACHE", "NTS_DIFF_NO_OBJECT_CACHE",
   "NTS_CENSUS_MEMORY_CAP_KB", "NTS_CENSUS_MIN_AVAILABLE_GB", "NTS_CENSUS_RUN_MAX_BYTES",
   // The memory reading admission uses (admission.ts). A test gives its inner
@@ -65,6 +70,28 @@ const EXPERIMENTS = new Set([
 ]);
 export const ENVIRONMENT_CONTEXT = "NTS_GATE_ENV_CONTEXT";
 export const ENVIRONMENT_EXPERIMENT = "NTS_GATE_ENV_EXPERIMENT";
+export const NODE_COMPILE_CACHE_ROOT=join(userInfo().homedir,".cache/nts/node-compile-cache/v1");
+
+/** Storage is owned by the caller's lifetime; shell cache overrides choose neither path. */
+export function ownedCacheEnvironment(launcher:NodeJS.ProcessEnv,options:{temporary:string}):{TMPDIR:string;NODE_COMPILE_CACHE:string} {
+  try {
+    const temporary=options.temporary,home=hostEnvironment(launcher).HOME!;
+    const under=(root:string,path:string)=>{const part=relative(root,path);return part!==""&&part!==".."&&!part.startsWith("../")&&!isAbsolute(part);};
+    const roots=[join(userInfo().homedir,".cache"),join(home,".cache")];
+    if(typeof temporary!=="string"||!isAbsolute(temporary)||roots.some(root=>resolve(root)===resolve(temporary))||!roots.some(root=>under(root,temporary)))throw new Error(`not an absolute home-cache path: ${String(temporary)}`);
+    const stat=lstatSync(temporary);
+    if(!stat.isDirectory()||stat.isSymbolicLink()||stat.uid!==process.getuid?.())throw new Error(`not an owned real directory: ${temporary}`);
+    const actual=realpathSync(temporary);
+    if(roots.some(root=>existsSync(root)&&realpathSync(root)===actual)||!roots.some(root=>existsSync(root)&&under(realpathSync(root),actual)))throw new Error(`directory escapes the home cache: ${temporary}`);
+    if(launcher[ENVIRONMENT_CONTEXT]){
+      const context=JSON.parse(launcher[ENVIRONMENT_CONTEXT]) as Context;
+      if(context.report?.version!==1||!context.owned||typeof context.report.canonical!=="boolean")throw new Error("invalid canonical handoff");
+      assertRunTemporary(context.temporary,home);
+      if(launcher.TMPDIR!==context.temporary.path)throw new Error("canonical TMPDIR differs from its registered temporary");
+    }
+    return {TMPDIR:temporary,NODE_COMPILE_CACHE:NODE_COMPILE_CACHE_ROOT};
+  }catch(error){throw new Error(`owned Node cache temporary: ${(error as Error).message}`);}
+}
 
 export function launcherPolicyNames(env: NodeJS.ProcessEnv): string[] {
   return Object.keys(env).filter(name => env[name] !== undefined && !HOST.has(name) && !PARENT.has(name) && (
@@ -80,10 +107,25 @@ export function assertLandingEnvironment(env: NodeJS.ProcessEnv = process.env): 
 export function hostEnvironment(launcher: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
   const host: NodeJS.ProcessEnv = {};
   for (const name of HOST_CAPABILITIES) if (launcher[name] !== undefined) host[name] = launcher[name];
-  host.HOME ??= homedir();
+  host.HOME ||= userInfo().homedir;
   host.CARGO_HOME ||= join(host.HOME, ".cargo");
   host.RUSTUP_HOME ||= join(host.HOME, ".rustup");
   return host;
+}
+
+/** The tooling tree's provisioned package, never an application's or PATH's. */
+export function oracleToolchainLocation():string {
+  return dirname(realpathSync(join(resolve(dirname(fileURLToPath(import.meta.url)),"../.."),"node_modules/typescript/package.json")));
+}
+
+/** A synthetic tooling tree may omit this capability; declaring it is binding. */
+export function declaredOracleToolchain(root=resolve(dirname(fileURLToPath(import.meta.url)),"../..")):string|undefined {
+  const manifest=join(root,"package.json");
+  if(!existsSync(manifest))return undefined;
+  const pkg=JSON.parse(readFileSync(manifest,"utf8"));
+  if(![pkg.dependencies,pkg.devDependencies,pkg.optionalDependencies].some(dependencies=>dependencies?.typescript!==undefined))return undefined;
+  try{return dirname(realpathSync(join(root,"node_modules/typescript/package.json")));}
+  catch(error){throw new Error(`declared oracle TypeScript capability is missing from ${root}: ${String(error)}`);}
 }
 
 /** Bus locations authorize orchestration; they do not identify program inputs. */
@@ -108,8 +150,21 @@ export type EnvironmentReport = {
   ambient: Record<string, string | null>; dropped: string[];
   experiments: { name: string; value: string }[];
 };
-type Context = { report: EnvironmentReport; owned: Record<string, string>; temporary:RunTemporary };
+type Context = { report: EnvironmentReport; owned: Record<string, string>; temporary:RunTemporary;resolutionOwner?:{pid:number;birth:string} };
 export type GateEnvironment = { env: NodeJS.ProcessEnv; report: EnvironmentReport; temporary:RunTemporary };
+
+/** The runner binds telemetry ownership before launching a step. Children
+ * retain it through the existing capability, independently of mock step names. */
+export function oracleStepEnvironment(env:NodeJS.ProcessEnv,step:string):NodeJS.ProcessEnv {
+  if(!/^[a-z][a-z0-9-]*$/.test(step))throw new Error('invalid oracle capture owner step');
+  const context:Context=JSON.parse(env[ENVIRONMENT_CONTEXT]??'null');
+  if(context?.report?.version!==1||!context.owned)throw new Error('missing canonical oracle step context');
+  const raw=context.owned.NTS_ORACLE_DEPENDENCIES;if(!raw)return env;
+  if(env.NTS_ORACLE_DEPENDENCIES!==raw||context.report.host.NTS_ORACLE_DEPENDENCIES!==raw)throw new Error('invalid owned oracle dependency handoff');
+  const next=JSON.stringify({...JSON.parse(raw),ownerStep:step});
+  context.owned.NTS_ORACLE_DEPENDENCIES=next;context.report.host.NTS_ORACLE_DEPENDENCIES=next;
+  return {...env,NTS_ORACLE_DEPENDENCIES:next,[ENVIRONMENT_CONTEXT]:JSON.stringify(context)};
+}
 
 function strings(values: NodeJS.ProcessEnv): Record<string, string> {
   return Object.fromEntries(Object.entries(values).filter((entry): entry is [string, string] => entry[1] !== undefined));
@@ -118,7 +173,7 @@ function strings(values: NodeJS.ProcessEnv): Record<string, string> {
 /** `owned` is supplied by the runner's code, never copied wholesale from a launcher. */
 export function gateEnvironment(
   launcher: NodeJS.ProcessEnv,
-  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string },
+  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone" },
 ): GateEnvironment {
   const inherited = launcher[ENVIRONMENT_CONTEXT];
   let prior: Context | undefined;
@@ -148,8 +203,16 @@ export function gateEnvironment(
   }
   const legacy = selected === "today" || prior?.report.experiments.some(e => e.name === ENVIRONMENT_EXPERIMENT && e.value === "today");
   const host = hostEnvironment(launcher);
+  delete host.NTS_ORACLE_DEPENDENCIES;delete owned.NTS_ORACLE_DEPENDENCIES;
+  // A launcher/application path never selects the oracle. Only the tooling
+  // manifest or an already owned canonical handoff supplies this capability.
+  const inheritedOracle=prior?.owned.NTS_ORACLE_TYPESCRIPT;
+  if(inheritedOracle&&prior!.report.host.NTS_ORACLE_TYPESCRIPT!==inheritedOracle)throw new Error("invalid owned oracle TypeScript handoff");
+  const oracle=inheritedOracle?dirname(realpathSync(join(inheritedOracle,"package.json"))):declaredOracleToolchain();
+  delete host.NTS_ORACLE_TYPESCRIPT;delete owned.NTS_ORACLE_TYPESCRIPT;
+  if(oracle){host.NTS_ORACLE_TYPESCRIPT=oracle;owned.NTS_ORACLE_TYPESCRIPT=oracle;}
   const under = (root: string) => { const path = relative(root, resolve(options.run)); return path !== ".." && !path.startsWith("../") && !isAbsolute(path); };
-  if (![join(homedir(),".cache"),join(host.HOME!,".cache")].some(under)) throw new Error("gate run directory must be under ~/.cache; /tmp is not a gate scratch directory");
+  if (![join(userInfo().homedir,".cache"),join(host.HOME!,".cache")].some(under)) throw new Error("gate run directory must be under ~/.cache; /tmp is not a gate scratch directory");
   const ambient: Record<string, string | null> = {};
   for (const name of [...Object.keys(FIXED_AMBIENT), ...UNSET_AMBIENT]) {
     ambient[name] = legacy ? launcher[name] ?? null : FIXED_AMBIENT[name] ?? null;
@@ -159,13 +222,17 @@ export function gateEnvironment(
     if (value === null) delete env[name]; else env[name] = value;
   }
   Object.assign(env, owned);
-  // /tmp is a small tmpfs. Neither a launcher nor an experiment owns this path.
-  env.TMPDIR = join(resolve(options.run), "tmp");
-  env.XDG_CACHE_HOME = join(host.HOME!, ".cache");
-  ambient.TMPDIR = env.TMPDIR;
-  ambient.XDG_CACHE_HOME = env.XDG_CACHE_HOME;
+  if(oracle)env.NTS_ORACLE_TYPESCRIPT=oracle;else delete env.NTS_ORACLE_TYPESCRIPT;
   if (!prior) pruneRunTemporaries(host.HOME!);
   const temporary=captureRunTemporary(options.run,prior?.temporary);
+  // /tmp is a small tmpfs. Neither a launcher nor an experiment owns these paths.
+  const storage=ownedCacheEnvironment(launcher,{temporary:temporary.path});
+  Object.assign(env,storage);
+  owned.NODE_COMPILE_CACHE=NODE_COMPILE_CACHE_ROOT;
+  env.XDG_CACHE_HOME = join(host.HOME!, ".cache");
+  ambient.TMPDIR = storage.TMPDIR;
+  ambient.NODE_COMPILE_CACHE=storage.NODE_COMPILE_CACHE;
+  ambient.XDG_CACHE_HOME = env.XDG_CACHE_HOME;
   const experiments = [...(prior?.report.experiments ?? []), ...overrides];
   if (selected === "today") experiments.push({ name: ENVIRONMENT_EXPERIMENT, value: "today" });
   delete env[ENVIRONMENT_EXPERIMENT];
@@ -173,13 +240,50 @@ export function gateEnvironment(
   const dropped = [...new Set([...(prior?.report.dropped ?? []), ...Object.keys(launcher).filter(name =>
     !retained.has(name) && launcher[name] !== env[name]
   )])].sort();
+  const inheritedDependencies=prior?.owned.NTS_ORACLE_DEPENDENCIES;
+  if(inheritedDependencies&&prior!.report.host.NTS_ORACLE_DEPENDENCIES!==inheritedDependencies)throw new Error("invalid owned oracle dependency handoff");
+  if(options.oracleAdmissionContext!==undefined&&options.oracleAdmissionContext!=="gate"&&options.oracleAdmissionContext!=="standalone")throw new Error("invalid oracle admission context");
+  const inheritedCapability=inheritedDependencies?JSON.parse(inheritedDependencies):undefined;
+  if(inheritedCapability&&inheritedCapability.admission?.kind!=="gate"&&inheritedCapability.admission?.kind!=="standalone")throw new Error("invalid owned oracle admission handoff");
+  const admissionKind=options.oracleAdmissionContext??inheritedCapability?.admission.kind??"standalone";
+  // An inherited capability keeps its capture root. Only an explicit caller
+  // can change its policy, and a gate grant binds that registered temporary.
+  const admission=admissionKind==="gate"?{kind:"gate" as const,temporary:inheritedCapability?.admission.kind==="gate"?inheritedCapability.admission.temporary:prior?.temporary??temporary}:{kind:"standalone" as const};
+  const toolingRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../..");
+  const dependencies=inheritedCapability?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
+    JSON.stringify(dependencyCapability(toolingRoot,join(temporary.path,"oracle-dependencies"),admission)):undefined);
+  if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,
     host: Object.fromEntries(HOST_CAPABILITIES.map(name => [name, env[name] ?? null])),
     ambient, dropped, experiments,
   };
-  env[ENVIRONMENT_CONTEXT] = JSON.stringify({ report, owned, temporary } satisfies Context);
+  const resolutionOwner=process.platform==='linux'?(prior?.resolutionOwner??{pid:process.pid,birth:nodeProcessBirth(process.pid)}):undefined;
+  if(resolutionOwner&&!nodeProcessAlive(resolutionOwner))throw new Error('oracle resolution run owner changed');
+  env[ENVIRONMENT_CONTEXT] = JSON.stringify({ report, owned, temporary,...(resolutionOwner?{resolutionOwner}:{}) } satisfies Context);
   return { env, report, temporary };
+}
+
+/** Validate once in the run parent, then forward its exact pinned seal. */
+export async function sealOracleRun(planned:GateEnvironment,signal?:AbortSignal):Promise<GateEnvironment>{
+  const raw=planned.env.NTS_ORACLE_DEPENDENCIES;if(!raw)return planned;
+  const context:Context=JSON.parse(planned.env[ENVIRONMENT_CONTEXT]??'null');
+  if(context?.report?.version!==1||context.owned?.NTS_ORACLE_DEPENDENCIES!==raw||context.report.host.NTS_ORACLE_DEPENDENCIES!==raw)throw new Error('invalid owned oracle dependency run');
+  let cap;try{
+    cap=await sealDependencyCapability(JSON.parse(raw),planned.env,signal);
+    signal?.throwIfAborted();
+    if(process.platform==='linux'){
+      context.resolutionOwner??={pid:process.pid,birth:nodeProcessBirth(process.pid)};
+      if(!nodeProcessAlive(context.resolutionOwner))throw new Error('oracle resolution run owner changed');
+      const execution=JSON.parse(readFileSync(new URL('../differential/oracle-toolchain.json',import.meta.url),'utf8')).execution.args as string[];
+      const bootstrap=execution.find((_argument,index)=>index>0&&execution[index-1]==='--import');
+      await startNodeResolutionSession(join(cap.directory,'oracle-resolution','node-'+process.versions.node),nodeResolutionOptions(execution,planned.env,bootstrap),context.resolutionOwner.pid);
+    }
+  }catch(error){if(error instanceof CaseBudgetError)throw error;throw new ToolingInstrumentError('tooling-setup',String(error));}
+  const next=JSON.stringify(cap);
+  const report={...planned.report,host:{...planned.report.host,NTS_ORACLE_DEPENDENCIES:next}};
+  const owned={...context.owned,NTS_ORACLE_DEPENDENCIES:next};
+  return {...planned,report,env:{...planned.env,NTS_ORACLE_DEPENDENCIES:next,[ENVIRONMENT_CONTEXT]:JSON.stringify({...context,report,owned})}};
 }
 
 export function reportEnvironment(report: EnvironmentReport, write: (text: string) => void = text => process.stderr.write(text)): void {
@@ -200,7 +304,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
     if (mode !== "--pinned" || !script) throw new Error("usage: canonical-environment.ts --pinned <script> [commit] [steps...]");
     const base = process.env;
     if (base.NTS_GATE_STEP && base[ENVIRONMENT_CONTEXT]) throw new Error("nested pinned gate entry must use its own run directory and environment");
-    const home = base.HOME ?? homedir();
+    const home = base.HOME || userInfo().homedir;
     const run = base.NTS_GATE_RUN_DIR ?? join(home, ".cache/nts-gate/runs", `${Date.now()}-${process.pid}`);
     const target = base.NTS_GATE_TARGET ?? join(home, ".cache/nts-gate/target");
     const owned: NodeJS.ProcessEnv = {
@@ -208,7 +312,7 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
       CARGO_TARGET_DIR: target, NTS_BIN: join(target, "release/nts"), NTS_SUITE_BIN: join(target, "release/nts-suite"), NTS_CHECKERS: "1",
     };
     for (const name of INFRASTRUCTURE) if (base[name] !== undefined) owned[name] = base[name];
-    const planned = gateEnvironment(base, { run, owned, standalone: !base[ENVIRONMENT_CONTEXT] });
+    const planned = gateEnvironment(base, { run, owned, standalone: !base[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate" });
     reportEnvironment(planned.report);
     const result = spawnSync("sh", [script, "--environment-ready", ...args], {
       env: planned.env,

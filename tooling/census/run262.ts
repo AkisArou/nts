@@ -147,7 +147,7 @@ if (!(BACKEND in BACKENDS)) {
 }
 const TOOLS = { nts: PINNED, cc: CC, backend: BACKEND };
 
-const checks = selfChecks(SCRATCH, TOOLS, cannotMeasure);
+const checks = await selfChecks(SCRATCH, TOOLS, cannotMeasure);
 
 // --- the run ---------------------------------------------------------------
 
@@ -158,7 +158,7 @@ const thrownBy = new Map();
 const bump = (map, key) => map.set(key, (map.get(key) ?? 0) + 1);
 
 for (const record of chosen) {
-  const outcome = attempt(dir, readFileSync(join(SUITE, record.path), "utf8"), TOOLS);
+  const outcome = await attempt(dir, readFileSync(join(SUITE, record.path), "utf8"), TOOLS);
   bump(buckets, outcome.bucket);
   if (outcome.bucket === "threw") bump(thrownBy, outcome.thrown);
   // **Appended as it is produced, not written at the end.** A full slice is

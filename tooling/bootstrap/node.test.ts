@@ -50,11 +50,12 @@ test('checksum failure leaves no prepared tree and a wrong version is rejected',
 
 test('committed recipe equals fresh upstream GYP evaluation without machine paths',()=>{
  const root=resolve(import.meta.dirname,'../..'),source=join(root,'third_party/node-source');
- assert.equal(nodePin(root),'24.20.0');
+ const pin=nodePin(root);
  resolveRecipe(source,undefined,true);
  const text=readFileSync(join(root,'build/node-deps/recipes.json'),'utf8');
  assert.ok(!text.includes(root));
  const registry=JSON.parse(text),recipe=registry.plans.find(p=>p.target==='x86_64-unknown-linux-gnu'),zlib=recipe.targets.find((t:{name:string})=>t.name==='zlib');
+ assert.equal(registry.node,pin);
  assert.deepEqual(zlib.dependencies,['zlib_data_chunk_simd','zlib_adler32_simd']);
  assert.ok(recipe.targets.some((t:{name:string,cflags:string[]})=>t.name==='zlib_adler32_simd'&&t.cflags.includes('-mssse3')));
  assert.deepEqual(recipe.targets.find((t:{name:string})=>t.name==='openssl').dependencies,['zlib','brotli','zstd']);

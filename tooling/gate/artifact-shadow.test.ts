@@ -136,3 +136,60 @@ test("only literal invocation input paths are normalized; raw logs and other dif
     { path: "/x/a[1].class", name: "artifact/a.class" }, { path: "/x/a[1].class.extra", name: "artifact/b.class" },
   ]), "artifact/b.class artifact/a.class");
 });
+
+function oracleManifest() {
+  return {
+    version: 3, status: "complete", entry: "/program/main.ts", project: "/program/tsconfig.json",
+    inputs: { "/program/main.ts": "source-bytes" },
+    observations: [{ kind: "file", path: "/program/main.ts", value: "observed-bytes" }],
+    outputs: { "program/main.js": "emitted-bytes" },
+    imports: [{ file: "/program/main.ts", specifier: "./value.ts", target: "/program/value.ts" }],
+    identity: { emitterSha256: "implementation-bytes" },
+    runtimeIndex: { path: "runtime-index/" + "a".repeat(64) + ".json", sha256: "a".repeat(64) },
+  };
+}
+
+test("oracle shadow keys share semantic inputs across runtime-index allocation", t => {
+  const { root, env } = fixture(t), file = join(root, "manifest.json"), manifest = oracleManifest();
+  const inputs = () => ({ files: [{ name: "oracle-emit-manifest", path: file }] });
+  writeFileSync(file, JSON.stringify(manifest));
+  const first = artifactShadow("bench-oracle-node", inputs, env)({ status: 0, stdout: "same" })!;
+  assert.equal(first.status, "miss");
+  assert.equal(artifactShadow("bench-oracle-node", inputs, env)({ status: 0, stdout: "same" })!.status, "hit-match");
+  writeFileSync(file, JSON.stringify({ ...manifest, runtimeIndex: { path: "runtime-index/" + "b".repeat(64) + ".json", sha256: "b".repeat(64) } }));
+  const relocated = artifactShadow("bench-oracle-node", inputs, env)({ status: 0, stdout: "same" })!;
+  assert.equal(relocated.key, first.key, "the authenticated allocation reference is derived, not semantic input");
+  assert.equal(relocated.status, "hit-match");
+});
+
+const manifestMutations = {
+  source: { inputs: { "/program/main.ts": "changed source" } },
+  observation: { observations: [{ kind: "file", path: "/program/main.ts", value: "changed observation" }] },
+  output: { outputs: { "program/main.js": "changed output" } },
+  "owner route": { imports: [{ file: "/program/main.ts", specifier: "./value.ts", target: "/program/other.ts" }] },
+  implementation: { identity: { emitterSha256: "changed implementation" } },
+};
+for (const [category, mutation] of Object.entries(manifestMutations)) test(`oracle shadow keys retain ${category} changes and recheck them after execution`, t => {
+  const { root, env } = fixture(t), file = join(root, "manifest.json"), manifest = oracleManifest();
+  const inputs = () => ({ files: [{ name: "oracle-emit-manifest", path: file }] });
+  writeFileSync(file, JSON.stringify(manifest));
+  const before = artifactShadow("bench-oracle-node", inputs, env), key = before.key;
+  writeFileSync(file, JSON.stringify({ ...manifest, ...mutation }));
+  const after = artifactShadow("bench-oracle-node", inputs, env);
+  assert.notEqual(after.key, key);
+  assert.equal(after({ status: 0 })!.status, "miss");
+  assert.equal(before({ status: 0 })!.status, "unavailable", "a changed fresh input cannot seed the old key");
+});
+
+test("oracle shadow derivation is narrow and keeps future semantic fields", t => {
+  const { root, env } = fixture(t), file = join(root, "manifest.json"), manifest = oracleManifest();
+  const key = (kind: string, name: string) => artifactShadow(kind, () => ({ files: [{ name, path: file }] }), env).key;
+  writeFileSync(file, JSON.stringify(manifest));
+  const unrelatedKind = key("assemble", "oracle-emit-manifest"), unrelatedName = key("bench-oracle-node", "other-input");
+  const original = key("bench-oracle-node", "oracle-emit-manifest");
+  writeFileSync(file, JSON.stringify({ ...manifest, runtimeIndex: { path: "other", sha256: "other" } }));
+  assert.notEqual(key("assemble", "oracle-emit-manifest"), unrelatedKind);
+  assert.notEqual(key("bench-oracle-node", "other-input"), unrelatedName);
+  writeFileSync(file, JSON.stringify({ ...manifest, futureSemanticField: "a new input" }));
+  assert.notEqual(key("bench-oracle-node", "oracle-emit-manifest"), original, "only schema-declared derived fields may be excluded");
+});

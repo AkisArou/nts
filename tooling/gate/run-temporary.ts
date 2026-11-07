@@ -2,8 +2,8 @@
 // artifacts and other scratch roots are outside this policy.
 import {createHash} from "node:crypto";
 import {execFileSync} from "node:child_process";
-import {existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,statfsSync,writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,realpathSync,renameSync,rmSync,statfsSync,writeFileSync} from "node:fs";
+import {userInfo} from "node:os";
 import {dirname,join,resolve,relative,isAbsolute} from "node:path";
 
 export const FAILED_TEMP_MAX_BYTES=8*2**30;
@@ -24,13 +24,25 @@ export function captureRunTemporary(run:string,previous?:RunTemporary):RunTempor
   return owned;
 }
 
-function checked(owned:RunTemporary,home:string):void {
-  if (!owned || !isAbsolute(owned.path) || ![join(home,".cache"),join(homedir(),".cache")].some(root=>under(root,owned.path)) || owned.path!==join(dirname(owned.path),"tmp")) throw new Error("invalid registered run temporary path");
+export function assertRunTemporary(owned:RunTemporary,home:string):void {
+  if (!owned || !isAbsolute(owned.path) || ![join(home,".cache"),join(userInfo().homedir,".cache")].some(root=>under(root,owned.path)) || owned.path!==join(dirname(owned.path),"tmp")) throw new Error("invalid registered run temporary path");
   const stat=lstatSync(owned.path);
   if (!stat.isDirectory() || stat.isSymbolicLink() || stat.uid!==process.getuid?.() || stat.uid!==owned.uid || stat.dev!==owned.dev || stat.ino!==owned.ino || realpathSync(dirname(owned.path))!==owned.parent) throw new Error(`run temporary directory was replaced: ${owned.path}`);
 }
 
 export type PruneOptions={maxBytes?:number;minimumFreeBytes?:number;write?:(line:string)=>void;freeBytes?:()=>number};
+// A run can own read-only captured inputs. Restore directory permissions only
+// after assertRunTemporary() authenticates this exact root; never traverse a link.
+export function removable(root:string):void {
+  const walk=(path:string)=>{
+    const info=lstatSync(path);
+    if(info.isSymbolicLink()||!info.isDirectory())return;
+    if(info.uid!==process.getuid?.())throw new Error("foreign directory in run temporary: "+path);
+    chmodSync(path,(info.mode&0o777)|0o700);
+    for(const name of readdirSync(path))walk(join(path,name));
+  };
+  walk(root);
+}
 
 /** Bounds apply to closed failures, and may evict them further for admission.
  * An invalid identity is reported and kept; it can never authorize a removal.
@@ -50,7 +62,7 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
     try {
       const entry=JSON.parse(readFileSync(file,"utf8"));
       if (!existsSync(entry.owned.path)) {rmSync(file);continue;}
-      checked(entry.owned,home);
+      assertRunTemporary(entry.owned,home);
       if (!Number.isFinite(entry.closed)) throw new Error("missing closed-run timestamp");
       const bytes=Number(execFileSync("du",["-sx","-B1","--",entry.owned.path],{encoding:"utf8"}).split("\t")[0]);
       if (!Number.isFinite(bytes)) throw new Error("cannot measure closed temporary bytes");
@@ -64,8 +76,8 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
     freeBytes=free();
     if (total<=maxBytes && freeBytes>=minimumFreeBytes) break;
     try {
-      checked(entry.owned,home);
-      rmSync(entry.owned.path,{recursive:true});rmSync(entry.file);
+      assertRunTemporary(entry.owned,home);
+      removable(entry.owned.path);rmSync(entry.owned.path,{recursive:true});rmSync(entry.file);
       total-=entry.bytes;removed.push(entry.owned.path);write(`gate tmp: evicted closed failure ${entry.owned.path} (${entry.bytes} allocated bytes); logs retained`);
     } catch(error) {protectedPaths.push(entry.owned.path);write(`gate tmp: kept ${entry.owned.path}: ${(error as Error).message}`);}
   }
@@ -75,9 +87,9 @@ export function pruneRunTemporaries(home:string,options:PruneOptions={}) {
 /** Remove a green run's temporary folder, or close a red one's and prune the closed failures with `prune`. */
 export function finishRunTemporary(owned:RunTemporary,home:string,green:boolean,prune:PruneOptions={}) {
   try {
-    checked(owned,home);
+    assertRunTemporary(owned,home);
     const directory=registry(home),file=join(directory,key(owned));
-    if (green) {rmSync(owned.path,{recursive:true});rmSync(file,{force:true});return {path:owned.path,state:"removed after green"};}
+    if (green) {removable(owned.path);rmSync(owned.path,{recursive:true});rmSync(file,{force:true});return {path:owned.path,state:"removed after green"};}
     mkdirSync(directory,{recursive:true});
     const next=file+"."+process.pid;
     writeFileSync(next,JSON.stringify({owned,closed:Date.now()})+"\n");renameSync(next,file);

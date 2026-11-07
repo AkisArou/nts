@@ -18,6 +18,22 @@ import * as policy from "./owed.mjs";
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
 const changeOwes = (changes) => gateSteps(owed(changes));
 
+test('each program consumer owes one shared producer before native execution',()=>{
+  for(const step of ['examples','rc','llvm','llvm-rc','jvm','outcomes','bench-agree']){
+    assert.deepEqual(gateSteps([{precise:true,steps:[step]}]),['program-oracles',step]);
+    assert.deepEqual(gateSteps([{precise:true,steps:['program-oracles',step]}]),['program-oracles',step]);
+  }
+});
+
+test('each TypeScript backend owes its shared reference exactly once',()=>{
+  for(const steps of [['typescript-c'],['typescript-llvm'],['typescript-jvm'],['typescript-c','typescript-llvm','typescript-jvm']]){
+    const selected=gateSteps([{precise:true,steps}]);
+    assert.deepEqual(selected,['typescript-oracles',...steps]);
+  }
+  assert.deepEqual(gateSteps([{precise:true,steps:['tooling']}]),['tooling']);
+  assert.deepEqual(gateSteps([{precise:true,steps:['typescript-oracles','typescript-c']}]),['typescript-oracles','typescript-c']);
+});
+
 test("the immutable Node input selector retains the gate-inputs' full reach",()=>{
   const expected=stepsFor('tooling/lanes/inputs.sh');
   for(const path of ['tooling/lanes/node-inputs.ts','tooling/lanes/node-inputs.json','tooling/lanes/node-inputs.test.ts','tooling/lanes/node-inputs-test-fixture.ts'])
@@ -539,11 +555,30 @@ test("the node harness owes only what every change owes", () => {
   // Its paths in owed.mjs's NODE_HARNESS, which no gate step runs.
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
   for (const p of [
-    "tooling/conformance/run.mjs", "tooling/conformance/run-one.mjs", "tooling/conformance/tmpdir.mjs",
-    "tooling/conformance/common.mjs", "tooling/conformance/check.sh", "tooling/conformance/unclaimed-reviewed",
+    "tooling/conformance/check.sh", "tooling/conformance/unclaimed-reviewed",
   ]) {
     assert.deepEqual([...stepsFor(p)].sort(), always, p);
   }
+});
+
+test("the finite Node preload planner and the harness it reads owe their tooling consumer",()=>{
+  const always=stepsFor("tooling/gate/times.tsv");
+  for(const path of ["tooling/conformance/node-preloads.ts","tooling/conformance/node-preloads.test.ts","tooling/conformance/run.mjs","tooling/conformance/run-one.mjs","tooling/conformance/tmpdir.mjs","tooling/conformance/common.mjs"])
+    assert.deepEqual([...stepsFor(path)].sort(),[...new Set([...always,"tooling"])].sort(),path);
+});
+
+test("the host project retains conservative quoted-basename reader reach",()=>{
+  // The generic beside-file heuristic also sees case-local 'tsconfig.json'
+  // literals in other readers. Its over-selection is a separate gate finding;
+  // this path's explicit rule never removes those additive obligations.
+  assert.deepEqual([...stepsFor('tooling/conformance/tsconfig.json')].sort(),[
+    'assembles','blockers','build','c-compiles','clippy','compile-time','compile-time-rc','definitions',
+    'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','rustfmt','tests','tooling','types',
+  ]);
+});
+
+test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
+  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','old-paths','outcomes','rustfmt','tests','tooling']);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {

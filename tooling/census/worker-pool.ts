@@ -23,15 +23,17 @@ export type ResidentPoolOptions = {
   report?: (message: string) => void;
   admission: Admission;
   token: CaseToken;
+  /** Reclaim a warm producer's heaps after this many completed cases. */
+  recycleAfterCases?: number;
 };
 
 type Dispatch = { path: string; ordinal: number };
 type Pressure = { dispatch?: Dispatch; cause: "aggregate-pressure" | "system-pressure"; kills: number };
 
-async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission, token }: ResidentPoolOptions,
+async function round({ jobs, memory, workerBytes, command = process.execPath, args, onRow, report = () => {}, admission, token, recycleAfterCases }: ResidentPoolOptions,
   work: Dispatch[], isolated: boolean, indexOffset = 0): Promise<Pressure[]> {
   const exclusive = isolated || Math.min(jobs, work.length) === 1;
-  const queue = createFeed(work.map((_, index) => String(index)), admission, undefined, (entry, signal) => token(work[Number(entry)].path, signal));
+  const queue = createFeed(work.map((_, index) => String(index)), admission, undefined, (entry, signal) => token(work[Number(entry)]!.path, signal));
   const pressure: Pressure[] = [];
   const tasks: Promise<void>[] = [];
   let idleRestarts = 0;
@@ -52,6 +54,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
         const stopped = new AbortController();
         let exited = false;
         let restarting = false;
+        let completedCases = 0;
         let active: Dispatch | undefined;
         let release: (() => void) | undefined;
         const returnToken = () => {
@@ -77,7 +80,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           }
           if (cause) {
             if (isolated) throw new PressureError(`resident instrument failure: isolated replay of ${dispatch.path} was killed by ${cause}, without an own-limit OOM`);
-            pressure.push({ dispatch, cause, kills: after.kills - dispatchedBefore.kills });
+            pressure.push({ dispatch, cause: cause as Pressure["cause"], kills: after.kills - dispatchedBefore.kills });
             report(`resident pressure: requeued ${dispatch.path} after ${cause}; no verdict recorded`);
             return true;
           }
@@ -103,7 +106,7 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
             release = granted;
             before = bound.counters();
             aggregateBefore = memory.aggregateOoms();
-            active = work[Number(entry)];
+            active = work[Number(entry)]!;
             child.stdin.write(`${active.path}\n`);
           },
           end: () => child.stdin.end(),
@@ -116,11 +119,14 @@ async function round({ jobs, memory, workerBytes, command = process.execPath, ar
           try {
             const row = JSON.parse(line);
             if (row.path !== active?.path) throw new Error(`worker ${index} answered ${row.path}, expected ${active?.path}`);
-            const restart = finish(row);
+            const failed = finish(row);
+            const recycled = recycleAfterCases !== undefined && ++completedCases >= recycleAfterCases;
+            const restart = failed || recycled;
             // Stop the entire scope before reuse, including any compiler child
             // left by a timed-out command. Only this worker is replaced.
             if (restart) {
               restarting = true;
+              if(recycled&&!failed)report(`resident worker ${index}: recycling after ${completedCases} completed cases`);
               bound.stop(scope);
             } else {
               void feed();
@@ -192,6 +198,10 @@ export type ResidentPoolSummary = {
 /** Each input has one final row. Parallel pressure is retried once, alone in
  * fresh cgroups after every parallel scope and its charges have been removed. */
 export async function runMemoryWorkers(options: ResidentPoolOptions): Promise<ResidentPoolSummary> {
+  if(options.recycleAfterCases!==undefined&&(!Number.isSafeInteger(options.recycleAfterCases)||options.recycleAfterCases<1)){
+    options.memory.close();
+    throw new ToolingInstrumentError('tooling-setup','resident worker recycling requires a positive completed-case count');
+  }
   if (!(options.admission instanceof Admission)) {
     options.memory.close();
     throw new ToolingInstrumentError("tooling-setup", "resident workers require an explicit admission policy");

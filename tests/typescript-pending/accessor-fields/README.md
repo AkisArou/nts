@@ -1,9 +1,6 @@
 # `accessor` fields
 
-**Why node cannot be the oracle:** node v24's V8 does not parse the
-`accessor` keyword (`SyntaxError: Unexpected identifier`), and
-`--experimental-transform-types` leaves it in place.
-
-**The oracle these need:** TypeScript's emit with `target: "ES2022"` (or lower),
-which turns each `accessor` into a private field and a getter and setter
-pair. With `target: "ESNext"` TypeScript emits `accessor` as written.
+This family waits for enrollment with TypeScript's accessor field emit. The
+oracle uses the pinned runtime target and the owner's class-field options;
+TypeScript turns each `accessor` into a private field and a getter and setter
+pair. Node runs that emitted JavaScript as it does for the selected suite.

@@ -100,7 +100,11 @@ pub(crate) fn finish_jvm(
     }
 }
 
-pub(crate) fn oracle(dir: &Utf8Path, sources: &[nts_diagnostics::SourceFile]) -> Option<Pending> {
+pub(crate) fn oracle(
+    dir: &Utf8Path,
+    sources: &[nts_diagnostics::SourceFile],
+    emitted: &super::oracle_emit::Prepared,
+) -> Option<Pending> {
     if !enabled() {
         return None;
     }
@@ -124,14 +128,46 @@ pub(crate) fn oracle(dir: &Utf8Path, sources: &[nts_diagnostics::SourceFile]) ->
         }
     }
     files.push(("oracle-driver".into(), dir.join("check_driver.mjs")));
-    files.push(("oracle-resolver".into(), dir.join("resolve_ts.mjs")));
+    files.extend(oracle_assets(emitted));
+    files.push(("oracle-emit-manifest".into(), emitted.manifest.clone()));
     begin(
         "bench-oracle-node",
         files,
         absent,
         vec!["node".into(), "prlimit".into()],
-        json!({"cpu_limit_s":super::oracle_coverage::CPU_SECONDS,"idle_limit_ms":super::oracle_coverage::IDLE_MILLIS,"memory_mb":super::MEMORY_MB,"flags":["--experimental-transform-types","--import"],"supervisor":include_str!("oracle_run.rs")}),
+        json!({"cpu_limit_s":super::oracle_coverage::CPU_SECONDS,"idle_limit_ms":super::oracle_coverage::IDLE_MILLIS,"memory_mb":super::MEMORY_MB,"flags":emitted.args,"oracle_emit":emitted.identity,"oracle_owner":include_str!("oracle_emit.rs"),"supervisor":include_str!("oracle_run.rs")}),
     )
+}
+
+fn oracle_assets(emitted: &super::oracle_emit::Prepared) -> Vec<(String, Utf8PathBuf)> {
+    let mut files = [
+        ("oracle-emitter", "oracle-emit.ts"),
+        ("oracle-loader", "oracle-loader.ts"),
+        ("oracle-assets", "oracle-assets.ts"),
+        ("oracle-filesystem", "oracle-filesystem.ts"),
+        ("oracle-toolchain-record", "oracle-toolchain.json"),
+        ("oracle-package", "package.json"),
+    ]
+    .into_iter()
+    .map(|(name, file)| (name.into(), emitted.assets.join(file)))
+    .collect::<Vec<_>>();
+    // Bind preparation assets and the bytes the relative --import executes.
+    if let Some(session) = emitted.manifest.parent() {
+        for file in [
+            "oracle-emit.ts",
+            "oracle-loader.ts",
+            "oracle-assets.ts",
+            "oracle-filesystem.ts",
+            "oracle-toolchain.json",
+            "package.json",
+        ] {
+            files.push((
+                format!("oracle-execution:{file}"),
+                session.join("assets").join(file),
+            ));
+        }
+    }
+    files
 }
 
 pub(crate) fn finish_oracle(
@@ -142,6 +178,8 @@ pub(crate) fn finish_oracle(
 ) {
     if let Some(pending) = pending {
         let mut result = outcome(run);
+        result["provisional"] = true.into();
+        result["snapshot_finalization"] = "pending".into();
         result["oracle_status"] = status.clone();
         result["oracle_completion"] = completion.clone();
         pending.finish(result);
@@ -194,4 +232,85 @@ fn unavailable(kind: &str, error: &str) {
     let row = json!({"event":"artifact.shadow","kind":kind,"step":"bench-agree","status":"unavailable","key":null,
         "run":std::env::var("NTS_GATE_RUN_DIR").ok(),"error":error});
     let _ = std::fs::write(path, format!("{row}\n"));
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+    use super::*;
+
+    #[test]
+    fn oracle_package_semantics_change_the_actual_observer_key() {
+        let scratch = super::super::Scratch::for_check().unwrap();
+        let assets = scratch.path.join("preparation-assets");
+        let costs = scratch.path.join("costs");
+        std::fs::create_dir_all(&assets).unwrap();
+        std::fs::create_dir_all(&costs).unwrap();
+        let emitted = super::super::oracle_emit::Prepared {
+            manifest: scratch.path.join("session/manifest.json"),
+            loader_state: scratch.path.join("loader-state.json"),
+            identity: Value::Null,
+            snapshot: Value::Null,
+            args: Vec::new(),
+            assets,
+        };
+        let files = oracle_assets(&emitted);
+        for (_, path) in &files {
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            std::fs::write(path, "{}").unwrap();
+        }
+        let package = emitted.assets.join("package.json");
+        std::fs::write(&package, "{\"type\":\"module\"}\n").unwrap();
+        let request = scratch.path.join("request.json");
+        std::fs::write(
+            &request,
+            serde_json::to_vec(&json!({
+                "kind":"bench-oracle-node", "mode":"prepare", "tools":[], "values":{},
+                "files":files.into_iter().map(|(name,path)|json!({"name":name,"path":path})).collect::<Vec<_>>()
+            })).unwrap(),
+        ).unwrap();
+        let key = || {
+            let output = std::process::Command::new("node")
+                .arg(Path::new(env!("CARGO_MANIFEST_DIR")).join("../gate/artifact-shadow.ts"))
+                .arg("--request")
+                .arg(&request)
+                .env("NTS_GATE_SHADOW_DIR", scratch.path.join("cache"))
+                .env("NTS_GATE_CASE_COSTS_DIR", &costs)
+                .env("NTS_GATE_STEP", "bench-agree")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let observed: Value = serde_json::from_slice(&output.stdout).unwrap();
+            assert!(observed["key"].is_string(), "{observed}");
+            observed["key"].clone()
+        };
+        let before = key();
+        std::fs::write(package, "{\"type\":\"commonjs\"}\n").unwrap();
+        assert_ne!(before, key());
+        let before = key();
+        let execution = emitted.manifest.parent().unwrap().join("assets");
+        std::fs::write(execution.join("oracle-loader.ts"), "changed loader byte").unwrap();
+        assert_ne!(before, key());
+        let before = key();
+        std::fs::write(execution.join("package.json"), "{\"type\":\"commonjs\"}\n").unwrap();
+        assert_ne!(before, key());
+        let before = key();
+        std::fs::write(
+            emitted.assets.join("oracle-filesystem.ts"),
+            "changed observation adapter",
+        )
+        .unwrap();
+        assert_ne!(before, key());
+        let before = key();
+        std::fs::write(
+            execution.join("oracle-filesystem.ts"),
+            "changed execution adapter",
+        )
+        .unwrap();
+        assert_ne!(before, key());
+    }
 }

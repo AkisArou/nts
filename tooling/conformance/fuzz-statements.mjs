@@ -672,7 +672,7 @@ function oracleSource(cases) {
     lines.push(`try { print("${c.module.label}", ${c.module.code}); } catch { print("${c.module.label}", undefined); }`);
     lines.push(`try { print("${c.fn.label}", ${c.fn.code}); } catch { print("${c.fn.label}", undefined); }`);
   }
-  return `${PRINTER.replace("function print(i, v)", "function print(_i, v)")}
+  return `${PRINTER.replace("function print(i: number | string, v: unknown)", "function print(_i: number | string, v: unknown)")}
 ${lines.join("\n")}
 console.log(JSON.stringify(out));
 `;
@@ -763,7 +763,7 @@ while (generated < CASES) {
   for (let k = 0; k < size; k++) cases.push(placements(generated + k));
   generated += size;
 
-  const answers = runOracle(dir, oracleSource(cases));
+  const answers = await runOracle(dir, oracleSource(cases));
   if (!answers) {
     totals.other += size;
     continue;

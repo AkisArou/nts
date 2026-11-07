@@ -16,6 +16,24 @@ const observations: TypeScriptObservation[] = [
 ];
 const paths = observations.map((_, index) => `tests/typescript/records/case-${index}.ts`);
 
+test("a completed oracle rejection is versioned and never a compiler pass or fix",()=>{
+  const rejected=observationFromRow({bucket:'oracle-rejected',rejection:{exit:1,error:'Test262Error: sameValue'}});
+  assert.deepEqual(rejected,{kind:'oracle-rejected',exit:1,error:'Test262Error: sameValue'});
+  const value:TypeScriptRecord={metadata:{...record().metadata,version:4},cases:new Map([[paths[0],rejected]])};
+  assert.deepEqual(parseTypeScriptRecord(serializeTypeScriptRecord(value)),value);
+  assert.throws(()=>serializeTypeScriptRecord({...value,metadata:{...value.metadata,version:3}}),/version 4/);
+  assert.equal(compareTypeScriptObservation(observations[0],rejected).word,'REGRESSED');
+  assert.equal(compareTypeScriptObservation(observations[1],rejected).word,'CHANGED');
+  assert.equal(compareTypeScriptObservation(rejected,observations[0]).word,'CHANGED');
+  assert.equal(compareTypeScriptObservation(rejected,rejected).word,'holds');
+  assert.equal(compareTypeScriptObservation(rejected,{kind:'oracle-rejected',exit:1,error:'different'}).word,'CHANGED');
+  assert.deepEqual(observationFromRow({bucket:'oracle-rejected',rejection:{exit:0,error:'Test262:AsyncTestFailure: Error'}}),
+    {kind:'oracle-rejected',exit:0,error:'Test262:AsyncTestFailure: Error'});
+  for(const input of [{bucket:'oracle',why:'timeout'},{bucket:'oracle',why:'loader failed'},
+    {bucket:'oracle-rejected',rejection:{exit:null,error:'SIGTERM'}},
+    {bucket:'oracle-rejected',rejection:{exit:1,error:'error',signal:'SIGTERM'}}])assert.throws(()=>observationFromRow(input));
+});
+
 test("wrong output before a native stop is recorded as wrong with its exact witness", () => {
   const raw = { bucket: "wrong-output", printed: { stdout: "wrong\n", stderr: "" }, nodeOutput: { stdout: "right\nfinally\n", stderr: "" },
     runtimeFailure: { exit: 1, signal: null, output: "nts: refused: unavailable representation" } };

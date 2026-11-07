@@ -7,12 +7,13 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
-import { Admission, createFeed, memAvailableGB } from "./admission.ts";
+import { Admission, createFeed, memAvailableGB, TemporaryAdmission } from "./admission.ts";
+import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./tokenpool.mjs";
 import { waitFor } from "./test-wait.ts";
 
@@ -49,6 +50,58 @@ test("a machine that reports no memory admits", () => {
   const { gb, admission } = scripted(null as unknown as number);
   gb.value = null;
   assert.equal(admission.open(), true);
+});
+
+function temporaryFixture(t: { after(fn: () => void): void }) {
+  const scratch = join(homedir(), ".cache/nts-scratch/admission-tests");
+  mkdirSync(scratch, { recursive: true });
+  const run = mkdtempSync(join(scratch, "run-")), temporary = captureRunTemporary(run);
+  t.after(() => rmSync(run, { recursive: true, force: true }));
+  return { run, temporary, path: join(temporary.path, "capture") };
+}
+
+test("both capture contexts reserve above the temporary floor while standalone retains its memory boundary", t => {
+  const { temporary, path } = temporaryFixture(t);
+  let freeBytes = 60 * 2 ** 30, memory = 14;
+  const options = { path, reservedBytes: 2 ** 30, readMemory: () => memory, readFreeBytes: () => freeBytes };
+  const gate = new TemporaryAdmission({ ...options, context: { kind: "gate", temporary } });
+  const standalone = new TemporaryAdmission({ ...options, context: { kind: "standalone" } });
+  assert.equal(gate.check().admitted, true);
+  assert.equal(standalone.check().admitted, true);
+  assert.equal(gate.check().diskFloorBytes, 40 * 2 ** 30);
+  assert.equal(gate.check().requiredFreeBytes, 41 * 2 ** 30);
+  assert.equal(standalone.check().diskFloorBytes,gate.check().diskFloorBytes);
+  assert.equal(standalone.check().requiredFreeBytes,gate.check().requiredFreeBytes);
+  freeBytes = 40.5 * 2 ** 30;
+  assert.equal(gate.check().admitted, false, "the image reservation is in addition to the gate temporary floor");
+  assert.equal(standalone.check().admitted,false);
+  freeBytes = 41 * 2 ** 30;
+  assert.equal(gate.check().admitted, true);
+  assert.equal(standalone.check().admitted, true);
+  memory = 13;
+  assert.equal(gate.check().admitted, true, "the gate retains its ordinary memory hysteresis");
+  assert.equal(standalone.check().admitted, false, "an outside heavy phase still starts only at 14 GiB");
+  memory = 11.9;
+  assert.equal(gate.check().admitted, false);
+  memory = 13;
+  assert.equal(gate.check().admitted, false);
+  memory = 14;
+  assert.equal(gate.check().admitted, true);
+  assert.equal(standalone.check().admitted, true);
+});
+
+test("gate policy rejects a replaced registration and outside or escaping capture roots", t => {
+  const { run, temporary, path } = temporaryFixture(t);
+  const options = { context: { kind: "gate" as const, temporary }, reservedBytes: 2 ** 30, readMemory: () => 14, readFreeBytes: () => 60 * 2 ** 30 };
+  assert.throws(() => new TemporaryAdmission({ ...options, path: join(run, "outside") }), /outside the registered/);
+  mkdirSync(join(run, "outside"));
+  symlinkSync(join(run, "outside"), join(temporary.path, "link"));
+  assert.throws(() => new TemporaryAdmission({ ...options, path: join(temporary.path, "link", "capture") }), /ancestor escapes/);
+  const admitted = new TemporaryAdmission({ ...options, path });
+  assert.equal(admitted.check().admitted, true);
+  renameSync(temporary.path, join(run, "previous-tmp"));mkdirSync(temporary.path);
+  assert.throws(() => admitted.check(), /temporary directory was replaced/);
+  assert.throws(() => new TemporaryAdmission({ ...options, path }), /temporary directory was replaced/);
 });
 
 test("MemAvailable is read from the file in /proc/meminfo's format", () => {

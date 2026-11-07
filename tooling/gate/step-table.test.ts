@@ -3,14 +3,17 @@
 //
 //   node --test tooling/gate/step-table.test.ts
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { test } from "node:test";
-import { fileURLToPath } from "node:url";
-import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
-import { STEPS, stepTableProblem } from "./step-table.mjs";
-import { spawnTest } from "./test-wait.ts";
-import { testScratch } from "./test-scratch.ts";
+import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {join, dirname} from "node:path";
+
+import {test} from "node:test";
+import {fileURLToPath} from "node:url";
+import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
+import {STEPS, stepTableProblem} from "./step-table.mjs";
+import {moduleClosure} from "./module-closure-fixture.ts";
+import {removable} from "./run-temporary.ts";
+import {spawnTest} from "./test-wait.ts";
+import {newTestScratch} from "./test-scratch.ts";
 
 test("the table's dependencies all name steps, and none waits for itself", () => {
   assert.equal(stepTableProblem(STEPS), null);
@@ -22,20 +25,23 @@ test("the table's dependencies all name steps, and none waits for itself", () =>
 });
 
 test("the runner refuses a table whose steps wait for one another, before any step starts", t => {
-  const own = testScratch(t, "step-table-run");
+  const own = newTestScratch("step-table-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), run = join(own, "home/.cache/gate-run"), started = join(own, "started");
   const source = fileURLToPath(new URL("./", import.meta.url));
   mkdirSync(gate, { recursive: true });
-  for (const name of readdirSync(source)) {
-    const original = join(source, name);
-    if (name === "run.mjs") writeFileSync(join(gate, name), readFileSync(original));
-    else if (name === "step-table.mjs") {
+  for (const file of moduleClosure(["tooling/gate/run.mjs"])) {
+    const target = join(root, file);
+    mkdirSync(dirname(target), {recursive: true});
+    const original = join(source, "../..", file);
+    if (file === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
+    else if (file === "tooling/gate/step-table.mjs") {
       // clippy needs tests, and tests waits for clippy as well as the build.
       const text = readFileSync(original, "utf8").replace('{ name: "clippy", slots: 6,', '{ name: "clippy", needs: ["tests"], slots: 6,').replace('after: ["build"], doc: "cargo test --workspace"', 'after: ["build", "clippy"], doc: "cargo test --workspace"');
       assert.notEqual(text, readFileSync(original, "utf8"));
-      writeFileSync(join(gate, name), text);
-    } else if (name !== "all.sh") symlinkSync(original, join(gate, name));
+      writeFileSync(target, text);
+    } else symlinkSync(original, target);
   }
+  symlinkSync(join(source, "times.tsv"), join(gate, "times.tsv"));
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  : > ${JSON.stringify(started)}\nfi\n`);

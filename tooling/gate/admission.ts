@@ -12,7 +12,10 @@
 //
 // Admission starts held, so the first case needs 14 GB as well -- the same
 // threshold AGENTS.md sets for starting a heavy phase.
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync, realpathSync, statfsSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, isAbsolute, relative, resolve } from "node:path";
+import { assertRunTemporary, TEMP_DISK_FLOOR_BYTES, type RunTemporary } from "./run-temporary.ts";
 
 export const HOLD_BELOW_GB = 12;
 export const RESUME_AT_GB = 14;
@@ -90,6 +93,61 @@ export class Admission {
   }
 }
 
+/** The source-owned caller chooses the policy; launcher variables never do. */
+export type TemporaryAdmissionContext = { kind: "gate"; temporary: RunTemporary } | { kind: "standalone" };
+export type TemporaryAdmissionSnapshot = {
+  context: TemporaryAdmissionContext["kind"]; availableGiB: number | null; freeBytes: number;
+  diskFloorBytes: number; reservedBytes: number; requiredFreeBytes: number; admitted: boolean;
+};
+type TemporaryAdmissionOptions = {
+  path: string; context: TemporaryAdmissionContext; reservedBytes: number;
+  readMemory?: () => number | null; readFreeBytes?: () => number; report?: (message: string) => void;
+};
+
+/** One policy for an allocation into a run's registered temporary space.
+ * Every capture reserves its measured size above the temporary floor.
+ * Check before starting the allocation, outside its execution budget. */
+export class TemporaryAdmission {
+  #memory: Admission;
+  #available: number | null = null;
+  #options: TemporaryAdmissionOptions;
+  constructor(options: TemporaryAdmissionOptions) {
+    this.#options = options;
+    if (!Number.isSafeInteger(options.reservedBytes) || options.reservedBytes <= 0) throw new Error("invalid temporary space reservation");
+    if (options.context?.kind !== "gate" && options.context?.kind !== "standalone") throw new Error("invalid temporary admission context");
+    this.#memory = new Admission({ read: () => this.#available, report: options.report });
+    this.#validate();
+  }
+
+  #validate(): void {
+    const { path, context } = this.#options;
+    if (context.kind === "gate") {
+      assertRunTemporary(context.temporary, homedir());
+      const root = context.temporary.path;
+      const under = (candidate: string) => {
+        const part = relative(root, candidate);
+        return part !== ".." && !part.startsWith("../") && !isAbsolute(part);
+      };
+      let ancestor = resolve(path);
+      if (!under(ancestor)) throw new Error("capture is outside the registered run temporary: " + path);
+      while (!existsSync(ancestor)) ancestor = dirname(ancestor);
+      if (!under(realpathSync(ancestor))) throw new Error("capture ancestor escapes the registered run temporary: " + path);
+    }
+  }
+
+  check(): TemporaryAdmissionSnapshot {
+    this.#validate();
+    const { path, context, reservedBytes } = this.#options;
+    this.#available = (this.#options.readMemory ?? memAvailableGB)();
+    const freeBytes = (this.#options.readFreeBytes ?? (() => { const stat = statfsSync(path); return stat.bavail * stat.bsize; }))();
+    if (!Number.isFinite(freeBytes) || freeBytes < 0) throw new Error("temporary disk availability was not measured");
+    const diskFloorBytes = TEMP_DISK_FLOOR_BYTES;
+    const requiredFreeBytes = diskFloorBytes + reservedBytes;
+    const memoryReady = this.#memory.open() && (context.kind === "gate" || (this.#available ?? 0) >= RESUME_AT_GB);
+    return { context: context.kind, availableGiB: this.#available, freeBytes, diskFloorBytes, reservedBytes, requiredFreeBytes, admitted: memoryReady && freeBytes >= requiredFreeBytes };
+  }
+}
+
 /**
  * One case's gate token: resolves to its release, or to `null` when `signal`
  * aborts first (`tokens.mjs`'s `acquireToken`).
@@ -139,7 +197,7 @@ export function createFeed(paths: readonly string[], admission: Admission, every
         // Another worker may have taken the last path while this one waited.
         if (!admitted || !remaining()) return worker.end();
         const reserved = returned.pop() ?? next++;
-        const release = await token(paths[reserved], worker.signal ?? never);
+        const release = await token(paths[reserved]!, worker.signal ?? never);
         if (release === null || worker.exited()) {
           release?.();
           returned.push(reserved);
@@ -153,7 +211,7 @@ export function createFeed(paths: readonly string[], admission: Admission, every
           continue;
         }
         written++;
-        worker.write(paths[reserved], release);
+        worker.write(paths[reserved]!, release);
         return;
       }
     },

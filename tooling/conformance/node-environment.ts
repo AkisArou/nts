@@ -9,6 +9,9 @@ const INPUTS = [
   "NTS_ADDON_EMITTED", "NTS_ADDON_SIBLING_CACHE", "NTS_NATIVE_OBJ_CACHE",
   "NTS_CONFORMANCE_TIMEOUT_MS", "NTS_CONFORMANCE_RC", "NTS_CONFORMANCE_ORACLE", "NTS_KEEP_TEMP",
 ] as const;
+export function nodeInputs(launcher:NodeJS.ProcessEnv):NodeJS.ProcessEnv{
+  return Object.fromEntries(INPUTS.filter(name=>launcher[name]!==undefined).map(name=>[name,launcher[name]]));
+}
 
 // **The directories made here are this process's.** A runner with no TMPDIR or
 // NODE_TEST_DIR above it gets ~/.cache/nts-conformance/<pid> and
@@ -55,7 +58,7 @@ export function sweepLeftovers(home:string):number {
 
 export function nodeEnvironment(launcher:NodeJS.ProcessEnv,owned:NodeJS.ProcessEnv={}):NodeJS.ProcessEnv {
   const host=hostEnvironment(launcher);
-  const inputs=Object.fromEntries(INPUTS.filter(name=>launcher[name]!==undefined).map(name=>[name,launcher[name]]));
+  const inputs=nodeInputs(launcher);
   const env:NodeJS.ProcessEnv={...host,...FIXED_AMBIENT,...inputs,NTS_CHECKERS:"1",...owned};
   const given={tmp:owned.TMPDIR??launcher.TMPDIR,test:owned.NODE_TEST_DIR??launcher.NODE_TEST_DIR};
   const keep=env.NTS_KEEP_TEMP!==undefined;

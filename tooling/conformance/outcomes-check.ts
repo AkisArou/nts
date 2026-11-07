@@ -1,3 +1,4 @@
+import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
 // Defects that neither `tests/programs/` nor `blockers/` can hold, each pinned to what
 // it does today, re-measured against whatever compiler is current.
 //
@@ -154,17 +155,20 @@
 // on demand from here. The first real one is its proof -- or its bug.
 
 import { spawnSync } from "node:child_process";
+
+import { prepareOracle,oracleRecipeIdentity,removeOracleSnapshot } from "../differential/oracle-emit.ts";
+import {ToolingInstrumentError} from "../gate/step-result.ts";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { runConsumer as supervisedCheck, finishCheckStep, checkOutcome, validateStoredCheckOutcome, reportCheckFailure } from "../differential/check-report.ts";
+import { runConsumer as supervisedCheck, checkOutcome, validateStoredCheckOutcome, reportCheckFailure } from "../differential/check-report.ts";
 
 import { capped, linkCommand, withCachedObjects } from "../census/attempt262.ts";
-import { compileSync, compileActive, serialRun } from "../census/worker-memory.ts";
-import { OUTCOMES as FIXTURES, materialise as materialiseIn, outcomeFixtures, runMode } from "./outcomes-project.ts";
+import { compileSync, compileActive, serialRun, closeMemoryRun } from "../census/worker-memory.ts";
+import { OUTCOMES as FIXTURES, OUTCOME_ORACLE_PRELOADS, outcomeSourceAssets, materialise as materialiseIn, nativeOutput, outcomeFixtures, runMode } from "./outcomes-project.ts";
 import { acceptedChange } from "./outcome-transition.ts";
 import { compilerExternalStop, compilerStop, compilerStopped } from "./compile-diagnostics.ts";
 import { judge, outcomeInventory, outcomeRecord, RECORD } from "./outcomes-verdict.ts";
@@ -172,13 +176,16 @@ import { provenanceOf } from "./pin.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { beforeTerminalDiagnostic, nativeDecline, outputPrefixes } from "./output-prefix.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
+import {ownCensusScratch} from '../census/census-scratch.ts';
+import {openProgramOracleResults} from '../differential/oracle-results.ts';
+import {OUTCOME_CONTROLS} from '../differential/program-oracles.ts';
+import {observeOutcomeNode} from './outcomes-oracle.ts';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
-const PRELOAD = join(HERE, "outcomes-node-preload.ts");
 const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const CC = process.env.CC ?? "cc";
-const SCRATCH = join(homedir(), ".cache/nts/outcomes", String(process.pid));
+const {path:SCRATCH,cleanup:_cleanupScratch}=ownCensusScratch(closeMemoryRun);
 const TOOLS = {
   nts: NTS,
   cc: CC,
@@ -208,12 +215,23 @@ const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex")
 mkdirSync(SCRATCH, { recursive: true });
 process.env.TMPDIR = join(SCRATCH, "tmp");
 mkdirSync(process.env.TMPDIR, { recursive: true });
-process.on("exit", () => rmSync(SCRATCH, { recursive: true, force: true }));
+
 
 // --- one project in a scratch directory --------------------------------------
 
 /** A fixture as a project under this run's scratch: see outcomes-project.ts. */
-const materialise = (name, sources, mode) => materialiseIn(SCRATCH, name, sources, mode);
+const reference=process.env.NTS_PROGRAM_ORACLE?openProgramOracleResults(JSON.parse(process.env.NTS_PROGRAM_ORACLE),oracleRecipeIdentity()):undefined;
+const materialise = (name, sources, mode) => {
+  if(reference){
+    const project=reference.project('tests/outcomes/'+name);
+    mkdirSync(nativeOutput(SCRATCH,dirname(project)),{recursive:true});
+    return dirname(project);
+  }
+  removeOracleSnapshot(join(SCRATCH,name));
+  const dir=materialiseIn(SCRATCH,name,sources,mode);
+  mkdirSync(nativeOutput(SCRATCH,dir),{recursive:true});
+  return dir;
+};
 
 const env = () => ({
   ...process.env,
@@ -224,7 +242,7 @@ const rootLine = (d) => `${d.code} ${d.raw}`;
 
 /** Everything the build run observed, reduced to one category and one detail. */
 function runBuild(dir, options = { rc: false, address: false }) {
-  const out = join(dir, "out");
+  const out = nativeOutput(SCRATCH, dir);
   const emit = compileSync(TOOLS, NTS, ["emit-c", join(dir, "tsconfig.json"), "--out", out, "--main", ...(options.rc ? ["--rc"] : [])], {
     encoding: "utf8",
     timeout: 180_000,
@@ -362,26 +380,18 @@ function firstCError(text) {
 }
 
 /** node on the same text: its exit and its uncaught line, in nts's shape. */
-function runNodeObservation(dir) {
-  const ran = spawnSync(
-    process.execPath,
-    ["--experimental-transform-types", "--no-warnings", "--import", PRELOAD, join(dir, "src/main.ts")],
-    { encoding: "utf8", timeout: 30_000, cwd: dir },
-  );
-  const printed = { stdout: ran.stdout ?? "", stderr: ran.stderr ?? "" };
-  if (ran.signal || ran.error) return { result: `node ${ran.signal ?? ran.error.message}`, printed, complete: false };
-  const lines = (ran.stderr ?? "").split("\n");
-  const uncaught = lines.find((l) => l.startsWith("nts: uncaught "));
-  if (uncaught) return { result: `exit ${ran.status}; ${uncaught}`,
-    printed: { ...printed, stderr: ran.status !== 0 ? beforeTerminalDiagnostic(printed.stderr, "uncaught") : printed.stderr }, complete: true };
-  // A program node refuses to *load* never reaches the preload's handler: an
-  // early error is thrown before any code runs. Its `SyntaxError: ...` line is
-  // the answer -- the one a test of an early error exists to compare with.
-  const early = lines.find((l) => /^\w*Error(?: \[\w+\])?: /.test(l));
-  return { result: `exit ${ran.status}${early ? `; before running: ${early.trim()}` : ""}`, printed, complete: ran.status === 0 };
+async function runNodeObservation(dir) {
+  if(reference){
+    const value=reference.forProject(join(dir,'tsconfig.json'));
+    if(value.kind!=='observation')throw new ToolingInstrumentError('tooling-setup','outcome has no completed Node observation: '+dir);
+    return value.observation;
+  }
+  const entry=join(dir,'src/main.ts'),owner=await prepareOracle({toolchain:oracleToolchainLocation(),entry,directory:join(dir,'oracle-emit'),
+    preloads:[...OUTCOME_ORACLE_PRELOADS],sourceAssets:outcomeSourceAssets()});
+  try{return observeOutcomeNode(owner,entry,dir);}finally{removeOracleSnapshot(dirname(owner.manifest));}
 }
 
-function runNode(dir) { return runNodeObservation(dir).result; }
+async function runNode(dir) { return (await runNodeObservation(dir)).result; }
 
 /**
  * The backend a `check` fixture's text names with `// backend: <name>` on a
@@ -444,14 +454,14 @@ async function measure(name) {
   const nts = runBuild(dir, options);
   if (nts.category === "refused" && nts.ran === null) return { run: "build", category: "not-measured", nts: "a refused program's artefact could not be run to the end", node: null };
   if (nts.nativeDecline) {
-    const node = runNodeObservation(dir);
+    const node = await runNodeObservation(dir);
     if (!node.complete) return { run: "build", category: "not-measured", nts: `output oracle did not complete: ${node.result}`, node: null };
     if (!outputPrefixes(nts.printed, node.printed)) return { run: "build", category: "wrong-answer",
       nts: `${nts.nts}; output ${JSON.stringify(nts.printed)}`, node: `${node.result}; output ${JSON.stringify(node.printed)}` };
     return { run: "build", ...nts, node: node.result };
   }
-  if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : runNode(dir) };
-  const node = runNode(dir);
+  if (nts.category !== "completed") return { run: "build", ...nts, node: nts.category === "not-measured" ? null : await runNode(dir) };
+  const node = await runNode(dir);
   return { run: "build", category: nts.nts === node ? "agrees" : "wrong-answer", nts: nts.nts, node };
 }
 
@@ -461,7 +471,7 @@ async function measure(name) {
 // `agrees`; the same program with node told a different story must not; a
 // refused construct must come back `refused`, not "completed".
 
-function selfCheck() {
+async function selfCheck() {
   // `// backend:` names a backend on a line of its own and selects it; prose
   // about one selects nothing.
   for (const [text, want] of [
@@ -479,14 +489,22 @@ function selfCheck() {
   const combined = fixtureOptions("// sanitizer: address\n// sanitizer: function\n");
   if (combined.address || combined.function || sanitizerHold("build", combined)?.category !== "not-measured") return "conflicting sanitizers were allowed to measure";
   const dir = join(SCRATCH, "self");
-  const probe = (text, compilerOptions) => {
-    rmSync(dir, { recursive: true, force: true });
+  const probe = async (text, compilerOptions?) => {
+    if(reference){
+      const control=OUTCOME_CONTROLS.find(control=>control.text===text&&JSON.stringify('options' in control?control.options:undefined)===JSON.stringify(compilerOptions));
+      if(!control)throw Error('outcome self-check has no producer control');
+      const d=dirname(reference.project('outcome-control/'+control.name));
+      mkdirSync(nativeOutput(SCRATCH,d),{recursive:true});
+      const nts=runBuild(d);
+      return {nts,node:await runNode(d)};
+    }
+    removeOracleSnapshot(dir);
     mkdirSync(join(dir, "src"), { recursive: true });
     writeFileSync(join(dir, "src/main.ts"), text);
     if (compilerOptions) writeFileSync(join(dir, "tsconfig.json"), JSON.stringify({ compilerOptions }));
     const d = materialise("self-run", join(dir, "src"), "build");
     const nts = runBuild(d);
-    return { nts, node: runNode(d) };
+    return { nts, node: await runNode(d) };
   };
   // Exercise ASan's actual compile/cache/run path independently of the
   // compiler defect. Fixing escape analysis must not invalidate this oracle.
@@ -514,11 +532,11 @@ function selfCheck() {
     const fault = instrument("static int answer(int *p) { (void)p; return 7; }\nint main(void) { int (*volatile call)(void *) = (int (*)(void *))answer; return call(0) == 7 ? 0 : 1; }\n");
     if (fault.category !== "aborted" || fault.nts !== "FunctionSanitizer: incorrect-function-type") return `function sanitizer fault: ${JSON.stringify(fault)}`;
   }
-  const control = probe('observe("sum", String(1 + 2));\ndone();\n');
+  const control = await probe('observe("sum", String(1 + 2));\ndone();\n');
   if (control.nts.category !== "completed" || control.nts.nts !== control.node || !/Observed: sum=3;/.test(control.node)) {
     return `control: nts said ${JSON.stringify(control.nts)}, node said ${control.node}`;
   }
-  const refused = probe('function classify(text: string): boolean { return /^[a-z]+$/.test(text); }\nobserve("r", String(classify("abc")));\ndone();\n');
+  const refused = await probe('function classify(text: string): boolean { return /^[a-z]+$/.test(text); }\nobserve("r", String(classify("abc")));\ndone();\n');
   if (refused.nts.category !== "refused") return `refusal arm came back ${refused.nts.category}: ${refused.nts.nts}`;
   // The refused call sits at the top level, so the artefact runs without it:
   // the harness must say so rather than stop at the refusal.
@@ -529,11 +547,11 @@ function selfCheck() {
   // compiled program cannot answer `undefined` there. When the copy dropped
   // the fixture's options, a defect that needs one was recorded as agreeing.
   const pastTheEnd = 'const xs = [1, 2];\nobserve("past the end", String(xs["ab".length]));\ndone();\n';
-  const unchecked = probe(pastTheEnd, { noUncheckedIndexedAccess: true });
+  const unchecked = await probe(pastTheEnd, { noUncheckedIndexedAccess: true });
   if (unchecked.nts.category !== "completed" || unchecked.nts.nts !== unchecked.node || !/past the end=undefined;/.test(unchecked.node)) {
     return `option arm: nts said ${JSON.stringify(unchecked.nts)}, node said ${unchecked.node}`;
   }
-  const typed = probe(pastTheEnd);
+  const typed = await probe(pastTheEnd);
   if (typed.nts.category === "completed" && typed.nts.nts === typed.node) {
     return "a fixture's compilerOptions did not change what was compiled";
   }
@@ -575,7 +593,7 @@ if (!recording) {
 }
 
 console.log(`  compiler ${NTS} (sha256:${FINGERPRINT})`);
-const broken = selfCheck();
+const broken = await selfCheck();
 if (broken) {
   console.log(`  NOT MEASURED: self-check failed -- ${broken}`);
   console.log("  a harness that cannot tell agreement from disagreement cannot hold a record");
@@ -583,6 +601,9 @@ if (broken) {
 }
 console.log("  self-checks: control agrees with node, refusal arm refused and its artefact run, a fixture's options reach the compiler" +
   (measured.some((name) => memoryOptions(name).address) ? "; ASan control clean, use-after-return fault detected" : ""));
+
+// The producer has already drained its SDK workers. This process retains
+// only authenticated answers and materializes no oracle population.
 
 let unexpected = 0;
 let loud = 0;
@@ -610,7 +631,7 @@ for (const name of chosen) {
   try { now = await measure(name); }
   catch (error) {
     console.error(`  NOT MEASURED ${name}: ${error instanceof Error ? error.message : String(error)}`);
-    process.exit(finishCheckStep(unexpected));
+    process.exit(reportCheckFailure(error, process.env, unexpected));
   }
   if (recording || unrecorded.has(name)) {
     if (now.category === "not-measured") {

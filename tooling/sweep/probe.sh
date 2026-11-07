@@ -19,11 +19,8 @@
 #
 # # What it cannot oracle
 #
-# **TypeScript-only syntax.** `node --experimental-strip-types` erases types; it
-# does not compile `enum`, `namespace`, or parameter properties. A probe using
-# one comes back `DISAGREE node=1 nts=0`, which is node refusing the file rather
-# than a finding. If an arm reports that, read the node output before believing
-# it.
+# TypeScript syntax runs through the shared pinned compiler emit authority,
+# including enums, namespaces and parameter properties.
 #
 # **Anything the harness cannot express.** `assert.sameValue` is overloaded for
 # number, string and boolean, so comparing an `undefined` or an object needs a
@@ -54,7 +51,9 @@ mkdir -p "$D/src"
 }
 J
 { cat "$HERE/probe-harness.ts"; printf '%s\n' "$body"; } > "$D/src/main.ts"
-node --experimental-strip-types "$D/src/main.ts" >/dev/null 2>"$D/node.txt" && ns=0 || ns=$?
+NTS_ORACLE_TYPESCRIPT=$(node --input-type=module -e 'const {oracleToolchainLocation}=await import(process.argv[1]); process.stdout.write(oracleToolchainLocation());' "$root/tooling/gate/canonical-environment.ts")
+export NTS_ORACLE_TYPESCRIPT
+node "$root/tooling/differential/oracle-emit.ts" --run "$D/src/main.ts" "$D/oracle-emit" >/dev/null 2>"$D/node.txt" && ns=0 || ns=$?
 nmsg=$(grep -o "message: '[^']*'" "$D/node.txt" | head -1 | cut -d"'" -f2)
 rm -rf "$D/out"
 "$compiler" emit-c "$D/tsconfig.json" \

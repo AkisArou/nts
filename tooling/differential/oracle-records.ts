@@ -162,7 +162,7 @@ export function parseShard(value: unknown, fixture: string): Shard {
 const NOT_SUBJECTS = new Set(["tests/programs/invalid", "tests/programs/unsupported"]);
 function inventory(root: string): Set<string> {
   const expected = new Set<string>();
-  for (const [parent, entry] of [["tests/programs", "tsconfig.json"], ["benchmarks/cases", "case.ts"]]) {
+  for (const [parent, entry] of [["tests/programs", "tsconfig.json"], ["benchmarks/cases", "case.ts"]] as const) {
     for (const name of readdirSync(join(root, parent), { withFileTypes: true })) {
       const fixture = `${parent}/${name.name}`;
       if (name.isDirectory() && !NOT_SUBJECTS.has(fixture) && existsSync(join(root, fixture, entry))) expected.add(fixture);

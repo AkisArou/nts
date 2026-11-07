@@ -1,4 +1,5 @@
 import { vmToolFlags } from "../jvm/vm-flags.ts";
+import { ORACLE_MANIFEST_DERIVED_FIELDS } from "../differential/oracle-runtime.ts";
 // Observe prospective cache hits. This module never executes or skips work.
 import { createHash, randomUUID } from "node:crypto";
 import { appendFileSync, existsSync, linkSync, mkdirSync, readFileSync, readdirSync, realpathSync, rmSync, statSync, writeFileSync } from "node:fs";
@@ -80,7 +81,13 @@ export function artifactFiles(root: string, prefix = "artifact"): File[] {
 
 function keyOf(kind: string, input: Inputs): string {
   if (input.absent?.some(path => existsSync(path))) throw new Error("an absent input appeared during fresh execution");
-  const files = input.files.map(f => ({ name: f.name, sha256: fileDigest(f.path) })).sort((a, b) => a.name.localeCompare(b.name));
+  const files = input.files.map(f => {
+    if (kind !== "bench-oracle-node" || f.name !== "oracle-emit-manifest") return { name: f.name, sha256: fileDigest(f.path) };
+    const manifest = JSON.parse(readFileSync(f.path, "utf8")) as Record<string, unknown>;
+    if (manifest?.version !== 3 || manifest.status !== "complete") throw new Error("incomplete oracle shadow manifest");
+    for (const field of ORACLE_MANIFEST_DERIVED_FIELDS) delete manifest[field];
+    return { name: f.name, sha256: digest("oracle-semantic-manifest-v1\0" + json(manifest)) };
+  }).sort((a, b) => a.name.localeCompare(b.name));
   if (new Set(files.map(f => f.name)).size !== files.length) throw new Error("duplicate artifact input name");
   return digest(json({ version: 1, kind, files, absent: input.absent ?? [], values: input.values }));
 }

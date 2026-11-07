@@ -19,7 +19,7 @@ export function normalizeGeneratedNumbers(text: string): string {
  * nts-owned abort text and wrong-answer output never enter this normalization.
  */
 export function stableRuntimeAbortOutput(output: string): string {
-  const first = output.split("\n", 1)[0];
+  const first = output.split("\n", 1)[0]!;
   const host = /^Exception in thread "[^"]*" ([\w.$]+)(?::\s*(.*))?$/.exec(first);
   if (host === null) return output;
   return host[1] + (host[2] === undefined ? "" : ": " + normalizeGeneratedNumbers(host[2]));

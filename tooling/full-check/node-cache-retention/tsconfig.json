@@ -1,0 +1,17 @@
+{
+  "extends": "../../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": false,
+    "incremental": false,
+    "declaration": false,
+    "declarationMap": false,
+    "emitDeclarationOnly": false,
+    "noEmit": true,
+    "tsBuildInfoFile": null,
+    "outDir": null,
+    "rootDir": "../../..",
+    "types": ["node"]
+  },
+  "files": ["../node-cache-retention.ts", "../node-cache-retention.test.ts", "typecheck.test.ts"],
+  "include": []
+}

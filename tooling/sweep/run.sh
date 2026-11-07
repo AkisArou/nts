@@ -8,10 +8,17 @@
 set -eu
 root="$(cd "$(dirname "$0")/../.." && pwd)"
 work="${1:-$root/target/sweep}"
-mkdir -p "$work/src"
-# Written rather than copied from a fixture: a fixture's `extends` counts its
-# own depth, and this directory is not at it.
-[ -f "$work/tsconfig.json" ] || printf '{ "extends": "%s/tsconfig.fixtures.json", "include": ["src"] }\n' "$root" > "$work/tsconfig.json"
-node "$root/tooling/sweep/sweep.mjs" > "$work/src/main.ts"
+if [ -n "${NTS_PROGRAM_ORACLE:-}" ]; then
+  # This control is part of the producer's authenticated population. Neither
+  # regenerate its inputs nor start an SDK while consuming the shared answer.
+  project=$(node "$root/tooling/differential/oracle-results.ts" --project-subject gate/jvm-sweep)
+else
+  mkdir -p "$work/src"
+  # Written rather than copied from a fixture: a fixture's `extends` counts its
+  # own depth, and this directory is not at it.
+  [ -f "$work/tsconfig.json" ] || printf '{ "extends": "%s/tsconfig.fixtures.json", "include": ["src"] }\n' "$root" > "$work/tsconfig.json"
+  node "$root/tooling/sweep/sweep.mjs" > "$work/src/main.ts"
+  project="$work/tsconfig.json"
+fi
 exec node "$root/tooling/differential/check-report.ts" consume program \
-  "${NTS_BIN:-$root/target/release/nts}" "$work/tsconfig.json"
+  "${NTS_BIN:-$root/target/release/nts}" "$project"

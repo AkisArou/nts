@@ -107,7 +107,11 @@ pub(crate) const COMMANDS: &[Command] = &[
     command(
         "check",
         " [project]",
-        &[PROJECT, PROVIDER, &[switch("--json")]],
+        &[
+            PROJECT,
+            PROVIDER,
+            &[switch("--json"), value("--oracle-prepared", "path")],
+        ],
     ),
     command("node-deps", " <request.json>", &[]),
     command(
@@ -294,6 +298,24 @@ pub(crate) fn takes_value(name: &str) -> bool {
         .iter()
         .flat_map(Command::flags)
         .any(|flag| flag.name == name && flag.value.is_some())
+}
+
+/// Read an already-validated value with the same metadata as positional discovery.
+/// Forwarded values that happen to name another flag are data, not options.
+pub(crate) fn value_of<'a>(args: &'a [String], name: &str) -> Option<&'a str> {
+    let mut words = args.iter();
+    while let Some(word) = words.next() {
+        let (key, assigned) = word
+            .split_once('=')
+            .map_or((word.as_str(), None), |(key, value)| (key, Some(value)));
+        if takes_value(key) {
+            let value = assigned.or_else(|| words.next().map(String::as_str))?;
+            if key == name {
+                return Some(value);
+            }
+        }
+    }
+    None
 }
 
 /// Return whether help was requested. Values (including a forwarded `--help`)

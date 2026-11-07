@@ -1,0 +1,216 @@
+{
+  "version": 1,
+  "hashDefinition": "rootPackageSha256: SHA256 of sorted regular package files; each contributes JSON([POSIX-relative-path,byteLength])+LF then exact bytes. packageSha256 continues that hash with JSON([\"native-executable\",nativeSha256]). nativeSha256: SHA256 of the extracted native executable bytes. Archive integrity is separate SHA512 over the registry tarball, verified against pnpm-lock.yaml. nativePackageSha256: same sorted-file hash over every regular file of the extracted platform package, including its default libraries. Runtime uses these captured bytes only.",
+  "packageArchiveIntegrity": "sha512-cjWjZAJDsmZzsNC5GwHNlW0YPM65jZa5oR0KyQcYX3KSVIfTvtBq//vewISyatKk4OLi5grZjHhIVE9fdrw1UQ==",
+  "platforms": {
+    "aix-ppc64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "f19402cc3af4123e8dca9342b3cac2b1666b3d803cbf745da838e23e6d373668",
+      "nativeSha256": "a500c389bdab8feafe7674563a3b0ef88e506217294b1f98e7a4e6b9250f3959",
+      "nativePackageSha256": "3aad084a0a2fdba503388385da76f5486a22d1fd513b908580e5d1f649cd5527",
+      "nativePackage": "@typescript/typescript-aix-ppc64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-DXDG+jIWxBHGdoO70tcHON33rCnSzsEZj9P13oyf/r/KEGIo6awsdSNVNjAw0uMwEpqRu75IrgCcW58YcVkZHg=="
+    },
+    "darwin-arm64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "35399f2f0755eda0fefe61bd1dc24667aaecfad8fc5048a04c3a9c73631081f3",
+      "nativeSha256": "29f5eb8daa5c8cf6ef1c0cb79fbcf47c0cfdf26edabdf148bb779d0b2d56cebc",
+      "nativePackageSha256": "add0bc896e1ee83c7c0b616b9f8f1964992e898fece6e665785ff63634b75f92",
+      "nativePackage": "@typescript/typescript-darwin-arm64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-q7mxblcyX0E7hXsY4k+Q6KWKK5mGmfVq+BDesdTgRVgjodk27aIxER77Zyj9+TgSTlCje8F7+JM6f6hl2BuNdw=="
+    },
+    "darwin-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "420238d680e5f4b0b359fea8fb66da4455aff27a12aebdde65209936b85e7f97",
+      "nativeSha256": "57e8068d9b0398b82fa857d1d5d6548a0103d52525e6556805b0d92ce38e7db6",
+      "nativePackageSha256": "ee36300affa6cae75341a890575e033bfd454b1649e05168d1c5f52900b1c896",
+      "nativePackage": "@typescript/typescript-darwin-x64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-D5EYqG5Wm/guw9+0j8+Mn1Jbr/gfS/VtFTuoH8PJtFbcqeDaQGMulc7SW8q51QG6Y3wGOGX3nbsTOw6fIKWWAA=="
+    },
+    "freebsd-arm64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "690d6feb5a6c368296a52c6ec408a693619720dec38351e69b0d357f6d800fcb",
+      "nativeSha256": "6155821433b2a341c622b962ab136a0132aac468f2049ac96c86f9344c4698b9",
+      "nativePackageSha256": "71e56178af84323b93fe9208977cc21768cf95a927334643fc2743ca827ed813",
+      "nativePackage": "@typescript/typescript-freebsd-arm64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-9A0XX0tcnH9qPdolSKKzSjTb93dlB0UEcAJbHYEsrFX2fkFNSum9+dvkQQJ9vLc+7vxHetDPujq9Qe6wx+Xhow=="
+    },
+    "freebsd-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "af7b75f6e4f15ef4756ffa0b4e8a5bee49393e7c46215be6798ebac716e0b67e",
+      "nativeSha256": "4bf791f02d6b89dece7860375d84d3084aef78e3bd716fbb9335f213e7eedc25",
+      "nativePackageSha256": "6fc7fbe8ed7c1c28a56831f9b6f2b6a6129ce9d349cb02433981a472bf2c208f",
+      "nativePackage": "@typescript/typescript-freebsd-x64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-EDf/dBHfY0TxX3NmUTek0hbffeyZlh3+ls6WQW3ICB8vYxwYLFnzg7wkgEUvl9eRlpiJ/nmc2S8arPMzINJ7rg=="
+    },
+    "linux-arm64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "91bb2fb255c2e1ead1359c07980b36711fd8df54e9404b3b48acc1b2004cb6d3",
+      "nativeSha256": "a13ba35a75869bc240411e702f837ab0d91848d0c6c3d13d1e327b337756bb47",
+      "nativePackageSha256": "9df79fab47afcc21b820a9987f534b324578f211f7a61b702a26c1f809e77f3e",
+      "nativePackage": "@typescript/typescript-linux-arm64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-hNqQBgQ5b5oGqN76QqbAU6CwYhJZ6iOcWc2kPTUs2OentgpxZktETziH6KIyRFJPaiBncognwn2ZLu3DNhHiWw=="
+    },
+    "linux-arm": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "602546a2caa42ca5729b1b0852af636677e90e1eab9571afea784660cf150838",
+      "nativeSha256": "043279b0e46033df88935a43ebc8681449c3a10c592890790251206ffb0504c2",
+      "nativePackageSha256": "a515cbcf304ca4a11406b74be4d6667bae8793a54d8a4e1f015cdbc2828d16ee",
+      "nativePackage": "@typescript/typescript-linux-arm",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-AvN9HmzOQh46G4312ooSgMHhbB7DtnLwg8D9mo324X49B7weMwtJrBG1MxT9IyI8kzDd7YRtW+1hWGun7WG7Qw=="
+    },
+    "linux-loong64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "dbffaca803385f3ae500c37197da3fe329aacca00a1a3a48483f5c3990930b39",
+      "nativeSha256": "3a7dbb20d705f5454f10291a062e04f1fd71a2da03b25af47cbf68aff600677d",
+      "nativePackageSha256": "62c0d6b6c12e6ab9266f403a518e933ff4a43ecccdb3bdbdf7c1d06dbeb2856b",
+      "nativePackage": "@typescript/typescript-linux-loong64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-xbUustlBrFflt2pNEyG5ye+d4WGPc/rfr2xK29MXeobPSw297JqwuKRrvbKM5o3fE/eUM/c+urVm6jQ3IaMVTw=="
+    },
+    "linux-mips64el": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "7dbee8009a2e0c012a853a911354254d7b796b87ca161c1e6d7745bf19550e2b",
+      "nativeSha256": "131f39851d2709f7d2fac7bc31427e101ced6fe7ac1d3a1b665c4d55cd3c8505",
+      "nativePackageSha256": "4d6d77088374ea2e316ce794838dba7b9e90c486990a2f2d6b5e0c7c878301b4",
+      "nativePackage": "@typescript/typescript-linux-mips64el",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-fS4/G7/0bXZ3NSq3nBMAXyg65I3tO4S7j08VNQ2g1aNC/qq79gE7Qne1BNjVsjMFfHBVBFjQYoTQCjmVU2iFlg=="
+    },
+    "linux-ppc64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "7f0501265eb9e5c662a8e0fa1e829f9cdb18d5deb2b230dc03f7804563902bc7",
+      "nativeSha256": "792243ebd2163a3ccb056b8b8269127a0d797a9b2879d2980ffcb0ef68b0aa31",
+      "nativePackageSha256": "321c3fc728939a40f3c47a7fd5d18689c68ab1b5ede66a4bc6b8e55fb5f8fcc8",
+      "nativePackage": "@typescript/typescript-linux-ppc64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-0upCCxYPX8X6gOwkvfv+Ee7/ufyy7k97mTrGE0e5BxLlnUEa+w+rtgnv2dsKcxFdwdeZYVlZKCqgN/xCBV08+A=="
+    },
+    "linux-riscv64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "d7b361427a5d5faf1f899d3f035362308dffa5828b0f77840e41bfbc92bec3d4",
+      "nativeSha256": "0f552bfc1fb5ec56baecaa31e3a68871a72993a04db075c81559352dc891059d",
+      "nativePackageSha256": "96b8644f1de81b6c5d74a84a31dac29b953ac2827e80df853bb84ed1e2e7a9cc",
+      "nativePackage": "@typescript/typescript-linux-riscv64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-0jKU9YRgOPRgiy5V/UWv37kB53PaTpIbwGCbbOMUPPAkrjVRNOIAJaz7Wa7s3H7mdDebX1LopUEPEJR+7Xa7zg=="
+    },
+    "linux-s390x": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "b8c54707153153192f1db1e6c465dabe772186eab61a31e1ab13204c5c864e08",
+      "nativeSha256": "09c0fc5be43cdcb355883ed3766b82d2722f0e4da46f63838796435bd345ce2a",
+      "nativePackageSha256": "b0663f1e009bd2cf7e69ff6b8d492f577a2fd39e4bc26e3b6cb56821c95cc12a",
+      "nativePackage": "@typescript/typescript-linux-s390x",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-j+d04s2kxaPQh6DLPb01sknAQfzsrdSZy15jBRHyLEZoaaQ19dVjbFRlkNVvYwUG7ZdP8+y5b/7RmPxdtHUKdQ=="
+    },
+    "linux-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "74a328c3e4325de5fe0bc69b7452c6f81b5dc7f4acb1ee14fc24b0c9cad9b21e",
+      "nativeSha256": "a183b1956edbe7e7d98f2249858eedf2d8a9790809cc4909db1276e202faaa70",
+      "nativePackageSha256": "b835edebd8bf1fdbda9a04860d23977d5483374348d5cac4636245af3f6a4b46",
+      "nativePackage": "@typescript/typescript-linux-x64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-kcD51ihf+pnI5KT4uQQYG04OpwznaZYBlIQhDhl8fflFd27NktxXsUeguxZyvUMyWfum7IF2bBS6Jv7ox0AgFQ=="
+    },
+    "netbsd-arm64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "b4ef29d46cf2a6478bb4b31b7d972c9a8d762b4b26235d8d887d15c744c82034",
+      "nativeSha256": "9aa4daaa5c29570f1cc8562ad9dfccc0ac2baf60baacd5318fd6c461cec72da1",
+      "nativePackageSha256": "b754cc28ab8287b516b52e3f483d9d43e4640fa77a31a7dae6388253885a0bab",
+      "nativePackage": "@typescript/typescript-netbsd-arm64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-8W85YyoGK+rgGoSU9jJQUpELbrKcZcbdJk2jPNQ6UKDKI7ryPlPFTrV2jCE5RQuv4Tt96hMDTc33s4YfRrLFBA=="
+    },
+    "netbsd-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "e2df629310059aeb4bf7fa2af6f24d354f22df3671546cffdd20a1b52936928d",
+      "nativeSha256": "0446cf8e751914aa46e58ac7899d04c963a1bd2741c5731b42721acb274881b0",
+      "nativePackageSha256": "3c978182b56610a4964928c59ae68509e9d107db7c96a6f579a188de8ba17811",
+      "nativePackage": "@typescript/typescript-netbsd-x64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-iGsTE0ve2PG0AcyZinwAR0LnGEZhu/y4dceS0hZsYCaKdYETvQtvtlNWlmYKempsBr6C7Il7dMXHVk+VFm9u0g=="
+    },
+    "openbsd-arm64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "9a5931d59ae32736de2f4c9be9032af8843397b11c1abbc4288b2c725cccc222",
+      "nativeSha256": "784e568b95f2a461c80fbedbebbd0b3bed08039177e40b5c6d6448f29d025546",
+      "nativePackageSha256": "a32408f2a7ce816a956bc8a32c8b9e062cec1619829d43b33f1039449f356750",
+      "nativePackage": "@typescript/typescript-openbsd-arm64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-Z2FERdHB9fAKI+KGqdWn04O7uNlnB+VYiEm6INE1aZuzzLNd3KBqQ6IpKUJF2ny4GigGU6nVu75XD9tAUODPng=="
+    },
+    "openbsd-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "a702e3ee31019914621cb4be9d7f9a5f1f77272e84e2dd032c0c55c98206efac",
+      "nativeSha256": "1cd944e9a2b45cd0d1646bc469edacc7324d02be4ceb5814ab68110701fc8dad",
+      "nativePackageSha256": "f187ce6ba69966fd27522a938f2d1061d4d63968e278b380c323004e702b3a75",
+      "nativePackage": "@typescript/typescript-openbsd-x64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-NVG3qeyCq/rJEOhaRjR3LsWgjrjo5vJW25omVLeHAVnpKIG4pE4cenwwKGR06DiJ1s0QTOymcJeKXMEpsiNBVg=="
+    },
+    "sunos-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "50ab54d64b4ebd3b75e9c3ba3c4fccb96d9a748127e8b725089a92a3369d6c98",
+      "nativeSha256": "3e033a0d41509ec14e9e0c3847b1cddcc0a62e4b6134ed56cd9ecbcfa30fb56c",
+      "nativePackageSha256": "b2527d85316173b63151df50a5f11e6483e7aa14cfd461f3cf9affbe4712c96e",
+      "nativePackage": "@typescript/typescript-sunos-x64",
+      "executable": "lib/tsc",
+      "nativeArchiveIntegrity": "sha512-ovAdoWXEn2B5/fyWG69pLU3FWmQwPWOjQV5TFbcxtpnOv+R3g8ySGHl1NYRq7Lb/GYdFDvaGcZ+SiU7iKuiMsA=="
+    },
+    "win32-arm64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "ab3674a05a6b86dad32b18deb66b6db47ca50e4d16f5efeeea0a662302e6fcd1",
+      "nativeSha256": "56d73f78be9efa2c8ba86749de10770be9f868df956739da423746bb3dc28d21",
+      "nativePackageSha256": "b041157b063804eb6d471e831f08618b7e2a8c634927c37810965a5fc1a9678f",
+      "nativePackage": "@typescript/typescript-win32-arm64",
+      "executable": "lib/tsc.exe",
+      "nativeArchiveIntegrity": "sha512-lJbo71IEOfL7ZZIZnArRaOLqjn9BAfoSzyUQn0aSjfSpDZL4ru0afUsdBfo6PQEjD6ssdmi0n/RwaPADX6bsvQ=="
+    },
+    "win32-x64": {
+      "version": "7.1.0-beta",
+      "rootPackageSha256": "f0c2028c86c74b68735662aef8a4ead419f2f05ec070bd8122aae452aeb3313c",
+      "packageSha256": "92a2ea2976adeca4bceb6ed1a9626616a1901ffb9749de51e4424f5e09b79f53",
+      "nativeSha256": "498f59d207e22c40f1ecc218dfa67d1db25629a231bd0948c3db92df7457afc7",
+      "nativePackageSha256": "b51f9dfd1850362be6cc1f84b5e300db3dfb0c9724fc99c2b789c08bec9bf7bc",
+      "nativePackage": "@typescript/typescript-win32-x64",
+      "executable": "lib/tsc.exe",
+      "nativeArchiveIntegrity": "sha512-UKcHvbybY2tDTvFW2b1vwiAvDlIRooo69lh8CXWVhOQejcvpM5+IgbiFW9EIwR5Wi5X/v+BdN7gdWbigBuJ3rw=="
+    }
+  },
+  "execution": {
+    "manifestVersion": 3,
+    "options": "source-resolved public Program.emitToString; original configured owner roots/options; complete input-byte/file/import/checking-diagnostic identity gate; owner-partitioned output with exact TS2877 obligations retained; pinned ES2026 with owner module/class-field defaults/library inputs; noEmit=false; noEmitOnError=false; rewriteRelativeImportExtensions=true; owner map options unchanged; status0 and emitSkipped=false required; producer sourceFileName output ownership; source index v9; parent prepare/finalize original proofs; authenticated Node-probed resolution and use-time loaded bytes; closed delegated child/Worker ownership; authored-JS CommonJS outside capture; unproved captured routes hold",
+    "args": [
+      "--enable-source-maps",
+      "--import",
+      "data:text/javascript,import%20%7BisMainThread%2CworkerData%7D%20from%20'node%3Aworker_threads'%3B%20import%20%7BpathToFileURL%7D%20from%20'node%3Aurl'%3B%20import%20%7BreadFileSync%2ClstatSync%7D%20from%20'node%3Afs'%3B%20import%20%7BcreateHash%7D%20from%20'node%3Acrypto'%3B%20const%20context%3D!isMainThread%26%26workerData%3F.role%3D%3D%3D'nts-commonjs-worker'%3FworkerData.oracle%3Aprocess.env%3B%20const%20root%3DpathToFileURL(context.NTS_ORACLE_EMIT_MANIFEST)%2Csnapshot%3DJSON.parse(context.NTS_ORACLE_SNAPSHOT)%3B%20if(!lstatSync(new%20URL('.%2Fassets%2F'%2Croot)).isDirectory()%7C%7ClstatSync(new%20URL('.%2Fassets%2F'%2Croot)).isSymbolicLink()%7C%7CObject.keys(snapshot.assets%3F%3F%7B%7D).length!%3D%3D3)throw%20Error('oracle%20generated%20bootstrap%20directory%20changed')%3B%20for(const%20name%20of%20%5B'loader'%2C'runtime'%2C'assets'%5D)%7Bconst%20file%3D'assets%2Foracle-'%2Bname%2B'.mjs'%2Cexpected%3Dsnapshot.assets%3F.%5Bfile%5D%3Bif(!lstatSync(new%20URL('.%2F'%2Bfile%2Croot)).isFile()%7C%7ClstatSync(new%20URL('.%2F'%2Bfile%2Croot)).isSymbolicLink()%7C%7C!%2F%5E%5Ba-f0-9%5D%7B64%7D%24%2F.test(expected%3F%3F'')%7C%7CcreateHash('sha256').update(readFileSync(new%20URL('.%2F'%2Bfile%2Croot))).digest('hex')!%3D%3Dexpected)throw%20Error('oracle%20generated%20bootstrap%20asset%20changed%3A%20'%2Bfile)%3B%7D%20await%20import(new%20URL('.%2Fassets%2Foracle-loader.mjs'%2Croot))%3B"
+    ]
+  }
+}

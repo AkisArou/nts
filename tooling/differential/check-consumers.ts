@@ -4,6 +4,8 @@ import {availableParallelism, homedir} from "node:os";
 import {dirname, join, resolve} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import assert from "node:assert/strict";
+import {openProgramOracleResults} from './oracle-results.ts';
+import {oracleRecipeIdentity} from './oracle-emit.ts';
 import {withToken} from "../gate/tokens.mjs";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
 import {checkFailurePolicy, reportCheckFailure, runConsumer} from "./check-report.ts";
@@ -23,6 +25,8 @@ type Incomplete = {entry: Entry; error: unknown};
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 
 function entries(mode: Mode, only: string | undefined, scratch: string): Entry[] {
+  const references=mode==='benchmarks'&&process.env.NTS_PROGRAM_ORACLE
+    ?openProgramOracleResults(JSON.parse(process.env.NTS_PROGRAM_ORACLE),oracleRecipeIdentity()):undefined;
   if (mode === "compiled-web") return ["jvm", "c", "llvm"].map(backend => ({name: backend, backend,
     project: "tooling/conformance/web-platform/compiled/tsconfig.json", consumer: "program"}));
   const benchmarks = mode === "benchmarks", area = benchmarks ? "benchmarks/cases" : "tests/programs";
@@ -33,7 +37,8 @@ function entries(mode: Mode, only: string | undefined, scratch: string): Entry[]
     let project = join(fixture, "tsconfig.json");
     if (benchmarks) {
       if (!existsSync(join(ROOT, fixture, "case.ts"))) continue;
-      if (!existsSync(join(ROOT, project))) {
+      if(references&&existsSync(join(ROOT,recordPath(fixture))))project=references.project(fixture);
+      else if (!existsSync(join(ROOT, project))) {
         project = join(scratch, `${name}.tsconfig.json`);
         writeFileSync(project, JSON.stringify({extends: join(ROOT, "tsconfig.fixtures.json"), include: [join(ROOT, fixture, "case.ts")]}));
       }

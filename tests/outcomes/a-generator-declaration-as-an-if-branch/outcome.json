@@ -2,7 +2,7 @@
   "run": "build",
   "category": "wrong-answer",
   "nts": "exit 1; nts: uncaught Observed: ran=yes;",
-  "node": "exit 1; nts: uncaught SyntaxError: Declaration is not allowed",
-  "measured_with": "cb5ba64c52ba7e99",
+  "node": "exit 1; nts: uncaught SyntaxError: In strict mode code, functions can only be declared at top level or inside a block.",
+  "measured_with": "7a9491c7c16c6153",
   "source": "measured"
 }

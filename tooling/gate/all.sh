@@ -2021,10 +2021,14 @@ held_to_record() {
   out=$(NTS_BIN="${NTS_BIN:-target/release/nts}" node tooling/census/conformance262.ts \
     "$@" --recorded "$record" --jobs "$cap" 2>&1)
   status=$?
-  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
   if [ "$status" -ne 0 ]; then
+    # A failed command may stop before its report. Keep its complete cause,
+    # including setup/cleanup exceptions that have no summary-line prefix.
+    printf '%s\n' "$out"
     return 1
-  elif [ -z "$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')" ]; then
+  fi
+  printf '%s\n' "$out" | awk '(/^  (outcome|pass|fail|refused|unsupported|no-verdict|sum|recorded cases|record age|pass-count|reconciled|NOT RECONCILED|INSTRUMENT FAILURE|self-checks|compiler)/ || /REGRESSED|CHANGED|MISSING|FIXED|NEW (PASS|FAIL)|^              /) && !/ranked by|by what|by family/ && !/\((test262-exclusions|features)\.json\)$/'
+  if [ -z "$(printf '%s\n' "$out" | awk '/^  pass-count: [0-9]+$/ { print $2 }')" ]; then
     echo "  no pass-count line: the run measured nothing, which is not zero"
     return 1
   fi
@@ -2065,6 +2069,15 @@ test262_llvm() {
 # the typed paths, which test262's untyped JavaScript never reaches. One step
 # per backend, as test262's are: the three run side by side, and a change
 # owes only the backends it reaches (owed.mjs).
+program_oracles() {
+  node tooling/differential/program-oracles.ts --jobs "${NTS_GATE_STEP_SLOTS:-2}"
+}
+
+typescript_oracles() {
+  cap=$(( ${jobs:-8} > 8 ? 8 : ${jobs:-8} ))
+  node tooling/census/typescript-oracles.ts --jobs "$cap"
+}
+
 typescript_backend() {
   backend=$1
   if [ ! -d third_party/test262/.git ]; then
@@ -2553,6 +2566,7 @@ step "test262-builtins-cases" test262_builtins_cases
 step "test262-rest-cases" test262_rest_cases
 step "test262-jvm" test262_jvm
 step "test262-llvm" test262_llvm
+step "typescript-oracles" typescript_oracles
 step "typescript-c" typescript_c
 step "typescript-llvm" typescript_llvm
 step "typescript-jvm" typescript_jvm
@@ -2762,6 +2776,7 @@ step "jvm" jvm
 step "dex" dex
 step "on-device" on_device
 step "bench-agree" ./tooling/gate/bench-agree.sh
+step "program-oracles" program_oracles
 step "examples" ./tooling/gate/gate.sh
 step "rc" ./tooling/gate/rc.sh
 step "memory" ./tooling/memory/run.sh

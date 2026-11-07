@@ -36,12 +36,15 @@ import {toolingSliceArgs} from "./tooling-slice.ts";
 // sets) and runs niced, off the measurement CPUs 4-5, in a capped scope.
 import { spawnSync } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { availableParallelism } from "node:os";
+import { availableParallelism,homedir } from "node:os";
+import {gateEnvironment,sealOracleRun} from "./canonical-environment.ts";
+import {finishRunTemporary} from "./run-temporary.ts";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { memAvailableGB, RESUME_AT_GB } from "./admission.ts";
 
 const ROOT = realpathSync(join(fileURLToPath(import.meta.url), "../../.."));
+let launchEnvironment:NodeJS.ProcessEnv=process.env;
 const BACKENDS = ["nts-codegen-c", "nts-codegen-llvm", "nts-codegen-jvm"];
 
 export type Package = { name: string; dir: string };
@@ -90,7 +93,7 @@ export function cpusOffMeasurement(count: number = availableParallelism()): stri
 }
 
 function run(command: string, args: readonly string[], env: NodeJS.ProcessEnv = {}): number {
-  const result = spawnSync(command, args, { cwd: ROOT, stdio: "inherit", env: { ...process.env, ...env } });
+  const result = spawnSync(command, args, { cwd: ROOT, stdio: "inherit", env: { ...launchEnvironment, ...env } });
   return result.status ?? 1;
 }
 
@@ -225,5 +228,9 @@ function main(argv: readonly string[]): number {
 }
 
 if (process.argv[1] && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  process.exit(main(process.argv.slice(2)));
+  const planned=gateEnvironment(process.env,{run:join(homedir(),'.cache/nts-inner',String(Date.now())+'-'+process.pid),standalone:!process.env.NTS_GATE_ENV_CONTEXT,oracleAdmissionContext:'gate'});
+  let status=1;
+  try{const sealed=await sealOracleRun(planned);launchEnvironment=sealed.env;status=main(process.argv.slice(2));}
+  finally{finishRunTemporary(planned.temporary,planned.env.HOME!,status===0);}
+  process.exitCode=status;
 }

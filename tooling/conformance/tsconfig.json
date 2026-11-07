@@ -1,0 +1,10 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "rootDir": "../..",
+    "composite": false
+  },
+  "files": ["node-preloads.ts", "node-preload-runtime.ts", "outcomes-node-preload.ts", "node-paths.ts", "outcomes-project.ts", "outcomes-oracle.ts"],
+  "include": []
+}

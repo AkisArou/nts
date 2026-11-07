@@ -15,29 +15,37 @@
 // test stops that unit by name: whatever the run started dies with its
 // cgroup, so no waiting runner can outlive the test.
 import assert from "node:assert/strict";
-import { spawn, spawnSync } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { existsSync, mkdirSync, readdirSync, readFileSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { createInterface } from "node:readline";
-import { test, type TestContext } from "node:test";
-import { fileURLToPath } from "node:url";
-import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
-import { spawnTest } from "./test-wait.ts";
-import { testScratch } from "./test-scratch.ts";
+import {spawn, spawnSync} from "node:child_process";
+import {randomUUID} from "node:crypto";
+import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
+import {join, dirname} from "node:path";
+
+import {createInterface} from "node:readline";
+import {test, type TestContext} from "node:test";
+import {fileURLToPath} from "node:url";
+import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
+import {moduleClosure} from "./module-closure-fixture.ts";
+import {removable} from "./run-temporary.ts";
+import {spawnTest} from "./test-wait.ts";
+import {newTestScratch} from "./test-scratch.ts";
 
 const GATE = fileURLToPath(new URL("./", import.meta.url));
 const WAITING = /waiting for 14 GB before the first case/;
 
 function fixture(t: TestContext) {
-  const own = testScratch(t, "inner-gate-memory-run");
+  const own = newTestScratch("inner-gate-memory-run");t.after(() => {removable(own);rmSync(own, {recursive:true,force:true});});
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), started = join(own, "case-started");
   // The gate's own files, with the runner copied so that it takes the fixture for its tree.
   mkdirSync(gate, { recursive: true });
-  for (const name of readdirSync(GATE)) {
-    if (name === "run.mjs") writeFileSync(join(gate, name), readFileSync(join(GATE, name)));
-    else if (name !== "all.sh") symlinkSync(join(GATE, name), join(gate, name));
+  for (const file of moduleClosure(["tooling/gate/run.mjs"])) {
+    const target = join(root, file), original = join(GATE, "../..", file);
+    mkdirSync(dirname(target), {recursive: true});
+    if (file === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
+    else symlinkSync(original, target);
   }
+  symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
+  // The stand-in shell executes this declared runtime asset.
+  symlinkSync(join(GATE, "token.sh"), join(gate, "token.sh"));
   const listed = spawnTest("sh", [join(GATE, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
   // The step's one case holds a token while it runs.
@@ -46,6 +54,8 @@ if [ "$1" = --list ]; then
 cat <<'NAMES'
 ${listed.stdout.trim()}
 NAMES
+elif [ "$2" = program-oracles ]; then
+  node --input-type=module -e 'import {createProgramOracleResults} from ${JSON.stringify(new URL("../differential/oracle-results.ts",import.meta.url).href)};import {programOracleDirectory} from ${JSON.stringify(new URL("../differential/oracle-result-scope.ts",import.meta.url).href)};import {oracleRecipeIdentity} from ${JSON.stringify(new URL("../differential/oracle-emit.ts",import.meta.url).href)};import {join} from "node:path";createProgramOracleResults(join(programOracleDirectory(),"results"),oracleRecipeIdentity()).publish();'
 else
   exec bash "$(dirname "$0")/token.sh" touch ${JSON.stringify(started)}
 fi

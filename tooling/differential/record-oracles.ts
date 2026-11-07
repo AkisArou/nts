@@ -1,3 +1,4 @@
+import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
 // Explicit recording only. Plans come from the checker's actual population;
 // a partial oracle can never publish a smaller promise.
 import { createHash } from "node:crypto";
@@ -8,15 +9,19 @@ import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
+import {prepareOracles,type OraclePreparation} from "./oracle-batch.ts";
+import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
+import {ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
   type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
 type Plan = { version: number; backend: string; source: string; source_digest: string; entry: string; seed: null;
+  tsconfig?: string;
   source_exports?: string[];
   input_domain?: RecordedDomain;
   repository_root?: string;
   generator_version: number; generator_digest: string; case_key: string; case_count: number;
-  cases: string[]; signature: unknown[]; driver: string; resolver: string };
+  cases: string[]; signature: unknown[]; driver: string };
 type Manifest = { version: number; plans: Plan[]; failures: { config: string; backend: string; error: string }[] };
 const digest = (value: string) => createHash("sha256").update(value).digest("hex");
 const json = (path: string) => JSON.parse(readFileSync(path, "utf8"));
@@ -36,7 +41,7 @@ export function writeTable(path: string, table: Table) {
 }
 export function canonicalDriver(plan: Plan): string {
   const root = plan.repository_root ?? (plan.entry.endsWith("/" + plan.source) ? plan.entry.slice(0, -plan.source.length - 1) : undefined);
-  let text = plan.driver + plan.resolver;
+  let text = plan.driver;
   if (root) {
     // Only this invocation's repository prefix is logicalised. Code and
     // outside inputs remain part of the digest; author worktree paths do not.
@@ -47,7 +52,7 @@ export function canonicalDriver(plan: Plan): string {
 function identity(plan: Plan) {
   return { source: plan.source, signature: digest(JSON.stringify([plan.signature, plan.cases])),
     keys: { [plan.backend]: plan.case_key }, cases_sha256: digest(JSON.stringify(plan.cases)),
-    driver_sha256: digest(canonicalDriver(plan)) };
+    driver_sha256: digest(canonicalDriver(plan) + JSON.stringify(oracleIdentity(oracleToolchainLocation()))) };
 }
 function populations(cases: string[]): Populations {
   const grouped = new Map<string, string[]>();
@@ -181,7 +186,7 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
   const backends = rc ? ["c", "llvm"] : ["c", "llvm", "jvm"];
   const ordered = configs.sort();
   for (let at = manifest.completed[mode]; at < ordered.length; at++) {
-    const config = ordered[at];
+    const config = ordered[at]!;
     // Two captures form one bounded phase. Each starts only above the same
     // memory floor, and backend order in the manifest stays deterministic.
     for (let first = 0; first < backends.length; first += 2) {
@@ -213,13 +218,11 @@ async function planAll(binary: string, root: string, evidence: string, rc = fals
     if ((at + 1) % 16 === 0 || at + 1 === ordered.length) atomic(path, manifest);
   }
 }
-async function measureDriver(plan: Plan, evidence: string, identity: string) {
+async function measureDriver(plan: Plan, evidence: string, identity: string, preparation?:OraclePreparation[]) {
   const cpu: number[] = [];
   let delivered = -1;
   const dir = join(evidence, identity);
   mkdirSync(dir, { recursive: true });
-  const hook = join(dir, "resolve_ts.mjs");
-  writeFileSync(hook, plan.resolver);
   const original = "function emit(line) { writeSync(resultsFd, line); }";
   if (!plan.driver.includes(original)) throw new Error("driver timing hook no longer matches");
   const driver = plan.driver.replace(original, 'const cpuFd = openSync(process.env.NTS_CPU_EVENTS,"w");\nfunction emit(line) { writeSync(resultsFd,line); const u=process.cpuUsage(); writeSync(cpuFd,JSON.stringify({line,cpu_us:u.user+u.system})+"\\n"); }');
@@ -230,13 +233,24 @@ async function measureDriver(plan: Plan, evidence: string, identity: string) {
     await admission();
     const results = join(dir, `${arm}.results`), timings = join(dir, `${arm}.cpu.jsonl`);
     writeFileSync(results, "");
-    const env: NodeJS.ProcessEnv = { ...process.env, NTS_DIFF_RESULTS: results, NTS_CPU_EVENTS: timings, NO_COLOR: "1" };
+    const selected=preparation?.[arm];
+    if(!selected||'instrument' in selected)throw Error('oracle preparation not measured: '+(selected&&'instrument' in selected?selected.instrument:'missing finite batch member'));
+    const snapshotOwner=selected.prepared;
+    let prepared:ReturnType<typeof oracleExecution>|undefined;
+    const finish=()=>{const result=finishOracleSnapshot(snapshotOwner);if(!result.ready)throw new ToolingInstrumentError('tooling-setup',result.why);};
+    try{
+    prepared=oracleExecution(snapshotOwner,script);
+    atomic(join(dir, `${arm}.oracle.json`), prepared);
+    const env: NodeJS.ProcessEnv = { ...process.env, ...prepared.env, NTS_DIFF_RESULTS: results, NTS_CPU_EVENTS: timings, NO_COLOR: "1" };
     delete env.FORCE_COLOR; delete env.CLICOLOR_FORCE;
     // timeout owns only its spawned child group. Recording never accepts a
     // guard's exit code, even if the results file already contains done.
-    const run = spawnSync("taskset", ["-c", "4", "prlimit", "--as=2147483648", "--core=0", "--cpu=15:16", "timeout", "120", "node", "--experimental-transform-types", "--import", pathToFileURL(hook).href, script], { env, maxBuffer: 64 * 2 ** 20 });
+    const run = spawnSync("taskset", ["-c", "4", "prlimit", "--as=2147483648", "--core=0", "--cpu=15:16", "timeout", "120", "node", ...prepared.args, script], { env, maxBuffer: 64 * 2 ** 20 });
     writeFileSync(join(dir, `${arm}.stdout`), run.stdout ?? "");
     writeFileSync(join(dir, `${arm}.stderr`), run.stderr ?? "");
+    finish();
+    const loader=oracleLoaderReady(prepared);
+    if(!loader.ready)throw new Error(`oracle not measured: ${plan.source}: ${loader.why}`);
     if (run.status !== 0 || run.error) throw new Error(`oracle not measured: ${plan.source}: ${run.error ?? run.signal ?? run.status}`);
     const text = readFileSync(results, "utf8");
     delivered = completeRows(text, plan.case_count).length;
@@ -244,6 +258,7 @@ async function measureDriver(plan: Plan, evidence: string, identity: string) {
     baseline = text;
     const stamps = readFileSync(timings, "utf8").trimEnd().split("\n").map(line => JSON.parse(line));
     cpu.push(stamps.at(-1).cpu_us / 1e6);
+    }finally{try{finish();}finally{if(prepared)closeOracleExecution(prepared);}}
   }
   return { cpu, count: delivered };
 
@@ -256,15 +271,21 @@ export async function recordAll(evidence: string, output: string, measure = meas
   const failed = new Map<string, Error>();
   const exceptions = new Set<string>();
   const findings: { source: string; backend: string; driver_sha256: string; error: string }[] = [];
+  let preparations:Record<string,OraclePreparation>|undefined;
+  if(measure===measureDriver){
+    const unique=new Map(manifest.plans.filter(plan=>plan.case_count>0).map(plan=>[digest(plan.driver),plan]));
+    const requests=[...unique].flatMap(([identity,plan])=>[0,1].map(arm=>({key:identity+':'+arm,options:{entry:plan.entry,project:plan.tsconfig,directory:join(evidence,identity,`${arm}.emit`)}})));
+    preparations=await prepareOracles(requests,{directory:join(evidence,'preparation'),toolchain:oracleToolchainLocation(),workers:1,env:process.env,memoryBytes:2*2**30,report:message=>console.error(message)});
+  }
   for (const plan of manifest.plans) {
-    const identity = digest(plan.driver + plan.resolver);
+    const identity = digest(plan.driver);
     const exception = table.rows.find(row => row.kind === "no-oracle" && row.source === plan.source && row.keys[plan.backend] === plan.case_key && row.source_digest === plan.source_digest && plan.case_count === 0);
     if (exception) { exceptions.add(identity); console.log("no-oracle", plan.source, exception.reason); continue; }
     let measurement = measured.get(identity);
     try {
       if (failed.has(identity)) throw failed.get(identity);
       if (measurement === undefined) {
-        measurement = await measure(plan, evidence, identity);
+        measurement = await measure(plan, evidence, identity, preparations?[preparations[identity+':0']!,preparations[identity+':1']!]:undefined);
         measured.set(identity, measurement);
       }
 
@@ -361,7 +382,7 @@ async function main() {
   const arguments_ = process.argv.slice(2);
   const [mode, first, second, third, fourth] = arguments_;
   if (/^(tests\/programs|benchmarks\/cases)\//.test(mode ?? "")) await recordNamed(arguments_);
-  else if (["plan", "plan-rc"].includes(mode) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));
+  else if (["plan", "plan-rc"].includes(mode!) && first && second && third) await planAll(resolve(first), resolve(second), resolve(third), mode === "plan-rc", fourth?.replace(/^--only=/, ""));
   else if (mode === "no-oracle" && first && second && third && fourth) {
     const manifest = json(join(resolve(first), "plans.json")) as Manifest;
     const output = resolve(second), table: Table = existsSync(output) ? json(output) : { version: 1, rows: [] };

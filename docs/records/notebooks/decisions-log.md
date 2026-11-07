@@ -1384,6 +1384,80 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   BuildXL, before more bespoke work. The file-access recorder (#245) is held
   at a WIP checkpoint until the survey's verdict.
 
+## TypeScript oracle ownership and public emit (11-04)
+
+- **The decision.** The pinned public TypeScript API creates the configured
+  checking program with noEmit semantics and emits its source-resolved program
+  through `ORACLE_EMIT_OPTIONS`. Complete files, import edges, raw input byte
+  hashes and diagnostics are checked before publication. The producer's
+  sourceFileName relation owns outputs; source maps only present coordinates.
+- **Owner imports.** Imported ordinary sources keep their nearest project,
+  including nested owners. Full configured checking context stays intact while
+  only the requested closure is published in a source-layout mirror. Reference
+  overlays change output locations only. An emission-only TS2877 is accepted
+  only through its exact checker relation and its target owner's executable;
+  both consumers validate that relation and all raw diagnostics remain bound.
+- **Reuse.** Owner emission is shared only within a registered run and replays
+  every recorded observation on reuse, including failed lookups and directory
+  reads. Changed inputs require re-emission. Binding injection uses published
+  source identity and the captured namespace's present, absent or unknown
+  answer.
+- **Scope.** Authored JavaScript CommonJS runs as plain Node outside the capture
+  claim and is reported separately. Transitions into TypeScript, ESM or
+  providers require captured ownership; unproved governed requests hold before
+  Node resolves them. General CommonJS replay belongs below Node.
+- **Execution ownership.** Fresh execution owners retain read descriptors from
+  before launch; loaders retain validated append descriptors. Exact child
+  delegation carries the validated environment and paired reservation/ready
+  records, so caught bootstrap failures hold their owner. Descriptors close on
+  every path, and drained results belong to one execution.
+- **Why.** One program authority preserves source checking and resolution, while
+  explicit captured ownership prevents omitted inputs from becoming ordinary
+  missing files. The specification is in
+  [TypeScript](../../conformance/typescript.md#decisions).
+
+## TypeScript emitter authority, runtime target and run seal (11-04)
+
+- **The decision.** TypeScript's own emit, run by Node, defines the oracle's
+  answer where native type stripping differs. Our negative-zero enum case
+  follows the emitter's folding to positive zero. One ES2026 emit target serves
+  Node 24 and 26, with the owner's module and class-field defaults carried and
+  its original library inputs preserved.
+- **Why.** Neither supported Node parses the emitted ESNext decorators. The
+  pinned compiler rejects RegExp modifiers at ES2024 with TS18062, while the
+  permanent syntax controls run the ES2026 output on both Nodes. The public
+  compiler's own programs pin every accepted target's effective defaults.
+- **Run ownership.** A canonical parent validates the dependency image once and
+  hands consumers a version-specific ready-record seal. Each acquisition
+  checks that inode and its exact stat identity; metadata hashes and actual-use
+  bytes, links, kinds and query domains remain checked. A changed seal is a
+  named instrument hold, not evidence against a landing. Outside a run,
+  acquisitions keep full validation. The specification is in
+  [TypeScript](../../conformance/typescript.md#decisions).
+
+## Oracle snapshots and Node resolution (11-05)
+
+- **The decision.** A preparation validates all original observations before
+  publication and again after its consumers drain, before any measured row or
+  cleanup. A final difference holds the entire session. Children authenticate
+  the compact index and the exact bytes they load, without replaying originals.
+- **Resolution.** One dedicated process per Node version and run batches public
+  hook queries without evaluating targets. Children replay authenticated answers
+  only with the same effective options and executable identity; a live holder
+  pins the binary and its process birth. Unrecorded requests retain the bounded
+  live path and its complete domain proof.
+- **Maps and startup.** Map options come from the owner; the oracle adds none.
+  Generated type-free runtime assets live only in run scratch and are checked
+  before evaluation. Parent-only capture code stays out of children.
+- **Worker ownership.** A closed, captured driver gets private context through
+  workerData. Reservations record begin and ready; a parent closes a failed
+  launch only before begin. Incomplete bootstrap and invalid handoffs are named
+  instrument holds even when test code catches the error.
+- **Why.** Repeating complete proofs in each process makes work depend on the
+  snapshot's size. The parent establishes one snapshot for the run; children pay
+  for the authenticated paths and bytes they use. The specification is in
+  [TypeScript](../../conformance/typescript.md#decisions).
+
 ## Fresh start (11-06)
 
 - **The decision.** The user approved the workflow in
@@ -1434,3 +1508,25 @@ calls C. The specification is [Calling C](../../targets/calling-c.md).
   benchmark port for 4.6 hours at full CPU, and the queue waited with it.
   Every step and every per-case compile gets a time bound, and a timeout is
   a recorded outcome.
+
+
+## TypeScript case transform and shared answer (11-07)
+
+The single-file TypeScript case suite uses the pinned public `transpileModule`
+API. Node judges the resulting JavaScript; nts performs the case's type checking
+and compilation. A checking Program adds work that the reference execution does
+not need. The syntax-only path also covers the corpus's const enums and internal
+namespace aliases, with permanent controls following those constructs.
+
+The run measures one answer per case and shares it across the backend steps.
+Preparation stays inside admitted worker lifetimes, and each executable snapshot
+is finalized and released before the worker takes its next case. Original input
+facts and the authenticated result remain run-owned. Reuse validates every
+recorded observation, including failed lookups and directory listings. The
+captured-JavaScript loader retains its unknown-domain holds.
+
+Named populations are selected before sampling. Omitted recorded cases are not
+missing, selected unrecorded cases remain pending, and selected recorded cases
+still pass through their ordinary comparison. The full check's writer measures
+pending cases. General project graphs retain their owner-program checking and
+emission contract.

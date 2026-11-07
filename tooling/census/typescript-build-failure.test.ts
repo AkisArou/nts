@@ -60,7 +60,7 @@ const dir=workspace(${JSON.stringify(join(scratch, "project"))},'ts');
 const result=[];
 for(const [signal,memoryKilled] of [['SIGABRT',false],['SIGKILL',false],['SIGKILL',true]]){
  emitted={status:null,signal,memoryKilled,stdout:'',stderr:'NTS1001 a refusal printed first',residentLimitBytes:134217728,residentRunBytes:805306368};
- const raw=attempt(dir,'const value:number=1;',{nts:'controlled-compiler',cc:'controlled-linker',fresh:true,language:'ts'});
+ const raw=await attempt(dir,'const value:number=1;',{nts:'controlled-compiler',cc:'controlled-linker',fresh:true,language:'ts'});
  let observation,rejected=false;try{observation=observationFromRow(raw);}catch{rejected=true;}
  result.push({raw,observation,rejected});
 }
@@ -84,7 +84,8 @@ import {observationFromRow} from ${JSON.stringify(new URL("./typescript-record.t
 const child=await import('node:child_process');
 let emitted,linkError;
 mock.module('node:child_process',{namedExports:{...child,execFileSync(){throw linkError;}}});
-mock.module(${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)},{namedExports:{compileSync(){return emitted;}}});
+const memoryLocation=${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)},realMemory=await import(memoryLocation);
+mock.module(memoryLocation,{namedExports:{...realMemory,compileSync(){return emitted;}}});
 const {attempt}=await import(${JSON.stringify(new URL("./attempt262.ts", import.meta.url).href)});
 const dir=workspace(${JSON.stringify(join(scratch, "project"))},'ts');
 const tools={nts:'controlled-compiler',cc:'controlled-linker',fresh:true,language:'ts'};
@@ -92,23 +93,23 @@ const run=()=>attempt(dir,'const value:number=1;',tools);
 const result=[];
 for(const [status,stderr] of [[1,'/controlled/program.ll:12:3: error: invalid operand 42'],[101,"thread 'main' (42) panicked at /controlled/lower.rs:12:3: broken route"],
   [101,"/controlled/src/main.ts:1:1: NTS1001 a refusal printed first\\nthread 'nts' (7) panicked at compiler/lower.rs:3:4:\\nbroken route\\n"]]){
- emitted={status,signal:null,stdout:'',stderr};const raw=run();
+ emitted={status,signal:null,stdout:'',stderr};const raw=await run();
  result.push({raw,observation:observationFromRow(raw)});
 }
 emitted={status:0,signal:null,stdout:'cc program.c -o program',stderr:''};
 linkError=Object.assign(new Error('link failed'),{status:1,signal:null,stdout:'',stderr:'/controlled/program.c:12:3: error: invalid operand 42'});
-const link=run();result.push({raw:link,observation:observationFromRow(link)});
+const link=await run();result.push({raw:link,observation:observationFromRow(link)});
 linkError=Object.assign(new Error('link tool died'),{status:1,signal:null,stdout:'',stderr:'the toolchain was Killed'});
-const lost=run();let rejected=false;try{observationFromRow(lost);}catch{rejected=true;}
+const lost=await run();let rejected=false;try{observationFromRow(lost);}catch{rejected=true;}
 result.push({raw:lost,rejected});
 linkError=Object.assign(new Error('silent link tool death'),{status:null,signal:'SIGSEGV',stdout:'',stderr:''});
-const killed=run();rejected=false;try{observationFromRow(killed);}catch{rejected=true;}
+const killed=await run();rejected=false;try{observationFromRow(killed);}catch{rejected=true;}
 result.push({raw:killed,rejected});
 emitted={status:1,signal:null,stdout:'',stderr:''};
-result.push({silent:observationFromRow(run())});
+result.push({silent:observationFromRow(await run())});
 emitted={status:0,signal:null,stdout:'cc program.c -o program',stderr:''};
 linkError=Object.assign(new Error('silent link failure'),{status:1,signal:null,stdout:'',stderr:''});
-result.push({silent:observationFromRow(run())});
+result.push({silent:observationFromRow(await run())});
 console.log(JSON.stringify(result));
 `);
   const result = spawnTest(process.execPath, ["--experimental-test-module-mocks", helper], { encoding: "utf8" });
@@ -149,8 +150,8 @@ const {attempt}=await import(${JSON.stringify(new URL("./attempt262.ts", import.
 try{
  const dir=workspace(${JSON.stringify(join(scratch, "project"))},'ts');
  const tools={nts:${JSON.stringify(compiler)},cc:'cc',fresh:true,language:'ts',memoryCapKb:512*1024};
- const control=attempt(dir,'const value:number=1;',tools);assert.equal(control.bucket,'strict-pass',JSON.stringify(control));
- const subject=attempt(dir,'const value:number=1;',{...tools,memoryCapKb:128*1024});
+ const control=await attempt(dir,'const value:number=1;',tools);assert.equal(control.bucket,'strict-pass',JSON.stringify(control));
+ const subject=await attempt(dir,'const value:number=1;',{...tools,memoryCapKb:128*1024});
  assert.equal(subject.bucket,'memory-cap',JSON.stringify(subject));
  assert.equal(terminations[1].signal,'SIGKILL');assert.equal(terminations[1].memoryKilled,true);
  assert.throws(()=>observationFromRow(subject),/unmeasured case/);

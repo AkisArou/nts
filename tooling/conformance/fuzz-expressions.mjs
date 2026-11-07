@@ -314,7 +314,7 @@ const KINDS = [
  * spelling -- `NaN` and the infinities have none that survives a round trip
  * through `JSON.stringify`, so they are spelled out.
  */
-function nodeAnswers(dir, exprs) {
+async function nodeAnswers(dir, exprs) {
   const lines = exprs.map(
     (e, i) => `try { print(${i}, ${e.code}); } catch { print(${i}, undefined); }`,
   );
@@ -440,7 +440,7 @@ for (let at = 0; at < CASES; at += BATCH) {
     const [, make] = pick(KINDS);
     exprs.push({ code: make(int(1, 3)) });
   }
-  const expected = nodeAnswers(dir, exprs);
+  const expected = await nodeAnswers(dir, exprs);
   if (expected === null) {
     totals.other += exprs.length;
     continue;

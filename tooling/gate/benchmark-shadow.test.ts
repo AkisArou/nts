@@ -6,6 +6,10 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { test } from "node:test";
 
+import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
+
+await setupOracleTestEnvironment();
+
 const HERE = dirname(fileURLToPath(import.meta.url)), ROOT = resolve(HERE, "../..");
 
 test("benchmark shadows compare fresh JVM and imported-source oracle results without supplying verdicts", async t => {
@@ -13,8 +17,9 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
   t.after(() => rmSync(root, { recursive: true, force: true }));
   const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
   assert.ok(existsSync(bin), `build nts or set NTS_BIN before running this CLI integration test: ${bin}`);
-  const project = join(root, "project"); mkdirSync(project);
-  const config = join(project, "tsconfig.json"), helper = join(root, "helper.ts");
+  const source = join(root, "source"), project = join(source, "project"); mkdirSync(project, { recursive: true });
+  const config = join(project, "tsconfig.json"), helper = join(source, "helper.ts");
+  writeFileSync(join(source, "tsconfig.json"), JSON.stringify({ extends: join(ROOT, "tsconfig.fixtures.json"), files: ["helper.ts"] }));
   writeFileSync(config, JSON.stringify({ extends: join(ROOT, "tsconfig.fixtures.json"), include: ["*.ts"] }));
   writeFileSync(join(project, "main.ts"), 'import { offset } from "../helper.ts"; export function value(n: number): number { return n + offset; }\n');
   writeFileSync(helper, "export const offset = 2;\n");
@@ -34,6 +39,7 @@ test("benchmark shadows compare fresh JVM and imported-source oracle results wit
     assert.ok(rows.every(r => r.context === config), "shadow context must identify the captured project");
     assert.ok(rows.every(r => r.runtime_inputs === "unreviewed"), "shadow agreement cannot imply runtime-input eligibility");
     assert.deepEqual(rows.map(r => r.kind).sort(), ["bench-oracle-node", "bench-program-jvm"]);
+    t.diagnostic(JSON.stringify({ name, rows }));
     return rows;
   };
   assert.ok((await run("first")).every(r => r.status === "miss"));

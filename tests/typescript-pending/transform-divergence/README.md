@@ -1,22 +1,15 @@
-# Where node's transform and TypeScript's emit disagree
+# Whole-program TypeScript emit
 
-**Why node cannot be the oracle:** for these programs node's
-`--experimental-transform-types` and TypeScript's emit produce different
-JavaScript, and node's throws `ReferenceError` where TypeScript's runs.
-Node is right about JavaScript, but these are questions about TypeScript's
-emit, which is what nts compiles to.
+This family waits for enrollment with whole-program emit and `isolatedModules`
+off. TypeScript's emitter defines the answer, including where native type
+stripping would produce different JavaScript.
 
-- **An unqualified reference to another block of a merged namespace**
-  (`namespace-*-across-blocks.ts`). TypeScript resolves `base` in the
-  second `namespace Units { }` block to the first block's export and emits
-  `Units.base`; node's transform scopes each block alone and emits `base`.
-  The suite's own `tests/typescript/namespaces/merging.ts` qualifies the
-  name for this reason.
-- **A `declare const enum`** (`declare-const-enum-is-inlined.ts`).
-  TypeScript inlines each member's value (`3 /* Flags.Both */`) and needs
-  no object; node's transform drops the declaration and leaves `Flags.Both`,
-  which names nothing.
+- An unqualified reference to another block of a merged namespace
+  (`namespace-*-across-blocks.ts`) resolves to that block's exported member.
+  TypeScript emits the qualified reference, such as `Units.base`.
+- A `declare const enum` (`declare-const-enum-is-inlined.ts`) needs whole-program
+  checking so TypeScript can inline each member's value without a runtime enum
+  object.
 
-**The oracle these need:** TypeScript's emit with the suite's own options
-(`target: "ESNext"`, `isolatedModules` off: inlining a `declare const enum`
-needs the whole program).
+The oracle carries the owner's options and uses its pinned runtime target,
+just as it does for the selected suite.

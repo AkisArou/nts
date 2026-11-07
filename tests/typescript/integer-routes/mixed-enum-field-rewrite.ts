@@ -2,12 +2,13 @@
 description: Numeric enum members enter a number field which increments and then halves beyond the enum members.
 features: [ts-integer-route-mixed, ts-numbers, ts-iteration, ts-enum, ts-class, ts-class-fields]
 ---*/
-// An enum seed replaces a small number field before increment and division; node keeps the exact nonmember values and zero sign.
+// An enum seed replaces a small number field before increment and division.
+// Values follow TypeScript's emitter, which writes a -0 enum initializer as 0.
 enum IntegerChoice { Zero = 0, NegativeZero = -0, One = 1, MinusOne = -1, Int32Last = 2147483647, Int32First = -2147483648, Int32Next = 2147483648, Uint32Last = 4294967295, Uint32Next = 4294967296, SafeLast = 9007199254740991, SafeNext = 9007199254740992, Half = 0.5, NegativeHalf = -0.5, Int32Before = 2147483646, Uint32Before = 4294967294, SafeBefore = 9007199254740990 }
 class EnumIntegerState { value: number = 1; }
 const expected: number[][] = [
   [1, 0, 1, 0.5],
-  [1, -0, 1, 0.5],
+  [1, 0, 1, 0.5],
   [1, 1, 2, 1],
   [1, -1, 0, 0],
   [1, 2147483647, 2147483648, 1073741824],

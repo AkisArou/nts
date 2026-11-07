@@ -2,7 +2,7 @@
 // executed test programs: tsrs reserves 32 GiB of virtual pointer space.
 // Scopes are siblings of a calling land service, so every run has its own
 // aggregate slice, then one persistent counter-holding slice per worker.
-import { spawnSync } from "node:child_process";
+import { spawnSync, type SpawnSyncOptions, type SpawnSyncOptionsWithBufferEncoding, type SpawnSyncOptionsWithStringEncoding, type SpawnSyncReturns } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
@@ -146,7 +146,7 @@ export class MemoryRun {
       this.#verify(group, bytes);
       return group;
     } catch (error) {
-      failedSetup(error, () => manager("StopUnit", "ss", unit, "replace"));
+      return failedSetup(error, () => manager("StopUnit", "ss", unit, "replace"));
     }
   }
   #verify(group: string, maximum: number) {
@@ -253,6 +253,8 @@ export function inResidentWorker(): boolean {
 }
 
 let direct: { run: MemoryRun; workers: Map<number, MemoryWorker> } | undefined;
+/** Drain an existing serial/controller owner without creating another run. */
+export function closeMemoryRun(): void { direct?.run.close(); }
 export function memoryRun(): MemoryRun {
   if (!direct) {
     direct = { run: new MemoryRun(), workers: new Map() };
@@ -265,7 +267,9 @@ export function memoryRun(): MemoryRun {
 }
 
 /** Re-enter a serial runner once inside one persistent scope for the whole run. */
-export function serialRun(tools): void {
+type CompilerTools = { memoryCapKb?: number };
+type MemoryResult<T> = T & { memoryKilled: boolean; residentLimitBytes: number; residentRunBytes: number };
+export function serialRun(tools: CompilerTools): void {
   if (inResidentWorker()) return;
   const run = memoryRun();
   const worker = run.worker("serial", Number(tools.memoryCapKb ?? 6_000_000) * 1024);
@@ -294,7 +298,7 @@ export function serialRun(tools): void {
 }
 
 // Both execution APIs share the same cgroup observations and attribution.
-function compilerInvocation(tools, command: string, args: readonly string[], options) {
+function compilerInvocation<TOptions extends {env?: NodeJS.ProcessEnv}>(tools: CompilerTools, command: string, args: readonly string[], options: TOptions) {
   const noAddressLimit = ["-c", 'ulimit -c 0; exec "$0" "$@"', command, ...args];
   if (inResidentWorker()) {
     const boundary = process.env.NTS_CENSUS_WORKER_GROUP!;
@@ -302,7 +306,7 @@ function compilerInvocation(tools, command: string, args: readonly string[], opt
     const before = events(boundary);
     const aggregateBefore = events(aggregate, true).oom;
     if (process.env.NTS_CENSUS_ACTIVE_CASE) writeFileSync(process.env.NTS_CENSUS_ACTIVE_CASE, `${[command, ...args].join(" ")}`);
-    return {command:"sh",args:noAddressLimit,options,close:()=>{},finish:(result)=>{
+    return {command:"sh",args:noAddressLimit,options,close:()=>{},finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
       const cause = memoryCause(before, events(boundary), aggregateBefore, events(aggregate, true).oom);
       const memoryKilled = compileMemoryResult(cause, process.env.NTS_CENSUS_CASE_CONCURRENCY === "exclusive", command, args, Number(process.env.NTS_CENSUS_RUN_MAX_BYTES), Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES));
       return { ...result, memoryKilled, residentLimitBytes: Number(process.env.NTS_CENSUS_WORKER_MAX_BYTES), residentRunBytes: Number(process.env.NTS_CENSUS_RUN_MAX_BYTES) };
@@ -314,7 +318,7 @@ function compilerInvocation(tools, command: string, args: readonly string[], opt
   const bytes = Number(tools.memoryCapKb ?? 6_000_000) * 1024;
   let worker = direct!.workers.get(bytes);
   if (!worker) {
-    worker = direct!.run.worker(`direct${direct.workers.size}`, bytes);
+    worker = direct!.run.worker(`direct${direct!.workers.size}`, bytes);
     direct!.workers.set(bytes, worker);
   }
   const scope = worker.scope("sh", noAddressLimit, options.env);
@@ -322,7 +326,7 @@ function compilerInvocation(tools, command: string, args: readonly string[], opt
   const aggregateBefore = worker.run.aggregateOoms();
   let closed=false;
   const close=()=>{if(!closed){closed=true;worker.stop(scope);}};
-  return {command:"systemd-run",args:scope.argv,options:{...options,env:scope.env},close,finish:(result)=>{
+  return {command:"systemd-run",args:scope.argv,options:{...options,env:scope.env},close,finish:<T extends {stderr?: string | Buffer; error?: Error}>(result:T)=>{
     try{
       if (!worker.ready(scope)) throw new Error(`resident cap: compiler scope failed before entry: ${result.stderr ?? result.error?.message ?? "no diagnostic"}`);
     }finally{close();}
@@ -332,14 +336,17 @@ function compilerInvocation(tools, command: string, args: readonly string[], opt
   }};
 }
 
-export function compileSync(tools, command: string, args: readonly string[], options) {
+export function compileSync(tools: CompilerTools, command: string, args: readonly string[], options: SpawnSyncOptionsWithStringEncoding): MemoryResult<SpawnSyncReturns<string>>;
+export function compileSync(tools: CompilerTools, command: string, args: readonly string[], options: SpawnSyncOptionsWithBufferEncoding): MemoryResult<SpawnSyncReturns<Buffer>>;
+export function compileSync(tools: CompilerTools, command: string, args: readonly string[], options: SpawnSyncOptions): MemoryResult<SpawnSyncReturns<string | Buffer>>;
+export function compileSync(tools: CompilerTools, command: string, args: readonly string[], options: SpawnSyncOptions): MemoryResult<SpawnSyncReturns<string | Buffer>> {
   const invocation=compilerInvocation(tools,command,args,options);
   try{return invocation.finish(spawnSync(invocation.command,invocation.args,invocation.options));}
   finally{invocation.close();}
 }
 
 /** Activity and CPU bounds replace wall deadlines without changing OOM policy. */
-export async function compileActive(tools, command: string, args: readonly string[], options: Partial<Parameters<typeof activeCommand>[2]> = {}) {
+export async function compileActive(tools: CompilerTools, command: string, args: readonly string[], options: Partial<Parameters<typeof activeCommand>[2]> = {}) {
   if("timeout" in options)throw new Error("compileActive does not accept wall-clock verdict deadlines");
   const invocation=compilerInvocation(tools,command,args,options);
   try{

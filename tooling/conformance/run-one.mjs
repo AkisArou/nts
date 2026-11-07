@@ -16,10 +16,20 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import assert from "node:assert";
 import process from "node:process";
 import { getSystemErrorMap, getSystemErrorMessage, getSystemErrorName } from "node:util";
-import { makeCommon, checkPending, peekPending, Skip } from "./common.mjs";
-import tmpdir, { bind as bindTmpdir } from "./tmpdir.mjs";
-import fixtures from "./fixtures.mjs";
-import * as hijackstdio from "./hijackstdio.mjs";
+// Routed spawn children may not inherit execArgv. They still consume the
+// exact parent-owned manifest; no emitter or new preparation runs here.
+const oracleLoader=process.env.NTS_ORACLE_EMIT_MANIFEST
+  ? await import(new URL('./assets/oracle-loader.ts',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)))
+  : null;
+// Consume before any infrastructure/provider/program import. This handle
+// remains in this module's closure and is never exported to a test.
+const oracleHarness=oracleLoader?.oracleHarnessCapability();
+const {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules} = await import('./node-preload-runtime.ts');
+const {makeCommon,checkPending,peekPending,Skip}=await import('./common.mjs');
+const {default:tmpdir,bind:bindTmpdir}=await import('./tmpdir.mjs');
+const {default:fixtures}=await import('./fixtures.mjs');
+const hijackstdio=await import('./hijackstdio.mjs');
+const {nodeHarnessPaths}=await import('./node-paths.ts');
 
 const [, , moduleName, fileArgument, addon, ...fixtureArgs] = process.argv;
 
@@ -502,10 +512,10 @@ try {
     exports = createRequire(import.meta.url)(resolvePath(addon));
     if (mutatedAddon || mutatedSilent) exports = poison(exports);
   } else {
-    const shims = join(moduleDir, "bindings.node.mjs");
+    const {bindings:shims,entry} = nodeModuleFiles(ROOT,moduleName);
     if (existsSync(shims)) await import(shims);
     hideBindingGlobals();
-    exports = await import(join(moduleDir, "src/main.ts"));
+    exports = await import(entry);
     if (mutatedAddon || mutatedSilent) exports = poison(exports);
   }
   // A module may declare canonical web-platform globals its tests need, one
@@ -514,12 +524,8 @@ try {
   // to a *host* function that expects the host's own -- `node:events`'s
   // `listenerCount`, for one -- is not understood, so a module gets this only
   // when its own tests are the reason.
-  const globalsPath = join(moduleDir, "globals");
-  if (existsSync(globalsPath)) {
-    const wanted = readFileSync(globalsPath, "utf8")
-      .split("\n")
-      .map((line) => line.trim())
-      .filter((line) => line !== "" && !line.startsWith("#"));
+  const wanted = nodeGlobalGroups(moduleDir);
+  if (wanted !== null) {
     // Web-platform source reads its environment slot through a typed native ABI
     // -- `nts_environment_has_platform` and its two siblings -- which compiled
     // code satisfies and a host lane must stand in for. `provider/environment.ts`
@@ -543,16 +549,15 @@ try {
     }
 
     for (const name of wanted) {
+      const entry = nodeGlobalEntry(moduleDir,name);
       if (name === "abort") {
-        const abort = await import(join(moduleDir, "../../web-platform/src/core/abort.ts"));
+        const abort = await import(entry);
         globalThis.AbortController = abort.AbortController;
         globalThis.AbortSignal = abort.AbortSignal;
       } else if (name === "encoding") {
-        const encoding = await import(join(moduleDir, "../../web-platform/src/core/encoding.ts"));
+        const encoding = await import(entry);
         globalThis.TextEncoder = encoding.TextEncoder;
         globalThis.TextDecoder = encoding.TextDecoder;
-      } else {
-        throw new Error(`unknown canonical global group in ${globalsPath}: ${name}`);
       }
     }
   }
@@ -653,24 +658,12 @@ try {
   }
   uncaughtHandler = sabotaged ? null : (shapeModule?.dispatchUncaught ?? null);
 
-  const usesPath = join(moduleDir, "uses");
-  if (existsSync(usesPath)) {
-    for (const requestedName of readFileSync(usesPath, "utf8")
-      .split("\n")
-      .map((l) => l.trim())) {
-      if (!requestedName || requestedName.startsWith("#")) continue;
-      // A dependency may name one exported subpath. That keeps the bare module
-      // available as an independent Node oracle in tests such as
-      // `zlib/iter` versus `zlib`, instead of replacing both sides with ours.
-      const slash = requestedName.indexOf("/");
-      const name = slash === -1 ? requestedName : requestedName.slice(0, slash);
-      const requestedSubpath = slash === -1 ? null : requestedName;
-      const dir = join(ROOT, "runtime/node", name);
-      const siblingShims = join(dir, "bindings.node.mjs");
+  {
+    for (const {name,requestedSubpath,dir,bindings:siblingShims,entry,shape:siblingShape} of nodeSiblingModules(ROOT,moduleDir)) {
+      // A declared subpath keeps the bare host module available as an oracle.
       if (existsSync(siblingShims)) await import(siblingShims);
       hideBindingGlobals();
-      const siblingExports = { ...(await import(join(dir, "src/main.ts"))) };
-      const siblingShape = join(dir, "shape.mjs");
+      const siblingExports = { ...(await import(entry)) };
       const siblingShapeModule = existsSync(siblingShape) ? await import(siblingShape) : null;
       // Sabotage is specific to the subject module. Its declared dependencies
       // remain intact, otherwise a mixed test can fail while loading a helper
@@ -736,8 +729,9 @@ try {
 }
 
 const realRequire = createRequire(import.meta.url);
-const nodeTestRoot = realpathSync(join(ROOT, "third_party/node/test"));
-const localTestRoot = join(moduleDir, "test");
+const harnessPaths=nodeHarnessPaths(ROOT,moduleName);
+const nodeTestRoot = oracleLoader?.oracleOriginalPath(realpathSync(harnessPaths.nodeTestRoot))??realpathSync(harnessPaths.nodeTestRoot);
+const localTestRoot = oracleLoader?.oracleOriginalPath(harnessPaths.localTestRoot)??harnessPaths.localTestRoot;
 const hostNodeExecutable = realpathSync(hostProcess.execPath);
 const testModuleCache = new Map();
 const realChildProcess = realRequire("node:child_process");
@@ -745,7 +739,7 @@ const realWorkerThreads = realRequire("node:worker_threads");
 const conformanceRunner = join(HERE, "run-one.mjs");
 const commonJsWorkerRunner = join(HERE, "run-cjs-worker.mjs");
 const declaredChildFixtures = new Set();
-const childFixturesPath = join(moduleDir, "child-fixtures");
+const childFixturesPath = nodeModuleFiles(ROOT,moduleName).childFixtures;
 if (existsSync(childFixturesPath)) {
   for (const childName of readFileSync(childFixturesPath, "utf8")
     .split("\n")
@@ -796,12 +790,13 @@ function isNodeExecutable(command) {
   return resolved === hostNodeExecutable;
 }
 
-function nestedChildOptions(options) {
+function nestedChildOptions(options,target) {
   return {
     ...options,
     env: {
       ...(options?.env ?? hostProcess.env),
       NTS_CONFORMANCE_NESTED_CHILD: "1",
+      ...(oracleHarness ? oracleHarness.child(target,file) : {}),
     },
   };
 }
@@ -828,7 +823,7 @@ function forkInfrastructure(modulePath, argsOrOptions, maybeOptions) {
     return realChildProcess.fork(
       conformanceRunner,
       [moduleName, target, addon ?? "-", ...args],
-      nestedChildOptions(options),
+      nestedChildOptions(options,target),
     );
   }
   return hasArgs
@@ -867,7 +862,7 @@ function spawnInfrastructure(command, argsOrOptions, maybeOptions) {
         addon ?? "-",
         ...args.slice(fixtureIndex + 1),
       ],
-      nestedChildOptions(options),
+      nestedChildOptions(options,target),
     );
   }
   return hasArgs
@@ -906,7 +901,7 @@ function spawnSyncInfrastructure(command, argsOrOptions, maybeOptions) {
         addon ?? "-",
         ...args.slice(fixtureIndex + 1),
       ],
-      nestedChildOptions(options),
+      nestedChildOptions(options,target),
     );
   }
   return hasArgs
@@ -947,6 +942,7 @@ function routedShellInvocation(command, environment, cwd) {
     const nodeReference = match[1];
     const targetReference = match[4];
     return {
+      target:nodeTestTarget(environment[targetName],cwd),
       invocation: match[0],
       replacement:
         `${nodeReference} "$NTS_CONFORMANCE_RUNNER" ` +
@@ -958,8 +954,8 @@ function routedShellInvocation(command, environment, cwd) {
 }
 
 /** Add the private routing values without disturbing any caller environment. */
-function nestedShellChildOptions(options) {
-  const nested = nestedChildOptions(options);
+function nestedShellChildOptions(options,target) {
+  const nested = nestedChildOptions(options,target);
   nested.env.NTS_CONFORMANCE_RUNNER = conformanceRunner;
   nested.env.NTS_CONFORMANCE_MODULE = moduleName;
   nested.env.NTS_CONFORMANCE_ADDON = addon ?? "-";
@@ -986,7 +982,7 @@ function routedShellSpawn(command, args, options, cwd) {
       shellCommand.replaceAll(routed.invocation, routed.replacement),
       ...args.slice(2),
     ],
-    options: nestedShellChildOptions(options),
+    options: nestedShellChildOptions(options,routed.target),
   };
 }
 
@@ -1000,7 +996,7 @@ function execInfrastructure(command, optionsOrCallback, maybeCallback) {
   const routed = routedShellInvocation(command, environment, cwd);
 
   if (routed !== null) {
-    const nested = nestedShellChildOptions(options);
+    const nested = nestedShellChildOptions(options,routed.target);
     const rewritten = command.replaceAll(routed.invocation, routed.replacement);
     return callback === undefined
       ? realChildProcess.exec(rewritten, nested)
@@ -1041,7 +1037,7 @@ function execFileInfrastructure(file, argsOrOptionsOrCallback, optionsOrCallback
       addon ?? "-",
       ...args.slice(fixtureIndex + 1),
     ];
-    const nested = nestedChildOptions(options);
+    const nested = nestedChildOptions(options,target);
     return callback === undefined
       ? realChildProcess.execFile(file, routedArgs, nested)
       : realChildProcess.execFile(file, routedArgs, nested, callback);
@@ -1091,19 +1087,37 @@ class CommonJsFixtureWorker extends realWorkerThreads.Worker {
   constructor(filename, options = {}) {
     const candidate = options.eval === true
       ? null
-      : nodeTestTarget(filename, hostProcess.cwd());
+      : nodeTestTarget(filename instanceof URL ? fileURLToPath(filename) : filename, hostProcess.cwd());
     const target = candidate?.endsWith(".js") ? candidate : null;
+    const requestedArgs = options.execArgv === undefined ? hostProcess.execArgv : options.execArgv;
+    const launch = oracleHarness?.worker(target, file, requestedArgs, options.eval === true ? 'eval' : 'file');
     if (target === null) {
       super(filename, options);
       return;
     }
-    super(commonJsWorkerRunner, {
-      ...options,
-      workerData: {
-        target,
-        value: options.workerData,
-      },
-    });
+    let constructed = false;
+    try {
+      super(commonJsWorkerRunner, {
+        ...options,
+        ...(launch && Array.isArray(requestedArgs) ? {execArgv: launch.args} : {}),
+        workerData: {
+          role: 'nts-commonjs-worker',
+          target,
+          value: options.workerData,
+          ...(launch ? {oracle: launch.context} : {}),
+        },
+      });
+      constructed = true;
+      if (launch) {
+        let failure;
+        this.once('error', error => { failure = {name:error.name,message:error.message,stack:error.stack,code:error.code}; });
+        this.once('exit', () => launch.ended(failure));
+      }
+    } catch (error) {
+      if (constructed) launch?.ended(error);
+      else launch?.failed(error);
+      throw error;
+    }
   }
 }
 
@@ -1420,7 +1434,10 @@ function installEsmHooks() {
         return { url: direct, format: "module", shortCircuit: true };
       }
       const resolved = nextResolve(specifier, context);
-      let infrastructure = files.get(resolved.url);
+      const original = resolved.url.startsWith("file:")
+        ? oracleLoader?.oracleOriginalPath(fileURLToPath(resolved.url)) ?? fileURLToPath(resolved.url)
+        : null;
+      let infrastructure = files.get(original === null ? resolved.url : pathToFileURL(original).href);
       // An ESM test can import a CommonJS helper directly. Node's ordinary
       // CJS loader would execute that helper with its real `require`, which
       // silently switches every nested dependency back to the host runtime.
@@ -1571,10 +1588,11 @@ function shimmedRequire(id, fromFile) {
       // Let the ordinary infrastructure fallback below try its own spelling.
     }
     if (resolved !== null) {
-      const infrastructure = testInfrastructure.get(resolved);
+      const original=oracleLoader?.oracleOriginalPath(resolved)??resolved;
+      const infrastructure = testInfrastructure.get(original);
       if (infrastructure !== undefined) return infrastructure;
       if (resolved.startsWith(`${nodeTestRoot}/`) && resolved.endsWith(".js")) {
-        return executeTestModule(resolved);
+        return executeTestModule(resolved,fromFile);
       }
       // Resolution succeeded, so any error here came from evaluating the
       // module and must reach the test rather than be mistaken for a miss.
@@ -1585,10 +1603,11 @@ function shimmedRequire(id, fromFile) {
   // test runner, `child_process` spawns, `util` formats. Node's own is the
   // right answer for those -- substituting ours would test ours. A module we
   // do not have is a skip, and the reason names it.
+  const originRequire=createRequire(fromFile);
   for (const candidate of [id, bare]) {
     let resolved = false;
     try {
-      realRequire.resolve(candidate);
+      originRequire.resolve(candidate);
       resolved = true;
     } catch {
       // Try the next spelling only when this spelling cannot be resolved.
@@ -1597,14 +1616,15 @@ function shimmedRequire(id, fromFile) {
       // Evaluation is deliberately outside the resolution catch. An
       // infrastructure module that throws while loading has failed the test;
       // it is not a missing module and must not be loaded a second time.
-      return realRequire(candidate);
+      return originRequire(candidate);
     }
   }
   throw new Skip(`needs ${id}`);
 }
 
 /** Execute one Node test/helper as CommonJS with recursive module substitution. */
-function executeTestModule(modulePath) {
+function executeTestModule(modulePath,fromFile) {
+  if(oracleHarness)modulePath=oracleHarness.commonJS(modulePath,fromFile);
   const cached = testModuleCache.get(modulePath);
   if (cached !== undefined) return cached.exports;
 

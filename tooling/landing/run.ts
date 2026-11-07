@@ -19,8 +19,9 @@
 // Lines a check prints for a case its record has no row for yet, or for a
 // recorded case that got better (tooling/records/pending.ts), are listed as
 // information: the full check writes those rows.
+import { removable } from "../gate/run-temporary.ts";
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { gateCommand } from "../gate/affinity.ts";
 import { RESUME_AT_GB, memAvailableGB } from "../gate/admission.ts";
@@ -216,15 +217,9 @@ export function pendingLines(run: string): string[] {
  * Remove a run's directory. A red run keeps its temporary directory, which
  * can hold read-only captured inputs (a sealed dependency tree): the run's own
  * directories get their write permission back first, never through a link,
- * and a directory another user owns is left as it is.
+ * and a directory another user owns is refused.
  */
 export function removeRun(path: string): void {
-  const walk = (at: string) => {
-    const info = lstatSync(at);
-    if (info.isSymbolicLink() || !info.isDirectory() || info.uid !== process.getuid?.()) return;
-    chmodSync(at, (info.mode & 0o777) | 0o700);
-    for (const name of readdirSync(at)) walk(join(at, name));
-  };
-  try { walk(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  try { removable(path); } catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   rmSync(path, { recursive: true, force: true });
 }

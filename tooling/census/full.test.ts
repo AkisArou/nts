@@ -1,13 +1,16 @@
-import { gateEnvironment, launcherPolicyNames, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
-import { STANDING_GATE_POLICY } from "../gate/verdict-policy.ts";
-import { spawnTest } from "../gate/test-wait.ts";
+import {gateEnvironment, launcherPolicyNames, ENVIRONMENT_CONTEXT} from "../gate/canonical-environment.ts";
+import {STANDING_GATE_POLICY} from "../gate/verdict-policy.ts";
+import {spawnTest} from "../gate/test-wait.ts";
+import {copyModuleClosure, moduleClosure} from "../gate/module-closure-fixture.ts";
+import {removeOracleSnapshot} from "../differential/oracle-emit.ts";
 import assert from "node:assert/strict";
-import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
-import { test } from "node:test";
-import { fullPlan, fullEnvironment } from "./full-plan.ts";
-import { testScratch } from "../gate/test-scratch.ts";
+import {execFileSync} from "node:child_process";
+import {existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
+import {join, dirname} from "node:path";
+
+import {test} from "node:test";
+import {fullPlan, fullEnvironment} from "./full-plan.ts";
+import {testScratch, newTestScratch} from "../gate/test-scratch.ts";
 
 
 test("missing full-run environment refuses before lock or setup", t => {
@@ -24,7 +27,8 @@ test("missing full-run environment refuses before lock or setup", t => {
 });
 
 function fixture(t: { after(fn: () => void): void }) {
-  const directory = testScratch(t, "full-run");
+  const directory = newTestScratch("full-run");
+  t.after(() => removeOracleSnapshot(directory));
   const root = join(directory, "repo"), home = join(directory, "full");
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
   mkdirSync(join(root, "tooling/lanes"), { recursive: true });
@@ -37,8 +41,7 @@ function fixture(t: { after(fn: () => void): void }) {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   writeFileSync(join(root, "results/marker"), "main record\n");
   writeFileSync(join(root, "tooling/gate/pinned.sh"), readFileSync(new URL("../gate/pinned.sh", import.meta.url)));
-  writeFileSync(join(root,"tooling/gate/canonical-environment.ts"),readFileSync(new URL("../gate/canonical-environment.ts",import.meta.url)));
-    writeFileSync(join(root,"tooling/gate/run-temporary.ts"),readFileSync(new URL("../gate/run-temporary.ts",import.meta.url)));
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json"], root);
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
   writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
@@ -70,10 +73,13 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
   const f=fixture(t),source=new URL("../gate/",import.meta.url).pathname,gate=join(f.root,"tooling/gate");
   // Exercise the real verdict runner in its own repository, with two stand-in
   // steps that both return 77. Only the source-owned device skip may be green.
-  for(const name of readdirSync(source)) {
-    if(name==="run.mjs") writeFileSync(join(gate,name),readFileSync(join(source,name)));
-    else if(!existsSync(join(gate,name)) && name!=="all.sh") symlinkSync(join(source,name),join(gate,name));
+  for(const file of moduleClosure(["tooling/gate/run.mjs"])){
+    const target=join(f.root,file),original=join(source,"../..",file);
+    mkdirSync(dirname(target),{recursive:true});
+    if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
+    else if(!existsSync(target))symlinkSync(original,target);
   }
+  symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[join(source,"all.sh"),"--list"],{encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
   writeFileSync(join(gate,"all.sh"),`#!/bin/sh\nif [ "$1" = --list ]; then\ncat <<'NAMES'\n${listed.stdout.trim()}\nNAMES\nelse\n  echo 'SKIP: fixture unavailable'\n  exit 77\nfi\n`);

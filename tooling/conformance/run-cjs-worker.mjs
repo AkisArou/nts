@@ -22,7 +22,13 @@ if (
   throw new TypeError("run-cjs-worker requires a Worker target");
 }
 
-const target = input.target;
+// The wrapper is declared by the producer and consumed before fixture code.
+// Its context stays in this closure, while workerData retains the user's value.
+const oracleLoader = input.oracle
+  ? await import(new URL('./assets/oracle-loader.ts', pathToFileURL(input.oracle.NTS_ORACLE_EMIT_MANIFEST)))
+  : null;
+const oracleHarness = oracleLoader?.oracleHarnessCapability();
+const target = oracleHarness ? oracleHarness.commonJS(input.target) : input.target;
 const loaded = { exports: {} };
 const localRequire = createRequire(target);
 const requireFromTarget = (id) => {

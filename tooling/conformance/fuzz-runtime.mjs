@@ -1,4 +1,7 @@
+import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
 import {bundledDependencies} from './node-deps.mjs';
+import {OracleWorker,oracleLoaderReady,oracleExecution,closeOracleExecution,finishOracleSnapshot,removeOracleSnapshot} from '../differential/oracle-emit.ts';
+import {ToolingInstrumentError} from '../gate/step-result.ts';
 // The machinery a generative differential needs, minus the grammar.
 //
 // `fuzz-expressions.mjs` was the first of these and carried all of it inline.
@@ -71,8 +74,8 @@ export const TSCONFIG = JSON.stringify(
  * value this cannot render comes back `null`, and its case is dropped.
  */
 export const PRINTER = `
-const out = [];
-function print(i, v) {
+const out: (string | null)[] = [];
+function print(i: number | string, v: unknown) {
   if (typeof v === "number") {
     out.push(Number.isNaN(v) ? "NaN"
       : v === Infinity ? "Infinity"
@@ -103,19 +106,32 @@ export function assertion(code, want, label) {
 /**
  * Run a generated `.ts` file under node and return what it printed.
  *
- * `.ts` and `--experimental-strip-types`, the way `probe.sh` runs node: the
- * generated code carries annotations because the *compiled* side needs them
- * under `strict`, and a plain `.mjs` oracle is a syntax error on the first one.
+ * Use the same pinned TypeScript program emit as every other Node oracle.
  */
-export function runOracle(dir, source) {
+let oracleWorker;
+process.once('beforeExit',()=>oracleWorker?.close());
+process.once('exit',()=>oracleWorker?.close());
+export async function runOracle(dir, source) {
   const file = join(dir, "oracle.ts");
   mkdirSync(dir, { recursive: true });
-  writeFileSync(file, source);
+  // Generated helpers are private to this program, never browser globals.
+  writeFileSync(file, source+'\nexport {};\n');
+  const project=join(dir,'oracle.tsconfig.json');
+  writeFileSync(project,JSON.stringify({...JSON.parse(TSCONFIG),files:['oracle.ts'],include:[]})+'\n');
+  oracleWorker??=new OracleWorker(join(dir,"oracle-worker"),oracleToolchainLocation());
+  const snapshotOwner=await oracleWorker.prepare({entry:file,project,directory:join(dir,"oracle-emit")});
+  let prepared;
+  const finish=()=>{const result=finishOracleSnapshot(snapshotOwner);if(!result.ready)throw new ToolingInstrumentError('tooling-setup',result.why);};
+  try{
+  prepared=oracleExecution(snapshotOwner);
   const run = spawnSync(
     process.execPath,
-    ["--experimental-strip-types", "--no-warnings", file],
-    { encoding: "utf8" },
+    [...prepared.args, "--no-warnings", file],
+    { encoding: "utf8", env: { ...process.env, ...prepared.env } },
   );
+  finish();
+  const health=oracleLoaderReady(prepared);
+  if(!health.ready||run.error||run.signal)throw Error('fuzz oracle not measured: '+(!health.ready?health.why:run.error??run.signal));
   if (run.status !== 0) {
     if (process.env.NTS_FUZZ_DEBUG) console.error("oracle failed:", run.stderr);
     return null;
@@ -128,6 +144,7 @@ export function runOracle(dir, source) {
     }
     return null;
   }
+  }finally{try{finish();}finally{if(prepared)closeOracleExecution(prepared);removeOracleSnapshot(dirname(snapshotOwner.manifest));}}
 }
 
 /**

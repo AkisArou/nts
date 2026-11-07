@@ -28,37 +28,50 @@
 // a fact about the program.
 import { existsSync } from "node:fs";
 import { registerHooks } from "node:module";
-import { join, relative, sep } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { RUNTIME_ROOT, RUNTIME_SPECIFIER } from "./outcomes-project.ts";
+import { RUNTIME_ROOT, RUNTIME_SPECIFIER, outcomeBindingPath } from "./outcomes-project.ts";
+
+// The capture loader publishes source identity for its own emitted modules.
+// Capture the trusted bootstrap path before any fixture body can change env.
+const manifest = process.env.NTS_ORACLE_EMIT_MANIFEST;
+const capture = manifest
+  ? await import(pathToFileURL(join(dirname(manifest), "assets/oracle-loader.ts")).href)
+  : undefined;
+const producerSource: ((url: string) => string | null) | undefined = capture?.oracleModuleSource;
+const capturedFile: ((source: string) => string | null) | undefined = capture?.oracleCapturedFile;
+if (manifest && (typeof producerSource !== "function" || typeof capturedFile !== "function")) throw Error("outcome preload has no producer source mapping");
+const ownSource = producerSource?.(import.meta.url);
+if (manifest && !ownSource) throw Error("outcome preload has no producer source identity");
+const runtimeRoot = ownSource ? resolve(dirname(ownSource), "../../runtime") : RUNTIME_ROOT;
 
 /** The stand-in file for the runtime module a path belongs to, or null. */
-export function bindingsFor(path) {
-  const inside = relative(RUNTIME_ROOT, path).split(sep);
-  // runtime/node/<module>/..., runtime/web-platform/...
-  const depth = inside[0] === "node" ? 2 : 1;
-  if (inside[0] === ".." || inside.length <= depth) return null;
-  const file = join(RUNTIME_ROOT, ...inside.slice(0, depth), "bindings.node.mjs");
+export function bindingsFor(path: string, root = runtimeRoot) {
+  const file = outcomeBindingPath(path,root);
+  if(!file)return null;
+  if (capturedFile) return capturedFile(file);
   return existsSync(file) ? file : null;
 }
 
 registerHooks({
   resolve(specifier, context, next) {
-    return specifier.startsWith(RUNTIME_SPECIFIER)
+    return !producerSource && specifier.startsWith(RUNTIME_SPECIFIER)
       ? next(pathToFileURL(join(RUNTIME_ROOT, specifier.slice(RUNTIME_SPECIFIER.length))).href, context)
       : next(specifier, context);
   },
   load(url, context, next) {
     const loaded = next(url, context);
-    if (!url.startsWith("file:") || !url.endsWith(".ts")) return loaded;
-    const bindings = bindingsFor(fileURLToPath(url));
+    const sourceIdentity = producerSource ? producerSource(url)
+      : url.startsWith("file:") && url.endsWith(".ts") ? fileURLToPath(url) : null;
+    if (!sourceIdentity) return loaded;
+    const bindings = bindingsFor(sourceIdentity);
     if (!bindings) return loaded;
-    const source = typeof loaded.source === "string" ? loaded.source : Buffer.from(loaded.source).toString("utf8");
+    const source = typeof loaded.source === "string" ? loaded.source : Buffer.from(loaded.source as any).toString("utf8");
     return { ...loaded, source: `import ${JSON.stringify(pathToFileURL(bindings).href)};\n${source}` };
   },
 });
 
-const report = (error) => {
+const report = (error: any) => {
   // **Of an object only.** A primitive has a constructor too -- `"x".constructor`
   // is `String`, through the wrapper a property read makes -- so asking every
   // value printed a rejected string as `String: ` and dropped its text, where nts

@@ -424,7 +424,7 @@ export const BACKENDS = {
  * mutable worker scratch instead, for checking materialization independently
  * of the immutable case-root store. Native capture runs anew in both modes.
  */
-export function attempt(dir, body, tools, origin?) {
+export async function attempt(dir, body, tools, origin?) {
   const { nts } = tools;
   const project = tools.fresh
     ? (materialise(dir, body, origin, tools.language), dir)
@@ -571,7 +571,7 @@ export function attempt(dir, body, tools, origin?) {
     if (nativeDecline(String(error.stderr ?? ""))) {
       const oracle = tools.oracleOutput !== undefined
         ? { ok: true as const, output: tools.oracleOutput }
-        : outputOracle(project, dir, body, tools, (command, args) => capped(tools, command, args));
+        : await outputOracle(project, dir, body, tools, (command, args) => capped(tools, command, args));
       if (!oracle.ok) return { bucket: "infrastructure-error", why: oracle.why };
       const printed = { stdout: String(error.stdout ?? ""), stderr: beforeTerminalDiagnostic(String(error.stderr ?? ""), "decline") };
       if (!outputPrefixes(printed, oracle.output)) return {
@@ -594,9 +594,9 @@ export function attempt(dir, body, tools, origin?) {
 // Both run through `attempt`, the same path a real test takes. A control that
 // takes a different path proves nothing about the one that matters.
 
-export function selfChecks(scratch, tools, cannotMeasure) {
+export async function selfChecks(scratch, tools, cannotMeasure) {
   const dir = workspace(join(scratch, "checks"));
-  const control = attempt(dir, `assert.sameValue(1 + 1, 2, "control");\n`, tools);
+  const control = await attempt(dir, `assert.sameValue(1 + 1, 2, "control");\n`, tools);
   if (control.bucket !== "strict-pass") {
     cannotMeasure(
       `the control program does not pass (${control.bucket}${control.why ? `: ${control.why}` : ""}). ` +
@@ -607,7 +607,7 @@ export function selfChecks(scratch, tools, cannotMeasure) {
   // the failure this whole effort exists to avoid, and it looks exactly like
   // success. A deliberately failing assertion must come back `threw
   // Test262Error` — not merely non-passing, because a crash would satisfy that.
-  const sabotage = attempt(dir, `assert.sameValue(1 + 1, 3, "sabotage");\n`, tools);
+  const sabotage = await attempt(dir, `assert.sameValue(1 + 1, 3, "sabotage");\n`, tools);
   if (sabotage.bucket !== "threw" || sabotage.thrown !== "Test262Error") {
     cannotMeasure(
       `a deliberately failing assertion reported ${sabotage.bucket}` +
@@ -633,7 +633,7 @@ export function selfChecks(scratch, tools, cannotMeasure) {
   // meaning the refusal went unread -- and so would the checker: this arm was
   // written in TypeScript (`text: string`), and when the test became
   // `main.js` it went on passing as a *syntax error*, testing nothing.
-  const refused = attempt(dir, 'var matched = /^[a-z]+$/.test("abc");\nassert.sameValue(matched, true, "refusal arm");\n', tools);
+  const refused = await attempt(dir, 'var matched = /^[a-z]+$/.test("abc");\nassert.sameValue(matched, true, "refusal arm");\n', tools);
   if (refused.bucket !== "unsupported" || refused.why !== "lowering") {
     cannotMeasure(
       `a program containing a refused construct reported ${refused.bucket}` +
@@ -646,9 +646,9 @@ export function selfChecks(scratch, tools, cannotMeasure) {
   // calls it -- exiting 0 is not a pass. `async`/`await` rather than `.then`,
   // which this compiler refuses on a promise.
   const ASYNC = "/*---\nflags: [async]\n---*/\n";
-  const done = attempt(dir, `${ASYNC}async function f() { await 0; $DONE(); }\nf();\n`, tools);
-  const failed = attempt(dir, `${ASYNC}async function f() { await 0; $DONE(new Test262Error("async arm")); }\nf();\n`, tools);
-  const silent = attempt(dir, `${ASYNC}async function f() { await 0; }\nf();\n`, tools);
+  const done = await attempt(dir, `${ASYNC}async function f() { await 0; $DONE(); }\nf();\n`, tools);
+  const failed = await attempt(dir, `${ASYNC}async function f() { await 0; $DONE(new Test262Error("async arm")); }\nf();\n`, tools);
+  const silent = await attempt(dir, `${ASYNC}async function f() { await 0; }\nf();\n`, tools);
   if (done.bucket !== "strict-pass" || failed.thrown !== "Test262Error" || silent.thrown !== "$DONE") {
     cannotMeasure(
       `the async arms read ${done.bucket}, ${failed.bucket} ${failed.thrown ?? ""}, ${silent.bucket} ${silent.thrown ?? ""}` +

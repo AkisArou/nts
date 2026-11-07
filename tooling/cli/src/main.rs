@@ -231,7 +231,8 @@ fn check(rest: &[String]) -> Result<()> {
     let measured = (|| {
         let tsconfig = project(rest)?;
         let mut source = frontend_for(&tsconfig)?;
-        nts_differential::check(&tsconfig, &mut source)
+        let oracle = arguments::value_of(rest, "--oracle-prepared").map(Utf8Path::new);
+        nts_differential::check_with_oracle(&tsconfig, &mut source, oracle)
     })();
     if rest.iter().any(|argument| argument == "--json") {
         return print_check_json(measured);

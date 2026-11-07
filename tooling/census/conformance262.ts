@@ -127,16 +127,19 @@ import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileS
 import { availableParallelism, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isDeepStrictEqual } from "node:util";
 
 import { BACKENDS, selfChecks } from "./attempt262.ts";
 import { bodyOf, collectCaseRoots, harnessHashOf, pinCompiler, populationOf } from "./project.ts";
 import { compareTypeScriptObservation, mergeTypeScriptRecord, observationFromRow, parseTypeScriptRecord, pendingCases,
-  serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION } from "./typescript-record.ts";
+  serializeTypeScriptRecord, TYPESCRIPT_OBSERVATIONS_VERSION, TYPESCRIPT_RECORD_VERSION } from "./typescript-record.ts";
 import { acceptedChange } from "../conformance/outcome-transition.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
-import { selectTypescript } from "./suites/typescript.ts";
+import { selectTypescript, typescriptOracleIdentity } from "./suites/typescript.ts";
+import { ownCensusScratch } from "./census-scratch.ts";
 import { provenanceOf } from "../conformance/pin.ts";
-import { memoryRun } from "./worker-memory.ts";
+import {ToolingInstrumentError,publishToolingFailure} from "../gate/step-result.ts";
+import { memoryRun, closeMemoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 import { Admission, RESUME_AT_GB } from "../gate/admission.ts";
 import { acquireToken, withToken } from "../gate/tokens.mjs";
@@ -160,8 +163,7 @@ const NTS = process.env.NTS_BIN ?? join(ROOT, "target/release/nts");
 const CC = process.env.CC ?? "cc";
 // Under `~/.cache`, not `/tmp`: `/tmp` is a tmpfs that runs out of inodes
 // before bytes, and a full run makes a runtime build per case.
-const SCRATCH =
-  process.env.NTS_CENSUS_DIR ?? join(homedir(), ".cache/nts/conformance262", String(process.pid));
+const {path:SCRATCH,cleanup:cleanupScratch}=ownCensusScratch(closeMemoryRun);
 
 const argv = process.argv.slice(2);
 const flag = (name, fallback) => {
@@ -300,6 +302,9 @@ for (const file of [recordedFile, checkFile]) {
   }
 }
 const TOOLS = { nts: PINNED, cc: CC, memoryCapKb: MEMORY_CAP_KB, objectCache: OBJECT_CACHE, backend: BACKEND, fresh: FRESH };
+// Census uses the source oracle even when nts itself is a pinned binary.
+// Bind both its verified toolchain and the single-case roots/options contract.
+const SOURCE_ORACLE = TYPESCRIPT ? typescriptOracleIdentity() : undefined;
 
 // --- the population --------------------------------------------------------
 
@@ -361,6 +366,11 @@ const chosen = populationOf(records, {
 });
 if ("refused" in chosen) cannotMeasure(chosen.refused);
 const population = chosen.population;
+if(sample>0){
+  const selected=new Set(population.map(record=>record.path));
+  pendingPaths=pendingPaths.filter(path=>selected.has(path));
+}
+const unmeasuredPending=new Set(TYPESCRIPT&&!recordFile&&!recordPendingFile?pendingPaths:[]);
 const partial = sample > 0 || recordedFile !== null;
 
 // --- exclusions ------------------------------------------------------------
@@ -478,11 +488,15 @@ async function runAll(all) {
   // overload changes which cases typecheck, so rows from two harnesses are two
   // runs even under one compiler.
   const header = { fingerprint: FINGERPRINT, under, harness: HARNESS_HASH, output_prefix: OUTPUT_PREFIX_VERSION,
-    ...(TYPESCRIPT ? { observations: TYPESCRIPT_OBSERVATIONS_VERSION } : {}) };
+    ...(TYPESCRIPT ? { observations: TYPESCRIPT_OBSERVATIONS_VERSION, oracleIdentity: SOURCE_ORACLE } : {}) };
   if (rowsFile && resume && existsSync(rowsFile)) {
     const [first, ...rest] = readFileSync(rowsFile, "utf8").split("\n");
     let was = null;
     try { was = JSON.parse(first); } catch {}
+    if (TYPESCRIPT && !isDeepStrictEqual(was?.oracleIdentity, SOURCE_ORACLE)) {
+      cannotMeasure(`${rowsFile} has a missing or different TypeScript oracle identity; ` +
+        "resume requires the same emitter, loader, toolchain and materializer roots/options contract");
+    }
     if (was?.fingerprint !== FINGERPRINT || was?.under !== under || was?.harness !== HARNESS_HASH ||
       was?.output_prefix !== OUTPUT_PREFIX_VERSION ||
       TYPESCRIPT && was?.observations !== header.observations) {
@@ -593,6 +607,7 @@ function classify(row) {
     case "timeout":
       return { outcome: "no-verdict", cause: `timeout${row.why ? ` (${row.why})` : ""}` };
     // A TypeScript case node itself fails: the case is wrong, not the compiler.
+    case "oracle-rejected":
     case "oracle":
       return { outcome: "no-verdict", cause: `oracle: node fails the case: ${row.why}` };
     case "crash":
@@ -723,7 +738,7 @@ const cases = population.map((record) => {
   // The spec section a test names -- for a negative, the rule that makes it an
   // early error -- so an accepted negative can be ranked by the rule to build.
   const esid = /^\s*esid:\s*(\S+)/m.exec(source.split("---*/")[0])?.[1] ?? "(no esid)";
-  return { record, gap: harnessGap(record, source), excluded: excludedBy(record), esid };
+  return { record, gap: unmeasuredPending.has(record.path)?'pending':harnessGap(record, source), excluded: excludedBy(record), esid };
 });
 const toAttempt = cases.filter((c) => c.gap === null).map((c) => c.record.path);
 const rows = await runAll(toAttempt);
@@ -791,7 +806,7 @@ for (const c of cases) {
   if (row.diagnostics) c.named = [...new Set(row.diagnostics.flatMap((d) => d.named))];
 }
 
-rmSync(SCRATCH, { recursive: true, force: true });
+cleanupScratch();
 
 // --- tallies -------------------------------------------------------------------
 
@@ -910,6 +925,13 @@ let typeScriptObserved = null;
 if (TYPESCRIPT) {
   typeScriptObserved = new Map();
   for (const one of cases) {
+    if(unmeasuredPending.has(one.record.path))continue;
+    const raw=rows.get(one.record.path);
+    if(raw?.bucket==='oracle'||raw?.bucket==='infrastructure-error'){
+      const error=new ToolingInstrumentError('tooling-setup',`${one.record.path}: oracle not measured: ${raw.why??'no completed oracle observation'}`);
+      publishToolingFailure(error);
+      cannotMeasure(error.message);
+    }
     try {
       if (one.gap !== null) throw new Error(`harness cannot judge: ${one.gap}`);
       typeScriptObserved.set(one.record.path, observationFromRow(rows.get(one.record.path)));
@@ -919,7 +941,7 @@ if (TYPESCRIPT) {
 
 if (recordFile && TYPESCRIPT) {
   const record = {
-    metadata: { version: 3, backend: BACKEND, commit: provenanceOf(NTS)?.sha,
+    metadata: { version: TYPESCRIPT_RECORD_VERSION, backend: BACKEND, commit: provenanceOf(NTS)?.sha,
       compiler: FINGERPRINT, harness: HARNESS_HASH, under },
     cases: typeScriptObserved,
   };
@@ -989,7 +1011,7 @@ if (checkFile && TYPESCRIPT) {
     if (!c) {
       // A sample does not see the whole record; only a full run may call a
       // recorded case missing.
-      if (!partial || recordedFile) comparison.MISSING.push(`${path}: recorded, not in the selection`);
+      if (sample === 0 && (!partial || recordedFile)) comparison.MISSING.push(`${path}: recorded, not in the selection`);
       continue;
     }
     if (was.outcome === "pass" && c.outcome !== "pass") {
@@ -1180,7 +1202,8 @@ console.log(out.join("\n"));
 
 if (jsonFile) {
   writeFileSync(jsonFile, JSON.stringify({
-    ...(TYPESCRIPT ? { record_version: 3, observations: Object.fromEntries(typeScriptObserved) } : {}),
+    ...(TYPESCRIPT ? { record_version: TYPESCRIPT_OBSERVATIONS_VERSION, oracleIdentity: SOURCE_ORACLE,
+      observations: Object.fromEntries(typeScriptObserved) } : {}),
     pin, compiler: NTS, fingerprint: FINGERPRINT, under, machine: { start: machineAtStart, end: machineAtEnd, jobs }, selected: records.length, population: population.length,
     attempted: toAttempt.length, checks, tally, inScope: inScope.length, inScopePass, excluded: excludedCases.length,
     rankSole, rankFirst, rankAny, rankNamed, exclusions: exclusionReport, comparison, problems,

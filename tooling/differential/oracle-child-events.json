@@ -1,0 +1,285 @@
+{
+  "version": 1,
+  "rows": [
+    {
+      "name": "root",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n",
+      "ready": true
+    },
+    {
+      "name": "numeric 1.0",
+      "raw": "{\"version\":1.0,\"status\":\"ready\"}\n",
+      "ready": true
+    },
+    {
+      "name": "numeric 1e0",
+      "raw": "{\"version\":1e0,\"status\":\"ready\"}\n",
+      "ready": true
+    },
+    {
+      "name": "invalid version \"1\"",
+      "raw": "{\"version\":\"1\",\"status\":\"ready\"}\n",
+      "ready": false
+    },
+    {
+      "name": "invalid version true",
+      "raw": "{\"version\":true,\"status\":\"ready\"}\n",
+      "ready": false
+    },
+    {
+      "name": "invalid version null",
+      "raw": "{\"version\":null,\"status\":\"ready\"}\n",
+      "ready": false
+    },
+    {
+      "name": "invalid version 0",
+      "raw": "{\"version\":0,\"status\":\"ready\"}\n",
+      "ready": false
+    },
+    {
+      "name": "invalid version 2",
+      "raw": "{\"version\":2,\"status\":\"ready\"}\n",
+      "ready": false
+    },
+    {
+      "name": "ready-child",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": true
+    },
+    {
+      "name": "unlaunched-child",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n",
+      "ready": true
+    },
+    {
+      "name": "two-child-interleave",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-two\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-two\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-two\"}\n",
+      "ready": true
+    },
+    {
+      "name": "mixed-closures",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-two\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-two\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-two\"}\n",
+      "ready": true
+    },
+    {
+      "name": "root-ready-between",
+      "raw": "{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": true
+    },
+    {
+      "name": "unfinished-reservation",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "unfinished-bootstrap",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "legacy-no-begin",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "unknown-begin",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "unknown-ready",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "unknown-failed",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "duplicate-start",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "duplicate-begin",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "duplicate-ready",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "duplicate-failed",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "begun-cannot-fail",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "failed-cannot-begin",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "failed-cannot-ready",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "unknown-child",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-two\"}\n",
+      "ready": false
+    },
+    {
+      "name": "reverse",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-start empty",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-start slash",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one/child\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-start number",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":1}\n",
+      "ready": false
+    },
+    {
+      "name": "child-start unicode",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-\\u03b1\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-start extra",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\",\"extra\":true}\n",
+      "ready": false
+    },
+    {
+      "name": "child-begin empty",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-begin slash",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one/child\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-begin number",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":1}\n",
+      "ready": false
+    },
+    {
+      "name": "child-begin unicode",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-\\u03b1\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-begin extra",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\",\"extra\":true}\n",
+      "ready": false
+    },
+    {
+      "name": "child-ready empty",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-ready slash",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one/child\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-ready number",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":1}\n",
+      "ready": false
+    },
+    {
+      "name": "child-ready unicode",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-\\u03b1\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-ready extra",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\",\"extra\":true}\n",
+      "ready": false
+    },
+    {
+      "name": "child-launch-failed empty",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-launch-failed slash",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one/child\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-launch-failed number",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":1}\n",
+      "ready": false
+    },
+    {
+      "name": "child-launch-failed unicode",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-\\u03b1\"}\n",
+      "ready": false
+    },
+    {
+      "name": "child-launch-failed extra",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\",\"extra\":true}\n",
+      "ready": false
+    },
+    {
+      "name": "instrument before ready",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"instrument\",\"reason\":\"sticky failure\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "instrument after ready",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"instrument\",\"reason\":\"sticky failure\"}\n",
+      "ready": false
+    },
+    {
+      "name": "instrument before launch-failed",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"instrument\",\"reason\":\"sticky failure\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n",
+      "ready": false
+    },
+    {
+      "name": "instrument after launch-failed",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-launch-failed\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"instrument\",\"reason\":\"sticky failure\"}\n",
+      "ready": false
+    },
+    {
+      "name": "truncated",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"child-start\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-begin\",\"execution\":\"execution-one\"}\n{\"version\":1,\"status\":\"child-ready\",\"execution\":\"execution-one\"}",
+      "ready": false
+    },
+    {
+      "name": "malformed",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{bad}\n",
+      "ready": false
+    },
+    {
+      "name": "empty instrument reason",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"instrument\",\"reason\":\"\"}\n",
+      "ready": false
+    },
+    {
+      "name": "named instrument control",
+      "raw": "{\"version\":1,\"status\":\"ready\"}\n{\"version\":1,\"status\":\"instrument\",\"reason\":\"named hold\"}\n",
+      "ready": false
+    }
+  ]
+}

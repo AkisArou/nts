@@ -1,5 +1,6 @@
 import { launcherPolicyNames } from "./canonical-environment.ts";
 import { spawnTest } from "./test-wait.ts";
+import { copyModuleClosure } from "./module-closure-fixture.ts";
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -26,8 +27,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     });
     const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
-    writeFileSync(join(root, "tooling/gate/canonical-environment.ts"), readFileSync(new URL("./canonical-environment.ts",import.meta.url)));
-    writeFileSync(join(root,"tooling/gate/run-temporary.ts"),readFileSync(new URL("./run-temporary.ts",import.meta.url)));
+    copyModuleClosure(["tooling/gate/canonical-environment.ts"], root);
     // Affinity is independently tested; this fixture isolates which commit
     // supplies preparation without depending on delegated host cpusets.
     writeFileSync(join(root, "tooling/gate/affinity.ts"), "");

@@ -133,10 +133,140 @@ fn a_backend_value_before_the_project_is_not_a_project() {
     assert!(!error.contains("`llvm` does not exist"), "{error}");
 }
 
+struct CaptureScope(std::path::PathBuf);
+impl Drop for CaptureScope {
+    fn drop(&mut self) {
+        fn writable(path: &std::path::Path) {
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o700));
+            }
+            if let Ok(entries) = std::fs::read_dir(path) {
+                for entry in entries.flatten() {
+                    if entry.file_type().is_ok_and(|kind| kind.is_dir()) {
+                        writable(&entry.path());
+                    }
+                }
+            }
+        }
+        writable(&self.0);
+        let _ = std::fs::remove_dir_all(&self.0);
+    }
+}
+
+fn assert_private_capture_accounting(
+    directory: &std::path::Path,
+    parent_ledger: Option<&std::path::Path>,
+    private_ledger: &std::path::Path,
+    acquisition_counts: &[usize],
+) {
+    if let Some(ledger) = parent_ledger {
+        let rows = std::fs::read_to_string(ledger).unwrap();
+        for row in rows
+            .split_inclusive('\n')
+            .filter(|line| line.ends_with('\n'))
+        {
+            let value: serde_json::Value = serde_json::from_str(row).unwrap();
+            let path = std::path::Path::new(value["directory"].as_str().unwrap());
+            assert!(
+                !path.starts_with(directory),
+                "private acquisitions must not enter the parent ledger: {row}"
+            );
+        }
+    }
+    assert_eq!(acquisition_counts, [1, 2, 2]);
+    let rows = std::fs::read_to_string(private_ledger).unwrap();
+    let rows: Vec<serde_json::Value> = rows
+        .lines()
+        .map(|line| serde_json::from_str(line).unwrap())
+        .collect();
+    let modes: Vec<_> = rows
+        .iter()
+        .map(|row| row["mode"].as_str().unwrap())
+        .collect();
+    assert_eq!(modes, ["cold", "hit"]);
+    eprintln!(
+        "private oracle capture accounting: {}",
+        serde_json::json!({"logicalExecutions":2,"refusalAcquisitions":0,"parentPrivateRows":0,"acquisitionCountsAfterCalls":acquisition_counts,"acquisitions":rows})
+    );
+}
+
+fn assert_provider_selection(
+    output: &std::process::Output,
+    counting: bool,
+    fresh_capture: Option<bool>,
+) {
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let stderr = String::from_utf8_lossy(&output.stderr);
+    if counting {
+        assert!(!output.status.success(), "{stdout}\n{stderr}");
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["status"], "error");
+        assert_eq!(report["error"]["kind"], "preparation");
+        assert!(
+            report["error"]["message"]
+                .as_str()
+                .unwrap()
+                .contains("jvm declines --rc")
+        );
+    } else {
+        assert!(output.status.success(), "{stdout}\n{stderr}");
+        if let Some(fresh_capture) = fresh_capture {
+            let costs: Vec<_> = stderr
+                .lines()
+                .filter_map(|line| line.strip_prefix("oracle dependency capture: "))
+                .map(|line| serde_json::from_str::<serde_json::Value>(line).unwrap())
+                .collect();
+            assert_eq!(costs.len(), usize::from(fresh_capture), "{stderr}");
+            if fresh_capture {
+                assert!(costs[0]["wallMs"].as_f64().unwrap() > 0.0);
+                assert!(costs[0]["peakBytes"].as_u64().unwrap() > 0);
+            }
+        }
+        let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+        assert_eq!(report["status"], "agrees");
+        assert_eq!(report["counts"]["compared"], 87);
+        assert_eq!(report["counts"]["functions"], 3);
+    }
+}
+
 #[test]
 fn check_rc_reaches_the_differential_librarys_provider_selection() {
     let root = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
-    for counting in [false, true] {
+    let directory =
+        std::env::temp_dir().join(format!("nts-cli-provider-capture-{}", std::process::id()));
+    std::fs::create_dir(&directory).unwrap();
+    let scope = CaptureScope(directory);
+    let parent_ledger = std::env::var("NTS_ORACLE_DEPENDENCIES")
+        .ok()
+        .and_then(|raw| serde_json::from_str::<serde_json::Value>(&raw).ok())
+        .and_then(|cap| {
+            cap["admission"]["temporary"]["parent"]
+                .as_str()
+                .map(|path| std::path::Path::new(path).join("oracle-dependency-calls.jsonl"))
+        });
+    let private_ledger = scope.0.join("dependencies/oracle-dependency-calls.jsonl");
+    let capability = std::env::var("NTS_ORACLE_DEPENDENCIES").ok().map(|raw| {
+        let mut cap: serde_json::Value = serde_json::from_str(&raw).unwrap();
+        cap.as_object_mut().unwrap().remove("seal");
+        cap["directory"] = serde_json::json!(scope.0.join("dependencies"));
+        cap["admission"] = serde_json::json!({"kind":"standalone"});
+        cap["ownerStep"] = serde_json::Value::Null;
+        serde_json::to_string(&cap).unwrap()
+    });
+    let context = capability.as_ref().and_then(|raw| {
+        std::env::var("NTS_GATE_ENV_CONTEXT").ok().map(|value| {
+            let mut context: serde_json::Value = serde_json::from_str(&value).unwrap();
+            context["owned"]["NTS_ORACLE_DEPENDENCIES"] = raw.clone().into();
+            context["report"]["host"]["NTS_ORACLE_DEPENDENCIES"] = raw.clone().into();
+            serde_json::to_string(&context).unwrap()
+        })
+    });
+    // This private scope starts cold and is reused only by this test. Neither
+    // expectation observes an image another parallel test can populate.
+    let mut acquisition_counts = Vec::new();
+    for (index, counting) in [false, false, true].into_iter().enumerate() {
         let mut command = Command::new(env!("CARGO_BIN_EXE_nts"));
         command
             .current_dir(&root)
@@ -148,30 +278,40 @@ fn check_rc_reaches_the_differential_librarys_provider_selection() {
             ])
             .env("NTS_BACKEND", "jvm")
             .env("NTS_RC", "0");
+        if let Some(raw) = &capability {
+            command.env("NTS_ORACLE_DEPENDENCIES", raw);
+        }
+        if let Some(value) = &context {
+            command.env("NTS_GATE_ENV_CONTEXT", value);
+        }
         if counting {
             command.arg("--rc");
         }
+        let began = std::time::Instant::now();
         let output = command.output().unwrap();
-        let stdout = String::from_utf8_lossy(&output.stdout);
-        let stderr = String::from_utf8_lossy(&output.stderr);
-        if counting {
-            assert!(!output.status.success(), "{stdout}\n{stderr}");
-            let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-            assert_eq!(report["status"], "error");
-            assert_eq!(report["error"]["kind"], "preparation");
-            assert!(
-                report["error"]["message"]
-                    .as_str()
-                    .unwrap()
-                    .contains("jvm declines --rc")
-            );
-        } else {
-            assert!(output.status.success(), "{stdout}\n{stderr}");
-            let report: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
-            assert_eq!(report["status"], "agrees");
-            assert_eq!(report["counts"]["compared"], 87);
-            assert_eq!(report["counts"]["functions"], 3);
+        eprintln!(
+            "private oracle CLI call: {}",
+            serde_json::json!({"index":index,"counting":counting,"wallMs":began.elapsed().as_secs_f64()*1000.0})
+        );
+        if capability.is_some() {
+            let count = match std::fs::read_to_string(&private_ledger) {
+                Ok(rows) => rows.lines().count(),
+                Err(error) if error.kind() == std::io::ErrorKind::NotFound => 0,
+                Err(error) => panic!("cannot read private acquisition ledger: {error}"),
+            };
+            acquisition_counts.push(count);
+            eprintln!("private oracle acquisition count after call {index}: {count}");
         }
+
+        assert_provider_selection(&output, counting, capability.as_ref().map(|_| index == 0));
+    }
+    if capability.is_some() {
+        assert_private_capture_accounting(
+            &scope.0,
+            parent_ledger.as_deref(),
+            &private_ledger,
+            &acquisition_counts,
+        );
     }
 }
 
@@ -513,5 +653,47 @@ fn every_remaining_process_argv_reader_is_in_the_migration_inventory() {
     assert_eq!(
         readers, expected,
         "pass parsed arguments to new helpers instead of adding another process argv reader"
+    );
+}
+
+#[test]
+fn prepared_oracle_is_an_explicit_check_only_file_argument() {
+    assert_eq!(
+        arguments::validate(&args(&[
+            "check",
+            "--oracle-prepared",
+            "manifest.json",
+            "project"
+        ])),
+        Ok(false)
+    );
+    assert!(arguments::takes_value("--oracle-prepared"));
+    assert!(arguments::validate(&args(&["check", "--oracle-prepared"])).is_err());
+    assert!(arguments::validate(&args(&["build", "--oracle-prepared", "manifest.json"])).is_err());
+}
+
+#[test]
+fn option_values_are_not_reinterpreted_as_an_oracle_flag() {
+    assert_eq!(
+        arguments::value_of(
+            &args(&["--clang", "--oracle-prepared", "project"]),
+            "--oracle-prepared"
+        ),
+        None
+    );
+    let values = args(&[
+        "--checkers",
+        "1",
+        "--oracle-prepared",
+        "owned/manifest.json",
+        "project",
+    ]);
+    assert_eq!(
+        arguments::value_of(&values, "--oracle-prepared"),
+        Some("owned/manifest.json")
+    );
+    assert_eq!(
+        arguments::value_of(&args(&["--out=somewhere"]), "--out"),
+        Some("somewhere")
     );
 }

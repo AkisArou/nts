@@ -10,12 +10,13 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { join, resolve as resolvePath, dirname } from "node:path";
 import { pathToFileURL } from "node:url";
+import {nodeHarnessPaths} from './node-paths.ts';
 
 const HERE = dirname(new URL(import.meta.url).pathname);
 // The real path, as `run-one.mjs` takes node's test tree: a lane's tree links
 // `third_party/node`, and a test comparing `fixtures.path()` with what
 // `fs.realpath` answers (test-fs-realpath) failed on the link's spelling.
-const fixturesDir = realpathSync(resolvePath(HERE, "../../third_party/node/test/fixtures"));
+const fixturesDir = realpathSync(nodeHarnessPaths(resolvePath(HERE,'../..')).fixtures);
 
 export function path(...args) {
   return join(fixturesDir, ...args);

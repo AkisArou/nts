@@ -8,13 +8,14 @@ import { nativeDecline, outputPrefixes, type PrintedOutput } from "../conformanc
 import { inventory } from "../records/pending.ts";
 import { mergeLineRecord, parseLineRecord, serializeLineRecord, type LineRecordFormat } from "./line-record.ts";
 
-// Version 4 excludes external compiler stops from measured observations.
-// Published TSV version 3 stays compatible; old raw checkpoints are remeasured.
-export const TYPESCRIPT_OBSERVATIONS_VERSION = 4;
+// Raw revision 5 combines external-stop rejection and completed oracle rejection.
+// Both previous revision-4 checkpoint formats must be remeasured.
+export const TYPESCRIPT_OBSERVATIONS_VERSION = 5;
+export const TYPESCRIPT_RECORD_VERSION = 4;
 
 export type Backend = "c" | "llvm" | "jvm";
 export interface RecordMetadata {
-  version: 2 | 3;
+  version: 2 | 3 | 4;
   backend: Backend;
   commit: string;
   compiler: string;
@@ -24,6 +25,7 @@ export interface RecordMetadata {
 export interface RefusalDiagnostic { code: string; where: "body" | "harness" | "other" | "none"; }
 export interface RuntimeFailure { exit: number | null; signal: string | null; output: string; }
 export type TypeScriptObservation =
+  | { kind: "oracle-rejected"; exit:number; error:string }
   | { kind: "pass" }
   | { kind: "build-failure"; stage: "emit" | "link" | "compiler-crash"; diagnostic: string }
   | { kind: "wrong"; errorClass: string; failure: RuntimeFailure }
@@ -57,7 +59,7 @@ function metadata(value: unknown): RecordMetadata {
   const row = object(value, "missing TypeScript record metadata");
   keys(row, ["version", "backend", "commit", "compiler", "harness", "under"], "TypeScript record metadata");
   const version = row.version;
-  assert.ok(version === 2 || version === 3, "unsupported TypeScript record version");
+  assert.ok(version === 2 || version === 3 || version === 4, "unsupported TypeScript record version");
   const backend = oneOf(row.backend, ["c", "llvm", "jvm"], "unknown TypeScript backend");
   const commit = text(row.commit, "missing compiler commit");
   assert.match(commit, /^[0-9a-f]{40}$/, "invalid compiler commit");
@@ -95,6 +97,10 @@ function refusalDiagnostic(value: unknown): RefusalDiagnostic {
 export function parseObservation(input: unknown): TypeScriptObservation {
   const row = object(input, "invalid TypeScript observation");
   switch (row.kind) {
+    case "oracle-rejected":
+      keys(row,["kind","exit","error"],"completed oracle rejection");
+      assert.ok(typeof row.exit==='number'&&Number.isSafeInteger(row.exit)&&row.exit>=0,"oracle rejection needs a completed exit");
+      return {kind:"oracle-rejected",exit:row.exit,error:text(row.error,"missing oracle rejection error")};
     case "pass":
       keys(row, ["kind"], "pass observation");
       return { kind: "pass" };
@@ -135,10 +141,11 @@ export function parseObservation(input: unknown): TypeScriptObservation {
   }
 }
 
-/** A timeout, oracle failure, missing row or tool failure cannot become an expected result. */
+/** Only a completed case rejection is recordable; failed measurement stays out. */
 export function observationFromRow(input: unknown): TypeScriptObservation {
   const row = object(input, "case produced no measured row");
   switch (row.bucket) {
+    case "oracle-rejected": return parseObservation({kind:"oracle-rejected",...object(row.rejection,"missing completed oracle rejection")});
     case "strict-pass": return { kind: "pass" };
     case "threw": return parseObservation({ kind: "wrong", errorClass: row.thrown, failure: row.runtimeFailure });
     case "wrong-output": return parseObservation({ kind: "wrong-output", printed: row.printed, nodeOutput: row.nodeOutput, failure: row.runtimeFailure });
@@ -177,6 +184,7 @@ const recordFormat: LineRecordFormat<RecordMetadata, TypeScriptObservation> = {
   prefix, label: "TypeScript", metadata,
   row(path, value, meta) {
     if (meta.version === 2) assert.notEqual(object(value, "invalid TypeScript observation").kind, "wrong-output", "wrong output requires a version 3 record");
+    if (meta.version < 4) assert.notEqual(object(value, "invalid TypeScript observation").kind, "oracle-rejected", "oracle rejection requires a version 4 record");
     canonical(path, "invalid TypeScript case path");
     assert.ok(path.endsWith(".ts") && (path === meta.under || path.startsWith(meta.under + "/")), "case outside record selection");
     return parseObservation(value);
@@ -203,5 +211,9 @@ export function mergeTypeScriptRecord(contents: string, updates: ReadonlyMap<str
 }
 
 export function compareTypeScriptObservation(before: TypeScriptObservation, after: TypeScriptObservation): OutcomeTransition {
+  if(before.kind==='oracle-rejected'||after.kind==='oracle-rejected'){
+    if(isDeepStrictEqual(before,after))return {word:'holds',ok:true,loud:false};
+    return {word:before.kind==='pass'?'REGRESSED':'CHANGED',ok:false,loud:false};
+  }
   return outcomeTransition(outcomeDisposition(before.kind), outcomeDisposition(after.kind), isDeepStrictEqual(before, after));
 }
