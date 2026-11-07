@@ -91,6 +91,7 @@ test("the CLI holds every recorded outcome and fails closed before recorded sele
       JSON.stringify({ path: target, ...observed }) + "\n");
     rmSync(json, { force: true });
     rmSync(instrumentFile,{force:true});
+    process.stderr.write(`record CLI control: ${JSON.stringify({observations, observed, lowMemory})}\n`);
     return spawnSync(process.execPath, ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", "c",
       "--check", expected, "--paths-from", one, "--sample", "1", "--jobs", "1", "--rows", rows, "--resume", "--json", json],
       { cwd: consumerRoot, encoding: "utf8", maxBuffer: 16 * 1024 * 1024,
