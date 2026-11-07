@@ -186,7 +186,7 @@ With pnpm **10.15.0** and TypeScript **7.0.2**, installation completes, strict
 checking reports **zero diagnostics**, and the shared suite passes **7/7 tests**
 with zero failures or skips. Tests never depend on elapsed time.
 
-The final syntax audit covers **298 TypeScript files**, including declarations:
+The final syntax audit covers **299 TypeScript files**, including declarations:
 zero `any` keywords, `as` expressions, type assertions or suppression comments.
 It records 217 classes, 1,498 declared properties and 614 erased non-null
 annotations. The complete semantic type scan finds zero inferred-`any`

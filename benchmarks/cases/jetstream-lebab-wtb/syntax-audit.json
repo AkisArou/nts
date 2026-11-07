@@ -1,7 +1,7 @@
 {
   "sourceRevision": "3967678fa8ab98d847ab33cf3728dba726fa854b",
   "counts": {
-    "files": 298,
+    "files": 299,
     "anyKeywords": 0,
     "asExpressions": 0,
     "typeAssertions": 0,
@@ -56,6 +56,11 @@
       "file": "traversal-types.ts",
       "bytes": 6249,
       "sha256": "693ca74431e8942698425c8d9b7b9d89031fe001d94b4dde24df5a439c7699ae"
+    },
+    {
+      "file": "types/ast-types/gen/builders.d.ts",
+      "bytes": 121210,
+      "sha256": "cba056c595d636895ba7a0f5fceeb0a9da815c6c9eaa3f91ac7feaf2cde57c81"
     },
     {
       "file": "types/ast-types/gen/kinds.d.ts",
