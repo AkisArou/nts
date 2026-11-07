@@ -13,16 +13,31 @@ import { toolingSlicePrefix } from "../gate/tooling-slice.ts";
 import { activeCommand, CommandNotMeasuredError } from "../gate/active-command.ts";
 
 const CGROUP = "/sys/fs/cgroup";
+const STOP_HANG_MS = 5 * 60_000;
 const pause = (ms: number) => Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms);
 const integer = (value: number, what: string) => {
   if (!Number.isSafeInteger(value) || value < 1) throw new Error(`${what} must be a positive integer, got ${value}`);
   return value;
 };
 const systemctl = (...args: string[]) => {
-  const result = spawnSync("systemctl", ["--user", ...args], { encoding: "utf8" });
+  const result = spawnSync("systemctl", ["--user", ...args], { encoding: "utf8", ...(args[0] === "stop" ? {timeout: STOP_HANG_MS} : {}) });
+  if (args[0] === "stop" && (result.error as NodeJS.ErrnoException | undefined)?.code === "ETIMEDOUT")
+    throw new Error(`resident cap: hung waiting for ${args[1]}'s stop job to finish (${STOP_HANG_MS} ms hang guard)`, {cause: result.error});
+  if (args[0] === "stop" && result.status !== 0 && result.stderr.includes(`Unit ${args[1]} not loaded.`)) return "";
   if (result.status !== 0) throw new Error(`resident cap: systemctl ${args.join(" ")} failed: ${result.stderr || result.error?.message}`);
   return result.stdout.trim();
 };
+/** systemctl joins StopUnit's job; a queued D-Bus reply is not a drain. */
+function stopSlice(unit: string, group: string, kind: "run" | "worker"): void {
+  systemctl("stop", unit);
+  if (!group) return;
+  let text: string;
+  try { text = readFileSync(join(CGROUP, group, "cgroup.events"), "utf8"); }
+  catch (error) { if ((error as NodeJS.ErrnoException).code === "ENOENT") return; throw error; }
+  const populated = /^populated ([01])$/m.exec(text)?.[1];
+  if (populated === undefined) throw new Error(`resident ${kind} cgroup has no populated evidence after its stop job: ${group}`);
+  throw new Error(`resident ${kind} cgroup was not removed after its stop job finished (populated ${populated}): ${group}`);
+}
 const validGroup = (unit: string, group: string, parent?: string) => {
   if (!group.startsWith("/") || group === "/" || group.split("/").includes("..") || !group.endsWith(`/${unit}`)
       || (parent !== undefined && (!parent || !group.startsWith(`${parent}/`)))) {
@@ -181,12 +196,7 @@ export class MemoryRun {
       try { worker.close(); } catch (error) { failure ??= error; }
     }
     if (this.group && this.#recordPeak) recordAggregatePeak(this.group, this.budgetBytes);
-    try { manager("StopUnit", "ss", this.slice, "replace"); } catch (error) { failure ??= error; }
-    if (this.group) {
-      const deadline = Date.now() + 3000;
-      while (existsSync(join(CGROUP, this.group)) && Date.now() < deadline) pause(10);
-      if (existsSync(join(CGROUP, this.group))) failure ??= new Error(`resident run cgroup was not removed: ${this.group}`);
-    }
+    try { stopSlice(this.slice, this.group, "run"); } catch (error) { failure ??= error; }
     rmSync(this.directory, { recursive: true, force: true });
     if (failure) throw failure;
   }
@@ -228,10 +238,7 @@ export class MemoryWorker {
     if (this.#closed) return;
     this.#closed = true;
     for (const scope of [...this.#scopes]) this.stop(scope);
-    manager("StopUnit", "ss", this.slice, "replace");
-    const deadline = Date.now() + 3000;
-    while (existsSync(join(CGROUP, this.group)) && Date.now() < deadline) pause(10);
-    if (existsSync(join(CGROUP, this.group))) throw new Error(`resident worker cgroup was not removed: ${this.group}`);
+    stopSlice(this.slice, this.group, "worker");
   }
 }
 

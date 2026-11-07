@@ -1,7 +1,7 @@
 import * as oracleOwner from '../differential/oracle-emit.ts';
 import assert from 'node:assert/strict';
 import {chmodSync,readdirSync,cpSync,existsSync,mkdirSync,mkdtempSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
-import {spawnSync} from 'node:child_process';
+import {spawnSync,type SpawnSyncOptionsWithStringEncoding,type SpawnSyncReturns} from 'node:child_process';
 import {OracleWorker,REPOSITORY,prepareOracle,oracleExecution as newOracleExecution,oracleLoaderReady,oracleRuntimeFile,removeOracleSnapshot,finishOracleSnapshot} from '../differential/oracle-emit.ts';
 import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
 import {tmpdir} from 'node:os';
@@ -12,8 +12,23 @@ import {instrumentPolicy} from '../gate/step-result.ts';
 import {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules,nodePreloadPlan} from './node-preloads.ts';
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
+import {newTestScratch} from '../gate/test-scratch.ts';
 
 await setupOracleTestEnvironment();
+
+// Forward the runner's real stderr while retaining it for assertions. Case
+// admission and preparation progress must reach the outer tooling collector;
+// buffering a whole nested run made active work look like a silent test file.
+function runNodeCase(t:TestContext,command:string,args:string[],options:SpawnSyncOptionsWithStringEncoding):SpawnSyncReturns<string>{
+  const root=newTestScratch('node-preload-progress'),stderr=join(root,'stderr');writeFileSync(stderr,'');
+  process.stderr.write(`node-preloads case starts: ${t.name}\n`);
+  try{
+    const relay='preload_case_stderr=$1; shift; exec 3> >(tee "$preload_case_stderr" >&2); preload_case_tee=$!; "$@" 2>&3 3>&-; preload_case_status=$?; exec 3>&-; wait "$preload_case_tee" || exit 125; exit "$preload_case_status"';
+    const result=spawnSync('bash',['-c',relay,'_',stderr,command,...args],{...options,stdio:['ignore','pipe','inherit']});
+    process.stderr.write(`node-preloads case finishes: ${t.name}: ${result.status??result.signal}\n`);
+    return {...result,stderr:readFileSync(stderr,'utf8')};
+  }finally{rmSync(root,{recursive:true,force:true});}
+}
 
 const executions=new Set<ReturnType<typeof newOracleExecution>>();
 function oracleExecution(...args:Parameters<typeof newOracleExecution>){const execution=newOracleExecution(...args);executions.add(execution);return execution;}
@@ -36,7 +51,7 @@ const runtime=await import(${JSON.stringify(runtime)}),root=${JSON.stringify(roo
 assert.equal(subject.entry,root+'/runtime/node/subject/src/main.ts');assert.deepEqual(runtime.nodeGlobalGroups(subject.dir),['abort']);
 assert.equal(runtime.nodeGlobalEntry(subject.dir,'abort'),root+'/runtime/web-platform/src/core/abort.ts');
 assert.equal(runtime.nodeSiblingModules(root,subject.dir)[0].name,'sibling');console.log('runtime-only declarations ready');`;
-  const result=spawnSync(process.execPath,['--input-type=module','-e',source],{encoding:'utf8'});
+  const result=runNodeCase(t,process.execPath,['--input-type=module','-e',source],{encoding:'utf8'});
   assert.equal(result.status,0,result.stdout+'\n'+result.stderr);assert.equal(result.stdout,'runtime-only declarations ready\n');
 });
 test('runtime and finite preparation share exact globals, subpaths and sibling order',t=>{
@@ -109,7 +124,7 @@ if(process.argv.includes('nested')){
   write('runtime/node/subject/test/01-clean.js',"require('node:assert/strict').equal(require('subject').answer(),42);\n");
   write('runtime/node/subject/test/02-capability.js',"(async()=>{const url=require('node:url').pathToFileURL(require('node:path').join(__dirname,'scope-provider.mjs'));const value=await import(url.href);require('node:assert/strict').equal(value.denied,true);})();\n");
   write('runtime/node/subject/test/scope-provider.mjs',"import assert from 'node:assert/strict';import {pathToFileURL} from 'node:url';const api=await import(new URL('./assets/oracle-loader.ts',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)));assert.throws(()=>api.oracleHarnessCapability(),/unavailable or already consumed/);export const denied=true;\n");
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
   assert.equal(run.status,124,run.stderr+'\n'+run.stdout);
   const record=JSON.parse(run.stdout);assert.deepEqual(record.rows.map(row=>[row.name,row.kind]),[['local/00-child.js','not-measured'],['local/01-clean.js','pass'],['local/02-capability.js','not-measured']],JSON.stringify(record,null,2));
   assert.match(record.rows[0].why,/nested-child control/);assert.match(record.rows[2].why,/harness capability is unavailable or already consumed/);assert.equal(record.tally['not-measured'],2);assert.equal(record.tally.pass,1);
@@ -118,7 +133,7 @@ if(process.argv.includes('nested')){
   assert.ok(existsSync(record.preparation.cleanup.path));
   assert.match(run.stderr,/kept Node preparation:/);
   assert.match(run.stderr,/"state":"retained after red"/);
-  const clean=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--only','01-clean.js','--json'],{cwd:root,encoding:'utf8',env:process.env});
+  const clean=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--only','01-clean.js','--json'],{cwd:root,encoding:'utf8',env:process.env});
   assert.equal(clean.status,0,clean.stderr+'\n'+clean.stdout);
   const completed=JSON.parse(clean.stdout);assert.equal(completed.tally.pass,1);
   assert.ok(completed.oracleScopes.some(row=>row.test==='local/01-clean.js'&&row.category==='plain node (outside capture)'&&row.attested===false&&row.path===join(root,'runtime/node/subject/test/01-clean.js')));
@@ -142,7 +157,7 @@ test('a newly nearer project config invalidates the prepared discovery decision'
   const prepared=(await prepareOracle({...plan,project:null,directory:join(root,'first'),toolchain:oracleToolchainLocation()}));
   const run=(prepared:Awaited<ReturnType<typeof prepareOracle>>)=>{
     const execution=oracleExecution(prepared,plan.entry);
-    const actual=spawnSync(process.execPath,[...execution.args,plan.entry],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
+    const actual=runNodeCase(t,process.execPath,[...execution.args,plan.entry],{cwd:root,encoding:'utf8',env:{...process.env,...execution.env}});
     return {actual,health:oracleLoaderReady(execution),snapshot:finishOracleSnapshot(prepared)};
   };
   const unchanged=run(prepared);
@@ -177,7 +192,7 @@ test('a no-execArgv child validates copied infrastructure before its top-level c
   write('runtime/node/subject/test/control.js',"require('node:assert/strict').equal(require('subject').value,1);\n");
   const plan=nodePreloadPlan(root,'subject',false),prepared=(await prepareOracle({...plan,project:null,directory:join(root,'preparation'),toolchain:oracleToolchainLocation()}));
   const driver=oracleRuntimeFile(prepared,plan.entry),file=oracleRuntimeFile(prepared,join(root,'runtime/node/subject/test/control.js'));
-  const run=()=>{const own=oracleExecution(prepared,driver,[join(root,'runtime/node/subject/test/control.js')]);return {own,result:spawnSync(process.execPath,[driver,'subject',file,'-'],{cwd:root,encoding:'utf8',env:{...process.env,...own.env}})};};
+  const run=()=>{const own=oracleExecution(prepared,driver,[join(root,'runtime/node/subject/test/control.js')]);return {own,result:runNodeCase(t,process.execPath,[driver,'subject',file,'-'],{cwd:root,encoding:'utf8',env:{...process.env,...own.env}})};};
   const healthy=run();assert.equal(healthy.result.status,0,healthy.result.stderr);assert.match(healthy.result.stdout,/"kind":"pass"/);assert.deepEqual(oracleLoaderReady(healthy.own),{ready:true});
   const common=oracleRuntimeFile(prepared,join(root,'tooling/conformance/common.mjs')),effect=join(root,'forbidden-side-effect');
   chmodSync(common,0o644);
@@ -248,7 +263,7 @@ test('a distinct sibling child receives exact scope through its private parent h
     const target=distinct?"require('node:path').join(__dirname,'01-child.js')":"__filename";
     const errorReceipt=join(root,'delegation-error.json');
     write('runtime/node/subject/test/00-parent.js',"if(process.argv.includes('nested')){"+child+"}else{const fs=require('node:fs'),path=require('node:path'),states=path.join(path.dirname(process.env.NTS_ORACLE_EMIT_MANIFEST),'states'),mode=fs.statSync(states).mode&0o7777,event=process.env.NTS_ORACLE_EMIT_STATUS,eventMode=fs.statSync(event).mode&0o7777,denied="+denied+",eventDenied="+eventDenied+";if(denied)fs.chmodSync(states,0o500);if(eventDenied)fs.chmodSync(event,0o400);if("+changedEnvironment+")Object.assign(process.env,"+JSON.stringify({...foreign.env,NTS_ORACLE_DEPENDENCIES:'{}'})+");try{const result=require('node:child_process').spawnSync(process.execPath,["+target+",'nested'],{encoding:'utf8',env:{}});require('node:assert/strict').equal(result.status,0,result.stderr);require('node:assert/strict').ok(result.stdout.includes('delegated child executed'));}catch(error){if(!denied&&!eventDenied&&!"+changedEnvironment+")throw error;fs.writeFileSync("+JSON.stringify(errorReceipt)+",JSON.stringify({code:error.code??error.cause?.code,message:error.message}));}finally{if(eventDenied)fs.chmodSync(event,eventMode);if(denied)fs.chmodSync(states,mode);}}\n");
-    const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--only','00-parent.js','--json'],{cwd:root,encoding:'utf8',env:process.env});
+    const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--only','00-parent.js','--json'],{cwd:root,encoding:'utf8',env:process.env});
     if(denied||eventDenied){const observed=JSON.parse(readFileSync(errorReceipt,'utf8'));if(denied)assert.equal(observed.code,'EACCES');t.diagnostic(JSON.stringify({denied,eventDenied,observed,status:run.status}));}
     assert.equal(run.status,124,run.stderr+run.stdout);
     const report=JSON.parse(run.stdout);t.diagnostic(JSON.stringify({distinct,changedEnvironment,rows:report.rows,scopes:report.oracleScopes}));
@@ -269,7 +284,7 @@ test('the actual runner retains a complete pre-result failure beside its short s
   write('runtime/node/subject/src/main.ts','export const value:number=19;\n');
   write('runtime/node/subject/tsconfig.json',JSON.stringify({extends:join(root,'tsconfig.fixtures.json'),files:['src/main.ts']}));
   write('runtime/node/subject/test/control.js','console.log(19);\n');
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:process.env});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:process.env});
   assert.equal(run.status,1,run.stderr+'\n'+run.stdout);
   const report=JSON.parse(run.stdout);assert.equal(report.rows.length,1);assert.equal(report.rows[0].kind,'fail');
   assert.ok(report.rows[0].why.length<=120);assert.ok(report.rows[0].detail?.includes(message),JSON.stringify(report.rows[0]));
@@ -298,7 +313,7 @@ test('the prepared runner preserves authored origins and infrastructure source i
   write('third_party/node/test/parallel/test-subject-01-common-identity.mjs',"import {mustCall} from '../common/index.mjs'; mustCall(()=>{},1)();\n");
   write('third_party/node/test/parallel/other/index.mjs','export const value=23;\n');
   write('third_party/node/test/parallel/test-subject-02-unrelated-index.mjs',"import assert from 'node:assert/strict'; import {value} from './other/index.mjs'; assert.equal(value,23);\n");
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:process.env});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:process.env});
   assert.equal(run.status,0,run.stderr+'\n'+run.stdout);
   const record=JSON.parse(run.stdout) as {rows:{name:string;kind:string}[];tally:Record<string,number>};
   assert.deepEqual(record.rows.map(row=>[row.name,row.kind]),[['test-subject-01-common-identity.mjs','pass'],['test-subject-02-unrelated-index.mjs','pass'],['local/00-authored-origin.js','pass']]);
@@ -329,7 +344,7 @@ test('the module runner finalizes the original snapshot before any measured repo
       assert.notEqual(changed,original);writeFileSync(runner,changed);
     }
     const instrument=join(root,'step-instrument.json'),step='snapshot-parent',attempt='guard';
-    const run=spawnSync(process.execPath,[runner,'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_GATE_STEP:step,NTS_GATE_STEP_ATTEMPT:attempt,NTS_GATE_STEP_RESULT:instrument}});
+    const run=runNodeCase(t,process.execPath,[runner,'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_GATE_STEP:step,NTS_GATE_STEP_ATTEMPT:attempt,NTS_GATE_STEP_RESULT:instrument}});
     const record=JSON.parse(run.stdout) as {rows:{kind:string;why?:string}[];preparation:{finalization:{ready:boolean}}};
     t.diagnostic(JSON.stringify({mutation,status:run.status,record,stderr:run.stderr}));
     assert.equal(record.rows.length,1);
@@ -414,9 +429,9 @@ const target=path.resolve(__dirname,'../../../../third_party/node/test/fixtures/
   const parent=join(root,'runtime/node/subject/test/00-worker.js');
   const reference=`const {createRequire}=require('node:module');const fs=require('node:fs'),path=require('node:path'),file=${JSON.stringify(parent)};new Function('require','__dirname',fs.readFileSync(file,'utf8'))(createRequire(file),path.dirname(file));`;
   write('reference.cjs',reference);
-  const plain=spawnSync(process.execPath,[join(root,'reference.cjs')],{cwd:root,encoding:'utf8'});
+  const plain=runNodeCase(t,process.execPath,[join(root,'reference.cjs')],{cwd:root,encoding:'utf8'});
   assert.equal(plain.status,0,plain.stderr);
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
   assert.equal(run.status,0,run.stderr+'\n'+run.stdout);
   const record=JSON.parse(run.stdout);assert.deepEqual(record.rows.map(row=>[row.name,row.kind]),[['local/00-worker.js','pass']]);assert.equal(record.tally.pass,1);
 });
@@ -459,7 +474,7 @@ worker.once('exit',status=>{
   console.log('caught-worker-failure-'+kind);
 });
 `);
-    const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+    const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
     assert.equal(run.status,124,run.stderr+'\n'+run.stdout);
     const record=JSON.parse(run.stdout),row=record.rows[0];assert.equal(row.kind,'not-measured');
     assert.match(row.why,kind==='driver'?/worker driver has no exact parent role/:kind==='dependency'?/dependency snapshot identity mismatch/:/generated bootstrap asset changed: assets\/oracle-runtime\.mjs/);
@@ -484,7 +499,7 @@ test('the producer cannot replace a declared Worker role with another owned file
 test('an eval-string Worker remains a named owner hold when its caller catches it',t=>{
   const {root,write}=workerFixture(t);
   write('runtime/node/subject/test/00-worker.js',"const {Worker}=require('node:worker_threads');try{new Worker('1+1',{eval:true});}catch{}\n");
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
   assert.equal(run.status,124,run.stderr+'\n'+run.stdout);const record=JSON.parse(run.stdout);
   assert.equal(record.rows[0].kind,'not-measured');assert.match(record.rows[0].why,/oracle eval Worker entry has no captured driver/);
 });
@@ -493,7 +508,7 @@ test('a Worker cannot run unknown pre-bootstrap loader code',t=>{
   const {root,write}=workerFixture(t),effect=join(root,'unowned-loader-ran');
   const loader='data:text/javascript,'+encodeURIComponent("import {writeFileSync} from 'node:fs';writeFileSync("+JSON.stringify(effect)+",'ran');");
   write('runtime/node/subject/test/00-worker.js',`const {Worker}=require('node:worker_threads');const path=require('node:path');const target=path.resolve(__dirname,'../../../../third_party/node/test/fixtures/test-worker-role.js');try{new Worker(target,{workerData:{value:23,exit:7},execArgv:['--experimental-loader',${JSON.stringify(loader)}]}).on('error',()=>{});}catch{}\n`);
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
   assert.equal(run.status,124,run.stderr+'\n'+run.stdout);assert.equal(existsSync(effect),false,'a custom loader is rejected before it can execute');
   const record=JSON.parse(run.stdout);assert.match(record.rows[0].why,/oracle Worker pre-bootstrap code was not captured/);
 });
@@ -523,9 +538,9 @@ worker.once('exit',status=>{
 `);
   const parent=join(root,'runtime/node/subject/test/00-worker.js');
   write('reference.cjs',`const {createRequire}=require('node:module');const fs=require('node:fs'),path=require('node:path'),file=${JSON.stringify(parent)};new Function('require','__dirname',fs.readFileSync(file,'utf8'))(createRequire(file),path.dirname(file));`);
-  const plain=spawnSync(process.execPath,[join(root,'reference.cjs')],{cwd:root,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);
+  const plain=runNodeCase(t,process.execPath,[join(root,'reference.cjs')],{cwd:root,encoding:'utf8'});assert.equal(plain.status,0,plain.stderr);
   write('runtime/node/subject/test/01-clean.js',"require('node:assert/strict').equal(require('subject').value,19);\n");
-  const run=spawnSync(process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
   assert.equal(run.status,0,run.stderr+'\n'+run.stdout);const record=JSON.parse(run.stdout);
   assert.deepEqual(record.rows.map(row=>[row.name,row.kind]),[['local/00-worker.js','pass'],['local/01-clean.js','pass']]);assert.equal(record.tally.pass,2);
 });

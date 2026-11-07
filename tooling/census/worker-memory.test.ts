@@ -468,6 +468,10 @@ async function fakeManager(mode, module) {
   const units = new Map();
   const calls = [];
   let root, rootLookups = 0;
+  const remove = unit => {
+    const held = units.get(unit);
+    for (const [name, row] of units) if (name === unit || held && row.group.startsWith(held.group + "/")) units.delete(name);
+  };
   const response = (stdout = "", status = 0, stderr = "") => ({ stdout, stderr, status });
   cp.spawnSync = (command, args, options) => {
     if (command === "busctl") {
@@ -484,14 +488,18 @@ async function fakeManager(mode, module) {
         const unit = args[at + 2];
         calls.push(`stop:${unit}`);
         if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected cleanup failure");
-        const held = units.get(unit);
-        for (const [name, row] of units) if (name === unit || held && row.group.startsWith(held.group + "/")) units.delete(name);
+        if (!["queued-stop", "retained-stop"].includes(mode)) remove(unit);
         return response('o "/fake-stop-job"');
       }
     }
     if (command === "systemctl") {
       const operation = args[1], unit = args[2], row = units.get(unit);
       calls.push(`${operation}:${unit}`);
+      if (operation === "stop") {
+        calls.push(`stop-job-finished:${unit}`);
+        if (mode !== "retained-stop") remove(unit);
+        return response();
+      }
       if (operation === "start") {
         if (mode === "failed-cleanup" && unit !== root) return response("", 1, "injected start failure");
         row.ready = true;
@@ -515,6 +523,12 @@ async function fakeManager(mode, module) {
   fs.readFileSync = (path, ...args) => {
     const text = String(path);
     if (text.startsWith("/sys/fs/cgroup/")) {
+      if (text.endsWith("/cgroup.events")) {
+        if (![...units.values()].some(row => text === "/sys/fs/cgroup" + row.group + "/cgroup.events"))
+          throw Object.assign(new Error("removed cgroup"), {code: "ENOENT"});
+        calls.push("kernel-populated-after-stop-job");
+        return "populated 0\n";
+      }
       const row = [...units.values()].find(row => text === "/sys/fs/cgroup" + row.group + "/memory.max" || text === "/sys/fs/cgroup" + row.group + "/memory.swap.max");
       if (!row) throw new Error(`unexpected kernel read ${text}`);
       return text.endsWith("memory.max") ? String(row.bytes) : "0";
@@ -524,24 +538,37 @@ async function fakeManager(mode, module) {
   syncBuiltinESMExports();
   const { MemoryRun } = await import(module);
   const run = new MemoryRun({ budgetBytes: 128 * 2 ** 20, id: "fake-manager" });
-  let error = null, group = null;
+  let error = null, closeError = null, group = null;
   try { group = run.worker(0, 64 * 2 ** 20).group; }
   catch (caught) { error = String(caught); }
-  finally { run.close(); }
-  process.stdout.write(JSON.stringify({ error, group, calls, rootLookups, remaining: units.size }));
+  finally {
+    // Move a wall clock across the old readiness deadline without sleeping.
+    // Job completion, not this clock, must decide whether cleanup is done.
+    if (["queued-stop", "retained-stop"].includes(mode)) { let tick = 0; Date.now = () => tick += 4000; }
+    try { run.close(); } catch (caught) { closeError = String(caught); }
+  }
+  process.stdout.write(JSON.stringify({ error, closeError, group, calls, rootLookups, remaining: units.size }));
 }
 
-for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanup"]) {
+for (const mode of ["empty-once", "always-empty", "wrong-parent", "failed-cleanup", "queued-stop", "retained-stop"]) {
   test(`slice setup with fake manager: ${mode}`, () => {
     const code = `(${fakeManager.toString()})(${JSON.stringify(mode)},${JSON.stringify(new URL("./worker-memory.ts", import.meta.url).href)});`;
     const result = spawnTest(process.execPath, ["--input-type=module", "-e", code], { encoding: "utf8",});
     assert.equal(result.status, 0, result.stderr);
     const actual = JSON.parse(result.stdout);
     assert.equal(actual.rootLookups, 0);
-    assert.equal(actual.remaining, 0);
-    if (mode === "empty-once") {
+    if (mode === "retained-stop") {
+      assert.match(actual.closeError, /cgroup was not removed after its stop job finished \(populated 0\)/);
+      assert.ok(actual.remaining > 0);
+      assert.ok(actual.calls.includes("kernel-populated-after-stop-job"));
+    } else assert.equal(actual.remaining, 0);
+    if (mode === "empty-once" || mode === "queued-stop") {
       assert.equal(actual.error, null);
+      assert.equal(actual.closeError, null);
       assert.ok(actual.group.endsWith("-w0.slice"));
+      if (mode === "queued-stop") assert.equal(actual.calls.filter(call => call.startsWith("stop-job-finished:")).length, 2);
+    } else if (mode === "retained-stop") {
+      assert.equal(actual.error, null);
     } else if (mode === "failed-cleanup") {
       assert.match(actual.error, /injected start failure/);
       assert.match(actual.error, /injected cleanup failure/);
