@@ -142,6 +142,9 @@ ids, kept so the records that cite them still resolve.
   rebuild linkage by product and emission pruning on today's
   `SourceSymbols::is_public`; descriptor initializers from one renderer
   (#248).
+- Typed scalar numbers (`Int32`, `Uint8`, `c_int`, `CGFloat`) have a design
+  from an earlier experiment:
+  [its notes](records/notebooks/scalar-numbers-playground/README.md).
 - Proved-integer arithmetic (#28): the integral producer and its two passes,
   rebuilt from
   [its notebook](records/notebooks/integral-arithmetic-regions.md); the
