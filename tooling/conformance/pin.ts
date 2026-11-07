@@ -58,17 +58,8 @@ const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 /** A pin's directory name: the commit, and the applied diff's hash when there is one. */
 export const keyOf = (sha, applied) => (applied ? `${sha.slice(0, 12)}+${applied.sha256.slice(0, 12)}` : sha.slice(0, 12));
 
-/** The provenance recorded beside `binary`, or null when nothing built it here. */
-export function provenanceOf(binary) {
-  const file = join(dirname(resolve(binary)), "provenance.json");
-  if (!existsSync(file)) return null;
-  try {
-    const record = JSON.parse(readFileSync(file, "utf8"));
-    return record.sha && "applied" in record ? record : null;
-  } catch {
-    return null;
-  }
-}
+import {provenanceOf} from "./pin-provenance.ts";
+export {provenanceOf};
 
 /** Cached artifacts are complete native compilers; their bytes must still match. */
 export function isRecordedBinary(binary, sha) {

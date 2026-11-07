@@ -172,7 +172,7 @@ async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Complete
 
 /** Merge rows into the record, or start it: its header names the clean pin of main that measured them. */
 async function writeRunRecord(plan: RunPlan, updates: ReadonlyMap<string, BenchmarkRun>): Promise<void> {
-  const {provenanceOf} = await import("../conformance/pin.ts");
+  const {provenanceOf} = await import("../conformance/pin-provenance.ts");
   const binary = process.env.NTS_BIN ?? join(ROOT, "target/release/nts"), pin = provenanceOf(binary);
   const compiler = createHash("sha256").update(readFileSync(binary)).digest("hex");
   assert.ok(pin?.clean && !pin.applied && /^[0-9a-f]{40}$/.test(pin.sha) && pin.binary_sha256 === compiler,

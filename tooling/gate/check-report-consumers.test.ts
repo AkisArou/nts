@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import {spawnTest} from "./test-wait.ts";
-import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
+import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
@@ -27,6 +27,8 @@ function sandbox(t: TestContext) {
     "tooling/differential/check-consumers.ts", "tooling/differential/oracle-toolchain.json",
     "tooling/conformance/pin.ts", "tooling/npm-survey/verdict.ts",
   ], root);
+  // Package imports use the same provisioned toolchain as the real entry.
+  symlinkSync(join(source, "../../node_modules"), join(root, "node_modules"));
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
   copyFileSync(join(source, "../conformance/web-platform/compiled/check.sh"), join(root, "tooling/conformance/web-platform/compiled/check.sh"));
   writeFileSync(join(root, "tooling/gate/tokens.mjs"), "export async function withToken(fn) { return fn(); }\n");
