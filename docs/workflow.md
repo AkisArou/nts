@@ -114,7 +114,8 @@ landing steps, the deferred ones and the estimate.
 **One queue, no trains.** One service, `nts-landing-check`, checks changes
 one at a time, each rebased onto the newest `main`. Green: `main`
 fast-forwards and is pushed, the task's branch is deleted here and on
-GitHub, and its pool tree is reset. Red: the change goes back to its agent
+GitHub (on GitHub it stays while an open pull request is based on it, since
+deleting a base closes the pull request), and its pool tree is reset. Red: the change goes back to its agent
 with the failing check's log.
 
 **No per-landing approval.** A green landing check lands. The exceptions are
