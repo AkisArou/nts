@@ -190,8 +190,14 @@ fn adapters_do_not_claim_other_platforms_or_hosts() {
 
 #[test]
 fn the_public_types_reject_conflicting_kinds_and_mutating_policy() {
-    let output = Command::new("pnpm")
+    let output = Command::new("node")
         .args([
+            "--input-type=module",
+            "-e",
+            "import {withPackageManager} from './tooling/lanes/package-manager.ts'; \
+             process.stdout.write(await withPackageManager(process.cwd(), {}, \
+             manager => manager.run(process.argv.slice(1))));",
+            "--",
             "exec",
             "tsc",
             "--ignoreConfig",
