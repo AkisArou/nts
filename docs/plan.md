@@ -190,8 +190,8 @@ ids, kept so the records that cite them still resolve.
   requests #69 to #74; #118 after its licence check.
 - AWFY Richards and DeltaBlue stay off `main` until a licence allows
   redistribution: their only one, an archived Sun Labs page, grants none
-  (`refs/cited/0afcc5667` keeps their ports). Octane's BSD versions cover
-  both workloads.
+  (their ports are on `helper/awfy-ports-parked`). Octane's BSD versions
+  cover both workloads.
 - 37 benchmark ports (the 35 JetStream ones, `clbg-pidigits` and
   `clbg-regex-redux`) need a `case.domains.json` before their oracle counts
   can be recorded: the recorder's pool reaches inputs outside their
