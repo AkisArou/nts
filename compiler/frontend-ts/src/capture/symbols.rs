@@ -139,7 +139,17 @@ impl<'p> Capture<'p, '_> {
                     && let Some(value) = native_owner.constructor_value()
                 {
                     let value = self.intern_symbol(value)?;
-                    self.snapshot.symbols[owner.0 as usize].constructor_value = Some(value);
+                    // The schema holds this identity to one library. A program
+                    // that augments the instance interface (`declare global {
+                    // interface Number { ... } }`) declares part of `Number`, so
+                    // the value is the program's while `NumberConstructor` stays
+                    // the library's: its statics are then no library's builtin,
+                    // and the checked relation is not recorded.
+                    if self.snapshot.symbols[value.0 as usize].library
+                        == self.snapshot.symbols[owner.0 as usize].library
+                    {
+                        self.snapshot.symbols[owner.0 as usize].constructor_value = Some(value);
+                    }
                 }
             }
             self.symbol_edges += 1;

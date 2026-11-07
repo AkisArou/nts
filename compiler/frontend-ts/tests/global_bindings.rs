@@ -180,3 +180,26 @@ fn a_constructor_value_across_libraries_is_rejected_by_name() {
         "{error}"
     );
 }
+
+/// A program that augments the instance interface (`declare global {
+/// interface Number { ... } }`) declares part of `Number` itself, so the
+/// relation would pair the library's owner with the program's value: it is not
+/// recorded, and the snapshot validates. Main refused to capture the program
+/// at all, which stopped the benchmark corpus at three.js's and WSL's
+/// augmentations of `Number` and `String`.
+#[test]
+fn a_constructor_value_is_recorded_only_within_one_library() {
+    let project = Project::new(
+        "constructor-value-augmented",
+        &format!("declare global {{ interface Number {{ readonly tag?: undefined; }} }}\n{WHOLE}"),
+    );
+    let snapshot = project.capture();
+    let owner = only(&snapshot, "NumberConstructor");
+    assert_eq!(owner.library, Some(nts_semantic_schema::Library::Es));
+    assert_eq!(owner.constructor_value, None);
+    assert_eq!(
+        only(&snapshot, "Number").library,
+        None,
+        "the augmentation is a declaration of the program's"
+    );
+}
