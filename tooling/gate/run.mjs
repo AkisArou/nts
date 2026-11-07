@@ -887,6 +887,7 @@ function pinBinaries() {
     pinned.nts = put(ntsBin, "nts");
     pinned.suite = put(suiteBin, "nts-suite");
     pinned.protocol = put(join(dirname(ntsBin), "nts-test262-protocol"), "nts-test262-protocol");
+    pinned.planner = put(join(dirname(ntsBin), "oracle-plan"), "oracle-plan");
     identities.nts.pinned = pinned.nts;
     // Keep the ten most recent pins; each is ~40 MB.
     const all = readdirSync(PIN_ROOT).map((n) => ({ n, t: statSync(join(PIN_ROOT, n)).mtimeMs })).sort((a, b) => b.t - a.t);

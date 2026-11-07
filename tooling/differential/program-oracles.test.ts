@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
-import {mkdirSync,mkdtempSync,readFileSync,writeFileSync} from 'node:fs';
+import {mkdirSync,mkdtempSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
-import {join} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {test} from 'node:test';
 import {REPOSITORY,verifyToolchain,oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import * as producer from './program-oracles.ts';
@@ -39,7 +39,7 @@ test('the measured example corpus names every type-directed emit project',()=>{
   }finally{api.close();}
 });
 
-test('program consumers read completed answers after the SDK workers drain',async t=>{
+test('program consumers read completed answers from an nts-dev planner after the SDK workers drain',async t=>{
   await setupOracleTestEnvironment();
   const root=mkdtempSync(join(tmpdir(),'program-producer-'));t.after(()=>removeOracleSnapshot(root));
   const project=join(root,'input'),source=join(project,'src');mkdirSync(source,{recursive:true});
@@ -53,7 +53,21 @@ test('program consumers read completed answers after the SDK workers drain',asyn
   writeFileSync(join(observedSources,'main.ts'),"import {value} from './value.mjs';console.log(value);\n");
   const tasks:ProgramOracleTask[]=[{subject:'tests/programs/private-producer',project:join(project,'tsconfig.json'),entry:join(source,'main.ts'),mode:'calls',program:false,observations:[]},
     {subject:'tests/outcomes/private-producer',project:join(observed,'tsconfig.json'),entry:join(observedSources,'main.ts'),mode:'observation',program:false,observations:[]}];
-  await produceProgramOracles({jobs:1,tasks});
+  const binary=resolve(process.env.NTS_BIN??join(REPOSITORY,'target/release/nts'));
+  const profile=join(root,'target/nts-dev'),calls=join(root,'planner-calls');mkdirSync(profile,{recursive:true});
+  symlinkSync(binary,join(profile,'nts'));
+  const planner=join(profile,'oracle-plan');
+  writeFileSync(planner,`#!/usr/bin/env node
+import {appendFileSync} from 'node:fs';
+import {spawnSync} from 'node:child_process';
+appendFileSync(${JSON.stringify(calls)},process.argv[1]+'\\n');
+const result=spawnSync(${JSON.stringify(join(dirname(binary),'oracle-plan'))},process.argv.slice(2),{stdio:'inherit'});
+process.exitCode=result.status??1;
+`,{mode:0o755});
+  const before=process.env.NTS_BIN;
+  try{process.env.NTS_BIN=join(profile,'nts');await produceProgramOracles({jobs:1,tasks});}
+  finally{if(before===undefined)delete process.env.NTS_BIN;else process.env.NTS_BIN=before;}
+  assert.deepEqual(readFileSync(calls,'utf8').trim().split('\n'),[planner,planner]);
   const handoff=programOracleHandoff(join(programOracleDirectory(),'results'));
   const reader=openProgramOracleResults(handoff,oracleRecipeIdentity()),answer=reader.get(tasks[0]!.subject);
   assert.equal(answer.kind,'calls');if(answer.kind!=='calls')throw Error('missing calls');
@@ -61,7 +75,6 @@ test('program consumers read completed answers after the SDK workers drain',asyn
   const observation=reader.get(tasks[1]!.subject);assert.equal(observation.kind,'observation');
   if(observation.kind!=='observation')throw Error('missing observation');
   assert.equal(observation.observation.result,'exit 0');assert.equal(observation.observation.printed.stdout,'23\n');
-  const binary=process.env.NTS_BIN??join(REPOSITORY,'target/release/nts');
   const ran=spawnSync(binary,['check',tasks[0]!.project],{encoding:'utf8',maxBuffer:8*1024**2,
     env:{...process.env,NTS_PROGRAM_ORACLE:JSON.stringify(handoff),NTS_ORACLE_TYPESCRIPT:join(root,'there-is-no-sdk-here'),NODE_OPTIONS:'--no-experimental-strip-types',NTS_BACKEND:'c'}});
   assert.equal(ran.status,0,ran.stdout+ran.stderr);

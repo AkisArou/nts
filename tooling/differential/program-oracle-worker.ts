@@ -1,6 +1,6 @@
 // The pool owns admission, tokens and this process's complete resident group.
 import {writeFileSync,mkdirSync} from 'node:fs';
-import {dirname,join} from 'node:path';
+import {dirname,join,resolve} from 'node:path';
 import {createInterface} from 'node:readline';
 import {OracleWorker,REPOSITORY,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot,type OraclePrepared} from './oracle-emit.ts';
 import {resultHash,type ProgramAnswer} from './oracle-results.ts';
@@ -16,7 +16,8 @@ const scratch=process.argv[2],executables=process.argv[3];
 if(!scratch||!executables)throw Error('program oracle worker has no owned scratch');
 if(!inResidentWorker())throw Error('program oracle worker requires its bounded scope');
 mkdirSync(scratch,{recursive:true});mkdirSync(executables,{recursive:true});
-const planner=join(process.env.CARGO_TARGET_DIR??join(REPOSITORY,'target'),'release/oracle-plan');
+// The run builds and pins siblings together, in its chosen Cargo profile.
+const planner=join(dirname(resolve(process.env.NTS_BIN??join(process.env.CARGO_TARGET_DIR??join(REPOSITORY,'target'),'release/nts'))),'oracle-plan');
 const tools={nts:process.env.NTS_BIN??'',cc:'cc',memoryCapKb:6_000_000};
 const worker=new OracleWorker(join(scratch,'sdk'),oracleToolchainLocation());
 function command(args:string[]){
