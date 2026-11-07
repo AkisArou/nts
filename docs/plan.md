@@ -48,17 +48,6 @@ one page that changes as work goes; the designs it builds are in
     other `node/*` branches are their earlier rounds, deleted after, and their
     trees from before the pool (`~/Projects/nts-lanes/node-oracle-on-input`,
     `~/Projects/nts-lanes/node`) go when Node 26 lands;
-  - the synchronous benchmark ports (#315,
-    `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
-    and Octane's provenance. Every step and case now has a time bound,
-    `bench-agree` records how each benchmark runs on the JVM, and `dex`
-    judges a port's JVM compile timeout against that port's compile record,
-    so `jetstream-threejs`, whose JVM compile spins, is a recorded finding.
-    The JVM also rejects some ports' bytecode (#265). The 46 pull
-    requests they replace (#9, #11, #19 to #23, #31 to #34, #44, #46, #48 to
-    #50, #53, #55 to #68, #75 to #80, #101 to #108, #119, #120) close when they
-    land, and their earlier rounds `helper4/ares6-family` and
-    `helper4/octane-namespace` are deleted;
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
     kept with it: `~/Projects/nts-lanes/chromium`,
@@ -116,6 +105,9 @@ ids, kept so the records that cite them still resolve.
 - Generated code is rejected: C for constrained generics (#310), LLVM's
   missing declaration (#311), a JVM VerifyError (#265) and ClassCastException
   (#215).
+- The JVM backend never finishes compiling `jetstream-threejs`: its compile
+  record says `timeout` once the full check writes it. Reduce it to an
+  outcome fixture.
 - Array holes have no representation (#143).
 - A class exported from an LLVM addon makes it fail to load (#181).
 
