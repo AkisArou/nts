@@ -25,9 +25,25 @@ export function processActivity(text:string) {
   const fields=text.slice(end+2).trim().split(/\s+/);
   const values=[2,3,11,12,13,14,19].map(at=>Number(fields[at]));
   if(values.some(value=>!Number.isSafeInteger(value)||value<0))throw new Error("invalid process activity counters");
-  // State R is running or waiting for a CPU: a starved process makes no CPU
-  // progress under load, and it is not idle.
-  return {group:values[0]!,session:values[1]!,cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),own:values[2]!+values[3]!,started:values[6]!,runnable:fields[0]==="R"};
+  return {group:values[0]!,session:values[1]!,cpu:values.slice(2,6).reduce((sum,n)=>sum+n,0),own:values[2]!+values[3]!,started:values[6]!,busy:busyState(fields[0]!)};
+}
+/**
+ * A thread running or waiting for a CPU (R), or waiting on the kernel's I/O
+ * (D): a loaded machine can keep it there with no CPU progress, and it is not
+ * idle. A thread asleep (S) waits for an event, which is what a hang does.
+ */
+const busyState=(state:string)=>state==="R"||state==="D";
+/** Whether any thread of `pid` is busy: a process's own state is only its main thread's. */
+export function threadsBusy(pid:number):boolean {
+  let tids:string[];
+  try{tids=readdirSync(`/proc/${pid}/task`);}catch{return false;}
+  for(const tid of tids){
+    let text:string;
+    try{text=readFileSync(`/proc/${pid}/task/${tid}/stat`,"utf8");}catch{continue;}
+    const end=text.lastIndexOf(")");
+    if(end>=0&&busyState(text.slice(end+2,end+3)))return true;
+  }
+  return false;
 }
 function processAt(pid:number) {
   try{return processActivity(readFileSync(`/proc/${pid}/stat`,"utf8"));}
@@ -47,12 +63,12 @@ function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessA
     // Counting the session forwards nested CPU without trusting a heartbeat
     // or treating a waiting compiler as idle. Signals still use only spawn's
     // directly owned group; the nested supervisor owns its children's groups.
-    if(record&&owned.has(record.session))records.set(pid,record);
+    if(record&&owned.has(record.session))records.set(pid,{...record,busy:record.busy||threadsBusy(pid)});
   }
   return records;
 }
 
-type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,runnable:boolean)=>void;broken:(error:unknown)=>void};
+type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean)=>void;broken:(error:unknown)=>void};
 /** One snapshot per tick for every live command; activity stays group-local. */
 export class CommandActivitySampler {
   private readonly watches=new Set<ActivityWatch>();
@@ -78,17 +94,17 @@ export class CommandActivitySampler {
     let records:ReadonlyMap<number,ProcessActivity>;
     try{records=this.snapshot(new Set(watches.map(watch=>watch.group)));}
     catch(error){for(const watch of watches)watch.broken(error);return;}
-    const totals=new Map<number,number>(),runnable=new Set<number>();
+    const totals=new Map<number,number>(),busy=new Set<number>();
     for(const record of records.values()){
       totals.set(record.session,(totals.get(record.session)??0)+record.cpu);
-      if(record.runnable)runnable.add(record.session);
+      if(record.busy)busy.add(record.session);
     }
     for(const watch of watches){
       if(!this.watches.has(watch))continue;
       try{
         const leader=records.get(watch.group);
         if(leader&&(leader.started!==watch.started||leader.group!==watch.group||leader.session!==watch.group))throw new Error("command process-group identity changed");
-        watch.sample(totals.get(watch.group)??0,leader?.own??0,runnable.has(watch.group));
+        watch.sample(totals.get(watch.group)??0,leader?.own??0,busy.has(watch.group));
       }catch(error){watch.broken(error);}
     }
   }
@@ -175,7 +191,7 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       const leader=processAt(child.pid);
       if(!leader||leader.group!==child.pid||leader.session!==child.pid)throw new Error("spawned command has no owned process group");
       started=leader.started;cpu=leader.cpu;
-      cancelActivity=activitySampler.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,runnable)=>{
+      cancelActivity=activitySampler.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy)=>{
         try{
           const now=performance.now();
           if(ownBound!==undefined&&own/frequency>=ownBound){
@@ -189,12 +205,13 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
           // Membership/reaping races can lower a sampled group total. Reset
           // its baseline too, rather than hiding subsequent real CPU work.
           if(measured!==cpu){cpu=measured;last=now;options.onActivity?.({cpu,elapsedMs:now-began,pid:child.pid!});}
-          // A process of the group that is running or waiting for a CPU is
-          // not idle, however long a loaded machine keeps it waiting: hung
-          // means every process sleeps with no output and no CPU progress.
-          else if(runnable)last=now;
+          // A thread of the group that is running, waiting for a CPU or
+          // waiting on disk is not idle, however long a loaded machine keeps
+          // it there: hung means every thread sleeps with no output and no
+          // CPU progress.
+          else if(busy)last=now;
           if(now-last<idle)return;
-          hung=`command NOT RUN (hung): ${command}; no output, process-group CPU activity or runnable process for ${idle} ms`;
+          hung=`command NOT RUN (hung): ${command}; no output, process-group CPU activity or busy thread for ${idle} ms`;
           publishHung(hung,options.env);cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();
         }catch(error){broken(error);}
       }});
