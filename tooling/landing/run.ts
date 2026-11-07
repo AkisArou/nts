@@ -56,6 +56,8 @@ export type RunOptions = {
   owned?: Readonly<Record<string, string>>;
   /** How many times memory pressure may send a step back before a person is asked. */
   attempts?: number;
+  /** The most any step may run, in seconds: the landing check's ceiling (step-bound.ts's landingCeiling). */
+  ceiling?: number;
 };
 
 const ROWS = new Map((STEPS as { name: string; treeOnly?: boolean }[]).map(row => [row.name, row]));
@@ -94,6 +96,8 @@ export function runLanding(options: RunOptions): Ran {
     // The scopes the rules narrowed a step to: the touched crates' doc tests, the interop projects a change reaches.
     ...(options.doctests && options.steps.includes("doctests") ? { NTS_DOCTEST_CRATES: options.doctests } : {}),
     ...(options.interop && options.steps.includes("interop") ? { NTS_INTEROP_PROJECTS: options.interop } : {}),
+    // A stuck step holds the queue for minutes, not the hour the full check allows.
+    ...(options.ceiling !== undefined ? { NTS_GATE_STEP_CEILING_S: String(options.ceiling) } : {}),
     ...options.owned,
   };
   const rest = options.steps.filter(step => step !== "build");

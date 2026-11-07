@@ -29,6 +29,7 @@
 //
 // The full check reads `deferredSteps` for what a landing left to it.
 import { readFileSync } from "node:fs";
+import { landingCeiling } from "../gate/step-bound.ts";
 import { usableWidth } from "../gate/step-scheduling.ts";
 
 export type Form =
@@ -315,5 +316,6 @@ export function describeSelection(selection: Selection): string {
   const parts = [`build ${minutes(e.build)}`, `work ${minutes(e.work)} on ${budget.slots} slots`, `longest ${e.longestStep ?? "none"} ${minutes(e.longest)}`];
   lines.push(`estimate: ${minutes(e.seconds)} of ${minutes(budget.seconds)} (${parts.join(", ")})`);
   if (!selection.fits) lines.push(`  over the budget: the steps that never move take ~${minutes(e.fixed)} on their own`);
+  lines.push(`ceiling: ${minutes(landingCeiling(e.seconds))} per step (step-bound.ts): a step still running then is stopped and held`);
   return lines.join("\n");
 }

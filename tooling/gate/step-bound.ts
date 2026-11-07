@@ -18,13 +18,20 @@
 // case its own supervisor stops at that budget is recorded as a timeout before
 // its step's bound comes, even on half a core. A tree check runs no case: it
 // reads the tree and takes seconds, and its floor is ten minutes.
+//
+// **A landing check's ceiling caps every bound**: three times the change's
+// estimate, at least fifteen minutes (tooling/landing/selection.ts). The
+// landing check passes it to the runner as NTS_GATE_STEP_CEILING_S, so a stuck
+// step holds the queue for minutes, not the hour the full check allows.
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 
 export const STEP_BOUND_FACTOR = 3;
 export const STEP_BOUND_FLOOR_S = 2 * COMMAND_CPU_BUDGET_SECONDS;
 export const TREE_CHECK_FLOOR_S = 10 * 60;
+export const LANDING_CEILING_FACTOR = 3;
+export const LANDING_CEILING_FLOOR_S = 15 * 60;
 
-export type StepBound = { seconds: number; basis: "stated" | "derived" };
+export type StepBound = { seconds: number; basis: "stated" | "derived" | "ceiling" };
 export type BoundRow = { name: string; bound?: number; treeOnly?: boolean };
 
 const positive = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value > 0;
@@ -39,18 +46,27 @@ export function statedBoundProblem(row: BoundRow): string | null {
 
 /**
  * A step's bound: the one its row states, else the one its recorded cost
- * derives. `work` is the step's CPU seconds, `width` the slots it can use, and
- * `run` the CPU seconds of every step in the run and the run's slots.
+ * derives, and never above `ceiling` when a landing check gives one. `work` is
+ * the step's CPU seconds, `width` the slots it can use, and `run` the CPU
+ * seconds of every step in the run and the run's slots.
  */
-export function stepBound(row: BoundRow, work: number, width: number, run: { cost: number; slots: number }): StepBound {
+export function stepBound(row: BoundRow, work: number, width: number, run: { cost: number; slots: number }, ceiling?: number): StepBound {
   const problem = statedBoundProblem(row);
   if (problem) throw new Error(problem);
-  if (row.bound !== undefined) return { seconds: row.bound, basis: "stated" };
+  if (ceiling !== undefined && !positive(ceiling)) throw new Error(`a step ceiling of ${String(ceiling)} is not a positive number of seconds`);
+  const capped = (bound: StepBound): StepBound => ceiling !== undefined && ceiling < bound.seconds ? { seconds: ceiling, basis: "ceiling" } : bound;
+  if (row.bound !== undefined) return capped({ seconds: row.bound, basis: "stated" });
   for (const [what, value, valid] of [["cost", work, cost], ["width", width, positive], ["run cost", run.cost, cost], ["run slots", run.slots, positive]] as const) {
     if (!valid(value)) throw new Error(`the bound of ${row.name} needs a ${valid === cost ? "measured" : "positive"} ${what}, not ${String(value)}`);
   }
   const floor = row.treeOnly ? TREE_CHECK_FLOOR_S : STEP_BOUND_FLOOR_S;
-  return { seconds: Math.ceil(Math.max(floor, STEP_BOUND_FACTOR * (work / width + run.cost / run.slots))), basis: "derived" };
+  return capped({ seconds: Math.ceil(Math.max(floor, STEP_BOUND_FACTOR * (work / width + run.cost / run.slots))), basis: "derived" });
+}
+
+/** The ceiling a landing check gives every step: three times its estimate, at least fifteen minutes. */
+export function landingCeiling(estimateSeconds: number): number {
+  if (!cost(estimateSeconds)) throw new Error(`a landing estimate of ${String(estimateSeconds)} is not a measured number of seconds`);
+  return Math.ceil(Math.max(LANDING_CEILING_FLOOR_S, LANDING_CEILING_FACTOR * estimateSeconds));
 }
 
 /** The reason a step stopped at its bound records. */

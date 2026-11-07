@@ -27,6 +27,7 @@ import { describePool, Pool, POOL_HOME } from "./pool.ts";
 import { ensureService, LANDING_HOME, Queue, SERVICE_UNIT, submit, type Result } from "./queue.ts";
 import { ruleSelect } from "./rules.ts";
 import { runLanding } from "./run.ts";
+import { landingCeiling } from "../gate/step-bound.ts";
 import { describeSelection, landingSteps } from "./selection.ts";
 import { BUDGET, drain, KEEP_DAYS, machineConfig, prune } from "./service.ts";
 
@@ -69,7 +70,8 @@ function here(root: string, sha: string): number {
   prune(join(LANDING_HOME, "runs"), KEEP_DAYS);
   const run = join(LANDING_HOME, "runs", `here-${short(sha)}-${Date.now()}`);
   say(`${note}: ${steps.join(" ")} in ${tree}, estimate ~${Math.round(selected.selection.estimate.seconds)} s; logs ${run}`);
-  const ran = runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests, env: process.env, hold: reason => say(`held: ${reason}`) });
+  const ran = runLanding({ tree, target: join(tree, "target"), run, commit: sha, steps, interop: selected.interop, doctests: selected.doctests,
+    ceiling: landingCeiling(selected.selection.estimate.seconds), env: process.env, hold: reason => say(`held: ${reason}`) });
   for (const s of ran.steps) console.log(`  ${s.verdict.padEnd(10)} ${s.name.padEnd(24)} ${s.wall !== undefined ? `${Math.round(s.wall)} s` : ""}${s.cpu !== undefined ? ` (cpu ${Math.round(s.cpu)} s)` : ""}${s.reason ? `  ${s.reason}` : ""}`);
   for (const line of ran.pending) console.log(`  ${line}`);
   say(`${ran.state} in ${Math.round(ran.wall_s)} s: ${ran.message}`);

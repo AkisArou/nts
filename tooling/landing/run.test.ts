@@ -53,6 +53,7 @@ if [ "$1" = --call ]; then
     pressure) [ -e "$controls/$step.pressured" ] && exit 0; : > "$controls/$step.pressured"; instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     always-pressure) instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
     hung) instrument "NOT RUN" hung "no progress for 600 s" ;;
+    stuck) echo "  $step: waits for ever"; exec tail -f /dev/null ;;
   esac
 fi
 exec node "$(dirname "$0")/run.mjs" "$@"
@@ -179,6 +180,15 @@ test("pressure that never clears, and a hung step, hold the change for a person"
   const hung = runLanding(g.options(["build", "outcomes"]));
   assert.equal(hung.state, "held");
   assert.match(hung.message, /outcomes NOT RUN: no progress for 600 s/);
+});
+
+test("the landing check's ceiling reaches the runner: a stuck step is stopped there and holds the change", t => {
+  const f = fixture(t);
+  f.control("outcomes", "stuck");
+  const ran = runLanding(f.options(["build", "outcomes", "rustfmt"], { ceiling: 2 }));
+  assert.equal(ran.state, "held", ran.message);
+  assert.match(ran.message, /outcomes INSTRUMENT: step exceeded its bound of 2 s/);
+  assert.deepEqual(ran.steps.map(s => `${s.name} ${s.verdict}`), ["build PASS", "outcomes INSTRUMENT", "rustfmt PASS"]);
 });
 
 test("a tree whose gate cannot say what its steps need holds the change", t => {

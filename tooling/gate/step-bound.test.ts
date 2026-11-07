@@ -5,14 +5,14 @@
 //   node --test tooling/gate/step-bound.test.ts
 import assert from "node:assert/strict";
 import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readBaseline } from "../landing/selection.ts";
 import { COMMAND_CPU_BUDGET_SECONDS } from "./active-command.ts";
 import { gateEnvironment, hostEnvironment } from "./canonical-environment.ts";
-import { STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, stepBound, stepBoundReason, unmeasuredSteps } from "./step-bound.ts";
+import { LANDING_CEILING_FLOOR_S, STEP_BOUND_FLOOR_S, TREE_CHECK_FLOOR_S, landingCeiling, stepBound, stepBoundReason, unmeasuredSteps } from "./step-bound.ts";
 import { instrumentPolicy } from "./step-result.ts";
 import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
@@ -39,6 +39,20 @@ test("a stated bound wins; otherwise three times the step's work and the run's o
   assert.deepEqual(instrumentPolicy("step-bound"), { verdict: "INSTRUMENT", disposition: "operator-hold" }, "a step stopped at its bound is held for a person");
 });
 
+test("a landing check's ceiling caps every bound: three times its estimate, at least fifteen minutes", () => {
+  const run = { cost: 2400, slots: 24 };
+  assert.equal(landingCeiling(100), LANDING_CEILING_FLOOR_S);
+  assert.equal(LANDING_CEILING_FLOOR_S, 15 * 60);
+  assert.equal(landingCeiling(600), 1800);
+  assert.deepEqual(stepBound({ name: "s" }, 16000, 8, run, 900), { seconds: 900, basis: "ceiling" });
+  assert.deepEqual(stepBound({ name: "s", bound: 7200 }, 0, 8, run, 900), { seconds: 900, basis: "ceiling" });
+  assert.deepEqual(stepBound({ name: "s", bound: 60 }, 0, 8, run, 900), { seconds: 60, basis: "stated" }, "a bound under the ceiling stands");
+  assert.deepEqual(stepBound({ name: "s", treeOnly: true }, 1, 1, run, 900), { seconds: 600, basis: "derived" }, "a tree check's own bound is under the ceiling");
+  assert.deepEqual(stepBound({ name: "s" }, 1, 1, run, 900), { seconds: 900, basis: "ceiling" }, "the full check's hour floor does not apply under a ceiling");
+  for (const ceiling of [0, -5, Number.NaN]) assert.throws(() => stepBound({ name: "s" }, 1, 1, run, ceiling), /step ceiling/);
+  assert.throws(() => landingCeiling(-1), /landing estimate/);
+});
+
 test("every step the gate runs has a recorded cost or a stated bound", () => {
   assert.deepEqual(unmeasuredSteps(STEPS, baseline()), [], "a step with no committed baseline states its bound in step-table.mjs");
   assert.deepEqual(unmeasuredSteps([{ name: "new" }, { name: "tree", treeOnly: true }, { name: "stated", bound: 60 }], new Map()), ["new"]);
@@ -60,10 +74,9 @@ test("no bound would have stopped the committed healthy run", () => {
 });
 
 /** A real runner in a scratch repository running `steps`: `format` never finishes, `records` finishes at once. */
-function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>) {
-  const base = join(homedir(), ".cache/nts/step-bound-tests");
-  mkdirSync(base, { recursive: true });
-  const own = mkdtempSync(join(base, "run-"));
+function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, owned: Record<string, string> = {}) {
+  // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
+  const own = mkdtempSync(join(tmpdir(), "step-bound-"));
   t.after(() => { writeFileSync(join(own, "release"), "the test is over"); rmSync(own, { recursive: true, force: true }); });
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
   mkdirSync(gate, { recursive: true });
@@ -102,7 +115,7 @@ fi
   // An ample memory reading of its own, as every test that starts a real runner gives it.
   const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
   const planned = gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") }, { run, owned: {
-    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", NTS_GATE_MEM_GB: "20", NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target,
+    NTS_GATE_STEPS: steps, NTS_GATE_SLOTS: "2", NTS_GATE_MEM_GB: "20", NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, ...owned,
   } });
   const result = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   type Row = { name: string; verdict: string; reason: string; log: string; bound_s: number; bound_basis: string;
@@ -140,4 +153,14 @@ test("a step within its bound is untouched", t => {
   assert.equal(records.instrument, undefined);
   assert.deepEqual([records.bound_s, records.bound_basis], [30, "stated"]);
   assert.equal(readFileSync(records.log, "utf8"), "records finished\n");
+});
+
+test("under a landing check's ceiling, a step is stopped there whatever its own bound", t => {
+  const { result, format, records } = runFixture(t, "format records", { format: 7200 }, { NTS_GATE_STEP_CEILING_S: "3" });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.equal(format.verdict, "INSTRUMENT");
+  assert.equal(format.reason, "step exceeded its bound of 3 s");
+  assert.deepEqual([format.bound_s, format.bound_basis], [3, "ceiling"]);
+  assert.equal(records.verdict, "PASS");
+  assert.deepEqual([records.bound_s, records.bound_basis], [3, "ceiling"]);
 });

@@ -62,6 +62,8 @@
 //                         (default <target>/gate-runs/<time>-<pid>)
 //   NTS_GATE_TIME_STRICT=1  a step much slower than its baseline is a FAIL
 //   NTS_GATE_RECORD_TIMES=1 write this run's times to tooling/gate/times.tsv
+//   NTS_GATE_STEP_CEILING_S the most any step may run (the landing check's
+//                         ceiling; see step-bound.ts)
 //
 // Set by this file for each step (a step reads them; nobody sets them by hand):
 //   NTS_GATE_JOBS         the workers it may run
@@ -198,6 +200,8 @@ if (!Number.isSafeInteger(TRAIN_MEMBERS) || TRAIN_MEMBERS < 0) throw new Error("
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
 const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
 const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
+// The landing check's ceiling on every step's bound (step-bound.ts); unset in the full check.
+const STEP_CEILING = intEnv("NTS_GATE_STEP_CEILING_S", undefined);
 const TIMES_FILE = join(HERE, "times.tsv");
 
 function usage(message) {
@@ -523,9 +527,10 @@ function workEstimate(name) {
 }
 
 // How long a step may run before it is stopped and held (step-bound.ts): its
-// row's stated bound, else three times its work and the run's over their slots.
+// row's stated bound, else three times its work and the run's over their slots,
+// and never above a landing check's ceiling.
 function boundOf(step) {
-  return stepBound(step, workEstimate(step.name), width(step.name), { cost: plan.reduce((sum, name) => sum + workEstimate(name), 0), slots: SLOTS });
+  return stepBound(step, workEstimate(step.name), width(step.name), { cost: plan.reduce((sum, name) => sum + workEstimate(name), 0), slots: SLOTS }, STEP_CEILING);
 }
 
 // A token is a case starting, so the pool is where the run stops starting

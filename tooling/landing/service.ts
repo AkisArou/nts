@@ -25,6 +25,7 @@ import { acquire } from "./lock.ts";
 import { Pool, POOL_HOME, linkInputs } from "./pool.ts";
 import { LANDING_HOME, Queue, type Checking, type Entry, type Result } from "./queue.ts";
 import { removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
+import { landingCeiling } from "../gate/step-bound.ts";
 import { costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
 import { durableRecord } from "../lanes/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
@@ -150,6 +151,7 @@ export function landOne(config: Config, queue: Queue, entry: Checking): Result {
       try { config.prepare(tip); }
       catch (error) { return queue.answer(entry, { state: "held", base, tip, run, message: `the landing tree could not be prepared at ${short(tip)}: ${(error as Error).message}` }); }
       ran = config.runSteps({ tree: config.tree, target: config.target, run, commit: tip, steps, interop: selected.interop, doctests: selected.doctests,
+        ceiling: landingCeiling(selected.selection.estimate.seconds),
         env: config.env, hold: reason => queue.setStatus({ state: "held", id: entry.id, sha: entry.sha, run, message: reason }) });
       // What the steps cost is for the next estimate; it never decides this one.
       try { recordCosts(config.home, ran, selected.kind); } catch (error) { config.log(`costs not recorded: ${String(error)}`); }
