@@ -192,9 +192,9 @@ regression becomes a task. Benchmarks never block a landing.
   `~/.cache/nts-pins/<12 hex>/nts`.
 - **The full check counts them.** Its hourly count
   (`tooling/full-check/count.ts`) is red when a branch is named by no task in
-  [`plan.md`](plan.md), a worktree is outside the pool, or `~/.cache` holds an
-  nts folder that `tooling/full-check/keep.json` does not name with its
-  reason. It deletes nothing; it reports. Rules
+  [`plan.md`](plan.md), a worktree is outside the pool and no task names its
+  path, or `~/.cache` holds an nts folder that `tooling/full-check/keep.json`
+  does not name with its reason. It deletes nothing; it reports. Rules
   alone let 1,364 branches, 185 worktrees and 120 GB of evidence folders pile
   up by 11-06; a red step does not.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is

@@ -5,6 +5,16 @@
   "nts-pins": { "kind": "pins", "writer": "tooling/conformance/pin.ts", "why": "pin.ts's tree, target and lock, and the pins main uses" },
   "nts-chromium-checkpoint1": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium-checkpoint2": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
+  "nts-chromium": { "kind": "kept", "why": "the Chromium task's own caches, kept while the user has it paused" },
+
+  "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
+  "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
+    "mainclaude": { "kind": "kept", "why": "the coordinator's" },
+    "chromium": { "kind": "kept", "why": "the Chromium task's, kept while the user has it paused" }
+  } },
+  "nts-jvm-codex": { "kind": "kept", "why": "the JVM evidence that all.sh's JVM exceptions and benchmarks/jvm-rows.md cite" },
+  "nts-node26": { "kind": "kept", "why": "Node 26's qualification runs, until it lands (#124)" },
+  "nts-tsrs-yield-replay-20261030": { "kind": "kept", "why": "the drafted reports of tsrs's yield gaps, until they are filed upstream" },
 
   "nts-node-inputs": { "kind": "kept", "writer": "tooling/lanes/node-inputs.ts", "why": "the node inputs every gate tree links" },
   "nts-dependencies": { "kind": "kept", "writer": "tooling/lanes/dependency-inputs.ts", "why": "each tree's dependency inputs" },
@@ -37,8 +47,10 @@
     "worker-memory": { "kind": "scratch", "writer": "tooling/census/worker-memory.ts" }
   } },
   "nts-agree": { "kind": "kept", "writer": "tooling/differential/agree.mjs", "why": "the differential's binaries and objects, by content" },
-  "nts-gate": { "kind": "folders", "why": "the gate's own caches; its old tree, target and runs are not kept", "folders": {
+  "nts-gate": { "kind": "folders", "why": "the gate's own caches, pinned.sh's tree and the logs of gates run by hand", "folders": {
     "bin": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the binaries a run executes, by content" },
+    "runs": { "kind": "logs", "who": "gates run by hand (all.sh, pinned.sh)", "writer": "tooling/gate/run.mjs", "why": "their logs" },
+    "tree": { "kind": "kept", "writer": "tooling/gate/pinned.sh", "why": "pinned.sh's tree, at the commit it runs" },
     "closed-temporaries": { "kind": "kept", "writer": "tooling/gate/run-temporary.ts", "why": "the registry of closed run temporaries" },
     "artifact-shadow": { "kind": "kept", "writer": "tooling/gate/run.mjs", "why": "the artifact shadow's results" }
   } },

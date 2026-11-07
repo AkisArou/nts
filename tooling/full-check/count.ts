@@ -14,7 +14,9 @@
 //     `verified` are exempt; refs/cited/* are not branches;
 //   - a worktree is in the pool at ~/.cache/nts-pool/<n>, or is the shared
 //     checkout, the landing check's tree (~/.cache/nts-landing/), the full
-//     check's own (~/.cache/nts-full-check/) or pin.ts's build tree;
+//     check's own (~/.cache/nts-full-check/), pin.ts's build tree or
+//     pinned.sh's (~/.cache/nts-gate/tree), or docs/plan.md names its path in
+//     backticks: a task's tree from before the pool, kept with its task;
 //   - an nts folder of ~/.cache is kept by an entry of keep.json, which says
 //     why and, for a tool's folder, which file writes it: an entry whose
 //     writer no longer names its folder is red too, so the list cannot
@@ -57,12 +59,13 @@ export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string
 const EXEMPT = new Set(["main", "verified"]);
 const DAY = 86_400_000;
 
-/** What docs/plan.md names: branches in backticks, `prefix/*` globs, and pull request numbers. */
-export function planNames(plan: string): { names: Set<string>; prefixes: string[]; pulls: Set<number> } {
-  const names = new Set<string>(), prefixes: string[] = [], pulls = new Set<number>();
+/** What docs/plan.md names: branches and paths (`~/...` or `/...`) in backticks, `prefix/*` globs, and pull request numbers. */
+export function planNames(plan: string): { names: Set<string>; prefixes: string[]; paths: Set<string>; pulls: Set<number> } {
+  const names = new Set<string>(), prefixes: string[] = [], paths = new Set<string>(), pulls = new Set<number>();
   for (const [, raw] of plan.matchAll(/`([^`\n]+)`/g)) {
     const token = raw!.trim().replace(/^refs\/heads\//, "");
-    if (/^[^\s*]+\/\*$/.test(token)) prefixes.push(token.slice(0, -1));
+    if (/^(?:~\/|\/)\S+$/.test(token)) paths.add(token.replace(/\/+$/, ""));
+    else if (/^[^\s*]+\/\*$/.test(token)) prefixes.push(token.slice(0, -1));
     else if (!/\s/.test(token)) names.add(token);
   }
   for (const [, from, to] of plan.matchAll(/#(\d+)\b(?:\s*(?:to|–)\s*#(\d+)\b)?/g)) {
@@ -70,7 +73,7 @@ export function planNames(plan: string): { names: Set<string>; prefixes: string[
     if (b < a || b - a > 500) { pulls.add(a); continue; }
     for (let n = a; n <= b; n++) pulls.add(n);
   }
-  return { names, prefixes, pulls };
+  return { names, prefixes, paths, pulls };
 }
 
 function branchLines(input: CountInput, red: string[], notes: string[]): void {
@@ -103,16 +106,18 @@ export function poolWorktree(path: string, cache: string): string | null {
   if (inside(p, join(c, "nts-landing"))) return "the landing check's";
   if (inside(p, join(c, "nts-full-check"))) return "the full check's";
   if (p === join(c, "nts-pins", "tree")) return "pin.ts's build tree";
+  if (p === join(c, "nts-gate", "tree")) return "pinned.sh's tree";
   return null;
 }
 
 function worktreeLines(input: CountInput, red: string[]): void {
-  const shared = real(input.shared);
+  const shared = real(input.shared), home = dirname(input.cache);
+  const named = new Set([...planNames(input.plan).paths].map(path => real(path.startsWith("~/") ? join(home, path.slice(2)) : path)));
   for (const tree of [...input.worktrees].sort((a, b) => a.path.localeCompare(b.path))) {
     const what = tree.branch ? tree.branch.replace(/^refs\/heads\//, "") : tree.head ? `detached at ${tree.head.slice(0, 12)}` : "no HEAD";
     if (tree.prunable) { red.push(`worktree ${tree.path} (${what}): its folder is gone; \`git worktree prune\` forgets it`); continue; }
-    if (real(tree.path) === shared || poolWorktree(tree.path, input.cache)) continue;
-    red.push(`worktree ${tree.path} (${what}): outside the pool (~/.cache/nts-pool/<n>)`);
+    if (real(tree.path) === shared || poolWorktree(tree.path, input.cache) || named.has(real(tree.path))) continue;
+    red.push(`worktree ${tree.path} (${what}): outside the pool (~/.cache/nts-pool/<n>), and docs/plan.md does not name it`);
   }
 }
 
@@ -130,7 +135,8 @@ function folders(dir: string): Entry[] {
  * Why a folder of ~/.cache is kept (keep.json), and what is checked inside it:
  *   kept     nothing inside;
  *   pool     only pool slots, ~/.cache/nts-pool/<n>;
- *   runs     its runs/ hold three days of logs;
+ *   runs     a service's folder: its runs/ is a folder of logs;
+ *   logs     a folder of runs' logs, each kept three days;
  *   pins     pin.ts's tree, target and lock, and the pins of main and verified;
  *   scratch  a tool's scratch root: what a run leaves for a day (or `days`) is a leftover;
  *   folders  each folder in it kept by a rule of its own.
@@ -139,7 +145,7 @@ function folders(dir: string): Entry[] {
  */
 export type Keep =
   | { kind: "kept" | "pool" | "pins"; why: string; writer?: string }
-  | { kind: "runs"; who: string; why: string; writer?: string }
+  | { kind: "runs" | "logs"; who: string; why: string; writer?: string }
   | { kind: "scratch"; writer: string; days?: number }
   | { kind: "folders"; why: string; folders: Record<string, Keep> };
 
@@ -148,7 +154,7 @@ export const KEEP_FILE = fileURLToPath(new URL("keep.json", import.meta.url));
 export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   const value = JSON.parse(readFileSync(file, "utf8")) as Record<string, Keep>;
   const check = (name: string, keep: Keep) => {
-    if (!["kept", "pool", "pins", "runs", "scratch", "folders"].includes(keep.kind)) throw new Error(`${file}: ${name} has an unknown kind ${String(keep.kind)}`);
+    if (!["kept", "pool", "pins", "runs", "logs", "scratch", "folders"].includes(keep.kind)) throw new Error(`${file}: ${name} has an unknown kind ${String(keep.kind)}`);
     if (keep.kind === "scratch" && !keep.writer) throw new Error(`${file}: the scratch root ${name} names no writer`);
     if (keep.kind !== "scratch" && !keep.why) throw new Error(`${file}: ${name} does not say why it is kept`);
     if (keep.kind === "folders") for (const [child, inner] of Object.entries(keep.folders)) check(`${name}/${child}`, inner);
@@ -189,9 +195,11 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context): string[] {
     case "pool":
       for (const child of children) if (!/^\d+$/.test(child.name)) lines.push(`${display(child.path, context)}: not a pool slot (~/.cache/nts-pool/<n>)`);
       break;
-    case "runs": {
-      const old = folders(join(entry.path, "runs")).filter(run => run.name !== "latest" && context.now - run.mtimeMs > 3 * DAY);
-      if (old.length) lines.push(`${display(join(entry.path, "runs"), context)}: ${aged(old, context)} of ${keep.who}; logs are kept three days`);
+    case "runs":
+    case "logs": {
+      const logs = keep.kind === "runs" ? join(entry.path, "runs") : entry.path;
+      const old = folders(logs).filter(run => run.name !== "latest" && context.now - run.mtimeMs > 3 * DAY);
+      if (old.length) lines.push(`${display(logs, context)}: ${aged(old, context)} of ${keep.who}; logs are kept three days`);
       break;
     }
     case "pins": {

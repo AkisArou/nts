@@ -6,7 +6,7 @@
 import assert from "node:assert/strict";
 import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
 import { count, parseWorktrees, planNames, readKeep, writerNames, type CountInput, type Keep } from "./count.ts";
 
@@ -25,6 +25,7 @@ const PLAN = `# The plan
 - The asynchronous benchmark harness (#56), then the parked JetStream pull
   requests #69 to #74; #118 after its licence check.
 - A commit #3e8c1cab3 is not a pull request, and \`not a branch\` is prose.
+- Chromium, paused, keeps its tree \`~/Projects/nts-lanes/chromium/\`.
 `;
 
 /** A keep list like keep.json's, over fixture writers. */
@@ -40,7 +41,11 @@ const KEEP: Record<string, Keep> = {
     "node-deps": { kind: "kept", writer: "tooling/deps.mjs", why: "archives" },
     "outcomes": { kind: "scratch", writer: "tooling/outcomes.ts" },
   } },
-  "nts-gate": { kind: "folders", why: "the gate's", folders: { "bin": { kind: "kept", writer: "tooling/run.mjs", why: "binaries" } } },
+  "nts-gate": { kind: "folders", why: "the gate's", folders: {
+    "bin": { kind: "kept", writer: "tooling/run.mjs", why: "binaries" },
+    "runs": { kind: "logs", who: "gates run by hand", writer: "tooling/run.mjs", why: "their logs" },
+    "tree": { kind: "kept", writer: "tooling/pinned.sh", why: "pinned.sh's tree" },
+  } },
   "nts-messages": { kind: "scratch", writer: "tooling/messages.ts" },
   "nts-jvm-verifies": { kind: "scratch", writer: "tooling/verifies.ts", days: 7 },
   "nts-gone-tool": { kind: "kept", writer: "tooling/gone.ts", why: "a tool since deleted" },
@@ -53,7 +58,8 @@ function rootFixture(t: TestContext): string {
   writeFileSync(join(root, "tooling/apple.sh"), 'root="${NTS_APPLE_ROOT:-$HOME/.cache/nts/apple}"\n');
   writeFileSync(join(root, "tooling/deps.mjs"), "cache: join(homedir(), '.cache', 'nts', 'x'), join(home, \".cache\", \"nts\", \"node-deps\")\n");
   writeFileSync(join(root, "tooling/outcomes.ts"), 'const SCRATCH = join(homedir(), ".cache/nts/outcomes", String(process.pid));\n');
-  writeFileSync(join(root, "tooling/run.mjs"), 'const PIN_ROOT = join(cache, "nts-gate", "bin");\n');
+  writeFileSync(join(root, "tooling/run.mjs"), 'const PIN_ROOT = join(cache, "nts-gate", "bin");\nconst RUN_DIR = join(homedir(), ".cache/nts-gate/runs", stamp);\n');
+  writeFileSync(join(root, "tooling/pinned.sh"), 'tree=${NTS_GATE_TREE:-$HOME/.cache/nts-gate/tree}\n');
   writeFileSync(join(root, "tooling/messages.ts"), 'const base = join(homedir(), ".cache/nts-messages");\n');
   writeFileSync(join(root, "tooling/verifies.ts"), 'const base = join(homedir(), ".cache/nts-jvm-verifies");\n');
   return root;
@@ -74,6 +80,9 @@ function cacheFixture(t: TestContext): string {
     "nts-gate/bin", "nts-messages/run-now", "not-nts-at-all", "ntsc-is-not-nts"]) folder(path);
   folder("nts-landing/runs/last-week", 7);
   folder("nts-full-check/runs/four-days", 4);
+  folder("nts-gate/runs/today");
+  folder("nts-gate/runs/latest", 9); // the link to the newest run, whatever its age
+  folder("nts-gate/runs/last-week", 7);
   folder("nts-messages/run-stopped", 2);
   folder("nts-jvm-verifies/failed-kept-a-week", 3);
   folder("nts-jvm-verifies/failed-past-its-week", 8);
@@ -116,7 +125,9 @@ function input(t: TestContext, overrides: Partial<CountInput> = {}): CountInput 
       { path: join(cache, "nts-full-check/tree"), head: MAIN },
       { path: join(cache, "nts-full-check/controller"), head: VERIFIED },
       { path: join(cache, "nts-pins/tree"), head: MAIN },
+      { path: join(cache, "nts-gate/tree"), head: OTHER },
       { path: "/home/u/Projects/nts-lanes/node", branch: "refs/heads/node/oracle-e039" },
+      { path: join(dirname(cache), "Projects/nts-lanes/chromium"), branch: "refs/heads/chromium/counter-tree-profile" },
       { path: join(cache, "nts-scratch/review"), head: OTHER },
       { path: join(cache, "nts-pool/1/nested"), head: OTHER },
       { path: "/gone/worktree", head: OTHER, prunable: true },
@@ -137,6 +148,7 @@ test("plan.md names branches in backticks, prefix globs and pull request numbers
   assert.ok(named.names.has("helper4/lifetime-field-overwrite-finding"), "a refs/heads/ spelling names the branch");
   assert.deepEqual(named.prefixes, ["node/"]);
   assert.ok(!named.names.has("not a branch"));
+  assert.deepEqual([...named.paths], ["~/Projects/nts-lanes/chromium"], "a path, not a branch, without its trailing slash");
   assert.deepEqual([...named.pulls].sort((a, b) => a - b), [56, 69, 70, 71, 72, 73, 74, 118, 193]);
 });
 
@@ -158,11 +170,12 @@ test("the count names every branch, worktree and cache folder outside its rules,
   lacks(/^branch chatgpt\/jetstream-acorn/); // the head of open #70, inside "#69 to #74"
 
   // Worktrees.
-  has(/^worktree \/home\/u\/Projects\/nts-lanes\/node \(node\/oracle-e039\): outside the pool/);
+  has(/^worktree \/home\/u\/Projects\/nts-lanes\/node \(node\/oracle-e039\): outside the pool \(~\/\.cache\/nts-pool\/<n>\), and docs\/plan\.md does not name it$/);
+  lacks(/^worktree \S*nts-lanes\/chromium /); // named by the plan, kept with its paused task
   has(/^worktree .*nts-scratch\/review \(detached at cccccccccccc\): outside the pool/);
   has(/^worktree .*nts-pool\/1\/nested .*outside the pool/);
   has(/^worktree \/gone\/worktree .*its folder is gone/);
-  for (const kept of ["/home/u/Projects/nts ", "nts-pool/1 ", "nts-landing/tree", "nts-full-check/tree", "nts-full-check/controller", "nts-pins/tree"]) lacks(new RegExp(`^worktree \\S*${kept.replaceAll("/", "\\/")}`));
+  for (const kept of ["/home/u/Projects/nts ", "nts-pool/1 ", "nts-landing/tree", "nts-full-check/tree", "nts-full-check/controller", "nts-pins/tree", "nts-gate/tree"]) lacks(new RegExp(`^worktree \\S*${kept.replaceAll("/", "\\/")}`));
 
   // Cache folders.
   has(/^~\/\.cache\/nts-tsrs2-review-r1: an nts folder no rule keeps$/);
@@ -170,7 +183,8 @@ test("the count names every branch, worktree and cache folder outside its rules,
   has(/^~\/\.cache\/nts-full-check\/runs: 1 folder\(s\), 4\.0 days old \(four-days\) of the full check/);
   has(new RegExp(`^~/\\.cache/nts-pins/${OTHER.slice(0, 12)}: a pin main does not use`));
   has(/^~\/\.cache\/nts-pool\/scratch: not a pool slot/);
-  has(/^~\/\.cache\/nts-gate\/tree: kept by no entry of keep\.json under nts-gate\/$/);
+  has(/^~\/\.cache\/nts-gate\/runs: 1 folder\(s\), 7\.0 days old \(last-week\) of gates run by hand; logs are kept three days$/);
+  lacks(/nts-gate\/(tree|runs\/(today|latest))/);
   has(/^~\/\.cache\/nts\/snapshots: kept by no entry of keep\.json under nts\/$/);
   has(/^~\/\.cache\/nts\/outcomes: 1 folder\(s\), 9\.0 days old \(12345\) left by tooling\/outcomes\.ts; a run removes its own folder$/);
   has(/^~\/\.cache\/nts-messages: 1 folder\(s\), 2\.0 days old \(run-stopped\) left by tooling\/messages\.ts/);
