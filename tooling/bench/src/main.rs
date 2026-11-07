@@ -1990,9 +1990,26 @@ fn capture_snapshot(tsconfig: &Utf8Path) -> Result<nts_semantic_schema::Semantic
         .map_err(|_| anyhow::anyhow!("the benchmark directory is not UTF-8"))?;
     let snapshot = Frontend::new(cwd)
         .with_checkers(std::num::NonZeroU16::MIN)
-        .snapshot(tsconfig)?;
+        .snapshot(tsconfig)
+        .with_context(|| format!("capturing {tsconfig}"))?;
     if snapshot.has_errors() {
-        bail!("{tsconfig} does not typecheck");
+        // Every error where it is: a corpus captured as one program would
+        // otherwise name its configuration and never the case that failed.
+        const SHOWN: usize = 20;
+        let errors: Vec<_> = snapshot
+            .diagnostics
+            .iter()
+            .filter(|diagnostic| diagnostic.severity == nts_diagnostics::Severity::Error)
+            .collect();
+        let mut lines: Vec<_> = errors
+            .iter()
+            .take(SHOWN)
+            .map(|diagnostic| nts_diagnostics::diagnostic_line(&snapshot.sources, diagnostic))
+            .collect();
+        if errors.len() > SHOWN {
+            lines.push(format!("and {} more", errors.len() - SHOWN));
+        }
+        bail!("{tsconfig} does not typecheck:\n  {}", lines.join("\n  "));
     }
     Ok(snapshot)
 }
