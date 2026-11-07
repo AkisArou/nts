@@ -253,3 +253,53 @@ const withIdle=process.argv[2]==='idle';
   assert.equal(observed.completedFailures,0);assert.ok(changed.stderr.includes(active),changed.stderr);
 
 });
+
+test("a finished short file cannot time out behind a long file's ordered report",t=>{
+  const directory=mkdtempSync(join(tmpdir(),"tooling-finished-activity-"));
+  t.after(()=>rmSync(directory,{recursive:true,force:true}));
+  const long=join(directory,"long.test.mjs"),short=join(directory,"short.test.mjs");
+  const closed=join(directory,"short-closed"),release=join(directory,"release-long"),probe=join(directory,"probe.mjs");
+  const wait=new URL("./test-wait.ts",import.meta.url).href,runner=new URL("./tooling-runner.ts",import.meta.url).href;
+  writeFileSync(long,`import{test}from'node:test';import{existsSync}from'node:fs';import{waitFor}from ${JSON.stringify(wait)};
+test('long first',async t=>{await waitFor('short file close',()=>existsSync(${JSON.stringify(closed)}));for(let i=0;i<6;i++)await t.test('progress '+i,()=>{});await waitFor('long release',()=>existsSync(${JSON.stringify(release)}));});\n`);
+  writeFileSync(short,"import{test}from'node:test';test('short second',()=>{});\n");
+  writeFileSync(probe,`
+import{runTooling}from ${JSON.stringify(runner)};
+import{writeFileSync}from'node:fs';import{PassThrough}from'node:stream';
+const long=${JSON.stringify(long)},short=${JSON.stringify(short)};
+let now=0,progress=0,shortClosed=false,reportWasWaiting=false,transcript='';
+const tasks=[],output=new PassThrough();output.on('data',bytes=>transcript+=bytes);
+const result=await runTooling([long,short],{idleMs:10,output,resultEnv:{},instrument:{
+ scheduleIdle(callback,milliseconds,file){const task={at:now+milliseconds,callback,file,cancelled:false};tasks.push(task);return()=>{task.cancelled=true};},
+ event(name,data){
+  if(name!=='test:complete')return;
+  if(data.name===short){shortClosed=true;reportWasWaiting=!transcript.includes('short second');writeFileSync(${JSON.stringify(closed)},'closed');}
+  if(data.entryFile===long&&/^progress [0-9]+$/.test(data.name)){
+   progress++;now+=6;
+   for(const task of [...tasks])if(!task.cancelled&&task.at<=now){task.cancelled=true;task.callback();}
+   if(progress===6)writeFileSync(${JSON.stringify(release)},'release');
+  }
+ }
+}});
+console.log(JSON.stringify({...result,now,progress,shortClosed,reportWasWaiting,reportedShort:transcript.includes('short second')}));
+`);
+  const env:NodeJS.ProcessEnv={...process.env};
+  for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
+  const actual=spawnTest(process.execPath,[probe],{encoding:"utf8",env},"long-first short-second activity probe");
+  assert.equal(actual.status,0,actual.stderr);
+  assert.deepEqual(JSON.parse(actual.stdout.trim()),{status:0,completedFailures:0,now:36,progress:6,shortClosed:true,reportWasWaiting:true,reportedShort:true});
+  // Ordered pass reports cannot substitute for execution-ordered completion.
+  const source=readFileSync(new URL("./tooling-runner.ts",import.meta.url),"utf8");
+  const handler='events.on("test:complete",data=>{';assert.ok(source.includes(handler));
+  const mutant=join(directory,"ordered-runner.ts"),changedProbe=join(directory,"ordered-probe.mjs");
+  const changed=source.replace(handler,'events.on("test:pass",data=>{')
+    .replace(/from (["'])\.\/([^"']+)\1/g,(_whole,_quote,name)=>"from "+JSON.stringify(new URL("./"+name,import.meta.url).href));
+  writeFileSync(mutant,changed);
+  writeFileSync(changedProbe,readFileSync(probe,"utf8").replace(runner,pathToFileURL(mutant).href));
+  rmSync(closed);rmSync(release);
+  const before=spawnTest(process.execPath,[changedProbe],{encoding:"utf8",env},"ordered-completion mutant");
+  assert.equal(before.status,0,before.stderr);
+  const held=JSON.parse(before.stdout.trim());
+  assert.equal(held.status,2);assert.equal(held.completedFailures,0);
+  assert.equal(held.shortClosed,true);assert.ok(before.stderr.includes(short),before.stderr);
+});
