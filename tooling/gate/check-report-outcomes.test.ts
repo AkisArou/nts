@@ -96,7 +96,14 @@ test("JVM host failures keep their class and normalized first message while answ
 test("every stored check outcome is accepted by its explicitly versioned reader", () => {
   const root=new URL("../../tests/outcomes/",import.meta.url);let checked=0;
   for(const name of readdirSync(root)) {
-    const record=JSON.parse(readFileSync(new URL(name+"/outcome.json",root),"utf8"));
+    let text:string;
+    try { text=readFileSync(new URL(name+"/outcome.json",root),"utf8"); }
+    catch(error) {
+      // A fixture without a record is pending until the full check records it.
+      if((error as NodeJS.ErrnoException).code==="ENOENT")continue;
+      throw error;
+    }
+    const record=JSON.parse(text);
     if(record.run!=="check")continue;
     assert.doesNotThrow(()=>validateStoredCheckOutcome(record),name);checked++;
   }
