@@ -39,15 +39,6 @@ one page that changes as work goes; the designs it builds are in
   machine's cleanup of the old lander's folders, and agents restarting on
   the tasks below, one agent per task (the user decides which and how many).
 - **In flight:**
-  - the shared TypeScript oracle (#193, `node/oracle-e039`): the TypeScript
-    suites use 38% less CPU than on `main`, but the five example steps cost
-    about three times `main`'s. They get the same treatment, one shared
-    answer per program from a `program-oracles` step (`outcomes` and
-    `bench-agree` too), before it lands. Then Node 26 (#124,
-    `node/node26-finished`), landed with Node 24 dropped (user, 11-06). The
-    other `node/*` branches are their earlier rounds, deleted after, and their
-    trees from before the pool (`~/Projects/nts-lanes/node-oracle-on-input`,
-    `~/Projects/nts-lanes/node`) go when Node 26 lands;
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
     kept with it: `~/Projects/nts-lanes/chromium`,
@@ -229,6 +220,11 @@ ids, kept so the records that cite them still resolve.
   tests leak (#197). Tests already keep theirs there through
   `tooling/gate/test-scratch.ts`. A gate run by hand keeps three days of its logs
   (`~/.cache/nts-gate/runs`), as the landing and full checks keep theirs.
+- `tooling/cli/tests/case_roots.rs`'s
+  `native_checker_errors_keep_their_count_diagnostics_and_exit` once found its
+  own scratch folder already gone when it removed it (`remove scratch:
+  NotFound`), though the folder's name is unique: find what deletes inside it
+  after the CLI exits, a child of `nts` outliving it being the first suspect.
 - The old lander's open defects fold into the landing check: #120, #121,
   #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
   #330, #332.
