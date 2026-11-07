@@ -149,3 +149,34 @@ fn merged_ambient_declarations_keep_every_site_and_only_their_real_meaning() {
         "merged scope facts do not invent an ambient-only implementation"
     );
 }
+
+const WHOLE: &str = "export function whole(n: number): boolean { return Number.isInteger(n); }\n";
+
+/// `Number.isInteger` reaches `NumberConstructor`, whose checked constructor
+/// value is the library's `Number`. Paired across libraries, that relation is
+/// what the schema rejects, and its error names both globals, their libraries
+/// and the files declaring them, so a failed corpus capture says where.
+#[test]
+fn a_constructor_value_across_libraries_is_rejected_by_name() {
+    let project = Project::new("constructor-value-crossed", WHOLE);
+    let snapshot = project.capture();
+    let owner = only(&snapshot, "NumberConstructor");
+    let value = owner
+        .constructor_value
+        .expect("the library's own constructor relation is recorded");
+    assert_eq!(
+        snapshot.symbols[value.0 as usize].name,
+        PropertyKey::Name("Number".into())
+    );
+    let mut crossed = snapshot.clone();
+    crossed.symbols[value.0 as usize].library = None;
+    let error = crossed.validate().unwrap_err().to_string();
+    assert!(
+        error.contains("`NumberConstructor` (a global type, library es, declared in "),
+        "{error}"
+    );
+    assert!(
+        error.contains("`Number` (a global type and value, the program's own, declared in "),
+        "{error}"
+    );
+}

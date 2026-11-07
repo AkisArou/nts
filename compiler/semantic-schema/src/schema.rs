@@ -1391,6 +1391,47 @@ impl SemanticSnapshot {
         self.symbols.get(symbol.0 as usize)?.name.public_name()
     }
 
+    /// A global symbol as a validation error names it: its name, which global
+    /// meanings the checker gave it, the library deciding its provider, and
+    /// the files declaring it. Declaration sources are validated by then.
+    fn describe_global(&self, symbol: &SymbolRecord) -> String {
+        let meanings = match (
+            symbol.flags.contains(SymbolFlags::GLOBAL_TYPE),
+            symbol.flags.contains(SymbolFlags::GLOBAL_VALUE),
+        ) {
+            (true, true) => "a global type and value",
+            (true, false) => "a global type",
+            (false, true) => "a global value",
+            (false, false) => "not global",
+        };
+        let library = match &symbol.library {
+            None => "the program's own".to_owned(),
+            Some(Library::Es) => "library es".to_owned(),
+            Some(Library::Dom) => "library dom".to_owned(),
+            Some(Library::Node) => "library @types/node".to_owned(),
+            Some(Library::Package(name)) => format!("library {name}"),
+        };
+        let mut files: Vec<&str> = Vec::new();
+        for site in &symbol.declaration_sites {
+            let path = self.declaration_sources[site.source.0 as usize]
+                .path
+                .as_str();
+            if !files.contains(&path) {
+                files.push(path);
+            }
+        }
+        let declared = match files.len() {
+            0 => "with no declaration site".to_owned(),
+            1..=4 => format!("declared in {}", files.join(", ")),
+            more => format!(
+                "declared in {} and {} more",
+                files[..4].join(", "),
+                more - 4
+            ),
+        };
+        format!("`{}` ({meanings}, {library}, {declared})", symbol.name)
+    }
+
     fn validate_symbols(&self) -> Result<(), SnapshotError> {
         for symbol in &self.symbols {
             self.check_key(&symbol.name)?;
@@ -1407,9 +1448,13 @@ impl SemanticSnapshot {
                     || !value.flags.contains(SymbolFlags::GLOBAL_VALUE)
                     || value.library != symbol.library
                 {
-                    return Err(SnapshotError::Project(
-                        "invalid checked constructor-value identity".into(),
-                    ));
+                    return Err(SnapshotError::Project(format!(
+                        "invalid checked constructor-value identity: {} has the constructor \
+                         value {}, where a global type that is not a value is expected, \
+                         constructed by a global value of the same library",
+                        self.describe_global(symbol),
+                        self.describe_global(value),
+                    )));
                 }
             }
             if let Some(TypeId(ty)) = symbol.ty {
