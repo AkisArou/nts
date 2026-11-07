@@ -23,7 +23,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     layout: repo.layout,
     git: repo.git,
     gate,
-    queue: async () => queue,
+    queue,
     submitted: queue.submitted,
     recorder: options.recorder ?? (() => ({ status: 0, output: "" })),
     bench: options.bench ?? stubBench(),

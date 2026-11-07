@@ -1,29 +1,23 @@
 // The landing queue the full check submits its reverts and records commits to:
-// `submit(commit, { first })` from tooling/landing/, which the landing check
-// owns. A revert goes in first, ahead of every other change; a records commit
-// takes its turn. Until that module is on the tree, the service says it cannot
-// submit, keeps the commit reachable and prints the command for it.
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+// the landing check's own (tooling/landing/queue.ts). A revert goes in first,
+// ahead of every change waiting; a records or benchmark commit takes its turn.
+// Submitting starts the landing service when none is draining the queue.
+import { submit } from "../landing/queue.ts";
 
 export type SubmitOptions = { first?: boolean };
-export type LandingQueue = { submit(commit: string, options?: SubmitOptions): unknown };
+export type LandingQueue = { submit(commit: string, options: SubmitOptions): unknown };
 
-/** The landing check's queue module: the one place the two services meet. */
-export const QUEUE_MODULE = new URL("../landing/queue.ts", import.meta.url);
-
-/** The landing queue, or why there is none to submit to. */
-export async function landingQueue(module: URL = QUEUE_MODULE): Promise<LandingQueue | { unavailable: string }> {
-  const path = fileURLToPath(module);
-  if (!existsSync(path)) return { unavailable: `no landing queue at ${path}` };
-  const loaded = await import(module.href) as Partial<LandingQueue>;
-  if (typeof loaded.submit !== "function") return { unavailable: `${path} exports no submit(commit, options)` };
-  return { submit: loaded.submit };
+/**
+ * The landing check's queue, as the full check submits to it: every entry is
+ * the full check's. `root` (the shared checkout) and `home` (the landing
+ * check's state) are this machine's unless a test names its own.
+ */
+export function landingQueue(where: { root?: string; home?: string } = {}): LandingQueue {
+  return { submit: (commit, options) => submit(commit, { first: options.first === true, by: "full-check", ...where }) };
 }
 
 /** Submit, and say what happened in one line; a failure is reported, not thrown. */
-export async function submitTo(queue: LandingQueue | { unavailable: string }, commit: string, options: SubmitOptions): Promise<{ submitted: boolean; line: string }> {
-  if ("unavailable" in queue) return { submitted: false, line: `not submitted (${queue.unavailable}): submit ${commit}${options.first ? " first" : ""} by hand` };
+export async function submitTo(queue: LandingQueue, commit: string, options: SubmitOptions): Promise<{ submitted: boolean; line: string }> {
   try {
     await queue.submit(commit, options);
     return { submitted: true, line: `submitted ${commit}${options.first ? " first" : ""} to the landing queue` };

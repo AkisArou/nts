@@ -57,7 +57,8 @@ export type Effects = {
   /** Git in a tree of the repository: refs are shared by every worktree. */
   git: Git;
   gate: Gate;
-  queue: () => Promise<LandingQueue | { unavailable: string }>;
+  /** The landing check's queue (queue.ts). */
+  queue: LandingQueue;
   recorder: Recorder;
   /** nts-bench on the tree, through the measurement lock (bench.ts). */
   bench: Bench;
@@ -264,7 +265,7 @@ async function revertCulprit(fx: Effects, state: State, finding: Finding): Promi
   }
   // Reachable until it lands: the queue holds a commit, not a branch.
   fx.git.run(["update-ref", `refs/full-check/reverts/${short(finding.culprit)}`, made.commit]);
-  const submitted = await submitTo(await fx.queue(), made.commit, { first: true });
+  const submitted = await submitTo(fx.queue, made.commit, { first: true });
   fx.log(`revert ${short(made.commit)} of ${short(finding.culprit)}: ${submitted.line}`);
   state.culprits.push({ commit: finding.culprit, part: finding.part, steps: finding.steps, run: finding.run, found_at: fx.now().toISOString(), revert: made.commit, ...(submitted.submitted ? {} : { reason: submitted.line }) });
   task(fx, state, taskLine(finding, made.commit));
@@ -343,7 +344,7 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
       return;
     }
     fx.git.run(["update-ref", `refs/full-check/records/${short(commit)}`, recorded.commit]);
-    const submitted = await submitTo(await fx.queue(), recorded.commit, { first: false });
+    const submitted = await submitTo(fx.queue, recorded.commit, { first: false });
     fx.log(`records ${short(recorded.commit)} (${recorded.files.length} file(s)): ${submitted.line}`);
     if (recorded.refused.length) task(fx, state, `- record-pending.ts at ${short(commit)} also wrote outside the records (${recorded.refused.join(", ")}); see ${run}.`);
     state.records = { commit, at, submitted: submitted.submitted ? recorded.commit : null, result: submitted.line };
@@ -383,7 +384,7 @@ async function runBenchmarks(fx: Effects, state: State, verified: string): Promi
     return;
   }
   fx.git.run(["update-ref", `refs/full-check/benchmarks/${short(verified)}`, found.commit]);
-  const submitted = await submitTo(await fx.queue(), found.commit, { first: false });
+  const submitted = await submitTo(fx.queue, found.commit, { first: false });
   attempt(run, `run record ${short(found.commit)}${measured.status ? ` (nts-bench exited ${measured.status})` : ""}: ${submitted.line}`, true, submitted.submitted ? found.commit : null);
   const slower = slowerRows(tree.run(["show", `${found.commit}:${FULL_MD}`]));
   if (slower.length) task(fx, state, `- ${slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(verified)}: ${slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
@@ -486,7 +487,7 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
   return {
     layout, git,
     gate: pinnedGate(layout, ROOT, stamp),
-    queue: () => landingQueue(),
+    queue: landingQueue(),
     recorder: recordPending,
     bench: benchWithLock(ROOT, layout.target, options.quietWait),
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
