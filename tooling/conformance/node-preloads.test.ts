@@ -13,6 +13,7 @@ import {nodeModuleFiles,nodeGlobalGroups,nodeGlobalEntry,nodeSiblingModules,node
 
 import {setupOracleTestEnvironment} from '../differential/oracle-test-fixture.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
+import {captureRunTemporary,finishRunTemporary,pruneRunTemporaries} from '../gate/run-temporary.ts';
 
 await setupOracleTestEnvironment();
 
@@ -100,6 +101,11 @@ test('unknown global groups retain the runtime error and are rejected by prepara
 
 test('the actual runner drains nested loader events and keeps the following file independent',t=>{
   const {root,write}=fixture(t);
+  // A closed failure is an evictable cache. This fixture owns its registry;
+  // concurrent real runs must never decide whether its retained image exists.
+  const home=join(root,'home'),neighbor=join(root,'neighbor-home');
+  mkdirSync(home);mkdirSync(neighbor);
+  const env={...process.env,HOME:home};
   // These are the production consumers, not a fake launcher or status reader.
   for(const dir of ['conformance','gate','differential','lanes','census'])cpSync(join(REPOSITORY,'tooling',dir),join(root,'tooling',dir),{recursive:true});
   for(const file of ['package.json','tsconfig.fixtures.json','tsconfig.base.json'])cpSync(join(REPOSITORY,file),join(root,file));
@@ -124,16 +130,22 @@ if(process.argv.includes('nested')){
   write('runtime/node/subject/test/01-clean.js',"require('node:assert/strict').equal(require('subject').answer(),42);\n");
   write('runtime/node/subject/test/02-capability.js',"(async()=>{const url=require('node:url').pathToFileURL(require('node:path').join(__dirname,'scope-provider.mjs'));const value=await import(url.href);require('node:assert/strict').equal(value.denied,true);})();\n");
   write('runtime/node/subject/test/scope-provider.mjs',"import assert from 'node:assert/strict';import {pathToFileURL} from 'node:url';const api=await import(new URL('./assets/oracle-loader.ts',pathToFileURL(process.env.NTS_ORACLE_EMIT_MANIFEST)));assert.throws(()=>api.oracleHarnessCapability(),/unavailable or already consumed/);export const denied=true;\n");
-  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...process.env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
+  const run=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--json'],{cwd:root,encoding:'utf8',env:{...env,NTS_CONFORMANCE_TIMEOUT_MS:'60000'}});
   assert.equal(run.status,124,run.stderr+'\n'+run.stdout);
   const record=JSON.parse(run.stdout);assert.deepEqual(record.rows.map(row=>[row.name,row.kind]),[['local/00-child.js','not-measured'],['local/01-clean.js','pass'],['local/02-capability.js','not-measured']],JSON.stringify(record,null,2));
   assert.match(record.rows[0].why,/nested-child control/);assert.match(record.rows[2].why,/harness capability is unavailable or already consumed/);assert.equal(record.tally['not-measured'],2);assert.equal(record.tally.pass,1);
   assert.ok(record.preparation.identity.declarationsSha256);
   assert.equal(record.preparation.cleanup.state,'retained after failure or explicit keep');
   assert.ok(existsSync(record.preparation.cleanup.path));
+  const registry=join(home,'.cache/nts-gate/closed-temporaries');
+  assert.ok(readdirSync(registry).some(name=>JSON.parse(readFileSync(join(registry,name),'utf8')).owned.path===record.preparation.temporary.path),'the closed job belongs to the fixture HOME');
+  const other=captureRunTemporary(join(neighbor,'.cache/run'));writeFileSync(join(other.path,'generated'),'neighbor');
+  finishRunTemporary(other,neighbor,false,{minimumFreeBytes:0,maxBytes:Number.MAX_SAFE_INTEGER,write:()=>{}});
+  assert.deepEqual(pruneRunTemporaries(neighbor,{minimumFreeBytes:0,maxBytes:0,write:()=>{}}).removed,[other.path]);
+  assert.ok(existsSync(record.preparation.cleanup.path),'an independent registry prune cannot evict this preparation');
   assert.match(run.stderr,/kept Node preparation:/);
   assert.match(run.stderr,/"state":"retained after red"/);
-  const clean=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--only','01-clean.js','--json'],{cwd:root,encoding:'utf8',env:process.env});
+  const clean=runNodeCase(t,process.execPath,[join(root,'tooling/conformance/run.mjs'),'--module','subject','--only','01-clean.js','--json'],{cwd:root,encoding:'utf8',env});
   assert.equal(clean.status,0,clean.stderr+'\n'+clean.stdout);
   const completed=JSON.parse(clean.stdout);assert.equal(completed.tally.pass,1);
   assert.ok(completed.oracleScopes.some(row=>row.test==='local/01-clean.js'&&row.category==='plain node (outside capture)'&&row.attested===false&&row.path===join(root,'runtime/node/subject/test/01-clean.js')));
