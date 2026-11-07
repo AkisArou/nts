@@ -72,7 +72,7 @@ export function revertsIn(git: Git, commits: readonly string[]): Map<string, str
   return found;
 }
 
-export type Composition = { commit: string } | { conflict: string };
+export type Composition = { commit: string } | { conflict: string; culprit: string };
 
 /**
  * `base` with each culprit reverted on top, newest first, as a commit only the
@@ -83,9 +83,9 @@ export function composeReverts(git: Git, base: string, culprits: readonly string
   let current = base;
   for (const culprit of [...culprits].reverse()) {
     const parent = git.commit(`${culprit}^1`);
-    if (!parent) return { conflict: `${culprit.slice(0, 12)} has no parent to revert to` };
+    if (!parent) return { conflict: `${culprit.slice(0, 12)} has no parent to revert to`, culprit };
     const merged = git.try(["merge-tree", "--write-tree", "--no-messages", `--merge-base=${culprit}`, current, parent]);
-    if (merged.status !== 0) return { conflict: `the revert of ${culprit.slice(0, 12)} does not apply to ${current.slice(0, 12)}` };
+    if (merged.status !== 0) return { conflict: `the revert of ${culprit.slice(0, 12)} does not apply to ${current.slice(0, 12)}`, culprit };
     const tree = merged.stdout.split("\n")[0]!.trim();
     current = git.run(["commit-tree", tree, "-p", current, "-F", "-"], message(culprit));
   }

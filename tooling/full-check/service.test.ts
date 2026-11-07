@@ -233,6 +233,30 @@ test("a revert that does not apply to main becomes a task", async t => {
   assert.ok(fx.lines.some(line => line.includes("TASK") && line.includes("revert it by hand")), fx.lines.join("\n"));
 });
 
+test("a culprit whose revert does not apply stays in where it cannot be taken out, and the next red is still searched", async t => {
+  const repo = repository(t);
+  const gate = fakeGate(repo);
+  // Before every slot: only the core runs, so the wide part is never green
+  // after the first culprit and it stays pending.
+  const fx = harness(repo, gate, { now: new Date(2026, 10, 6, 2, 0) });
+  repo.commit({ "src.txt": "base\n" }, "good");
+  await cycle(fx);
+  const first = repo.commit({ "RED/tests": "", "src.txt": "changed by the culprit\n" }, "culprit");
+  repo.commit({ "src.txt": "changed again on top\n" }, "builds on it");
+  await cycle(fx);
+  assert.deepEqual(readState(repo.layout.state).culprits.map(c => [c.commit, c.revert]), [[first, null]]);
+  // Fixed forward rather than reverted, and before any green run another
+  // commit breaks another step: the search spans the first culprit, whose
+  // revert cannot be taken out of the tip, and still finds the second.
+  repo.commit({ "RED/tests": null }, "fixed forward");
+  const second = repo.commit({ "RED/typescript-c": "" }, "breaks typescript-c");
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.deepEqual(state.culprits.map(c => c.commit), [first, second]);
+  assert.ok(fx.lines.some(line => line.startsWith("measuring ") && line.includes(`with ${first.slice(0, 12)} in: the revert of ${first.slice(0, 12)} does not apply`)), fx.lines.join("\n"));
+  assert.ok(!fx.lines.some(line => line.startsWith("culprit search held")), fx.lines.join("\n"));
+});
+
 test("a green run that listed pending cases records them, commits exactly the records and submits the commit", async t => {
   const repo = repository(t);
   const gate = fakeGate(repo);

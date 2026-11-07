@@ -293,11 +293,16 @@ function probe(fx: Effects, state: State, part: Part): Measure {
     }
     const result = (verdict: Probe["verdict"], run: string, failed: string[] = [], reason?: string): Probe =>
       ({ base, reverts, steps, verdict, failed, run, ...(reason ? { reason } : {}) });
-    let commit = base;
-    if (reverts.length) {
-      const composed = composeReverts(fx.git, base, reverts, culprit => `full check: ${short(base)} without ${short(culprit)}\n\nThis reverts commit ${culprit}.\n`);
-      if ("conflict" in composed) return result("skip", "", [], composed.conflict);
-      commit = composed.commit;
+    // Each pending revert is taken out where it applies. One that does not
+    // apply here stays in, and is said so: it cannot hide another culprit it
+    // cannot be taken out from, and holding the search for it would hold
+    // every later search too.
+    let commit = base, applying = [...reverts];
+    while (applying.length) {
+      const composed = composeReverts(fx.git, base, applying, culprit => `full check: ${short(base)} without ${short(culprit)}\n\nThis reverts commit ${culprit}.\n`);
+      if (!("conflict" in composed)) { commit = composed.commit; break; }
+      fx.log(`measuring ${short(base)} with ${short(composed.culprit)} in: ${composed.conflict}`);
+      applying = applying.filter(culprit => culprit !== composed.culprit);
     }
     let all: string[];
     try { all = fx.gate.steps(commit).all; }

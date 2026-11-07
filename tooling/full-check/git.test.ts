@@ -49,5 +49,5 @@ test("a composition reverts culprits on top of a base without touching a tree, a
 
   const over = repo.commit({ "x": "x2\n" }, "builds on the first culprit");
   const conflict = composeReverts(repo.git, over, [first], () => "take out\n");
-  assert.deepEqual(conflict, { conflict: `the revert of ${first.slice(0, 12)} does not apply to ${over.slice(0, 12)}` });
+  assert.deepEqual(conflict, { conflict: `the revert of ${first.slice(0, 12)} does not apply to ${over.slice(0, 12)}`, culprit: first });
 });
