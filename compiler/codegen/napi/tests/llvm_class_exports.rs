@@ -158,12 +158,7 @@ fn node_oracle(source: &Utf8Path) -> Output {
         "{OBSERVE}import(require('node:url').pathToFileURL(process.argv[1]).href).then(a=>console.log(JSON.stringify(answer(a)))).catch(e=>{{console.error(e);process.exitCode=1;}});"
     );
     Command::new("node")
-        .args([
-            "--experimental-transform-types",
-            "--no-warnings",
-            "-e",
-            &script,
-        ])
+        .args(["--no-warnings", "-e", &script])
         .arg(source)
         .output()
         .unwrap()

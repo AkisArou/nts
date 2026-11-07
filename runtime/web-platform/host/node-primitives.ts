@@ -4,8 +4,7 @@
 import { connect as tcpConnect, createServer, isIP } from "node:net";
 import type { Server, Socket } from "node:net";
 import { lookup as dnsLookup } from "node:dns";
-import { checkServerIdentity, connect as tlsConnect } from "node:tls";
-import type { TLSSocket } from "node:tls";
+import { checkServerIdentity, connect as tlsConnect, TLSSocket } from "node:tls";
 import { createHash, randomFillSync } from "node:crypto";
 import { EOL } from "node:os";
 import { URL } from "node:url";
@@ -500,7 +499,7 @@ export class HostNodeSocketConnector implements NegotiatingSocketConnector {
         let certificateNames: readonly string[] = [];
         if (address.secure) {
           try {
-            if (!("alpnProtocol" in socket)) throw new TypeError("TLS socket has no ALPN result");
+            if (!(socket instanceof TLSSocket)) throw new TypeError("TLS socket has no ALPN result");
             validateAlpn(socket.alpnProtocol, requiredAlpn(address));
             protocol = this.reportsNegotiatedProtocol
               ? selectedProtocol(socket.alpnProtocol)

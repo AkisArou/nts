@@ -2,7 +2,7 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use camino::Utf8Path;
-use nts_core::hir::{self, BinOp, Callee, OpKind, Terminator};
+use nts_core::hir::{self, BinOp, Callee, HirType, ManagedType, OpKind, Terminator};
 use nts_frontend_ts::Frontend;
 
 fn snapshot() -> nts_semantic_schema::SemanticSnapshot {
@@ -71,17 +71,17 @@ fn safe_literals_avoid_guards_and_raising_copies_but_controls_keep_them() {
                 }),
                 "{name}: the bigint operation must remain present"
             );
-            let messages = body
+            let guards = body
                 .values
                 .iter()
                 .filter(|value| {
-                    matches!(
-                        &value.kind, OpKind::ConstString(text)
-                            if text == "Division by zero" || text == "undefined must be positive"
-                    )
+                    matches!(value.kind, OpKind::ObjectNew { .. })
+                        && matches!(&value.ty, HirType::Managed(ManagedType::Object(ty))
+                            if program.layouts.iter().any(|layout|
+                                layout.name == "RangeError" && layout.types.contains(ty)))
                 })
                 .count();
-            assert_eq!(messages, usize::from(guarded), "{name}: guard count");
+            assert_eq!(guards, usize::from(guarded), "{name}: guard count");
             assert_eq!(
                 body.blocks
                     .iter()
