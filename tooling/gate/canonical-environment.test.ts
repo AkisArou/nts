@@ -7,6 +7,7 @@ import {homedir} from "node:os";
 import {dirname, join} from "node:path";
 import {pathToFileURL} from "node:url";
 import {dependencyCapability} from "../differential/oracle-dependencies.ts";
+import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {spawnTest, waitFor} from "./test-wait.ts";
 import {spawn} from "node:child_process";
 import {instrumentPolicy} from "./step-result.ts";
@@ -101,6 +102,13 @@ test("copied helpers omit undeclared oracle tools, reject missing declared tools
   assert.equal(absent.env.NTS_ORACLE_TYPESCRIPT,undefined);assert.equal(absent.report.host.NTS_ORACLE_TYPESCRIPT,null);
   const owned=gateEnvironment(base,{run});
   const child=copied.gateEnvironment(owned.env,{run});assert.equal(child.env.NTS_ORACLE_TYPESCRIPT,oracleToolchainLocation());
+  // An older parent may grant only the SDK, with no dependency-root field.
+  // An explicit source-owned root still selects its own declarations.
+  const legacy={...owned.env},context=JSON.parse(legacy[ENVIRONMENT_CONTEXT]!);
+  delete legacy.NTS_ORACLE_DEPENDENCIES;delete context.owned.NTS_ORACLE_DEPENDENCIES;
+  context.report.host.NTS_ORACLE_DEPENDENCIES=null;legacy[ENVIRONMENT_CONTEXT]=JSON.stringify(context);
+  const local=gateEnvironment(legacy,{run,oracleRoot:root});
+  assert.equal(local.env.NTS_ORACLE_TYPESCRIPT,undefined);assert.equal(local.env.NTS_ORACLE_DEPENDENCIES,undefined);
   writeFileSync(join(root,"package.json"),JSON.stringify({type:"module",devDependencies:{typescript:"7.0.2"}}));
   assert.throws(()=>copied.gateEnvironment(base,{run}),/declared oracle TypeScript capability is missing/);
 });
@@ -232,6 +240,7 @@ test("the real runner records the environment and distinguishes verdict failures
     if(file==="tooling/gate/run.mjs")writeFileSync(target,readFileSync(original));
     else symlinkSync(original,target);
   }
+  oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,"times.tsv"),join(gate,"times.tsv"));
   const listed=spawnTest("sh",[join(source,"all.sh"),"--list"],{encoding:"utf8"});
   assert.equal(listed.status,0,listed.stderr);
@@ -333,6 +342,7 @@ test('SIGTERM releases a runner waiting for startup capture admission',async t=>
     if(file==='tooling/gate/run.mjs')writeFileSync(target,readFileSync(original));
     else symlinkSync(original,target);
   }
+  oracleWorkspaceFixture(t,root);
   symlinkSync(join(source,'times.tsv'),join(gate,'times.tsv'));
   const listed=spawnTest('sh',[join(source,'all.sh'),'--list'],{encoding:'utf8'});
   assert.equal(listed.status,0,listed.stderr);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {moduleClosure} from "./module-closure-fixture.ts";
+import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {test} from "node:test";
 import {mkdirSync, readFileSync, symlinkSync, writeFileSync, rmSync} from "node:fs";
 import {join, dirname} from "node:path";
@@ -85,6 +86,7 @@ test("measured CPU work starts TypeScript at full width against a competing fixe
     if(file==="tooling/gate/run.mjs")writeFileSync(destination,readFileSync(original));
     else symlinkSync(original,destination);
   }
+  oracleWorkspaceFixture(t,root);
   const baseline = "tests\t900\t10000\t8\ntypescript-c\t1\t1\t8\ntypescript-oracles\t1\t1\t8\n";
   writeFileSync(join(gate, "times.tsv"), baseline);
   writeFileSync(join(target, "gate-costs/steps.json"), JSON.stringify({ version: 2, steps: { tests: 100, "typescript-c": 8000, "typescript-oracles": 16000 } }) + "\n");
@@ -104,7 +106,7 @@ fi
   const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
   // Publishing the fixture's empty reference must never reuse an outer
   // TypeScript producer's capture directory.
-  const planned = gateEnvironment(hostEnvironment(process.env), { run, owned: {
+  const planned = gateEnvironment(hostEnvironment(process.env), { run, oracleRoot:root, owned: {
     NTS_GATE_STEPS: "tests typescript-c", NTS_GATE_SLOTS: "12", NTS_GATE_MEM_GB: "20",
     NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, NTS_BIN: compiler,
   } });

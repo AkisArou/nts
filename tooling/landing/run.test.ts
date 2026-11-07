@@ -10,12 +10,14 @@
 // fixture has its own HOME, so the runner's binary pins stay in it.
 import {test, type TestContext} from "node:test";
 import assert from "node:assert/strict";
-import {execFileSync} from "node:child_process";
+import {execFileSync,spawnSync} from "node:child_process";
 import {chmodSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
-import {join, dirname} from "node:path";
+import {createHash} from "node:crypto";
+import {join, dirname, resolve} from "node:path";
 
 import {fileURLToPath} from "node:url";
-import {ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT, gateEnvironment} from "../gate/canonical-environment.ts";
+import {ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT, gateEnvironment, sealOracleRun} from "../gate/canonical-environment.ts";
+import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {moduleClosure} from "../gate/module-closure-fixture.ts";
 import {launcherEnvironment, PROFILE, pendingLines, removeRun, runLanding, type RunOptions} from "./run.ts";
 import {newTestScratch} from "../gate/test-scratch.ts";
@@ -34,6 +36,7 @@ function fixture(t: TestContext) {
     if (name === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
     else symlinkSync(original, target);
   }
+  oracleWorkspaceFixture(t,tree);
   symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
   const names = execFileSync("sh", [join(GATE, "all.sh"), "--list"], { encoding: "utf8" }).trim();
   writeFileSync(join(gate, "all.sh"), `#!/bin/sh
@@ -55,6 +58,7 @@ if [ "$1" = --call ]; then
   [ "$step" = doctests ] && echo "$NTS_DOCTEST_CRATES" > "$controls/doctest-crates"
   case $control in
     pass) echo "  $step: every case as recorded"; exit 0 ;;
+    oracle-context) node --input-type=module -e 'import {readFileSync,writeFileSync} from "node:fs";import {createHash} from "node:crypto";const capture=JSON.parse(process.env.NTS_ORACLE_DEPENDENCIES),parent=readFileSync(${JSON.stringify(join(controls,"parent-record"))},"utf8");writeFileSync(${JSON.stringify(join(controls,"oracle-context.json"))},JSON.stringify({capture,imageSource:JSON.parse(readFileSync(capture.seal.record,"utf8")).source,parentSha256:createHash("sha256").update(readFileSync(parent)).digest("hex"),temporary:JSON.parse(process.env[${JSON.stringify(ENVIRONMENT_CONTEXT)}]).temporary}));'; exit $? ;;
     fail) echo "  $step: a recorded case went wrong"; exit 1 ;;
     pending) echo "  pending: tests/x/a.ts is not recorded in results/x.tsv yet"; echo "  improved, record pending: tests/x/b.ts refused -> pass"; exit 0 ;;
     pressure) [ -e "$controls/$step.pressured" ] && exit 0; : > "$controls/$step.pressured"; instrument INSTRUMENT memory-pressure "memory: 9.0 GB available" ;;
@@ -67,7 +71,6 @@ exec node "$(dirname "$0")/run.mjs" "$@"
 `);
   chmodSync(join(gate, "all.sh"), 0o755);
   const git = (...args: string[]) => execFileSync("git", args, { cwd: tree, encoding: "utf8", env: { ...process.env, GIT_CONFIG_GLOBAL: "/dev/null", GIT_AUTHOR_NAME: "a", GIT_AUTHOR_EMAIL: "a@a", GIT_COMMITTER_NAME: "a", GIT_COMMITTER_EMAIL: "a@a" } }).trim();
-  git("init", "-q", "-b", "main"); writeFileSync(join(tree, ".gitignore"), "tooling/\n"); git("add", ".gitignore"); git("commit", "-q", "-m", "fixture");
   const commit = git("rev-parse", "HEAD");
   const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
   const build = join(own, "build.sh");
@@ -80,6 +83,35 @@ exec node "$(dirname "$0")/run.mjs" "$@"
   });
   return { tree, target, run, controls, control, options, calls: () => { try { return readFileSync(join(controls, "calls"), "utf8").trim().split("\n"); } catch { return []; } } };
 }
+
+test("a candidate gate replaces old main's foreign oracle handoff but holds its own changed seal",async t=>{
+  for(const foreign of [true,false])await t.test(foreign?"foreign root gets a fresh capture":"same-root corruption holds",async()=>{
+    const f=fixture(t),options=f.options(["rustfmt"]);f.control("rustfmt","oracle-context");
+    const launcher=launcherEnvironment(options.env);
+    const planned=gateEnvironment(launcher,{run:f.run,owned:{...options.owned,NTS_GATE_STEPS:"rustfmt"},oracleAdmissionContext:"gate",
+      ...(!foreign?{oracleRoot:f.tree}:{})});
+    const parent=await sealOracleRun(planned),before=JSON.parse(parent.env.NTS_ORACLE_DEPENDENCIES!) as {source:string;directory:string;admission:unknown;seal:{record:string}};
+    assert.equal(before.source,foreign?resolve(GATE,"../.."):f.tree);
+    const original=readFileSync(before.seal.record);
+    writeFileSync(join(f.controls,"parent-record"),before.seal.record);
+    if(!foreign){chmodSync(before.seal.record,0o644);writeFileSync(before.seal.record,Buffer.concat([original,Buffer.from(" ")]));chmodSync(before.seal.record,0o444);}
+    const child=spawnSync(process.execPath,[join(f.tree,"tooling/gate/run.mjs")],{cwd:f.tree,env:parent.env,encoding:"utf8",maxBuffer:16*1024**2});
+    if(foreign){
+      assert.equal(child.status,0,child.stdout+child.stderr);
+      const observed=JSON.parse(readFileSync(join(f.controls,"oracle-context.json"),"utf8")) as {capture:typeof before;imageSource:string;parentSha256:string;temporary:unknown};
+      const after=observed.capture;
+      assert.equal(after.source,f.tree);assert.notEqual(after.directory,before.directory);assert.notEqual(after.seal.record,before.seal.record);
+      assert.deepEqual(after.admission,before.admission);
+      assert.equal(observed.parentSha256,createHash("sha256").update(original).digest("hex"),"the unused parent capture remains intact until cleanup");
+      assert.equal(observed.imageSource,f.tree);assert.deepEqual(observed.temporary,parent.temporary);
+    }else{
+      assert.notEqual(child.status,0,child.stdout+child.stderr);
+      assert.match(child.stdout+child.stderr,/oracle dependency.*(?:changed|identity|seal)/);
+      assert.equal(existsSync(join(f.controls,"oracle-context.json")),false,"a corrupt owned seal grants no execution");
+      assert.deepEqual(readFileSync(before.seal.record),Buffer.concat([original,Buffer.from(" ")]),"no replacement hides the corruption");
+    }
+  });
+});
 
 test("the compiler builds first in nts-dev, and the steps drive it through the gate's own runner", t => {
   const f = fixture(t);

@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import {moduleClosure} from "../module-closure-fixture.ts";
+import {oracleWorkspaceFixture} from "../../differential/oracle-workspace-fixture.ts";
 import {test} from "node:test";
 import {existsSync, mkdirSync, readFileSync, readdirSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
 import {join, dirname} from "node:path";
@@ -100,7 +101,7 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, memb
     if(file==="tooling/gate/run.mjs")writeFileSync(destination,readFileSync(original));
     else symlinkSync(original,destination);
   }
-  if (control.oracleCancellation) cancellationScope(gate, source, own, control.oracleCancellation === "seal");
+  if (control.oracleCancellation) {oracleWorkspaceFixture(t,root);cancellationScope(gate, source, own, control.oracleCancellation === "seal");}
   writeFileSync(join(gate, "times.tsv"), "format\t3000\t3000\t1\nold-paths\t2000\t2000\t1\nrecords\t1000\t1000\t1\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);
@@ -183,7 +184,7 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
     }
     commit = spawnTest("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).stdout.trim();
   }
-  planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const } : {}), owned: {
+  planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2", NTS_GATE_MEM_GB: "20",
     NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, NTS_GATE_TRAIN_MEMBERS: String(members),
   } });

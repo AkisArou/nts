@@ -1,5 +1,6 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
+import { createHash } from "node:crypto";
 import { existsSync,lstatSync,readFileSync,realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
@@ -173,7 +174,7 @@ function strings(values: NodeJS.ProcessEnv): Record<string, string> {
 /** `owned` is supplied by the runner's code, never copied wholesale from a launcher. */
 export function gateEnvironment(
   launcher: NodeJS.ProcessEnv,
-  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone" },
+  options: { run: string; owned?: NodeJS.ProcessEnv; standalone?: boolean; experiment?: string; oracleAdmissionContext?: "gate" | "standalone"; oracleRoot?: string },
 ): GateEnvironment {
   const inherited = launcher[ENVIRONMENT_CONTEXT];
   let prior: Context | undefined;
@@ -204,11 +205,20 @@ export function gateEnvironment(
   const legacy = selected === "today" || prior?.report.experiments.some(e => e.name === ENVIRONMENT_EXPERIMENT && e.value === "today");
   const host = hostEnvironment(launcher);
   delete host.NTS_ORACLE_DEPENDENCIES;delete owned.NTS_ORACLE_DEPENDENCIES;
+  const toolingRoot=realpathSync(options.oracleRoot??resolve(dirname(fileURLToPath(import.meta.url)),"../.."));
+  const inheritedDependencies=prior?.owned.NTS_ORACLE_DEPENDENCIES;
+  if(inheritedDependencies&&prior!.report.host.NTS_ORACLE_DEPENDENCIES!==inheritedDependencies)throw new Error("invalid owned oracle dependency handoff");
+  const inheritedCapability=inheritedDependencies?JSON.parse(inheritedDependencies):undefined;
+  if(inheritedCapability&&(inheritedCapability.version!==1||typeof inheritedCapability.source!=="string"||!isAbsolute(inheritedCapability.source)))throw new Error("invalid owned oracle dependency handoff");
+  if(inheritedCapability&&inheritedCapability.admission?.kind!=="gate"&&inheritedCapability.admission?.kind!=="standalone")throw new Error("invalid owned oracle admission handoff");
+  // Only source-owned callers choose a new oracle root. A foreign grant is
+  // unused authority, never proof for this tree; policy and temporary stay.
+  const foreignRoot=Boolean(options.oracleRoot!==undefined&&inheritedCapability&&inheritedCapability.source!==toolingRoot);
   // A launcher/application path never selects the oracle. Only the tooling
   // manifest or an already owned canonical handoff supplies this capability.
   const inheritedOracle=prior?.owned.NTS_ORACLE_TYPESCRIPT;
   if(inheritedOracle&&prior!.report.host.NTS_ORACLE_TYPESCRIPT!==inheritedOracle)throw new Error("invalid owned oracle TypeScript handoff");
-  const oracle=inheritedOracle?dirname(realpathSync(join(inheritedOracle,"package.json"))):declaredOracleToolchain();
+  const oracle=inheritedOracle&&options.oracleRoot===undefined?dirname(realpathSync(join(inheritedOracle,"package.json"))):declaredOracleToolchain(toolingRoot);
   delete host.NTS_ORACLE_TYPESCRIPT;delete owned.NTS_ORACLE_TYPESCRIPT;
   if(oracle){host.NTS_ORACLE_TYPESCRIPT=oracle;owned.NTS_ORACLE_TYPESCRIPT=oracle;}
   const under = (root: string) => { const path = relative(root, resolve(options.run)); return path !== ".." && !path.startsWith("../") && !isAbsolute(path); };
@@ -240,18 +250,16 @@ export function gateEnvironment(
   const dropped = [...new Set([...(prior?.report.dropped ?? []), ...Object.keys(launcher).filter(name =>
     !retained.has(name) && launcher[name] !== env[name]
   )])].sort();
-  const inheritedDependencies=prior?.owned.NTS_ORACLE_DEPENDENCIES;
-  if(inheritedDependencies&&prior!.report.host.NTS_ORACLE_DEPENDENCIES!==inheritedDependencies)throw new Error("invalid owned oracle dependency handoff");
   if(options.oracleAdmissionContext!==undefined&&options.oracleAdmissionContext!=="gate"&&options.oracleAdmissionContext!=="standalone")throw new Error("invalid oracle admission context");
-  const inheritedCapability=inheritedDependencies?JSON.parse(inheritedDependencies):undefined;
-  if(inheritedCapability&&inheritedCapability.admission?.kind!=="gate"&&inheritedCapability.admission?.kind!=="standalone")throw new Error("invalid owned oracle admission handoff");
   const admissionKind=options.oracleAdmissionContext??inheritedCapability?.admission.kind??"standalone";
   // An inherited capability keeps its capture root. Only an explicit caller
   // can change its policy, and a gate grant binds that registered temporary.
   const admission=admissionKind==="gate"?{kind:"gate" as const,temporary:inheritedCapability?.admission.kind==="gate"?inheritedCapability.admission.temporary:prior?.temporary??temporary}:{kind:"standalone" as const};
-  const toolingRoot=resolve(dirname(fileURLToPath(import.meta.url)),"../..");
-  const dependencies=inheritedCapability?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
-    JSON.stringify(dependencyCapability(toolingRoot,join(temporary.path,"oracle-dependencies"),admission)):undefined);
+  // A sealed parent image may already occupy the default directory. Keep it
+  // intact while the candidate independently captures and seals its own root.
+  const capture=join(temporary.path,"oracle-dependencies",...(foreignRoot?["source-"+createHash("sha256").update(toolingRoot).digest("hex")]:[]));
+  const dependencies=inheritedCapability&&!foreignRoot?JSON.stringify({...inheritedCapability,admission}):(oracle&&existsSync(join(toolingRoot,"pnpm-lock.yaml"))?
+    JSON.stringify(dependencyCapability(toolingRoot,capture,admission)):undefined);
   if(dependencies){env.NTS_ORACLE_DEPENDENCIES=dependencies;owned.NTS_ORACLE_DEPENDENCIES=dependencies;}
   const report: EnvironmentReport = {
     version: 1, canonical: (prior?.report.canonical ?? true) && experiments.length === 0,

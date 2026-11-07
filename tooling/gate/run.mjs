@@ -177,7 +177,7 @@ if (argSteps.length && (env.NTS_GATE_STEPS ?? "").trim() !== "") {
 const target = resolve(env.CARGO_TARGET_DIR ?? join(ROOT, "target"));
 const stamp = new Date().toISOString().replace(/[-:]/g, "").replace(/\..*/, "");
 const RUN_DIR = resolve(env.NTS_GATE_RUN_DIR ?? join(homedir(), ".cache/nts-gate/runs", `${stamp}-${process.pid}`));
-let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate" });
+let normalized = gateEnvironment(argSteps.length && !env[ENVIRONMENT_CONTEXT] ? {...env,NTS_GATE_STEPS:argSteps.join(" ")} : env, { run: RUN_DIR, standalone: !env[ENVIRONMENT_CONTEXT], oracleAdmissionContext: "gate", oracleRoot: ROOT });
 env = normalized.env;
 reportEnvironment(normalized.report);
 // `NTS_BIN` defaults to the build this run makes, not to `./target/release/nts`:

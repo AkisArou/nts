@@ -156,7 +156,7 @@ function buildCompiler(options: RunOptions, launcher: NodeJS.ProcessEnv, owned: 
   const log = join(options.run, attempt === 1 ? "build.log" : `build-${attempt}.log`), time = `${log}.time`;
   // The run's slots, as the gate sizes itself: the steps after it get the same.
   const command = options.build ?? ["cargo", "build", "--profile", PROFILE, "--jobs", String(machineBudget(cpus().length).slots)];
-  const env = gateEnvironment(launcher, { run: options.run, owned }).env;
+  const env = gateEnvironment(launcher, { run: options.run, owned, oracleRoot: options.tree }).env;
   const timed = existsSync("/usr/bin/time") ? ["/usr/bin/time", "-f", "%e %U %S %M", "-o", time, ...command] : [...command];
   const launch = gateCommand(timed[0]!, timed.slice(1));
   const r = spawnSync(launch.command, launch.args, { cwd: options.tree, env, encoding: "utf8", maxBuffer: 1 << 30 });
@@ -175,7 +175,7 @@ function buildCompiler(options: RunOptions, launcher: NodeJS.ProcessEnv, owned: 
 type Summary = { identities?: { commit?: string | null }; interrupted?: unknown; environment?: { canonical?: boolean }; steps?: StepResult[] };
 function runSteps(options: RunOptions, launcher: NodeJS.ProcessEnv, owned: Record<string, string>, dir: string, steps: readonly string[]): { rows: StepResult[] } | { held: string } {
   mkdirSync(dir, { recursive: true });
-  const env = gateEnvironment(launcher, { run: dir, owned }).env;
+  const env = gateEnvironment(launcher, { run: dir, owned, oracleRoot: options.tree }).env;
   const launch = gateCommand("sh", [join(options.tree, "tooling/gate/all.sh")]);
   const r = spawnSync(launch.command, launch.args, { cwd: options.tree, env, encoding: "utf8", maxBuffer: 1 << 30 });
   writeFileSync(join(dir, "gate.log"), `${r.stdout ?? ""}${r.stderr ?? ""}`);

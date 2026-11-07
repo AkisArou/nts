@@ -25,6 +25,7 @@ import {test, type TestContext} from "node:test";
 import {fileURLToPath} from "node:url";
 import {gateEnvironment, hostEnvironment} from "./canonical-environment.ts";
 import {moduleClosure} from "./module-closure-fixture.ts";
+import {oracleWorkspaceFixture} from "../differential/oracle-workspace-fixture.ts";
 import {removable} from "./run-temporary.ts";
 import {spawnTest} from "./test-wait.ts";
 import {newTestScratch} from "./test-scratch.ts";
@@ -43,6 +44,7 @@ function fixture(t: TestContext) {
     if (file === "tooling/gate/run.mjs") writeFileSync(target, readFileSync(original));
     else symlinkSync(original, target);
   }
+  oracleWorkspaceFixture(t,root);
   symlinkSync(join(GATE, "times.tsv"), join(gate, "times.tsv"));
   // The stand-in shell executes this declared runtime asset.
   symlinkSync(join(GATE, "token.sh"), join(gate, "token.sh"));
@@ -65,7 +67,7 @@ fi
   const planned = (name: string, meminfo: string) => {
     const run = join(own, "home/.cache", name);
     return { run, env: gateEnvironment({ ...hostEnvironment(process.env), HOME: join(own, "home") },
-      { run, owned: { NTS_GATE_STEPS: "examples", NTS_BIN: compiler, CARGO_TARGET_DIR: join(own, "target"), NTS_MEMINFO: meminfo } }).env };
+      { run, oracleRoot:root, owned: { NTS_GATE_STEPS: "examples", NTS_BIN: compiler, CARGO_TARGET_DIR: join(own, "target"), NTS_MEMINFO: meminfo } }).env };
   };
   return { root, gate, started, reading, planned };
 }
