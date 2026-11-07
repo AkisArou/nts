@@ -21,8 +21,9 @@ case $mode in
 esac
 
 # The candidate's own pin selects an already acquired immutable Node pair.
-# Neither a gate tree nor a work tree may borrow the shared checkout's other release.
-node "$(dirname -- "$0")/node-inputs.ts" --link "$tree"
+# Its catalog belongs to that tree too, including either endpoint of a range.
+# Neither a gate tree nor a work tree may borrow the caller's other release.
+node "$tree/tooling/lanes/node-inputs.ts" --link "$tree"
 
 # The gitignored third-party clones are inputs rather than sources -- test262,
 # Are We Fast Yet, TypeScript's tests and node's `lib/`. They are not in any

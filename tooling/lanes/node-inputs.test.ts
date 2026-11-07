@@ -1,11 +1,13 @@
 import assert from 'node:assert/strict';
-import {execFileSync} from 'node:child_process';
+import {execFileSync,spawnSync} from 'node:child_process';
 import {chmodSync,existsSync,lstatSync,mkdirSync,readdirSync,readFileSync,readlinkSync,realpathSync,renameSync,rmSync,symlinkSync,unlinkSync,writeFileSync} from 'node:fs';
-import {join} from 'node:path';
+import {dirname,join} from 'node:path';
 import {test,type TestContext} from 'node:test';
 import {acquire,inventory,link,pairPath,type Records} from './node-inputs.ts';
 import {fixtureInputs} from './node-inputs-test-fixture.ts';
 import {newTestScratch} from '../gate/test-scratch.ts';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {nodePin} from '../bootstrap/node.ts';
 
 function scratch(t:TestContext){
   const root=newTestScratch('node-inputs');
@@ -22,6 +24,29 @@ function candidate(source:string,target:string){
   mkdirSync(join(target,'build/node-deps'),{recursive:true});
   for(const file of ['.tool-versions','build/node-deps/recipes.json'])writeFileSync(join(target,file),readFileSync(join(source,file)));
 }
+
+test('input provisioning uses each destination tree catalog across a Node upgrade',async t=>{
+  const {root,old,next,table}=scratch(t),home=join(root,'home'),cache=join(home,'.cache/nts-node-inputs');
+  acquire(old,cache,table);acquire(next,cache,table);
+  const trees=[join(root,'catalog-old'),join(root,'catalog-next')],oldVersion=nodePin(old),nextVersion=nodePin(next);
+  for(const [source,tree,release] of [[old,trees[0]!,oldVersion],[next,trees[1]!,nextVersion]] as const){
+    candidate(source,tree);
+    copyModuleClosure(['tooling/lanes/node-inputs.ts'],tree);
+    writeFileSync(join(tree,'tooling/lanes/node-inputs.json'),JSON.stringify({version:1,releases:{[release]:table.releases[release]}}));
+    writeFileSync(join(tree,'tooling/lanes/inputs.sh'),readFileSync(new URL('./inputs.sh',import.meta.url)));
+    // This guard exercises Node provisioning; registry installation has its
+    // own tests and must not touch any real package cache in this fixture.
+    writeFileSync(join(tree,'tooling/lanes/dependency-inputs.ts'),"import {writeFileSync} from 'node:fs';writeFileSync(process.argv[4]+'/dependency-provisioned','yes');\n");
+  }
+  const shared=join(root,'shared');mkdirSync(shared);
+  for(const [from,to,release] of [[trees[0]!,trees[1]!,nextVersion],[trees[1]!,trees[0]!,oldVersion]] as const)await t.test(release,()=>{
+    const result=spawnSync('sh',[join(from,'tooling/lanes/inputs.sh'),'lane',shared,to],{encoding:'utf8',
+      env:{...process.env,HOME:home,PATH:dirname(process.execPath)+':'+process.env.PATH}});
+    assert.equal(result.status,0,result.stdout+result.stderr);
+    assert.equal(realpathSync(join(to,'third_party/node-inputs')),pairPath(release,table.releases[release]!,cache));
+    assert.equal(readFileSync(join(to,'dependency-provisioned'),'utf8'),'yes');
+  });
+});
 
 test('Node 24 and 26 candidates select side-by-side immutable recipe-matching pairs',t=>{
   const {root,old,next,cache,table}=scratch(t);
