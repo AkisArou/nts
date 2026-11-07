@@ -96,7 +96,7 @@ const TREE = execFileSync("git", ["rev-parse", "--show-toplevel"], { encoding: "
 // and reader graph. The range selector fingerprints these plus every loaded
 // module before using candidate reach for a newly added path.
 export const SELECTOR_POLICY_DATA = [
-  "tooling/lanes/lanes.json", "tooling/config/src/target.ts",
+  "tooling/config/src/target.ts",
   "tooling/gate/all.sh", "tooling/gate/run.mjs", "tooling/gate/comment-tokens.rs",
   TOOLING_TEST_EXCLUSIONS,
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
@@ -937,16 +937,15 @@ export const RULES = [
     arms: [{ kind: "answers", asks: "does the inventory preserve exact sources, closure and ownership", run: "node --test tooling/conformance/node-work-list.test.ts" }],
   },
   {
-    // The node lane's harness: the runner node's own tests go through, its
-    // stand-ins for their `test/common`, and the instruments over what the
-    // modules publish. These are the lane's `tooling/` paths in
-    // tooling/lanes/lanes.json, so a file the lane takes on is settled with
-    // the rest. No gate step runs them. One that does still owes that step
-    // through the step map (build.sh owes `addons`). A gate step that starts
-    // reading one must enter that map too, or this rule hides it. What the
-    // harness says is checked where it runs: the compiled axis against its
-    // floor, and the web platform's own suite.
-    name: "the node lane's harness",
+    // The node harness (NODE_HARNESS): the runner node's own tests go
+    // through, its stand-ins for their `test/common`, and the instruments
+    // over what the modules publish. A new harness file joins that list, or
+    // it owes what any instrument no step runs owes. No gate step runs them.
+    // One that does still owes that step through the step map (build.sh owes
+    // `addons`). A gate step that starts reading one must enter that map too,
+    // or this rule hides it. What the harness says is checked where it runs:
+    // the compiled axis against its floor, and the web platform's own suite.
+    name: "the node harness",
     wide: true,
     when: (p) => nodeHarness(p) && !/^tooling\/conformance\/node-work-list(?:\.test)?\.ts$/.test(p),
     settled: true,
@@ -1026,11 +1025,39 @@ export const RULES = [
   },
 ];
 
-/** The node lane's `tooling/` paths in tooling/lanes/lanes.json: a file, or a directory and what is under it. */
+/** The node harness's paths: a file, or a directory and what is under it. */
+const NODE_HARNESS = [
+  "tooling/conformance/audit.mjs",
+  "tooling/conformance/build.sh",
+  "tooling/conformance/c-tests.sh",
+  "tooling/conformance/check.sh",
+  "tooling/conformance/common.mjs",
+  "tooling/conformance/compiled-axis-floor.mjs",
+  "tooling/conformance/compiled-axis-rows.mjs",
+  "tooling/conformance/compiled-axis.floor",
+  "tooling/conformance/compiled-axis.sh",
+  "tooling/conformance/fixtures.mjs",
+  "tooling/conformance/hijackstdio.mjs",
+  "tooling/conformance/honours-addon-out.mjs",
+  "tooling/conformance/instance-shape-diff.mjs",
+  "tooling/conformance/interpreted-lane.sh",
+  "tooling/conformance/missing-exports",
+  "tooling/conformance/node-work-list.test.ts",
+  "tooling/conformance/node-work-list.ts",
+  "tooling/conformance/run-one.mjs",
+  "tooling/conformance/run.mjs",
+  "tooling/conformance/same-shape-classes.mjs",
+  "tooling/conformance/shape-blindspot.mjs",
+  "tooling/conformance/shaped-surface.mjs",
+  "tooling/conformance/tmpdir.mjs",
+  "tooling/conformance/unclaimed-reviewed",
+  "tooling/conformance/web-platform-reach.mjs",
+  "tooling/conformance/web-platform/",
+  "tooling/conformance/wpt-url-setters.mjs",
+  "tooling/conformance/wpt-url.mjs",
+];
 function nodeHarness(path) {
-  const owns = once("nodeHarness", () =>
-    (JSON.parse(readFileSync(join(TREE, "tooling/lanes/lanes.json"), "utf8")).lanes.node?.owns ?? []).filter((p) => p.startsWith("tooling/")));
-  return owns.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`));
+  return NODE_HARNESS.some((p) => path === p || path.startsWith(p.endsWith("/") ? p : `${p}/`));
 }
 
 /** Every change, whatever it touched: the gate's first two steps. */

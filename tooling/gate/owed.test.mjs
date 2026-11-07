@@ -535,8 +535,8 @@ test("the Chromium lane's own files owe only what every change owes", () => {
   }
 });
 
-test("the node lane's harness owes only what every change owes", () => {
-  // Its `tooling/` paths in tooling/lanes/lanes.json, which no gate step runs.
+test("the node harness owes only what every change owes", () => {
+  // Its paths in owed.mjs's NODE_HARNESS, which no gate step runs.
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
   for (const p of [
     "tooling/conformance/run.mjs", "tooling/conformance/run-one.mjs", "tooling/conformance/tmpdir.mjs",
@@ -551,9 +551,9 @@ test("a node harness file a gate step runs still owes that step", () => {
   owes("tooling/conformance/build.sh", ["addons"]);
 });
 
-test("an instrument outside the node lane that no step runs still owes the full gate", () => {
-  // The node rule settles the lane's own paths, not tooling/conformance.
-  assert.equal(stepsFor("tooling/conformance/not-the-node-lanes.mjs").length, landing().length);
+test("an instrument outside the node harness that no step runs still owes the full gate", () => {
+  // The node rule settles the harness's own paths, not tooling/conformance.
+  assert.equal(stepsFor("tooling/conformance/not-the-node-harness.mjs").length, landing().length);
 });
 
 test("what a target brings owes the corpora built for it", () => {
