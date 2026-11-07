@@ -5,9 +5,14 @@ import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fullEnvironment } from "../census/full-plan.ts";
+import { PLATFORM_PROGRAMS, PLATFORMS_UNRUN_OK, unrunPlatforms, type UnrunPolicy } from "../gate/verdict-policy.ts";
 import type { Layout } from "./state.ts";
 
-/** A step's result as the full check reads it: a skip the policy accepts is a pass. */
+/**
+ * A step's result as the full check reads it: a skip the policy accepts is a
+ * pass, and a platform's programs left unrun hold a step that passed, unless
+ * the policy lets that platform stay unrun (verdict-policy.ts).
+ */
 export type StepResult = "PASS" | "FAIL" | "HELD";
 
 export type Measurement = {
@@ -30,8 +35,11 @@ type Summary = {
   steps?: { name: string; verdict: string; reason?: string; accepted?: boolean }[];
 };
 
+const PLATFORM_STEPS = new Set(Object.values(PLATFORM_PROGRAMS).map(programs => programs.step));
+const logOf = (run: string, step: string) => { try { return readFileSync(join(run, `${step}.log`), "utf8"); } catch { return ""; } };
+
 /** What a run's summary says of each requested step; anything it cannot vouch for is held. */
-export function readSummary(run: string, commit: string, requested: readonly string[]): Pick<Measurement, "steps" | "reasons"> {
+export function readSummary(run: string, commit: string, requested: readonly string[], unrun: UnrunPolicy = PLATFORMS_UNRUN_OK): Pick<Measurement, "steps" | "reasons"> {
   const steps: Record<string, StepResult> = {}, reasons: Record<string, string> = {};
   const hold = (why: string) => { for (const name of requested) { steps[name] = "HELD"; reasons[name] = why; } return { steps, reasons }; };
   const file = join(run, "summary.json");
@@ -46,6 +54,14 @@ export function readSummary(run: string, commit: string, requested: readonly str
     if (!step) { steps[name] = "HELD"; reasons[name] = "not in the summary"; continue; }
     steps[name] = step.verdict === "PASS" || (step.verdict === "SKIPPED" && step.accepted) ? "PASS" : step.verdict === "FAIL" ? "FAIL" : "HELD";
     if (steps[name] !== "PASS") reasons[name] = `${step.verdict}${step.reason ? `: ${step.reason}` : ""}`;
+    else if (PLATFORM_STEPS.has(name)) {
+      const refused = unrunPlatforms(name, logOf(run, name), unrun).filter(platform => !platform.accepted);
+      if (refused.length) {
+        steps[name] = "HELD";
+        const allowed = unrun.platforms.length ? `only ${unrun.platforms.join(" and ")}` : "no platform";
+        reasons[name] = refused.map(p => `${p.platform} programs did not run, and ${unrun.policy} lets ${allowed} stay unrun: ${p.line}`).join("; ");
+      }
+    }
   }
   return { steps, reasons };
 }
