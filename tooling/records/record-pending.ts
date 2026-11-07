@@ -8,14 +8,16 @@
 //
 //   NTS_BIN=<main's pin> node tooling/records/record-pending.ts [kind ...]
 //
-// The kinds are oracle-counts, typescript, benchmarks and outcomes, all four
-// when none is named. Each is recorded by its own recorder, in its pending
-// mode, with the compiler NTS_BIN names:
+// The kinds are oracle-counts, typescript, benchmarks, benchmark-runs and
+// outcomes, all five when none is named, in that order: a benchmark's run is
+// recorded once its oracle count is. Each is recorded by its own recorder, in
+// its pending mode, with the compiler NTS_BIN names:
 //
-//   oracle-counts  tooling/differential/record-oracles.ts <pending fixture>, per fixture
-//   typescript     tooling/census/conformance262.ts --record-pending, per backend
-//   benchmarks     tooling/bench/build-records.ts --record-pending
-//   outcomes       tooling/conformance/outcomes-check.ts --record-pending
+//   oracle-counts   tooling/differential/record-oracles.ts <pending fixture>, per fixture
+//   typescript      tooling/census/conformance262.ts --record-pending, per backend
+//   benchmarks      tooling/bench/build-records.ts --record-pending
+//   benchmark-runs  tooling/differential/check-consumers.ts benchmarks --record-pending (bench-agree's JVM record)
+//   outcomes        tooling/conformance/outcomes-check.ts --record-pending
 //
 // The pending cases come from the tree alone. Accepted changes need a
 // measurement, so the last three recorders run whether or not anything is
@@ -40,9 +42,10 @@ import { acceptedChange, improves, type OutcomeTransition } from "../conformance
 import { outcomeFixtures } from "../conformance/outcomes-project.ts";
 import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
 import { pendingFixtures, recordPath, RECORDS } from "../differential/oracle-records.ts";
+import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
 import { inventory, pendingLine } from "./pending.ts";
 
-export const KINDS = ["oracle-counts", "typescript", "benchmarks", "outcomes"] as const;
+export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 
@@ -69,6 +72,11 @@ export function findPending(root: string, kind: Kind): Pending[] {
         const recorded = parseBenchmarkRecord(read(root, benchmarkRecord(backend))).rows.filter(row => row.scope === "compile").map(row => row.path);
         return inventory(recorded, benchmarkCases(root)).pending.map(name => ({ kind, name, record: benchmarkRecord(backend) }));
       });
+    case "benchmark-runs":
+      return BENCH_AGREE_BACKENDS.flatMap(backend => {
+        const file = runsRecord(backend), record = existsSync(join(root, file)) ? parseRunRecord(read(root, file)) : null;
+        return pendingRuns(record, benchmarkCases(root)).map(name => ({ kind, name, record: file }));
+      });
     case "outcomes": {
       const directory = join(root, "tests/outcomes");
       return outcomeInventory(directory, outcomeFixtures(directory)).pending
@@ -89,6 +97,9 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       return BACKENDS.map(backend => ["tooling/census/conformance262.ts", "--suite", "typescript", "--backend", backend, "--record-pending", typescriptRecord(backend)]);
     case "benchmarks":
       return [["tooling/bench/build-records.ts", "--record-pending"]];
+    case "benchmark-runs":
+      // The JVM, which bench-agree checks (BENCH_AGREE_BACKENDS).
+      return [["tooling/differential/check-consumers.ts", "benchmarks", "--record-pending"]];
     case "outcomes":
       return [["tooling/conformance/outcomes-check.ts", "--record-pending"]];
   }
@@ -104,6 +115,7 @@ function recordFiles(root: string, kind: Kind): string[] {
     case "oracle-counts": return under(RECORDS);
     case "typescript": return BACKENDS.map(typescriptRecord);
     case "benchmarks": return BACKENDS.map(benchmarkRecord);
+    case "benchmark-runs": return BENCH_AGREE_BACKENDS.map(runsRecord);
     case "outcomes": return outcomeFixtures(join(root, "tests/outcomes")).map(outcomesRecord);
   }
 }
@@ -114,13 +126,14 @@ function snapshot(root: string, kind: Kind, pending: readonly Pending[]): Map<st
 }
 
 /** One row of a line record: its key, its case, and its exact line. */
-function rows(text: string, kind: "typescript" | "benchmarks"): { header: string; rows: Map<string, { name: string; line: string }> } {
+type LineKind = "typescript" | "benchmarks" | "benchmark-runs";
+function rows(text: string, kind: LineKind): { header: string; rows: Map<string, { name: string; line: string }> } {
   const [header = "", ...lines] = text.split("\n");
   const result = new Map<string, { name: string; line: string }>();
   for (const line of lines) {
     if (line === "" || line.startsWith("#")) continue;
     const [name, value] = line.split("\t") as [string, string];
-    result.set(kind === "typescript" ? name : `${name}\0${JSON.parse(value).scope}`, { name, line });
+    result.set(kind === "benchmarks" ? `${name}\0${JSON.parse(value).scope}` : name, { name, line });
   }
   return { header, rows: result };
 }
@@ -129,8 +142,12 @@ function rows(text: string, kind: "typescript" | "benchmarks"): { header: string
 const label = (transition: OutcomeTransition) => improves(transition) ? "improved" : "refuses differently";
 
 /** A rewritten row the ratchet accepts, described, or null when it does not accept it. */
-function acceptedRow(kind: "typescript" | "benchmarks", before: string, after: string): string | null {
+function acceptedRow(kind: LineKind, before: string, after: string): string | null {
   const value = (line: string) => JSON.parse(line.split("\t")[1]!);
+  if (kind === "benchmark-runs") {
+    const was = parseBenchmarkRun(value(before)), now = parseBenchmarkRun(value(after)), change = compareBenchmarkRun(was, now);
+    return acceptedChange(change) ? `${JSON.stringify(was)} -> ${JSON.stringify(now)} (${label(change)})` : null;
+  }
   if (kind === "typescript") {
     const was = parseObservation(value(before)), now = parseObservation(value(after)), change = compareTypeScriptObservation(was, now);
     return acceptedChange(change) ? `${JSON.stringify(was)} -> ${JSON.stringify(now)} (${label(change)})` : null;
@@ -150,7 +167,13 @@ function acceptedRow(kind: "typescript" | "benchmarks", before: string, after: s
 export function auditRecord(kind: Kind, file: string, before: string | null, after: string | null, pending: ReadonlySet<string>): string[] {
   if (before === after) return [];
   assert.ok(after !== null, `${file} was removed`);
-  if (kind === "typescript" || kind === "benchmarks") {
+  if (kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs") {
+    // bench-agree's record starts from its pending rows: with no file, every benchmark is pending.
+    if (before === null && kind === "benchmark-runs") {
+      const now = rows(after, kind);
+      for (const row of now.rows.values()) assert.ok(pending.has(row.name), `${file}: a row was added for ${row.name}, which was not pending`);
+      return [...now.rows.values()].map(row => `${row.name} ${row.line.split("\t")[1]} (pending)`);
+    }
     assert.ok(before !== null, `${file} was created; a line record is written by a full --record`);
     const was = rows(before, kind), now = rows(after, kind);
     assert.equal(now.header, was.header, `${file}: the header changed`);
