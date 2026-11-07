@@ -142,10 +142,10 @@ export function pushedMain(git: Git, remote: string): boolean {
 export type BranchOutcome = { where: "local" | "remote"; state: "deleted" | "absent" | "kept"; reason?: string };
 /**
  * Delete `branch` here and on `remote` when everything on it is in
- * `submitted`, the commit that landed: a branch an agent moved on since it
- * submitted keeps its new work. A branch checked out in a tree is kept; the
- * caller frees the tree first. Each deletion is a compare-and-swap on the
- * value checked.
+ * `submitted`: the commit that landed, or the tip a dropped task gave back
+ * (pool.ts's `give --discard`). A branch an agent moved on since then keeps
+ * its new work. A branch checked out in a tree is kept; the caller frees the
+ * tree first. Each deletion is a compare-and-swap on the value checked.
  */
 export function deleteBranch(git: Git, branch: string, submitted: string, remote: string | null): BranchOutcome[] {
   if (!/^[A-Za-z0-9._/-]+$/.test(branch) || branch === "main" || branch.startsWith("-")) throw new GitError(`not a task branch: ${branch}`);
@@ -153,7 +153,7 @@ export function deleteBranch(git: Git, branch: string, submitted: string, remote
   const out: BranchOutcome[] = [];
   const local = run(git, ["rev-parse", "--verify", "--quiet", ref]).stdout.trim();
   if (!local) out.push({ where: "local", state: "absent" });
-  else if (!isAncestor(git, local, submitted)) out.push({ where: "local", state: "kept", reason: `it has commits the landing does not: ${local.slice(0, 12)}` });
+  else if (!isAncestor(git, local, submitted)) out.push({ where: "local", state: "kept", reason: `it is at ${local.slice(0, 12)}, with commits ${submitted.slice(0, 12)} does not have` });
   else {
     const holder = worktrees(git).find(t => t.branch === branch);
     if (holder) out.push({ where: "local", state: "kept", reason: `checked out in ${holder.path}` });
@@ -169,7 +169,7 @@ export function deleteBranch(git: Git, branch: string, submitted: string, remote
   if (!there) { out.push({ where: "remote", state: "absent" }); return out; }
   if (!hasCommit(git, there)) run(git, ["fetch", "--quiet", "--no-tags", remote, ref]);
   if (!hasCommit(git, there) || !isAncestor(git, there, submitted)) {
-    out.push({ where: "remote", state: "kept", reason: `${remote}/${branch} has commits the landing does not: ${there.slice(0, 12)}` });
+    out.push({ where: "remote", state: "kept", reason: `${remote}/${branch} is at ${there.slice(0, 12)}, with commits ${submitted.slice(0, 12)} does not have` });
     return out;
   }
   const r = run(git, ["push", "--porcelain", `--force-with-lease=${ref}:${there}`, remote, `:${ref}`]);
