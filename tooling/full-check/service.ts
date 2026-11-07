@@ -29,26 +29,26 @@
 //     way, and the rows full.md marks slower than their own best are a task;
 //   - held (a step that could not finish): nothing moves; it runs again when
 //     main moves, or after half an hour.
-import {spawnSync} from "node:child_process";
-import {existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync} from "node:fs";
-import {homedir} from "node:os";
-import {dirname, join, resolve} from "node:path";
-import {fileURLToPath, pathToFileURL} from "node:url";
-import {memAvailableGB, RESUME_AT_GB} from "../gate/admission.ts";
-import {FIXED_AMBIENT, hostEnvironment} from "../gate/canonical-environment.ts";
-import {sharedCheckout} from "../landing/git.ts";
-import {Pool, POOL_HOME, pruneLines} from "../landing/pool.ts";
-import {pruneNodeCompileCache, type NodeCacheRetention} from "./node-cache-retention.ts";
-import {count as countMachine, countLines, gather, type CountResult} from "./count.ts";
-import {search, type Measure, type Probe} from "./culprit.ts";
-import {composeReverts, firstParents, Git, revertedBy, revertsIn} from "./git.ts";
-import {pinnedGate, type Gate} from "./measure.ts";
-import {landingQueue, submitTo, type LandingQueue} from "./queue.ts";
-import {listedRecords, recordAt, recordsMessage, runPin, type Recorder} from "./records.ts";
-import {makeRevert, taskLine, type Finding} from "./revert.ts";
-import {benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, resultsCommit, slowerRows, type Bench} from "./bench.ts";
-import {DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule} from "./schedule.ts";
-import {layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State} from "./state.ts";
+import { spawnSync } from "node:child_process";
+import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { dirname, join, resolve } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
+import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
+import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import { sharedCheckout } from "../landing/git.ts";
+import { Pool, POOL_HOME, pruneLines } from "../landing/pool.ts";
+import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
+import { count as countMachine, countLines, gather, type CountResult } from "./count.ts";
+import { search, type Measure, type Probe } from "./culprit.ts";
+import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
+import { pinnedGate, type Gate } from "./measure.ts";
+import { landingQueue, submitTo, type LandingQueue } from "./queue.ts";
+import { listedRecords, recordAt, recordsMessage, runPin, type Recorder } from "./records.ts";
+import { makeRevert, taskLine, type Finding } from "./revert.ts";
+import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, resultsCommit, slowerRows, type Bench } from "./bench.ts";
+import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
+import { layout as defaultLayout, probeKey, readState, writeState, type Layout, type Part, type RunRecord, type State } from "./state.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
