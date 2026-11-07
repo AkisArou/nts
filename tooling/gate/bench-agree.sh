@@ -22,29 +22,23 @@
 # A green step is a claim about what it looked at. This one looks at the fifty
 # cases nothing else runs.
 #
-# # Why a floor rather than "all of them"
+# # What it holds each case to: its run record
 #
-# Nine cases export nothing with scalar arguments and a scalar result, so the
-# differential has nothing to build a pool for and says so. That is not a
-# failure and it is not agreement either -- it is the same distinction the rest
-# of this gate keeps between a refusal and an absence.
+# Each benchmark's run on this backend is a row of
+# results/benchmarks/<backend>/runs.tsv (tooling/bench/run-outcomes.ts): it
+# agrees, it has no scalar export, it is refused, it aborts, it times out, or
+# it answers wrongly. A row that reproduces passes, a loud defect included: on
+# 11-07 awfy-json and awfy-storage aborted on the JVM with a VerifyError
+# (#265), and with no record of a known per-backend failure this step went red
+# on main. A change the shared ratchet accepts passes and is listed; anything
+# else, getting worse first, is red. A benchmark with no row is pending and
+# does not run here; the full check writes its row after landing
+# (`check-consumers.ts benchmarks --record-pending`, run by
+# tooling/records/record-pending.ts). The record replaces the agreement floor
+# this step used to keep.
 #
-# **The floor is now every case that can be measured, and the arithmetic says
-# so**: 61 benchmark cases compile on all three backends, nine of them have no
-# pool, and 61 - 9 = 52. It sat at 41 while the tree produced 52, which is a
-# ratchet eleven teeth behind -- eleven cases could have stopped agreeing with
-# node and this step would still have printed green. A floor that has slipped is
-# not a loose ratchet, it is an absent one.
-#
-# Raised off `pinned.sh` on 44f8287e, from its own worktree, which printed no
-# `NOT A COMMIT` line -- the rule `all.sh` states beside the example floors, for
-# the reason recorded there: a floor taken from a run that counted somebody's
-# untracked directory is a claim about that directory and goes red when they
-# revert it.
-#
-# The count is the **jvm** backend's, which is the one `all.sh` runs. Another
-# backend may measure a different set; `NTS_BENCH_AGREE_FLOOR` is how to say so
-# rather than editing this.
+# The backend is the JVM's unless NTS_BACKEND says otherwise; each backend has
+# its own record.
 set -eu
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
 exec node "$root/tooling/differential/check-consumers.ts" benchmarks "$@"

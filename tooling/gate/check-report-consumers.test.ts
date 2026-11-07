@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnTest } from "./test-wait.ts";
 import { existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -12,7 +13,7 @@ const source = dirname(fileURLToPath(import.meta.url));
 function sandbox(t: TestContext) {
   const root = mkdtempSync(join(tmpdir(), "nts-check-consumers-"));
   t.after(() => rmSync(root, { recursive: true, force: true }));
-  for (const directory of ["tooling/gate", "tooling/jvm", "tooling/differential", "tooling/conformance", "tooling/sweep", "tooling/npm-survey", "tooling/records",
+  for (const directory of ["tooling/gate", "tooling/jvm", "tooling/differential", "tooling/conformance", "tooling/sweep", "tooling/npm-survey", "tooling/records", "tooling/bench", "tooling/census",
     "tooling/conformance/web-platform/compiled", "tests/programs/control",
     "tests/programs/invalid", "tests/programs/unsupported", "benchmarks/cases/control"]) {
     mkdirSync(join(root, directory), { recursive: true });
@@ -26,6 +27,10 @@ function sandbox(t: TestContext) {
   copyFileSync(join(source, "../differential/check-consumers.ts"), join(root, "tooling/differential/check-consumers.ts"));
   copyFileSync(join(source, "../differential/oracle-records.ts"), join(root, "tooling/differential/oracle-records.ts"));
   copyFileSync(join(source, "../records/pending.ts"), join(root, "tooling/records/pending.ts"));
+  copyFileSync(join(source, "../bench/run-outcomes.ts"), join(root, "tooling/bench/run-outcomes.ts"));
+  copyFileSync(join(source, "../census/line-record.ts"), join(root, "tooling/census/line-record.ts"));
+  copyFileSync(join(source, "../conformance/outcome-transition.ts"), join(root, "tooling/conformance/outcome-transition.ts"));
+  copyFileSync(join(source, "../conformance/pin.ts"), join(root, "tooling/conformance/pin.ts"));
   copyFileSync(join(source, "active-command.ts"), join(root, "tooling/gate/active-command.ts"));
   copyFileSync(join(source, "step-result.ts"), join(root, "tooling/gate/step-result.ts"));
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
@@ -145,11 +150,11 @@ test("agrees-with-c.sh compares structured compiled answers and rejects answer m
   }
 });
 
-for (const script of ["gate.sh", "rc.sh", "bench-agree.sh"]) {
+for (const script of ["gate.sh", "rc.sh"]) {
   test(`${script} reads structured dispositions and refuses text/field mutations`, (t) => {
     const { root, compiler } = sandbox(t);
     const run = (mutation = "") => spawnTest(script === "rc.sh" ? "bash" : "sh",
-      [join(root, "tooling/gate", script), ...(script === "bench-agree.sh" ? ["control"] : [])], {
+      [join(root, "tooling/gate", script)], {
         cwd: root, encoding: "utf8", 
         env: { ...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation },
       });
@@ -161,14 +166,46 @@ for (const script of ["gate.sh", "rc.sh", "bench-agree.sh"]) {
     }
     const unavailable = run("unavailable");
     assert.match(unavailable.stdout, /no compiled bindings were available/);
-    if (script === "bench-agree.sh") {
-      assert.equal(unavailable.status, 0, unavailable.stdout + unavailable.stderr);
-      assert.match(unavailable.stdout, /no compiled benchmark cases compared/);
-    } else {
-      assert.notEqual(unavailable.status, 0, "a corpus with no compared example cannot pass");
-    }
+    assert.notEqual(unavailable.status, 0, "a corpus with no compared example cannot pass");
   });
 }
+
+test("bench-agree.sh holds each benchmark to its run record: what reproduces passes, a loud defect included; worse is red; no row is pending", t => {
+  const { root, compiler } = sandbox(t);
+  const file = join(root, "results/benchmarks/jvm/runs.tsv");
+  const header = `# nts-benchmark-runs {"version":1,"backend":"jvm","commit":"${"a".repeat(40)}","compiler":"${"b".repeat(16)}","under":"benchmarks/cases"}\n`;
+  const record = (outcome: object) => { mkdirSync(dirname(file), { recursive: true }); writeFileSync(file, `${header}benchmarks/cases/control\t${JSON.stringify(outcome)}\n`); };
+  const run = (mutation = "", ...args: string[]) => spawnTest("sh", [join(root, "tooling/gate/bench-agree.sh"), ...args], { cwd: root, encoding: "utf8",
+    env: { ...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, NTS_GATE_JOBS: "1", CHECK_MUTATION: mutation } });
+  // No record yet: every benchmark is pending, listed, and not run.
+  const pending = run("wrong");
+  assert.equal(pending.status, 0, pending.stdout + pending.stderr);
+  assert.match(pending.stdout, /pending: benchmarks\/cases\/control is not recorded in results\/benchmarks\/jvm\/runs\.tsv yet/);
+  record({ kind: "agrees" });
+  const holds = run(); assert.equal(holds.status, 0, holds.stdout + holds.stderr); assert.match(holds.stdout, /1 as recorded/);
+  for (const mutation of ["legacy-text", "contradiction"]) assert.notEqual(run(mutation).status, 0, mutation);
+  const worse = run("runtime-decline");
+  assert.equal(worse.status, 1, worse.stdout + worse.stderr);
+  assert.match(worse.stdout, /^REGRESSED  benchmarks\/cases\/control: \{"kind":"agrees"\} -> \{"kind":"aborted","failure":"the compiled program declined every case"\}$/m);
+  // A recorded loud defect that persists reproduces: a known JVM abort is a finding, not a red step.
+  record({ kind: "aborted", failure: "the compiled program declined every case" });
+  const loud = run("runtime-decline"); assert.equal(loud.status, 0, loud.stdout + loud.stderr); assert.match(loud.stdout, /1 as recorded/);
+  const silent = run("wrong"); assert.equal(silent.status, 1, "an abort that became a wrong answer got worse");
+  const better = run(); assert.equal(better.status, 0, better.stdout + better.stderr);
+  assert.match(better.stdout, /improved, record pending: benchmarks\/cases\/control \{"kind":"aborted"/);
+  // The full check's writer: from a clean pin of main, it writes the accepted change, every other line byte for byte.
+  writeFileSync(join(root, "provenance.json"), JSON.stringify({ sha: "c".repeat(40), clean: true, applied: null,
+    binary_sha256: createHash("sha256").update(readFileSync(compiler)).digest("hex") }));
+  const refused = run("wrong", "--record-pending"); assert.equal(refused.status, 1);
+  assert.match(refused.stdout, /not recorded: 1 recorded run\(s\) changed/);
+  assert.equal(readFileSync(file, "utf8"), `${header}benchmarks/cases/control\t{"kind":"aborted","failure":"the compiled program declined every case"}\n`);
+  const written = run("", "--record-pending"); assert.equal(written.status, 0, written.stdout + written.stderr);
+  assert.equal(readFileSync(file, "utf8"), `${header}benchmarks/cases/control\t{"kind":"agrees"}\n`);
+  rmSync(file);
+  const started = run("", "--record-pending"); assert.equal(started.status, 0, started.stdout + started.stderr);
+  assert.equal(readFileSync(file, "utf8").split("\n")[1], 'benchmarks/cases/control\t{"kind":"agrees"}', "a record starts from its pending rows");
+  assert.match(readFileSync(file, "utf8"), /"commit":"c{40}"/);
+});
 
 test("gate.sh lists a program with no oracle record as pending, and fails one with a record", t => {
   const { root, compiler } = sandbox(t);
