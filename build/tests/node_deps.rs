@@ -59,7 +59,7 @@ fn graph_keeps_simd_dependencies_assertions_and_pinned_versions() {
     let recipe = node_deps::recipe();
     let bundle = node_deps::bundle();
     assert_eq!(bundle.versions["node"], bundle.node);
-    assert_eq!(bundle.versions["openssl"], "3.5.7");
+    assert_eq!(bundle.versions["openssl"], "3.5.9");
     let target = |name| {
         recipe
             .targets
