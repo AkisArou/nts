@@ -1,6 +1,6 @@
 // One pinned public TypeScript Program authority checks and emits every TS oracle.
 import type {API,Program,RawCompilerOptions,CompilerOptions,Diagnostic} from 'typescript/sync';
-import {createHash,type BinaryLike} from 'node:crypto';
+import {createHash} from 'node:crypto';
 import {spawn,spawnSync} from 'node:child_process';
 import {createRequire,isBuiltin,stripTypeScriptTypes} from 'node:module';
 import {appendFileSync,chmodSync,openSync,closeSync,existsSync,lstatSync,mkdirSync,mkdtempSync,readFileSync,readdirSync,realpathSync,renameSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
@@ -14,7 +14,7 @@ export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 export const REPOSITORY=resolve(HERE,'../..');
 export const ORACLE_LOADER=pathToFileURL(join(HERE,'oracle-loader.ts')).href;
-const hash=(bytes:BinaryLike)=>createHash('sha256').update(bytes).digest('hex');
+const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest('hex');
 
 export type TypeScriptIdentity={version:string;rootPackageSha256:string;packageSha256:string;nativeSha256:string;nativePackageSha256:string};
 type ToolchainRecord=TypeScriptIdentity&{nativePackage:string;executable:string};
