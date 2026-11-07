@@ -20925,8 +20925,11 @@ declare getHandler: (file: string) => Loader | null;
 	}
 }
 const DefaultLoadingManager =  new LoadingManager();
+// The CORS setting a loader gives the images it creates: whatever the DOM
+// library allows `HTMLImageElement.crossOrigin` to hold, short of null.
+type CrossOrigin = NonNullable<HTMLImageElement["crossOrigin"]>;
 class Loader<TData = unknown, TUrl = string> {
-	declare crossOrigin: string;
+	declare crossOrigin: CrossOrigin;
 	declare withCredentials: boolean;
 	declare path: string;
 	declare resourcePath: string;
@@ -20952,7 +20955,7 @@ class Loader<TData = unknown, TUrl = string> {
 	}
 	parse(...args: unknown[]): unknown;
 	parse(  ) {}
-	setCrossOrigin( crossOrigin: string ) {
+	setCrossOrigin( crossOrigin: CrossOrigin ) {
 		this.crossOrigin = crossOrigin;
 		return this;
 	}
