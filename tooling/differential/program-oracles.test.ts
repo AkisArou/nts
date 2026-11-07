@@ -1,17 +1,17 @@
 import assert from 'node:assert/strict';
-import {mkdirSync,mkdtempSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
-import {tmpdir} from 'node:os';
+import {mkdirSync,readFileSync,symlinkSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 import {createRequire} from 'node:module';
 import {dirname,join,resolve} from 'node:path';
 import {test} from 'node:test';
 import {REPOSITORY,verifyToolchain,oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import * as producer from './program-oracles.ts';
-import {PROGRAM_EMIT_PROJECTS,produceProgramOracles,programOracleDirectory,type ProgramOracleTask} from './program-oracles.ts';
+import {PROGRAM_EMIT_PROJECTS,produceProgramOracles,type ProgramOracleTask} from './program-oracles.ts';
 import {openProgramOracleResults,programOracleHandoff} from './oracle-results.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {readRecords,fixtureOf} from './oracle-records.ts';
 import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
+import {newTestScratch} from '../gate/test-scratch.ts';
 
 test('the measured example corpus names every type-directed emit project',()=>{
   const location=oracleToolchainLocation(),{compiler}=verifyToolchain(location),require=createRequire(join(location,'package.json'));
@@ -41,7 +41,7 @@ test('the measured example corpus names every type-directed emit project',()=>{
 
 test('program consumers read completed answers from an nts-dev planner after the SDK workers drain',async t=>{
   await setupOracleTestEnvironment();
-  const root=mkdtempSync(join(tmpdir(),'program-producer-'));t.after(()=>removeOracleSnapshot(root));
+  const root=newTestScratch('program-producer');t.after(()=>removeOracleSnapshot(root));
   const project=join(root,'input'),source=join(project,'src');mkdirSync(source,{recursive:true});
   writeFileSync(join(project,'package.json'),'{"type":"module"}');
   writeFileSync(join(project,'tsconfig.json'),JSON.stringify({compilerOptions:{target:'ESNext',module:'ESNext',moduleResolution:'Bundler',rootDir:'src',strict:true},include:['src']}));
@@ -64,11 +64,20 @@ appendFileSync(${JSON.stringify(calls)},process.argv[1]+'\\n');
 const result=spawnSync(${JSON.stringify(join(dirname(binary),'oracle-plan'))},process.argv.slice(2),{stdio:'inherit'});
 process.exitCode=result.status??1;
 `,{mode:0o755});
-  const before=process.env.NTS_BIN;
-  try{process.env.NTS_BIN=join(profile,'nts');await produceProgramOracles({jobs:1,tasks});}
-  finally{if(before===undefined)delete process.env.NTS_BIN;else process.env.NTS_BIN=before;}
-  assert.deepEqual(readFileSync(calls,'utf8').trim().split('\n'),[planner,planner]);
-  const handoff=programOracleHandoff(join(programOracleDirectory(),'results'));
+  await assert.rejects(Reflect.apply(produceProgramOracles,undefined,[{jobs:1,tasks}]),/publication requires an explicit absolute root/);
+  const stepPublication=join(root,'step-publication'),fixturePublication=join(root,'fixture-publication');
+  const launch=`import {produceProgramOracles} from ${JSON.stringify(new URL('./program-oracles.ts',import.meta.url).href)};
+await produceProgramOracles({directory:process.argv[1],jobs:1,tasks:JSON.parse(process.argv[2])});`;
+  // Both producers inherit the exact same TMPDIR and run capability. The
+  // completed step publication remains present when the fixture publishes.
+  for(const directory of [stepPublication,fixturePublication]){
+    const produced=spawnSync(process.execPath,['--input-type=module','-e',launch,directory,JSON.stringify(tasks)],
+      {encoding:'utf8',maxBuffer:8*1024**2,env:{...process.env,NTS_BIN:join(profile,'nts')}});
+    assert.equal(produced.status,0,produced.stdout+produced.stderr);
+    assert.equal(openProgramOracleResults(programOracleHandoff(join(directory,'results')),oracleRecipeIdentity()).get(tasks[0]!.subject).kind,'calls');
+  }
+  assert.deepEqual(readFileSync(calls,'utf8').trim().split('\n'),[planner,planner,planner,planner]);
+  const handoff=programOracleHandoff(join(fixturePublication,'results'));
   const reader=openProgramOracleResults(handoff,oracleRecipeIdentity()),answer=reader.get(tasks[0]!.subject);
   assert.equal(answer.kind,'calls');if(answer.kind!=='calls')throw Error('missing calls');
   assert.ok(answer.count>1);assert.equal(answer.rows.length,answer.count);assert.ok(answer.replay);
@@ -85,7 +94,7 @@ process.exitCode=result.status??1;
 
 
 test('the generated JVM sweep is a producer-owned program with unchanged source',t=>{
-  const root=mkdtempSync(join(tmpdir(),'program-sweep-'));t.after(()=>removeOracleSnapshot(root));
+  const root=newTestScratch('program-sweep');t.after(()=>removeOracleSnapshot(root));
   const api=producer as typeof producer & {sweepOracleTask?:(directory:string)=>ProgramOracleTask};
   assert.equal(typeof api.sweepOracleTask,'function','the generated JVM control must join the producer population');
   const task=api.sweepOracleTask!(root);

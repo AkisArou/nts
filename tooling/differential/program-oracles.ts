@@ -2,7 +2,7 @@
 // exits. A bounded warm pool amortizes SDK startup without retaining its heaps.
 import {mkdirSync,writeFileSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
-import {dirname,join,resolve} from 'node:path';
+import {dirname,isAbsolute,join,resolve} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {availableParallelism} from 'node:os';
 import {REPOSITORY,oracleRecipeIdentity} from './oracle-emit.ts';
@@ -79,8 +79,9 @@ export function programOracleTasks(directory:string):ProgramOracleTask[]{
   return tasks;
 }
 
-export async function produceProgramOracles({jobs=Math.min(2,availableParallelism()),tasks:provided}: {jobs?:number;tasks?:ProgramOracleTask[]}={}):Promise<void>{
-  const directory=programOracleDirectory(),inputs=join(directory,'tasks'),results=join(directory,'results');
+export async function produceProgramOracles({directory,jobs=Math.min(2,availableParallelism()),tasks:provided}: {directory:string;jobs?:number;tasks?:ProgramOracleTask[]}):Promise<void>{
+  if(typeof directory!=='string'||!isAbsolute(directory))throw Error('program oracle publication requires an explicit absolute root');
+  const inputs=join(directory,'tasks'),results=join(directory,'results');
   mkdirSync(inputs,{recursive:true});mkdirSync(results,{recursive:true});
   const tasks=provided??programOracleTasks(directory);
   const {path:scratch,cleanup}=ownCensusScratch(closeMemoryRun);
@@ -107,6 +108,6 @@ export async function produceProgramOracles({jobs=Math.min(2,availableParallelis
 }
 
 if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
-  try{const at=process.argv.indexOf('--jobs');await produceProgramOracles({jobs:at<0?undefined:Number(process.argv[at+1])});}
+  try{const at=process.argv.indexOf('--jobs');await produceProgramOracles({directory:programOracleDirectory(),jobs:at<0?undefined:Number(process.argv[at+1])});}
   catch(error){const failure=error instanceof ToolingInstrumentError?error:new ToolingInstrumentError('tooling-setup',String(error instanceof Error?error.stack:error));publishToolingFailure(failure);process.stderr.write(failure.message+'\n');process.exitCode=2;}
 }
