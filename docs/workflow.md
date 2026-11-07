@@ -91,6 +91,16 @@ The smoke sample is a few hundred TypeScript and test262 cases and the
 examples, on C; the full suites, LLVM, the JVM and the wide steps run after
 landing.
 
+**Nothing waits for ever.** Every gate step has a time bound
+([`tooling/gate/step-bound.ts`](../tooling/gate/step-bound.ts)): the one its
+row states, else three times its recorded cost and the run's over their
+slots, at least an hour; in a landing check, at most max(15 minutes, three
+times the change's estimate). A step past its bound is stopped and held for
+a person. A single case past its own bound, a compile past ten CPU minutes
+or a compiled call past its allowance, is a `timeout`: a loud defect,
+recorded like any other outcome, so a spinning compile is a finding, never a
+stall.
+
 **How it chooses.** Each gate step has a landing form in `LANDING` beside the
 rules in `owed.mjs`: the tree checks, the build, lint, unit tests, tooling and
 the test262 inventory run as they are; a fixture corpus's steps run when the
@@ -156,7 +166,7 @@ in two ways:
   that became a wrong answer, makes the full check red, and the culprit is
   reverted.
 - **Records list what does not pass,** by kind (refused, wrong answer,
-  abort), not a transcript of every case. A passing case needs no row.
+  abort, timeout), not a transcript of every case. A passing case needs no row.
 
 ## Benchmarks
 

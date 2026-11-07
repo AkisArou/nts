@@ -50,10 +50,13 @@ one page that changes as work goes; the designs it builds are in
     `~/Projects/nts-lanes/node`) go when Node 26 lands;
   - the synchronous benchmark ports (#315,
     `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
-    and Octane's provenance. They land whole once every gate step and every
-    single compile has a time bound and `bench-agree` records outcomes per
-    backend (Tooling, below): the JVM spins forever compiling
-    `jetstream-threejs` and rejects some ports' bytecode (#265). The 46 pull
+    and Octane's provenance. Every step and case now has a time bound, and
+    `bench-agree` records how each benchmark runs on the JVM. One gap is
+    left: the `dex` step fails on a JVM compile timeout, so it must judge a
+    port's timeout against that port's JVM compile record, as `bench-agree`
+    does. Until then, `jetstream-threejs`, whose JVM compile spins, would
+    turn the full check red. The JVM also rejects some ports' bytecode
+    (#265). The 46 pull
     requests they replace (#9, #11, #19 to #23, #31 to #34, #44, #46, #48 to
     #50, #53, #55 to #68, #75 to #80, #101 to #108, #119, #120) close when they
     land, and their earlier rounds `helper4/ares6-family` and
@@ -199,10 +202,9 @@ ids, kept so the records that cite them still resolve.
 - The WebSocket server goes (#52); the interface tag sweep (#53).
 
 **Tooling**
-- Every gate step and every single compile has a time bound, and a timeout is
-  a recorded outcome, never a stall: on 11-07 the `dex` step compiled
-  `jetstream-threejs` for 4.6 hours and the queue waited
-  (`gate/time-bounds`).
+- The landing check's own `nts-dev` build (`landing/run.ts`) has no time
+  bound yet; `NTS_BENCH_AGREE_FLOOR`, now unread, leaves the canonical
+  environment after #193 lands.
 - The TypeScript and test262 suites as sampled landing steps
   (`typescript-sample`, `test262-sample`), so a compiler change runs a slice
   of them before it lands.
@@ -220,8 +222,6 @@ ids, kept so the records that cite them still resolve.
   emitted-diff, attempt262, outcomes-check, test262, layouts-link, agreement,
   blocker-reach and blockers-check move to the active-command observer.
   A definite failure outranks a hang (#87).
-- Benchmark records cover compile outcomes only; whether each workload runs
-  correctly on each backend is not recorded yet.
 - The TypeScript families the new oracle can judge (#195, #276); the JVM jar
   built from `JAVA_HOME` (#194); type-check coverage of tooling (#281);
   ratchets that record their own progress (#74).

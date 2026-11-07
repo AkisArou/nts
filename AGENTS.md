@@ -87,7 +87,9 @@ newest `main`, in ten minutes or less. A conflict refuses it, naming the
 files. Green fast-forwards and pushes `main`, deletes your branch here and on
 GitHub, and resets your pool tree. Red names the failing steps and the run's
 logs. Memory pressure retries by itself; any other unfinished run holds the
-change (`check.ts retry <id>`). Withdraw with `check.ts withdraw <id|commit>`,
+change (`check.ts retry <id>`), as does a step stopped at its time bound. A
+single case past its own bound (a compile past ten CPU minutes, a compiled
+call past its allowance) is a recorded `timeout`, a loud defect. Withdraw with `check.ts withdraw <id|commit>`,
 never by stopping a unit. `check.ts status` lists the queue. Documentation
 and fixtures land the same way, in seconds. A new gate step needs a
 `LANDING` row in `owed.mjs`, and a new tooling directory a rule, so that a
