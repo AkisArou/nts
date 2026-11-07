@@ -4,6 +4,9 @@
 #     sh tooling/android/dexes.sh              # every example and bench case
 #     sh tooling/android/dexes.sh symbol-keys  # named ones
 #
+# A bench case's emit-jvm here is the compile the benches step records
+# (results/benchmarks/jvm/outcomes.tsv): a timeout is judged against that row.
+#
 # # Why this exists beside two ratchets that already run d8
 #
 # `d8_accepts_the_runtime_jar` dexes the runtime, which is hand-written Java --
@@ -77,12 +80,12 @@ nts=${NTS_BIN:-$root/target/release/nts}
 # refused, so a lost worker cannot shrink the totals unnoticed.
 one() {
   target=$1
-  dexed=0 refused=0 declined=0 methods=0 timedout=0 unmeasured=0
+  dexed=0 refused=0 declined=0 methods=0 timedout=0 unmeasured=0 recorded=0 awaiting=0
   # Keyed by the whole path: thirteen bench cases share a basename with an
   # example, which a serial loop could reuse one directory for and a parallel one
   # cannot.
   key=$(printf '%s' "$target" | tr '/' '_')
-  record() { printf '%s %s %s %s %s %s\n' "$dexed" "$refused" "$declined" "$methods" "$timedout" "$unmeasured" > "$work/$key.counts"; }
+  record() { printf '%s %s %s %s %s %s %s %s\n' "$dexed" "$refused" "$declined" "$methods" "$timedout" "$unmeasured" "$recorded" "$awaiting" > "$work/$key.counts"; }
   name=$(basename "$target")
   out="$work/$key"
   rm -rf "$out"; mkdir -p "$out/classes" "$out/dex"
@@ -129,8 +132,28 @@ JSON
   NTS_CHECKERS=1 node "$root/tooling/gate/case-bound.ts" --compile -- "$nts" emit-jvm "$config" \
        --out "$out/classes" > "$out/emit.log" 2>&1 || emitted=$?
   if [ "$emitted" -eq 125 ]; then
-    printf "%-28s emit-jvm timed out: %s\n" "$name" "$(grep '^timed out: ' "$out/emit.log" | tail -1 | cut -c12-140)"
-    timedout=1; record; return
+    reason=$(grep '^timed out: ' "$out/emit.log" | tail -1 | cut -c12-140)
+    # **A bench case's timeout is judged against its compile record**, the
+    # same compile the benches step records: a timeout the row records
+    # reproduces, a row not written yet (the full check writes it after
+    # landing) leaves it pending, and any other row means it got worse. An
+    # example has no compile record: its timeout is red.
+    judged=worse
+    case $target in
+      benchmarks/cases/*)
+        judged=$(node "$root/tooling/bench/compile-outcome.ts" timeout jvm "$target" 2>&1) || {
+          printf "%-28s not measured: its compile record could not be read: %s\n" "$name" "$judged"
+          unmeasured=1; record; return; } ;;
+    esac
+    case $judged in
+      "as recorded") printf "%-28s emit-jvm timed out, as its compile record says: %s\n" "$name" "$reason"; recorded=1 ;;
+      pending:*) printf "%-28s emit-jvm timed out, %s: %s\n" "$name" "$judged" "$reason"; awaiting=1 ;;
+      *)
+        where=""
+        case $judged in worse:*) where=", where ${judged#worse: }" ;; esac
+        printf "%-28s emit-jvm timed out%s: %s\n" "$name" "$where" "$reason"; timedout=1 ;;
+    esac
+    record; return
   fi
   if [ "$emitted" -eq 124 ]; then
     printf "%-28s not measured: %s\n" "$name" "$(grep '^not measured: ' "$out/emit.log" | tail -1 | cut -c15-140)"
@@ -261,7 +284,7 @@ fi
 # Methods rather than bytes: bytes fall when codegen improves, which would make
 # a real win look like this bug. A method disappears only when a function is
 # pruned, which is the defect itself.
-dexed=0 refused=0 declined=0 methods=0 timedout=0 unmeasured=0
+dexed=0 refused=0 declined=0 methods=0 timedout=0 unmeasured=0 recorded=0 awaiting=0
 jobs=${NTS_DEX_JOBS:-${NTS_GATE_JOBS:-4}}
 NTS_DEX_WORK=$work
 export NTS_DEX_WORK
@@ -275,9 +298,9 @@ for target in $targets; do
   key=$(printf '%s' "$target" | tr '/' '_')
   if [ -f "$work/$key.out" ]; then cat "$work/$key.out"; fi
   if [ -f "$work/$key.counts" ]; then
-    read -r d r c m t u < "$work/$key.counts"
+    read -r d r c m t u e p < "$work/$key.counts"
     dexed=$((dexed + d)); refused=$((refused + r)); declined=$((declined + c)); methods=$((methods + m))
-    timedout=$((timedout + t)); unmeasured=$((unmeasured + u))
+    timedout=$((timedout + t)); unmeasured=$((unmeasured + u)); recorded=$((recorded + e)); awaiting=$((awaiting + p))
   else
     printf "%-28s did not finish: no counts were written\n" "$name"
     refused=$((refused + 1))
@@ -285,6 +308,7 @@ for target in $targets; do
 done
 
 printf "\n%s dexed, %s refused, %s declined by the backend, %s timed out compiling\n" "$dexed" "$refused" "$declined" "$timedout"
+printf "%s timed out as their compile record says, %s pending their compile record\n" "$recorded" "$awaiting"
 printf "%s method(s) across them\n" "$methods"
 
 # A target the supervisor could not measure says nothing either way. With a
@@ -296,7 +320,8 @@ if [ "$unmeasured" -gt 0 ]; then
   node "$root/tooling/differential/check-report.ts" finish "$((refused + declined + timedout))" || finished=$?
   exit "$finished"
 fi
-# A timeout is a defect, as a decline is: named above, and red.
+# A timeout is a defect, as a decline is: named above, and red -- unless it is
+# a bench case's, which its compile record holds (as recorded, or pending).
 if [ "$timedout" -gt 0 ]; then
   echo "$timedout target(s) timed out compiling, each named above: a compile past its bound is a defect" >&2
   exit 1

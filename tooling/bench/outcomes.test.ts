@@ -123,3 +123,22 @@ test("a compile past its bound is a recorded timeout, ranked as a loud defect", 
   assert.equal(compareBenchmarkOutcome(timeout, { kind: "refused", diagnostic: "NTS1001 x" }).word, "REFUSES NOW");
   assert.equal(compareBenchmarkOutcome({ kind: "wrong", node: "1", compiled: "2" }, timeout).word, "LOUD NOW");
 });
+
+test("a compile timeout elsewhere is judged against the benchmark's compile row", async () => {
+  const { judgeCompileTimeout, recordedCompileOutcome, parseBenchmarkRecord } = await import(new URL("./outcomes.ts", import.meta.url).href);
+  const { compileTimeoutLine } = await import(new URL("./compile-outcome.ts", import.meta.url).href);
+  assert.equal(judgeCompileTimeout({ kind: "timeout", stage: "compile" }), "as recorded");
+  assert.equal(judgeCompileTimeout(null), "pending");
+  for (const recorded of [{ kind: "pass" }, { kind: "refused", diagnostic: "NTS1001 x" }, { kind: "build-failure", stage: "emit", diagnostic: "error: x" }]) {
+    assert.equal(judgeCompileTimeout(recorded), "worse", recorded.kind);
+  }
+  const header = `# nts-benchmark-outcomes {"version":1,"backend":"jvm","commit":"${"a".repeat(40)}","compiler":"${"b".repeat(16)}","harness":"${"c".repeat(16)}","under":"benchmarks/cases","scopes":["compile"]}\n`;
+  const row = (name: string, outcome: object) => `benchmarks/cases/${name}\t${JSON.stringify({ scope: "compile", source: "1".repeat(64), driver: "2".repeat(64), outcome })}\n`;
+  const record = parseBenchmarkRecord(header + row("spin", { kind: "timeout", stage: "compile" }));
+  assert.deepEqual(recordedCompileOutcome(record, "benchmarks/cases/spin"), { kind: "timeout", stage: "compile" });
+  assert.equal(recordedCompileOutcome(record, "benchmarks/cases/new"), null);
+  // The repository's own record: every recorded case has a row.
+  const root = new URL("../..", import.meta.url).pathname;
+  assert.equal(compileTimeoutLine(root, "jvm", "benchmarks/cases/absences"), "worse: the record says pass");
+  assert.match(compileTimeoutLine(root, "jvm", "benchmarks/cases/no-such-case"), /^pending: benchmarks\/cases\/no-such-case is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet$/);
+});

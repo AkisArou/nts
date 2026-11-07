@@ -149,3 +149,23 @@ export function compareBenchmarkOutcome(before: BenchmarkOutcome, after: Benchma
     return { word: unchanged ? "reproduces" : "CHANGED", ok: unchanged, loud: !unchanged };
   return outcomeTransition(outcomeDisposition(before.kind), outcomeDisposition(after.kind), unchanged);
 }
+
+/** The compile record of one backend, relative to the repository. */
+export const compileRecordPath = (backend: Backend): string => `results/benchmarks/${backend}/outcomes.tsv`;
+
+/** The compile outcome a benchmark's row records on one backend, or null when it has no row yet (pending). */
+export function recordedCompileOutcome(record: BenchmarkRecord, path: string): BenchmarkOutcome | null {
+  requireBenchmarkScopes(record, ["compile"]);
+  return record.rows.find(row => row.path === path && row.scope === "compile")?.outcome ?? null;
+}
+
+/**
+ * A compile that timed out elsewhere (the dex step's emit-jvm is the same
+ * compile), judged against the benchmark's row: a timeout the row records
+ * reproduces; a row not written yet leaves it pending; any other row means the
+ * compile got worse.
+ */
+export function judgeCompileTimeout(recorded: BenchmarkOutcome | null): "as recorded" | "pending" | "worse" {
+  if (recorded === null) return "pending";
+  return compareBenchmarkOutcome(recorded, { kind: "timeout", stage: "compile" }).word === "reproduces" ? "as recorded" : "worse";
+}
