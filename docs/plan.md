@@ -192,6 +192,10 @@ ids, kept so the records that cite them still resolve.
   redistribution: their only one, an archived Sun Labs page, grants none
   (their ports are on `helper/awfy-ports-parked`). Octane's BSD versions
   cover both workloads.
+- `bench-agree` records each benchmark's run outcome per backend, with pending
+  and the ratchet like the other records, so a known failure is a recorded
+  finding instead of a red step. Until then `awfy-json` and `awfy-storage`
+  stay pending: both abort on the JVM with a `VerifyError` (#265).
 - 37 benchmark ports (the 35 JetStream ones, `clbg-pidigits` and
   `clbg-regex-redux`) need a `case.domains.json` before their oracle counts
   can be recorded: the recorder's pool reaches inputs outside their
