@@ -2,11 +2,11 @@
 # Link into a worktree what no commit carries: the third-party clones, the
 # native checker's upstream corpora and the workspace's node_modules.
 #
-#   sh tooling/lanes/inputs.sh gate <shared checkout> <tree>   what pinned.sh gates in
-#   sh tooling/lanes/inputs.sh lane <shared checkout> <tree>   what `lane start` gives a lane
+#   sh tooling/lanes/inputs.sh gate <shared checkout> <tree>   what pinned.sh and the landing check gate in
+#   sh tooling/lanes/inputs.sh lane <shared checkout> <tree>   what a pool tree, or the rule selector's, works in
 #
 # One list for both, because a tree missing an input does not fail: it
-# answers emptily. A gate step over no cases reads green, and a lane's tree
+# answers emptily. A gate step over no cases reads green, and a work tree
 # without node_modules builds nothing a config file names. Run it again after
 # any checkout; every link is re-made, never trusted.
 #
@@ -21,7 +21,7 @@ case $mode in
 esac
 
 # The candidate's own pin selects an already acquired immutable Node pair.
-# Neither a gate nor a lane may borrow the shared checkout's other release.
+# Neither a gate tree nor a work tree may borrow the shared checkout's other release.
 node "$(dirname -- "$0")/node-inputs.ts" --link "$tree"
 
 # The gitignored third-party clones are inputs rather than sources -- test262,

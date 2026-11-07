@@ -2340,7 +2340,7 @@ interop() {
   lanes=$(mktemp -d)
   local_lanes=${NTS_INTEROP_LOCAL_LANES:-${NTS_GATE_JOBS:-6}}
   # **Only the projects the range owes**, when owed.mjs could name them
-  # (NTS_INTEROP_PROJECTS, which land.ts passes on): a JVM backend change owes
+  # (NTS_INTEROP_PROJECTS, which the landing check passes on): a JVM backend change owes
   # the projects built on the JVM, a change inside one project that project.
   # Unset, every project, as before. A range that touches nothing narrower
   # than the compiler owes them all, so the floor below still holds there.

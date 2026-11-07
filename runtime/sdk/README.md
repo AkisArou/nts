@@ -41,7 +41,6 @@ tsc -p runtime/sdk/examples/tsconfig.json
 
 ## Status
 
-Branch `sdk/interfaces`; not yet registered in
-`tooling/lanes/lanes.json`, not wired into the root solution.
+Branch `sdk/interfaces`; not wired into the root solution.
 Node.js APIs (`runtime/node`) are a separate layer beside this package and
 deliberately not referenced from it for now.

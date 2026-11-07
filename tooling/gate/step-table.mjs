@@ -22,8 +22,8 @@
 //   host   what the machine must have, named when the step SKIPs
 //   favoured  runs at the runner's own priority; every other step at nice +5
 //   treeOnly  true when it reads only the tree, builds and runs nothing, and
-//          takes seconds: `land.ts --dry-run` runs the owed ones, so a landing
-//          does not spend a gate learning what they say
+//          takes seconds: a landing check of only these waits for no memory,
+//          and one never measured is costed at seconds
 //   capabilities  environment requirements, read before a landing/full run takes the lock
 //   doc    what it proves, for the summary's reader
 // ---------------------------------------------------------------------------
