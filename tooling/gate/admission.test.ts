@@ -8,7 +8,7 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { once } from "node:events";
 import { mkdirSync, mkdtempSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { createInterface } from "node:readline";
 import { fileURLToPath } from "node:url";
@@ -16,6 +16,7 @@ import { Admission, createFeed, memAvailableGB, TemporaryAdmission } from "./adm
 import { captureRunTemporary } from "./run-temporary.ts";
 import { createTokenPool } from "./tokenpool.mjs";
 import { waitFor } from "./test-wait.ts";
+import { testScratch } from "./test-scratch.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -53,10 +54,7 @@ test("a machine that reports no memory admits", () => {
 });
 
 function temporaryFixture(t: { after(fn: () => void): void }) {
-  const scratch = join(homedir(), ".cache/nts-scratch/admission-tests");
-  mkdirSync(scratch, { recursive: true });
-  const run = mkdtempSync(join(scratch, "run-")), temporary = captureRunTemporary(run);
-  t.after(() => rmSync(run, { recursive: true, force: true }));
+  const run = testScratch(t, "admission"), temporary = captureRunTemporary(run);
   return { run, temporary, path: join(temporary.path, "capture") };
 }
 

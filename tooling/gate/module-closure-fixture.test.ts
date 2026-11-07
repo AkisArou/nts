@@ -1,15 +1,14 @@
 import assert from "node:assert/strict";
-import {existsSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync} from "node:fs";
-import {homedir} from "node:os";
+import {existsSync, lstatSync, mkdirSync, readFileSync, symlinkSync, writeFileSync} from "node:fs";
 import {dirname, join} from "node:path";
 import {test, type TestContext} from "node:test";
 import {copyModuleClosure, moduleClosure} from "./module-closure-fixture.ts";
 import {spawnTest} from "./test-wait.ts";
+import {testScratch} from "./test-scratch.ts";
 
 function fixture(t: TestContext) {
-  const base = join(homedir(), ".cache/nts/module-closure-tests"); mkdirSync(base, {recursive: true});
-  const root = mkdtempSync(join(base, "case-")), source = join(root, "source"), destination = join(root, "destination");
-  mkdirSync(source); t.after(() => rmSync(root, {recursive: true, force: true}));
+  const root = testScratch(t, "module-closure"), source = join(root, "source"), destination = join(root, "destination");
+  mkdirSync(source);
   const write = (name: string, value: string) => {const path = join(source, name); mkdirSync(dirname(path), {recursive: true}); writeFileSync(path, value);};
   return {source, destination, write};
 }

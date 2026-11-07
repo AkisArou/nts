@@ -100,7 +100,7 @@ test("a plain full run canonically accepts exactly the landing's standing skips"
     const summary=JSON.parse(readFileSync(join(plan.run,"summary.json"),"utf8"));
     assert.equal(summary.environment.canonical,true);
     assert.equal(summary.verdict,accepted?"green":"red");
-    assert.equal(summary.steps[0].verdict,"SKIPPED");
+    assert.equal(summary.steps[0].verdict,"SKIPPED",JSON.stringify(summary.steps[0]));
     assert.equal(summary.steps[0].accepted===true,accepted);
   }
 });

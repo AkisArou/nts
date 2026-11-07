@@ -223,7 +223,7 @@ for (const arm of ["clean", "seal"] as const) test(`red-stop SIGTERM with ${arm 
     assert.equal(cancelled.verdict, "NOT RUN");
     assert.equal(cancelled.cancelled_by, "format");
     assert.equal(cancelled.instrument, undefined);
-    assert.equal(instrumentPolicy(cancelled.instrument?.kind)?.disposition === "operator-hold", false);
+    assert.equal(instrumentPolicy(undefined)?.disposition === "operator-hold", false);
   }
   const pending = summary.steps.find(row => row.name === "records")!;
   assert.equal(pending.verdict, "NOT RUN"); assert.equal(pending.cancelled_by, "format");

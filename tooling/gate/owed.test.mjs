@@ -573,12 +573,12 @@ test("the host project retains conservative quoted-basename reader reach",()=>{
   // this path's explicit rule never removes those additive obligations.
   assert.deepEqual([...stepsFor('tooling/conformance/tsconfig.json')].sort(),[
     'assembles','blockers','build','c-compiles','clippy','compile-time','compile-time-rc','definitions',
-    'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','rustfmt','tests','tooling','types',
+    'expect-ir','integrity','integrity-runtime','jvm-verifies','old-paths','outcomes','program-oracles','rustfmt','tests','tooling','types',
   ]);
 });
 
 test("the shared harness path authority reaches tooling and its ordinary host consumer",()=>{
-  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','old-paths','outcomes','rustfmt','tests','tooling']);
+  assert.deepEqual([...stepsFor('tooling/conformance/node-paths.ts')].sort(),['build','clippy','old-paths','outcomes','program-oracles','rustfmt','tests','tooling']);
 });
 
 test("a node harness file a gate step runs still owes that step", () => {

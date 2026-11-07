@@ -4,8 +4,8 @@
 //
 //   node --test tooling/gate/step-bound.test.ts
 import assert from "node:assert/strict";
-import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { existsSync, mkdirSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { readBaseline } from "../landing/selection.ts";
@@ -17,6 +17,8 @@ import { usableWidth } from "./step-scheduling.ts";
 import { STEPS } from "./step-table.mjs";
 import { spawnTest } from "./test-wait.ts";
 import { newTestScratch } from "./test-scratch.ts";
+import { moduleClosure } from "./module-closure-fixture.ts";
+import { removable } from "./run-temporary.ts";
 
 const baseline = () => readBaseline(readFileSync(new URL("./times.tsv", import.meta.url), "utf8"));
 
@@ -77,21 +79,24 @@ test("no bound would have stopped the committed healthy run", () => {
 function runFixture(t: { after: (fn: () => void) => void }, steps: string, bounds: Record<string, number>, owned: Record<string, string> = {}) {
   // The run's own TMPDIR inside a gate; the runner's directory sits under the fixture's HOME/.cache.
   const own = newTestScratch("step-bound");
-  t.after(() => { writeFileSync(join(own, "release"), "the test is over"); rmSync(own, { recursive: true, force: true }); });
+  t.after(() => { writeFileSync(join(own, "release"), "the test is over"); removable(own); rmSync(own, { recursive: true, force: true }); });
   const root = join(own, "repo"), gate = join(root, "tooling/gate"), target = join(own, "target"), run = join(own, "home/.cache/gate-run");
   mkdirSync(gate, { recursive: true });
   mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("./", import.meta.url));
-  for (const name of readdirSync(source)) {
-    if (name === "run.mjs") writeFileSync(join(gate, name), readFileSync(join(source, name)));
-    else if (name === "step-table.mjs") {
-      writeFileSync(join(gate, name), `import { STEPS as REAL, stepTableProblem } from ${JSON.stringify(pathToFileURL(join(source, name)).href)};
+  for (const name of moduleClosure(["tooling/gate/run.mjs"])) {
+    const destination = join(root, name), original = join(source, "../..", name);
+    mkdirSync(dirname(destination), { recursive: true });
+    if (name === "tooling/gate/run.mjs") writeFileSync(destination, readFileSync(original));
+    else if (name === "tooling/gate/step-table.mjs") {
+      writeFileSync(destination, `import { STEPS as REAL, stepTableProblem } from ${JSON.stringify(pathToFileURL(original).href)};
 const bounds = ${JSON.stringify(bounds)};
 export const STEPS = REAL.map(row => Object.hasOwn(bounds, row.name) ? { ...row, bound: bounds[row.name] } : row);
 export { stepTableProblem };
 `);
-    } else if (!["all.sh", "times.tsv"].includes(name)) symlinkSync(join(source, name), join(gate, name));
+    } else symlinkSync(original, destination);
   }
+  symlinkSync(join(source, "token.sh"), join(gate, "token.sh"));
   writeFileSync(join(gate, "times.tsv"), "format\t1\t1\t1\nrecords\t1\t1\t1\n");
   const listed = spawnTest("sh", [join(source, "all.sh"), "--list"], { encoding: "utf8" });
   assert.equal(listed.status, 0, listed.stderr);

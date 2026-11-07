@@ -16,7 +16,7 @@ export interface LineRecord<Metadata, Row> {
 export function parseLineRecord<Metadata, Row>(contents: string, format: LineRecordFormat<Metadata, Row>): LineRecord<Metadata, Row> {
   const lines = contents.split("\n");
   assert.ok(lines[0]?.startsWith(format.prefix), `missing versioned ${format.label} record header; re-record the complete suite`);
-  const metadata = format.metadata(JSON.parse(lines[0].slice(format.prefix.length)));
+  const metadata = format.metadata(JSON.parse(lines[0]!.slice(format.prefix.length)));
   const rows: { path: string; value: Row }[] = [], seen = new Set<string>();
   for (const line of lines.slice(1)) {
     if (line === "" || line.startsWith("#")) continue;

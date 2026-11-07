@@ -1,12 +1,13 @@
 import assert from "node:assert/strict";
 import {spawnTest} from "./test-wait.ts";
-import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync, symlinkSync} from "node:fs";
+import {existsSync, copyFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync} from "node:fs";
 import {createHash} from "node:crypto";
 import {tmpdir} from "node:os";
 import {dirname, join} from "node:path";
 import {fileURLToPath, pathToFileURL} from "node:url";
 import test from "node:test";
 import type { TestContext } from "node:test";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 
 const source = dirname(fileURLToPath(import.meta.url));
 
@@ -22,25 +23,15 @@ function sandbox(t: TestContext) {
     copyFileSync(join(source, script), join(root, "tooling/gate", script));
   }
   copyFileSync(join(source, "../jvm/agrees-with-c.sh"), join(root, "tooling/jvm/agrees-with-c.sh"));
-  copyFileSync(join(source, "../differential/check-report.ts"), join(root, "tooling/differential/check-report.ts"));
-  copyFileSync(join(source, "../differential/check-report-types.ts"), join(root, "tooling/differential/check-report-types.ts"));
-  copyFileSync(join(source, "../differential/check-consumers.ts"), join(root, "tooling/differential/check-consumers.ts"));
-  copyFileSync(join(source, "../differential/oracle-records.ts"), join(root, "tooling/differential/oracle-records.ts"));
-  copyFileSync(join(source, "../records/pending.ts"), join(root, "tooling/records/pending.ts"));
-  copyFileSync(join(source, "../bench/run-outcomes.ts"), join(root, "tooling/bench/run-outcomes.ts"));
-  copyFileSync(join(source, "../census/line-record.ts"), join(root, "tooling/census/line-record.ts"));
-  copyFileSync(join(source, "../conformance/outcome-transition.ts"), join(root, "tooling/conformance/outcome-transition.ts"));
-  copyFileSync(join(source, "../conformance/pin.ts"), join(root, "tooling/conformance/pin.ts"));
-  copyFileSync(join(source, "active-command.ts"), join(root, "tooling/gate/active-command.ts"));
-  copyFileSync(join(source, "step-result.ts"), join(root, "tooling/gate/step-result.ts"));
-  symlinkSync(join(source,"canonical-environment.ts"),join(root,"tooling/gate/canonical-environment.ts"));
+  copyModuleClosure([
+    "tooling/differential/check-consumers.ts", "tooling/differential/oracle-toolchain.json",
+    "tooling/conformance/pin.ts", "tooling/npm-survey/verdict.ts",
+  ], root);
   copyFileSync(join(source, "../sweep/run.sh"), join(root, "tooling/sweep/run.sh"));
-  copyFileSync(join(source, "../npm-survey/verdict.ts"), join(root, "tooling/npm-survey/verdict.ts"));
   copyFileSync(join(source, "../conformance/web-platform/compiled/check.sh"), join(root, "tooling/conformance/web-platform/compiled/check.sh"));
   writeFileSync(join(root, "tooling/gate/tokens.mjs"), "export async function withToken(fn) { return fn(); }\n");
   writeFileSync(join(root, "tooling/sweep/sweep.mjs"), "console.log('export function work(n: number): number { return n; }');\n");
   writeFileSync(join(root, "tooling/conformance/web-platform/compiled/tsconfig.json"), "{}");
-  copyFileSync(join(source, "../conformance/observation-text.ts"), join(root, "tooling/conformance/observation-text.ts"));
   writeFileSync(join(root, "tooling/gate/token.sh"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 });
   for (const name of ["control", "invalid", "unsupported"]) {
     writeFileSync(join(root, "tests/programs", name, "tsconfig.json"), "{}");
