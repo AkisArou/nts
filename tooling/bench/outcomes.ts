@@ -14,6 +14,7 @@ export type BenchmarkOutcome =
   | { kind: "refused"; diagnostic: string }
   | { kind: "build-failure"; stage: "emit" | "link" | "compiler-crash"; diagnostic: string }
   | { kind: "wrong"; node: string; compiled: string }
+  | { kind: "timeout"; stage: "compile" | "run" }
   | { kind: "no-scalar-exports" };
 export interface BenchmarkCell { scope: BenchmarkScope; source: string; driver: string; outcome: BenchmarkOutcome; }
 export interface BenchmarkRow extends BenchmarkCell { path: string; }
@@ -58,6 +59,7 @@ export function parseBenchmarkOutcome(value: unknown): BenchmarkOutcome {
       assert.notEqual(node, compiled, "a wrong-answer record needs different answers");
       return { kind: "wrong", node, compiled };
     }
+    case "timeout": keys(row, ["kind", "stage"]); return { kind: "timeout", stage: choice(row.stage, ["compile", "run"]) };
     default: throw new Error(`unrecordable benchmark outcome: ${String(row.kind)}`);
   }
 }
@@ -82,6 +84,7 @@ const format: LineRecordFormat<BenchmarkMetadata, BenchmarkCell> = {
     assert.ok(metadata.scopes.includes(scope), `undeclared benchmark scope: ${scope}`);
     assert.ok(outcome.kind !== "no-scalar-exports" || scope === "scalar", "only scalar scope can have no scalar exports");
     assert.ok(scope !== "compile" || outcome.kind !== "wrong", "compilation cannot claim runtime agreement");
+    assert.ok(scope !== "compile" || outcome.kind !== "timeout" || outcome.stage === "compile", "a compile can time out only compiling");
     return { scope, source: digest(row.source, 64), driver: digest(row.driver, 64), outcome };
   },
   key: (path, row) => benchmarkKey({ path, scope: row.scope }),

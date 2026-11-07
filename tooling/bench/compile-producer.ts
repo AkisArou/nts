@@ -10,11 +10,11 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { existsSync, lstatSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { basename, join } from "node:path";
-import { compileSync } from "../census/worker-memory.ts";
+import { compileActive } from "../census/worker-memory.ts";
 import type { Backend } from "../census/typescript-record.ts";
 import { compilerExternalStop, compilerStop, compilerStopped, stableBuildDiagnostic } from "../conformance/compile-diagnostics.ts";
 import { gateEnvironment, ENVIRONMENT_CONTEXT } from "../gate/canonical-environment.ts";
-import type { ActiveResult } from "../gate/active-command.ts";
+import { COMPILE_CPU_BOUND_SECONDS, type ActiveResult } from "../gate/active-command.ts";
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import type { BenchmarkOutcome } from "./outcomes.ts";
 
@@ -37,8 +37,10 @@ export function compileEnvironment(launcher: NodeJS.ProcessEnv, scratch: string,
   return gateEnvironment(launcher, { run, owned: { NTS_BIN: binary, NTS_CHECKERS: "1" } }).env;
 }
 
-/** A process stop is never an expected compiler defect, including an OOM SIGKILL. */
+/** A process stop is never an expected compiler defect, including an OOM SIGKILL;
+ * a compile stopped at its bound is one: it timed out. */
 export function compileOutcome(result: Result, stage: "emit" | "link"): BenchmarkOutcome | null {
+  if (result.timeout && !result.memoryKilled) return { kind: "timeout", stage: "compile" };
   // LLVM and C can emit arbitrary program strings on stdout. Only stderr is
   // a diagnostic channel on success; a failed command may use either channel.
   const diagnostic = result.stderr.trim() || (result.status === 0 ? "" : result.stdout.trim());
@@ -77,12 +79,12 @@ export function regularFiles(directory: string): string[] {
   return result.sort();
 }
 
-export async function observeCompile({ backend, project, output, binary, root, env, command = async (binary, args, options) => {
-  const began = performance.now();
-  const result = compileSync({ memoryCapKb: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 6_000_000 * 1024) / 1024 }, binary, args,
-    { ...options, encoding: "utf8", maxBuffer: 128 * 1024 * 1024, stdio: ["ignore", "pipe", "pipe"] });
-  return { ...result, stdout: result.stdout ?? "", stderr: result.stderr ?? "", out: `${result.stdout ?? ""}${result.stderr ?? ""}`, elapsedMs: performance.now() - began };
-} }:
+// Each command is a case's compile, under the shared supervisor: its own CPU is
+// bounded (COMPILE_CPU_BOUND_SECONDS), and past it the case timed out.
+export async function observeCompile({ backend, project, output, binary, root, env, command = (binary, args, options) =>
+  compileActive({ memoryCapKb: Number(process.env.NTS_GATE_STEP_MEMORY_BYTES ?? 6_000_000 * 1024) / 1024 }, binary, args,
+    { ...options, maxBuffer: 128 * 1024 * 1024, ownCpuSeconds: COMPILE_CPU_BOUND_SECONDS }),
+}:
   { backend: Backend; project: string; output: string; binary: string; root: string; env: NodeJS.ProcessEnv; command?: Command }): Promise<BenchmarkOutcome> {
   rmSync(output, { recursive: true, force: true }); mkdirSync(output, { recursive: true });
   const options = { cwd: root, env: { ...env, NTS_CHECKERS: "1" } };

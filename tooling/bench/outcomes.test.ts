@@ -102,3 +102,24 @@ test("the full check's writer adds pending rows and rewrites improved ones, ever
   assert.equal(mergeBenchmarkRecord(before, []), before, "nothing pending changes nothing");
   assert.throws(() => mergeBenchmarkRecord(before, [cell("beta", { kind: "pass" }), cell("beta", refused)]), /duplicate/);
 });
+
+const FIELD = "timeout";
+test("a compile past its bound is a recorded timeout, ranked as a loud defect", async () => {
+  const { parseBenchmarkOutcome, serializeBenchmarkRecord, compareBenchmarkOutcome } = await import(new URL("./outcomes.ts", import.meta.url).href);
+  const { compileOutcome } = await import(new URL("./compile-producer.ts", import.meta.url).href);
+  const timeout = { kind: "timeout", stage: "compile" };
+  assert.deepEqual(parseBenchmarkOutcome(timeout), timeout);
+  // A command the supervisor stopped at its compile bound (ActiveResult's field of that name).
+  const stopped = (extra: object) => ({ [FIELD]: "nts used its 600 s CPU bound", status: null, signal: "SIGKILL", out: "", stdout: "", stderr: "", elapsedMs: 1, ...extra });
+  assert.deepEqual(compileOutcome(stopped({}), "emit"), timeout);
+  assert.throws(() => compileOutcome(stopped({ memoryKilled: true }), "emit"), /NOT MEASURED/, "a memory kill is never a timeout");
+  const metadata = { version: 1, backend: "jvm", commit: "a".repeat(40), compiler: "b".repeat(16), harness: "c".repeat(16), under: "benchmarks/cases", scopes: ["compile"] };
+  const row = (outcome: object) => ({ path: "benchmarks/cases/spin", scope: "compile", source: "1".repeat(64), driver: "2".repeat(64), outcome });
+  assert.doesNotThrow(() => serializeBenchmarkRecord({ metadata, rows: [row(timeout)] }));
+  assert.throws(() => serializeBenchmarkRecord({ metadata, rows: [row({ kind: "timeout", stage: "run" })] }), /only compiling/);
+  assert.equal(compareBenchmarkOutcome(timeout, timeout).word, "reproduces");
+  assert.equal(compareBenchmarkOutcome({ kind: "pass" }, timeout).word, "REGRESSED");
+  assert.equal(compareBenchmarkOutcome(timeout, { kind: "pass" }).word, "FIXED");
+  assert.equal(compareBenchmarkOutcome(timeout, { kind: "refused", diagnostic: "NTS1001 x" }).word, "REFUSES NOW");
+  assert.equal(compareBenchmarkOutcome({ kind: "wrong", node: "1", compiled: "2" }, timeout).word, "LOUD NOW");
+});
