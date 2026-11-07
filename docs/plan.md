@@ -30,46 +30,29 @@ one page that changes as work goes; the designs it builds are in
 
 ## Now
 
-- **The switch to [how we work](workflow.md).** The fresh start and the
-  [branch triage](records/notebooks/branch-triage-20261106.md) are done
-  (11-06): every branch left is in flight or named by a task below. Next, in
-  order: the landing check, the full check after landing, the records it
-  writes and the worktree pool; then agents restart on the tasks below, one
-  agent per task.
-- **Landed (11-07):** pending records. A test or benchmark case with no
-  record yet is pending rather than red, a better outcome passes and is
-  listed, getting worse stays red, and `tooling/records/record-pending.ts`
-  writes the missing and improved rows after landing (user, 11-06: tests and
-  benchmarks land directly, with no records made by hand). The ratchet ranks
-  a silent wrong answer below a loud defect, and the benchmark compile key
-  covers only what decides a compile outcome. With it landed the tests
-  batch: #18's indirect-throw guards and outcome, the C memory declaration
-  tests, a write-once module function refusal, a Node-API function export
-  refusal, and #181's LLVM addon class test.
-- **In the train now:** the path rules of the landing check and the full
-  check; the records follow-ups (each oracle fixture recorded on its own; a
-  case refused before and after, for other reasons, is accepted); the
-  synchronous benchmark ports (#315, `coordinator/benchmark-ports-315-r2`),
-  with ARES-6 as upstream wrote it and Octane's provenance, whose 46 replaced
-  pull requests close when it lands; and the AWFY macro benchmarks CD,
-  Havlak, Json and Storage (#26, `coordinator/awfy-macro-26`).
-- **Next:** the compiler batch (`coordinator/triage-compiler-fixes`): Octane's
-  loose equality and `Object.assign` (#147), the comparison fold on known
-  non-NaN values, a Java `float` range that includes the infinities, a JVM
-  refusal of a fixed view over a shrunk buffer (#113 E), and the gate's
-  overflow checks in the `nts-dev` profile. Its first train went red on a
-  case that refuses for another reason, which the follow-ups now accept, and
-  it is checked on the three TypeScript suites before it goes again. With it
-  go the landing check (`workflow/landing-check`) and the full check
-  (`workflow/full-check`), then the switch. The source branches the triage
-  marked for landing are deleted as each batch lands.
+- **The switch to [how we work](workflow.md) (11-07).** The landing check and
+  the full check are on `main`. Every change lands through
+  `node tooling/landing/check.ts`, one at a time against the newest `main`,
+  in ten minutes or less; the old lander and the lane machinery are gone.
+  Tests and benchmarks land without records: the full check writes them.
+  Left for the switch: the full check's unit, the worktree pool, the
+  machine's cleanup of the old lander's folders, and agents restarting on
+  the tasks below, one agent per task (the user decides which and how many).
 - **In flight:**
-  - the shared TypeScript oracle (#193, `node/oracle-e039`). Its train held on
-    five defects (11-06), which nodejs repairs in place, each worker now
-    preparing only its own case instead of every case first. Then Node 26
-    (#124, `node/node26-finished`), landed straight on `main` with Node 24
-    dropped (user, 11-06). The other `node/*` branches are their earlier
-    rounds, deleted after;
+  - the shared TypeScript oracle (#193, `node/oracle-e039`): the TypeScript
+    suites use 38% less CPU than on `main`, but the five example steps cost
+    about three times `main`'s. They get the same treatment, one shared
+    answer per program from a `program-oracles` step (`outcomes` and
+    `bench-agree` too), before it lands. Then Node 26 (#124,
+    `node/node26-finished`), landed with Node 24 dropped (user, 11-06). The
+    other `node/*` branches are their earlier rounds, deleted after;
+  - the synchronous benchmark ports (#315,
+    `coordinator/benchmark-ports-315-r2`), with ARES-6 as upstream wrote it
+    and Octane's provenance. They land whole once every gate step and every
+    single compile has a time bound and `bench-agree` records outcomes per
+    backend (Tooling, below): the JVM spins forever compiling
+    `jetstream-threejs` and rejects some ports' bytecode (#265). The 46 pull
+    requests they replace close when they land;
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`).
 - **The machine:** one shared 32 GB box; CPUs 4–5 are kept for measurement
@@ -205,6 +188,17 @@ ids, kept so the records that cite them still resolve.
 - The WebSocket server goes (#52); the interface tag sweep (#53).
 
 **Tooling**
+- Every gate step and every single compile has a time bound, and a timeout is
+  a recorded outcome, never a stall: on 11-07 the `dex` step compiled
+  `jetstream-threejs` for 4.6 hours and the queue waited.
+- The TypeScript and test262 suites as sampled landing steps
+  (`typescript-sample`, `test262-sample`), so a compiler change runs a slice
+  of them before it lands.
+- The `tests` step is the landing check's critical path (about five minutes on
+  eight slots): measure it wider.
+- Dead code the old lander left: the read side of `resource-comparison.ts`, the
+  strict landing classification in `owed.mjs`, `run.mjs`'s train red-stop, and
+  `census/full.ts`'s use of the old landing lock.
 - A candidate that does not compile is held, not refused: the landing check
   reports it red (#46).
 - One format rule for all owned C; the web-platform suite as a landing-check
