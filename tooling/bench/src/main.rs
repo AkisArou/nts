@@ -1347,7 +1347,7 @@ fn case_tsconfig(case: &Utf8Path, out: &Utf8Path, name: &str) -> Result<Utf8Path
 
 /// The node and bun harness, generated from the same workload.
 ///
-/// Node 24 strips TypeScript types natively, so this imports the case's own
+/// Node strips TypeScript types natively, so this imports the case's own
 /// `.ts` rather than a hand-maintained JavaScript copy -- there is no second
 /// version of the program to drift. Bun runs the identical file.
 ///

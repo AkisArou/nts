@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Exercise the actual content_shell under Xvfb, directly with Node 24.
+// Exercise the actual content_shell under Xvfb, directly with pinned Node.
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";

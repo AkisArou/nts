@@ -1356,7 +1356,7 @@ mod tests {
     fn run_seal_uses_exact_stat_strings_and_canonical_parent_authority() {
         use std::os::unix::fs::{MetadataExt as _, PermissionsExt as _};
         let scratch = super::super::Scratch::for_check().unwrap();
-        let directory = scratch.path.join("node-24.20.0");
+        let directory = scratch.path.join("node-26.13.0");
         std::fs::create_dir(&directory).unwrap();
         let ready = directory.join("ready.json");
         std::fs::write(&ready, "pinned bytes").unwrap();
@@ -1377,7 +1377,7 @@ mod tests {
             .zip(values)
             .map(|(key, value)| ((*key).into(), value.into()))
             .collect();
-        let cap = serde_json::json!({"version":1,"directory":scratch.path,"seal":{"version":1,"nodeVersion":"24.20.0","record":ready,"readySha256":"a".repeat(64),"semanticSha256":"b".repeat(64),"identity":identity}});
+        let cap = serde_json::json!({"version":1,"directory":scratch.path,"seal":{"version":1,"nodeVersion":"26.13.0","record":ready,"readySha256":"a".repeat(64),"semanticSha256":"b".repeat(64),"identity":identity}});
         let context = |raw: &str| {
             serde_json::json!({"report":{"version":1,"host":{"NTS_ORACLE_DEPENDENCIES":raw}},"owned":{"NTS_ORACLE_DEPENDENCIES":raw}}).to_string()
         };
@@ -1429,17 +1429,17 @@ mod tests {
     #[test]
     fn dependency_handoff_holds_missing_unknown_and_changed_authority() {
         let scratch = super::super::Scratch::for_check().unwrap();
-        let directory = scratch.path.join("node-24.20.0");
+        let directory = scratch.path.join("node-26.13.0");
         std::fs::create_dir(&directory).unwrap();
-        let semantic = br#"{"version":1,"inputSet":{"version":1,"identity":{"node":"24.20.0"}},"lockfileSha256":"lock"}"#;
+        let semantic = br#"{"version":1,"inputSet":{"version":1,"identity":{"node":"26.13.0"}},"lockfileSha256":"lock"}"#;
         std::fs::write(directory.join("semantic.json"), semantic).unwrap();
         std::fs::write(
             directory.join("ready.json"),
-            br#"{"version":1,"inputSet":{"version":1,"identity":{"node":"24.20.0"}},"lockfileSha256":"lock","sourceRevision":"source"}"#,
+            br#"{"version":1,"inputSet":{"version":1,"identity":{"node":"26.13.0"}},"lockfileSha256":"lock","sourceRevision":"source"}"#,
         )
         .unwrap();
         let dependency =
-            serde_json::json!({"semanticSha256":digest(semantic),"nodeVersion":"24.20.0"});
+            serde_json::json!({"semanticSha256":digest(semantic),"nodeVersion":"26.13.0"});
         let capability = serde_json::json!({"version":1,"directory":scratch.path,"lockfileSha256":"lock","sourceRevision":"source"});
         verify_dependencies(Some(&dependency), Some(&capability.to_string())).unwrap();
         assert!(verify_dependencies(Some(&dependency), None).is_err());
@@ -1449,7 +1449,7 @@ mod tests {
         let mut changed = capability.clone();
         changed["lockfileSha256"] = "changed".into();
         assert!(verify_dependencies(Some(&dependency), Some(&changed.to_string())).is_err());
-        for version in ["", "../24.20.0", "24.20.0/other", "26.13.0"] {
+        for version in ["", "../26.13.0", "26.13.0/other", "27.0.0"] {
             let mut wrong_version = dependency.clone();
             wrong_version["nodeVersion"] = version.into();
             assert!(
@@ -1458,7 +1458,7 @@ mod tests {
         }
         std::fs::write(
             directory.join("ready.json"),
-            br#"{"version":1,"inputSet":{"version":1,"identity":{"node":"24.20.0"},"paths":["changed"]},"lockfileSha256":"lock","sourceRevision":"source"}"#,
+            br#"{"version":1,"inputSet":{"version":1,"identity":{"node":"26.13.0"},"paths":["changed"]},"lockfileSha256":"lock","sourceRevision":"source"}"#,
         )
         .unwrap();
         assert!(verify_dependencies(Some(&dependency), Some(&capability.to_string())).is_err());

@@ -13,7 +13,7 @@ import type { ReductionCandidate } from "./reduce.ts";
 import { findingSignature } from "./grouping.ts";
 import { json, readProgram, sourceHash, writeProgram } from "./writer.ts";
 
-export const HELP = `Generate proof-directed TypeScript programs (Node 24; run pnpm install first).
+export const HELP = `Generate proof-directed TypeScript programs (pinned Node; run pnpm install first).
 
   node tooling/census/generate/main.ts --seed <uint32> --count <positive integer> \\
     --cells bounds:call,length:merge,... --out <empty directory>

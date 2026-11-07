@@ -16,7 +16,7 @@ function scratch(t:TestContext){
     writable(root);rmSync(root,{recursive:true,force:true});
   });
   const old=join(root,'old'),next=join(root,'next'),cache=join(root,'cache');
-  const a=fixtureInputs(old,'24.20.0'),b=fixtureInputs(next,'26.13.0');
+  const a=fixtureInputs(old,'26.13.0'),b=fixtureInputs(next,'27.0.0');
   const table:Records={version:1,releases:{...a.releases,...b.releases}};
   return {root,old,next,cache,table};
 }
@@ -48,12 +48,19 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
   });
 });
 
-test('Node 24 and 26 candidates select side-by-side immutable recipe-matching pairs',t=>{
+test('the repository records only its pinned Node 26 input pair',()=>{
+  const table=JSON.parse(readFileSync(new URL('./node-inputs.json',import.meta.url),'utf8')) as Records;
+  const pin=readFileSync(new URL('../../.tool-versions',import.meta.url),'utf8').match(/^nodejs\s+(\S+)$/m)?.[1];
+  assert.equal(pin,'26.13.0');
+  assert.deepEqual(Object.keys(table.releases),[pin]);
+});
+
+test('Candidate pins select side-by-side immutable recipe-matching pairs',t=>{
   const {root,old,next,cache,table}=scratch(t);
   const original=inventory(join(old,'third_party/node')),native=inventory(join(old,'third_party/node-source'));
   const a=acquire(old,cache,table),b=acquire(next,cache,table);assert.notEqual(a,b);
   assert.deepEqual(inventory(join(a,'node')),original);assert.deepEqual(inventory(join(a,'node-source')),native);
-  for(const [source,name,pair] of [[old,'gate24',a],[next,'gate26',b]] as const){
+  for(const [source,name,pair] of [[old,'gate26',a],[next,'gate27',b]] as const){
     const tree=join(root,name);candidate(source,tree);assert.equal(link(tree,cache,table),pair);
     assert.equal(realpathSync(join(tree,'third_party/node')),join(pair,'node'));
     assert.equal(realpathSync(join(tree,'third_party/node-source')),join(pair,'node-source'));
@@ -64,7 +71,7 @@ test('Node 24 and 26 candidates select side-by-side immutable recipe-matching pa
 
 test('linking either Node version leaves a real candidate checkout clean',t=>{
   const {root,old,next,cache,table}=scratch(t);acquire(old,cache,table);acquire(next,cache,table);
-  for(const [source,name] of [[old,'clean24'],[next,'clean26']] as const){
+  for(const [source,name] of [[old,'clean26'],[next,'clean27']] as const){
     const tree=join(root,name);candidate(source,tree);
     writeFileSync(join(tree,'.gitignore'),readFileSync(new URL('../../.gitignore',import.meta.url)));
     const git=(...args:string[])=>execFileSync('git',args,{cwd:tree,encoding:'utf8'}).trim();
@@ -80,7 +87,7 @@ test('a missing new pair never borrows an available old pair or shared clone',t=
   const {root,old,next,cache,table}=scratch(t);acquire(old,cache,table);
   const tree=join(root,'gate26');candidate(next,tree);mkdirSync(join(tree,'third_party'),{recursive:true});
   symlinkSync(join(old,'third_party/node'),join(tree,'third_party/node'));
-  assert.throws(()=>link(tree,cache,table),/missing immutable pair for Node 26\.13\.0/);
+  assert.throws(()=>link(tree,cache,table),/missing immutable pair for Node 27\.0\.0/);
   assert.equal(realpathSync(join(tree,'third_party/node')),join(old,'third_party/node'),'a rejected selection mutates no old link');
   assert.equal(existsSync(join(tree,'third_party/node-source')),false);
 });
@@ -103,7 +110,7 @@ test('symlinked acquisition roots become independent snapshots without ignored s
   rmSync(moved,{recursive:true,force:true});rmSync(movedSource,{recursive:true,force:true});
   const tree=join(root,'candidate');candidate(reference,tree);assert.equal(link(tree,cache,table),pair);
   assert.deepEqual(inventory(join(pair,'node')),saved,'removing both origins cannot change or remove the pair');
-  assert.equal(readFileSync(join(pair,'node-source/deps/uv/source-link.c'),'utf8'),'24.20.0 uv\n');
+  assert.equal(readFileSync(join(pair,'node-source/deps/uv/source-link.c'),'utf8'),'26.13.0 uv\n');
 });
 
 test('a published root symlink is rejected even when its target bytes match',t=>{
@@ -118,16 +125,16 @@ test('a published root symlink is rejected even when its target bytes match',t=>
 test('unknown versions, mismatched pairs, recipe versions and changed bytes fail by name',t=>{
   const {root,old,next,cache,table}=scratch(t);const a=acquire(old,cache,table);acquire(next,cache,table);
   const tree=join(root,'candidate');candidate(old,tree);
-  writeFileSync(join(tree,'.tool-versions'),'nodejs 27.0.0\n');assert.throws(()=>link(tree,cache,table),/no recorded source identities for Node 27\.0\.0/);
-  writeFileSync(join(tree,'.tool-versions'),'nodejs 24.20.0\n');
+  writeFileSync(join(tree,'.tool-versions'),'nodejs 28.0.0\n');assert.throws(()=>link(tree,cache,table),/no recorded source identities for Node 28\.0\.0/);
+  writeFileSync(join(tree,'.tool-versions'),'nodejs 26.13.0\n');
   const manifest=join(a,'pair.json'),saved=readFileSync(manifest);chmodSync(manifest,0o644);
-  writeFileSync(manifest,saved.toString().replace('"release": "24.20.0"','"release": "26.13.0"'));
-  assert.throws(()=>link(tree,cache,table),/mismatched immutable pair for Node 24\.20\.0/);writeFileSync(manifest,saved);
+  writeFileSync(manifest,saved.toString().replace('"release": "26.13.0"','"release": "27.0.0"'));
+  assert.throws(()=>link(tree,cache,table),/mismatched immutable pair for Node 26\.13\.0/);writeFileSync(manifest,saved);
   writeFileSync(join(tree,'build/node-deps/recipes.json'),readFileSync(join(next,'build/node-deps/recipes.json')));
-  assert.throws(()=>link(tree,cache,table),/recipe Node 26\.13\.0 differs from tree pin 24\.20\.0/);
+  assert.throws(()=>link(tree,cache,table),/recipe Node 27\.0\.0 differs from tree pin 26\.13\.0/);
   candidate(old,tree);const file=join(a,'node/lib/control.js');chmodSync(file,0o644);writeFileSync(file,'modified');
   assert.throws(()=>link(tree,cache,table),/immutable node bytes changed/);
-  assert.equal(a,pairPath('24.20.0',table.releases['24.20.0']!,cache));
+  assert.equal(a,pairPath('26.13.0',table.releases['26.13.0']!,cache));
 });
 
 test('composition selects the candidate pin and refuses private-directory replacement',t=>{

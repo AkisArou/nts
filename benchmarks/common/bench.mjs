@@ -1,7 +1,7 @@
 // The JavaScript side of the same measurement, kept deliberately parallel to
 // benchmarks/common/main.c: same calibration, same best-of-five, same output.
 //
-// Node 24 strips TypeScript types natively, so a case imports its own `.ts`
+// Node strips TypeScript types natively, so a case imports its own `.ts`
 // source rather than a hand-maintained JavaScript copy. There is no second
 // version of the program to drift.
 //

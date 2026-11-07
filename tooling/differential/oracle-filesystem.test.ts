@@ -9,14 +9,14 @@ import {test,type TestContext} from 'node:test';
 import {OracleFilesystem,OraclePathPrefixes,validateHostObservations,writeOracleSnapshotIndex,readOracleSnapshotIndex} from './oracle-filesystem.ts';
 test('invalid local file URL syntax has a complete empty ESM lookup domain',async t=>{
   const domain=new OracleResolutionDomain({recipe:ORACLE_NODE_RESOLUTION_RECIPE,roots:[],excluded:[],aliases:[],files:[],directories:[],absent:[],scopeAbsent:[],moduleAbsent:[],packages:[]});
-  for(const nodeMajor of [24,26]){
+  for(const nodeMajor of [26]){
     await t.test('local unobserved '+nodeMajor,()=>assert.equal(domain.prove({nodeMajor,mode:'esm',specifier:'file:///unobserved.js',parent:'/captured/main.mjs',direct:'/unobserved.js'}).complete,false));
     await t.test('CJS spelling '+nodeMajor,()=>assert.equal(domain.prove({nodeMajor,mode:'cjs',specifier:'file://hmm.js',parent:'/captured/main.cjs',extensions:ORACLE_NODE_RESOLUTION_RECIPE.extensions}).complete,false));
     for(const specifier of ['file://hmm.js','file:///unobserved%2ffile.mjs'])await t.test(specifier+' '+nodeMajor,()=>{
       assert.deepEqual(domain.prove({nodeMajor,mode:'esm',specifier,parent:'/captured/main.mjs'}),{complete:true,queries:[]});
     });
   }
-  await t.test('unsupported Node',()=>assert.equal(domain.prove({nodeMajor:99,mode:'esm',specifier:'file://hmm.js',parent:'/captured/main.mjs'}).complete,false));
+  for(const nodeMajor of [24,99])await t.test('unsupported Node '+nodeMajor,()=>assert.equal(domain.prove({nodeMajor,mode:'esm',specifier:'file://hmm.js',parent:'/captured/main.mjs'}).complete,false));
 });
 
 test('snapshot metadata keeps namespace keys distinct and binds every lazy branch',t=>{
@@ -160,7 +160,7 @@ test('one pure Node lookup authority preserves logical main domains and refuses 
     files:['/capture/package.json','/capture/app/main.mjs','/capture/app/nested/pkg/package.json','/capture/app/nested/pkg/index.js','/capture/app/outside/value.cjs'],
     directories:['/capture','/capture/app','/capture/app/nested','/capture/app/nested/pkg','/capture/app/outside'],absent:['/capture/app/missing.mjs'],scopeAbsent:[],moduleAbsent:[],
     packages:[{directory:'/capture',valid:true,main:null,name:null,exports:null},{directory:'/capture/app/nested/pkg',valid:true,main:'../../outside/value.cjs',name:null,exports:null}]});
-  for(const nodeMajor of [24,26]){
+  for(const nodeMajor of [26]){
     const input=record(),domain=new OracleResolutionDomain(input),request={nodeMajor,mode:'cjs' as const,specifier:'/capture/app/nested/pkg',direct:'/capture/app/nested/pkg',parent:'/capture/app/main.mjs',extensions:['.js','.json','.node']};
     assert.equal(domain.prove(request).complete,true);
     const shallow=domain.prove({...request,specifier:'/capture/app/alias',direct:'/capture/app/alias'});
@@ -180,7 +180,7 @@ test('one pure Node lookup authority preserves logical main domains and refuses 
 
 
 test('ESM self-package proof stops at the node_modules package-scope boundary',async t=>{
-  for(const nodeMajor of [24,26])for(const selfExport of [false,true])await t.test(JSON.stringify({nodeMajor,selfExport}),()=>{
+  for(const nodeMajor of [26])for(const selfExport of [false,true])await t.test(JSON.stringify({nodeMajor,selfExport}),()=>{
     const app='/capture/app',dependency=app+'/node_modules/same';
     const record:ResolutionDomainRecord={recipe:ORACLE_NODE_RESOLUTION_RECIPE,roots:[app],excluded:[],aliases:[],
       files:[app+'/package.json',app+'/outer.mjs',app+'/node_modules/middle/main.mjs',dependency+'/package.json',dependency+'/value.cjs'],
@@ -196,7 +196,7 @@ test('ESM self-package proof stops at the node_modules package-scope boundary',a
 
 
 test('ESM package queries include node_modules ancestors rather than the CommonJS skip rule',async t=>{
-  for(const nodeMajor of [24,26])for(const nearerPackage of [false,true])await t.test(JSON.stringify({nodeMajor,nearerPackage}),()=>{
+  for(const nodeMajor of [26])for(const nearerPackage of [false,true])await t.test(JSON.stringify({nodeMajor,nearerPackage}),()=>{
     const app='/capture/app',normal=app+'/node_modules/same',nearer=app+'/node_modules/node_modules/same';
     const files=[app+'/package.json',app+'/node_modules/middle/main.mjs',normal+'/package.json',normal+'/value.cjs'];
     const directories=[app,app+'/node_modules',app+'/node_modules/middle',normal];
@@ -212,7 +212,7 @@ test('ESM package queries include node_modules ancestors rather than the CommonJ
 });
 
 test('generated Node sensitivity covers every admitted lookup domain',t=>{
-  const nodeMajor=Number(process.versions.node.split('.')[0]);assert.ok([24,26].includes(nodeMajor));
+  const nodeMajor=Number(process.versions.node.split('.')[0]);assert.ok([26].includes(nodeMajor));
   const gaps:unknown[]=[],reports:unknown[]=[];
   for(const layout of ['relative','bare','self','exports','imports','nested','symlink','fallback','absolute-cjs','relative-cjs','file-url-cjs']){
     const root=fixture(t),app=join(root,'app'),files=new Map<string,string>(),links=new Map<string,string>();
@@ -311,7 +311,7 @@ test('exact captured module files grant no directory or sibling lookup domain',(
   const record:ResolutionDomainRecord={recipe:ORACLE_NODE_RESOLUTION_RECIPE,roots:['/capture/app'],excluded:[],aliases:[],
     files:['/capture/package.json','/capture/app/main.mjs',file],directories:['/capture','/capture/app','/capture/shims'],absent:[],scopeAbsent:['/capture/shims/package.json'],moduleAbsent:[],
     packages:[{directory:'/capture',valid:true,main:null,name:null,exports:null}]};
-  for(const nodeMajor of [24,26]){
+  for(const nodeMajor of [26]){
     const domain=new OracleResolutionDomain(record),request={nodeMajor,mode:'esm' as const,specifier:file,direct:file,parent:'/capture/app/main.mjs'};
     assert.equal(domain.prove({...request,direct:'/capture/shims/unobserved.mjs'}).complete,false);
     assert.equal(domain.prove({...request,direct:'/capture/shims'}).complete,false);

@@ -217,7 +217,7 @@ function sourceMaps(group:EmitGroup,filesystem:OracleFilesystem,producerOutput=g
       writeFileSync(file,code.slice(0,match.index)+'//# sourceMappingURL=data:application/json;base64,'+bytes.toString('base64')+code.slice(match.index!+match[0].length));
       group.maps[key]={kind:'inline'};continue;
     }
-    // Node 24/26 dataFromUrl ignores absolute URL protocols other than data.
+    // Node 26 dataFromUrl ignores absolute URL protocols other than data.
     // A relative URL (including an absolute filesystem path) is the precise
     // file Node reads. Bind that file or its absence, not the adjacent TSFILE.
     let absolute:URL|undefined;try{absolute=new URL(reference);}catch{}
@@ -249,7 +249,7 @@ function sourceMaps(group:EmitGroup,filesystem:OracleFilesystem,producerOutput=g
 // A worker retains its verified toolchain, while every ordinary project gets
 // its own command and original configuration context.
 // The finite standard target lowers proposals (notably decorators) that the
-// shared Node 24/26 runtime cannot parse. Revisit the paired syntax controls
+// pinned Node 26 runtime cannot parse. Revisit the paired syntax controls
 // deliberately when changing either supported Node or the TypeScript pin.
 export const ORACLE_RUNTIME_TARGET=13; // TypeScript ScriptTarget.ES2026
 function originalTarget(options:EmitOptions):number{return options.target??13;}

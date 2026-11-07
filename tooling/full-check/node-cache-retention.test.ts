@@ -29,8 +29,8 @@ function fixture(t: { after(fn: () => void): void }) {
 
 test("hourly Node cache retention removes old entries and empty temporary siblings while retaining recent use", t => {
   const f = fixture(t);
-  const old = f.file("node24/old", "old!", 8), empty = f.file("node24/old.tmp", "", 8);
-  const recentRead = f.file("node24/read", "read", 1, 10), recentWrite = f.file("node26/write", "write", 10, 1);
+  const old = f.file("node26/old", "old!", 8), empty = f.file("node26/old.tmp", "", 8);
+  const recentRead = f.file("node26/read", "read", 1, 10), recentWrite = f.file("node26/write", "write", 10, 1);
   const boundary = f.file("node26/seven", "seven", 7), freshTemporary = f.file("node26/fresh.tmp", "", 0);
   const result = prune({ home: f.home, now: NOW });
   assert.equal(result.state, "complete"); assert.equal(result.removed, 2); assert.equal(result.removedBytes, 4);
@@ -41,7 +41,7 @@ test("hourly Node cache retention removes old entries and empty temporary siblin
 });
 
 test("the byte cap evicts oldest cache entries with deterministic ties and retains a fresh empty temporary", t => {
-  const f = fixture(t), first = f.file("node24/a", "aaaa", 3), second = f.file("node24/b", "bbbb", 3);
+  const f = fixture(t), first = f.file("node26/a", "aaaa", 3), second = f.file("node26/b", "bbbb", 3);
   const newer = f.file("node26/c", "cccc", 1), temporary = f.file("node26/inflight.tmp", "", 0);
   const result = prune({ home: f.home, now: NOW, maxBytes: 8 });
   assert.equal(result.removed, 1); assert.equal(result.removedBytes, 4); assert.equal(result.keptBytes, 8);
@@ -50,7 +50,7 @@ test("the byte cap evicts oldest cache entries with deterministic ties and retai
 });
 
 test("a concurrent pruner owns the non-blocking lock and a later run can collect", t => {
-  const f = fixture(t), old = f.file("node24/old", "old", 8);
+  const f = fixture(t), old = f.file("node26/old", "old", 8);
   const lock = acquire(join(dirname(f.root), "retention.lock")); assert.ok(lock);
   try { assert.equal(prune({ home: f.home, now: NOW }).state, "busy"); assert.ok(existsSync(old)); }
   finally { lock.release(); }
@@ -70,7 +70,7 @@ test("retention never follows symlinks and reports an invalid cache root without
 
 test("an entry accessed or atomically replaced after the scan is retained", t => {
   for (const change of ["access", "replace"] as const) {
-    const f = fixture(t), path = f.file("node24/old", "old", 8);
+    const f = fixture(t), path = f.file("node26/old", "old", 8);
     const result = prune({ home: f.home, now: NOW, onAttempt(candidate) {
       assert.equal(candidate, path);
       if (change === "access") utimesSync(path, new Date(NOW), new Date(NOW - 8 * DAY));
@@ -81,7 +81,7 @@ test("an entry accessed or atomically replaced after the scan is retained", t =>
 });
 
 test("a fresh empty temporary survives even when a concurrent read prevents reaching the byte cap", t => {
-  const f = fixture(t), used = f.file("node24/reused", "used", 1), temporary = f.file("node24/publishing.tmp", "", 0);
+  const f = fixture(t), used = f.file("node26/reused", "used", 1), temporary = f.file("node26/publishing.tmp", "", 0);
   const result = prune({ home: f.home, now: NOW, maxBytes: 0, onAttempt(path) {
     assert.equal(path, used); utimesSync(used, new Date(NOW), new Date(NOW));
   } });

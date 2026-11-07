@@ -10,7 +10,7 @@ test("gate and standalone captures report only their own owner emissions", t => 
   t.after(() => rmSync(root, { recursive: true, force: true }));
   for (const [kind, modes] of [["gate", ["emit", "hit"]], ["standalone", ["emit", "hit", "hit"]]] as const) {
     const directory = join(root, kind); mkdirSync(directory);
-    const rows = modes.map(mode => ({ version: 1, step: "tooling", nodeVersion: "24.20.0", project: join(directory, "tsconfig.json"),
+    const rows = modes.map(mode => ({ version: 1, step: "tooling", nodeVersion: "26.13.0", project: join(directory, "tsconfig.json"),
       directory: join(directory, "oracle-owners/programs/owned"), mode, inputsSha256: "a".repeat(64) }));
     writeFileSync(join(directory, "oracle-owner-calls.jsonl"), rows.map(row => JSON.stringify(row) + "\n").join(""));
     const result = ownerEmissionCalls({ directory, admission: { kind } }, { drained: true });

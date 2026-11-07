@@ -83,7 +83,7 @@ factories remain outside both barrels. The four formats share these stream and
 lifetime algorithms; their encoding, validation and finish operations stay native.
 
 The compression test provider lives only in `test/node-compression-provider.ts`
-and calls `node:zlib`'s synchronous native streaming handle on the pinned Node 24
+and calls `node:zlib`'s synchronous native streaming handle on the pinned Node 26
 host. Native strict end handling prevents concatenated gzip members and ignored
 trailing bytes. No compression primitive or checksum is implemented in shared
 TypeScript. Focused tests cover both the stream algorithms and the reusable

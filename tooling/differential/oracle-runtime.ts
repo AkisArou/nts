@@ -80,7 +80,7 @@ export function dependencySealReady(cap:{version:number;directory:string;ownerSt
   const began=performance.now(),seal=cap.seal!,record=join(cap.directory,'node-'+nodeVersion,'ready.json');
   const identity=seal.identity;
   if(cap.version!==1||seal.version!==1||seal.record!==record||seal.nodeVersion!==nodeVersion||!isAbsolute(cap.directory)||
-     !/^(?:24|26)\.\d+\.\d+$/.test(nodeVersion)||!identity||Object.keys(identity).sort().join(',')!==[...DEPENDENCY_SEAL_FIELDS].sort().join(',')||
+     !/^26\.\d+\.\d+$/.test(nodeVersion)||!identity||Object.keys(identity).sort().join(',')!==[...DEPENDENCY_SEAL_FIELDS].sort().join(',')||
      DEPENDENCY_SEAL_FIELDS.some(key=>typeof identity[key]!=='string'||!/^\d+$/.test(identity[key]))||
      !/^[0-9a-f]{64}$/.test(seal.readySha256)||!/^[0-9a-f]{64}$/.test(seal.semanticSha256))throw dependencySealError(record);
   try{const actual=dependencySealIdentity(record);if(DEPENDENCY_SEAL_FIELDS.some(key=>actual[key]!==identity[key]))throw dependencySealError(record);}
@@ -302,7 +302,7 @@ export function validateRuntimeObservations(observations:HostObservation[],read:
 
 export type ResolutionPackageFact={directory:string;valid:boolean;main:string|null;name:string|null;exports:unknown};
 /** Candidate suffixes from Node's legacyMainResolve; all selection stays in Node. */
-export const ORACLE_NODE_RESOLUTION_RECIPE=Object.freeze({version:1,nodeMajors:Object.freeze([24,26]),extensions:Object.freeze(['.js','.json','.node']),
+export const ORACLE_NODE_RESOLUTION_RECIPE=Object.freeze({version:1,nodeMajors:Object.freeze([26]),extensions:Object.freeze(['.js','.json','.node']),
   mainSuffixes:Object.freeze(['','.js','.json','.node','/index.js','/index.json','/index.node']),
   packageIndexSuffixes:Object.freeze(['/index.js','/index.json','/index.node'])});
 export function oracleLegacyMainQueries(directory:string,main:string|null):string[]{
@@ -403,7 +403,7 @@ export class OracleResolutionDomain{
       if(!complete(path))return fail('incomplete direct module domain: '+path);
       return !this.files.has(key)||scopes(path).complete&&scopes(key).complete;
     };
-    // Node24/26 legacyMainResolve: main itself, three extensions, three
+    // Node26 legacyMainResolve: main itself, three extensions, three
     // main/index variants, then three package/index fallbacks. No selection.
 
     const metadata=(directory:string)=>{

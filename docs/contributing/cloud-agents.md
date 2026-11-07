@@ -109,7 +109,7 @@ does. In particular:
 
 ## Testing
 
-The package's tests run under plain node 24 (the version in
+The package's tests run under plain node (the version in
 `.tool-versions`), with pnpm 10 (`packageManager` in `package.json`):
 
 ```sh

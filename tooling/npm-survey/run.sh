@@ -6,7 +6,7 @@
 # what makes a number in `docs/records/notebooks/npm-deps.md` re-derivable rather than
 # re-measured against an ecosystem that has moved underneath it.
 #
-# TypeScript, run directly: node 24 strips types with no flag and no build step.
+# TypeScript, run directly: node strips types with no flag and no build step.
 # The last stage runs the compiler, so it needs a built one:
 #   cargo build --release -p nts-cli   (or point NTS_BIN at one)
 set -euo pipefail

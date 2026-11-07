@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-/** Opt-in Chromium checkout/build; run directly with Node 24. */
+/** Opt-in Chromium checkout/build; run directly with pinned Node. */
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { sha256File } from "./hash.ts";

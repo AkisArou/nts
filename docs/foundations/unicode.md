@@ -70,7 +70,7 @@ checker's lag recorded as known gaps.
 
 1. **The compiler owns the Unicode data.** A new crate, `compiler/unicode`,
    parses the UCD files of exactly the version node reports
-   (`process.versions.unicode`: 17.0 for the pinned node 24.20.0). The parsed
+   (`process.versions.unicode`: 17.0 for the pinned node 26.13.0). The parsed
    model is baked into the `nts` binary, so a shipped `nts` needs no files and
    no network. It is the one source for C, LLVM, the JVM and both Wasm
    profiles.

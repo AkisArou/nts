@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "node": "v24.20.0",
+  "node": "v26.13.0",
   "bun": {
     "version": "1.4.4-canary.1+3a9ea0043",
     "commit": "3a9ea00437f8065cd5a4604d7423299a769e2d9e",

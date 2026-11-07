@@ -16,13 +16,13 @@ function tree(root:string){
 
 test('release checksum lookup is an exact unique filename match',()=>{
  const hash='1'.repeat(64);
- assert.equal(publishedHash(hash+'  node-v24.20.0.tar.xz\n','node-v24.20.0.tar.xz'),hash);
- assert.throws(()=>publishedHash(hash+'  node-v24.20.0.tar.xz.other\n','node-v24.20.0.tar.xz'));
+ assert.equal(publishedHash(hash+'  node-v26.13.0.tar.xz\n','node-v26.13.0.tar.xz'),hash);
+ assert.throws(()=>publishedHash(hash+'  node-v26.13.0.tar.xz.other\n','node-v26.13.0.tar.xz'));
  assert.throws(()=>publishedHash((hash+'  wanted\n').repeat(2),'wanted'));
 });
 
 test('verified acquisition publishes atomically and reuse is offline',async()=>{
- const dir=scratch(),version='24.20.0',root=join(dir,'root'),source=join(dir,'node-v'+version);
+ const dir=scratch(),version='26.13.0',root=join(dir,'root'),source=join(dir,'node-v'+version);
  mkdirSync(root);writeFileSync(join(root,'.tool-versions'),'nodejs '+version+'\n');tree(source);
  const archive=join(dir,'source.tar.xz');execFileSync('tar',['-cJf',archive,'-C',dir,'node-v'+version]);const bytes=readFileSync(archive);
  const server=createServer((req,res)=>{if(req.url?.endsWith('SHASUMS256.txt'))res.end(digest(bytes)+'  node-v'+version+'.tar.xz\n');else res.end(bytes);});
@@ -38,13 +38,13 @@ test('verified acquisition publishes atomically and reuse is offline',async()=>{
 });
 
 test('checksum failure leaves no prepared tree and a wrong version is rejected',async()=>{
- const dir=scratch();writeFileSync(join(dir,'.tool-versions'),'nodejs 24.20.0\n');
- const server=createServer((req,res)=>res.end(req.url?.endsWith('SHASUMS256.txt')?'0'.repeat(64)+'  node-v24.20.0.tar.xz\n':'wrong archive'));
+ const dir=scratch();writeFileSync(join(dir,'.tool-versions'),'nodejs 26.13.0\n');
+ const server=createServer((req,res)=>res.end(req.url?.endsWith('SHASUMS256.txt')?'0'.repeat(64)+'  node-v26.13.0.tar.xz\n':'wrong archive'));
  await new Promise<void>(done=>server.listen(0,'127.0.0.1',done));const address=server.address();assert.ok(address&&typeof address==='object');
  try {
   const dest=join(dir,'prepared');await assert.rejects(prepare(dest,dir,'http://127.0.0.1:'+address.port),/checksum/);assert.equal(existsSync(dest),false);
-  tree(dest);writeFileSync(join(dest,'NTS-SOURCE.json'),JSON.stringify({version:'24.19.0',archive_sha256:'0'.repeat(64),files:inputFiles(dest)}));
-  assert.throws(()=>verifySource(dest,'24.20.0'),/version/);
+  tree(dest);writeFileSync(join(dest,'NTS-SOURCE.json'),JSON.stringify({version:'26.12.0',archive_sha256:'0'.repeat(64),files:inputFiles(dest)}));
+  assert.throws(()=>verifySource(dest,'26.13.0'),/version/);
  }finally{await new Promise<void>(done=>server.close(()=>done()));rmSync(dir,{recursive:true,force:true});}
 });
 

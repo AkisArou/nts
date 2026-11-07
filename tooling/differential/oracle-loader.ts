@@ -83,7 +83,7 @@ if(descriptor.resolution)checkNodeResolutionSession(descriptor.resolution,nodeRe
 let liveResolutions=0;
 process.once('exit',()=>{try{appendFileSync(state+'.resolutions.jsonl',JSON.stringify({version:1,pid:process.pid,live:liveResolutions})+'\n');}catch{/* Report-only counters never decide an oracle verdict. */}});
 const requireExtensions=createRequire(import.meta.url).extensions,defaultExtensions=['.js','.json','.node'];
-if(![24,26].includes(Number(process.versions.node.split('.')[0]))||JSON.stringify(Object.keys(requireExtensions))!==JSON.stringify(defaultExtensions))throw Error('oracle Node resolution recipe is unsupported');
+if(![26].includes(Number(process.versions.node.split('.')[0]))||JSON.stringify(Object.keys(requireExtensions))!==JSON.stringify(defaultExtensions))throw Error('oracle Node resolution recipe is unsupported');
 let executionDriver:{path:string;sha256:string}|undefined,eventIdentity:ReturnType<typeof lstatSync>|undefined;
 const moduleInputs=join(dirname(state),'module-inputs.json');
 if(existsSync(moduleInputs)){

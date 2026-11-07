@@ -22,7 +22,7 @@ tooling/npm-survey/run.sh
 | `vendor.ts` | tarballs | `vendored/` | materialises the recovered TypeScript as ordinary source |
 | `verdict.ts` | `vendored/` | `verdict.json` | hands each package to `nts check` and records what the compiler says |
 
-Written in TypeScript and run directly — node 24 strips types with no flag and
+Written in TypeScript and run directly — node strips types with no flag and
 no build step, so there is nothing to compile before measuring.
 
 No stage installs anything, runs a lifecycle script, or executes package code.

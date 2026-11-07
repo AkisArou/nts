@@ -78,7 +78,7 @@ generated program and the runtime are C. They are compiled separately rather
 than by letting one driver guess from file extensions, and the `nts.cpp` shim
 declares the generated entry point `extern "C"`.
 
-Node 24 strips TypeScript types natively, so `bench.mjs` imports the same
+Node strips TypeScript types natively, so `bench.mjs` imports the same
 `src/main.ts` the compiler consumes. There is no second copy of the program to
 drift out of step.
 
