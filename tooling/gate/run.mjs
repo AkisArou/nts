@@ -74,6 +74,7 @@ import { definiteFailure } from "./train/red-stop.ts";
 import { GateScopes } from "./train/step-scope.ts";
 import { inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory } from "./step-scheduling.ts";
 import { STEP_SUCCESSORS } from "./step-successors.ts";
+import { stepBound, stepBoundReason } from "./step-bound.ts";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
@@ -387,6 +388,7 @@ function report(name) {
   if (r.wall !== undefined) block += `  ${Math.round(r.wall)}s${r.cpu !== undefined ? ` (cpu ${Math.round(r.cpu)}s, ${how})` : ""}\n`;
   if (r.verdict === "FAIL") block += `${color(31, "FAILED")}: ${name}\n`;
   else if (r.verdict === "SKIPPED") block += `${color(33, "SKIPPED")}: ${name} -- ${r.reason}\n`;
+  else if (r.verdict === "INSTRUMENT") block += `${color(33, "INSTRUMENT")}: ${name} -- ${r.reason}\n`;
   process.stdout.write(block);
 }
 
@@ -520,6 +522,12 @@ function workEstimate(name) {
   return estimate(name) * width(name);
 }
 
+// How long a step may run before it is stopped and held (step-bound.ts): its
+// row's stated bound, else three times its work and the run's over their slots.
+function boundOf(step) {
+  return stepBound(step, workEstimate(step.name), width(step.name), { cost: plan.reduce((sum, name) => sum + workEstimate(name), 0), slots: SLOTS });
+}
+
 // A token is a case starting, so the pool is where the run stops starting
 // cases when memory runs low: none below 12 GB, again from 14, and the cases
 // already running are never stopped (`./admission.ts`). The recheck below
@@ -617,6 +625,7 @@ function schedule() {
 }
 
 function start(step, slots, rider = false) {
+  const bound = boundOf(step);
   let scope;
   try { scopes ??= new GateScopes(env, join(ROOT, "target/gate-scope-owner.json")); scope = scopes.step(); }
   catch (error) {
@@ -640,15 +649,29 @@ function start(step, slots, rider = false) {
   closeSync(fd);
   const started = Date.now();
   const elastic = Boolean(step.elastic && tokenAddr);
-  const owned = { child, slots, started, rider, elastic, scope, draining: false };
+  const owned = { child, slots, started, rider, elastic, scope, draining: false, overBound: false };
   running.set(step.name, owned);
+  // **Past its bound the step is stopped through its own scope** and held: its
+  // log stays, and it is neither a pass nor a red verdict about the change.
+  // Killed again until it exits: a kill reaches only what its scope holds.
+  let boundTimer;
+  const stopAtBound = () => {
+    if (!stopping) owned.overBound = true;
+    try { scope.kill(); }
+    catch (error) { stop(`cannot stop ${step.name} at its bound: ${error.message}`); return; }
+    boundTimer = setTimeout(stopAtBound, 5000);
+    boundTimer.unref();
+  };
+  boundTimer = setTimeout(stopAtBound, bound.seconds * 1000);
+  boundTimer.unref();
   process.stderr.write(elastic
-    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running)\n`
-    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running)\n`);
+    ? `-- ${step.name} started (${slots} workers on tokens; ${running.size} running; bound ${bound.seconds} s)\n`
+    : `-- ${step.name} started (${slots} slot${slots === 1 ? "" : "s"}; ${running.size} running; bound ${bound.seconds} s)\n`);
   let completed = false;
   const complete = async (code, signal, spawnError) => {
     if (completed) return;
     completed = true;
+    clearTimeout(boundTimer);
     owned.draining = true;
     let drained, cleanupError, entered, entryError;
     try { entered = scope.entry(); } catch (error) { entryError = `step scope entry was not proved: ${error.message}`; }
@@ -668,9 +691,12 @@ function start(step, slots, rider = false) {
         cpu = user + sys;
       }
     } catch {}
+    // After the drain, so no process of the step can still write over it.
+    if (owned.overBound) writeFileSync(log, `\n${stepBoundReason(bound.seconds)}: stopped through its scope\n`, { flag: "a" });
     const text = existsSync(log) ? readFileSync(log, "utf8") : "";
     account();
-    const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered };
+    const extra = { exit: code, signal, wall, cpu, user, sys, maxrss_kb: maxrss, slots, log, started_at: new Date(started).toISOString(), scope: drained, scope_entry: entered,
+      bound_s: bound.seconds, bound_basis: bound.basis };
     if (elastic) Object.assign(extra, { elastic: true, peak_tokens: tok.peak.get(step.name) ?? 0, token_s: Math.round(tok.used.get(step.name) ?? 0) });
     let instrument;
     try { instrument = readStepInstrument(join(RUN_DIR, `${step.name}.instrument.json`), step.name, RUN_DIR); }
@@ -678,6 +704,9 @@ function start(step, slots, rider = false) {
     if (cleanupError || spawnError) {
       const reason = cleanupError ?? `step scope launch failed: ${spawnError.message}`;
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "tooling-cleanup", verdict: "INSTRUMENT", reason } });
+    } else if (owned.overBound) {
+      const reason = stepBoundReason(bound.seconds);
+      finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "step-bound", verdict: "INSTRUMENT", reason } });
     } else if (trainRedStop && ["SIGTERM", "SIGKILL"].includes(signal) && !instrument) {
       finish(step.name, "NOT RUN", `cancelled after ${trainRedStop.trigger} failed`, { ...extra, cancelled_by: trainRedStop.trigger });
     } else if (stopping && !trainRedStop && (signal || code !== 0)) {

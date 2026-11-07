@@ -1,6 +1,6 @@
 // A failed instrument is evidence to wait, never evidence against a landing.
 import { readFileSync, renameSync, writeFileSync } from "node:fs";
-export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "runaway" | "tooling-setup" | "tooling-cleanup" | "selector-setup"; step: string; attempt: string; reason: string; completedFailures?: number };
+export type InstrumentResult = { version: 1; verdict: "INSTRUMENT" | "FAIL" | "NOT RUN"; kind: "memory-pressure" | "case-budget" | "hung" | "runaway" | "tooling-setup" | "tooling-cleanup" | "step-bound" | "selector-setup"; step: string; attempt: string; reason: string; completedFailures?: number };
 type Disposition={verdict:InstrumentResult["verdict"];disposition:"retry"|"operator-hold"|"verdict"};
 export const INSTRUMENT_DISPOSITIONS={
   "memory-pressure":{verdict:"INSTRUMENT",disposition:"retry"},
@@ -8,6 +8,8 @@ export const INSTRUMENT_DISPOSITIONS={
   "runaway":{verdict:"NOT RUN",disposition:"operator-hold"},
   "tooling-setup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
   "tooling-cleanup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
+  // The runner stopped a step at its bound (step-bound.ts): it never finished.
+  "step-bound":{verdict:"INSTRUMENT",disposition:"operator-hold"},
   "selector-setup":{verdict:"INSTRUMENT",disposition:"operator-hold"},
   "case-budget":{verdict:"FAIL",disposition:"verdict"},
 } as const satisfies Record<InstrumentResult["kind"],Disposition>;

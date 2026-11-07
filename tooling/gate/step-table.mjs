@@ -25,10 +25,17 @@
 //          takes seconds: a landing check of only these waits for no memory,
 //          and one never measured is costed at seconds
 //   capabilities  environment requirements, read before a landing/full run takes the lock
+//   bound  seconds the step may run before it is stopped and held, for a step
+//          whose recorded cost cannot derive one (step-bound.ts): no committed
+//          baseline, or a cost that is what its build cache lacks
 //   doc    what it proves, for the summary's reader
 // ---------------------------------------------------------------------------
+import { statedBoundProblem } from "./step-bound.ts";
+
 export const STEPS = [
-  { name: "build", slots: 8, min: 4, mem: 8, lock: "cargo", doc: "release binaries build" },
+  // Its history is the last build's, which a warm cache makes seconds; a cold
+  // release build of the workspace took about forty minutes beside a gate.
+  { name: "build", slots: 8, min: 4, mem: 8, lock: "cargo", bound: 7200, doc: "release binaries build" },
   // Its own target directory (see stepEnv), so it neither waits for nor blocks
   // `build` and `tests` on cargo's build-directory lock.
   { name: "clippy", slots: 6, min: 4, mem: 6, lock: "clippy", doc: "lint clean" },
@@ -38,7 +45,7 @@ export const STEPS = [
   { name: "records", slots: 1, treeOnly: true, mem: 0.1, doc: "record numbers unique" },
   { name: "old-paths", slots: 1, treeOnly: true, mem: 0.1, doc: "nothing sits or points where the corpora used to be" },
   { name: "audit", slots: 1, treeOnly: true, mem: 0.2, doc: "classification reasons, authorities and suite entries" },
-  { name: "doctests", slots: 4, min: 1, mem: 4, lock: "cargo", after: ["build"], doc: "touched crates' doc examples compile and pass" },
+  { name: "doctests", slots: 4, min: 1, mem: 4, lock: "cargo", after: ["build"], bound: 3600, doc: "touched crates' doc examples compile and pass" },
   { name: "test262", slots: 1, mem: 2, after: ["build"], doc: "test262 pin, inventory, features audit" },
   // Whole-group measured headroom: results/gate-memory-calibration.json.
   // The conformance steps are elastic: the resident pool starts all its
@@ -70,7 +77,8 @@ export const STEPS = [
   // Reads the CPU time integrity-runtime measured on that same lowering
   // (NTS_COMPILE_TIMES_FROM); lowers the modules itself when it runs alone.
   { name: "compile-time", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, after: ["integrity-runtime"], doc: "NoGC preparation stays within its calibrated instruction budget" },
-  { name: "compile-time-rc", elastic: true, slots: 4, min: 2, mem: 8, nts: true, fe: true, after: ["build"], doc: "RC preparation stays within its calibrated instruction budget" },
+  // No committed baseline: one measured run took 1,352 CPU seconds over 18 minutes.
+  { name: "compile-time-rc", elastic: true, slots: 4, min: 2, mem: 8, nts: true, fe: true, after: ["build"], bound: 3600, doc: "RC preparation stays within its calibrated instruction budget" },
   { name: "integrity-runtime", elastic: true, slots: 12, min: 4, mem: 4, nts: true, fe: true, doc: "listing rules over the runtime corpus" },
   { name: "assembles", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "runtime LLVM IR assembles" },
   { name: "c-compiles", elastic: true, slots: 8, min: 2, mem: 3, nts: true, fe: true, after: ["profile"], doc: "every runtime program's emitted C compiles" },
@@ -137,12 +145,14 @@ export const STEPS = [
 ];
 
 /**
- * What is wrong with the table's dependencies, or null: a step that depends on
- * no step, or steps that wait for one another. The runner waits for a step's
- * `needs` and `after` while they are requested and unfinished, so a cycle
- * among them would wait for ever; it refuses such a table before anything runs.
+ * What is wrong with the table, or null: a stated bound that is not a positive
+ * number of seconds, a step that depends on no step, or steps that wait for one
+ * another. The runner waits for a step's `needs` and `after` while they are
+ * requested and unfinished, so a cycle among them would wait for ever; it
+ * refuses such a table before anything runs.
  */
 export function stepTableProblem(steps = STEPS) {
+  for (const s of steps) { const problem = statedBoundProblem(s); if (problem) return problem; }
   const names = new Set(steps.map((s) => s.name));
   const deps = new Map(steps.map((s) => [s.name, [...(s.needs ?? []), ...(s.after ?? [])]]));
   for (const [name, on] of deps) for (const d of on) if (!names.has(d)) return `${name} depends on ${d}, which is not a step`;
