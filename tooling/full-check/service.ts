@@ -165,6 +165,7 @@ async function runPart(fx: Effects, state: State, part: Part, commit: string): P
   if (m.verdict === "green") {
     state[part].last_green = record;
     fx.log(`${part} green at ${short(commit)}; logs ${m.run}`);
+    clearCulprits(fx, state, part, commit);
     if (part === "core") moveVerified(fx, state, commit);
     writeState(fx.layout.state, state);
     await writeRecords(fx, state, part, commit, m.run);
@@ -445,6 +446,25 @@ function dropLandedRefs(fx: Effects, main: string, now: number): void {
   }
 }
 
+/**
+ * A culprit its own part is green after is no culprit: the steps it broke
+ * pass with it in. It is in no later search, and its revert, if it still
+ * waits to land, is withdrawn at once, since landing it would take out a
+ * commit this run just showed is good. The other part's runs do not keep it:
+ * a part that never goes green (the wide steps had no green run on
+ * 2026-11-08) held a false culprit, and its revert in the queue, overnight. If
+ * the commit breaks the other part's steps too, that part's own search finds it.
+ */
+function clearCulprits(fx: Effects, state: State, part: Part, green: string): void {
+  state.culprits = state.culprits.filter(culprit => {
+    if (culprit.part !== part || !fx.git.isAncestor(culprit.commit, green)) return true;
+    const withdrawn = culprit.revert ? fx.queue.withdraw(culprit.revert) : "unknown";
+    fx.log(`${short(culprit.commit)} is no culprit: ${culprit.part} was green after it at ${short(green)}${
+      withdrawn === "unknown" ? "" : `; its revert ${short(culprit.revert!)} is ${withdrawn === "withdrawn" ? "withdrawn" : "withdrawn when its check ends"}`}`);
+    return false;
+  });
+}
+
 /** Old runs and probes go; landed reverts lose the ref that kept them; verified is pushed. */
 function housekeeping(fx: Effects, state: State): void {
   const now = fx.now().getTime();
@@ -460,9 +480,6 @@ function housekeeping(fx: Effects, state: State): void {
   const main = fx.git.commit("refs/heads/main");
   if (main) {
     dropLandedRefs(fx, main, now);
-    // A culprit both parts have been green after can be in no later search.
-    const greens = [state.core.last_green?.commit, state.wide.last_green?.commit].filter((sha): sha is string => !!sha);
-    state.culprits = state.culprits.filter(c => !(greens.length === 2 && greens.every(g => fx.git.isAncestor(c.commit, g))));
   }
   pushVerified(fx, state);
   writeState(fx.layout.state, state);

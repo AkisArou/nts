@@ -14,7 +14,7 @@ import {cycle, followVerified, parseOptions, partSteps, type Effects} from "./se
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
 
-type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"] };
+type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"]; withdrawn: string[] };
 
 function harness(repo: Repository, gate: FakeGate, options: { now?: Date; recorder?: Recorder; schedule?: Effects["schedule"]; bench?: Effects["bench"]; prunePool?: Effects["prunePool"] } = {}): Harness {
   const lines: string[] = [];
@@ -25,6 +25,7 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     gate,
     queue,
     submitted: queue.submitted,
+    withdrawn: queue.withdrawn,
     recorder: options.recorder ?? (() => ({ status: 0, output: "" })),
     bench: options.bench ?? stubBench(),
     pins: join(repo.root, "pins"),
@@ -447,4 +448,25 @@ test("the controller follows verified with the inputs its new code needs, or sta
   assert.deepEqual(linked, [second], "the new code's inputs are linked after its checkout");
   // A service that does not run from the controller never moves it.
   assert.equal(followVerified(repo.git, { ...layout, controller: join(repo.root, "elsewhere") }, repo.dir, () => assert.fail("linked")), false);
+});
+
+test("a culprit its own part is green after is cleared and its waiting revert withdrawn, though the other part was never green", async t => {
+  const repo = repository(t);
+  const fx = harness(repo, fakeGate(repo));
+  repo.commit({ "src.txt": "base\n", "RED/integrity": "" }, "good, with the wide steps red from the start");
+  await cycle(fx);
+  const b = repo.commit({ "RED/tests": "", "b.txt": "b\n" }, "b: breaks tests");
+  await cycle(fx);
+  const revert = readState(repo.layout.state).culprits.find(c => c.commit === b)?.revert;
+  assert.ok(revert, fx.lines.join("\n"));
+  assert.deepEqual(fx.submitted, [{ commit: revert, first: true }]);
+  // Fixed forward while the revert waits: the core is green with b in.
+  const fixed = repo.commit({ "RED/tests": null }, "fix tests forward");
+  await cycle(fx);
+  const state = readState(repo.layout.state);
+  assert.equal(state.core.last_green?.commit, fixed);
+  assert.equal(state.wide.last_green, undefined, "the wide steps have never been green");
+  assert.deepEqual(state.culprits, []);
+  assert.deepEqual(fx.withdrawn, [revert], "landing the revert would take out a commit the core is green with");
+  assert.ok(fx.lines.some(line => line === `${b.slice(0, 12)} is no culprit: core was green after it at ${fixed.slice(0, 12)}; its revert ${revert.slice(0, 12)} is withdrawn`), fx.lines.join("\n"));
 });

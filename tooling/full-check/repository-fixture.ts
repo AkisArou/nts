@@ -121,10 +121,17 @@ export function stubBench(options: { slower?: string[]; quiet?: boolean; stray?:
   return Object.assign(bench, { calls });
 }
 
-/** A landing queue that records what it was given. */
-export function stubQueue(): { submitted: { commit: string; first: boolean }[]; submit(commit: string, options?: { first?: boolean }): void } {
-  const submitted: { commit: string; first: boolean }[] = [];
-  return { submitted, submit(commit, options) { submitted.push({ commit, first: options?.first === true }); } };
+/** A landing queue that records what it was given, and what was withdrawn from it. */
+export function stubQueue(): { submitted: { commit: string; first: boolean }[]; withdrawn: string[]; submit(commit: string, options?: { first?: boolean }): void; withdraw(commit: string): "withdrawn" | "unknown" } {
+  const submitted: { commit: string; first: boolean }[] = [], withdrawn: string[] = [];
+  return {
+    submitted, withdrawn,
+    submit(commit, options) { submitted.push({ commit, first: options?.first === true }); },
+    withdraw(commit) {
+      if (!submitted.some(entry => entry.commit === commit) || withdrawn.includes(commit)) return "unknown";
+      withdrawn.push(commit); return "withdrawn";
+    },
+  };
 }
 
 export function assertMessage(git: Git, commit: string, ...patterns: RegExp[]): void {

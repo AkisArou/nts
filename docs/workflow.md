@@ -148,7 +148,8 @@ What follows from a run:
   flaky or machine red reverts nothing. Then the culprit search finds the
   commit that broke it, among those since that part's last green run. The lander reverts that commit (the
   revert passes the landing check like any change), and re-landing it with a
-  fix becomes a task.
+  fix becomes a task. When that part goes green with the commit still in, it
+  was no culprit: a revert of it still waiting to land is withdrawn.
 - **What can be wrong on `main`, and for how long:** only a heavy suite's
   result, and only until the full check finds it: within about an hour for
   the core, within the day for a wide step. A build or unit test that a
