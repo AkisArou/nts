@@ -6,6 +6,7 @@
   "nts-chromium-checkpoint1": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium-checkpoint2": { "kind": "kept", "why": "a Chromium build cache, kept because rebuilding it is slow" },
   "nts-chromium": { "kind": "kept", "why": "the Chromium task's own caches, kept while the user has it paused" },
+  "nts-chromium-tests": { "kind": "kept", "why": "the Chromium task's test folder, kept while the user has it paused" },
 
   "nts-handover": { "kind": "kept", "why": "each agent's handover notes, from which a stopped agent resumes its task" },
   "nts-scratch": { "kind": "folders", "why": "agents' working files, one folder for each agent", "folders": {
@@ -30,7 +31,6 @@
     "arm64-sysroot": { "kind": "kept", "writer": "tooling/android/arm-barrier.sh", "why": "the arm64 sysroot" },
     "case-roots": { "kind": "kept", "writer": "tooling/census/project.ts", "why": "the census's case roots, which it expires itself" },
     "c-objects": { "kind": "kept", "writer": "tooling/census/conformance262.ts", "why": "compiled runtime objects, by content" },
-    "conformance262": { "kind": "scratch", "writer": "tooling/census/conformance262.ts" },
     "differential-objects": { "kind": "kept", "writer": "tooling/differential/src/objects.rs", "why": "the differential's objects, by content" },
     "expect-ir": { "kind": "scratch", "writer": "tooling/conformance/expect-ir.ts" },
     "gate-scope-entries": { "kind": "scratch", "writer": "tooling/gate/train/step-scope.ts" },
@@ -38,7 +38,6 @@
     "linux": { "kind": "kept", "writer": "tooling/linux/build-libuv.sh", "why": "the Linux musl libuv builds" },
     "node-compile-cache": { "kind": "kept", "writer": "tooling/gate/canonical-environment.ts", "why": "the shared Node compile cache, bounded by hourly age and byte retention in tooling/full-check/node-cache-retention.ts" },
     "node-deps": { "kind": "kept", "writer": "tooling/conformance/node-deps.mjs", "why": "the bundled Node native dependencies" },
-    "outcomes": { "kind": "scratch", "writer": "tooling/conformance/outcomes-check.ts" },
     "proxy-app": { "kind": "kept", "writer": "tooling/android/proxy-app.sh", "why": "the Android proxy app's build" },
     "swift": { "kind": "kept", "writer": "build/src/swift.rs", "why": "the Swift toolchain" },
     "swift-kept": { "kind": "kept", "writer": "tooling/cli/src/swift.rs", "why": "what is kept per Swift toolchain" },
