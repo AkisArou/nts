@@ -85,6 +85,14 @@ ids, kept so the records that cite them still resolve.
 - The rest of #190's wrong answers, by reach.
 
 **Aborts and failed builds**
+- Flow's incremental fixpoint for test262's
+  [infinity division](../third_party/test262/test/language/expressions/division/S11.5.2_A4_T4.js)
+  differs from a full sweep: materialize the case with `tooling/census/project.ts`;
+  `target/nts-dev/nts emit-c <project>/tsconfig.json --main` reports "flow
+  fixpoint changed on a full sweep" at `compiler/core/src/hir/flow.rs:1363`.
+  Release skips this verifier;
+  [neighbour T3](../third_party/test262/test/language/expressions/division/S11.5.2_A4_T3.js)
+  emits as the control.
 - A rest parameter reads the second argument (#209); `Array.isArray` over a
   typed array (#208); a refused function called through `{ size }` (#161); a
   class called with `.call` through a construct signature (#222).

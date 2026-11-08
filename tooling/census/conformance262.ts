@@ -121,7 +121,6 @@
 // `sole` is an upper bound for every root, and for a checker root a loose one.
 
 import { checkerPin } from "./checker-pin.ts";
-import {createHash} from "node:crypto";
 import { execFileSync, spawnSync } from "node:child_process";
 import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir, loadavg } from "node:os";
@@ -143,12 +142,9 @@ import { memoryRun, closeMemoryRun } from "./worker-memory.ts";
 import { runMemoryWorkers } from "./worker-pool.ts";
 import { Admission, RESUME_AT_GB } from "../gate/admission.ts";
 import { acquireToken, withToken } from "../gate/tokens.mjs";
-import {beginComparison,digest,resourceStop,RECORD_COMPARISON_STEPS} from "../lanes/resource-comparison.ts";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
 
-const comparisonOwner=RECORD_COMPARISON_STEPS.includes(process.env.NTS_GATE_STEP??"");
-const comparisonReport=beginComparison(comparisonOwner&&(process.argv.includes("--recorded")||process.argv.includes("--check"))?process.env:{});
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
 const argvEarly = process.argv.slice(2);
@@ -226,7 +222,6 @@ if (recordPendingFile && (!TYPESCRIPT || sample > 0 || pathsFrom.length > 0 || r
 }
 
 const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
-const COMPARISON_COMPILER_HASH=createHash("sha256").update(readFileSync(PINNED)).digest("hex");
 process.env.NTS_CHECKERS = "1";
 
 
@@ -970,7 +965,6 @@ let comparison = null;
 const COMPARISON_FAILURES = TYPESCRIPT ? ["REGRESSED", "CHANGED"] : ["REGRESSED", "MISSING", "CHANGED", "NEW FAIL"];
 // The rows --record-pending writes: the pending cases' and the accepted changes'.
 const recordUpdates = new Map();
-const resourceRegressions=[];
 if (checkFile && TYPESCRIPT) {
   const expected = parseTypeScriptRecord(readFileSync(checkFile, "utf8"));
   comparison = { REGRESSED: [], CHANGED: [], FIXED: [], "REFUSES NOW": [], "LOUD NOW": [], "REFUSES DIFFERENTLY": [],
@@ -1016,7 +1010,6 @@ if (checkFile && TYPESCRIPT) {
     }
     if (was.outcome === "pass" && c.outcome !== "pass") {
       comparison.REGRESSED.push(`${path}: pass -> ${c.outcome} (${c.cause ?? ""})`);
-      const stop=resourceStop(path,rows.get(path));if(c.outcome==="no-verdict"&&stop)resourceRegressions.push(stop);
     }
     if (was.outcome === "fail" && c.outcome === "pass") comparison.FIXED.push(`${path}: fail -> pass`);
     if (was.outcome === "fail" && c.outcome === "fail" && c.detail !== was.detail) {
@@ -1025,7 +1018,6 @@ if (checkFile && TYPESCRIPT) {
     }
     if (was.outcome === "fail" && c.outcome !== "fail" && c.outcome !== "pass") {
       comparison.REGRESSED.push(`${path}: fail -> ${c.outcome} (${c.cause ?? ""})`);
-      const stop=resourceStop(path,rows.get(path));if(c.outcome==="no-verdict"&&stop)resourceRegressions.push(stop);
     }
   }
   for (const c of ranRows) {
@@ -1184,7 +1176,6 @@ if (rows.size !== toAttempt.length) problems.push(`${toAttempt.length - rows.siz
 if (audit.withoutReason.length + audit.naming_nothing.length + audit.unknownKind.length > 0) problems.push("the exclusion audit failed");
 if (overrideAudit.some((a) => a.faults.length > 0)) problems.push("the evidence-override audit failed");
 const comparisonFailures=comparison ? COMPARISON_FAILURES.reduce((sum, kind) => sum + comparison[kind].length, 0) : 0;
-const reconciliationFailures=problems.length;
 if (comparisonFailures > 0) {
   problems.push("the recorded outcomes changed; see above, then re-record with --record if intended");
 }
@@ -1215,9 +1206,4 @@ if (jsonFile) {
     outcomes: Object.fromEntries(cases.filter((c) => c.outcome).map((c) => [c.record.path, { outcome: c.outcome, cause: c.cause ?? null }])),
   }, null, 2));
 }
-if(checkFile)comparisonReport.complete({suite:SUITE_NAME,under,backend:BACKEND,compiler:COMPARISON_COMPILER_HASH,
-  record:digest(readFileSync(checkFile,"utf8")),selection:digest(JSON.stringify(population.map(row=>row.path).sort())),
-  policy:digest(JSON.stringify({jobs,workerBytes:MEMORY_CAP_KB*1024,runBytes:Number(process.env.NTS_GATE_STEP_MEMORY_BYTES??8*2**30),harness:HARNESS_HASH,
-    sources:["conformance262.ts","attempt262.ts","worker-memory.ts","worker-pool.ts","project.ts","../jvm/launch.ts"].map(file=>readFileSync(join(HERE,file),"utf8"))})),
-},comparisonFailures+reconciliationFailures,resourceRegressions);
 exitAfterOutput(problems.length === 0 ? 0 : 1);
