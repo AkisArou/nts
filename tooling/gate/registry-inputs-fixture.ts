@@ -9,9 +9,9 @@ import { chmodSync,copyFileSync,mkdirSync, mkdtempSync, readFileSync, readdirSyn
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import type { TestContext } from "node:test";
-import {withPackageManager} from "../lanes/package-manager.ts";
-import {fixtureInputs} from "../lanes/node-inputs-test-fixture.ts";
-import {acquire as acquireNodeInputs} from "../lanes/node-inputs.ts";
+import {withPackageManager} from "../inputs/package-manager.ts";
+import {fixtureInputs} from "../inputs/node-inputs-test-fixture.ts";
+import {acquire as acquireNodeInputs} from "../inputs/node-inputs.ts";
 import {nodePin} from "../bootstrap/node.ts";
 import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
@@ -81,16 +81,16 @@ export async function registryInputsFixture(t: TestContext,
     writable(root);rmSync(root, { recursive: true, force: true });
   } });
   const toolingRoot=fileURLToPath(new URL("../../",import.meta.url));
-  const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),lanes=join(consumer,"tooling/lanes");
+  const table=fixtureInputs(main,nodePin(toolingRoot)),consumer=join(root,"input-consumer"),linkerDir=join(consumer,"tooling/inputs");
   acquireNodeInputs(main,join(root,"consumer-home/.cache/nts-node-inputs"),table);
-  copyModuleClosure(["tooling/lanes/dependency-inputs.ts"],consumer);
-  copyFileSync(join(toolingRoot,"tooling/lanes/inputs.sh"),join(lanes,"inputs.sh"));
+  copyModuleClosure(["tooling/inputs/dependency-inputs.ts"],consumer);
+  copyFileSync(join(toolingRoot,"tooling/inputs/link.sh"),join(linkerDir,"link.sh"));
   // A frozen destination executes its own Node provisioner and catalog.
   // Commit that real import closure so both clones retain the same authority.
-  const nodeFiles=copyModuleClosure(["tooling/lanes/node-inputs.ts"],main);
-  writeFileSync(join(main,"tooling/lanes/node-inputs.json"),JSON.stringify(table));
+  const nodeFiles=copyModuleClosure(["tooling/inputs/node-inputs.ts"],main);
+  writeFileSync(join(main,"tooling/inputs/node-inputs.json"),JSON.stringify(table));
   writeFileSync(join(consumer,"package.json"),'{"type":"module"}\n');
-  const inputs=join(lanes,"inputs.sh");
+  const inputs=join(linkerDir,"link.sh");
   const packageJson = { name: REGISTRY_FIXTURE_PACKAGE, version: "1.0.0", type: "module",
     exports: "./index.js", license: "MIT" };
   writeFileSync(join(packageRoot, "package.json"), JSON.stringify(packageJson));
@@ -137,7 +137,7 @@ export async function registryInputsFixture(t: TestContext,
     "-c", "core.hooksPath=/dev/null", "-c", "user.name=Registry input fixture",
     "-c", "user.email=fixture@example.invalid", ...args], cwd);
   await git(main, ["init", "--initial-branch=main"]);
-  await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc", ".tool-versions", "build/node-deps/recipes.json", ...nodeFiles, "tooling/lanes/node-inputs.json"]);
+  await git(main, ["add", "package.json", "pnpm-workspace.yaml", ".gitignore", ".npmrc", ".tool-versions", "build/node-deps/recipes.json", ...nodeFiles, "tooling/inputs/node-inputs.json"]);
   await git(main, ["commit", "-m", "fixture main has no registry dependency or test importer"]);
   mkdirSync(join(main, "node_modules"));
   const mainIdentity = treeIdentity(main);

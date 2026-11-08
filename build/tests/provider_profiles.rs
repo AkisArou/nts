@@ -194,7 +194,7 @@ fn the_public_types_reject_conflicting_kinds_and_mutating_policy() {
         .args([
             "--input-type=module",
             "-e",
-            "import {withPackageManager} from './tooling/lanes/package-manager.ts'; \
+            "import {withPackageManager} from './tooling/inputs/package-manager.ts'; \
              process.stdout.write(await withPackageManager(process.cwd(), {}, \
              manager => manager.run(process.argv.slice(1))));",
             "--",

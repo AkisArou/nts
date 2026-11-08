@@ -24,10 +24,10 @@ type Cancellation = { slice: string; signal: string; record: string; before: str
 // seam, after the failing trigger has been judged, to exercise SIGTERM with
 // either an intact seal or a seal changed at that exact cancellation boundary.
 function cancellationScope(gate: string, source: string, own: string, corrupt: boolean): void {
-  const train = join(gate, "train"); mkdirSync(train);
-  for (const name of readdirSync(join(source, "train"))) if (name !== "step-scope.ts") symlinkSync(join(source, "train", name), join(train, name));
+  const scopes = join(gate, "scopes"); mkdirSync(scopes);
+  for (const name of readdirSync(join(source, "scopes"))) if (name !== "step-scope.ts") symlinkSync(join(source, "scopes", name), join(scopes, name));
   const actual = new URL("./step-scope.ts", import.meta.url).href;
-  writeFileSync(join(train, "step-scope.ts"), `
+  writeFileSync(join(scopes, "step-scope.ts"), `
 import assert from 'node:assert/strict';
 import {spawnSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
@@ -101,7 +101,7 @@ function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, fail
   mkdirSync(join(target, "gate-costs"), { recursive: true });
   const source = fileURLToPath(new URL("../", import.meta.url));
   for(const file of moduleClosure(["tooling/gate/run.mjs"])){
-    if(control.oracleCancellation&&file.startsWith("tooling/gate/train/"))continue;
+    if(control.oracleCancellation&&file.startsWith("tooling/gate/scopes/"))continue;
     const destination=join(root,file),original=join(source,"../..",file);
     mkdirSync(dirname(destination),{recursive:true});
     if(file==="tooling/gate/run.mjs")writeFileSync(destination,readFileSync(original));

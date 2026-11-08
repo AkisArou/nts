@@ -23,7 +23,7 @@ function fixture(t:{after(fn:()=>void):void}) {
   const table=(names:string[])=>JSON.stringify({...header,rows:names.map(row)});
   mkdirSync(join(root,"benchmarks/cases"),{recursive:true});
   put("benchmarks/cases/.keep", "");
-  put("tooling/lanes/inputs.sh", "#!/bin/sh\nexit 0\n");
+  put("tooling/inputs/link.sh", "#!/bin/sh\nexit 0\n");
   for(const name of ["existing","previously-unrecorded","previously-no-config"])put(`tests/programs/${name}/src/main.ts`,"export function work(n:number):number{return n;}");
   put("tests/programs/existing/tsconfig.json","{}");put("tests/programs/previously-unrecorded/tsconfig.json","{}");
   put("results/oracle-counts.json",table(["existing"]));

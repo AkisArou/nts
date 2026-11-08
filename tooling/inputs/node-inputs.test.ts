@@ -31,16 +31,16 @@ test('input provisioning uses each destination tree catalog across a Node upgrad
   const trees=[join(root,'catalog-old'),join(root,'catalog-next')],oldVersion=nodePin(old),nextVersion=nodePin(next);
   for(const [source,tree,release] of [[old,trees[0]!,oldVersion],[next,trees[1]!,nextVersion]] as const){
     candidate(source,tree);
-    copyModuleClosure(['tooling/lanes/node-inputs.ts'],tree);
-    writeFileSync(join(tree,'tooling/lanes/node-inputs.json'),JSON.stringify({version:1,releases:{[release]:table.releases[release]}}));
-    writeFileSync(join(tree,'tooling/lanes/inputs.sh'),readFileSync(new URL('./inputs.sh',import.meta.url)));
+    copyModuleClosure(['tooling/inputs/node-inputs.ts'],tree);
+    writeFileSync(join(tree,'tooling/inputs/node-inputs.json'),JSON.stringify({version:1,releases:{[release]:table.releases[release]}}));
+    writeFileSync(join(tree,'tooling/inputs/link.sh'),readFileSync(new URL('./link.sh',import.meta.url)));
     // This guard exercises Node provisioning; registry installation has its
     // own tests and must not touch any real package cache in this fixture.
-    writeFileSync(join(tree,'tooling/lanes/dependency-inputs.ts'),"import {writeFileSync} from 'node:fs';writeFileSync(process.argv[4]+'/dependency-provisioned','yes');\n");
+    writeFileSync(join(tree,'tooling/inputs/dependency-inputs.ts'),"import {writeFileSync} from 'node:fs';writeFileSync(process.argv[4]+'/dependency-provisioned','yes');\n");
   }
   const shared=join(root,'shared');mkdirSync(shared);
   for(const [from,to,release] of [[trees[0]!,trees[1]!,nextVersion],[trees[1]!,trees[0]!,oldVersion]] as const)await t.test(release,()=>{
-    const result=spawnSync('sh',[join(from,'tooling/lanes/inputs.sh'),'lane',shared,to],{encoding:'utf8',
+    const result=spawnSync('sh',[join(from,'tooling/inputs/link.sh'),'work',shared,to],{encoding:'utf8',
       env:{...process.env,HOME:home,PATH:dirname(process.execPath)+':'+process.env.PATH}});
     assert.equal(result.status,0,result.stdout+result.stderr);
     assert.equal(realpathSync(join(to,'third_party/node-inputs')),pairPath(release,table.releases[release]!,cache));

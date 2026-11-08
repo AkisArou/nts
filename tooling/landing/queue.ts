@@ -21,7 +21,7 @@ import { existsSync, mkdirSync, openSync, readdirSync, readFileSync, rmSync, wri
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { systemdEnvironment } from "../gate/environment.ts";
-import { durableRecord } from "../lanes/durable-record.ts";
+import { durableRecord } from "../gate/durable-record.ts";
 import { revParse, sharedCheckout } from "./git.ts";
 import { holder } from "./lock.ts";
 

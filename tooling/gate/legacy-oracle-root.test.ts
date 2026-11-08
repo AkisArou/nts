@@ -18,7 +18,7 @@ function fixture(t: { after(fn: () => void): void }, oldUnrecorded = false) {
   put(source, "export function work(n: number): number { return 1; }\n");
   put("tests/programs/example/tsconfig.json", '{"files":["src/main.ts"]}');
   put("benchmarks/cases/.keep", "");
-  put("tooling/lanes/inputs.sh", "#!/bin/sh\nexit 0\n");
+  put("tooling/inputs/link.sh", "#!/bin/sh\nexit 0\n");
   put(".gitignore", "/results/oracle-counts.json\n");
   if (oldUnrecorded) {
     put("tests/programs/unrecorded/tsconfig.json", '{"files":["src/main.ts"]}');
@@ -92,15 +92,15 @@ test("malformed records remove the private checkout without publishing any view"
   assert.equal(existsSync(join(f.root, "results/oracle-counts.json")), false);
 });
 
-test("a lane comparison prepares from the shared checkout's owned dependency store", t => {
-  const f = fixture(t), lane = join(dirname(f.root), "lane");
-  f.git("worktree", "add", "--quiet", "--detach", lane, f.migration);
+test("a work tree's comparison prepares from the shared checkout's owned dependency store", t => {
+  const f = fixture(t), work = join(dirname(f.root), "work");
+  f.git("worktree", "add", "--quiet", "--detach", work, f.migration);
   try {
-    writeFileSync(join(lane, "tooling/lanes/inputs.sh"), '#!/bin/sh\nprintf "%s" "$2" > "$3/preparation-root"\n');
-    const snapshot = comparisonOracleRoot(lane, [f.old], f.cache);
+    writeFileSync(join(work, "tooling/inputs/link.sh"), '#!/bin/sh\nprintf "%s" "$2" > "$3/preparation-root"\n');
+    const snapshot = comparisonOracleRoot(work, [f.old], f.cache);
     try { assert.equal(readFileSync(join(snapshot.root, "preparation-root"), "utf8"), f.root); }
     finally { snapshot.dispose(); }
-  } finally { f.git("worktree", "remove", "--force", lane); }
+  } finally { f.git("worktree", "remove", "--force", work); }
 });
 
 test("a changed existing population keeps the pin's historical key without waiving coverage", t => {

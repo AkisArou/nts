@@ -35,8 +35,8 @@ test('each TypeScript backend owes its shared reference exactly once',()=>{
 });
 
 test("the immutable Node input selector retains the gate-inputs' full reach",()=>{
-  const expected=stepsFor('tooling/lanes/inputs.sh');
-  for(const path of ['tooling/lanes/node-inputs.ts','tooling/lanes/node-inputs.json','tooling/lanes/node-inputs.test.ts','tooling/lanes/node-inputs-test-fixture.ts'])
+  const expected=stepsFor('tooling/inputs/link.sh');
+  for(const path of ['tooling/inputs/node-inputs.ts','tooling/inputs/node-inputs.json','tooling/inputs/node-inputs.test.ts','tooling/inputs/node-inputs-test-fixture.ts'])
     for(const added of [false,true])assert.deepEqual(changeOwes([{path,added}]),expected,path);
 });
 
@@ -834,7 +834,7 @@ test("an unavailable Cargo toolchain grants no scope for compiled inputs or docu
 
 test("the gate trees' inputs owe every step", () => {
   // Every gate tree is linked through them.
-  for (const path of ["tooling/lanes/inputs.sh", "tooling/inputs/linker.ts", "tooling/inputs/linker.test.ts"])
+  for (const path of ["tooling/inputs/link.sh", "tooling/inputs/linker.ts", "tooling/inputs/linker.test.ts", "tooling/inputs/dependency-inputs.ts", "tooling/inputs/package-manager.ts"])
     assert.equal(stepsFor(path).length, allSteps().length, path);
 });
 

@@ -30,7 +30,7 @@ function fixture(t: { after(fn: () => void): void }) {
   t.after(() => removeOracleSnapshot(directory));
   const root = join(directory, "repo"), home = join(directory, "full");
   mkdirSync(join(root, "tooling/gate"), { recursive: true });
-  mkdirSync(join(root, "tooling/lanes"), { recursive: true });
+  mkdirSync(join(root, "tooling/inputs"), { recursive: true });
   mkdirSync(join(root, "results"), { recursive: true });
   const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
   Object.assign(env, {
@@ -44,7 +44,7 @@ function fixture(t: { after(fn: () => void): void }) {
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
   writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
-  writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'mkdir -p "$NTS_GATE_TREE/results"\nprintf CANDIDATE > "$NTS_GATE_TREE/results/setup-marker"\n');
+  writeFileSync(join(root, "tooling/inputs/link.sh"), 'mkdir -p "$NTS_GATE_TREE/results"\nprintf CANDIDATE > "$NTS_GATE_TREE/results/setup-marker"\n');
   git("init", "-q", "-b", "main"); git("add", "."); git("commit", "-qm", "main");
   git("checkout", "-qb", "candidate");
   writeFileSync(join(root, "candidate"), "candidate input\n");

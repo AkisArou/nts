@@ -6,7 +6,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { test } from "node:test";
-import {GateResource} from "../lanes/gate-resource.ts";
+import {GateResource} from "./gate-resource.ts";
 import { testScratch } from "./test-scratch.ts";
 
 const script = readFileSync(new URL("./pinned.sh", import.meta.url), "utf8");
@@ -17,7 +17,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     const root = join(directory, "repo");
     const tree = join(directory, "gate-tree");
     mkdirSync(join(root, "tooling/gate"), { recursive: true });
-    mkdirSync(join(root, "tooling/lanes"), { recursive: true });
+    mkdirSync(join(root, "tooling/inputs"), { recursive: true });
     const env = Object.fromEntries(Object.entries(process.env).filter(([key]) => !key.startsWith("GIT_") && !key.startsWith("NTS_") && !launcherPolicyNames({[key]:process.env[key]}).length));
     Object.assign(env, {
       GIT_AUTHOR_NAME: "fixture", GIT_AUTHOR_EMAIL: "fixture@example.invalid",
@@ -31,12 +31,12 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     // Affinity is independently tested; this fixture isolates which commit
     // supplies preparation without depending on delegated host cpusets.
     writeFileSync(join(root, "tooling/gate/affinity.ts"), "");
-    writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'printf owner > "' + join(directory, "marker") + '"\n');
+    writeFileSync(join(root, "tooling/inputs/link.sh"), 'printf owner > "' + join(directory, "marker") + '"\n');
     git("init", "-q");
     git("add", ".");
     git("commit", "-qm", "owner");
     const owner = git("rev-parse", "HEAD");
-    writeFileSync(join(root, "tooling/lanes/inputs.sh"), 'test -z "${NTS_GATE_LOCK_FD:-}" || { echo "lock marker leaked into candidate tools" >&2; exit 24; }\n' + (refuses
+    writeFileSync(join(root, "tooling/inputs/link.sh"), 'test -z "${NTS_GATE_LOCK_FD:-}" || { echo "lock marker leaked into candidate tools" >&2; exit 24; }\n' + (refuses
       ? 'echo "candidate input is missing" >&2\nexit 23\n'
       : 'printf candidate > "' + join(directory, "marker") + '"\n'));
     git("add", ".");

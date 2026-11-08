@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import {execFileSync} from 'node:child_process';
 import {createHash} from 'node:crypto';
 import {existsSync,mkdirSync,readFileSync,renameSync,writeFileSync} from 'node:fs';
-import {basename,dirname,join} from 'node:path';
+import {basename,dirname,join,normalize,relative} from 'node:path';
 import {fileURLToPath,pathToFileURL} from 'node:url';
 import {test,type TestContext} from 'node:test';
 import {copyModuleClosure,moduleClosure} from '../gate/module-closure-fixture.ts';
@@ -46,10 +46,16 @@ test('the source tree chooses a relocated producer and authenticates its current
   const old=files.find(file=>basename(file)==='durable-record.ts')!;
   const moved='tooling/relocated/durable-record.ts';mkdirSync(dirname(join(f.root,moved)),{recursive:true});
   renameSync(join(f.root,old),join(f.root,moved));
+  // Every import that names the old file is rewritten, from wherever its importer sits.
   for(const file of files){
     if(file===old)continue;
     const path=join(f.root,file),text=readFileSync(path,'utf8');
-    if(text.includes('"./durable-record.ts"'))writeFileSync(path,text.replaceAll('"./durable-record.ts"','"../relocated/durable-record.ts"'));
+    const next=text.replace(/(["'])(\.\.?\/[^"']+)\1/g,(whole,quote:string,spec:string)=>{
+      if(normalize(join(dirname(file),spec))!==old)return whole;
+      const to=relative(dirname(file),moved);
+      return quote+(to.startsWith('.')?to:'./'+to)+quote;
+    });
+    if(next!==text)writeFileSync(path,next);
   }
   assert.equal(existsSync(join(f.root,old)),false,'no caller-layout fallback can find the moved file');
   const relocated=f.cap();

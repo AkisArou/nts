@@ -3,7 +3,7 @@
 import {execFileSync} from 'node:child_process';
 import {existsSync,mkdirSync,readFileSync,rmSync,symlinkSync,writeFileSync} from 'node:fs';
 import {dirname,join,resolve} from 'node:path';
-import {DEPENDENCY_ROOT_INPUTS,dependencyCache} from '../lanes/dependency-inputs.ts';
+import {DEPENDENCY_ROOT_INPUTS,dependencyCache} from '../inputs/dependency-inputs.ts';
 import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
 import {RECIPE_SOURCES} from './oracle-results.ts';
 

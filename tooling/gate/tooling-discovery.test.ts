@@ -21,7 +21,7 @@ test("recursive discovery reaches omitted folders, nested tests, both suffixes a
   assert.deepEqual(toolingTestInventory(root),expected);
   validateToolingCoverage(toolingTestInventory(root),collectToolingTests(root),[]);
   // The former fixed-folder mechanism omitted these entries altogether.
-  const old=collectToolingTests(root).filter(path=>/^tooling\/(gate|lanes|census|apple)\/[^/]+$/.test(path));
+  const old=collectToolingTests(root).filter(path=>/^tooling\/(gate|inputs|census|apple)\/[^/]+$/.test(path));
   assert.throws(()=>validateToolingCoverage(toolingTestInventory(root),old,[]),/neither collected nor explicitly excluded/);
 });
 test("Git inventory covers tracked, untracked and ignored tests without shell splitting",t=>{

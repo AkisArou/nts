@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import {acquireRevision,dependencyCache} from "../lanes/dependency-inputs.ts";
+import {acquireRevision,dependencyCache} from "../inputs/dependency-inputs.ts";
 import { readFileSync, writeFileSync, rmSync, readdirSync, mkdirSync, realpathSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
@@ -9,7 +9,7 @@ import { command, registryInputsFixture, REGISTRY_FIXTURE_MARKER,
 
 const prepare = (fixture: Awaited<ReturnType<typeof registryInputsFixture>>) => {
   const home=join(fixture.root,"consumer-home");mkdirSync(home,{recursive:true});
-  return command("sh", [fixture.inputs, "lane", fixture.main, fixture.frozen], fixture.root,undefined,{HOME:home,COREPACK_ENABLE_NETWORK:"0"});
+  return command("sh", [fixture.inputs, "work", fixture.main, fixture.frozen], fixture.root,undefined,{HOME:home,COREPACK_ENABLE_NETWORK:"0"});
 };
 
 test("a frozen candidate gets its new registry dev dependency before main has it", async t => {

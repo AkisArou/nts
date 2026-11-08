@@ -9,7 +9,7 @@ import { fileURLToPath } from "node:url";
 import { selectRange, selectionInfrastructure, unionViews, type RuleView } from "./owed-range.ts";
 import {committedChanges} from "./change-paths.ts";
 import {waitFor} from "./test-wait.ts";
-import {dependencyCache} from "../lanes/dependency-inputs.ts";
+import {dependencyCache} from "../inputs/dependency-inputs.ts";
 
 const ROOT = fileURLToPath(new URL("../..", import.meta.url));
 function fixtureRepository(t,repo:string,env:NodeJS.ProcessEnv):void {

@@ -1,6 +1,6 @@
 // The existing pinned.sh tree lock, held across setup and gate execution.
 // Acquire this before the landing lock. A snapshot only tries the latter:
-// an older lander may hold it while waiting for pinned.sh's tree lock.
+// a caller that started first may hold it while waiting for pinned.sh's tree lock.
 import { spawnSync, type StdioOptions } from "node:child_process";
 import { closeSync, fstatSync, mkdirSync, openSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";

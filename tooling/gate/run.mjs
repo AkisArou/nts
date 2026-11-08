@@ -72,7 +72,7 @@
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
-import {GateScopes} from "./train/step-scope.ts";
+import {GateScopes} from "./scopes/step-scope.ts";
 import {inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
 import {stepBound, stepBoundReason} from "./step-bound.ts";

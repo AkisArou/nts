@@ -9,8 +9,8 @@ import {setTimeout as pause} from "node:timers/promises";
 import {activeCommand} from "../gate/active-command.ts";
 import {ENVIRONMENT_CONTEXT,hostEnvironment,FIXED_AMBIENT,ownedCacheEnvironment} from "../gate/canonical-environment.ts";
 import {ToolingInstrumentError} from "../gate/step-result.ts";
-import {GateResource} from "./gate-resource.ts";
-import {durableRecord} from "./durable-record.ts";
+import {GateResource} from "../gate/gate-resource.ts";
+import {durableRecord} from "../gate/durable-record.ts";
 
 // Manifests before this commit carry bare pins. This frozen table only gains
 // an entry for a bare spec that a historical main actually shipped.

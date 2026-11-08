@@ -28,7 +28,7 @@ const actor = `
 import assert from 'node:assert/strict';
 import {ownedCacheEnvironment,NODE_COMPILE_CACHE_ROOT} from ${JSON.stringify(new URL("./canonical-environment.ts", import.meta.url).href)};
 import {captureRunTemporary,assertRunTemporary} from ${JSON.stringify(new URL("./run-temporary.ts", import.meta.url).href)};
-import {withPackageManager} from ${JSON.stringify(new URL("../lanes/package-manager.ts", import.meta.url).href)};
+import {withPackageManager} from ${JSON.stringify(new URL("../inputs/package-manager.ts", import.meta.url).href)};
 import {pruneNodeCompileCache} from ${JSON.stringify(new URL("../full-check/node-cache-retention.ts", import.meta.url).href)};
 import {join} from 'node:path';
 const f=JSON.parse(process.argv[1]),kind=process.argv[2],expected=join(f.account,'.cache/nts/node-compile-cache/v1');

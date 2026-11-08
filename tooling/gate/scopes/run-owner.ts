@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
-import { durableRecord } from "../../lanes/durable-record.ts";
+import { durableRecord } from "../durable-record.ts";
 import { toolingSlice } from "../tooling-slice.ts";
 
 export type RootIdentity = { group: string; device: string; inode: string };

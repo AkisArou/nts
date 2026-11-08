@@ -27,7 +27,7 @@ import { LANDING_HOME, Queue, type Checking, type Entry, type Result } from "./q
 import { removeRun, runLanding, type Ran, type RunOptions } from "./run.ts";
 import { landingCeiling } from "../gate/step-bound.ts";
 import { costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
-import { durableRecord } from "../lanes/durable-record.ts";
+import { durableRecord } from "../gate/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
 import { linkTree } from "../inputs/linker.ts";
 

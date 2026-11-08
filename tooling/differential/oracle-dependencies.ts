@@ -7,9 +7,9 @@ import {appendFileSync,chmodSync,existsSync,lstatSync,mkdirSync,mkdtempSync,read
 import {dirname,isAbsolute,join,relative,resolve,sep} from 'node:path';
 import {fileURLToPath} from 'node:url';
 import {setTimeout as pause} from 'node:timers/promises';
-import {DEPENDENCY_ROOT_INPUTS,identity,installDependencies,type Identity} from '../lanes/dependency-inputs.ts';
-import {GateResource} from '../lanes/gate-resource.ts';
-import {managerPin,withPackageManager} from '../lanes/package-manager.ts';
+import {DEPENDENCY_ROOT_INPUTS,identity,installDependencies,type Identity} from '../inputs/dependency-inputs.ts';
+import {GateResource} from '../gate/gate-resource.ts';
+import {managerPin,withPackageManager} from '../inputs/package-manager.ts';
 import {activeCommand} from '../gate/active-command.ts';
 import {TemporaryAdmission,type TemporaryAdmissionContext} from '../gate/admission.ts';
 import {MemoryRun} from '../census/worker-memory.ts';

@@ -2,8 +2,11 @@
 # Link into a worktree what no commit carries: the third-party clones, the
 # native checker's upstream corpora and the workspace's node_modules.
 #
-#   sh tooling/lanes/inputs.sh gate <shared checkout> <tree>   what pinned.sh and the landing check gate in
-#   sh tooling/lanes/inputs.sh lane <shared checkout> <tree>   what a pool tree, or the rule selector's, works in
+#   sh tooling/inputs/link.sh gate <shared checkout> <tree>   what pinned.sh and the landing check gate in
+#   sh tooling/inputs/link.sh work <shared checkout> <tree>   what a pool tree, or the rule selector's, works in
+#
+# Callers run a tree's own copy through tooling/inputs/linker.ts, which also
+# finds it in a commit from before it moved here.
 #
 # One list for both, because a tree missing an input does not fail: it
 # answers emptily. A gate step over no cases reads green, and a work tree
@@ -16,14 +19,14 @@ mode=$1
 root=$2
 tree=$3
 case $mode in
-  gate|lane) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/deno" ;;
-  *) echo "inputs.sh: mode is gate or lane, not $mode" >&2; exit 2 ;;
+  gate|work) linked="third_party/typescript third_party/test262 third_party/are-we-fast-yet third_party/deno" ;;
+  *) echo "link.sh: the use is gate or work, not $mode" >&2; exit 2 ;;
 esac
 
 # The candidate's own pin selects an already acquired immutable Node pair.
 # Its catalog belongs to that tree too, including either endpoint of a range.
 # Neither a gate tree nor a work tree may borrow the caller's other release.
-node "$tree/tooling/lanes/node-inputs.ts" --link "$tree"
+node "$tree/tooling/inputs/node-inputs.ts" --link "$tree"
 
 # The gitignored third-party clones are inputs rather than sources -- test262,
 # Are We Fast Yet, TypeScript's tests and node's `lib/`. They are not in any

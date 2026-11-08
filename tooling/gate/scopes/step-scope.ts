@@ -65,7 +65,7 @@ function reapPreviousRoot(previous: RunOwner): void {
   control("stop", previous.slice);
 }
 
-/** The train owns the warm-tree lock here, before checkout or cache cleanup. */
+/** The runner owns the warm-tree lock here, before checkout or cache cleanup. */
 export function reapGateRoot(ownerFile: string): void { reapRunOwner(ownerFile, reapPreviousRoot); }
 
 /** The timeout is a failed cleanup instrument, never evidence of emptiness. */

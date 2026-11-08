@@ -8,8 +8,8 @@ import {dirname,join,relative,resolve,sep} from "node:path";
 import {pathToFileURL} from "node:url";
 import {setTimeout as pause} from "node:timers/promises";
 import {ToolingInstrumentError,publishToolingFailure} from "../gate/step-result.ts";
-import {GateResource} from "./gate-resource.ts";
-import {durableRecord} from "./durable-record.ts";
+import {GateResource} from "../gate/gate-resource.ts";
+import {durableRecord} from "../gate/durable-record.ts";
 import {withPackageManager,type PackageManager} from "./package-manager.ts";
 
 const digest=(data:string|Buffer)=>createHash("sha256").update(data).digest("hex");

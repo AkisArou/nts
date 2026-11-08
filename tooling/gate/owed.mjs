@@ -994,7 +994,7 @@ export const RULES = [
     // Every gate tree's inputs are linked through these, the full run's too,
     // so they owe every step, as the runner does.
     name: "the gate trees' inputs",
-    when: (p) => p === "tooling/lanes/inputs.sh" || /^tooling\/lanes\/node-inputs(?:-test-fixture|\.test)?\.(?:ts|json)$/.test(p) || /^tooling\/inputs\//.test(p),
+    when: (p) => /^tooling\/inputs\//.test(p),
     full: true,
     wide: true,
     steps: [],
