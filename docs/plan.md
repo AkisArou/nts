@@ -304,6 +304,13 @@ ids, kept so the records that cite them still resolve.
   tests leak (#197). Tests already keep theirs there through
   `tooling/gate/test-scratch.ts`. A gate run by hand keeps three days of its logs
   (`~/.cache/nts-gate/runs`), as the landing and full checks keep theirs.
+- Check benchmark identities at landing: a fast step that computes every
+  case's identity and the compile key (`benchmarkIdentities`, `compileKey` in
+  `tooling/bench`) and compares them with the recorded compile rows, compiling
+  nothing, owed by a change to benchmark sources, the compile key's inputs and
+  the runtime sources benchmarks import. Today `benches` is deferred to the
+  full check, so an edit that moves a row's source or driver is found only
+  after it lands, where it holds the core.
 - `tooling/cli/tests/case_roots.rs`'s
   `native_checker_errors_keep_their_count_diagnostics_and_exit` once found its
   own scratch folder already gone when it removed it (`remove scratch:
