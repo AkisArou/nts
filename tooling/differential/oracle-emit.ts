@@ -392,7 +392,11 @@ function produceProgram(requestFile:string,requestSha256:string):ProgramEmission
   }});
   let original:ReturnType<API['createSnapshot']>|undefined,emitting:ReturnType<API['createSnapshot']>|undefined;
   const record:ProgramEmission={version:1,requestSha256,project:request.project,options:{},inventory:[],observations:[],outputs:[],inputHashes:{checking:{},emission:{}},placementOverlays:[],checkerImports:[],deferredImports:[],emitSkipped:true,diagnostics:''};
-  const diagnostics=(program:Program)=>({config:program.getConfigFileParsingDiagnostics(),program:program.getProgramDiagnostics(),global:program.getGlobalDiagnostics(),syntax:program.getSyntacticDiagnostics(),semantic:program.getSemanticDiagnostics(),declaration:program.getDeclarationDiagnostics()});
+  const diagnostics=(program:Program)=>{
+    const options=program.getCompilerOptions();
+    return {config:program.getConfigFileParsingDiagnostics(),program:program.getProgramDiagnostics(),global:program.getGlobalDiagnostics(),syntax:program.getSyntacticDiagnostics(),semantic:program.getSemanticDiagnostics(),
+      declaration:(options.declaration??options.composite)?program.getDeclarationDiagnostics():[]};
+  };
   const format=(channels:ReturnType<typeof diagnostics>)=>sdk.formatDiagnostics(Object.values(channels).flat(),api);
   const edges=(program:Program,files:readonly string[],inputHashes:Record<string,string>)=>files.map(file=>{
     const source=program.getSourceFile(file);if(!source)throw Error('oracle program source disappeared: '+file);
@@ -859,7 +863,7 @@ async function publishRuntimeSnapshot(directory:string,stored:OracleManifest,ind
   records.set('descriptor',descriptor);
   return writeOracleSnapshotIndex(directory,records);
 }
-type Job={request:OracleOptions;directory:string;entry:string;project:string|null;groups:EmitGroup[];ownerOrder:EmitGroup[];originalOutputs:Set<string>;inputs:Record<string,string>;files:Map<EmitGroup,string[]>};
+type Job={request:OracleOptions;directory:string;entry:string;project:string|null;ownerOverride:{physical:string;project:string}|null;groups:EmitGroup[];ownerOrder:EmitGroup[];originalOutputs:Set<string>;inputs:Record<string,string>;files:Map<EmitGroup,string[]>};
 
 /** One run-scoped worker; the batch owner supervises its compiler commands. */
 export class OracleWorker{
@@ -952,7 +956,7 @@ export class OracleWorker{
     // source extension. Keep the real identity everywhere outside this call.
     return file.replace(/\.tsx?$/,goal==='module'?'.mts':'.cts');
   }
-  private transpileOwner(group:EmitGroup):void{
+  private transpileOwner(job:Job,group:EmitGroup):void{
     const context=this.contexts.get(group)!,root=join(this.snapshot,'node_modules/typescript');
     const require=createRequire(join(root,'package.json'));
     const sdk:typeof import('typescript/sync')=require('typescript/sync'),ast:typeof import('typescript/ast')=require('typescript/ast');
@@ -982,7 +986,7 @@ export class OracleWorker{
         };
         if(!declaration&&!external)inspect(lease.sourceFile);
         const name=this.transpileFileName(file,group.options),mode=name.endsWith('.cts')||group.options.module===1?1:99;
-        const owner=declaration||external?null:this.filesystem.projectFor(file);
+        const owner=declaration||external?null:this.projectFor(job,file);
         const transformed=(file===group.entry||owner&&this.filesystem.realpath(owner)===group.project)&&/\.[cm]?tsx?$/.test(file)
           ?this.api.transpileModule(text,{fileName:name,compilerOptions:group.options as RawCompilerOptions,reportDiagnostics:true}):undefined;
         if(transformed?.diagnostics?.length)throw new TypeScriptDiagnosticError(2,sdk.formatDiagnostics(transformed.diagnostics,this.api));
@@ -1050,7 +1054,7 @@ export class OracleWorker{
       for(;;){
         for(const group of job.groups){
           const context=this.contexts.get(group)!;
-          if(!context.record||[...context.targets].some(file=>!group.sourceInventory.some(fact=>fact.path===file))){signal?.throwIfAborted();this.transpileOwner(group);}
+          if(!context.record||[...context.targets].some(file=>!group.sourceInventory.some(fact=>fact.path===file))){signal?.throwIfAborted();this.transpileOwner(job,group);}
         }
         for(const group of [...job.groups])this.expandOwners(job,group);
         if(job.groups.every(group=>{const context=this.contexts.get(group)!;return context.record&&[...context.targets].every(file=>context.expanded.has(file));}))break;
@@ -1087,7 +1091,10 @@ export class OracleWorker{
     const entry=this.filesystem.realpath(request.entry),project=request.project===undefined?this.filesystem.projectFor(entry):request.project===null?null:resolve(request.project);
     this.filesystem.readBytes(entry);
     mkdirSync(request.directory,{recursive:true});const directory=mkdtempSync(join(resolve(request.directory),'emit-'));
-    const job:Job={request,directory,entry,project,groups:[],ownerOrder:[],originalOutputs:new Set(),inputs:{},files:new Map()};
+    const physical=project&&request.project!==undefined?this.filesystem.projectFor(entry):null;
+    const ownerOverride=physical&&project&&this.filesystem.realpath(physical)!==this.filesystem.realpath(project)
+      ?{physical:this.filesystem.realpath(physical),project:this.filesystem.realpath(project)}:null;
+    const job:Job={request,directory,entry,project,ownerOverride,groups:[],ownerOrder:[],originalOutputs:new Set(),inputs:{},files:new Map()};
     const stageGroup=(file:string,name:string,config:string|null,roots?:string[])=>this.stageOwner(job,file,name,config,'declared',roots);
     for(const [i,preload] of (request.preloads??[]).entries()){
       const item=typeof preload==='string'?{entry:preload,project:this.filesystem.projectFor(preload)}:preload;
@@ -1102,6 +1109,13 @@ export class OracleWorker{
     return job;
   }
   private reset(){this.contexts.clear();this.filesystem.clear();this.api.clearSourceFileCache();}
+  /** An explicit case project replaces the entry's physical aggregate owner,
+   * including shared imports. A genuinely nearer config keeps its authority. */
+  private projectFor(job:Job,file:string):string|null{
+    const physical=this.filesystem.projectFor(file);if(!physical)return null;
+    const configured=this.filesystem.realpath(physical);
+    return configured===job.ownerOverride?.physical?job.ownerOverride.project:configured;
+  }
   private command(group:EmitGroup){
     const context=this.contexts.get(group)!;
     const request={version:1,project:group.project,output:context.producerOutput,mirror:join(this.ownerCache,'mirror'),cache:this.ownerCache,identity:this.identity,toolchain:join(this.snapshot,'node_modules/typescript'),compiler:this.compiler};
@@ -1180,7 +1194,7 @@ export class OracleWorker{
     while(queue.length){
       const file=queue.pop()!;if(context.expanded.has(file))continue;context.expanded.add(file);
       if(file!==group.entry&&!file.endsWith('.json')){
-        const owner=this.filesystem.projectFor(file);
+        const owner=this.projectFor(job,file);
         if(!owner)throw Error('oracle TypeScript import has no owner: '+file);
         if(this.filesystem.realpath(owner)!==group.project){context.dependencies.add(this.stageOwner(job,file,'owner-'+job.groups.length,owner,'imported'));continue;}
       }
@@ -1193,7 +1207,7 @@ export class OracleWorker{
         const target=this.filesystem.realpath(resolved);
         if(target.endsWith('.json')){context.targets.add(target);continue;}
         if(!/\.[cm]?tsx?$/.test(target))continue;
-        const project=this.filesystem.projectFor(target);
+        const project=this.projectFor(job,target);
         if(!project)throw Error('oracle TypeScript import has no owner: '+target);
         if(this.filesystem.realpath(project)===group.project){
           context.targets.add(target);queue.push(target);
@@ -1228,7 +1242,7 @@ export class OracleWorker{
       job.files.set(group,[...context.targets]);
     }
     for(const group of job.groups)for(const obligation of ownerImports(this.contexts.get(group)!.record!).filter(item=>this.contexts.get(group)!.targets.has(item.file))){
-      const target=this.filesystem.realpath(obligation.target),owner=this.filesystem.projectFor(target);
+      const target=this.filesystem.realpath(obligation.target),owner=this.projectFor(job,target);
       if(!owner||!job.groups.some(group=>group.project===this.filesystem.realpath(owner)&&group.emitted[target]))throw Error('oracle unowned TS2877 target: '+obligation.file+' -> '+obligation.specifier+' -> '+target);
     }
   }
@@ -1514,7 +1528,7 @@ export class OracleWorker{
       const outputs:Record<string,string>={};
       const tree=trees.get(job)!,sources=tree.sources;
       const imports=job.groups.flatMap(group=>ownerImports(this.contexts.get(group)!.record!).filter(item=>this.contexts.get(group)!.targets.has(item.file)).map(item=>{
-        const target=this.filesystem.realpath(item.target),project=this.filesystem.projectFor(target),execution=sources[target];
+        const target=this.filesystem.realpath(item.target),project=this.projectFor(job,target),execution=sources[target];
         if(!execution||!project||!sources[item.file])throw Error('oracle package TypeScript route has no owner output: '+item.file+' -> '+item.specifier);
         return {file:item.file,specifier:item.specifier,target,project:this.filesystem.realpath(project),execution,relationSha256:item.relationSha256};
       }));

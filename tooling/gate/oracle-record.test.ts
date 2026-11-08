@@ -7,6 +7,9 @@ import assert from "node:assert/strict";
 import { addRecord, canonicalDriver, completeRows, noOracleRecord, recordAll, validateSourcePlan } from "../differential/record-oracles.ts";
 import { readRecords } from "../differential/oracle-records.ts";
 import { fileURLToPath } from "node:url";
+import {testScratch} from './test-scratch.ts';
+import {OracleCompileBudgetError} from '../differential/oracle-batch.ts';
+import {CaseBudgetError} from './step-result.ts';
 const plan = { version: 1, backend: "c", source: "fixture.ts", entry: "/fixture.ts", source_digest: "source-digest", seed: null,
   generator_version: 1, generator_digest: "generator", case_key: "key", case_count: 2,
   cases: ["f 0 [0.0]", "f 1 [-0.0]"], signature: [], driver: "", resolver: "" };
@@ -133,6 +136,41 @@ test("a later shortfall publishes none of a recording's rows", async () => {
     if (saved === undefined) delete process.env.NTS_BENCH_CPUS; else process.env.NTS_BENCH_CPUS = saved;
     rmSync(dir,{recursive:true,force:true});
   }
+});
+
+test('an oracle compile timeout or memory cap records a budget failure without publishing a count',async t=>{
+  const root=testScratch(t,'oracle-record-budget'),saved=process.env.NTS_BENCH_CPUS;
+  t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
+  process.env.NTS_BENCH_CPUS='4';
+  t.mock.method(console,'log',()=>{});
+  for(const outcome of ['timeout','memory-cap'] as const){
+    const output=join(root,'counts.json'),original='{"version":1,"rows":[]}\n';writeFileSync(output,original);
+    writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans:[plan]}));
+    await assert.rejects(recordAll(root,output,async()=>{throw new OracleCompileBudgetError(outcome,'named compiler '+outcome);}),CaseBudgetError);
+    assert.equal(readFileSync(output,'utf8'),original,'a budget failure cannot fabricate a complete count');
+    const summary=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8'));
+    assert.equal(summary.findings[0].outcome,outcome);
+    assert.match(readFileSync(summary.findings[0].detail,'utf8'),new RegExp(outcome));
+  }
+});
+
+test('a large producer dump is retained once and never echoed into the recording report',async t=>{
+  const root=testScratch(t,'oracle-record-dump'),saved=process.env.NTS_BENCH_CPUS;
+  t.after(()=>{if(saved===undefined)delete process.env.NTS_BENCH_CPUS;else process.env.NTS_BENCH_CPUS=saved;});
+  process.env.NTS_BENCH_CPUS='4';
+  const lines:string[]=[];t.mock.method(console,'log',(...args:unknown[])=>{lines.push(args.join(' '));});
+  const dump='runtime: out of memory\n'+'goroutine dump detail\n'.repeat(100_000);
+  const plans=['c','llvm','jvm'].map(backend=>({...plan,backend}));
+  writeFileSync(join(root,'plans.json'),JSON.stringify({version:1,failures:[],plans}));
+  let measured=0;
+  await assert.rejects(recordAll(root,join(root,'counts.json'),async()=>{measured++;throw Error(dump);}),/recording incomplete/);
+  assert.equal(measured,1,'backend signatures share the same failed driver');
+  assert.ok(lines.join('\n').length<3000,'the console contains summaries and paths only');
+  const summary=JSON.parse(readFileSync(join(root,'measurement-summary.json'),'utf8'));
+  assert.equal(summary.findings.length,3);
+  assert.equal(new Set(summary.findings.map((finding:{detail:string})=>finding.detail)).size,1);
+  assert.equal(readFileSync(summary.findings[0].detail,'utf8'),dump+'\n');
+  assert.equal(existsSync(join(root,'counts.json')),false);
 });
 
 test("no-oracle records carry no numeric count and require an empty source identity", () => {

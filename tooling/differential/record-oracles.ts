@@ -9,9 +9,9 @@ import { execFile, spawnSync } from "node:child_process";
 import { promisify } from "node:util";
 const executeFile = promisify(execFile);
 import { fileURLToPath, pathToFileURL } from "node:url";
-import {prepareOracles,type OraclePreparation} from "./oracle-batch.ts";
+import {prepareOracles,preparedOracle,OracleCompileBudgetError,ORACLE_COMPILE_MEMORY_BYTES,type OraclePreparation} from "./oracle-batch.ts";
 import { oracleIdentity,oracleExecution,oracleLoaderReady,closeOracleExecution,finishOracleSnapshot } from "./oracle-emit.ts";
-import {ToolingInstrumentError} from '../gate/step-result.ts';
+import {CaseBudgetError,publishPressure,publishToolingFailure,ToolingInstrumentError} from '../gate/step-result.ts';
 
 import { GENERATOR, fixtureOf, parseLegacyTable, readRecords, recordPath, writeRecords,
   type RecordedDomain, type Populations, type OracleRow as Row, type OracleTable as Table } from "./oracle-records.ts";
@@ -234,8 +234,7 @@ async function measureDriver(plan: Plan, evidence: string, identity: string, pre
     const results = join(dir, `${arm}.results`), timings = join(dir, `${arm}.cpu.jsonl`);
     writeFileSync(results, "");
     const selected=preparation?.[arm];
-    if(!selected||'instrument' in selected)throw Error('oracle preparation not measured: '+(selected&&'instrument' in selected?selected.instrument:'missing finite batch member'));
-    const snapshotOwner=selected.prepared;
+    const snapshotOwner=preparedOracle(selected,'oracle preparation');
     let prepared:ReturnType<typeof oracleExecution>|undefined;
     const finish=()=>{const result=finishOracleSnapshot(snapshotOwner);if(!result.ready)throw new ToolingInstrumentError('tooling-setup',result.why);};
     try{
@@ -270,12 +269,12 @@ export async function recordAll(evidence: string, output: string, measure = meas
   const measured = new Map<string, { cpu: number[]; count: number }>();
   const failed = new Map<string, Error>();
   const exceptions = new Set<string>();
-  const findings: { source: string; backend: string; driver_sha256: string; error: string }[] = [];
+  const findings: { source: string; backend: string; driver_sha256: string; outcome: 'timeout'|'memory-cap'|'not-measured'; error: string; detail: string }[] = [];
   let preparations:Record<string,OraclePreparation>|undefined;
   if(measure===measureDriver){
     const unique=new Map(manifest.plans.filter(plan=>plan.case_count>0).map(plan=>[digest(plan.driver),plan]));
     const requests=[...unique].flatMap(([identity,plan])=>[0,1].map(arm=>({key:identity+':'+arm,options:{entry:plan.entry,project:plan.tsconfig,directory:join(evidence,identity,`${arm}.emit`)}})));
-    preparations=await prepareOracles(requests,{directory:join(evidence,'preparation'),toolchain:oracleToolchainLocation(),workers:1,env:process.env,memoryBytes:2*2**30,report:message=>console.error(message)});
+    preparations=await prepareOracles(requests,{directory:join(evidence,'preparation'),toolchain:oracleToolchainLocation(),workers:1,env:process.env,memoryBytes:ORACLE_COMPILE_MEMORY_BYTES,report:message=>console.error(message)});
   }
   for (const plan of manifest.plans) {
     const identity = digest(plan.driver);
@@ -293,10 +292,13 @@ export async function recordAll(evidence: string, output: string, measure = meas
       console.log("recorded", plan.backend, plan.source, measurement.count, measurement.cpu);
     } catch (error) {
       const failure = error instanceof Error ? error : new Error(String(error));
-      const message = failure.message;
+      const message = failure.message.split(/\r?\n/,1)[0]!.slice(0,280);
+      const detail=join(evidence,identity,'failure.txt');
+      if(!failed.has(identity)){mkdirSync(dirname(detail),{recursive:true});writeFileSync(detail,failure.message+'\n');}
       failed.set(identity, failure);
-      findings.push({ source: plan.source, backend: plan.backend, driver_sha256: identity, error: message });
-      console.log("NOT MEASURED", plan.backend, plan.source, message);
+      const outcome=failure instanceof OracleCompileBudgetError?failure.outcome:'not-measured';
+      findings.push({ source: plan.source, backend: plan.backend, driver_sha256: identity, outcome, error: message, detail });
+      console.log(outcome==='not-measured'?'NOT MEASURED':outcome.toUpperCase(),plan.backend,plan.source,message,`(full error: ${detail})`);
     }
   }
 
@@ -304,9 +306,13 @@ export async function recordAll(evidence: string, output: string, measure = meas
     recorded_populations: table.rows.filter(row => row.kind === "measured").length, no_oracle_unique_drivers: exceptions.size,
     worst_node_cpu_s_to_done: Math.max(0, ...[...measured.values()].flatMap(m => m.cpu)), findings,
     preparation_failures: manifest.failures, measurements: Object.fromEntries(measured) };
-  atomic(join(evidence, "measurement-summary.json"), summary);
-  console.log(JSON.stringify(summary));
-  if (findings.length || manifest.failures.length) throw new Error("recording incomplete; review every not-measured project before submitting");
+  const summaryPath=join(evidence,"measurement-summary.json");
+  atomic(summaryPath, summary);
+  const {findings:_findings,preparation_failures:_preparationFailures,measurements:_measurements,...counts}=summary;
+  console.log(JSON.stringify({...counts,failed_populations:findings.length,preparation_failures:manifest.failures.length,summary:summaryPath}));
+  if(findings.length&&!manifest.failures.length&&findings.every(finding=>finding.outcome!=='not-measured'))
+    throw new CaseBudgetError('oracle recording incomplete: compile case budgets exceeded; '+summaryPath);
+  if (findings.length || manifest.failures.length) throw new ToolingInstrumentError('tooling-setup',"recording incomplete; review every not-measured project before submitting; "+summaryPath);
   writeTable(output, table);
 }
 
@@ -396,5 +402,5 @@ async function main() {
   else throw new Error("usage: record-oracles.ts plan|plan-rc <oracle-plan binary> <fixture root> <evidence dir> [--only=<config>] | record <evidence dir> <count table> | no-oracle <evidence dir> <table> <source> <reason>");
 }
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  main().catch(error => { console.error(error); process.exitCode = 1; });
+  main().catch(error => { if(error instanceof ToolingInstrumentError)publishToolingFailure(error);else publishPressure(error);console.error(error);process.exitCode=1; });
 }

@@ -308,6 +308,48 @@ async function prepare(root:string,entry="src/main.ts",extra:Partial<OracleOptio
   return (await prepareOracle({toolchain,entry:join(root,entry),directory:join(root,"scratch"),...extra}));
 }
 
+test('an explicit case project replaces its aggregate owner while retaining nearer owners',async t=>{
+  const root=workspace(t,{
+    'src/cases/one/main.ts':"import {local} from './local.ts';import {shared} from '../../common/shared.ts';import {near} from '../../near/value.ts';console.log(local+shared+near);\n",
+    'src/cases/one/local.ts':'export const local=19;\n',
+    'src/common/shared.ts':'export const shared=23;\n',
+    'src/cases/unrelated/broken.ts':'export const unrelated:number="sibling type error";\n',
+    'src/near/value.ts':'export const near=29;\n',
+    'src/near/anchor.ts':'export const anchor=31;\n',
+    'src/near/tsconfig.json':JSON.stringify({extends:'../../tsconfig.json',files:['value.ts'],include:[]}),
+  });
+  const project=join(root,'case-project.json'),near=join(root,'src/near/tsconfig.json');
+  writeFileSync(project,JSON.stringify({extends:'./tsconfig.json',files:['src/cases/one/main.ts'],include:[]}));
+  const original=readFileSync(join(root,'tsconfig.json'));
+  const prepared=await prepare(root,'src/cases/one/main.ts',{project});
+  const stored=JSON.parse(readFileSync(prepared.manifest,'utf8'));
+  assert.deepEqual(stored.groups.map((group:{project:string})=>group.project).sort(),[project,near].sort());
+  const group=stored.groups.find((group:{project:string})=>group.project===project);
+  assert.ok(group.sourceInventory.some((fact:{path:string})=>fact.path===join(root,'src/common/shared.ts')));
+  assert.equal(group.sourceInventory.some((fact:{path:string})=>fact.path.endsWith('/unrelated/broken.ts')),false,'a sibling error is outside the case Program');
+  const run=execute(root,prepared,'src/cases/one/main.ts');
+  assert.equal(run.status,0,run.stdout+run.stderr);assert.equal(run.stdout,'71\n');
+  assert.ok(readFileSync(join(root,'tsconfig.json')).equals(original),'the aggregate config remains unchanged');
+  writeFileSync(near,JSON.stringify({extends:'../../tsconfig.json',files:['anchor.ts'],include:[]}));
+  await assert.rejects(prepare(root,'src/cases/one/main.ts',{project,directory:join(root,'unchecked')}),/owner closure has no checking input: .*near\/value\.ts/);
+});
+
+test('declaration diagnostics are requested only for an owner that enables declarations',async t=>{
+  const root=workspace(t,{
+    'src/types.ts':"interface Label {name:string;}export class Parser {label:Label={name:'label'};}\n",
+    'src/main.ts':"import {Parser} from './types.ts';function plugin(Parent:typeof Parser){return class extends Parent {};}export function create(){return function(Parent:typeof Parser){return plugin(Parent);};}console.log(new (create()(Parser))().label.name);\n",
+  },{declaration:false});
+  const project=join(root,'tsconfig.json'),{compiler}=verifyToolchain(toolchain);
+  const plain=await activeCommand(compiler,['-p',project,'--noEmit','--pretty','false'],{cwd:root,env:process.env});
+  assert.equal(plain.status,0,plain.stdout+plain.stderr);
+  const prepared=await prepare(root);
+  const stored=JSON.parse(readFileSync(prepared.manifest,'utf8'));
+  assert.equal(stored.groups[0].options.declaration,false);
+  const run=execute(root,prepared);assert.equal(run.status,0,run.stdout+run.stderr);assert.equal(run.stdout,'label\n');
+  const options=JSON.parse(readFileSync(project,'utf8'));options.compilerOptions.declaration=true;writeFileSync(project,JSON.stringify(options));
+  await assert.rejects(prepare(root,'src/main.ts',{directory:join(root,'declarations')}),error=>error instanceof TypeScriptDiagnosticError&&error.diagnostics.includes('TS4058'));
+});
+
 test('owner runtime capture follows imports without visiting unrelated package trees',async t=>{
   const root=workspace(t,{
     'src/main.ts':"import {value} from './dependency.mjs';console.log(value);const request=process.argv[2];if(request){try{await import(request);}catch{console.log('caught');}}\n",

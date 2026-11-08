@@ -34,7 +34,7 @@ import { activeCommand, CommandNotMeasuredError, processActivity } from "../gate
 import { ToolingInstrumentError } from "../gate/step-result.ts";
 import { checkFailurePolicy, reportCheckFailure } from "../differential/check-report.ts";
 import {nodePreloadPlan} from './node-preloads.ts';
-import {prepareOracles} from '../differential/oracle-batch.ts';
+import {prepareOracles,preparedOracle} from '../differential/oracle-batch.ts';
 import {oracleExecution,oracleLoaderReady,closeOracleExecution,oracleRuntimeFiles,finishOracleSnapshot,oracleSnapshotReady,removeOracleSnapshot} from '../differential/oracle-emit.ts';
 import {oracleToolchainLocation} from '../gate/canonical-environment.ts';
 import { nodeEnvironment,nodeInputs } from "./node-environment.ts";
@@ -565,11 +565,8 @@ if(!publishesNothing){
     report:message=>process.stderr.write(message+'\n'),
   });}catch(error){process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
   const member=members[moduleName];
-  if(!member||'instrument' in member){
-    process.stderr.write('kept Node preparation after failure: '+own+'\n');
-    throw new ToolingInstrumentError('tooling-setup','Node preparation: '+(member?.instrument??'missing finite member'));
-  }
-  preparedModule=member.prepared;
+  try{preparedModule=preparedOracle(member,'Node preparation');}
+  catch(error){process.stderr.write('kept Node preparation after failure: '+own+'\n');throw error;}
 }
 for (const test of publishesNothing ? [] : tests) {
   const { name } = test;
