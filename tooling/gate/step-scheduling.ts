@@ -35,7 +35,7 @@ export function readStepCpuHistory(file: string): ReadonlyMap<string, number> {
 }
 
 /** Bootstrap from the runner's last completed summary when this cache did
- * not yet exist. A small later train must not erase timings already retained. */
+ * not yet exist. A later run of a few steps must not erase timings already retained. */
 export function readPreviousStepCpu(file: string): ReadonlyMap<string, number> {
   try {
     const row = JSON.parse(readFileSync(file, "utf8")) as {

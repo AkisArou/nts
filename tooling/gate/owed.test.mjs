@@ -106,7 +106,7 @@ test("a quoted runtime/* fixture alias does not make tooling read the Chromium r
     for(const added of [false, true]) {
       const rules = owed([{path,added}]);
       assert.deepEqual([...gateSteps(rules)].sort(), [...stepsFor("tooling/gate/times.tsv")].sort(), path);
-      assert.ok(rules.some(rule => rule.name === "the Chromium lane"));
+      assert.ok(rules.some(rule => rule.name === "the Chromium runtime"));
     }
   assert.deepEqual([...stepsFor("tooling/chromium/processes.ts")].sort(), actualReader);
   superset(changeReach([{path:"runtime/chromium/dom/types/dom-idl.d.ts",added:false}]), ["blockers", "integrity", "interop"], "the actual DOM corpus readers");
@@ -117,7 +117,7 @@ test("the real Chromium runtime readers are complete", () => {
   assert.equal(listed.status, 0, listed.stderr);
   const paths = listed.stdout.split("\0").filter(Boolean);
   assert.ok(paths.length > 0, "the real Chromium runtime inventory is empty");
-  const declaration = RULES.find(rule => rule.name === "the Chromium lane").stepReaders;
+  const declaration = RULES.find(rule => rule.name === "the Chromium runtime").stepReaders;
   const inputs = stepInputs();
   for(const path of paths) {
     const declared = declaration(path);
@@ -126,7 +126,7 @@ test("the real Chromium runtime readers are complete", () => {
     // inferred edge. No other step may hide behind the complete declaration.
     const allowed = new Set([...declared, "tooling"]);
     const unexpected = [...covering(inputs, path)].filter(step => !allowed.has(step));
-    assert.deepEqual(unexpected, [], `a new reader of runtime/chromium: update the Chromium lane's stepReaders (${path}: ${unexpected.join(" ")})`);
+    assert.deepEqual(unexpected, [], `a new reader of runtime/chromium: update the Chromium runtime's stepReaders (${path}: ${unexpected.join(" ")})`);
   }
 });
 
@@ -540,7 +540,7 @@ test("a private timing fixture does not make committed step estimates a verdict 
   }
 });
 
-test("the Chromium lane's own files owe only what every change owes", () => {
+test("the Chromium runtime's own files owe only what every change owes", () => {
   // As the gate's step times do: placed, and owing nothing of its own.
   const always = [...stepsFor("tooling/gate/times.tsv")].sort();
   assert.ok(always.includes("clippy") && !always.includes("blockers"), `every change owes ${always.join(" ")}`);

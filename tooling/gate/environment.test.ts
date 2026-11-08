@@ -48,7 +48,7 @@ test("a newly declared Valgrind project needs no central project-name entry", ()
   }
 });
 
-test("the train union and full gate keep requirements absent from one member", () => {
+test("a union of steps and the full gate keep requirements absent from one member", () => {
   const root = fixture();
   assert.equal(gateEnvironmentError(root, ["format"], null, {}), null);
   for (const steps of [["format", "jvm"], "all"] as const) {

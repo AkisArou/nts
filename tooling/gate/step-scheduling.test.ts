@@ -23,7 +23,7 @@ test("equal and missing estimates have a deterministic name tie-break", () => {
     ["typescript-c", "tests", "blockers", "integrity"]);
 });
 
-test("completed CPU history survives small trains and corrupt or failed cache writes are harmless", t => {
+test("completed CPU history survives small runs and corrupt or failed cache writes are harmless", t => {
   const own = testScratch(t, "step-scheduling-history");
   const previous = join(own, "summary.json"), file = join(own, "costs/steps.json");
   writeFileSync(previous, JSON.stringify({ schema: 1, environment: { canonical: true }, steps: [

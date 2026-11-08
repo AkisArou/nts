@@ -6,7 +6,7 @@ const budget = { slots: 24, mem: 20, fe: 24 };
 const llvm = { slots: 8, min: 2, mem: 6, fe: true };
 
 test("a pending fixed step cannot reserve memory held by other fixed steps", () => {
-  // The measured train: tests 8 + test262-cases 8 + blockers 1 + outcomes 1.
+  // The measured run: tests 8 + test262-cases 8 + blockers 1 + outcomes 1.
   const fixed = { slots: 8 + 8 + 1 + 1, mem: 8 + 8 + 1 + 1, fe: 8 + 1 + 1 };
   assert.equal(fixedReservation(llvm, fixed, budget), 0);
 });

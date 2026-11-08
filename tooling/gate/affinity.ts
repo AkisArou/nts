@@ -160,7 +160,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   } else if (process.argv[2] === "--launch-scope") {
     const cpus = argument(3);
     cpuList(cpus);
-    // A train can hold pinned.sh's tree lock across setup and execution.
+    // A caller can hold pinned.sh's tree lock across setup and execution.
     // Preserve that open description when entering the cpuset scope.
     const child = spawnSync("systemd-run", [...scopeArgs(cpus), "taskset", "-c", cpus, ...process.argv.slice(4)], {
       stdio: process.env.NTS_GATE_LOCK_FD === "8" ? ["inherit","inherit","inherit",null,null,null,null,null,8] : "inherit",

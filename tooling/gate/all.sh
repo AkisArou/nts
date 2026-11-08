@@ -699,8 +699,8 @@ profile() {
   # raise argued for, giving 16611, rounded to 16650.
   #
   # And a note for whoever raises it next: because the glob reads the *working
-  # tree*, an uncommitted module reddens this step for every lane before its own
-  # commit lands. That is what happened here, and it is why the ceiling moved
+  # tree*, an uncommitted module reddens this step in every tree that has it
+  # before its own commit lands. That is what happened here, and it is why the ceiling moved
   # ahead of the module rather than with it.
   #
   # =====================================================================
@@ -783,8 +783,8 @@ profile() {
   # **A band, not a floor, and the difference is deliberate.**
   #
   # 17882 definitions at `9a9fa3a8`. A floor at that number would go red the
-  # first time another lane deletes a function from `runtime/node`, which is
-  # their ordinary work and not my regression — and a gate that punishes a peer
+  # first time another task deletes a function from `runtime/node`, which is
+  # its ordinary work and not a regression — and a gate that punishes a peer
   # for editing their own module is worse than one number less.
   #
   # So this catches a *collapse* rather than a drift: the failure it is for is a
@@ -1377,8 +1377,8 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   # see the note on `llvm_rc` above, which carries the diagnosis. A floor equal
   # to the corpus cannot ratchet, only hold -- which is the right instrument the
   # moment nothing is known to fail, and `exact` is available here now that the
-  # two numbers are equal. Left ratcheting, because whether this lane wants the
-  # stricter instrument is that lane's call and not a side effect of a raise.
+  # two numbers are equal. Left ratcheting, because whether this backend wants the
+  # stricter instrument is a decision of its own and not a side effect of a raise.
   #
   # 319 -> 320 on 2026-09-25 for `a-method-through-a-union-of-classes`.
   #
@@ -1388,7 +1388,7 @@ llvm() { ( NTS_BACKEND=llvm; export NTS_BACKEND
   #
   # **327 -> 347 and exact, 2026-09-27.** Every example agrees here, and the
   # twenty of slack absorbed a hypot sabotage into `not agreeing: math` in a
-  # green run. "Left ratcheting" above was right while this lane was climbing;
+  # green run. "Left ratcheting" above was right while this backend was climbing;
   # it has arrived, and a new example that disagrees now fails the day it
   # lands, as it does on the JVM.
   #
@@ -2057,7 +2057,7 @@ test262_jvm() {
 }
 # LLVM shares C's runtime and most of its pipeline, which is why it had no
 # records until 2026-10-19: first written from C's paths on a pin of
-# 362b32f13, 4,909 passes over the five. It has no lane, so a core change that
+# 362b32f13, 4,909 passes over the five. Nobody checked them, so a core change that
 # broke only its rows reached main unseen.
 test262_llvm() {
   test262_backend llvm

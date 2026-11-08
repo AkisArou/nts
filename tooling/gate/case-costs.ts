@@ -276,7 +276,7 @@ export function summarizeCosts(root: string, events: Observation[], steps: Timed
             matching_hits: rows.filter(row => row.status === "hit-match").length,
             mismatching_hits: rows.filter(row => row.status === "hit-mismatch").length,
             unavailable: rows.filter(row => row.status === "unavailable").length,
-            cross_train_hits: rows.filter(row => String(row.status).startsWith("hit-") && row.run && row.baseline_run && row.run !== row.baseline_run).length }];
+            cross_run_hits: rows.filter(row => String(row.status).startsWith("hit-") && row.run && row.baseline_run && row.run !== row.baseline_run).length }];
         })) },
       aggregate_memory: { reserved_step_mem_bytes: step.mem_gb === undefined ? null : Math.floor(step.mem_gb * 2 ** 30),
         scopes, max_scope_peak_bytes: peaks.length ? Math.max(...peaks) : null,

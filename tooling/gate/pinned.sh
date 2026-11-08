@@ -6,8 +6,8 @@
 #
 # # Why the gate needs its own tree
 #
-# Three sessions edit this checkout continuously, and `gate.lock.d` governs
-# *when* a gate runs rather than whether the tree holds still while it does. On
+# A tree someone works in moves under a gate, and a lock governs *when* a
+# gate runs rather than whether the tree holds still while it does. On
 # 2026-09-04 a correctly-locked `rc` step reported **0 of 96 passing, every case
 # failing**, because two things changed under it mid-run: `cargo test` relinked
 # `target/release/nts`, and a mutation test appended a line to a source file the
@@ -83,7 +83,7 @@ mkdir -p "$(dirname "$tree")" "$target"
 # after both. The kernel releases this one when the last process holding it
 # exits, so it never goes stale, and every process the gate starts inherits it.
 if [ "${NTS_GATE_LOCK_FD:-}" = 8 ]; then
-  # A train or shadow verifier holds this same open description across both
+  # A caller that already holds the tree lock passes this same open description
   # setup and execution. Validate the actual inode; an env flag is no proof.
   exec 9>&8
   if [ "$(stat -Lc '%d:%i' /proc/self/fd/9)" != "$(stat -Lc '%d:%i' "$tree.lock")" ] || ! flock -n 9; then
@@ -135,7 +135,7 @@ fi
 node "$(dirname -- "$0")/../inputs/linker.ts" gate "$root" "$tree"
 
 echo "gate: $sha in $tree"
-# Set up and stop: what `lane doctor` and this script's own test ask.
+# Set up and stop: what this script's own test asks.
 [ -n "${NTS_GATE_SETUP_ONLY:-}" ] && exit 0
 cd "$tree"
 CARGO_TARGET_DIR="$target" cargo build --release -q

@@ -3,7 +3,7 @@
 // available (admission.ts), and inside a full gate the host can sit below it:
 // an inner run reading the host then waits, silently, until the tooling
 // runner's watchdog calls the file hung (canonical-environment.test.ts, in the
-// train of 11-07, under a runner that admits before its first step). Every test
+// landing run of 11-07, under a runner that admits before its first step). Every test
 // that starts a real runner gives it its own reading through gateEnvironment's
 // owned values, as this one does.
 //

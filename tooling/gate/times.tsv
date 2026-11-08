@@ -3,7 +3,7 @@
 # a step's cpu is 2x this and a minute more. Rewrite with NTS_GATE_RECORD_TIMES=1
 # on a run you have checked is healthy. Last written at 7adb331620df.
 # Source run: 7adb331620df-1792833313369/summary.json (2026-10-24, green; on-device skip accepted).
-# typescript-c, typescript-llvm, typescript-jvm: recorded 2026-11-06 by run.mjs on those three steps alone (green), NTS_BIN = the e0395d27506b pin, no train running.
+# typescript-c, typescript-llvm, typescript-jvm: recorded 2026-11-06 by run.mjs on those three steps alone (green), NTS_BIN = the e0395d27506b pin, nothing else running.
 build	0.1	0.1	8
 clippy	0.3	0.2	6
 format	2.6	2.4	1

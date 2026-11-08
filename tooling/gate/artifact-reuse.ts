@@ -10,7 +10,7 @@ type Kind = keyof typeof REUSE;
 export type VerifierResult = { status: number | null; signal: string | null; error: string | null; stdout: string; stderr: string };
 let counter = 0;
 
-/** Verification reads emitted classes and the JDK, never the lander's shell
+/** Verification reads emitted classes and the JDK, never the caller's shell
  * options or locale. Use this exact allowlist for execution and its key. */
 export function verifierEnvironment(command: string, parent: NodeJS.ProcessEnv = process.env): Record<string, string> {
   const located = command.includes("/") ? resolve(command) : spawnSync("sh", ["-c", 'command -v "$1"', "sh", command], { encoding: "utf8", env: parent }).stdout.trim();

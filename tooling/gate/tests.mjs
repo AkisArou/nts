@@ -24,7 +24,7 @@
 // failing doctest fails it), at least one binary must have been recorded, and
 // every replayed binary must exit 0. A binary that crashes or is killed fails.
 // Only then are obsolete test executables pruned. The build defaults to the
-// lander's opt-level 1, line tables and CARGO_INCREMENTAL=0, avoiding a
+// landing check's opt-level 1, line tables and CARGO_INCREMENTAL=0, avoiding a
 // second variant in standalone runs. Explicit standalone overrides still work;
 // old incremental/feature variants are reclaimed after a successful run too.
 // NTS_TEST_PROFILE names another Cargo profile to build and run them in: the

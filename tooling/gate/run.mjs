@@ -336,7 +336,7 @@ function stepEnv(step, slots, scope) {
   e.NTS_SUITE_BIN = pinned.suite ?? suiteBin;
   e.NTS_CHECKERS = "1";
   e.CARGO_TARGET_DIR = target;
-  // Match tests.mjs and the lander, including Cargo calls in frontend-tsrs.
+  // Match tests.mjs and the landing check, including Cargo calls in frontend-tsrs.
   e.CARGO_INCREMENTAL ??= "0";
   e.CARGO_PROFILE_DEV_DEBUG ??= TEST_BUILD_DEBUG;
   e.CARGO_PROFILE_DEV_OPT_LEVEL ??= TEST_BUILD_OPT_LEVEL;

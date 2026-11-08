@@ -15,8 +15,8 @@
 # 2,046,179,082 where node answers 2,046,179,137, for pool value 2147483647:
 # the loop counter passes 2^31, the remainder is typed `u32`, and a `u32` lives
 # in an `int` slot on the JVM, so `irem` took the sign of a dividend that has
-# none. The C lane agreed with node because C has the type. Three green steps,
-# one wrong lane, and the case's own seed is 3 so the benchmark could not see
+# none. The C backend agreed with node because C has the type. Three green steps,
+# one wrong backend, and the case's own seed is 3 so the benchmark could not see
 # it either.
 #
 # A green step is a claim about what it looked at. This one looks at the fifty

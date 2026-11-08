@@ -113,7 +113,7 @@ test("real JDK verification reuses complete output and measures only the verifie
   assert.equal(calls, 1);
 });
 
-test("different lander environments produce identical emitted bytes, verifier facts and keys", async t => {
+test("different caller environments produce identical emitted bytes, verifier facts and keys", async t => {
   const { root, env } = fixture(t);
   const bin = process.env.NTS_BIN ?? join(ROOT, "target/nts-dev/nts");
   const java = process.env.JAVA_HOME ? join(process.env.JAVA_HOME, "bin/java") : "/usr/bin/java";
@@ -138,7 +138,7 @@ test("different lander environments produce identical emitted bytes, verifier fa
     const before = await run(java, [...vmToolFlags(java), ...args], parent), after = await run(java, [...vmToolFlags(java), ...args], canonical);
     assert.equal(after.status, 0, after.stderr); assert.equal(after.stderr, "");
     assert.deepEqual(after, before, "canonicalization must preserve the real verifier's verdict lines");
-    // Separate lander processes matter: computing both keys in this process
+    // Separate caller processes matter: computing both keys in this process
     // would fail to detect a helper accidentally reading process.env.
     const probe = `
       import { artifactFiles, artifactShadow, toolIdentity } from ${JSON.stringify(new URL("./artifact-shadow.ts", import.meta.url).href)};
@@ -155,7 +155,7 @@ test("different lander environments produce identical emitted bytes, verifier fa
     assert.deepEqual(keyedEnvironment, canonical);
     assert.ok(key);
     records.push({ key, bytes: files.map(file => [file.name, fileDigest(file.path)]), verdict: after, canonical });
-    // VM and dynamic-loader injection in a lander's shell must never reach
+    // VM and dynamic-loader injection in a caller's shell must never reach
     // the verifier or its version/identity probe.
     const injected = verifierEnvironment(java, { ...parent, JAVA_TOOL_OPTIONS: "-not-a-jvm-option", LD_PRELOAD: "/missing/injected.so" });
     assert.deepEqual(injected, canonical);

@@ -20,7 +20,7 @@
 #
 # Output is one line per decline. Silence is the answer you want, and the three
 # standing ones -- `dates`, `symbol-keyed-map`, `symbol-values` -- are gaps this
-# lane names rather than regressions.
+# backend names rather than regressions.
 #
 # Not reported: the hostile-pool cases a *compiled program* declines at run time.
 # Those are the harness doing its job on every example and they drown the signal

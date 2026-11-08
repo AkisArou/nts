@@ -86,7 +86,7 @@ export {parseNameStatus} from "./change-paths.ts";
  * The tree whose change is asked about: the one the command is run from, not
  * the one this script lives in. "The repo" is two things here -- the rules
  * travel with the script, the change belongs to the worktree you stand in --
- * and every lane works in a worktree. Resolving it from the script's path
+ * and every task works in a tree of its own. Resolving it from the script's path
  * answered, confidently, about the shared checkout's uncommitted files. The
  * `--commit` mode reads history and could not show it.
  */
@@ -612,7 +612,7 @@ export const RULES = [
     wide: true,
     when: (p) => /^runtime\/(node|web-platform)\//.test(p),
     steps: ["definitions", "integrity-runtime", "assembles", "addons"],
-    arms: [{ kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # lane-local, ~16 min" }],
+    arms: [{ kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # in your own tree, ~16 min" }],
   },
   {
     // A printed diagnostic is an interface: eleven readers anchored on `^TS`,
@@ -654,7 +654,7 @@ export const RULES = [
     steps: [],
     arms: [
       { kind: "valid", asks: "does it parse, and do the touched steps run", run: "sh -n tooling/gate/all.sh; node --test tooling/gate/*.test.mjs; then the steps, from a worktree" },
-      { kind: "hygiene", asks: "do the lanes know", run: "announce it; never edit it while a run from this tree is executing" },
+      { kind: "hygiene", asks: "is a run of it executing from this tree", run: "never edit it while one is: the shell reads a running script as it goes" },
     ],
   },
   {
@@ -907,7 +907,7 @@ export const RULES = [
     arms: [{ kind: "hygiene", asks: "were they taken on a healthy run", run: "NTS_GATE_RECORD_TIMES=1 on a full gate whose summary you have read" }],
   },
   {
-    // The Chromium lane's own files: the Blink build, its harnesses and the
+    // The Chromium runtime's own files: the Blink build, its harnesses and the
     // bindings generator (tooling/chromium), and what only that build compiles
     // -- the app host, the Blink adapter, the embedder probe, the apps, the
     // tests and benchmarks, their docs (runtime/chromium). The runtime half
@@ -922,14 +922,14 @@ export const RULES = [
     // fixtures' tsconfigs name owe `blockers` and `integrity`. The rest is
     // checked by tooling/chromium/verify.ts (both backends, against the V8
     // oracle).
-    name: "the Chromium lane",
+    name: "the Chromium runtime",
     stepReaders: p => !p.startsWith("runtime/chromium/") ? undefined
       : /^runtime\/chromium\/dom\/types\/(dom-idl|dom-abi|lib-dom-bindings)\.d\.ts$/.test(p) ? ["tests"] : [],
     wide: true,
     when: (p) => /^(tooling|runtime)\/chromium\//.test(p),
     settled: true,
     steps: [],
-    arms: [{ kind: "answers", asks: "does the lane still agree with V8 on both backends", run: "node tooling/chromium/verify.ts: the bindings current, both backends staged, built and smoked against the V8 oracle, and every example app built and checked" }],
+    arms: [{ kind: "answers", asks: "does it still agree with V8 on both backends", run: "node tooling/chromium/verify.ts: the bindings current, both backends staged, built and smoked against the V8 oracle, and every example app built and checked" }],
   },
   {
     // This offline inventory reads pinned source objects; tooling discovers
@@ -969,7 +969,7 @@ export const RULES = [
     settled: true,
     steps: [],
     arms: [
-      { kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # lane-local, ~16 min" },
+      { kind: "answers", asks: "what node's own tests say of each compiled module", run: "node tooling/conformance/compiled-axis-floor.mjs   # in your own tree, ~16 min" },
       { if: "it touches the web platform's harness", kind: "answers", asks: "does every web platform test file still run and pass", run: "sh tooling/conformance/web-platform/check.sh" },
     ],
   },
@@ -1544,7 +1544,7 @@ export function owed(changes) {
       for (const rule of rulesFor(path, added)) for (const step of rule.steps) readers.add(step);
       const fullReader = rulesFor(path, added).some(rule => rule.full);
       // A future compiled include or corpus input keeps its full ordinary
-      // reach. Only an output with no execution reader takes the fast lane.
+      // reach. Only an output with no execution reader owes just the tree checks.
       if (!fullReader && !crateOf(path) && !covering(embedded(), path).size && [...readers].every(step => TREE_CHECKS.includes(step))) {
         add(benchmarkRecord(path) ? "benchmark run records" : "tool-written results", path, [...readers], {precise:true});
         continue;
