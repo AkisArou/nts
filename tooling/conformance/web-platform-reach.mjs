@@ -3,7 +3,7 @@
 //   node tooling/conformance/web-platform-reach.mjs
 //   node tooling/conformance/web-platform-reach.mjs core/events.ts core/abort.ts
 //
-// The web-platform lane pings this one when it changes `core/` or `provider/`,
+// Run this after a change to the web platform's `core/` or `provider/`,
 // and the first thing that has to be answered is which modules could possibly
 // care. That answer has been given wrong twice, both times by grepping
 // `runtime/node` for the string `web-platform` and reading the direct hits as

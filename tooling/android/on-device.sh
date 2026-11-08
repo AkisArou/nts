@@ -1,5 +1,5 @@
 #!/bin/sh
-# Run the JVM lane's Java suites on a real Android device or emulator.
+# Run the JVM backend's Java suites on a real Android device or emulator.
 #
 # The desktop suites run on OpenJDK: HotSpot, JSSE, and a stop-the-world
 # collector. A device runs ART, Conscrypt over BoringSSL, and a concurrent

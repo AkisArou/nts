@@ -68,7 +68,7 @@ tools=$(ls -d "$sdk"/build-tools/* 2>/dev/null | sort -V | tail -1)
 # `target/release` is what `tooling/gate/all.sh` builds and drives, so that is
 # the default here: a gate step dexing some other session's binary would report
 # a ratchet for code nobody is looking at. `NTS_BIN` overrides it, which is how
-# the JVM lane runs this against `target-jvm` by hand.
+# to run this by hand against `target-jvm`.
 nts=${NTS_BIN:-$root/target/release/nts}
 [ -x "$nts" ] || { echo "no nts at $nts -- set NTS_BIN" >&2; exit 1; }
 

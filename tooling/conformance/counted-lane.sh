@@ -15,9 +15,9 @@
 #
 #   pass             the module behaves the same counted as uncounted
 #   invalid HIR      almost certainly a compiler-side liveness problem, not a
-#                    module problem -- if it compiles *without* the flag, send
-#                    the compiler lane the function name and block numbers and
-#                    nothing else
+#                    module problem -- if it compiles *without* the flag, report
+#                    it as a compiler defect: a fixture naming the function and
+#                    its block numbers, nothing else
 #   wrong answer     conspicuous under poison (`a5d03c…` read as a double, a
 #                    string written over its own contents). A *plausible* wrong
 #                    answer is more interesting, not less: it means something
@@ -64,7 +64,7 @@ for module in $modules; do
   if ! printf '%s' "$build" | grep -q 'bytes$'; then
     # Distinguish the two ways a build fails, because they are different work.
     if printf '%s' "$build" | grep -qi 'does NOT verify\|NotDominated\|invalid HIR'; then
-      echo "invalid HIR under counting -- compiler lane"
+      echo "invalid HIR under counting -- a compiler defect"
       printf '%s\n' "$build" | grep -iE 'does NOT verify|NotDominated|invalid HIR' | head -2 | sed 's/^/                   /'
     else
       echo "did not build"

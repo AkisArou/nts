@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
- * The Chromium lane's verification, as one command: everything that says the
- * lane still agrees with V8, on both backends. tooling/gate/owed.mjs settles
- * the lane's files -- they owe no gate step of their own -- on the strength
+ * The Chromium runtime's verification, as one command: everything that says
+ * it still agrees with V8, on both backends. tooling/gate/owed.mjs settles
+ * its files -- they owe no gate step of their own -- on the strength
  * of this run.
  *
  *   node tooling/chromium/verify.ts [--profile baseline|perf]

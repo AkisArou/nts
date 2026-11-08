@@ -5,8 +5,8 @@
 #
 #   tooling/windows/interop-on-win.sh <name>... [--out DIR]
 #
-# The Apple lane's `interop-on-mac.sh`, for Windows. The examples are the
-# compiler lane's and their configs target Linux, so nothing in them is edited.
+# `tooling/apple/interop-on-mac.sh`, for Windows. The examples are the
+# compiler's corpus and their configs target Linux, so nothing in them is edited.
 # Each is mirrored under DIR with its repository neighbours symlinked, the
 # mirror's config is retargeted, and the example's own build.sh runs from the
 # mirror with four substitutions:

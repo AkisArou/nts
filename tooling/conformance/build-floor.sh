@@ -220,7 +220,7 @@ KNOWN_UNRESOLVED=""
 
 compiler=${NTS_COMPILER:-${NTS_BIN:-$PWD/target/release/nts}}
 if [ ! -x "$compiler" ]; then
-  echo "  no compiler at $compiler; the compiler lane builds it" >&2
+  echo "  no compiler at $compiler; build it with cargo build --release, or name one in NTS_COMPILER" >&2
   exit 2
 fi
 

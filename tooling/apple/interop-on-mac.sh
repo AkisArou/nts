@@ -5,7 +5,7 @@
 #
 #   tooling/apple/interop-on-mac.sh <name>... [--out DIR]
 #
-# The examples are the compiler lane's, and their configs target Linux. So
+# The examples are the compiler's corpus, and their configs target Linux. So
 # nothing in them is edited: each is mirrored under DIR with its repository
 # neighbours symlinked (the fixture tsconfig, the runtime's declarations,
 # node_modules), the mirror's config is retargeted, and the example's own
