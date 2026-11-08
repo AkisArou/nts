@@ -5,6 +5,7 @@
 //
 //   node --test tooling/gate/case-bound.test.ts
 import assert from "node:assert/strict";
+import {spawnSync} from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -98,5 +99,19 @@ test("supervisor receipts start on their own line after unterminated tool stderr
       {out:()=>{},err:text=>{err.push(text);}});
     assert.equal(code,mode==="spin"?CASE_TIMEOUT_EXIT:CASE_UNMEASURED_EXIT);
     assert.match(err.join(""),mode==="spin"?/partial diagnostic\ntimed out: /:/partial diagnostic\nnot measured: /);
+  }
+});
+
+test("supervisor receipts remain anchored after unterminated stdout in merged shell output", t => {
+  const f=frame(t),env={...f.env};
+  for(const key of ["NODE_TEST_CONTEXT","NODE_CHANNEL_FD","NODE_CHANNEL_SERIALIZATION_MODE"])delete env[key];
+  for(const mode of ["spin","idle"]) {
+    const body="process.stdout.write('partial stdout');"+(mode==="spin"?"for(;;){}":"Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)");
+    const bound={ownCpuSeconds:0.3,cpuSeconds:60,idleMs:200,command:process.execPath,args:["-e",body]};
+    const script=`import {runCaseBound} from ${JSON.stringify(new URL("./case-bound.ts",import.meta.url).href)};process.exitCode=await runCaseBound(${JSON.stringify(bound)});`;
+    const result=spawnSync("sh",["-c",'exec "$@" 2>&1',"merged-bound",process.execPath,"--input-type=module","-e",script],{env,encoding:"utf8"});
+    assert.equal(result.status,mode==="spin"?CASE_TIMEOUT_EXIT:CASE_UNMEASURED_EXIT,result.stdout+result.stderr);
+    assert.equal(result.stderr,"");
+    assert.match(result.stdout,mode==="spin"?/partial stdout\ntimed out: /:/partial stdout\nnot measured: /);
   }
 });
