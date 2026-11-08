@@ -10,7 +10,7 @@ one page that changes as work goes; the designs it builds are in
 - **Foundations and correctness in parallel.** The foundations (the memory
   analysis, bounds-check placement, typed containers, strings, numbers, the
   builtins mechanism) are the main line, until each reaches its designed
-  performance. Bugs are fixed beside them by their own agents: a silent
+  performance. Bugs are fixed beside them: a silent
   wrong answer before a refusal, which is safe, and both in the order of how
   much real code they affect. The TypeScript suite's families are measured
   as test262 is: their failures are recorded and flip as fixes land, and
@@ -30,22 +30,16 @@ one page that changes as work goes; the designs it builds are in
 
 ## Now
 
-- **The switch to [how we work](workflow.md) (11-07).** The landing check and
-  the full check are on `main`. Every change lands through
-  `node tooling/landing/check.ts`, one at a time against the newest `main`,
-  in ten minutes or less; the old lander and the lane machinery are gone.
-  Tests and benchmarks land without records: the full check writes them.
-  Left for the switch: the full check's unit, the worktree pool, the
-  machine's cleanup of the old lander's folders, and agents restarting on
-  the tasks below, one agent per task (the user decides which and how many).
+- **Settling before the foundations:** the full check writes the pending
+  records again (the oracle's and the recorder's fixes are on `main`), the
+  wide steps' five `runtime/node` reds are reconciled, and the hourly count
+  is green, with the full check sweeping the leftovers it may remove.
 - **In flight:**
   - the gate's memory admission (#335, `tsrs/335-gate-memory`), held;
   - Chromium, paused by the user (`chromium/counter-tree-profile`), its trees
     kept with it: `~/Projects/nts-lanes/chromium`,
     `~/.cache/nts-chromium-checkpoint1/context-control` and
     `~/.cache/nts-chromium-checkpoint1/scoped-harness-61e0020e9`.
-- **The machine:** one shared 32 GB box; CPUs 4–5 are kept for measurement
-  ([`../AGENTS.md`](../AGENTS.md)).
 
 ## Tasks
 
@@ -82,6 +76,19 @@ ids, kept so the records that cite them still resolve.
   same-spelled private names (#236).
 - Numbers: wide integers in power-of-two bases (#262), a definite-assignment
   assertion taken as a write (#263), a TypeError node does not throw (#264).
+- The register's last wrong answer, the covariant-array dispatch, recorded
+  as a fixture.
+- A throw through any indirect call is catchable (L15), so a failed check of
+  an erased value is always a catchable `TypeError` (L6).
+- The web-platform classes keep their functional setup out of the reflective
+  setup that nts defers.
+- Reads that JavaScript answers with `undefined` give `undefined`: holes,
+  uninitialized and `declare` fields, a `var` read before its assignment,
+  reads past the end (L4, X1), on one shared representation of a
+  possibly-undefined value, the same one typed maps use for absence (the
+  shared representation first).
+- Native `setTimeout` clamps its delay as node does, with a two-arm fixture
+  that pins HTML's rule too (C-6).
 - The rest of #190's wrong answers, by reach.
 
 **Aborts and failed builds**
@@ -210,6 +217,20 @@ ids, kept so the records that cite them still resolve.
 - The WebSocket server goes (#52); the interface tag sweep (#53).
 
 **Tooling**
+- The compile-time guard adds backend code generation and link time (P-6).
+- Native instruction counts per benchmark row gate the full check, against
+  the noise band, starting with the counting drivers (P-5).
+- A weekly full check with result caches off (Q-3), and a sanitized,
+  reference-counted differential run over the whole corpus in the full
+  check (Q-7).
+- Results cached by their inputs: keyed on artifact bytes, the JVM verifier's
+  results reused, the other kinds in shadow mode until their results are
+  proved identical; next, one capture per project per run, shared by every
+  step.
+- A diagnostic registry (L21): every code with its meaning, whether it is
+  permanent or "not yet", and its message.
+- The library ABI version of record 0018, with result caches keyed on the
+  schema, compiler and runtime digests (X-7).
 - The landing check's own `nts-dev` build (`landing/run.ts`) has no time
   bound yet; `NTS_BENCH_AGREE_FLOOR`, now unread, leaves the canonical
   environment after #193 lands.
@@ -245,7 +266,7 @@ ids, kept so the records that cite them still resolve.
   own scratch folder already gone when it removed it (`remove scratch:
   NotFound`), though the folder's name is unique: find what deletes inside it
   after the CLI exits, a child of `nts` outliving it being the first suspect.
-- The old lander's open defects fold into the landing check: #120, #121,
+- Landing's open defects, to fix in the landing check: #120, #121,
   #133, #135, #139, #141, #176, #216, #223, #271, #273, #290, #299, #300,
   #330, #332.
 
@@ -253,110 +274,12 @@ ids, kept so the records that cite them still resolve.
 
 | phase | what | state |
 |---|---|---|
-| 1 | Settle `main` | finishing; what remains runs beside phase 2 |
+| 1 | Settle `main` | done; what it left open is in the tasks above |
 | 2 | Foundations, native first | the main line; memory and Unicode designs decided |
 | 3 | Conformance-driven development | paused; its records keep gating |
 | 4 | The JVM and Wasm on the same foundations | after phase 2 |
 
 Benchmarks run through every phase.
-
-## Phase 1: settle main
-
-1. **The tsrs switch.** *Done.*
-2. **What tsgo left behind.** *Done:* the binary is gone, and nothing reads
-   `NTS_TSGO`.
-3. **The memory defects the outside review found.** *Fixed*, with region and
-   frame allocations kept within their proved lifetimes, and the frames that
-   fix gave up restored; the follow-up is in its landing gate.
-4. **The gate,** in this order:
-   - a red train blames only the landing that caused it, and a failure that is
-     already on `main` is reported as red on main (*done*);
-   - the reference-counting and memory checks run on every compiler and runtime
-     landing, not only in the full run (*done*);
-   - deliberate crashes store no core dumps, so measurement can start beside a
-     gate (*done*);
-   - no cold build per train: tests are built with line tables only, at
-     opt-level 1, and the debug build folder is pruned within a bound (*done*);
-   - every step runs in one canonical environment, whoever launches the gate
-     (*done*);
-   - the compile-time tripwire counts every compiler thread from the start,
-     against a threshold set from repeated runs of one binary, and the
-     reference-counting build has a row of its own (*done*);
-   - the compile-time guard adds backend code generation and link time (P-6);
-   - native instruction counts per benchmark row gate the full run, against
-     the noise band, starting with the counting drivers (P-5);
-   - a nightly full run and a weekly one with result caches off; `--touching`
-     only once a test proves it selects deterministically (Q-3);
-   - a sanitized, reference-counted differential run over the whole corpus in
-     every full run (Q-7);
-   - a per-case ratchet on the conformance records, changed only through
-     reviewed `results:` commits (Q-4);
-   - the web platform's own suite as a gate step, owed by every change to
-     `runtime/web-platform`;
-   - what a change owes is the union of `main`'s rules and its own, so no
-     change narrows its own gate;
-   - one format rule for every C file nts owns.
-5. **The fast landing model** (approved):
-   1. a change owes only the checks it can affect, so docs, records and
-      comments land in seconds, with no train (*done*: the fast lane);
-   2. the gate's waiting is fixed, its results are cached by their inputs, and
-      only the cases a change can affect run, for a full gate near 10
-      minutes. *Waiting fixed:* frontend capacity follows the CPU slots,
-      reservations only for steps that can fit, memory budgets calibrated from
-      measured peaks, and `blockers` runs in parallel. *Caching:* keyed on
-      artifact bytes; the JVM verifier's results are reused, and the other
-      kinds stay in shadow mode until their results are proved identical. An
-      inspection program is prepared once (*done*). Next: one capture per
-      project per run, shared by every step;
-   3. then code lands after a 5–10 minute check, while a verifier gates `main`
-      behind it, bisects a red and reverts the culprit automatically. Changes
-      to the gate itself stay strict. *The ledger and the shadow verifier are
-      on `main`;* optimistic landing waits for three shadow batches that agree
-      with their trains (two have), then for the holds, bisection and brake,
-      which come next.
-6. **Deterministic builds:** the same source and compiler give the same bytes
-   on every backend, held by a test over each of them ([cli](reference/cli.md#nts-build)). *Done.*
-7. **The documentation** as specification pages, with the notebooks in
-   [`records/`](records). *Done.*
-8. **The register's wrong answers** recorded as fixtures: decorators dropped,
-   throws escaping `try` through closures in fields, overrides and method
-   values, and a method read twice being two functions (*done*); the
-   covariant-array dispatch remains.
-9. **A citation sweep:** code comments that cite documents moved to
-    `records/` (*done*).
-10. **Exact verdicts:**
-    - the integrity audit counts every statement a refusal cuts, and every
-      known cut names its cause (*done*);
-    - the differential oracle compares a recorded number of cases per
-      project, measured complete, under a CPU-time bound, so what a gate
-      checks never depends on the machine's load (*done*);
-    - a wall-clock deadline decides no result anywhere in the gate (*done*).
-11. **The silent wrong answers found on the way,** in this order (a store
-    that would close a cycle now keeps a counted root, so a closure that
-    captures `this` no longer leaks: *done*):
-    - an optional callable property in a structural type (the node stdio
-      setup, *done*), then one writer per stream for `console.log`,
-      `process.stdout.write` and the node `console` (*done*);
-    - a project that is not `strict` is refused, naming the flags that are
-      off, all nine, as NTS1006 (L8, *done*);
-    - decorators refused until implemented;
-    - a throw through any indirect call is catchable (L15), so a failed
-      check of an erased value is always a catchable `TypeError` (L6);
-    - the web-platform classes keep their functional setup out of the
-      reflective setup that nts defers;
-    - any refusal fails `nts build`, with `--partial` for experiments (L20),
-      so a refused program never runs with parts cut (*done*);
-    - reads that JavaScript answers with `undefined` give `undefined`:
-      holes, uninitialized and `declare` fields, a `var` read before its
-      assignment, reads past the end (L4, X1). They are built on one shared
-      representation of a possibly-undefined value, the same one typed maps
-      use for absence (in progress: the shared representation first);
-    - native `setTimeout` clamps its delay as node does, with a two-arm
-      fixture that pins HTML's rule too (C-6).
-12. **A diagnostic registry** (L21): every code with its meaning, whether it
-    is permanent or "not yet", and its message.
-13. **The library ABI version** of record 0018, with result caches keyed on
-    the schema, compiler and runtime digests (X-7).
 
 ## Phase 2: foundations, native first
 
@@ -372,7 +295,7 @@ The designs and their build orders are in [`foundations/`](foundations).
      that nts refuses until three compiler gaps, recorded as fixtures, are
      fixed: a nullable generic array property (four ports), Richards'
      module-scope sentinel, and Storage's recursive array return;
-   - more ported suites, by cloud agents: the Computer Language Benchmarks
+   - more ported suites: the Computer Language Benchmarks
      Game (nine programs, with C++ references), Octane (five) and ARES-6
      (four), each landing as it is reviewed, with declared input domains
      for the generated cases;
@@ -406,10 +329,9 @@ The designs and their build orders are in [`foundations/`](foundations).
    depends on nothing in `runtime/node` and that node re-exports. Both become
    reachable in stage 5. The clock and randomness come with stage 6. Decided
    for it:
-   - the floor's missing APIs in `runtime/web-platform` taken by cloud agents
-     through pull requests ([cloud-agents](contributing/cloud-agents.md)): the
-     web platform's conformance, Web Crypto, WebSocket and EventSource, with
-     their first pull requests landing;
+   - the floor's missing APIs in `runtime/web-platform`: the web platform's
+     conformance, Web Crypto, WebSocket and EventSource, with their first pull
+     requests landing;
    - WebSocket as the client only: the server code in `runtime/web-platform`
      is removed once the realtime pull requests have landed, and the client's
      conformance tests get a peer of their own;
@@ -419,8 +341,7 @@ The designs and their build orders are in [`foundations/`](foundations).
    - Brotli for `CompressionStream` and `DecompressionStream` once the
      compression pull requests and the host libraries have landed, then Web
      Crypto's Modern Algorithms, as node implements them, once the Web Crypto
-     chain has landed. The Web Crypto cloud agent writes the TypeScript and its
-     maintainer the native half;
+     chain has landed;
    - `runtime/sdk` becoming `runtime/app` (`@nts/app`), its web-standard parts
      moving to `runtime/web-platform` and its lib subset retired;
    - the floor's `WebAssembly` API last, through an embedded engine linked
@@ -440,10 +361,9 @@ The designs and their build orders are in [`foundations/`](foundations).
 8. **Bounds-check placement** (decided,
    [objects](foundations/objects.md#arrays)): one relational analysis in
    `compiler/core`, whose rule for what a call ends is a whole-program summary
-   of the effects that can change a length. The compiler lane builds it after
-   the flow fixes have landed and the validation build's mode exists. Loops
-   it cannot clear are versioned through runtime2's loop versioning (the
-   integral regions). Each step is measured per row by instruction counts and
+   of the effects that can change a length. It is built after the flow fixes
+   have landed and the validation build's mode exists. Loops it cannot clear
+   are versioned (the integral regions). Each step is measured per row by instruction counts and
    by the checks left in the hot loops' machine code on each backend
    ([evidence](records/notebooks/bounds-check-placement.md)).
 9. **Calling C** (decided, [calling C](targets/calling-c.md)), built in
@@ -461,9 +381,7 @@ The designs and their build orders are in [`foundations/`](foundations).
       what the program knew about C-reachable memory ending at each C call,
       an interior zero and a NULL non-null result as `TypeError`s, and
       callbacks only on the owner thread inside a C call, with or without a
-      host (C-3, I-3). Then the checking build. `local<T>()` goes. Owner:
-      runtime, with the compiler lane reviewing every core change, the
-      lifetime rule and the end of facts at a C call above all.
+      host (C-3, I-3). Then the checking build. `local<T>()` goes.
    2. **The binder:** C's number types first, each kind also a value; then
       whole headers per target, type-checked against what every target of a
       build declares, with the type map of [calling C](targets/calling-c.md#types-at-the-boundary);
@@ -471,20 +389,19 @@ The designs and their build orders are in [`foundations/`](foundations).
       from the header; constants, pointer casts included; C shims for
       function-like macros and `static inline` functions; variadic arguments
       of a C kind with `format` checked; the refusals (`va_list`, `setjmp`,
-      a TypeScript signal or exit handler). Owner: runtime2.
+      a TypeScript signal or exit handler).
    3. **The existing bindings** move to the new forms (`tests/interop`,
       `runtime/native/libc.d.ts` and its README), the hand-written ones
       included, so `Counted`, `CBytes`, `CStrings`, copied string results and
       `local` leave plain C and the fact tags stay only where metadata
-      generates them. Owner: helper2, with the lanes whose bindings move.
+      generates them.
    4. **Rows:** the cost of a C call, a struct-heavy binding and a
       callback-heavy one, each against the same work written in C and against
-      node calling the library through a Node-API addon (owner: helper2).
+      node calling the library through a Node-API addon.
 
    `runtime/node`'s libraries (libuv, llhttp, zlib, the crypto library) are
    the first bound this way. TypeScript's `using` and `DisposableStack`, which
-   C handles can use, follow from the compiler lane after its soundness
-   classes. `node:ffi` is kept in mind for later, not scheduled
+   C handles can use, follow the compiler's soundness classes. `node:ffi` is kept in mind for later, not scheduled
    ([calling C](targets/calling-c.md#later-nodeffi)).
 
 ## Phase 3: conformance-driven development
@@ -595,21 +512,21 @@ add, in order:
 
      The hand prototype on emitted C is clean: every sabotage control traps
      by its name, and it caught the merge-bound bug that ASan let through. It
-     becomes an `nts build` mode (compiler). The mode records each rewritten
+     becomes an `nts build` mode. The mode records each rewritten
      operation's original recipe, keeps its checks out of the facts the
      optimizer trusts, and places its failure edges before reference
      counting. It runs over the differential corpus and the five test262
      records, and their cost decides its place in the nightly full run;
    - the adversarial routes as fixtures with one-difference controls on every
      backend: Bun's method-bivariance and covariant-array cases and ScriptC's
-     variance case (helper2). A bivariant method receiving an erased argument
+     variance case. A bivariant method receiving an erased argument
      gets a checked conversion at the callee's entry instead of invalid HIR
-     (compiler);
+    ;
    - array holes: the behaviour is decided (L4); an experiment on the array
      rows chooses the mechanism, a reserved NaN or a filled-prefix count
-     maintained by writes (runtime);
+     maintained by writes;
    - at region reset, a check that no cycle candidate or collector work list
-     points into the region, with a sabotage case (runtime).
+     points into the region, with a sabotage case.
 2. **Experiments on the rows nts loses,** each on hand-edited emitted code
    before any compiler change, each shown with every ratio:
    - `cyclic-churn`: the collector's counters are measured. Every candidate
@@ -619,51 +536,50 @@ add, in order:
      per iteration is not safe either. Nothing planned targets young
      candidates that are mostly still live: candidate aging and a trigger
      that follows the reclaimed share are each measured by hand on emitted C
-     before a mechanism is chosen (runtime);
+     before a mechanism is chosen;
    - `json-parse`: a hand-written typed parser row against the
      hosts' native `JSON.parse`, with and without validation, to size the
-     generated parser (helper2);
+     generated parser;
    - `awfy-towers` and `fib`: integer copies of the recursive
      functions, to decide whether argument ranges are proved through the
-     recursion or guarded at its entry (runtime2);
+     recursion or guarded at its entry;
    - `sort-objects`, `release-acyclic`, `immutable-update`,
      `str-split`: profiles, then one fact a fuller helper contract would
      supply (what a helper reads, writes, retains and calls back), kept by
-     hand, to size the contracts of memory stage 0 (runtime);
+     hand, to size the contracts of memory stage 0;
    - after the call-heavy rows: the cost of the test after each call that may
-     raise, which decides whether table unwinding pays (runtime2);
+     raise, which decides whether table unwinding pays;
    - async calls, once the asynchronous benchmark rows land: a row that awaits
      a known async function in a loop, beside a control that awaits a real
      promise, with the emitted code entering the body without an intermediate
      promise. It is adopted only as a proof in the shared IR that keeps the
      order of queued microtasks, cleanup and iterator closing, so every async
-     ordering fixture must still agree with node (helper2 for the row,
-     runtime2 for the experiment);
+     ordering fixture must still agree with node;
    - the generator rows run at C++'s speed but lose to Bun's AOT compiler,
      so a hand-fused generator loop is measured against it, kept only as a
-     proof in the shared IR that keeps the protocol's order (L16) (compiler).
+     proof in the shared IR that keeps the protocol's order (L16).
    The 10-29 comparator sitting's loss record maps every row below
    [the bar](README.md#the-bar) to the item that covers it. These are the
    ones nothing covered:
    - `str-append-length` loses to all three engines while observing only the
      length: strings.md's condition for a rope is met, so its first choice,
      an internal segmented builder that materializes an ordinary string, is
-     built and measured against a rope (runtime2, after the flow landing);
+     built and measured against a rope (after the flow landing);
    - the numeric kernels (`awfy-nbody`, both Mandelbrot rows,
      `clbg-spectral-norm`, `bytes`, `checksum`, `array-predicates`, `loop`):
      the hot loop's machine code beside ScriptC's and Bun AOT's, to find the
      instruction-level difference before any design. Candidates include
      vectorizing independent iterations without reordering floating-point
-     operations, and integral proofs (compiler);
+     operations, and integral proofs;
    - `pipeline`: a hand-fused map and reduce against the materialized
-     arrays, to size a fusion design (compiler);
+     arrays, to size a fusion design;
    - the JVM-only gaps (`cyclic-churn`, `release-acyclic` and
      `clbg-spectral-norm` on the JVM): the JVM's collector and flags, and
-     the object layout, measured per row (runtime2);
+     the object layout, measured per row;
    - **the LLVM backend slower than C** on the rows the 10-29 loss record
      lists. The layout-interval instrument shows the gaps are real. Two
      causes are found by hand-editing the IR, and both are being built in
-     the LLVM backend (runtime writes it, the compiler lane reviews it):
+     the LLVM backend:
      - no-overflow facts: `nsw` on the signed operations the exactness
        analysis proves, the same fact that lets C use signed arithmetic. It
        changes `awfy-sieve`'s loop shape and its branch misses, not its
@@ -765,7 +681,7 @@ Noted, not scheduled:
 - narrow test262's exclusion files (`features.json`,
   `test262-exclusions.json`) to those three boundaries, so every in-scope
   feature counts in the denominator;
-- node's own tests in the gate once the node lane resumes (Q-5).
+- node's own tests in the gate (Q-5).
 
 ## Decisions
 
