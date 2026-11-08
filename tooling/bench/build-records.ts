@@ -17,6 +17,7 @@ import { ToolingInstrumentError, publishToolingFailure } from "../gate/step-resu
 import { acceptedChange } from "../conformance/outcome-transition.ts";
 import { acceptedLine, pendingLine } from "../records/pending.ts";
 import { compileEnvironment, compileKey, observeCompile, projectFor, regularFiles } from "./compile-producer.ts";
+import { STEPS } from "../gate/step-table.mjs";
 import { benchmarkInventory, benchmarkKey, compareBenchmarkOutcome, mergeBenchmarkRecord, parseBenchmarkRecord, requireBenchmarkScopes,
   serializeBenchmarkRecord, type BenchmarkRecord, type BenchmarkRow } from "./outcomes.ts";
 
@@ -126,6 +127,11 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
   const scratch = mkdtempSync(join(base, "compile-"));
   let resident = false;
   try {
+    // A compile's memory is its step's reservation (NTS_GATE_STEP_MEMORY_BYTES).
+    // Outside a step, as the records writer runs, it is the benches step's own,
+    // so a check reproduces what was recorded; it stays out of compile-producer.ts,
+    // which is the compile key and would move every recorded row's driver.
+    process.env.NTS_GATE_STEP_MEMORY_BYTES ??= String(STEPS.find(step => step.name === "benches")!.mem * 2 ** 30);
     const environment = compileEnvironment(process.env, scratch, binary);
     const all = benchmarkCases(ROOT), paths = only ? all.filter(path => path === `benchmarks/cases/${only}`) : all;
     assert.ok(paths.length > 0, `unknown benchmark case: ${only}`);
@@ -147,6 +153,16 @@ export async function runBuildRecords(args = process.argv.slice(2)): Promise<num
     for (const path of paths) for (const backend of backends) {
       // A case with no row yet is not measured at landing: the full check records it.
       if (mode === "--check" && pending.get(backend)!.has(path)) continue;
+      // Nor is a recorded compile timeout. Compiling only, it cannot get worse,
+      // and measuring it costs its whole bound on every check: ten such rows
+      // held the full check's benches step past its own ceiling. The records
+      // writer measures every case, so a timeout that improves is still written.
+      const recorded = mode === "--check" ? records.get(backend)!.rows.find(row => row.path === path && row.scope === "compile") : undefined;
+      if (recorded?.outcome.kind === "timeout") {
+        actual.get(backend)!.push(recorded);
+        console.log(`${backend} ${path}: timeout, as recorded; a check does not measure it again`);
+        continue;
+      }
       // The standalone recorder has no resident worker keeping it alive.
       // Keep this admission wait referenced, as the calibration recorder does.
       while (!admission.open()) await poll(2000);

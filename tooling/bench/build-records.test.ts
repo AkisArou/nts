@@ -140,6 +140,15 @@ else { const output = args[args.indexOf('--out') + 1]; fs.mkdirSync(output, {rec
   assert.match(waiting.stdout, /^c pending: benchmarks\/cases\/subject is not recorded in \S*pending\/c\/outcomes\.tsv yet$/m);
   assert.doesNotMatch(waiting.stdout, /^c benchmarks\/cases\/subject: /m, "a pending case is not measured at landing");
   assert.match(waiting.stdout, /^llvm benchmarks\/cases\/subject: refused$/m, "a recorded case is");
+  // A recorded compile timeout is not measured by a check: compiling only, it
+  // cannot get worse, and it would cost its whole bound on every run.
+  const timedOut = (backend: string, text: string) => backend === "c" ? text.split("\n").map(line => line.startsWith("benchmarks/cases/control\t")
+    ? line.replace('"outcome":{"kind":"pass"}', '"outcome":{"kind":"timeout","stage":"compile"}') : line).join("\n") : text;
+  const kept = invoke("--check", variant("timeout", timedOut));
+  assert.equal(kept.status, 0, kept.stdout + kept.stderr);
+  assert.match(kept.stdout, /^c benchmarks\/cases\/control: timeout, as recorded; a check does not measure it again$/m);
+  assert.doesNotMatch(kept.stdout, /^c improved, record pending: benchmarks\/cases\/control /m, "measured, the fake compiler's pass would show");
+  assert.match(kept.stdout, /^llvm benchmarks\/cases\/control: pass$/m, "the other backends' rows are measured");
   const staleRow = (backend: string, text: string) => backend === "c" ? text + text.split("\n")[1]!.replace("benchmarks/cases/control", "benchmarks/cases/deleted") + "\n" : text;
   const stale = invoke("--check", variant("stale", staleRow)); assert.equal(stale.status, 124, stale.stdout + stale.stderr);
   assert.match(stale.stderr, /recorded benchmark scope gone missing: benchmarks\/cases\/deleted compile/, "a row whose case is gone still fails");

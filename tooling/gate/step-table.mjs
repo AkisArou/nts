@@ -95,7 +95,9 @@ export const STEPS = [
   { name: "corpus", slots: 8, min: 4, mem: 6, nts: true, fe: true, doc: "invalid HIR 0, uncompilable C 0, unverifiable class 0",
     capabilities: ["jvm"],
   },
-  { name: "benches", slots: 1, mem: 1, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
+  // One compile at a time, under this reservation, which the records writer takes as its
+  // cap too (build-records.ts); the large JetStream cases need more than 1 GiB to emit.
+  { name: "benches", slots: 1, mem: 6, nts: true, fe: true, doc: "bench cases emit and compile on C, LLVM, JVM" },
   { name: "example-refusals", elastic: true, slots: 8, min: 2, mem: 4, nts: true, fe: true, doc: "per-example refusal counts match the table" },
   { name: "config", slots: 1, treeOnly: true, mem: 1, doc: "nts.config.ts files coherent" },
   { name: "react-sources", slots: 1, mem: 0.3, doc: "vendored React sources match the manifest" },
