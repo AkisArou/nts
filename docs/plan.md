@@ -133,6 +133,17 @@ ids, kept so the records that cite them still resolve.
 - A class exported from an LLVM addon makes it fail to load (#181).
 
 **Refusals, by reach**
+- Specialize a generic typed-array subclass's base when its caller fixes the
+  backing type: [the type-parameter base](../tests/refusals/a-type-parameter-in-a-typed-array-subclass-base/src/main.ts)
+  refuses while [the concrete backing type](../tests/programs/a-concrete-backing-type-in-a-typed-array-subclass-base/src/main.ts)
+  compiles the same allocation and byte access. The Node 26 Buffer split
+  exposes this gap across the runtime modules; restore the lost definitions
+  before moving their floors or the refusal-profile ceiling.
+- Compile the [asserted indexed compound write](../tests/refusals/a-byte-mask-through-an-asserted-index/src/main.ts)
+  that drops MIME's character-class initialization; the
+  [explicit indexed write](../tests/programs/a-byte-mask-through-an-explicit-index-write/src/main.ts)
+  is its control. Prototype descriptor registrations remain a separate
+  representation boundary.
 - Exceptional transfer through indirect calls (#18): build the producer per
   [the design](records/notebooks/exceptional-transfer-and-activation-design.md).
 - Octane: `Error()` without `new`, and `new.target` (#147's rest).
@@ -217,6 +228,12 @@ ids, kept so the records that cite them still resolve.
 - The WebSocket server goes (#52); the interface tag sweep (#53).
 
 **Tooling**
+- Restore a working control to the
+  [generic backing-view alias guard](../tests/refusals/a-generic-alias-result-on-a-typed-array-subclass/src/main.ts)
+  after generic base specialization: both arms currently refuse before the
+  alias distinction is reached, and its empty add-on cannot resolve
+  `nts_closure_call_slot`. Use the new generic/concrete base pair for that
+  prerequisite rather than treating the old control as measured.
 - The compile-time guard adds backend code generation and link time (P-6).
 - Native instruction counts per benchmark row gate the full check, against
   the noise band, starting with the counting drivers (P-5).
