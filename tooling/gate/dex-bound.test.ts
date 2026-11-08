@@ -12,6 +12,7 @@ import { dirname, join, resolve } from "node:path";
 import { test, type TestContext } from "node:test";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { testScratch } from "./test-scratch.ts";
+import { written, type DexOutcome } from "../android/dex-record.ts";
 import { spawnTest } from "./test-wait.ts";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -25,7 +26,7 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   copyFileSync(join(ROOT, "runtime/jvm/test-vm-flags.txt"), join(root, "runtime/jvm/test-vm-flags.txt"));
   // Copies, not links: a tool's main-module guard compares its own path, and
   // compile-outcome.ts reads the record of the tree it sits in.
-  for (const path of ["tooling/gate/case-bound.ts", "tooling/gate/active-command.ts", "tooling/gate/step-result.ts", "tooling/bench/compile-outcome.ts"]) {
+  for (const path of ["tooling/gate/case-bound.ts", "tooling/gate/active-command.ts", "tooling/gate/step-result.ts", "tooling/bench/compile-outcome.ts", "tooling/android/dex-record.ts"]) {
     copyFileSync(join(ROOT, path), join(root, path));
   }
   // What the record's parser imports, as it is.
@@ -33,14 +34,17 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
     if (!existsSync(join(root, path))) symlinkSync(join(ROOT, path), join(root, path));
   }
   writeFileSync(join(root, "tooling/gate/token.sh"), '#!/bin/sh\nexec "$@"\n', { mode: 0o755 });
-  writeFileSync(join(own, "sdk/build-tools/99.0.0/d8"), "#!/bin/sh\nexit 0\n", { mode: 0o755 });
+  // d8 refuses what a `*-refused` target emits and accepts the rest; javap
+  // names one method of each class.
+  writeFileSync(join(own, "sdk/build-tools/99.0.0/d8"), "#!/bin/sh\ncase \"$*\" in *-refused*) printf 'Error in x.class:\\ncom.android.tools.r8.internal.fx: Illegal class file: fake\\n'; exit 1 ;; esac\nexit 0\n", { mode: 0o755 });
+  writeFileSync(join(own, "bin/javap"), "#!/bin/sh\necho '  public static void main(java.lang.String[]);'\n", { mode: 0o755 });
   const digest = (n: string) => n.repeat(64);
   writeFileSync(join(root, "results/benchmarks/jvm/outcomes.tsv"),
     `# nts-benchmark-outcomes {"version":1,"backend":"jvm","commit":"${"a".repeat(40)}","compiler":"${"b".repeat(16)}","harness":"${"c".repeat(16)}","under":"benchmarks/cases","scopes":["compile"]}\n` +
     Object.entries({ "other-case": { kind: "pass" }, ...recorded }).sort(([a], [b]) => a.localeCompare(b))
       .map(([name, outcome]) => `benchmarks/cases/${name}\t${JSON.stringify({ scope: "compile", source: digest("1"), driver: digest("2"), outcome })}\n`).join(""));
   const nts = join(own, "bin/nts");
-  writeFileSync(nts, '#!/bin/sh\ncase "$2" in *-spin*) while :; do :; done ;; esac\necho "error: the backend declines this program" >&2\nexit 1\n', { mode: 0o755 });
+  writeFileSync(nts, '#!/bin/sh\ncase "$2" in *-spin*) while :; do :; done ;; *-dexes*|*-refused*) mkdir -p "$4/nts/gen" && echo class > "$4/nts/gen/Program.class" && exit 0 ;; esac\necho "error: the backend declines this program" >&2\nexit 1\n', { mode: 0o755 });
   // The real supervisor, with the compile bound it was asked for made small.
   const preload = join(own, "compile-bound.mjs"), active = pathToFileURL(join(root, "tooling/gate/active-command.ts")).href;
   writeFileSync(preload, `import {mock} from 'node:test';const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>real.activeCommand(command,args,{...options,...(options.ownCpuSeconds?{ownCpuSeconds:0.5}:{}),pollMs:50})}});\n`);
@@ -61,7 +65,11 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   // dexed here, so the method floor is 0.
   const dex = (...targets: string[]) => run(targets, true);
   const full = (...targets: string[]) => run(targets, false, { NTS_DEX_METHOD_FLOOR: "0" });
-  return { dex, full, frame };
+  const dexRecord = (rows: Record<string, DexOutcome>) => {
+    mkdirSync(join(root, "results/dex"), { recursive: true });
+    writeFileSync(join(root, "results/dex/outcomes.tsv"), written(null, Object.entries(rows).map(([path, outcome]) => ({ path, value: { outcome } }))));
+  };
+  return { dex, full, frame, dexRecord };
 }
 
 test("a bench case's timeout its compile record holds reproduces: named, counted, not red, and the next target runs", t => {
@@ -120,4 +128,19 @@ test("a full run: a bench case declined where its compile record says pass got w
     assert.match(result.stdout, /^0 dexed, 0 refused, 1 declined by the backend, 0 timed out compiling$/m);
     assert.match(result.stderr, /^1 target\(s\) were declined by the backend, where 0 is expected$/m);
   }
+});
+
+test("d8's verdict is judged against the dex record: a new target is pending, a recorded refusal holds, a new refusal is red", t => {
+  const { full, dexRecord } = sandbox(t, {});
+  const fake: DexOutcome = { kind: "build-failure", diagnostic: "Illegal class file: fake" };
+  dexRecord({ "tests/programs/held-refused": fake, "tests/programs/was-dexing-refused": { kind: "pass" } });
+  const result = full("new-dexes", "held-refused", "was-dexing-refused");
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stdout, /^pending: tests\/programs\/new-dexes is not recorded in results\/dex\/outcomes\.tsv yet: d8 accepts it$/m);
+  assert.match(result.stdout, /^tests\/programs\/held-refused: d8 refuses it: Illegal class file: fake, as its dex record says$/m);
+  assert.match(result.stdout, /^tests\/programs\/was-dexing-refused: REGRESSED: d8 refuses it: Illegal class file: fake, where its dex record says: d8 accepts it$/m);
+  assert.match(result.stderr, /^1 target\(s\) worse than the dex record/m);
+  // Without the regression the same run is green: the held refusal and the pending target pass.
+  dexRecord({ "tests/programs/held-refused": fake, "tests/programs/was-dexing-refused": fake });
+  assert.equal(full().status, 0);
 });

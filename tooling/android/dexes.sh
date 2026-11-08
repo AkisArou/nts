@@ -6,7 +6,8 @@
 #
 # A bench case's emit-jvm here is the compile the benches step records
 # (results/benchmarks/jvm/outcomes.tsv): a timeout or a decline is judged
-# against that row.
+# against that row. What d8 does with what it emitted is judged against the
+# dex record (results/dex/outcomes.tsv, tooling/android/dex-record.ts).
 #
 # # Why this exists beside two ratchets that already run d8
 #
@@ -236,6 +237,8 @@ JSON
     printf "%-28s d8 refused it\n" "$name"
     sed -n '1,3p' "$out/d8.log" | sed 's/^/    /'
   fi
+  # What d8 did is judged against the dex record at the end (dex-record.ts).
+  printf '%s\n' "$d8_status" > "$out/d8.status"
   if [ -n "${NTS_GATE_SHADOW_DIR:-}" ]; then
     node "$root/tooling/gate/artifact-shadow.ts" --kind dex --context "$target" \
       --inputs "$out/classes" --outputs "$out/dex" --result "$out/d8.log" --status "$d8_status" \
@@ -258,6 +261,9 @@ trap 'rm -rf "$work"' EXIT INT TERM
 if [ $# -gt 0 ]; then
   targets=""
   for name in "$@"; do
+    # A target's whole path names it alone: thirteen bench cases share a
+    # basename with an example, and the dex record's recorder names both.
+    case $name in benchmarks/cases/*|tests/programs/*) if [ -d "$root/$name" ]; then targets="$targets $name"; continue; fi ;; esac
     if [ -d "$root/benchmarks/cases/$name" ]; then targets="$targets benchmarks/cases/$name"
     elif [ -f "$root/tests/programs/$name/tsconfig.json" ]; then targets="$targets tests/programs/$name"
     elif [ -d "$root/tests/programs/$name" ]; then
@@ -268,38 +274,9 @@ if [ $# -gt 0 ]; then
     fi
   done
 else
-  # **`invalid` and `unsupported` are excluded, as `backend_examples` excludes
-  # them.** `invalid` exists to fail typechecking, so the backend declining it
-  # is the example working. Counting it made `1 declined` a permanent fixture,
-  # and a permanent fixture is what a real decline would have hidden behind.
-  #
-  # **An example is a directory with a `tsconfig.json`, not any directory
-  # under `tests/programs/`.** `tests/interop` and `tests/workspace` are
-  # *containers* -- seventeen projects and four packages -- and the branch below
-  # synthesises a tsconfig that includes the whole tree, so each was compiled as
-  # one giant program. They declined, every run, for reasons that are properties
-  # of being a container rather than of any backend:
-  #
-  #     interop     TS2300 Duplicate identifier 'Drawable'
-  #     workspace   TS2307 Cannot find module '@workspace/notifications'
-  #
-  # Both landed in `declined by the backend`, which is the same bucket a real
-  # refusal lands in, and contributed 0 methods. A bench case genuinely has no
-  # tsconfig and gets a synthesised one, so the test applies to `tests/programs/` only.
-  #
-  # `if` rather than `[ ... ] && printf`: the `&&` form leaves the loop's exit
-  # status at 1 whenever the *last* directory has no tsconfig, which under
-  # `set -e` kills the assignment and the script with it, silently, before
-  # anything is printed. `tests/workspace` sorts last and has no tsconfig,
-  # so this failed on the first run -- the same bug `pinned.sh` carried, written
-  # again by someone who had been told about it that afternoon.
-  examples=$(
-    for dir in "$root"/tests/programs/*/; do
-      if [ -f "$dir/tsconfig.json" ]; then printf '%s\n' "$dir"; fi
-    done
-  )
-  targets=$( (printf '%s\n' $examples; ls -d "$root"/benchmarks/cases/*/ 2>/dev/null) \
-    | sed "s|^$root/||;s|/$||" | grep -vE '/(invalid|unsupported)$' | sort)
+  # Every example and bench case, from the one list the dex record checks
+  # against (dex-record.ts's dexTargets says which, and why).
+  targets=$(node "$root/tooling/android/dex-record.ts" targets)
 fi
 
 # **The count this ratchet owes itself.** See `docs/records/0295`.
@@ -344,6 +321,15 @@ done
 printf "\n%s dexed, %s refused, %s declined by the backend, %s timed out compiling\n" "$dexed" "$refused" "$declined" "$timedout"
 printf "%s declined or timed out as their compile record says, %s pending their compile record\n" "$recorded" "$awaiting"
 printf "%s method(s) across them\n" "$methods"
+
+# The full check's recorder (dex-record.ts record-pending) writes the rows for
+# the targets the dex record has none for, and for those d8 now accepts where
+# it refused; the verdicts below are a check's, not a recording's.
+if [ "${NTS_DEX_RECORD:-}" = pending ]; then
+  # shellcheck disable=SC2086
+  node "$root/tooling/android/dex-record.ts" write "$work" $targets
+  exit $?
+fi
 
 # A target the supervisor could not measure says nothing either way. With a
 # definite failure beside it the step is red; with none it is held
@@ -452,4 +438,10 @@ if [ $# -eq 0 ] && [ "$methods" -lt "$floor" ]; then
   fi
   exit 1
 fi
-[ "$refused" -eq 0 ] || exit 1
+# **What d8 did is judged against the dex record** (results/dex/outcomes.tsv):
+# a target it has no row for is pending, a refusal its row records holds, and
+# a refusal where its row says d8 accepts it is red. It used to be any refusal:
+# one d8 defect in a new bench case (jetstream-babylon-wtb, 2026-11-07) kept
+# the step red, and a red step hides the next refusal behind it.
+# shellcheck disable=SC2086
+node "$root/tooling/android/dex-record.ts" judge "$work" $([ $# -eq 0 ] && echo --full) $targets

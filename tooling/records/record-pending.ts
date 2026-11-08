@@ -8,16 +8,17 @@
 //
 //   NTS_BIN=<main's pin> node tooling/records/record-pending.ts [kind ...]
 //
-// The kinds are oracle-counts, typescript, benchmarks, benchmark-runs and
-// outcomes, all five when none is named, in that order: a benchmark's run is
-// recorded once its oracle count is. Each is recorded by its own recorder, in
-// its pending mode, with the compiler NTS_BIN names:
+// The kinds are oracle-counts, typescript, benchmarks, benchmark-runs,
+// outcomes and dex, all six when none is named, in that order: a benchmark's
+// run is recorded once its oracle count is. Each is recorded by its own
+// recorder, in its pending mode, with the compiler NTS_BIN names:
 //
 //   oracle-counts   tooling/differential/record-oracles.ts <pending fixture>, per fixture
 //   typescript      tooling/census/conformance262.ts --record-pending, per backend
 //   benchmarks      tooling/bench/build-records.ts --record-pending
 //   benchmark-runs  tooling/differential/check-consumers.ts benchmarks --record-pending (bench-agree's JVM record)
 //   outcomes        tooling/conformance/outcomes-check.ts --record-pending
+//   dex             tooling/android/dex-record.ts record-pending (d8 over what can change a row)
 //
 // The pending cases come from the tree alone. Accepted changes need a
 // measurement, so the last three recorders run whether or not anything is
@@ -43,9 +44,10 @@ import { outcomeFixtures } from "../conformance/outcomes-project.ts";
 import { judge, outcomeInventory, RECORD } from "../conformance/outcomes-verdict.ts";
 import { pendingFixtures, recordPath, RECORDS } from "../differential/oracle-records.ts";
 import { BENCH_AGREE_BACKENDS, compareBenchmarkRun, parseBenchmarkRun, parseRunRecord, pendingRuns, runsRecord } from "../bench/run-outcomes.ts";
+import { compareDex, DEX_RECORD, dexOutcome, dexTargets, recordedTargets } from "../android/dex-record.ts";
 import { inventory, pendingLine } from "./pending.ts";
 
-export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes"] as const;
+export const KINDS = ["oracle-counts", "typescript", "benchmarks", "benchmark-runs", "outcomes", "dex"] as const;
 export type Kind = typeof KINDS[number];
 const BACKENDS = ["c", "llvm", "jvm"] as const;
 
@@ -82,6 +84,10 @@ export function findPending(root: string, kind: Kind): Pending[] {
       return outcomeInventory(directory, outcomeFixtures(directory)).pending
         .map(name => ({ kind, name: `tests/outcomes/${name}`, record: outcomesRecord(name) }));
     }
+    case "dex": {
+      const recorded = existsSync(join(root, DEX_RECORD)) ? recordedTargets(read(root, DEX_RECORD)) : [];
+      return inventory(recorded, dexTargets(root)).pending.map(name => ({ kind, name, record: DEX_RECORD }));
+    }
   }
 }
 
@@ -102,6 +108,8 @@ export function recorderRuns(kind: Kind, pending: readonly Pending[]): string[][
       return [["tooling/differential/check-consumers.ts", "benchmarks", "--record-pending"]];
     case "outcomes":
       return [["tooling/conformance/outcomes-check.ts", "--record-pending"]];
+    case "dex":
+      return [["tooling/android/dex-record.ts", "record-pending"]];
   }
 }
 
@@ -117,6 +125,7 @@ function recordFiles(root: string, kind: Kind): string[] {
     case "benchmarks": return BACKENDS.map(benchmarkRecord);
     case "benchmark-runs": return BENCH_AGREE_BACKENDS.map(runsRecord);
     case "outcomes": return outcomeFixtures(join(root, "tests/outcomes")).map(outcomesRecord);
+    case "dex": return [DEX_RECORD];
   }
 }
 
@@ -126,7 +135,7 @@ function snapshot(root: string, kind: Kind, pending: readonly Pending[]): Map<st
 }
 
 /** One row of a line record: its key, its case, and its exact line. */
-type LineKind = "typescript" | "benchmarks" | "benchmark-runs";
+type LineKind = "typescript" | "benchmarks" | "benchmark-runs" | "dex";
 function rows(text: string, kind: LineKind): { header: string; rows: Map<string, { name: string; line: string }> } {
   const [header = "", ...lines] = text.split("\n");
   const result = new Map<string, { name: string; line: string }>();
@@ -152,6 +161,10 @@ function acceptedRow(kind: LineKind, before: string, after: string): string | nu
     const was = parseObservation(value(before)), now = parseObservation(value(after)), change = compareTypeScriptObservation(was, now);
     return acceptedChange(change) ? `${JSON.stringify(was)} -> ${JSON.stringify(now)} (${label(change)})` : null;
   }
+  if (kind === "dex") {
+    const path = before.split("\t")[0]!, was = dexOutcome(path, value(before)), now = dexOutcome(path, value(after)), change = compareDex(was, now);
+    return acceptedChange(change) ? `${JSON.stringify(was)} -> ${JSON.stringify(now)} (${label(change)})` : null;
+  }
   const was = value(before), now = value(after);
   if (was.source !== now.source || was.driver !== now.driver) return null;
   const outcome = (cell: { outcome: unknown }) => parseBenchmarkOutcome(cell.outcome);
@@ -167,9 +180,10 @@ function acceptedRow(kind: LineKind, before: string, after: string): string | nu
 export function auditRecord(kind: Kind, file: string, before: string | null, after: string | null, pending: ReadonlySet<string>): string[] {
   if (before === after) return [];
   assert.ok(after !== null, `${file} was removed`);
-  if (kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs") {
-    // bench-agree's record starts from its pending rows: with no file, every benchmark is pending.
-    if (before === null && kind === "benchmark-runs") {
+  if (kind === "typescript" || kind === "benchmarks" || kind === "benchmark-runs" || kind === "dex") {
+    // bench-agree's and dex's records start from their pending rows: with no
+    // file, every benchmark (every dex target) is pending.
+    if (before === null && (kind === "benchmark-runs" || kind === "dex")) {
       const now = rows(after, kind);
       for (const row of now.rows.values()) assert.ok(pending.has(row.name), `${file}: a row was added for ${row.name}, which was not pending`);
       return [...now.rows.values()].map(row => `${row.name} ${row.line.split("\t")[1]} (pending)`);

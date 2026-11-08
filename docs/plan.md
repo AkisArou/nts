@@ -102,10 +102,11 @@ ids, kept so the records that cite them still resolve.
 - The JVM backend never finishes compiling `jetstream-threejs`: its compile
   record says `timeout` once the full check writes it. Reduce it to an
   outcome fixture.
-- d8 refuses the JVM backend's classes for `jetstream-babylon-wtb`, so the
-  full check's dex step is red: `nts/gen/SyntaxError` comes out as an
-  interface whose superclass is the `Error` class ("Interface
-  nts/gen/SyntaxError must extend class java.lang.Object"). The program has
+- d8 refuses the JVM backend's classes for `jetstream-babylon-wtb` (held in
+  `results/dex/outcomes.tsv` once the full check writes its row):
+  `nts/gen/SyntaxError` comes out as an interface whose superclass is the
+  `Error` class ("Interface nts/gen/SyntaxError must extend class
+  java.lang.Object"). The program has
   `interface PositionedSyntaxError extends SyntaxError` (`parser.ts:50`), but
   a few-line program with only that interface dexes. Reduce the case to an
   outcome fixture with a control, then fix it.

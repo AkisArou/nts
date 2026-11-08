@@ -7,7 +7,8 @@ import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
-import { findPending, recordPending, type Runner } from "./record-pending.ts";
+import { auditRecord, findPending, recordPending, type Runner } from "./record-pending.ts";
+import { written as dexRecord, type DexOutcome } from "../android/dex-record.ts";
 import { testScratch } from "../gate/test-scratch.ts";
 
 const BACKENDS = ["c", "llvm", "jvm"] as const;
@@ -154,4 +155,15 @@ test("a row refused as before for other reasons is accepted and labelled so, not
   });
   assert.equal(recordPending(root, ["typescript"], run, line => lines.push(line)), 0, lines.join("\n"));
   assert.ok(lines.includes(`  recorded results/typescript/c/cases.tsv: tests/typescript/family/recorded.ts ${JSON.stringify(refused)} -> ${JSON.stringify(later)} (refuses differently)`), lines.join("\n"));
+});
+
+test("the dex record starts from its pending rows, takes an improvement, and refuses a regression or a row nobody lacked", () => {
+  const file = "results/dex/outcomes.tsv", refused: DexOutcome = { kind: "build-failure", diagnostic: "Illegal class file: x" };
+  const text = (rows: Record<string, DexOutcome>) => dexRecord(null, Object.entries(rows).map(([path, outcome]) => ({ path, value: { outcome } })));
+  const first = text({ "tests/programs/a": { kind: "pass" }, "benchmarks/cases/b": refused });
+  assert.deepEqual(auditRecord("dex", file, null, first, new Set(["tests/programs/a", "benchmarks/cases/b"])).length, 2);
+  assert.throws(() => auditRecord("dex", file, null, first, new Set(["tests/programs/a"])), /a row was added for benchmarks\/cases\/b, which was not pending/);
+  const fixed = text({ "tests/programs/a": { kind: "pass" }, "benchmarks/cases/b": { kind: "pass" } });
+  assert.match(auditRecord("dex", file, first, fixed, new Set()).join("\n"), /^benchmarks\/cases\/b .* \(improved\)$/);
+  assert.throws(() => auditRecord("dex", file, fixed, first, new Set()), /the row of benchmarks\/cases\/b was rewritten, and the ratchet does not accept it/);
 });
