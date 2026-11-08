@@ -83,7 +83,13 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   const active=new Map<string,()=>void>(),owners=new ToolingTestOwners(names);
   const schedule=options.instrument?.scheduleIdle??((callback:()=>void,milliseconds:number)=>{const timer=setTimeout(callback,milliseconds);return()=>clearTimeout(timer);});
   let hung:string|undefined,hungFile:string|undefined,success=true,priorFailures=0;
-  const hangReason=()=>`tooling file NOT RUN (hung): ${hungFile}; no test activity for ${options.idleMs??TOOLING_IDLE_GUARD_MS} ms; ${priorFailures} prior assertion failure(s) retained in the transcript`;
+  // Each file's tests that have started and not completed: what a hang names,
+  // since a hung test prints nothing of its own.
+  const open=new Map<string,Map<number|string,string>>();
+  const hangReason=()=>{
+    const tests=[...(hungFile?open.get(hungFile)?.values()??[]:[])];
+    return `tooling file NOT RUN (hung): ${hungFile}; no test activity for ${options.idleMs??TOOLING_IDLE_GUARD_MS} ms${tests.length?` in ${tests.map(name=>JSON.stringify(name)).join(", ")}`:""}; ${priorFailures} prior assertion failure(s) retained in the transcript`;
+  };
   const touch=(file:string)=>{
     active.get(file)?.();
     active.set(file,schedule(()=>{
@@ -95,7 +101,11 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
   const fileOf=(data:TestActivity)=>owners.file(data);
   const stream=run({files:[...names],execArgv:options.execArgv,concurrency:true,signal:controller.signal,setup:events=>{
     events.on("test:enqueue",data=>{fileOf(data);});
-    events.on("test:dequeue",data=>{const file=fileOf(data);if(file)touch(file);});
+    events.on("test:dequeue",data=>{
+      const file=fileOf(data);if(!file)return;
+      touch(file);
+      if(data.name&&resolve(data.name)!==file)open.set(file,(open.get(file)??new Map()).set(data.testId??data.name,data.name));
+    });
     for(const event of ["test:stdout","test:stderr","test:start","test:pass","test:fail","test:diagnostic"] as const){
       events.on(event,(data:any)=>{const file=fileOf(data);if(file&&active.has(file))touch(file);});
     }
@@ -104,6 +114,7 @@ export async function runTooling(files:string[],options:{idleMs?:number;execArgv
       // its owning entry file. All events here belong to this owned stream.
       if(completedTestFailure(data))priorFailures++;
       const file=fileOf(data);if(!file)return;
+      open.get(file)?.delete(data.testId??data.name!);
       if(resolve(data.name)===file){active.get(file)?.();active.delete(file);}
       else if(active.has(file))touch(file);
     });

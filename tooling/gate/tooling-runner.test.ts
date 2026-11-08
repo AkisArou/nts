@@ -116,6 +116,7 @@ test("a completed failure followed by an idle test is red while pass followed by
     assert.equal(actual.completedFailures,failed?1:0,transcript);
     const observation=readStepInstrument(result,"tooling","mixed")!;
     assert.equal(observation.kind,"hung");assert.equal(observation.verdict,failed?"FAIL":"NOT RUN");
+    assert.match(transcript,/no test activity for 1000 ms in "unfinished";/,"a hang names the test that had started and not completed");
     assert.equal(observation.completedFailures??0,failed?1:0,transcript);
     if(failed)assert.match(transcript,/definite assertion/);
   }
