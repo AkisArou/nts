@@ -159,6 +159,21 @@ test("read-only owned captures are removed on green and closed-red eviction with
  chmodSync(peer,0o755);
 });
 
+// A test writes a name that is not UTF-8 on purpose (node's fs over raw bytes).
+const notUtf8=(dir:string)=>Buffer.concat([Buffer.from(join(dir,"bad-")),Buffer.from([0xff])]);
+test("a name that is not UTF-8 is removed on green and on closed-red eviction, read-only folders too",t=>{
+ const f=fixture(t);
+ for(const green of [true,false]){
+  const owned=captureRunTemporary(f.run('bytes-'+green)),nested=join(owned.path,'nts-fs-bytes/inner');mkdirSync(nested,{recursive:true});
+  writeFileSync(notUtf8(nested),'raw');chmodSync(nested,0o555);
+  const log:string[]=[];
+  if(green)assert.equal(finishRunTemporary(owned,f.home,true).state,'removed after green');
+  else{finishRunTemporary(owned,f.home,false,roomy);assert.deepEqual(pruneRunTemporaries(f.home,{maxBytes:0,minimumFreeBytes:0,write:line=>log.push(line)}).removed,[owned.path]);}
+  assert.equal(existsSync(owned.path),false);
+  assert.ok(!log.some(line=>line.includes('kept')),log.join("\n"));
+ }
+});
+
 test("a failed root ownership check changes no read-only directory permissions",t=>{
  const f=fixture(t),owned=captureRunTemporary(f.run('ownership')),nested=join(owned.path,'capture');mkdirSync(nested);chmodSync(nested,0o555);
  const result=finishRunTemporary({...owned,uid:owned.uid+1},f.home,true);assert.match(result.state,/kept/);assert.equal(lstatSync(nested).mode&0o777,0o555);

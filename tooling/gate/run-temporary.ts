@@ -49,15 +49,19 @@ export function assertRunTemporary(owned:RunTemporary,home:string):void {
 export type PruneOptions={maxBytes?:number;minimumFreeBytes?:number;write?:(line:string)=>void;freeBytes?:()=>number};
 // A run can own read-only captured inputs. Restore directory permissions only
 // after assertRunTemporary() authenticates this exact root; never traverse a link.
+// Names are walked as bytes: one that is not UTF-8, which a test writes on
+// purpose, decodes to U+FFFD and names nothing, so a walk by strings stopped
+// there and its folder was kept on every prune.
+const SLASH=Buffer.from("/");
 export function removable(root:string):void {
-  const walk=(path:string)=>{
+  const walk=(path:Buffer)=>{
     const info=lstatSync(path);
     if(info.isSymbolicLink()||!info.isDirectory())return;
-    if(info.uid!==process.getuid?.())throw new Error("foreign directory in run temporary: "+path);
+    if(info.uid!==process.getuid?.())throw new Error("a folder another user owns: "+path.toString());
     chmodSync(path,(info.mode&0o777)|0o700);
-    for(const name of readdirSync(path))walk(join(path,name));
+    for(const name of readdirSync(path,{encoding:"buffer"}))walk(Buffer.concat([path,SLASH,name]));
   };
-  walk(root);
+  walk(Buffer.from(root));
 }
 
 /** Bounds apply to closed failures, and may evict them further for admission.

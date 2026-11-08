@@ -26,11 +26,12 @@
 //     writer no longer names its folder is red too, so the list cannot
 //     outlive the tools it describes.
 import { spawnSync } from "node:child_process";
-import { chmodSync, existsSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
+import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
+import { removable as makeRemovable } from "../gate/run-temporary.ts";
 
 export type Pull = { number: number; headRefName: string; baseRefName?: string; isCrossRepository?: boolean };
 export type Worktree = { path: string; head?: string; branch?: string; prunable?: boolean };
@@ -193,10 +194,15 @@ export function writerNames(root: string, writer: string, path: string): boolean
   return spellings.some(spelling => text.includes(spelling));
 }
 
-/** Nothing under `path` changed after `since` (its own folder's time aside): no run still writes it. */
+/**
+ * Nothing under `path` changed after `since` (its own folder's time aside): no
+ * run still writes it. Walked by bytes, as removable() walks: a name that is
+ * not UTF-8 would name nothing, and a fresh file under it would go unseen.
+ */
 function settled(path: string, since: number): boolean {
-  for (const name of readdirSync(path, { recursive: true }) as string[]) {
-    try { if (lstatSync(join(path, name)).mtimeMs > since) return false; }
+  const root = Buffer.from(path), slash = Buffer.from("/");
+  for (const name of readdirSync(root, { recursive: true, encoding: "buffer" })) {
+    try { if (lstatSync(Buffer.concat([root, slash, name])).mtimeMs > since) return false; }
     catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
   }
   return true;
@@ -296,23 +302,18 @@ export function count(input: CountInput, keep: Record<string, Keep> = readKeep()
 /**
  * Remove what the count found removable, one folder at a time: a path must
  * sit inside `cache` and be a real folder, not a link; its folders are made
- * writable first (a run can leave read-only captured inputs). Returns a line
+ * writable first (a run can leave read-only captured inputs), by the walk the
+ * gate's own temporary folders are removed with. Returns a line
  * per folder, removed or kept with the reason.
  */
 export function sweep(removable: readonly Removable[], cache: string): string[] {
-  const writable = (path: string): void => {
-    const info = lstatSync(path);
-    if (info.isSymbolicLink() || !info.isDirectory()) return;
-    chmodSync(path, (info.mode & 0o777) | 0o700);
-    for (const name of readdirSync(path)) writable(join(path, name));
-  };
   return removable.map(({ path, why }) => {
     const shown = `~/.cache/${relative(cache, path)}`, part = relative(cache, path);
     try {
       if (!part || part.startsWith("..") || isAbsolute(part)) throw new Error("outside ~/.cache");
       const info = lstatSync(path);
       if (info.isSymbolicLink() || !info.isDirectory()) throw new Error("not a real folder");
-      writable(path);
+      makeRemovable(path);
       rmSync(path, { recursive: true });
       return `swept ${shown}: ${why}`;
     } catch (error) {

@@ -267,6 +267,22 @@ test("the count lists the two kinds of leftover the full check removes itself, a
   assert.match(result.removable.find(one => one.path.endsWith("run-stopped"))!.why, /^left by tooling\/messages\.ts 2\.0 days ago$/);
 });
 
+test("a name that is not UTF-8 is walked by its bytes: the sweep removes its folder, and a fresh one keeps its folder unsettled", t => {
+  const cache = cacheFixture(t), raw = (dir: string) => Buffer.concat([Buffer.from(join(cache, dir, "bad-")), Buffer.from([0xff])]);
+  mkdirSync(join(cache, "nts-messages/run-bytes/captured"), { recursive: true });
+  writeFileSync(raw("nts-messages/run-bytes/captured"), "x");
+  chmodSync(join(cache, "nts-messages/run-bytes/captured"), 0o500);
+  assert.deepEqual(sweep([{ path: join(cache, "nts-messages/run-bytes"), why: "old" }], cache), ["swept ~/.cache/nts-messages/run-bytes: old"]);
+  assert.equal(existsSync(join(cache, "nts-messages/run-bytes")), false);
+  // A stopped run's folder past its age, whose only fresh file has such a name: a run may still write it.
+  mkdirSync(join(cache, "nts-messages/still-written-bytes"));
+  writeFileSync(raw("nts-messages/still-written-bytes"), "now\n");
+  const when = new Date(NOW - 2 * DAY);
+  utimesSync(join(cache, "nts-messages/still-written-bytes"), when, when);
+  const result = count(input(t, { cache }), KEEP);
+  assert.ok(!result.removable.some(one => one.path.endsWith("still-written-bytes")), "a fresh file under a raw name is seen");
+});
+
 test("the sweep removes real folders inside the cache, read-only ones too, and keeps a link or a path outside it", t => {
   const cache = cacheFixture(t), outside = mkdtempSync(join(tmpdir(), "full-check-outside-"));
   t.after(() => rmSync(outside, { recursive: true, force: true }));
