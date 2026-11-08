@@ -5,7 +5,8 @@
 #     sh tooling/android/dexes.sh symbol-keys  # named ones
 #
 # A bench case's emit-jvm here is the compile the benches step records
-# (results/benchmarks/jvm/outcomes.tsv): a timeout is judged against that row.
+# (results/benchmarks/jvm/outcomes.tsv): a timeout or a decline is judged
+# against that row.
 #
 # # Why this exists beside two ratchets that already run d8
 #
@@ -86,6 +87,39 @@ one() {
   # cannot.
   key=$(printf '%s' "$target" | tr '/' '_')
   record() { printf '%s %s %s %s %s %s %s %s\n' "$dexed" "$refused" "$declined" "$methods" "$timedout" "$unmeasured" "$recorded" "$awaiting" > "$work/$key.counts"; }
+  # **A bench case's decline is judged against its compile record**, as its
+  # timeout is below: a row that records no passing compile either holds it,
+  # a row not written yet (the full check writes it after landing) leaves it
+  # pending, and a row that records a pass means the compile got worse. An
+  # example has no compile record: its decline is counted, and a full run
+  # fails on it. $1 is what the compile said.
+  #
+  # What it said is its first diagnostic, not its first line: a warning naming
+  # a path came first for jetstream-lebab-wtb, and 72 columns of it named
+  # nothing. The tree's own prefix is dropped, so the width goes to the words.
+  said() {
+    { grep -m1 -E '(^|: )(error|invalid HIR)|NTS[0-9]{4}|panicked at' "$out/emit.log" || grep -m1 -v '^$' "$out/emit.log" || :; } |
+      sed "s|$root/||g" | cut -c1-160
+  }
+  decline() {
+    judged=worse
+    case $target in
+      benchmarks/cases/*)
+        judged=$(node "$root/tooling/bench/compile-outcome.ts" decline jvm "$target" 2>&1) || {
+          printf "%-28s not measured: its compile record could not be read: %s\n" "$name" "$judged"
+          unmeasured=1; record; return; } ;;
+    esac
+    case $judged in
+      "as recorded: the record says "*)
+        printf "%-28s the backend declined it, as its compile record says (%s): %s\n" "$name" "${judged#as recorded: the record says }" "$1"; recorded=1 ;;
+      pending:*) printf "%-28s the backend declined it, %s: %s\n" "$name" "$judged" "$1"; awaiting=1 ;;
+      *)
+        where=""
+        case $judged in worse:*) where=", where ${judged#worse: }" ;; esac
+        printf "%-28s the backend declined it%s: %s\n" "$name" "$where" "$1"; declined=1 ;;
+    esac
+    record
+  }
   name=$(basename "$target")
   out="$work/$key"
   rm -rf "$out"; mkdir -p "$out/classes" "$out/dex"
@@ -173,15 +207,12 @@ JSON
     # invisible, because a constant reads as furniture rather than as a
     # question. `times-on-device.sh` beside this already names its declines;
     # this one counted them.
-    printf "%-28s the backend declined it: %s\n" "$name" \
-      "$(grep -v '^$' "$out/emit.log" | head -1 | cut -c1-72)"
-    declined=1
-    record; return
+    decline "$(said)"; return
   fi
   classes=$(find "$out/classes" -name '*.class' 2>/dev/null)
-  [ -n "$classes" ] || {
-    printf "%-28s emitted no class file\n" "$name"
-    declined=1; record; return; }
+  # A compile can exit 0 having refused every function it was given
+  # (ares6-basic): what it refused is the reason.
+  [ -n "$classes" ] || { why=$(said); decline "emitted no class file${why:+: $why}"; return; }
   # The generated classes only. The runtime jar has its own ratchet and
   # including it here would make every failure ambiguous about which half of
   # the artefact d8 refused.
@@ -311,7 +342,7 @@ for target in $targets; do
 done
 
 printf "\n%s dexed, %s refused, %s declined by the backend, %s timed out compiling\n" "$dexed" "$refused" "$declined" "$timedout"
-printf "%s timed out as their compile record says, %s pending their compile record\n" "$recorded" "$awaiting"
+printf "%s declined or timed out as their compile record says, %s pending their compile record\n" "$recorded" "$awaiting"
 printf "%s method(s) across them\n" "$methods"
 
 # A target the supervisor could not measure says nothing either way. With a

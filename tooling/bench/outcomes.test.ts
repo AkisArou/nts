@@ -142,3 +142,16 @@ test("a compile timeout elsewhere is judged against the benchmark's compile row"
   assert.equal(compileTimeoutLine(root, "jvm", "benchmarks/cases/absences"), "worse: the record says pass");
   assert.match(compileTimeoutLine(root, "jvm", "benchmarks/cases/no-such-case"), /^pending: benchmarks\/cases\/no-such-case is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet$/);
 });
+
+test("a compile that declined elsewhere is judged against the benchmark's compile row", async () => {
+  const { judgeCompileDecline } = await import(new URL("./outcomes.ts", import.meta.url).href);
+  const { compileDeclineLine } = await import(new URL("./compile-outcome.ts", import.meta.url).href);
+  for (const recorded of [{ kind: "refused", diagnostic: "NTS1001 x" }, { kind: "build-failure", stage: "compiler-crash", diagnostic: "invalid HIR" }, { kind: "timeout", stage: "compile" }]) {
+    assert.equal(judgeCompileDecline(recorded), "as recorded", recorded.kind);
+  }
+  assert.equal(judgeCompileDecline({ kind: "pass" }), "worse");
+  assert.equal(judgeCompileDecline(null), "pending");
+  const root = new URL("../..", import.meta.url).pathname;
+  assert.equal(compileDeclineLine(root, "jvm", "benchmarks/cases/absences"), "worse: the record says pass");
+  assert.match(compileDeclineLine(root, "jvm", "benchmarks/cases/no-such-case"), /^pending: benchmarks\/cases\/no-such-case is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet$/);
+});

@@ -1,8 +1,9 @@
 // The dex step's compile is bounded per target (tooling/android/dexes.sh, under
-// tooling/gate/case-bound.ts), and a bench case's timeout is judged against its
-// compile record (results/benchmarks/jvm/outcomes.tsv): as recorded or pending
-// passes, a better row is red, and an example's timeout is red. On 2026-11-07
-// one benchmark port compiled for 4.6 hours here.
+// tooling/gate/case-bound.ts), and a bench case's timeout or decline is judged
+// against its compile record (results/benchmarks/jvm/outcomes.tsv): as recorded
+// or pending passes, a better row is red, and an example's timeout or decline
+// is red. On 2026-11-07 one benchmark port compiled for 4.6 hours here, and
+// four new ports' declines turned the step red before their rows were written.
 //
 //   node --test tooling/gate/dex-bound.test.ts
 import assert from "node:assert/strict";
@@ -45,17 +46,22 @@ function sandbox(t: TestContext, recorded: Record<string, object>) {
   writeFileSync(preload, `import {mock} from 'node:test';const real=await import(${JSON.stringify(active)});mock.module(${JSON.stringify(active)},{namedExports:{...real,activeCommand:(command,args,options)=>real.activeCommand(command,args,{...options,...(options.ownCpuSeconds?{ownCpuSeconds:0.5}:{}),pollMs:50})}});\n`);
   writeFileSync(join(own, "bin/node"), `#!/bin/sh\nexec '${process.execPath}' --no-warnings --experimental-test-module-mocks --import '${preload}' "$@"\n`, { mode: 0o755 });
   const frame = join(own, "result.json");
-  const dex = (...targets: string[]) => {
+  const run = (targets: string[], named: boolean, extra: NodeJS.ProcessEnv = {}) => {
     for (const target of targets) {
       if (target.startsWith("benchmarks/")) mkdirSync(join(root, target), { recursive: true });
       else { mkdirSync(join(root, "tests/programs", target), { recursive: true }); writeFileSync(join(root, "tests/programs", target, "tsconfig.json"), "{}"); }
     }
-    return spawnTest("sh", [join(root, "tooling/android/dexes.sh"), ...targets.map(target => target.split("/").pop()!)], { cwd: root, encoding: "utf8", env: {
+    return spawnTest("sh", [join(root, "tooling/android/dexes.sh"), ...(named ? targets.map(target => target.split("/").pop()!) : [])], { cwd: root, encoding: "utf8", env: {
       ...process.env, PATH: `${join(own, "bin")}:${process.env.PATH}`, NTS_BIN: nts, ANDROID_HOME: join(own, "sdk"), NTS_GATE_JOBS: "1",
-      NTS_ART_WORK: join(own, "work"), NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "bound", NTS_GATE_STEP_RESULT: frame,
+      NTS_ART_WORK: join(own, "work"), NTS_GATE_STEP: "dex", NTS_GATE_STEP_ATTEMPT: "bound", NTS_GATE_STEP_RESULT: frame, ...extra,
     } });
   };
-  return { dex, frame };
+  // Named targets, as the step is run by hand; and the full run the gate makes,
+  // over every target the tree has, where a decline fails the step. Nothing is
+  // dexed here, so the method floor is 0.
+  const dex = (...targets: string[]) => run(targets, true);
+  const full = (...targets: string[]) => run(targets, false, { NTS_DEX_METHOD_FLOOR: "0" });
+  return { dex, full, frame };
 }
 
 test("a bench case's timeout its compile record holds reproduces: named, counted, not red, and the next target runs", t => {
@@ -63,9 +69,9 @@ test("a bench case's timeout its compile record holds reproduces: named, counted
   const result = dex("benchmarks/cases/a-spin", "benchmarks/cases/b-declines");
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^a-spin +emit-jvm timed out, as its compile record says: .*used its 0\.5 s CPU bound/m);
-  assert.match(result.stdout, /^b-declines +the backend declined it: error: the backend declines this program$/m, "the next target ran");
-  assert.match(result.stdout, /^0 dexed, 0 refused, 1 declined by the backend, 0 timed out compiling$/m);
-  assert.match(result.stdout, /^1 timed out as their compile record says, 0 pending their compile record$/m);
+  assert.match(result.stdout, /^b-declines +the backend declined it, pending: benchmarks\/cases\/b-declines is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet: error: the backend declines this program$/m, "the next target ran");
+  assert.match(result.stdout, /^0 dexed, 0 refused, 0 declined by the backend, 0 timed out compiling$/m);
+  assert.match(result.stdout, /^1 declined or timed out as their compile record says, 1 pending their compile record$/m);
   assert.equal(existsSync(frame), false, "a timeout is the target's outcome: nothing holds the step");
 });
 
@@ -74,7 +80,7 @@ test("a bench case with no compile row yet: its timeout is pending, named and co
   const result = dex("benchmarks/cases/new-spin");
   assert.equal(result.status, 0, result.stdout + result.stderr);
   assert.match(result.stdout, /^new-spin +emit-jvm timed out, pending: benchmarks\/cases\/new-spin is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet: /m);
-  assert.match(result.stdout, /^0 timed out as their compile record says, 1 pending their compile record$/m);
+  assert.match(result.stdout, /^0 declined or timed out as their compile record says, 1 pending their compile record$/m);
 });
 
 test("a bench case whose compile row is better than a timeout got worse: red", t => {
@@ -92,4 +98,26 @@ test("an example has no compile record: its timeout is red", t => {
   assert.equal(result.status, 1, result.stdout + result.stderr);
   assert.match(result.stdout, /^example-spin +emit-jvm timed out: .*used its 0\.5 s CPU bound/m);
   assert.match(result.stdout, /^0 dexed, 0 refused, 0 declined by the backend, 1 timed out compiling$/m);
+});
+
+test("a full run: a bench case's decline its compile record holds, or one with no row yet, is named and counted, not red", t => {
+  const { full } = sandbox(t, { "held-declines": { kind: "refused", diagnostic: "<path> NTS1001 a shape this lowering does not take" } });
+  const result = full("benchmarks/cases/held-declines", "benchmarks/cases/new-declines");
+  assert.equal(result.status, 0, result.stdout + result.stderr);
+  assert.match(result.stdout, /^held-declines +the backend declined it, as its compile record says \(refused\): error: the backend declines this program$/m);
+  assert.match(result.stdout, /^new-declines +the backend declined it, pending: benchmarks\/cases\/new-declines is not recorded in results\/benchmarks\/jvm\/outcomes\.tsv yet: error: the backend declines this program$/m);
+  assert.match(result.stdout, /^0 dexed, 0 refused, 0 declined by the backend, 0 timed out compiling$/m);
+  assert.match(result.stdout, /^1 declined or timed out as their compile record says, 1 pending their compile record$/m);
+});
+
+test("a full run: a bench case declined where its compile record says pass got worse, and an example's decline is red", t => {
+  for (const [target, line] of [["benchmarks/cases/was-passing", /^was-passing +the backend declined it, where the record says pass: error: the backend declines this program$/m],
+    ["example-declines", /^example-declines +the backend declined it: error: the backend declines this program$/m]] as const) {
+    const { full } = sandbox(t, { "was-passing": { kind: "pass" } });
+    const result = full(target);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stdout, line);
+    assert.match(result.stdout, /^0 dexed, 0 refused, 1 declined by the backend, 0 timed out compiling$/m);
+    assert.match(result.stderr, /^1 target\(s\) were declined by the backend, where 0 is expected$/m);
+  }
 });

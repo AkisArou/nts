@@ -169,3 +169,14 @@ export function judgeCompileTimeout(recorded: BenchmarkOutcome | null): "as reco
   if (recorded === null) return "pending";
   return compareBenchmarkOutcome(recorded, { kind: "timeout", stage: "compile" }).word === "reproduces" ? "as recorded" : "worse";
 }
+
+/**
+ * A compile that produced nothing elsewhere (the dex step's emit-jvm declined
+ * the program, or emitted no class), judged against the benchmark's row: a row
+ * that records no passing compile either holds it; a row not written yet
+ * leaves it pending; a row that records a pass means the compile got worse.
+ */
+export function judgeCompileDecline(recorded: BenchmarkOutcome | null): "as recorded" | "pending" | "worse" {
+  if (recorded === null) return "pending";
+  return recorded.kind === "pass" ? "worse" : "as recorded";
+}
