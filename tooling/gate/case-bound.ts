@@ -68,7 +68,9 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
     return CASE_UNMEASURED_EXIT;
   }
   write.out(result.stdout); write.err(result.stderr);
-  const diagnosticLine=(text:string)=>write.err(`${result.stderr && !result.stderr.endsWith("\n") ? "\n" : ""}${text}\n`);
+  const last=result.stderr || result.stdout;
+  const lead=last && !last.endsWith("\n") ? "\n" : "";
+  const diagnosticLine=(text:string)=>write.err(`${lead}${text}\n`);
   if (result.timeout) { diagnosticLine(`timed out: ${result.timeout}`); return CASE_TIMEOUT_EXIT; }
   if (result.runaway) { publishRunaway(result.runaway, env); diagnosticLine(`not measured: ${result.runaway}`); return CASE_UNMEASURED_EXIT; }
   if (result.hung) { publishHung(result.hung, env); diagnosticLine(`not measured: ${result.hung}`); return CASE_UNMEASURED_EXIT; }
