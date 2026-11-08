@@ -68,12 +68,13 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
     return CASE_UNMEASURED_EXIT;
   }
   write.out(result.stdout); write.err(result.stderr);
-  if (result.timeout) { write.err(`timed out: ${result.timeout}\n`); return CASE_TIMEOUT_EXIT; }
-  if (result.runaway) { publishRunaway(result.runaway, env); write.err(`not measured: ${result.runaway}\n`); return CASE_UNMEASURED_EXIT; }
-  if (result.hung) { publishHung(result.hung, env); write.err(`not measured: ${result.hung}\n`); return CASE_UNMEASURED_EXIT; }
+  const diagnosticLine=(text:string)=>write.err(`${result.stderr && !result.stderr.endsWith("\n") ? "\n" : ""}${text}\n`);
+  if (result.timeout) { diagnosticLine(`timed out: ${result.timeout}`); return CASE_TIMEOUT_EXIT; }
+  if (result.runaway) { publishRunaway(result.runaway, env); diagnosticLine(`not measured: ${result.runaway}`); return CASE_UNMEASURED_EXIT; }
+  if (result.hung) { publishHung(result.hung, env); diagnosticLine(`not measured: ${result.hung}`); return CASE_UNMEASURED_EXIT; }
   if (result.error) {
     publishToolingFailure(new ToolingInstrumentError("tooling-setup", `cannot start ${bound.command}: ${result.error.message}`), env);
-    write.err(`not measured: cannot start ${bound.command}: ${result.error.message}\n`);
+    diagnosticLine(`not measured: cannot start ${bound.command}: ${result.error.message}`);
     return CASE_UNMEASURED_EXIT;
   }
   if (result.signal) return 128 + (constants.signals[result.signal] ?? 0);

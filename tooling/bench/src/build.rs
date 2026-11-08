@@ -49,7 +49,11 @@ pub(super) fn output(root: &Utf8Path, tool: &mut Command) -> Result<Output> {
     let result = command
         .output()
         .with_context(|| format!("supervising build {}", tool.get_program().display()))?;
-    if result.status.code() == Some(124) {
+    if result.status.code() == Some(124)
+        && String::from_utf8_lossy(&result.stderr)
+            .lines()
+            .any(|line| line.starts_with("not measured: "))
+    {
         return Err(NotMeasured(format!(
             "{} {:?}\n{}{}",
             tool.get_program().display(),
@@ -153,13 +157,15 @@ mock.module({active},{{namedExports:{{...real,activeCommand:(command,args,option
             r"import os, pathlib, subprocess, sys
 marker = pathlib.Path(sys.argv[1])
 if sys.argv[2] == 'spin':
+    print('partial compiler diagnostic',file=sys.stderr,end='',flush=True)
     subprocess.run([sys.executable, '-c', 'import os,pathlib,sys\npathlib.Path(sys.argv[1]).write_text(str(os.getpid()))\nwhile True: pass', str(marker.with_suffix('.pid'))], check=True)
 elif sys.argv[2] == 'idle':
+    print('partial compiler diagnostic',file=sys.stderr,end='',flush=True)
     import time
     time.sleep(60)
-elif sys.argv[2] == 'exit125':
+elif sys.argv[2].startswith('exit'):
     print('ordinary compiler failure', file=sys.stderr)
-    sys.exit(125)
+    sys.exit(int(sys.argv[2][4:]))
 else:
     marker.write_text(os.environ['BUILD_SENTINEL'] + '|' + os.getcwd() + '|' + str('HOME' in os.environ))
 ",
@@ -257,11 +263,13 @@ else:
         Ok(())
     }
     #[test]
-    fn bare_exit_125_is_an_ordinary_tool_failure() -> Result<()> {
+    fn bare_reserved_exits_are_ordinary_tool_failures() -> Result<()> {
         let own = fixture()?;
-        let result = output(&own.root, &mut own.tool("exit125")?)?;
-        assert_eq!(result.status.code(), Some(125));
-        assert!(String::from_utf8_lossy(&result.stderr).contains("ordinary compiler failure"));
+        for code in [124, 125] {
+            let result = output(&own.root, &mut own.tool(&format!("exit{code}"))?)?;
+            assert_eq!(result.status.code(), Some(code));
+            assert!(String::from_utf8_lossy(&result.stderr).contains("ordinary compiler failure"));
+        }
         assert!(!own.dir.join("result.json").exists());
         Ok(())
     }
@@ -288,7 +296,7 @@ else:
                 .is::<NotMeasured>()
         );
         assert!(failures.is_empty());
-        assert!(failed.is_empty());
+        assert_eq!(failed, Vec::<String>::new());
         Ok(())
     }
 }

@@ -88,3 +88,15 @@ test("the helper's arguments", () => {
     assert.throws(() => parseCaseBound(bad));
   }
 });
+
+test("supervisor receipts start on their own line after unterminated tool stderr", async t => {
+  const f=frame(t);
+  for(const mode of ["spin","idle"]) {
+    const err:string[]=[];
+    const body="process.stderr.write('partial diagnostic');"+(mode==="spin"?"for(;;){}":"Atomics.wait(new Int32Array(new SharedArrayBuffer(4)),0,0)");
+    const code=await runCaseBound({ownCpuSeconds:0.3,cpuSeconds:60,idleMs:200,command:process.execPath,args:["-e",body]},f.env,
+      {out:()=>{},err:text=>{err.push(text);}});
+    assert.equal(code,mode==="spin"?CASE_TIMEOUT_EXIT:CASE_UNMEASURED_EXIT);
+    assert.match(err.join(""),mode==="spin"?/partial diagnostic\ntimed out: /:/partial diagnostic\nnot measured: /);
+  }
+});
