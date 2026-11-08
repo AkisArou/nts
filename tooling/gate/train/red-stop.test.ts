@@ -7,7 +7,7 @@ import {join, dirname} from "node:path";
 
 import {fileURLToPath} from "node:url";
 import {gateEnvironment, hostEnvironment} from "../canonical-environment.ts";
-import {finishRunTemporary, removable} from "../run-temporary.ts";
+import {captureRunTemporary, finishRunTemporary, pruneRunTemporaries, removable} from "../run-temporary.ts";
 import {instrumentPolicy} from "../step-result.ts";
 import {spawnTest, waitFor} from "../test-wait.ts";
 import {processActivity} from "../active-command.ts";
@@ -15,7 +15,8 @@ import {newTestScratch} from "../test-scratch.ts";
 
 type Row = { name: string; verdict: string; cancelled_by?: string; reason?: string; started_at?: string;
   signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
-type Summary = { steps: Row[]; identities?: { commit: string }; train_red_stop?: { trigger: string; cancelled: string[] } };
+type Summary = { steps: Row[]; identities?: { commit: string }; train_red_stop?: { trigger: string; cancelled: string[] };
+  temporary: { path: string; state: string } };
 type Cancellation = { slice: string; signal: string; record: string; before: string; after: string; isolated: boolean };
 
 // Use the real step scopes and drain proof. Change only this fixture's kill
@@ -71,6 +72,10 @@ export class GateScopes extends ActualGateScopes {
 // A red-stopping runner cancels old-paths and never admits records.
 function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, members: number, hold: boolean, escape?: "double-fork" | "outlive-leader", missing?: "DBUS_SESSION_BUS_ADDRESS" | "XDG_RUNTIME_DIR", control: { launcherFailure?: boolean; repository?: boolean; oracleCancellation?: "clean" | "seal" } = {}) {
   const own = newTestScratch("train-red-stop-run");
+  // A closed run temporary is an evictable cache. This fixture owns its
+  // registry, so no neighbour's prune decides whether its run's files exist.
+  const home = join(own, "home"), neighbor = join(own, "neighbor-home");
+  mkdirSync(home); mkdirSync(neighbor);
   let planned: ReturnType<typeof gateEnvironment> | undefined;
   const escaped = join(own, "escape-ready");
   const descendantAlive = () => {
@@ -166,6 +171,7 @@ fi
   const meminfo = join(own, "meminfo"); writeFileSync(meminfo, "MemAvailable: 64000000 kB\n");
   // The mutation must never reach a capability inherited from the outer test run.
   const launcher = control.oracleCancellation ? hostEnvironment(process.env) : { ...process.env };
+  launcher.HOME = home;
   if (missing) delete launcher[missing];
   if (control.launcherFailure) {
     const bin = join(own, "bin"); mkdirSync(bin);
@@ -191,7 +197,17 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(actual.status, 1, actual.stdout + actual.stderr);
   assert.equal(actual.signal, null);
-  return { summary: JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as Summary,
+  const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as Summary;
+  // The red run closed its temporary in this fixture's registry alone. A
+  // neighbour's prune, here one that evicts all it holds, never reaches it.
+  const registry = join(home, ".cache/nts-gate/closed-temporaries");
+  const closed = existsSync(registry) ? readdirSync(registry).map(name => (JSON.parse(readFileSync(join(registry, name), "utf8")) as { owned: { path: string } }).owned.path) : [];
+  assert.deepEqual(closed, summary.temporary.state === "retained after red" ? [planned.temporary.path] : [], JSON.stringify(summary.temporary));
+  const retained = existsSync(planned.temporary.path), other = captureRunTemporary(join(neighbor, ".cache/run"));
+  finishRunTemporary(other, neighbor, false, { minimumFreeBytes: 0, maxBytes: Number.MAX_SAFE_INTEGER, write: () => {} });
+  assert.deepEqual(pruneRunTemporaries(neighbor, { minimumFreeBytes: 0, maxBytes: 0, write: () => {} }).removed, [other.path]);
+  assert.equal(existsSync(planned.temporary.path), retained, "an independent registry prune cannot evict this run's temporary");
+  return { summary,
     admitted: existsSync(join(own, "records-started")), descendantAlive: descendantAlive(), commit,
     normalDrains: control.oracleCancellation ? readFileSync(join(own,"normal-drains.jsonl"),"utf8").trim().split("\n").map(line=>(JSON.parse(line) as {slice:string}).slice) : [],
     cancellation: control.oracleCancellation ? JSON.parse(readFileSync(join(own, "cancellation.json"), "utf8")) as Cancellation : undefined };
