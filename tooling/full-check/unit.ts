@@ -2,7 +2,7 @@
 // priority, from a controller worktree of its own at `verified`.
 //
 //   node tooling/full-check/unit.ts                  print the unit
-//   node tooling/full-check/unit.ts --install        make the controller tree, write the unit, reload systemd
+//   node tooling/full-check/unit.ts --install        make the controller tree and link its inputs, write the unit, reload systemd
 //   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00 --bench-wait=240 --memory-high=20G
 //
 // Then `systemctl --user enable --now nts-full-check` starts it, `journalctl
@@ -16,6 +16,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import { sharedCheckout } from "../landing/git.ts";
+import { linkInputs } from "../landing/pool.ts";
 import { DEFAULT_QUIET_WAIT_MINUTES } from "./bench.ts";
 import { DEFAULT_SCHEDULE, parseTimes, type Schedule } from "./schedule.ts";
 import { layout as defaultLayout, type Layout } from "./state.ts";
@@ -103,6 +105,9 @@ if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.m
         run("git", ["worktree", "add", "--detach", "-q", layout.controller, start], root);
         console.log(`controller tree: ${layout.controller} at ${start}`);
       }
+      // The service launches gates from this tree, so it has the inputs no
+      // commit carries (inputs.sh), made again on every install.
+      linkInputs(sharedCheckout(root))(layout.controller);
       const file = join(homedir(), ".config/systemd/user", `${UNIT}.service`);
       mkdirSync(dirname(file), { recursive: true });
       writeFileSync(file, text);

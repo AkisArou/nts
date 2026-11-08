@@ -10,7 +10,7 @@ import {join} from "node:path";
 import {test} from "node:test";
 import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
 import type { Recorder } from "./records.ts";
-import {cycle, parseOptions, partSteps, type Effects} from "./service.ts";
+import {cycle, followVerified, parseOptions, partSteps, type Effects} from "./service.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
 
@@ -425,4 +425,26 @@ test("cache upkeep runs only on the hourly count and warnings never change its v
   assert.equal(calls, 2);
   assert.equal(readState(repo.layout.state).count?.verdict, "PASS");
   assert.ok(fx.lines.some(line => line.includes("unreadable private cache")));
+});
+
+test("the controller follows verified with the inputs its new code needs, or stays on its own code", t => {
+  const repo = repository(t);
+  const first = repo.commit({ "a.txt": "1\n" }, "first"), second = repo.commit({ "a.txt": "2\n" }, "second");
+  repo.git.run(["branch", "verified", second]);
+  repo.git.run(["checkout", "-q", "--detach", first]);
+  const layout = { ...repo.layout, controller: repo.dir }, linked: string[] = [];
+  const refuse = (tree: string) => {
+    const at = new Git(tree, ENV).commit("HEAD")!; linked.push(at);
+    if (at === second) throw new Error("dependency-inputs.ts --offline: a package is not in the registry cache");
+  };
+  // Inputs that cannot be linked keep the code that runs: the tree goes back, its own inputs linked again.
+  assert.equal(followVerified(repo.git, layout, repo.dir, refuse), false);
+  assert.equal(repo.git.commit("HEAD"), first);
+  assert.deepEqual(linked, [second, first]);
+  linked.length = 0;
+  assert.equal(followVerified(repo.git, layout, repo.dir, tree => { linked.push(new Git(tree, ENV).commit("HEAD")!); }), true);
+  assert.equal(repo.git.commit("HEAD"), second);
+  assert.deepEqual(linked, [second], "the new code's inputs are linked after its checkout");
+  // A service that does not run from the controller never moves it.
+  assert.equal(followVerified(repo.git, { ...layout, controller: join(repo.root, "elsewhere") }, repo.dir, () => assert.fail("linked")), false);
 });

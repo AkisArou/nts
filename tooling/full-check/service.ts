@@ -37,7 +37,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
 import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
 import { sharedCheckout } from "../landing/git.ts";
-import { Pool, POOL_HOME, pruneLines } from "../landing/pool.ts";
+import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
 import { count as countMachine, countLines, gather, type CountResult } from "./count.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
@@ -553,17 +553,32 @@ function takeLock(lock: string): void {
   throw new Error(`could not take ${lock}`);
 }
 
+let unfollowed: string | undefined;
 /**
  * The unit runs the service from its controller tree, at `verified`: code
  * that passed the full check runs the full check. When verified moves past it,
- * the tree follows and the service exits, so systemd starts the new code.
+ * the tree follows and the service exits, so systemd starts the new code. The
+ * new code gets the inputs no commit carries, linked again after the checkout
+ * (inputs.sh): without them it cannot even list its steps. A commit whose
+ * inputs cannot be linked is not followed; the tree goes back to the code it
+ * ran, and says so once.
  */
-function followVerified(git: Git, layout: Layout): boolean {
-  if (resolve(ROOT) !== resolve(layout.controller)) return false;
+export function followVerified(git: Git, layout: Layout, root = ROOT, inputs?: Inputs): boolean {
+  if (resolve(root) !== resolve(layout.controller)) return false;
   const verified = git.commit("refs/heads/verified"), head = git.commit("HEAD");
   if (!verified || !head || verified === head || !git.isAncestor(head, verified)) return false;
   if (git.run(["status", "--porcelain", "--untracked-files=no"])) return false;
+  const link = inputs ?? linkInputs(sharedCheckout(layout.controller));
   git.run(["checkout", "--detach", "-q", verified]);
+  try { link(layout.controller); }
+  catch (error) {
+    git.run(["checkout", "--detach", "-q", head]);
+    let back = "";
+    try { link(layout.controller); } catch (again) { back = `; its own inputs could not be linked again either: ${again instanceof Error ? again.message : String(again)}`; }
+    if (unfollowed !== verified) stamp(`the controller stays at ${short(head)}: verified ${short(verified)}'s inputs could not be linked: ${error instanceof Error ? error.message : String(error)}${back}`);
+    unfollowed = verified;
+    return false;
+  }
   stamp(`the controller moved to verified ${short(verified)}; restarting on its code`);
   return true;
 }
