@@ -39,7 +39,7 @@ import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
-import { count as countMachine, countLines, gather, type CountResult } from "./count.ts";
+import { count as countMachine, countLines, gather, sweep as sweepLeftovers, type CountResult, type Removable } from "./count.ts";
 import { search, type Measure, type Probe } from "./culprit.ts";
 import { composeReverts, firstParents, Git, revertedBy, revertsIn } from "./git.ts";
 import { pinnedGate, type Gate } from "./measure.ts";
@@ -69,6 +69,8 @@ export type Effects = {
   /** Where pins live (pin.ts's PINS). */
   pins: string;
   count: () => CountResult;
+  /** Remove the leftovers the count found removable (count.ts's sweep), a line each. */
+  sweep: (removable: readonly Removable[]) => string[];
   /** The pool's upkeep (pool.ts's prune), and the lines that say what it removed. */
   prunePool: () => string[];
   /** Recomputable cache upkeep, report-only, on the hourly count cycle. */
@@ -412,8 +414,16 @@ function runCount(fx: Effects, state: State): void {
     for (const error of cache.errors) fx.log(`Node compile cache warning: ${error}`);
   } catch (error) { fx.log(`Node compile cache warning: ${String(error)}`); }
   let result: CountResult;
-  try { result = fx.count(); }
-  catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${error instanceof Error ? error.message : String(error)}`] }; }
+  try {
+    result = fx.count();
+    // The two kinds of leftover the full check removes itself; what is left is
+    // counted again, so the count says what remains.
+    if (result.removable.length) {
+      for (const line of fx.sweep(result.removable)) fx.log(line);
+      result = fx.count();
+    }
+  }
+  catch (error) { result = { verdict: "INSTRUMENT", red: [], notes: [`not counted: ${error instanceof Error ? error.message : String(error)}`], removable: [] }; }
   state.count = { at: fx.now().toISOString(), verdict: result.verdict, lines: [...result.red, ...result.notes] };
   for (const line of countLines(result)) fx.log(line);
   writeState(fx.layout.state, state);
@@ -555,6 +565,7 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
     bench: benchWithLock(ROOT, layout.target, options.quietWait),
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
     count: () => countMachine(gather(ROOT)),
+    sweep: removable => sweepLeftovers(removable, join(homedir(), ".cache")),
     prunePool: () => pruneLines(new Pool(POOL_HOME, { root: sharedCheckout(ROOT) }).prune()),
     pruneNodeCache: () => pruneNodeCompileCache(),
     push: commit => {

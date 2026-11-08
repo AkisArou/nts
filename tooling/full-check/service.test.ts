@@ -29,7 +29,8 @@ function harness(repo: Repository, gate: FakeGate, options: { now?: Date; record
     recorder: options.recorder ?? (() => ({ status: 0, output: "" })),
     bench: options.bench ?? stubBench(),
     pins: join(repo.root, "pins"),
-    count: () => ({ verdict: "PASS", red: [], notes: [] }),
+    count: () => ({ verdict: "PASS", red: [], notes: [], removable: [] }),
+    sweep: () => [],
     prunePool: options.prunePool ?? (() => []),
     pruneNodeCache: () => ({root:"private fixture",state:"missing",removed:0,removedBytes:0,kept:0,keptBytes:0,changed:0,skipped:0,errors:[]}),
     push: commit => {
@@ -486,4 +487,22 @@ process.exit(seen ? 3 : 4);
   assert.equal(result.status, 3, readFileSync(log, "utf8"));
   assert.equal(readFileSync(log, "utf8"), "first line\nstreamed\n");
   assert.equal(result.output, "first line\nstreamed\n", "the result carries the log's tail");
+});
+
+test("the hourly count removes what it found removable, then counts again", async t => {
+  const repo = repository(t), fx = harness(repo, fakeGate(repo));
+  repo.commit({"a.txt":"one"}, "one");
+  await cycle(fx);
+  const left = { path: "/home/u/.cache/nts-messages/run-stopped", why: "left by tooling/messages.ts 2.0 days ago" };
+  let counted = 0;
+  const swept: string[][] = [];
+  fx.count = () => counted++ === 0
+    ? { verdict: "FAIL", red: ["~/.cache/nts-messages: 1 folder(s) left"], notes: [], removable: [left] }
+    : { verdict: "PASS", red: [], notes: [], removable: [] };
+  fx.sweep = removable => { swept.push(removable.map(one => one.path)); return [`swept ~/.cache/nts-messages/run-stopped: ${left.why}`]; };
+  assert.equal(await cycle(fx), "count");
+  assert.deepEqual(swept, [[left.path]]);
+  assert.equal(counted, 2, "what is left is counted after the sweep");
+  assert.equal(readState(repo.layout.state).count?.verdict, "PASS");
+  assert.ok(fx.lines.includes(`swept ~/.cache/nts-messages/run-stopped: ${left.why}`), fx.lines.join("\n"));
 });

@@ -206,9 +206,14 @@ regression becomes a task. Benchmarks never block a landing.
   (`tooling/full-check/count.ts`) is red when a branch is named by no task in
   [`plan.md`](plan.md), a worktree is outside the pool and no task names its
   path, or `~/.cache` holds an nts folder that `tooling/full-check/keep.json`
-  does not name with its reason. It deletes nothing; it reports. Rules
-  alone let 1,364 branches, 185 worktrees and 120 GB of evidence folders pile
-  up by 11-06; a red step does not.
+  does not name with its reason. Rules alone let 1,364 branches, 185
+  worktrees and 120 GB of evidence folders pile up by 11-06; a red step does
+  not.
+- **The full check removes two kinds of leftover itself,** each hour before
+  it counts: what a stopped run left in a tool's scratch root past that
+  root's age in `keep.json`, with nothing inside it changed since, and its own
+  pins of commits that are neither `main` nor `verified`, a day old and named
+  by no task. Everything else the count only reports.
 - **Kept on purpose:** the Chromium build caches, because rebuilding them is
   slow.
 - **CPUs 4 and 5 stay reserved for measurement;** heavy work runs at low
@@ -243,6 +248,10 @@ the first node task.
   landing, tasks that land within a day, agents per task, and the fresh start
   ([log](records/notebooks/decisions-log.md#fresh-start-11-06)). It replaces
   the lane model of record 0355.
+- **The full check sweeps two kinds of leftover** (11-08): stopped runs'
+  scratch past its age by `keep.json`'s rule, and its own pins of commits that
+  are neither `main` nor `verified`; every other red line stays report-only
+  ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08)).
 - **The landing check is its own tool** (11-07): `tooling/landing/` checks one
   change at a time against the newest `main`, with no trains, halving or
   attribution, and reuses the step runner, the path rules and the canonical

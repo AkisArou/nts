@@ -2,7 +2,10 @@
 // them"). Red when a branch is named by no task in docs/plan.md, a worktree is
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json
 // keeps, or a node test root a stopped runner left (n<pid in base 36>). Each
-// red line names the item and why. It deletes nothing; it reports.
+// red line names the item and why. It reports; of what it reports, the full
+// check removes two kinds itself (sweep below): what a stopped run left in a
+// tool's scratch root past that root's age, and the full check's own pins of
+// commits that are neither main nor verified. Everything else stays a line.
 //
 //   node tooling/full-check/count.ts          the lines, exit 0 green, 1 red, 2 not counted
 //
@@ -23,7 +26,7 @@
 //     writer no longer names its folder is red too, so the list cannot
 //     outlive the tools it describes.
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { chmodSync, existsSync, lstatSync, readdirSync, readFileSync, realpathSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -55,7 +58,9 @@ export type CountInput = {
   now: number;
 };
 
-export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string[]; notes: string[] };
+/** A leftover of a kind the full check removes itself, and why it is one. */
+export type Removable = { path: string; why: string };
+export type CountResult = { verdict: "PASS" | "FAIL" | "INSTRUMENT"; red: string[]; notes: string[]; removable: Removable[] };
 
 const EXEMPT = new Set(["main", "verified"]);
 const DAY = 86_400_000;
@@ -168,7 +173,7 @@ export function readKeep(file = KEEP_FILE): Record<string, Keep> {
   return value;
 }
 
-export type Context = { cache: string; main: string | null; verified: string | null; now: number; root: string };
+export type Context = { cache: string; main: string | null; verified: string | null; now: number; root: string; plan: string };
 const days = (ms: number) => (ms / DAY).toFixed(1);
 const display = (path: string, context: Context) => `~/.cache/${relative(context.cache, path)}`;
 /** "3 folders, 1.5 to 9.0 days old (a, b, c)": a group of leftovers as one line, its first names shown. */
@@ -188,7 +193,22 @@ export function writerNames(root: string, writer: string, path: string): boolean
   return spellings.some(spelling => text.includes(spelling));
 }
 
-function judgeFolder(entry: Entry, keep: Keep, context: Context): string[] {
+/** Nothing under `path` changed after `since` (its own folder's time aside): no run still writes it. */
+function settled(path: string, since: number): boolean {
+  for (const name of readdirSync(path, { recursive: true }) as string[]) {
+    try { if (lstatSync(join(path, name)).mtimeMs > since) return false; }
+    catch (error) { if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error; }
+  }
+  return true;
+}
+
+/** A pin the full check built (records.ts's runPin), by its provenance. */
+function fullCheckPin(path: string): boolean {
+  try { return (JSON.parse(readFileSync(join(path, "provenance.json"), "utf8")) as { built_by?: string }).built_by === "full-check"; }
+  catch { return false; }
+}
+
+function judgeFolder(entry: Entry, keep: Keep, context: Context, removable: Removable[]): string[] {
   const at = relative(context.cache, entry.path);
   const lines: string[] = [];
   if ("writer" in keep && keep.writer && !writerNames(context.root, keep.writer, at)) {
@@ -212,19 +232,27 @@ function judgeFolder(entry: Entry, keep: Keep, context: Context): string[] {
       for (const child of children) {
         if (used.has(child.name) || (child.name.includes(".partial-") && context.now - child.mtimeMs < DAY)) continue;
         lines.push(`${display(child.path, context)}: a pin main does not use (it uses the pins of main${context.verified ? " and verified" : ""})`);
+        // Only the full check's own, a day old, and named by no task: an
+        // agent's pin is a peer's evidence and stays a line.
+        if (fullCheckPin(child.path) && context.now - child.mtimeMs > DAY && !context.plan.includes(child.name)) {
+          removable.push({ path: child.path, why: `the full check's pin of ${child.name}, neither main's nor verified's` });
+        }
       }
       break;
     }
     case "scratch": {
-      const left = children.filter(child => context.now - child.mtimeMs > (keep.days ?? 1) * DAY);
+      const age = (keep.days ?? 1) * DAY, left = children.filter(child => context.now - child.mtimeMs > age);
       if (left.length) lines.push(`${display(entry.path, context)}: ${aged(left, context)} left by ${keep.writer}; a run removes its own folder`);
+      for (const child of left) {
+        if (settled(child.path, context.now - age)) removable.push({ path: child.path, why: `left by ${keep.writer} ${days(context.now - child.mtimeMs)} days ago` });
+      }
       break;
     }
     case "folders":
       for (const child of children) {
         const inner = keep.folders[child.name];
         if (!inner) lines.push(`${display(child.path, context)}: kept by no entry of keep.json under ${entry.name}/`);
-        else lines.push(...judgeFolder(child, inner, context));
+        else lines.push(...judgeFolder(child, inner, context, removable));
       }
       break;
   }
@@ -247,22 +275,50 @@ function nodeTestRoots(input: CountInput, context: Context): string[] {
   return left.length ? [`~/.cache/n<pid>: ${aged(left, context)}, NODE_TEST_DIR roots left by tooling/conformance/node-environment.ts; a runner removes its own`] : [];
 }
 
-function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[]): void {
-  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, now: input.now, root: input.root };
+function cacheLines(input: CountInput, keep: Record<string, Keep>, red: string[], removable: Removable[]): void {
+  const context: Context = { cache: input.cache, main: input.main, verified: input.verified, now: input.now, root: input.root, plan: input.plan };
   for (const entry of folders(input.cache).filter(entry => /^nts(?:[-_.]|$)/.test(entry.name))) {
     const rule = keep[entry.name];
     if (!rule) red.push(`${display(entry.path, context)}: an nts folder no rule keeps`);
-    else red.push(...judgeFolder(entry, rule, context));
+    else red.push(...judgeFolder(entry, rule, context, removable));
   }
   red.push(...nodeTestRoots(input, context));
 }
 
 export function count(input: CountInput, keep: Record<string, Keep> = readKeep()): CountResult {
-  const red: string[] = [], notes: string[] = [];
+  const red: string[] = [], notes: string[] = [], removable: Removable[] = [];
   branchLines(input, red, notes);
   worktreeLines(input, red);
-  cacheLines(input, keep, red);
-  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes };
+  cacheLines(input, keep, red, removable);
+  return { verdict: red.length ? "FAIL" : notes.length ? "INSTRUMENT" : "PASS", red, notes, removable };
+}
+
+/**
+ * Remove what the count found removable, one folder at a time: a path must
+ * sit inside `cache` and be a real folder, not a link; its folders are made
+ * writable first (a run can leave read-only captured inputs). Returns a line
+ * per folder, removed or kept with the reason.
+ */
+export function sweep(removable: readonly Removable[], cache: string): string[] {
+  const writable = (path: string): void => {
+    const info = lstatSync(path);
+    if (info.isSymbolicLink() || !info.isDirectory()) return;
+    chmodSync(path, (info.mode & 0o777) | 0o700);
+    for (const name of readdirSync(path)) writable(join(path, name));
+  };
+  return removable.map(({ path, why }) => {
+    const shown = `~/.cache/${relative(cache, path)}`, part = relative(cache, path);
+    try {
+      if (!part || part.startsWith("..") || isAbsolute(part)) throw new Error("outside ~/.cache");
+      const info = lstatSync(path);
+      if (info.isSymbolicLink() || !info.isDirectory()) throw new Error("not a real folder");
+      writable(path);
+      rmSync(path, { recursive: true });
+      return `swept ${shown}: ${why}`;
+    } catch (error) {
+      return `kept ${shown}: ${error instanceof Error ? error.message : String(error)}`;
+    }
+  });
 }
 
 // ---------------------------------------------------------------------------

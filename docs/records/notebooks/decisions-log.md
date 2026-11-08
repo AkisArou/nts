@@ -1530,3 +1530,20 @@ missing, selected unrecorded cases remain pending, and selected recorded cases
 still pass through their ordinary comparison. The full check's writer measures
 pending cases. General project graphs retain their owner-program checking and
 emission contract.
+
+## The full check sweeps (11-08)
+
+The user approved the full check removing, each hour, two kinds of leftover
+its count reports, and nothing else. The count had only reported: on 11-08 it
+named 52 red lines, which the user removed with a reviewed script, and by the
+evening runs stopped since had left 38 more folders, and the full check's own
+records runs had left two pins of commits no longer `main` or `verified`.
+
+What it removes: a folder a stopped run left in a scratch root of `keep.json`
+past that root's age, when nothing inside it changed since (a run may still
+be writing it otherwise); and a pin whose provenance says the full check
+built it, for a commit that is neither `main` nor `verified`, a day old and
+named by no task in `docs/plan.md`. A link is never followed and nothing
+outside `~/.cache` is touched. What stays report-only: folders no rule keeps,
+pins anyone else built (a peer's evidence), the node test roots, branches and
+worktrees.

@@ -4,11 +4,11 @@
 // fixture worktrees and a fixture ~/.cache, and its keep list against this
 // tree: every tool it names still writes the folder it keeps.
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, rmSync, utimesSync, writeFileSync } from "node:fs";
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
-import { count, parseWorktrees, planNames, readKeep, writerNames, type CountInput, type Keep } from "./count.ts";
+import { count, parseWorktrees, planNames, readKeep, sweep, writerNames, type CountInput, type Keep } from "./count.ts";
 
 const NOW = Date.parse("2026-11-06T12:00:00Z");
 const DAY = 86_400_000;
@@ -212,7 +212,7 @@ test("a machine within the rules is green; one the count could not read is not",
     cache, local: ["main", "coordinator/pending-records"], remote: ["main", "verified"], pulls: [],
     worktrees: [{ path: "/home/u/Projects/nts", branch: "refs/heads/main" }, { path: join(cache, "nts-pool/1"), head: MAIN }],
   };
-  assert.deepEqual(count(input(t, clean), KEEP), { verdict: "PASS", red: [], notes: [] });
+  assert.deepEqual(count(input(t, clean), KEEP), { verdict: "PASS", red: [], notes: [], removable: [] });
   const blind = count(input(t, { ...clean, remote: { error: "network unreachable" }, pulls: { error: "gh: not logged in" } }), KEEP);
   assert.equal(blind.verdict, "INSTRUMENT");
   assert.deepEqual(blind.notes, [
@@ -244,4 +244,46 @@ test("keep.json is well formed, and a writer is matched by any of the ways the t
   assert.throws(() => readKeep(bad), /names no writer/);
   writeFileSync(bad, JSON.stringify({ "nts-x": { kind: "folders", why: "w", folders: { y: { kind: "tidy", why: "z" } } } }));
   assert.throws(() => readKeep(bad), /nts-x\/y has an unknown kind tidy/);
+});
+
+test("the count lists the two kinds of leftover the full check removes itself, and only those", t => {
+  const cache = cacheFixture(t), at = (path: string, ageDays: number) => { const when = new Date(NOW - ageDays * DAY); utimesSync(join(cache, path), when, when); };
+  const pin = (sha: string, by: string) => {
+    mkdirSync(join(cache, "nts-pins", sha));
+    writeFileSync(join(cache, "nts-pins", sha, "provenance.json"), JSON.stringify({ sha, built_by: by }));
+    at(`nts-pins/${sha}`, 2);
+  };
+  pin("d".repeat(12), "full-check");     // the full check's, a day old, named by no task: removed
+  pin("e".repeat(12), "pin.ts");         // an agent's: a peer's evidence, a line only
+  pin("3e8c1cab3000", "full-check");     // named in plan.md: kept
+  // A stopped run's folder past its age, but something inside it is newer: a run may still write it.
+  mkdirSync(join(cache, "nts-messages/still-written"));
+  writeFileSync(join(cache, "nts-messages/still-written/log"), "now\n");
+  at("nts-messages/still-written", 2);
+  const result = count(input(t, { cache, plan: PLAN.replace("#3e8c1cab3", "#3e8c1cab3 (`3e8c1cab3000`)") }), KEEP);
+  assert.deepEqual(result.removable.map(one => one.path.slice(cache.length + 1)).sort(), [
+    `nts-jvm-verifies/failed-past-its-week`, `nts-messages/run-stopped`, `nts-pins/${"d".repeat(12)}`, `nts/outcomes/12345`]);
+  assert.ok(result.red.some(line => line.includes(`nts-pins/${"e".repeat(12)}: a pin main does not use`)), "a peer's pin is still named");
+  assert.match(result.removable.find(one => one.path.endsWith("run-stopped"))!.why, /^left by tooling\/messages\.ts 2\.0 days ago$/);
+});
+
+test("the sweep removes real folders inside the cache, read-only ones too, and keeps a link or a path outside it", t => {
+  const cache = cacheFixture(t), outside = mkdtempSync(join(tmpdir(), "full-check-outside-"));
+  t.after(() => rmSync(outside, { recursive: true, force: true }));
+  mkdirSync(join(cache, "nts-messages/run-old/captured"), { recursive: true });
+  writeFileSync(join(cache, "nts-messages/run-old/captured/input"), "x");
+  chmodSync(join(cache, "nts-messages/run-old/captured"), 0o500);
+  writeFileSync(join(outside, "keep"), "y");
+  symlinkSync(outside, join(cache, "nts-messages/run-link"));
+  const lines = sweep([
+    { path: join(cache, "nts-messages/run-old"), why: "old" },
+    { path: join(cache, "nts-messages/run-link"), why: "a link" },
+    { path: outside, why: "outside" },
+  ], cache);
+  assert.deepEqual(lines.map(line => line.replace(/: .*$/, "")), [
+    "swept ~/.cache/nts-messages/run-old", "kept ~/.cache/nts-messages/run-link", `kept ~/.cache/${join("..", outside.split("/").pop()!)}`]);
+  assert.match(lines[1]!, /not a real folder$/);
+  assert.match(lines[2]!, /outside ~\/\.cache$/);
+  assert.equal(existsSync(join(cache, "nts-messages/run-old")), false);
+  assert.equal(existsSync(join(outside, "keep")), true, "a link is never followed");
 });
