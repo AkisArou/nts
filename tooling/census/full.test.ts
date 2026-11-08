@@ -13,7 +13,7 @@ import {fullPlan, fullEnvironment} from "./full-plan.ts";
 import {testScratch, newTestScratch} from "../gate/test-scratch.ts";
 
 
-test("missing full-run environment refuses before lock or setup", t => {
+test("missing full-run environment refuses before setup", t => {
   const home = testScratch(t, "full-run-missing-env");
   const result = spawnTest(process.execPath, [new URL("./full.ts", import.meta.url).pathname, "main"], {
     env: { ...process.env, HOME: home, ANDROID_HOME: "", JAVA_HOME: "", DEBUGINFOD_URLS: "" },
@@ -22,7 +22,6 @@ test("missing full-run environment refuses before lock or setup", t => {
   assert.equal(result.status, 2, result.stdout + result.stderr);
   for (const name of ["ANDROID_HOME", "JAVA_HOME", "DEBUGINFOD_URLS"]) assert.match(result.stdout, new RegExp(`${name} is missing`));
   assert.match(result.stdout, /node tooling\/landing\/check.ts/);
-  assert.equal(existsSync(join(home, ".cache/nts-land.lock")), false);
   assert.equal(existsSync(join(home, ".cache/nts-full")), false);
 });
 

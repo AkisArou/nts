@@ -33,7 +33,7 @@ test("committed paths preserve spaces, Unicode, tabs and line breaks across a re
   assert.deepEqual(committedChanges(repo,base,"HEAD"),[{path:before,added:false,deleted:true},{path:after,added:true,deleted:false}]);
 });
 const view = (steps: string[] | "all", interop: string | null, doctests: string | null, catalogue = ["build", "interop", "doctests"]): RuleView =>
-  ({ revision: "0".repeat(40), checks: { steps, interop, doctests }, catalogue, strict: false, rules: [] });
+  ({ revision: "0".repeat(40), checks: { steps, interop, doctests }, catalogue, rules: [] });
 
 test("scope union keeps both project/crate subsets and either whole-step obligation", () => {
   const a = view(["interop", "doctests"], "alpha", "nts-core");
@@ -124,7 +124,6 @@ if(process.argv.includes("--self-test"))console.log("legacy self-test passed");\
   git("add",".");git("commit","-qm","legacy candidate");
   const got=selectRange(repo,`${base}..HEAD`);
   assert.deepEqual(got.checks.steps,["tests","tooling"]);
-  assert.equal(got.strict,true,"unknown historical routing stays strict");
 });
 
 test("range registries are private, borrow pinned objects, and disappear after success or failure",t=>{
@@ -278,8 +277,7 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   const original = readFileSync(policy, "utf8");
   assert.ok(original.includes("export const RULES = ["));
   writeFileSync(policy, original.replace("export const RULES = [", `export const RULES = [
-    {name:"the newly classified path",when:p=>p==="new-area/control.dat",steps:["tooling"],arms:[]},`)
-    .replace(/export const isStrictPath = [^\n]+/, "export const isStrictPath = () => false;"));
+    {name:"the newly classified path",when:p=>p==="new-area/control.dat",steps:["tooling"],arms:[]},`));
   mkdirSync(join(repo, "new-area"));
   writeFileSync(join(repo, "new-area/control.dat"), "new compiled input\n");
   git("add", "tooling/gate/owed.mjs", "new-area/control.dat");
@@ -291,8 +289,6 @@ test("a rule cannot narrow its own committed range and dirty policy cannot alter
   assert.ok(oldOnly.length > 0, "the candidate-only control must really narrow the old obligations");
   const joined = selected.checks.steps === "all" ? selected.views[1].catalogue : selected.checks.steps;
   for (const step of oldOnly) assert.ok(joined.includes(step), `base rule still owes ${step}`);
-  assert.equal(selected.views[1].strict, false);
-  assert.equal(selected.strict, true, "removing the strict classifier cannot make its own edit optimistic");
   // A later working-tree edit is outside both selected commits.
   writeFileSync(policy, "throw new Error('dirty policy must not run');\n");
   assert.deepEqual(selectRange(repo, `${base}..${tip}`).checks, selected.checks);
@@ -376,7 +372,6 @@ import {leafStep} from './policy.ts';
 export const SELECTOR_POLICY_DATA=['tooling/gate/all.sh','tooling/gate/rules.json'];
 export const allSteps=()=>['build','tests','tooling','profile','full'];
 export const selfTest=()=>null;
-export const isStrictPath=()=>true;
 export function owed(changes){
  JSON.parse(readFileSync('tooling/gate/rules.json','utf8'));
  const script=readFileSync('tooling/gate/all.sh','utf8');

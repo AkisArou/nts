@@ -13,8 +13,8 @@ import {committedChanges,type PathChange} from "./change-paths.ts";
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
 export type StepSuccessors = Record<string, { steps: string[]; reason?: string }>;
-export type RuleView = { revision: string; checks: Checks; catalogue: string[]; successors?: StepSuccessors; strict: boolean; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
-export type RangeSelection = { base: string; tip: string; checks: Checks; strict: boolean; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] } };
+export type RuleView = { revision: string; checks: Checks; catalogue: string[]; successors?: StepSuccessors; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
+export type RangeSelection = { base: string; tip: string; checks: Checks; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] } };
 const SELF = fileURLToPath(import.meta.url);
 const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
 const INFRASTRUCTURE_CODE = "NTS_SELECTION_INFRASTRUCTURE";
@@ -86,7 +86,7 @@ function endpoints(repo: string, range: string): [string, string] {
 function readView(text: string, revision: string): RuleView {
   const view = JSON.parse(text) as RuleView;
   const strings = (value: unknown): value is string[] => Array.isArray(value) && value.every(s => typeof s === "string");
-  if (view.revision !== revision || !view.checks || !strings(view.catalogue) || typeof view.strict !== "boolean"
+  if (view.revision !== revision || !view.checks || !strings(view.catalogue)
       || (view.checks.steps !== "all" && !strings(view.checks.steps))
       || (view.checks.interop !== null && typeof view.checks.interop !== "string")
       || (view.checks.doctests != null && typeof view.checks.doctests !== "string")
@@ -191,7 +191,7 @@ export function selectRange(repo: string, range: string): RangeSelection {
     const identity=views[0].selector?.identity;
     const stable=identity&&identity===views[1].selector?.identity;
     if(stable)views[0]=views[0].selector!.existing;
-    result = { base, tip, checks: unionViews(views), strict: views.some(v => v.strict), views,
+    result = { base, tip, checks: unionViews(views), views,
       ...(stable?{candidateNewPaths:{identity,paths:changes.filter(change=>change.added).map(change=>change.path)}}:{}) };
   } catch (error) { errors.push(error); }
   finally {
@@ -242,7 +242,7 @@ async function endpoint(tree: string, revision: string, changes:PathChange[]): P
       interop: Array.isArray(projects) && projects.length ? projects.join(" ") : null,
       doctests: doctests.length ? doctests.join(" ") : null },
       catalogue: m.allSteps(), ...(m.STEP_SUCCESSORS === undefined ? {} : { successors: m.STEP_SUCCESSORS }),
-      strict: typeof m.isStrictPath!=="function" || changes.some(c => m.isStrictPath(c.path)), rules };
+      rules };
   };
   const full=select(changes);
   const declared=Array.isArray(m.SELECTOR_POLICY_DATA);

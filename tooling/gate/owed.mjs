@@ -102,15 +102,6 @@ export const SELECTOR_POLICY_DATA = [
   "package.json", "pnpm-lock.yaml", "pnpm-workspace.yaml",
 ];
 
-/** Verdict machinery always gates before landing, including its verifier.
- * Tree-only changes have already passed their entire owed gate; they never
- * need the future optimistic path either. Keep this routing policy in one list. */
-export const STRICT_PATHS = [
-  "tooling/gate/", "tooling/lanes/", "tooling/full-check/", "tooling/conformance/", "tooling/census/", "tooling/differential/",
-  "tooling/memory/", "tooling/licenses/", "tooling/config/", "tooling/primitives/", "tooling/jvm/", "tooling/android/",
-  "results/", "compiler/frontend-tsrs/vendor.ts",
-];
-export const isStrictPath = path => STRICT_PATHS.some(prefix => prefix.endsWith("/") ? path.startsWith(prefix) : path === prefix);
 export const TREE_CHECKS = ["rustfmt", "format", "reformat", "records", "old-paths", "primitives", "config", "licenses", "audit"];
 const benchmarkRecord = path => /^results\/benchmarks\/(?:runs\/[^/]+\.json|full\.md)$/.test(path);
 
@@ -1806,7 +1797,6 @@ function main() {
   console.log(`  ${changes.length} path(s) changed in ${TREE}`);
   if (selection) console.log(`  rules: union of base ${selection.base.slice(0,12)} and candidate ${selection.tip.slice(0,12)}`);
   if(selection?.candidateNewPaths?.paths.length)console.log(`  new paths: candidate reach with unchanged selector ${selection.candidateNewPaths.identity.slice(0,12)} (${selection.candidateNewPaths.paths.length} path(s))`);
-  if (selection?.strict ?? changes.some(c => isStrictPath(c.path))) console.log("  landing policy: strict gate-before-land");
   for (const r of rules) {
     console.log(`\n  ${r.name}${r.paths.length ? ` (${r.paths.slice(0, 3).join(", ")}${r.paths.length > 3 ? `, +${r.paths.length - 3}` : ""})` : ""}`);
     for (const a of r.arms) console.log(`    [ ] [${a.kind}] ${arm(a)}`);

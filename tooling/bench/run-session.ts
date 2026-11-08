@@ -25,8 +25,6 @@ function command(root: string, program: string, args: string[]): string {
   return r.stdout.trim();
 }
 export function conditions(): Json {
-  const lock = spawnSync("flock", ["-n", join(process.env.HOME!, ".cache/nts-land.lock"), "true"]);
-  assert.ok(lock.status === 0 || lock.status === 1, "landing lock probe failed");
   return {
     time: new Date().toISOString(),
     load: readFileSync("/proc/loadavg", "utf8").trim(),
@@ -35,7 +33,6 @@ export function conditions(): Json {
     cpu5: readFileSync("/proc/stat", "utf8")
       .split("\n")
       .find((l) => l.startsWith("cpu5 "))!,
-    landingLockHeld: lock.status === 1,
   };
 }
 function cleanSources(root: string): void {

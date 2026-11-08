@@ -12,7 +12,7 @@ import { chmodSync, globSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writ
 import { join, relative } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
-import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, isStrictPath, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
+import { allSteps, changedPaths, covering, gateSteps, RULES, interopBuiltWith, interopOwed, owed, parseNameStatus, selfTest, stepInputs, targetFiles, WIDE } from "./owed.mjs";
 import * as policy from "./owed.mjs";
 
 const stepsFor = (...paths) => gateSteps(owed(paths.map((path) => ({ path, added: false }))));
@@ -273,14 +273,6 @@ test("the standalone ICU driver has an explicit validation obligation", () => {
   superset(gateSteps(rules), ["tooling", "licenses"], "the standalone ICU validator");
   const driver = rules.find(r => r.name === "the standalone ICU validation driver");
   assert.ok(driver?.arms.some(a => a.run.includes("icu.ts --string-case")));
-});
-
-test("verdict machinery and every verifier entry point stay strict", () => {
-  for (const path of ["tooling/gate/run.mjs", "tooling/lanes/inputs.sh", "tooling/lanes/dependency-inputs.ts", "tooling/lanes/gate-resource.ts", "tooling/lanes/resource-comparison.ts",
-    "tooling/full-check/service.ts", "tooling/full-check/culprit.ts",
-    "tooling/conformance/outcomes-check.ts", "tooling/census/worker-memory.ts",
-    "tooling/differential/agree.mjs", "tooling/memory/run.sh", "results/test262/c/language.tsv"]) assert.ok(isStrictPath(path), path);
-  for (const path of ["compiler/core/src/hir/lower.rs", "runtime/c/nts_runtime.c", "docs/architecture.md"]) assert.equal(isStrictPath(path), false, path);
 });
 
 test("tool-written result outputs owe tree checks while recorded baselines retain their readers", () => {

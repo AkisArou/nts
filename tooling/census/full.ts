@@ -18,12 +18,10 @@
 // candidates/{tree,target,runs/CANDIDATE-<sha>-<time>} namespace and never
 // update the main history or re-record policy tables.
 //
-// It waits for memory before it starts and never starts beside a gate: the
-// wide steps are the heaviest there are, and a landing's memory checks are
-// what a neighbour breaks.
+// It waits for memory before it starts; the gate admits its individual steps.
 
 import { execFileSync, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -38,7 +36,7 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "../..");
 const HOME = join(homedir(), ".cache/nts-full");
 const git = (args: string[]) => execFileSync("git", args, { cwd: ROOT, encoding: "utf8" }).trim();
 const steps = [...WIDE];
-// No queue, lock or worktree setup before required tools can run.
+// No worktree setup before required tools can run.
 try {
   const problem = gateEnvironmentError(ROOT, steps);
   if (problem) { console.log(`  NOT RUN: ${problem}`); process.exit(2); }
@@ -52,11 +50,6 @@ try { plan = fullPlan(ROOT, HOME, process.argv.slice(2)); }
 catch (error) { console.log(`  NOT RUN: ${String(error)}`); process.exit(2); }
 const { candidate, commit, label, run } = plan;
 
-// The landing lock, held for the whole run: a full run beside a gate would
-// starve both and red the gate's memory checks, and only holding the lock
-// keeps a landing from starting once the run has (a landing waits, queued).
-const landLock = join(homedir(), ".cache/nts-land.lock");
-const BUSY = 75;
 const available = () => Number(/MemAvailable:\s+(\d+)/.exec(readFileSync("/proc/meminfo", "utf8"))?.[1] ?? 0) / 1048576;
 if (available() < 16) {
   console.log(`  NOT RUN: ${available().toFixed(1)} GB available, under the 16 the wide steps start at`);
@@ -70,7 +63,7 @@ console.log(`  ${label} full run of ${short} (${git(["log", "-1", "--format=%s",
 console.log(`  steps: ${steps.join(" ")}`);
 console.log(`  logs: ${run}`);
 
-const gated = spawnSync("flock", ["-n", "-E", String(BUSY), landLock, "sh", join(ROOT, "tooling/gate/pinned.sh"), commit], {
+const gated = spawnSync("sh", [join(ROOT, "tooling/gate/pinned.sh"), commit], {
   cwd: ROOT,
   stdio: "inherit",
   env: {
@@ -83,11 +76,6 @@ const gated = spawnSync("flock", ["-n", "-E", String(BUSY), landLock, "sh", join
   },
 });
 
-if (gated.status === BUSY) {
-  rmSync(run, { recursive: true, force: true });
-  console.log("  NOT RUN: a landing is gating -- start the full run when the queue is quiet (`lane status`)");
-  process.exit(2);
-}
 const summary = join(run, "summary.json");
 if (!existsSync(summary)) {
   console.log(`  the run wrote no summary (exit ${gated.status}); see ${run}`);

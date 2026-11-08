@@ -2,7 +2,6 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { HOST_INFRASTRUCTURE, hostEnvironment, programHost } from "../canonical-environment.ts";
 import { systemdEnvironment } from "../environment.ts";
-import { comparisonHost } from "../../lanes/resource-comparison.ts";
 
 test("bus capabilities are passed by name while verdict host identity excludes their values", () => {
   const host = { PATH: "/tools", JAVA_HOME: "/jdk", DBUS_SESSION_BUS_ADDRESS: "unix:path=/owned bus", XDG_RUNTIME_DIR: "/owned runtime" };
@@ -15,8 +14,6 @@ test("bus capabilities are passed by name while verdict host identity excludes t
   }
   const changed = { ...host, DBUS_SESSION_BUS_ADDRESS: "unix:path=/another bus", XDG_RUNTIME_DIR: "/another runtime" };
   assert.deepEqual(programHost(host), programHost(changed));
-  const key = (value: typeof host) => comparisonHost({ host: value, ambient: { TZ: "UTC" } }, "/run");
-  assert.equal(key(host), key(changed));
-  assert.notEqual(key(host), key({ ...host, PATH: "/different-tools" }));
-  assert.notEqual(key(host), key({ ...host, JAVA_HOME: "/different-jdk" }));
+  assert.notDeepEqual(programHost(host), programHost({ ...host, PATH: "/different-tools" }));
+  assert.notDeepEqual(programHost(host), programHost({ ...host, JAVA_HOME: "/different-jdk" }));
 });

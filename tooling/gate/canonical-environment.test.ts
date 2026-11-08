@@ -171,12 +171,13 @@ test("different launcher ambients produce identical step environments",t=>{
 });
 
 test("land refuses every verdict override by name, without its value",()=>{
-  for (const name of ["NTS_RC_NAIVE","NTS_GATE_STEPS","NTS_JOBS","NTS_GATE_SLOTS","NTS_GATE_JOBS","NTS_DEX_METHOD_FLOOR","NTS_COREDUMPS","CARGO_PROFILE_DEV_DEBUG","CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS","RUSTFLAGS",ENVIRONMENT_CONTEXT,ENVIRONMENT_EXPERIMENT]) {
+  for (const name of ["NTS_RC_NAIVE","NTS_GATE_STEPS","NTS_JOBS","NTS_GATE_SLOTS","NTS_GATE_JOBS","NTS_DEX_METHOD_FLOOR","NTS_COREDUMPS","CARGO_PROFILE_DEV_DEBUG","CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUSTFLAGS","RUSTFLAGS",ENVIRONMENT_CONTEXT,ENVIRONMENT_EXPERIMENT,
+    "NTS_LAND_HOME","NTS_LAND_AUTHOR_BRANCH","NTS_LAND_AUTHOR_ADDRESS","NTS_LAND_TRAIN_MAX","NTS_LAND_LOCKED","NTS_LAND_ENTRY","NTS_LAND_FAST","NTS_LAND_SUBMISSION_UNIT","NTS_LAND_TRAIN_UNIT","NTS_LAND_TRAIN_DIRECTORY","NTS_LAND_TRAIN_TRACE"]) {
     assert.throws(()=>assertLandingEnvironment({[name]:"private-value"}),error=>{
       assert.match(String(error),new RegExp(name));assert.doesNotMatch(String(error),/private-value/);return true;
     });
   }
-  assert.doesNotThrow(()=>assertLandingEnvironment({NTS_APPLE_SSH:"mac",NTS_LAND_AUTHOR_ADDRESS:"lane",LANG:"C",NODE_OPTIONS:"--no-warnings"}));
+  assert.doesNotThrow(()=>assertLandingEnvironment({NTS_APPLE_SSH:"mac",NTS_TOOLING_SLICE:"step.slice",LANG:"C",NODE_OPTIONS:"--no-warnings"}));
 });
 
 test("source-owned values survive the handoff without becoming experiments",t=>{

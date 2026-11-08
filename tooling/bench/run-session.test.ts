@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { spawnSync } from "node:child_process";
-import { readFileSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync, symlinkSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { COMPARATORS, COLUMNS, POLICY } from "./run-record.ts";
 import { unsharedLaunches } from "../jvm/launcher-audit.ts";
-import { newTestScratch } from "../gate/test-scratch.ts";
+import { newTestScratch, testScratch } from "../gate/test-scratch.ts";
 const script = fileURLToPath(new URL("./run-session.ts", import.meta.url));
 const pin = "a".repeat(40),
   sha = "b".repeat(64);
@@ -84,4 +84,19 @@ test("session toolchain discovery rejects the old bare JVM launch", () => {
   assert.equal(findings.length, 1);
   assert.equal(findings[0]!.tool, "java");
   assert.match(findings[0]!.code, /-version/);
+});
+
+test("session conditions have no dependency on the old landing lock probe", t => {
+  const root = testScratch(t, "bench-session-conditions"), bin = join(root, "bin"), invoked = join(root, "invoked");
+  mkdirSync(bin);
+  writeFileSync(join(bin, "flock"), `#!${process.execPath}\nrequire('node:fs').writeFileSync(${JSON.stringify(invoked)}, 'invoked');process.exit(99);\n`, { mode: 0o755 });
+  const result = spawnSync(process.execPath, [script, "conditions", root], {
+    encoding: "utf8", env: { ...process.env, PATH: `${bin}:${process.env.PATH ?? ""}` },
+  });
+  assert.equal(result.status, 0, result.stderr);
+  const observed = JSON.parse(result.stdout);
+  assert.equal(typeof observed.load, "string");
+  assert.ok(observed.memoryAvailableBytes > 0);
+  assert.equal(Object.hasOwn(observed, "landingLockHeld"), false);
+  assert.equal(existsSync(invoked), false);
 });

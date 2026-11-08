@@ -13,7 +13,7 @@ export function fullPlan(root: string, home: string, args: string[], now = Date.
   const resolved = spawnSync("git", ["rev-parse", "--verify", "--quiet", `${asked}^{commit}`], { cwd: root, encoding: "utf8" });
   if (resolved.status !== 0) throw new Error(`\`${asked}\` names no commit`);
   // Resolve once. Every later command consumes this immutable object ID, even
-  // if the caller's branch moves while waiting for the landing lock.
+  // if the caller's branch moves before setup starts.
   const commit = resolved.stdout.trim();
   if (!candidate && spawnSync("git", ["merge-base", "--is-ancestor", commit, "main"], { cwd: root }).status !== 0) {
     throw new Error(`${asked} is not on main -- use --candidate for explicit pre-landing validation`);

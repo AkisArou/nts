@@ -38,12 +38,8 @@ export const UNSET_AMBIENT = [
   "DISPLAY", "WAYLAND_DISPLAY", "XAUTHORITY",
 ] as const;
 
-// Parent entry protocol, not capabilities forwarded to programs under test.
-const PARENT = new Set([
-  "NTS_LAND_HOME", "NTS_LAND_AUTHOR_BRANCH", "NTS_LAND_AUTHOR_ADDRESS", "NTS_LAND_TRAIN_MAX",
-  "NTS_LAND_LOCKED", "NTS_LAND_ENTRY", "NTS_LAND_FAST",
-  "NTS_LAND_SUBMISSION_UNIT", "NTS_LAND_TRAIN_UNIT", "NTS_LAND_TRAIN_DIRECTORY", "NTS_LAND_TRAIN_TRACE", "NTS_TOOLING_SLICE",
-]);
+// Step scope handoff, not capabilities forwarded to programs under test.
+const PARENT = new Set(["NTS_TOOLING_SLICE"]);
 const HOST = new Set<string>(HOST_CAPABILITIES);
 const EXTRA_POLICY = new Set([
   "RAYON_NUM_THREADS",
