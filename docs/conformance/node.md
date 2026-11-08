@@ -145,8 +145,8 @@ the supported part covered.
 
 No tool writes node's results to `results/` yet.
 
-The gate runs none of node's tests yet; they gate once the node lane resumes
-([Decisions](#decisions)). The full run's
+The gate runs none of node's tests yet; they are a task (Q-5,
+[Decisions](#decisions)). The full run's
 `addons` step builds every module as an addon, refusing one that used to build
 and stopped, and loads each with every symbol bound. Its `divergence` step
 audits the `not-applicable` lists and runs differential fuzzers that compare
@@ -208,7 +208,7 @@ deprecated `domain`, `constants` and `sys`.
 - Node's tests run as node wrote them; a gap is reported, never edited away
   ([`CLAUDE.md`](../../CLAUDE.md)).
 - The node pin moves with node's LTS releases, and the Unicode pin with it
-  (D2); node's own tests gate once the node lane resumes (Q-5; 10-28,
+  (D2); node's own tests gate when their task is done (Q-5; 10-28,
   [log](../records/notebooks/decisions-log.md#performance-and-process-10-28)).
 - All 28 modules are owed to native programs, through a `node:` resolver, with
   `process` and `Buffer` as globals in the native profile (G10; 10-28,

@@ -245,7 +245,7 @@ run validates that image once and passes a version-specific seal pinned after
 publication. Later acquisitions check the ready record's exact inode and stat
 identity, including its unmodified ctime, without starting a helper process or
 walking the image again. A declared but changed or invalid seal is a named
-instrument hold, including through the gate and lander; a case-budget failure
+instrument hold, including through the gate and the landing check; a case-budget failure
 keeps its verdict disposition. The seal belongs to its run and never outlives
 its registered capture owner. Outside a canonical run, acquisitions retain
 complete validation of the recorded commit and input paths.

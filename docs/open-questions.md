@@ -102,9 +102,6 @@ Ranked by how much each blocks or how much harm it does today.
   lists async generators, which compile; `builtin.rs` calls BigInt absent.
 - `tests/refusals/a-lone-surrogate-in-a-string-literal` expects three U+FFFD,
   while the semantic schema now keeps lone surrogates.
-- Code comments cite documents that moved to `docs/records/notebooks/` in the
-  documentation restructure. The sweep is prepared (`helper/docs-citations`)
-  and lands through the fast lane for comment-only changes.
 - The `nts` help text says "See docs/nts-config.md" (`tooling/cli/src/main.rs`);
   the page is `docs/reference/nts-config.md`.
 - Eighteen `runtime/node/*/not-applicable` files give reasons citing

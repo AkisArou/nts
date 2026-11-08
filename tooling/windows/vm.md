@@ -1,4 +1,4 @@
-# The Windows lane's Windows
+# The Windows VM
 
 This box is Linux. nts compiles and links Windows artifacts here, and a Windows
 machine only *runs* them. Until there is real hardware, that machine is a
@@ -25,7 +25,7 @@ Windows machine is reachable.
 
    quickemu forwards ssh from a host port to the guest's 22 and prints the port
    when it boots. It is 22220 unless another VM already holds that, which is the
-   Apple lane's Mac on this box.
+   Apple VM on this box.
 
 2. In the guest, in an **administrator** PowerShell:
 

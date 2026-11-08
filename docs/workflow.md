@@ -111,7 +111,7 @@ cost keeps them under ten minutes, moving the costliest deferrable ones to
 the full check. `node tooling/landing/check.ts <commit> --dry-run` prints the
 landing steps, the deferred ones and the estimate.
 
-**One queue, no trains.** One service, `nts-landing-check`, checks changes
+**One queue.** One service, `nts-landing-check`, checks changes
 one at a time, each rebased onto the newest `main`. Green: `main`
 fast-forwards and is pushed, the task's branch is deleted here and on
 GitHub (on GitHub it stays while an open pull request is based on it, since
@@ -119,7 +119,7 @@ deleting a base closes the pull request), and its pool tree is reset. Red: the c
 with the failing check's log.
 
 **No per-landing approval.** A green landing check lands. The exceptions are
-changes to the compiler's core, the gate and the lander: those wait for the
+changes to the compiler's core, the gate and the landing tools: those wait for the
 coordinator to read the diff. The coordinator never reviews evidence.
 
 **Outside contributions land the same way.** Pull requests from other agents
@@ -146,7 +146,7 @@ What follows from a run:
   compiler use `verified`, not the tip of `main`.
 - **Red:** the tip and the last green commit are measured again first, so a
   flaky or machine red reverts nothing. Then the culprit search finds the
-  commit that broke it, among those since that part's last green run. The lander reverts that commit (the
+  commit that broke it, among those since that part's last green run. The full check reverts that commit (the
   revert passes the landing check like any change), and re-landing it with a
   fix becomes a task. When that part goes green with the commit still in, it
   was no culprit: a revert of it still waiting to land is withdrawn.
@@ -229,34 +229,19 @@ defect that hurts the machine (the TypeScript oracle prepares every case's
 snapshot before running the first, holding about 17 GB of disk at once) is
 the first node task.
 
-## What changes from the old workflow
-
-| Old | New |
-|---|---|
-| The full gate (7–33 min) before every landing, one train at a time | a landing check of ten minutes or less, then the full check after landing |
-| Agents prove a change for hours or days before submitting | agents add tests and submit; the checks are the proof |
-| Records recorded by hand, twice, on a pinned compiler | the full check writes records |
-| Lanes owning areas for weeks (`tooling/lanes/lanes.json`); multi-day branches | tasks that land within a day; agents per task; a change's checks follow the files it touches, not who touched them |
-| Coordinator approval and evidence packets per landing | design agreement before work; risky diffs read |
-| Benchmarks and landings competing for the machine | benchmarks nightly on `verified` |
-| A separate path for tests-only and docs-only changes | one landing check, which is seconds for them |
-| Branches, worktrees and evidence folders that piled up | one branch and one pool worktree per task, deleted on landing, and counted by the full check |
-
 ## Decisions
 
 - **This workflow** (11-06): the landing check, the full check after
   landing, tasks that land within a day, agents per task, and the fresh start
-  ([log](records/notebooks/decisions-log.md#fresh-start-11-06)). It replaces
-  the lane model of record 0355.
+  ([log](records/notebooks/decisions-log.md#fresh-start-11-06)).
 - **The full check sweeps two kinds of leftover** (11-08): stopped runs'
   scratch past its age by `keep.json`'s rule, and its own pins of commits that
   are neither `main` nor `verified`; every other red line stays report-only
   ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08)).
 - **The landing check is its own tool** (11-07): `tooling/landing/` checks one
-  change at a time against the newest `main`, with no trains, halving or
-  attribution, and reuses the step runner, the path rules and the canonical
-  environment. The old lander and the lane machinery went with the switch;
-  which platforms may stay unrun is standing policy in
+  change at a time against the newest `main`, and reuses the step runner, the
+  path rules and the canonical environment; which platforms may stay unrun is
+  standing policy in
   `tooling/gate/verdict-policy.ts`
   ([log](records/notebooks/decisions-log.md#the-switch-11-07)).
 - **Counting is the full check's own hourly step** (11-07), never a gate step:

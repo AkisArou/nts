@@ -68,7 +68,7 @@ checker is compiled into nts, and every tree shares the object store.
   owned values, so the host's free memory never decides the result, and run
   it under `systemd-run --user --unit=<name>`, so a runner that outlives its
   test is stopped by name. On 2026-11-07 an inner run waited silently for
-  host memory inside a full gate, and an orphaned runner spun a core in the
+  host memory inside a gate run, and an orphaned runner spun a core in the
   tmux pane's own cgroup.
 
 ## Landing
@@ -113,10 +113,9 @@ fixture's record in the same commit, which makes it pending.
 
 **Never cap the gate's parallelism for a landing:** no `NTS_JOBS`,
 `NTS_GATE_SLOTS` or `NTS_GATE_JOBS` in its environment. The gate sizes itself
-(24 slots on this machine), and its own admission guards memory. The tsrs
-switch's official runs set `NTS_JOBS=4` and took 72–100 minutes for the full
-gate (2026-10-25 to 10-27). The same gate took 26–32 minutes at 24 slots on
-10-24.
+(24 slots on this machine), and its own admission guards memory. Capped at
+`NTS_JOBS=4`, the same steps took 72–100 minutes where 24 slots took 26–32
+(2026-10-24 to 10-27).
 
 **The gate's environment is its own, not your shell's.** Every step of the
 landing check, `pinned.sh` and the full check runs in one canonical
@@ -190,7 +189,7 @@ then a guard once fixed), `tests/memory/`.
 
 - A change to the semantic schema (a field added, removed or retyped in
   `compiler/semantic-schema/src/schema.rs`) bumps `SCHEMA_VERSION` in the same
-  commit, to the next number even if another lane bumped it today.
+  commit, to the next number even if another task bumped it today.
 - A new C runtime helper owes a row in four tables in four crates, each checked
   by a test in *its* crate: follow the checklist at the top of the helper block in
   `runtime/c/nts_runtime.h`. A forgotten row reds a change that never calls the
@@ -232,8 +231,8 @@ then a guard once fixed), `tests/memory/`.
   runner's feeder hold it themselves (`tooling/gate/admission.ts`); work of
   your own outside them holds its next case or phase by hand. Never SIGSTOP timed work:
   its wall-clock timeout keeps running, so suspension fabricates a timeout.
-  A gate step's memory pre-check is what a neighbour breaks, and a red gate
-  costs its lane a half-hour rerun.
+  A gate step's memory pre-check is what a neighbour breaks, and a red step
+  costs its change a rerun of its check.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
   measurement.** Every process an agent starts excludes both, monitors and
   samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the

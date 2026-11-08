@@ -56,7 +56,7 @@ result runs, and how it is held to each standard.
   and Java.
 - [`../results/`](../results): what the tools measured. Every number these
   pages rely on is there, written by a tool.
-- Lanes keep their own notes beside their code, such as
+- Some areas keep their own notes beside their code, such as
   [`../runtime/chromium/docs/`](../runtime/chromium/docs).
 
 ## How these pages are kept

@@ -1,4 +1,4 @@
-# The Apple lane's Mac
+# The Apple VM
 
 This box is Linux. nts compiles and links Apple artifacts here; a Mac only
 *runs* them. Until there is real hardware, the Mac is a quickemu VM.
@@ -12,7 +12,7 @@ depends on it being a VM, and a real Mac replaces it by changing one ssh alias.
 **What a VM cannot answer.** The VM is x86_64. arm64 Mach-O is built and linked
 here, and its load commands and symbols are checked, but it is never *run* until
 an arm64 Mac is reachable. That gap matters most for `objc_msgSend`, whose
-variadic-versus-typed call difference is an arm64 problem. The lane never emits
+variadic-versus-typed call difference is an arm64 problem. nts never emits
 a variadic `objc_msgSend` call, so correctness does not rest on arm64 running
 by luck.
 
