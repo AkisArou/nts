@@ -13,10 +13,11 @@ import {spawnTest, waitFor} from "../test-wait.ts";
 import {processActivity} from "../active-command.ts";
 import {newTestScratch} from "../test-scratch.ts";
 
-type Row = { name: string; verdict: string; cancelled_by?: string; reason?: string; started_at?: string;
+type Row = { name: string; verdict: string; reason?: string; started_at?: string;
   signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
-type Summary = { steps: Row[]; identities?: { commit: string }; train_red_stop?: { trigger: string; cancelled: string[] };
+type Summary = { steps: Row[]; identities?: { commit: string }; fail_fast: boolean; interrupted: string | null;
   temporary: { path: string; state: string } };
+const FAIL_FAST_STOP = "NTS_GATE_FAIL_FAST: a step failed";
 type Cancellation = { slice: string; signal: string; record: string; before: string; after: string; isolated: boolean };
 
 // Use the real step scopes and drain proof. Change only this fixture's kill
@@ -68,10 +69,10 @@ export class GateScopes extends ActualGateScopes {
 `);
 }
 
-// The old runner terminates without a timeout: records releases old-paths.
-// A red-stopping runner cancels old-paths and never admits records.
-function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, members: number, hold: boolean, escape?: "double-fork" | "outlive-leader", missing?: "DBUS_SESSION_BUS_ADDRESS" | "XDG_RUNTIME_DIR", control: { launcherFailure?: boolean; repository?: boolean; oracleCancellation?: "clean" | "seal" } = {}) {
-  const own = newTestScratch("train-red-stop-run");
+// Without fail-fast the runner terminates without a timeout: records releases
+// old-paths. With it, format's failure stops old-paths and never admits records.
+function runFixture(t: { after: (fn: () => void | Promise<void>) => void }, failFast: boolean, hold: boolean, escape?: "double-fork" | "outlive-leader", missing?: "DBUS_SESSION_BUS_ADDRESS" | "XDG_RUNTIME_DIR", control: { launcherFailure?: boolean; repository?: boolean; oracleCancellation?: "clean" | "seal" } = {}) {
+  const own = newTestScratch("runner-stop-run");
   // A closed run temporary is an evictable cache. This fixture owns its
   // registry, so no neighbour's prune decides whether its run's files exist.
   const home = join(own, "home"), neighbor = join(own, "neighbor-home");
@@ -192,7 +193,7 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   }
   planned = gateEnvironment(launcher, { run, ...(control.oracleCancellation ? { oracleAdmissionContext: "gate" as const,oracleRoot:root } : {}), owned: {
     NTS_GATE_STEPS: "format old-paths records", NTS_GATE_SLOTS: "2", NTS_GATE_MEM_GB: "20",
-    NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, NTS_GATE_TRAIN_MEMBERS: String(members),
+    NTS_MEMINFO: meminfo, CARGO_TARGET_DIR: target, ...(failFast ? { NTS_GATE_FAIL_FAST: "1" } : {}),
   } });
   const actual = spawnTest(process.execPath, [join(gate, "run.mjs")], { cwd: root, env: planned.env, encoding: "utf8" });
   assert.equal(actual.status, 1, actual.stdout + actual.stderr);
@@ -213,11 +214,11 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
     cancellation: control.oracleCancellation ? JSON.parse(readFileSync(join(own, "cancellation.json"), "utf8")) as Cancellation : undefined };
 }
 
-for (const arm of ["clean", "seal"] as const) test(`red-stop SIGTERM with ${arm === "seal" ? "a changed" : "an unchanged"} seal preserves capture-integrity precedence`, t => {
-  const { summary, admitted, cancellation, normalDrains } = runFixture(t, 2, false, undefined, undefined, { oracleCancellation: arm });
-  t.diagnostic(JSON.stringify({ arm, admitted, cancellation, steps:summary.steps, redStop:summary.train_red_stop }));
+for (const arm of ["clean", "seal"] as const) test(`a fail-fast SIGTERM with ${arm === "seal" ? "a changed" : "an unchanged"} seal preserves capture-integrity precedence`, t => {
+  const { summary, admitted, cancellation, normalDrains } = runFixture(t, true, false, undefined, undefined, { oracleCancellation: arm });
+  t.diagnostic(JSON.stringify({ arm, admitted, cancellation, steps:summary.steps, interrupted:summary.interrupted }));
   assert.equal(admitted, false);
-  assert.equal(summary.train_red_stop?.trigger, "format");
+  assert.equal(summary.interrupted, FAIL_FAST_STOP);
   const format=summary.steps.find(row => row.name === "format")!;
   assert.equal(format.verdict,"FAIL");assert.ok(format.scope);
   assert.ok(normalDrains.includes(format.scope.slice),'the persistent format descendant must take the normal drain path');
@@ -233,76 +234,72 @@ for (const arm of ["clean", "seal"] as const) test(`red-stop SIGTERM with ${arm 
     assert.equal(cancelled.verdict, "INSTRUMENT");
     assert.equal(cancelled.instrument?.kind, "tooling-setup");
     assert.equal(cancelled.reason, `oracle dependency seal changed: ${cancellation.record}`);
-    assert.equal(cancelled.cancelled_by, undefined);
     assert.equal(instrumentPolicy(cancelled.instrument?.kind)?.disposition === "operator-hold", true);
   } else {
     assert.equal(cancellation.before, cancellation.after);
     assert.equal(cancelled.verdict, "NOT RUN");
-    assert.equal(cancelled.cancelled_by, "format");
+    assert.equal(cancelled.reason, `stopped: ${FAIL_FAST_STOP}`);
     assert.equal(cancelled.instrument, undefined);
     assert.equal(instrumentPolicy(undefined)?.disposition === "operator-hold", false);
   }
   const pending = summary.steps.find(row => row.name === "records")!;
-  assert.equal(pending.verdict, "NOT RUN"); assert.equal(pending.cancelled_by, "format");
+  assert.equal(pending.verdict, "NOT RUN"); assert.equal(pending.reason, FAIL_FAST_STOP);
 });
 
 test("a launcher exiting one before scope entry is an instrument, never a completed failure", t => {
-  const observed = runFixture(t, 2, false, undefined, undefined, { launcherFailure: true });
-  assert.equal(observed.summary.train_red_stop, undefined);
+  const observed = runFixture(t, true, false, undefined, undefined, { launcherFailure: true });
+  assert.equal(observed.summary.interrupted, null, "an instrument stops nothing");
   assert.equal(observed.admitted, false);
   assert.ok(observed.summary.steps.every(row => row.verdict === "INSTRUMENT"), JSON.stringify(observed.summary));
   assert.ok(observed.summary.steps.every(row => /scope entry/.test(row.reason ?? "")));
 });
 
 test("normal command exit drains its still-populated descendant subtree", t => {
-  const observed = runFixture(t, 1, false, "outlive-leader");
+  const observed = runFixture(t, false, false, "outlive-leader");
   assert.equal(observed.descendantAlive, false);
   assert.deepEqual(observed.summary.steps.map(row => row.verdict), ["FAIL", "PASS", "PASS"]);
 });
 
 test("the runner publishes the full frozen commit for retained retries", t => {
-  const observed = runFixture(t, 1, false, undefined, undefined, { repository: true });
+  const observed = runFixture(t, false, false, undefined, undefined, { repository: true });
   assert.match(observed.commit!, /^[a-f0-9]{40}$/);
   assert.equal(observed.summary.identities?.commit, observed.commit);
 });
 
-test("a multi-member train cancels its live sibling and pending work after a definite failure", t => {
-  const { summary, admitted } = runFixture(t, 2, false);
-  assert.equal(admitted, false, "a completed failure must stop admission in a multi-member train");
+test("fail-fast stops a live sibling and pending work after a failure", t => {
+  const { summary, admitted } = runFixture(t, true, false);
+  assert.equal(admitted, false, "a completed failure must stop admission under fail-fast");
   assert.equal(summary.steps.find(row => row.name === "format")?.verdict, "FAIL");
-  assert.equal(summary.train_red_stop?.trigger, "format");
-  assert.deepEqual(summary.train_red_stop?.cancelled, ["old-paths", "records"]);
-  for (const name of ["old-paths", "records"]) {
-    const row = summary.steps.find(row => row.name === name);
-    assert.equal(row?.verdict, "NOT RUN"); assert.equal(row?.cancelled_by, "format");
-  }
+  assert.equal(summary.fail_fast, true);
+  assert.equal(summary.interrupted, FAIL_FAST_STOP);
+  assert.deepEqual(summary.steps.filter(row => row.name !== "format").map(row => [row.name, row.verdict, row.reason]).sort(),
+    [["old-paths", "NOT RUN", `stopped: ${FAIL_FAST_STOP}`], ["records", "NOT RUN", FAIL_FAST_STOP]]);
 });
 
-test("a single-member landing still collects every requested step", t => {
-  const { summary, admitted } = runFixture(t, 1, false);
+test("without fail-fast every requested step is collected", t => {
+  const { summary, admitted } = runFixture(t, false, false);
   assert.equal(admitted, true);
-  assert.equal(summary.train_red_stop, undefined);
+  assert.equal(summary.interrupted, null);
   assert.deepEqual(summary.steps.map(row => row.verdict), ["FAIL", "PASS", "PASS"]);
 });
 
-test("an instrument hold never starts red cancellation", t => {
-  const { summary, admitted } = runFixture(t, 2, true);
+test("an instrument hold never starts fail-fast cancellation", t => {
+  const { summary, admitted } = runFixture(t, true, true);
   assert.equal(admitted, true);
-  assert.equal(summary.train_red_stop, undefined);
+  assert.equal(summary.interrupted, null);
   assert.deepEqual(summary.steps.map(row => row.verdict), ["INSTRUMENT", "PASS", "PASS"]);
 });
 
-for (const escape of ["double-fork", "outlive-leader"] as const) test(`red cancellation drains a ${escape} descendant before publishing its proof`, t => {
-  const observed = runFixture(t, 2, false, escape);
+for (const escape of ["double-fork", "outlive-leader"] as const) test(`fail-fast cancellation drains a ${escape} descendant before publishing its summary`, t => {
+  const observed = runFixture(t, true, false, escape);
   assert.equal(observed.admitted, false);
   assert.equal(observed.descendantAlive, false, "an exited group leader cannot prove every owned descendant drained");
-  assert.equal(observed.summary.train_red_stop?.trigger, "format");
+  assert.equal(observed.summary.interrupted, FAIL_FAST_STOP);
 });
 
 for (const missing of ["DBUS_SESSION_BUS_ADDRESS", "XDG_RUNTIME_DIR"] as const) test(`missing ${missing} holds before a step can run unscoped`, t => {
-  const observed = runFixture(t, 2, false, undefined, missing);
+  const observed = runFixture(t, true, false, undefined, missing);
   assert.equal(observed.admitted, false);
-  assert.equal(observed.summary.train_red_stop, undefined);
   const first = observed.summary.steps.find(row => row.name === "format")!;
   assert.equal(first.verdict, "INSTRUMENT"); assert.match(first.reason!, new RegExp(missing));
   assert.ok(observed.summary.steps.every(row => row.started_at === undefined), "there is no unscoped fallback");

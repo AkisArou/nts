@@ -209,8 +209,9 @@ ids, kept so the records that cite them still resolve.
 - The `tests` step is the landing check's critical path (about five minutes on
   eight slots): measure it wider.
 - Dead code the old lander left: the read side of `resource-comparison.ts`, the
-  strict landing classification in `owed.mjs`, `run.mjs`'s train red-stop, and
-  `census/full.ts`'s use of the old landing lock.
+  strict landing classification in `owed.mjs`, `census/full.ts`'s use of the
+  old landing lock, and the `NTS_LAND_*` names `canonical-environment.ts`
+  still treats as a parent's entry protocol.
 - A candidate that does not compile is held, not refused: the landing check
   reports it red (#46).
 - One format rule for all owned C; the web-platform suite as a landing-check

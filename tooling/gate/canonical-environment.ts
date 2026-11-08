@@ -57,7 +57,6 @@ const INFRASTRUCTURE = new Set([
 ]);
 const EXPERIMENTS = new Set([
   ...EXTRA_POLICY, "NTS_GATE_STEPS", "NTS_GATE_SLOTS", "NTS_GATE_JOBS", "NTS_JOBS", "NTS_GATE_MEM_GB",
-  "NTS_GATE_TRAIN_MEMBERS",
   "NTS_GATE_FRONTENDS", "NTS_GATE_FAIL_FAST", "NTS_GATE_ACCEPT_SKIP", "NTS_GATE_TIME_STRICT", "NTS_GATE_RECORD_TIMES",
   // The landing check's ceiling on step bounds (step-bound.ts), owned by it.
   "NTS_GATE_STEP_CEILING_S",

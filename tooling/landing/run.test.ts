@@ -190,16 +190,14 @@ test("a failing step refuses the change and names itself", t => {
 });
 
 test("a landing run started inside another gate is a run of its own, not that gate's", t => {
-  // The tooling step of a train of three: its context owns the train's red-stop.
+  // The tooling step of an outer gate: its context owns that gate's fail-fast.
   const f = fixture(t), home = f.options([]).env!.HOME!;
-  const outer = gateEnvironment({ ...process.env, HOME: home }, { run: join(home, ".cache/outer-train"), owned: { NTS_GATE_TRAIN_MEMBERS: "3", NTS_GATE_STEPS: "tooling" } }).env;
+  const outer = gateEnvironment({ ...process.env, HOME: home }, { run: join(home, ".cache/outer-gate"), owned: { NTS_GATE_FAIL_FAST: "1", NTS_GATE_STEPS: "tooling" } }).env;
   assert.ok(outer[ENVIRONMENT_CONTEXT]);
   f.control("outcomes", "fail");
   const ran = runLanding(f.options(["build", "examples", "outcomes"], { env: { ...outer, HOME: home } }));
   assert.equal(ran.state, "red");
-  assert.equal(ran.steps.find(s => s.name === "examples")?.verdict, "PASS", "the train's red-stop did not reach this run");
-  const summary = JSON.parse(readFileSync(join(f.run, "summary.json"), "utf8"));
-  assert.equal(summary.train_red_stop, undefined);
+  assert.equal(ran.steps.find(s => s.name === "examples")?.verdict, "PASS", "the outer gate's fail-fast did not reach this run");
   assert.deepEqual(launcherEnvironment({ A: "1", [ENVIRONMENT_CONTEXT]: "{}", [ENVIRONMENT_EXPERIMENT]: "today" }), { A: "1" });
 });
 

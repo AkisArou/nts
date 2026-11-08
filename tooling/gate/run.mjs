@@ -72,7 +72,6 @@
 //   NTS_GATE_STEP         the step's name, sent with each token request
 
 import {CaseBudgetError, ToolingInstrumentError, instrumentPolicy, readStepInstrument} from "./step-result.ts";
-import {definiteFailure} from "./train/red-stop.ts";
 import {GateScopes} from "./train/step-scope.ts";
 import {inheritedStepWork, orderStepStarts, readPreviousStepCpu, readStepCpuHistory, usableWidth, writeStepCpuHistory} from "./step-scheduling.ts";
 import {STEP_SUCCESSORS} from "./step-successors.ts";
@@ -200,8 +199,6 @@ const FRONTENDS = (() => {
   catch (error) { usage(error.message); }
 })();
 const FAIL_FAST = (env.NTS_GATE_FAIL_FAST ?? "") !== "" && env.NTS_GATE_FAIL_FAST !== "0";
-const TRAIN_MEMBERS = Number(env.NTS_GATE_TRAIN_MEMBERS ?? "0");
-if (!Number.isSafeInteger(TRAIN_MEMBERS) || TRAIN_MEMBERS < 0) throw new Error("invalid owned train member count");
 const ACCEPT_SKIP = new Set((env.NTS_GATE_ACCEPT_SKIP ?? "").split(/\s+/).filter(Boolean));
 const TIME_STRICT = (env.NTS_GATE_TIME_STRICT ?? "") === "1";
 const RECORD_TIMES = (env.NTS_GATE_RECORD_TIMES ?? "") === "1";
@@ -309,7 +306,6 @@ let interrupted = null;
 let stopping = false;
 const startupAbort = new AbortController();
 let preparingCapture = true;
-let trainRedStop = null;
 let scopes;
 let scopeCleanup = { state: "complete" };
 let summaryWritten = false;
@@ -813,9 +809,9 @@ function start(step, slots, rider = false) {
     } else if (owned.overBound) {
       const reason = stepBoundReason(bound.seconds);
       finish(step.name, "INSTRUMENT", reason, { ...extra, instrument: { kind: "step-bound", verdict: "INSTRUMENT", reason } });
-    } else if (trainRedStop && ["SIGTERM", "SIGKILL"].includes(signal) && !instrument) {
-      finish(step.name, "NOT RUN", `cancelled after ${trainRedStop.trigger} failed`, { ...extra, cancelled_by: trainRedStop.trigger });
-    } else if (stopping && !trainRedStop && (signal || code !== 0)) {
+    } else if (stopping && !instrument && (signal || code !== 0)) {
+      // A step stopped with the rest is not run, unless its own instrument
+      // (a capture seal that changed, say) says more than the stop does.
       finish(step.name, "NOT RUN", interrupted ? `stopped: ${interrupted}` : "stopped by fail-fast", extra);
     } else if (entryError) {
       finish(step.name, "INSTRUMENT", entryError, { ...extra, instrument: { kind: "tooling-setup", verdict: "INSTRUMENT", reason: entryError } });
@@ -831,11 +827,6 @@ function start(step, slots, rider = false) {
     }
     report(step.name);
     if (step.name === "build" && results.get("build").verdict === "PASS") identify();
-    if (TRAIN_MEMBERS > 1 && definiteFailure({ name: step.name, ...results.get(step.name) }) && !stopping) {
-      trainRedStop = { version: 1, commit: git("rev-parse", "HEAD"), members: TRAIN_MEMBERS,
-        trigger: step.name, decided_at: new Date().toISOString() };
-      stop(`cancelled after ${step.name} failed`);
-    }
     if (results.get(step.name).verdict === "FAIL" && FAIL_FAST && !stopping) {
       stop("NTS_GATE_FAIL_FAST: a step failed");
     }
@@ -850,8 +841,8 @@ function stop(why) {
   if (stopping) { if (why.startsWith("signal")) interrupted = why; return; }
   stopping = true;
   startupAbort.abort(new Error(why));
-  if (!trainRedStop) interrupted = why;
-  for (const name of pending) finish(name, "NOT RUN", why, trainRedStop ? { cancelled_by: trainRedStop.trigger } : {});
+  interrupted = why;
+  for (const name of pending) finish(name, "NOT RUN", why);
   pending = [];
   for (const [, r] of running) {
     try { r.scope.kill(); }
@@ -1002,8 +993,6 @@ function done() {
     scope_execution: true,
     scope_cleanup: scopeCleanup,
     scope_root: scopes ? { slice: scopes.slice, group: scopes.group } : null,
-    ...(trainRedStop ? { train_red_stop: { ...trainRedStop,
-      cancelled: plan.filter(name => results.get(name).cancelled_by !== undefined).sort(), drained_at: new Date().toISOString() } } : {}),
     started: new Date(startedAt).toISOString(),
     wall_s: wall,
     root: ROOT,

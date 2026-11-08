@@ -73,8 +73,7 @@ const sleep = () => { spawnSync("sleep", ["10"]); };
  * capabilities, never another run's context. A landing check started inside
  * a gate step -- this file's own tests, in the tooling step -- would otherwise
  * be read as that gate re-entering itself and inherit its owned policy:
- * a train's NTS_GATE_TRAIN_MEMBERS arms the runner's red-stop, which cancels
- * the other steps after one fails.
+ * that gate's NTS_GATE_FAIL_FAST stops the other steps after one fails.
  */
 export function launcherEnvironment(env: NodeJS.ProcessEnv = process.env): NodeJS.ProcessEnv {
   const own = { ...env };
