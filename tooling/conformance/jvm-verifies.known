@@ -1,5 +1,5 @@
 # Runtime modules whose emit-jvm output the JVM verifier rejects, known and owned:
-# project<TAB>why. Classified by the verifier reason on 55698b009 (conformance lane, 2026-09-28);
+# project<TAB>why. Classified by the verifier reason on 55698b009 (conformance, 2026-09-28);
 # (A)-(E) are the causes jvm-verifies.ts names; its run prints the live counts, so none are kept
 # here to go stale. A module that verifies again prints "remove it".
 #
@@ -36,9 +36,9 @@
 # layout and verified before the fix, so no fixture holds it, and while stream and net fail for
 # other reasons a regression of (B) prints "known" like everything else. (D) has a unit test,
 # body.rs `a_number_converted_to_a_bool_puts_a_label_between_a_definition_and_its_read`.
-runtime/node/child_process	(E) ChildWritable, referenced and never written -- lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), and Program references a ClosureN beside it; the first failure since (F) cleared (jvm lane, 2026-09-29)
-runtime/node/cluster	(E) ChildWritable, as child_process's: lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), so the class is never written. The tuple that stood in front of it cleared in 602f496c8 (jvm lane, 2026-09-30)
-runtime/node/perf_hooks	(E) PerformanceNodeTiming and PerformanceResourceTiming, declined under NTS4009 and never written: their `toJSON` returns a JSON record that repeats PerformanceEntryJSON's fields with no `extends`, so the covariant return has no class relation to bridge. The agreed fix is an inferred parent (override-keyed, assignability-only, its own field), after the tuple; the tuple that stood in front of it cleared in 602f496c8 (jvm lane, 2026-09-30)
+runtime/node/child_process	(E) ChildWritable, referenced and never written -- lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), and Program references a ClosureN beside it; the first failure since (F) cleared (JVM, 2026-09-29)
+runtime/node/cluster	(E) ChildWritable, as child_process's: lowering refuses its `_write`, an override narrowing an erased chunk (live on C, a-writable-override-narrowing-an-erased-chunk), so the class is never written. The tuple that stood in front of it cleared in 602f496c8 (JVM, 2026-09-30)
+runtime/node/perf_hooks	(E) PerformanceNodeTiming and PerformanceResourceTiming, declined under NTS4009 and never written: their `toJSON` returns a JSON record that repeats PerformanceEntryJSON's fields with no `extends`, so the covariant return has no class relation to bridge. The agreed fix is an inferred parent (override-keyed, assignability-only, its own field), after the tuple; the tuple that stood in front of it cleared in 602f496c8 (JVM, 2026-09-30)
 tests/outcomes/a-method-loop-at-entry-misses-its-jvm-stackmap	(J) AWFY Json: the entry loop in Parser#skipWhiteSpace branches to bytecode offset 0 without its stackmap frame; the one-call-site inline-loop control verifies.	pin: invalid=[["Program","¢nts$body$Parser$23$skipWhiteSpace"]]
 tests/outcomes/object-is-of-a-string-and-a-boolean	(K) Object.is("", true): module init compares the string reference with the boolean primitive (if_acmpeq, "Bad type on operand stack"); C rejects the same call as uncompilable C (nts_string_eq given an int); the two-string control verifies.
 tests/outcomes/an-any-argument-to-a-string-method	(L) "lego".concat(missing) with `missing: any`: module init passes the NtsValue to concat's String parameter (invokestatic, "Bad type on operand stack"); C rejects the same call as uncompilable C (nts_concat given an erased value); the control, converting with String() first, verifies.
