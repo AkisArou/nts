@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/octane-splay",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/octane-splay/case.ts",
+      "signature": "1516ae39028f6159a070e4a93e0ef64eee59c6919ab2f34343529f7da4e17f62",
+      "keys": {
+        "c": "23e75ed5a173b295eba3772e6bc88dcf",
+        "jvm": "82dc356a671e048638c747b8cb55244c",
+        "llvm": "ee1affc52ef93057d60e5a0bfcbd6e45"
+      },
+      "cases_sha256": "b69ac7c0b781625ed3e47ff5ea8e360f058748a3ffc27e3b52b2266da455ad3f",
+      "driver_sha256": "fc33e8e2e3030795833ce6a5c66685eccc9c1c3c054200dbe7dc083967e3db56",
+      "input_domain": {
+        "identity": "9167c01fbac2dcf123e918232960dace",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "A finite initial tree population retaining the original 8000-node configuration, original depth-five payloads and all 80 modifications.",
+                "min": 0,
+                "max": 8000,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 13,
+          "cases_sha256": "b69ac7c0b781625ed3e47ff5ea8e360f058748a3ffc27e3b52b2266da455ad3f"
+        }
+      },
+      "complete": true,
+      "count": 13
+    }
+  ]
+}

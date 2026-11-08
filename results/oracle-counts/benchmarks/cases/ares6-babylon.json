@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/ares6-babylon",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/ares6-babylon/case.ts",
+      "signature": "2e7074ad1dc07fab47eb4e9d11fb35a829ac9bc70f95936661413c35a33596e7",
+      "keys": {
+        "c": "ac89967794194bc1b51a1f39b2b19e07",
+        "jvm": "d9c0784ed10c529522575fa4966787be",
+        "llvm": "0c9f16740389590371f55a46a0e34b27"
+      },
+      "cases_sha256": "77f808aacd19cf2abfd3fe50b0535424ca59d1da0504af0ef54eee293ee7a886",
+      "driver_sha256": "19bfc1961efac1896a0a84008b5c7c7ed548f82a7d7224f3ef2606d7fdf942f9",
+      "input_domain": {
+        "identity": "c94864380e96504055384a6f7fa726bd",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "Outer repetitions parse all four complete upstream source strings, retaining the original standalone 200 iterations without truncating any parser input.",
+                "min": 0,
+                "max": 200,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 9,
+          "cases_sha256": "77f808aacd19cf2abfd3fe50b0535424ca59d1da0504af0ef54eee293ee7a886"
+        }
+      },
+      "complete": true,
+      "count": 9
+    }
+  ]
+}

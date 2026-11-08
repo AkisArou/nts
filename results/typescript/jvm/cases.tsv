@@ -4725,7 +4725,7 @@ tests/typescript/integer-routes/counters-field-prefix-increment.ts	{"kind":"pass
 tests/typescript/integer-routes/counters-for-update-index.ts	{"kind":"pass"}
 tests/typescript/integer-routes/counters-generic-return-sum.ts	{"kind":"pass"}
 tests/typescript/integer-routes/counters-return-cancellation.ts	{"kind":"pass"}
-tests/typescript/integer-routes/mixed-enum-field-rewrite.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
+tests/typescript/integer-routes/mixed-enum-field-rewrite.ts	{"kind":"pass"}
 tests/typescript/integer-routes/mixed-field-nan-recovery.ts	{"kind":"pass"}
 tests/typescript/integer-routes/mixed-index-capture-fraction.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index 0.5 is outside [0, 3)"}}
 tests/typescript/integer-routes/mixed-index-field-width.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index -1 is outside [0, 3)"}}
@@ -5203,6 +5203,7 @@ tests/typescript/length-routes/callbacks-for-each-owner.ts	{"kind":"refused","di
 tests/typescript/length-routes/callbacks-map-snapshot-holes.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/length-routes/callbacks-reduce-owner.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/length-routes/callbacks-some-live-owner.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"},{"code":"NTS1005","where":"body"}]}
+tests/typescript/length-routes/callbacks-sort-snapshot-owner.ts	{"kind":"wrong","errorClass":"Test262Error","failure":{"exit":1,"signal":null,"output":"nts: uncaught Test262Error: sameValue"}}
 tests/typescript/length-routes/indices-arithmetic-field-history.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index -1 is outside [0, 0)"}}
 tests/typescript/length-routes/indices-at-readonly-truncate.ts	{"kind":"pass"}
 tests/typescript/length-routes/indices-closure-rebound-index.ts	{"kind":"runtime-abort","failure":{"exit":134,"signal":null,"output":"nts: refused: index -1 is outside [0, 0)"}}
@@ -11162,7 +11163,7 @@ tests/typescript/unicode/locale-case-locales-invalid-first.ts	{"kind":"refused",
 tests/typescript/unicode/locale-case-locales-invalid-second.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/unicode/locale-case-locales-language-subtags.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/unicode/locale-case-locales-negative-length.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
-tests/typescript/unicode/locale-case-locales-receiver-coercion-order.ts	{"kind":"build-failure","stage":"emit","diagnostic":"Error: invalid checked constructor-value identity"}
+tests/typescript/unicode/locale-case-locales-receiver-coercion-order.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/unicode/locale-case-locales-zero-length.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1003","where":"body"}]}
 tests/typescript/unicode/locale-case-lt-below-only.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}
 tests/typescript/unicode/locale-case-lt-existing-dot-above.ts	{"kind":"refused","diagnostics":[{"code":"NTS1001","where":"body"},{"code":"NTS1005","where":"body"}]}

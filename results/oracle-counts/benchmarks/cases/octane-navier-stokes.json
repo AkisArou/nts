@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/octane-navier-stokes",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/octane-navier-stokes/case.ts",
+      "signature": "f752a16558c0d6641ad5d3b964a05e8e8bbec3d8b637f18438e72147de38cb97",
+      "keys": {
+        "c": "f33f9c2afb11338f859d3adb95bd8678",
+        "jvm": "00c5f4a535e4444033b84c77ed377896",
+        "llvm": "3ac689907b288d07dc8d2654145216ae"
+      },
+      "cases_sha256": "7003a7c0081ad927dbb4303008b429ec073835683adbba5f6a1d637cb507e97d",
+      "driver_sha256": "6d7e4f128d4b666a4635cdc37be15b1156ef07268963965568bbb7b6f3b78e97",
+      "input_domain": {
+        "identity": "999719fc169e579c242004ef81746027",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "A finite count of original 128x128 fluid updates including the original fifteenth-frame validation; bound generated CPU work.",
+                "min": 0,
+                "max": 15,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 7,
+          "cases_sha256": "7003a7c0081ad927dbb4303008b429ec073835683adbba5f6a1d637cb507e97d"
+        }
+      },
+      "complete": true,
+      "count": 7
+    }
+  ]
+}

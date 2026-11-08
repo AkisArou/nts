@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/ares6-basic",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/ares6-basic/case.ts",
+      "signature": "003614298a9d78ec14e432ca06d81652edcc7d4b0970085e4cacddf2ccf7d0b5",
+      "keys": {
+        "c": "80c62d7f8e7dcc5eb1d1a7a7fedc983a",
+        "jvm": "42e4f76456b48a4584667ca27958fd32",
+        "llvm": "df6158be3abbd7a9f72d68cf8867452c"
+      },
+      "cases_sha256": "65515f4498b9113cad00533fdc7c6bd15080199137489d1eb9f13b1adb59e5fb",
+      "driver_sha256": "89a17c870c08497dae55d628196db75daf8b62b516f36a6bd4787bc5e32bda58",
+      "input_domain": {
+        "identity": "2aa7b8c1e8c79a220e4321c8cd17c169",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "A bounded outer repetition count; every repetition runs all five complete original BASIC programs with their full outputs and reset seeded RNG.",
+                "min": 0,
+                "max": 3,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 5,
+          "cases_sha256": "65515f4498b9113cad00533fdc7c6bd15080199137489d1eb9f13b1adb59e5fb"
+        }
+      },
+      "complete": true,
+      "count": 5
+    }
+  ]
+}

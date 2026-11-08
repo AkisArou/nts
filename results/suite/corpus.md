@@ -1,6 +1,6 @@
 # TypeScript's own tests, compiled as programs
 
-<sub>Written by `nts-suite`, compiled in `/home/akisarou/Projects/nts-lanes/tsrs`. It writes that tree's `results/suite/corpus.md` wherever it is run from, including a sealed worktree — the destination is chosen when the binary is built, not when it runs. Regenerate with `cargo run --release -p nts-suite`.</sub>
+<sub>Written by `nts-suite`, compiled in `/home/akisarou/.cache/nts-full-check/tree`. It writes that tree's `results/suite/corpus.md` wherever it is run from, including a sealed worktree — the destination is chosen when the binary is built, not when it runs. Regenerate with `cargo run --release -p nts-suite`.</sub>
 
 184 single-file cases from TypeScript's own test suite, compiled as ordinary programs.
 
@@ -27,7 +27,6 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | `x`, a name from an enclosing scope | 6 |
 | a module declaration, which has code in it | 5 |
 | a tagged template whose tag is not a plain declared function | 5 |
-| `x`, captured above its own declaration, where it has no value yet | 3 |
 | a class expression | 3 |
 | a function returning the type parameter `T` | 3 |
 | an exported generic function this program never instantiates, so there is no copy for the export to name | 3 |
@@ -35,5 +34,6 @@ So a tall row means a construct many files use, which is worth knowing. It does 
 | foreign function `f`'s parameter `opts` (which wants a kind from `@nts/scalars` (`Int32`, `c_int`, `Float64` ...), a boolean, or a string), a type with no native ABI | 3 |
 | `a`, which `an anonymous type` does not declare | 2 |
 | a parameter of unrepresentable type (a union of `RegExp` | null | number | undefined) | 2 |
+| a parameter of unrepresentable type (a union of `RegExp` | null | number) | 2 |
 
 This is a work queue ordered by evidence rather than intuition, which is most of why it exists.

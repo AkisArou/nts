@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/awfy-json",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/awfy-json/case.ts",
+      "signature": "c4aca36588fa758c682a52f05de90eafd20f51b359f520f4dab5ad45c343c02e",
+      "keys": {
+        "c": "61f8ede9900293d06459563643efef96",
+        "jvm": "7183c49f4a604bf4ab3c0580953b4a76",
+        "llvm": "8ce62ac8b6f5c69390bd1303cd991c09"
+      },
+      "cases_sha256": "0ee39c20da348595351fdd5e258d29df9bde99c0ea1cddd716447f0dac4e8591",
+      "driver_sha256": "1e10640bc602a3cc7705799a597714af856ddd2e7d713dd4815a7b64cb8ec3d5",
+      "input_domain": {
+        "identity": "98136d52488f43dc70c2784561c608cb",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "iterations": {
+                "reason": "Bound generated repeated document parses within the Node oracle CPU and address-space budgets while retaining upstream seed1, NaN, negatives and fractions.",
+                "max": 16,
+                "integer": false,
+                "allowNaN": true
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 18,
+          "cases_sha256": "0ee39c20da348595351fdd5e258d29df9bde99c0ea1cddd716447f0dac4e8591"
+        }
+      },
+      "complete": true,
+      "count": 18
+    }
+  ]
+}

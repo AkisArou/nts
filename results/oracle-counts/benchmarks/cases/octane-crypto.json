@@ -1,0 +1,56 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/octane-crypto",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/octane-crypto/case.ts",
+      "signature": "5be5be7fa9f80053efb1342e740ceea0d35b0e814a4b56d402412cba032f0521",
+      "keys": {
+        "c": "c31320220f3685f3c363f13e9f774757",
+        "jvm": "caee7b8daadb9d2367a0027d489e269c",
+        "llvm": "5bc9c11121b067be78d6102d5f0ef360"
+      },
+      "cases_sha256": "e7ca723a9d81c7a124f02c72006784895755de1c19fed82f24001d8f188b8593",
+      "driver_sha256": "bb0f8de6026ea5711c1697e0698eb286108b4218611e61a1b46075713b288c77",
+      "input_domain": {
+        "identity": "a09aa5f84697b5c3b3f4c9c53bdba1f0",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "render": {
+              "n": {
+                "reason": "A finite count of complete original encrypt/decrypt pairs, covering original seed one and within-call RNG progress across three pairs.",
+                "min": 0,
+                "max": 3,
+                "integer": true,
+                "allowNaN": false
+              }
+            },
+            "work": {
+              "n": {
+                "reason": "A finite count of complete original encrypt/decrypt pairs, covering original seed one and within-call RNG progress across three pairs.",
+                "min": 0,
+                "max": 3,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "render": {
+          "count": 5,
+          "cases_sha256": "63c97680c5771aa592098611aaf7de325d7b4fabfd0841f70d949e4627b7ad47"
+        },
+        "work": {
+          "count": 5,
+          "cases_sha256": "65515f4498b9113cad00533fdc7c6bd15080199137489d1eb9f13b1adb59e5fb"
+        }
+      },
+      "complete": true,
+      "count": 10
+    }
+  ]
+}

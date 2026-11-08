@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/ares6-ml",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/ares6-ml/case.ts",
+      "signature": "5a039ca7db047573c2cf0beff145f001479c4aef155a68f934bbcbfbb400f3e5",
+      "keys": {
+        "c": "a27ef95f52450614d7583a0ec418658f",
+        "jvm": "6d21f374e4790d7bd03b01f9c6173630",
+        "llvm": "69f9ff47f33206f4566c710923cc9070"
+      },
+      "cases_sha256": "6352c01cb47f8a75d63c14ec4a8b4d6907795c5baac48c11ce83838f8b605896",
+      "driver_sha256": "497b3757c3e6689d7e5b14c8b9b528199c432f2c33fdc1c6d24bb678c4b5c59e",
+      "input_domain": {
+        "identity": "6486499820c305f42b2f90bbc598a47b",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "The outer activation sweep includes all fourteen original activation names; each selected activation trains all five complete original networks. ML remains a refused-by-design eval row with no native arrival or pass claim.",
+                "min": 0,
+                "max": 14,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 7,
+          "cases_sha256": "6352c01cb47f8a75d63c14ec4a8b4d6907795c5baac48c11ce83838f8b605896"
+        }
+      },
+      "complete": true,
+      "count": 7
+    }
+  ]
+}

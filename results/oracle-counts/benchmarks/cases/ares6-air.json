@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/ares6-air",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/ares6-air/case.ts",
+      "signature": "dae90999d922fc7672a1ba85960c58ec452a3723a487abdde3c0198d3771faea",
+      "keys": {
+        "c": "3be883aac690a01194e8442a1ef76c94",
+        "jvm": "6512219a058a87093e71334a52f3a3de",
+        "llvm": "a04e50d2dff4703e239bb2289d364157"
+      },
+      "cases_sha256": "e53c26d7621c67b5c6553bfdff8fcf7f0f59bb99c42a5f6be31b419a73bc8b3c",
+      "driver_sha256": "a81fccb62bcc3f810ccc88dd36dd110caa64b1f2ea9387736f80c3ac57c99f42",
+      "input_domain": {
+        "identity": "fa07df97138f2547e782448c30aafa10",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "Outer repetitions of all three complete permitted Air recordings, including the original standalone 150 iterations; the IR payloads are never truncated.",
+                "min": 0,
+                "max": 150,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "work": {
+          "count": 9,
+          "cases_sha256": "e53c26d7621c67b5c6553bfdff8fcf7f0f59bb99c42a5f6be31b419a73bc8b3c"
+        }
+      },
+      "complete": true,
+      "count": 9
+    }
+  ]
+}

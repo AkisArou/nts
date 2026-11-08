@@ -1,0 +1,47 @@
+{
+  "version": 1,
+  "fixture": "benchmarks/cases/octane-raytrace",
+  "rows": [
+    {
+      "kind": "measured",
+      "source": "benchmarks/cases/octane-raytrace/case.ts",
+      "signature": "9d50ceea55e24653ce3b3e29ae6bce62cbeda34bf839fe70119fde045ea006ba",
+      "keys": {
+        "c": "939bcb00aebb4e7f15a14b27165700de",
+        "jvm": "94e6179a8282c68085a1dd12b3d86f5c",
+        "llvm": "ea7a29660466236787ed85ad1543fd21"
+      },
+      "cases_sha256": "895375185be486cc9a5dd0096756464ce84714355c2add9ce98a058d352fee48",
+      "driver_sha256": "fa1d718f4beee5c7afa2a23da0ca66826e9977ae007993be7f14c39ca2f7f477",
+      "input_domain": {
+        "identity": "419949b24fe91378be6e3b4658649820",
+        "declaration": {
+          "version": 1,
+          "functions": {
+            "work": {
+              "n": {
+                "reason": "Complete original RayTrace scene repetitions; preserve the benchmark seed of four while bounding generated CPU work.",
+                "min": 0,
+                "max": 4,
+                "integer": true,
+                "allowNaN": false
+              }
+            }
+          }
+        }
+      },
+      "populations": {
+        "renderScene": {
+          "count": 1,
+          "cases_sha256": "58c0eb08d9586d6f82a4eba5131b00b115ece866608152259e67587a2f3a058f"
+        },
+        "work": {
+          "count": 6,
+          "cases_sha256": "5a8aed927bc6132eeb0df8cdd4a60673a479f1062a57698aea3453ff12e66fe0"
+        }
+      },
+      "complete": true,
+      "count": 7
+    }
+  ]
+}
