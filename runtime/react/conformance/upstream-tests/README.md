@@ -13,7 +13,7 @@ package we do not implement stay upstream's own.
 
 ```sh
 runtime/react/tools/setup-upstream.sh          # once: clone, install, build the control
-npm --prefix runtime/react install              # the lane's toolchain and workspaces
+npm --prefix runtime/react install              # the port's toolchain and workspaces
 node runtime/react/tools/build-js.ts           # emit this runtime for the harness
 node runtime/react/conformance/upstream-tests/run.ts --arm upstream   # control
 node runtime/react/conformance/upstream-tests/run.ts --arm stub       # control
@@ -31,7 +31,7 @@ Each test has one row in `ledger/<suite>.<mode>.json`, and a run prints its diff
 against that ledger. Only the diff says what changed; a total cannot say which
 test moved.
 
-- **In scope:** the test file uses only packages this lane implements.
+- **In scope:** the test file uses only packages this port implements.
 - **Out of scope `[out:react-dom]` etc.:** the file requires another renderer,
   the server packages, React's server-components build
   (`react/react.react-server`) or the noop server renderers. It is recorded,

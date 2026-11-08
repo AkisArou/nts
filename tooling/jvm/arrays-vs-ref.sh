@@ -14,7 +14,7 @@
 # answer it; the emulator is not involved and neither is the gate lock.
 #
 # Run 2026-09-12: **2 of 52**, and both are the two already known. 34 rows match
-# their reference exactly. See `benchmarks/jvm-rows.md`.
+# their reference exactly. See `docs/records/notebooks/jvm-rows.md`.
 #
 # # What it cannot answer, which is the more useful half
 #
@@ -37,7 +37,7 @@
 # names a constant-pool index with the class in a trailing comment, so reading
 # the next token printed types like `62:1`. A column constant across forty-four
 # rows is the instrument, every time. The control is the five rows whose answers
-# `benchmarks/jvm-rows.md` already records.
+# `docs/records/notebooks/jvm-rows.md` already records.
 set -u
 nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
 nts_jvm_flags=$(cat "$nts_jvm_flags_file")

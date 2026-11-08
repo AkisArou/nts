@@ -27,7 +27,7 @@
 # **Not a benchmark.** The device here is an x86_64 emulator, so timings from
 # it are not a phone's. What survives emulation is *allocation*, which is
 # deterministic, and *whether the program is correct*, which is what this asks.
-# See `benchmarks/jvm-rows.md` for what ART's missing C2 does to the numbers.
+# See `docs/records/notebooks/jvm-rows.md` for what ART's missing C2 does to the numbers.
 set -eu
 nts_jvm_flags_file=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)/runtime/jvm/test-vm-flags.txt
 nts_jvm_flags=$(cat "$nts_jvm_flags_file")

@@ -45,7 +45,7 @@ Consequences for the runtime:
 - the same kind with a different `S` at the same position (a conditional
   `useState<number>` swapped with a `useState<string>`) passes the kind check.
   Closing that needs either a checked `unerase` in a checking build or a type
-  token per call site. That goes to the compiler lanes as a request, not as a
+  token per call site. That goes to the compiler as a fixture and a task, not as a
   runtime workaround.
 
 ## What A does not settle

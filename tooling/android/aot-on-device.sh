@@ -29,7 +29,7 @@
 # A raw dex in `/data/local/tmp` has no `.odex`, so that is ART's **interpreter
 # and JIT**. A shipped Android application does not run that way: the system
 # runs `dex2oat` and the app executes AOT-compiled code. So every ART *timing*
-# in `benchmarks/jvm-rows.md` is about a mode no product ships, and the bar's
+# in `docs/records/notebooks/jvm-rows.md` is about a mode no product ships, and the bar's
 # second and third numbers are written about Android.
 #
 # A ratio is fairer than an absolute -- ours and the reference get the same
@@ -41,7 +41,7 @@
 # # Why an APK, when `dex2oat` is right there
 #
 # It is not: `dex2oat` is **inaccessible to the shell user** on this emulator,
-# which `benchmarks/jvm-rows.md` already records as what stopped the profile. What
+# which `docs/records/notebooks/jvm-rows.md` already records as what stopped the profile. What
 # is *not* recorded, and is true, is that **`oatdump` runs fine from the shell**
 # -- so the artefact can be read once something produces it.
 #
@@ -293,7 +293,7 @@ PY
   adb shell "am force-stop $package" > /dev/null 2>&1 || true
   # **`NTS_AOT_KEEP=1` leaves the package installed and dumps its AOT code.**
   #
-  # This is the method-level view `benchmarks/jvm-rows.md` records as unavailable.
+  # This is the method-level view `docs/records/notebooks/jvm-rows.md` records as unavailable.
   # It was unavailable because `dex2oat` cannot be run by the shell user -- and
   # what was never checked is that **`oatdump` can**. Once `cmd package compile`
   # has produced an `.odex`, the artefact is on disk and readable, so the thing

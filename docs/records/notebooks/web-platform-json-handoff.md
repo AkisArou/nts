@@ -1,5 +1,8 @@
 # JSON: handoff
 
+*A notebook, moved here from `runtime/web-platform/docs/JSON-HANDOFF.md` on
+2026-11-08. The `PERFORMANCE.md` it names is `runtime/web-platform/docs/PERFORMANCE.md`.*
+
 Written 2026-09-09 by the Web-platform lane, for whoever continues the JSON performance work.
 
 `PERFORMANCE.md` is the objective and carries the full evidence with its counterfactuals; this

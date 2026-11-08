@@ -1,5 +1,10 @@
 # Integration baseline
 
+*A record of the web platform's import, moved here from
+`runtime/web-platform/docs/BASELINE.md` on 2026-11-08. Its `docs/external`
+is `runtime/web-platform/docs/external`. Later integration evidence goes to
+`docs/records/`.*
+
 ## Inputs
 
 - NTS implementation-start commit: `31f15a0d87ecc6d20640bec73dba0563d31b4894`.

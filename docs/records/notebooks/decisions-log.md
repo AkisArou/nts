@@ -1531,6 +1531,25 @@ still pass through their ordinary comparison. The full check's writer measures
 pending cases. General project graphs retain their owner-program checking and
 emission contract.
 
+## Baselines for the gaps Node 26 exposed (11-08)
+
+Four wide steps were red after the Node 26 runtime: definitions in five
+modules, zlib's compile time on both providers, and the refusal profile. Each
+loss is pinned by a refusal fixture with a control and a plan task. The user
+accepted today's numbers as the new baselines: the five definitions floors at
+their counts, zlib's compile-time baseline re-recorded (five repeats, the 1.10
+tripwire kept) and the profile ceiling at 1,929 (1,889 plus the usual 40).
+These floors are kept by hand, so the task that restores the functions raises
+them back.
+
+## The old workflow's history stays (11-08)
+
+Asked how far the cleanup of old-workflow references should go, the user chose
+"leave history, move notebooks": instructions, the workflow's tools and data
+notes say only the current way of working; provenance written in the old
+lanes' words ("Found by the JVM lane") stays as written; dated notebook pages
+outside `docs/` move to `docs/records/notebooks/`.
+
 ## The full check sweeps (11-08)
 
 The user approved the full check removing, each hour, two kinds of leftover

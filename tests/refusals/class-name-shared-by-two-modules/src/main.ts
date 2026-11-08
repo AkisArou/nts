@@ -23,7 +23,7 @@
 // **It blocks JSON.** `json/parse.ts` and `json/stringify.ts` each declare a
 // `Frame`, so `readValue`, `parseJsonText` and `stringifyJsonValue` are all
 // dropped -- the parser has no presence on the compiled axis and the shipped
-// serializer none either. `JSON-HANDOFF.md` records `Number(string)` as the one
+// serializer none either. `docs/records/notebooks/web-platform-json-handoff.md` records `Number(string)` as the one
 // remaining refusal on that chain; it landed, and this was underneath it.
 //
 // The companion `class-name-unique-to-one-module` is the control: the same

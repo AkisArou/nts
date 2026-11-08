@@ -53,7 +53,7 @@ and artifact-size evidence before becoming another provider.
 1. **Compiler integration.** Support canonical library unions, record projection,
    nested generic dispatch, standard builtin binding, actual supplied argument
    counts, mutable Date representation and proof that provided builtin bindings
-   remain unchanged. The compiler lane owns these changes.
+    remain unchanged. These changes are compiler work.
 2. **Shared foundations.** Complete locale validation, aliases, extension
    negotiation/matching, Locale, supportedValuesOf, clocks/default locale/zone,
    calendar metadata and conversion. Locale metadata uses public ICU primitives
@@ -282,7 +282,7 @@ verdicts and reasons were unchanged by that declaration cleanup. The current
 compiled provider gate stops before execution: NTS does not discover structural
 interface implementors without an explicit clause. C/JVM minimal implicit and
 explicit controls, plus the actual value-class witness, retain the diagnostics
-for the compiler lane. This is a compiler dependency; no casts or replacement
+for the compiler. This is a compiler dependency; no casts or replacement
 ambient contracts hide it. The earlier compiled cache/performance receipts
 below precede this cleanup and are not current-source compiled acceptance.
 
@@ -536,7 +536,7 @@ and `target/ecmascript/icu-check/*calendar-presentation*`.
 The complete compiled provider/public gate still refuses implicit calendar/zone
 dispatch and the DateTimeFormatter range storage layout; its diagnostics are
 general-public-gate.log. Canonical public unions and standard binding remain
-compiler-lane dependencies. No implements clause or erased cast masks them.
+compiler dependencies. No implements clause or erased cast masks them.
 
 The native adapter adds 2,774 allocated object-section bytes (16,772 total), using
 ordinary pinned headers at -O2 without sanitizers. This adds no translation unit
@@ -1047,7 +1047,7 @@ diagnostic comparisons are in
 
 Run original Test262 through actual compiled standard bindings on C, LLVM, JVM,
 C+RC and LLVM+RC. Retain refusals, timeouts, failures and unvisited cases. Complete
-binding-drift checks, relevant lane gates, native sanitizers/leaks and JVM
+binding-drift checks, the relevant gate steps, native sanitizers/leaks and JVM
 verification before accepting a change.
 
 Validate Linux, Windows, macOS/iOS, JVM and Android; Android API 29, 30, 33 and
@@ -1528,7 +1528,7 @@ The unchanged production Date/Temporal localization consumers are still refused
 on C-RC and JVM. Both emit commands exit zero but diagnose and omit `main` because
 the canonical locale union cannot be represented; these are failed acceptance
 gates. Canonical formattable-value unions, generic factory captures and provider
-layout/dispatch gaps also remain compiler-lane work. No reduced input contract
+layout/dispatch gaps also remain compiler work. No reduced input contract
 or scalar replacement stands in for that public acceptance.
 
 Original rows, comparisons, immutable baseline source, ownership/overhead probes,

@@ -89,4 +89,4 @@ done
 echo
 echo "$mismatches case(s) where the reference computes narrower than the program."
 echo "Each is a decision with a measurement attached, not a defect: see"
-echo "benchmarks/jvm-rows.md for what happened when \`fib\`'s was priced."
+echo "docs/records/notebooks/jvm-rows.md for what happened when \`fib\`'s was priced."

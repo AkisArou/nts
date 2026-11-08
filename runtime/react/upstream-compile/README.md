@@ -14,12 +14,12 @@
 > with nts's static model. Even a successful compile would erase every hot
 > field.
 >
-> The lane now builds its own React runtime, fully compatible with React's
+> The port now builds its own React runtime, fully compatible with React's
 > public behaviour; see `../README.md`. This directory is kept for two jobs:
 >
 > - **a compiler stress corpus.** `npm run runtime:native-probe` is a census of
 >   refusals over 57k lines of real TypeScript, and `blockers/` holds the
->   reduced cases, for the language lanes;
+>   reduced cases, for the compiler;
 > - **the upstream behaviour oracle.** `tools/upstream-oracle.mjs` runs the
 >   exact pinned sources.
 >

@@ -12,8 +12,9 @@ bootstrap, not compiled TypeScript mutation of `globalThis`, exposes globals.
 Historical delivery documents and test evidence are retained under
 [`docs/external`](docs/external). They describe the external baseline and must not be
 read as evidence that the integrated native, JVM/Android, or LLVM/iOS paths execute.
-Current integration evidence belongs in [`docs/BASELINE.md`](docs/BASELINE.md) and
-subsequent validation records.
+The import's own record is
+[`docs/records/notebooks/web-platform-baseline.md`](../../docs/records/notebooks/web-platform-baseline.md);
+later integration evidence goes to `docs/records/`.
 
 Shared source compiles without DOM or Node ambient globals and extends the repository
 root `tsconfig.base.json`. Platform providers import only explicit typed capabilities;
@@ -38,7 +39,7 @@ runtime/web-platform/src/websocket      WebSocket API, protocol and reference en
 
 runtime/node/internal/web-platform      native Node-compatible provider (when introduced)
 tooling/conformance/web-platform        ordinary-Node host provider and host tests
-runtime/jvm                              JVM/Android provider, owned by the JVM lane
+runtime/jvm                              JVM/Android provider, in the JVM runtime
 ```
 
 There is intentionally no `runtime/web-platform/adapters` directory. A platform

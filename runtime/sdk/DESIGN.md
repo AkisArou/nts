@@ -112,7 +112,7 @@ Deferred/deleted vs draft 0: proprietary camera sessions, portable
 
 ## 5. How implementations will attach (later)
 
-Public interface here; internal *provider* interfaces per platform lane
+Public interface here; internal *provider* interfaces per platform
 (the `runtime/web-platform` provider pattern). One provider can back both
 a global and an SDK verb (one capture stack under `getUserMedia` and the
 scanner). Apps never select providers.
@@ -122,7 +122,7 @@ scanner). Apps never select providers.
 1. **Lib ownership**: who owns generating `lib.native-dom` from WebIDL, and
    does the Blink host share it? (Extractor is a stopgap; say so in the lib.)
 2. **Target-narrowed typings** via export conditions vs `availability()` —
-   compiler lane's call.
+    the compiler's call.
 3. **Experimental standards**: which draft APIs in the lib do we bless with
    presence on native targets (Shape Detection, Contact Picker are
    Chromium-only on the web)? Adopting a well-defined draft natively is
@@ -143,6 +143,6 @@ scanner). Apps never select providers.
    `runtime/web-platform` implements none of it yet — only a
    provider-side monotonic-clock primitive exists (`runtime/node`'s
    `perf_hooks` is a separate realm). Adopted standard, missing
-   implementation; the web-platform lane owns closing it. Adjacent:
+    implementation; closing it is web-platform work. Adjacent:
    the `navigator` object itself has no web-platform implementation
    (host/bootstrap-provided per target — unconfirmed natively).

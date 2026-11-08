@@ -100,7 +100,7 @@ shipping standard builtin execution is required for completion.
 The parser, matcher and builtin algorithms have one TypeScript source for native
 and JVM targets. JVM execution needs no JNI, Java regex engine or C library.
 Compiler binding to the standard `RegExp` and String builtins belongs to the
-compiler/backend lanes. Core imports provide the emitted-code integration API;
+compiler and backends. Core imports provide the emitted-code integration API;
 the generic builtin facade is currently validated on the host.
 
 `src/regexp/engine.ts` exports `compile`, `execute`, `RegexProgram` and
@@ -159,7 +159,7 @@ A native program using both the existing C String case-conversion code and this
 regexp implementation can contain overlapping Unicode data. This change does
 not claim that one binary copy exists. Removing that overlap requires migrating
 String case conversion to shared Unicode primitives or a backend data ABI; that
-must be coordinated with the compiler/runtime lane.
+is compiler and runtime work, done together.
 
 ## Validation
 
@@ -268,5 +268,5 @@ the RegExp object tag and iterator ancestry/tag descriptor. The project's
 metaobject boundary is documented in `docs/language/boundaries.md`; these
 host results must not be advertised as full ECMAScript engine conformance.
 
-Run the compiler lane's ordinary Test262 runner after builtin binding. The host
+Run the ordinary Test262 runner after builtin binding. The host
 adapter cannot establish that standard syntax reaches the emitted matcher.

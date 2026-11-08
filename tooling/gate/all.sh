@@ -1513,7 +1513,7 @@ jvm() { ( NTS_BACKEND=jvm; export NTS_BACKEND
   # through what javac makes of the same shape written as Java. **A
   # transcription of a bytecode shape into source is not that bytecode.**
   #
-  # So the row's cause is unfound, and `benchmarks/jvm-rows.md` holds what has
+  # So the row's cause is unfound, and `docs/records/notebooks/jvm-rows.md` holds what has
   # been ruled out rather than a diagnosis.
   #
   # 125, level with the LLVM lane. The per-lane gap this paragraph used to

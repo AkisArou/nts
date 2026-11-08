@@ -19,7 +19,7 @@
 // HotSpot**. They are indistinguishable on ART and they are not here. So an
 // interface would have made the *reference* 14% slower on the runtime the row
 // is quoted from, which flatters this compiler -- the one direction a harness
-// must never be wrong in, and the same trap `benches/jvm-rows.md` records for
+// must never be wrong in, and the same trap `docs/records/notebooks/jvm-rows.md` records for
 // `awfy-sieve`, where one extra static call cost its reference 18%.
 //
 // It also happens to be what nts emits, which is a good tie-breaker and not the

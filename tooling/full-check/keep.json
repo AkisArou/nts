@@ -13,7 +13,7 @@
     "mainclaude": { "kind": "kept", "why": "the coordinator's" },
     "chromium": { "kind": "kept", "why": "the Chromium task's, kept while the user has it paused" }
   } },
-  "nts-jvm-codex": { "kind": "kept", "why": "the JVM evidence that all.sh's JVM exceptions and benchmarks/jvm-rows.md cite" },
+  "nts-jvm-codex": { "kind": "kept", "why": "the JVM evidence that all.sh's JVM exceptions and docs/records/notebooks/jvm-rows.md cite" },
   "nts-node26": { "kind": "kept", "why": "Node 26's qualification runs, until it lands (#124)" },
   "nts-tsrs-yield-replay-20261030": { "kind": "kept", "why": "the drafted reports of tsrs's yield gaps, until they are filed upstream" },
 

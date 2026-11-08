@@ -25,7 +25,7 @@ module to write — step 4) · `recorded` (disposition is the resolution).
 | AppIntents | native-projection | Apple App Intents / Android App Actions | recorded | — |
 | AppleAuthentication | sdk-gap | `sdk:auth` | covered | Via the generic system-browser OAuth flow |
 | Application | sdk-gap | `sdk:app` | covered | — |
-| Asset | build/config | Product resources in nts.config; loaded via fetch/`documents` | recorded | Resource story belongs to the build lane's config doc |
+| Asset | build/config | Product resources in nts.config; loaded via fetch/`documents` | recorded | Resource story belongs to the build config's doc |
 | Audio (expo-audio) | sdk-gap | `lib:MediaRecorder` + `sdk:media` | covered | Recording is standard; Web Audio adopted step 3 (+76/+1474); playback player added in `sdk:media` |
 | AuthSession | sdk-gap | `sdk:auth` | covered | — |
 | BackgroundTask | sdk-gap | `sdk:tasks` | covered | — |
@@ -94,7 +94,7 @@ module to write — step 4) · `recorded` (disposition is the resolution).
 | Updates | build/config | Store updates / product delivery, not OTA JS | recorded | AOT platform: no JS-bundle update channel to mirror |
 | Video (expo-video) | sdk-gap | `sdk:media` | covered | VideoView itself is ui-layer |
 | WebBrowser | sdk-gap | `sdk:browser` `sdk:auth` | covered | — |
-| Widgets | out-of-scope | — | recorded | Out of scope for now (decided 2026-10-16); revisit with the React lane if ever |
+| Widgets | out-of-scope | — | recorded | Out of scope for now (decided 2026-10-16); revisit with the React port if ever |
 
 ## Web API adoption decisions (step 3, measured 2026-10-16)
 

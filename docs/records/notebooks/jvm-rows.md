@@ -1,5 +1,9 @@
 # The JVM lane's rows, and what has already been asked of them
 
+*A notebook, moved here from `benchmarks/jvm-rows.md` on 2026-11-08 and no
+longer kept up to date: the numbers it carried now live in `results/benchmarks/`,
+written by the tools.*
+
 **This file is the state; the goal is the method.** A goal text that carries row
 numbers goes stale the first time a row moves, and then it sends the next
 session to redo finished work. So the numbers live here, and whoever moves a row

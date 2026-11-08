@@ -25,7 +25,7 @@
 // the gap is somewhere else. No transcription of the emitted shape into Java
 // reproduces it; every variant lands at 4210-4270ns where ours is 4461.
 //
-// `benchmarks/jvm-rows.md` carries the numbers. Recorded here because this header
+// `docs/records/notebooks/jvm-rows.md` carries the numbers. Recorded here because this header
 // is where someone deciding what the row is for will look first, and it read
 // as though the question were still open.
 //

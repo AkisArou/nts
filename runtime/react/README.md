@@ -1,6 +1,6 @@
 # React for NTS
 
-This lane has one goal. An application written against React's public API
+The React port has one goal. An application written against React's public API
 should compile to native code with NTS. The same hooks and components should
 also run unchanged on the web against real React.
 
@@ -35,7 +35,7 @@ we move the pin and review which tests changed.
 **Application code** goes through three steps:
 1. **The native frontend** checks the original TS/TSX. Types come from this checked program.
 2. **React Compiler** runs, using upstream's Rust port.
-3. **Typed JSX lowering** runs, as the lane's own pass.
+3. **Typed JSX lowering** runs, as the port's own pass.
 
 Then NTS compiles the result. A component whose output cannot be fully typed
 stays uncompiled by React Compiler. It is still correct, only not memoised.
@@ -80,7 +80,7 @@ checked-in program. What stands between a native program and running is
 read from its build log with `node tools/census.ts <log>`: the entry's chain
 of refused calls, the construct that ends it, and every root refusal by
 kind. Walking that chain and then running the program, with each blocker
-neutralised in a scratch copy to reach the next, found about 30. The lane's
+neutralised in a scratch copy to reach the next, found about 30. The port's
 own were fixed, and so was one compiler item (`Array.isArray` after a
 `typeof` narrowing). The rest were reported with reductions, and these
 stand:
@@ -135,5 +135,5 @@ config's comments.
 - NTS must compile it with zero refusals:
   - no `any`, prototype manipulation, extra fields added at runtime, or weak collections;
   - classes, closures, discriminated unions, and `unknown` only behind a checked narrowing.
-- A missing NTS feature becomes a reduced fixture handed to the lane that owns
-  it. This lane does not edit `compiler/` or `runtime/c`.
+- A missing NTS feature becomes a reduced fixture and a task in `docs/plan.md`
+  (AGENTS.md); work on the port does not edit `compiler/` or `runtime/c`.

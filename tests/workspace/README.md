@@ -4,7 +4,7 @@
 today, and much of it names capability this compiler does not have. It exists so
 the build system is argued against a concrete tree instead of against a config
 snippet -- which is how the previous round of this design went wrong, by being
-written from inside one lane.
+written from inside one area of the work.
 
 It is deliberately **not** a pnpm workspace yet: no `pnpm-workspace.yaml`, no
 `package.json`, no dependencies. Those decisions come after the shape is agreed,

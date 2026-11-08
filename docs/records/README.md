@@ -9,7 +9,7 @@ it needs to be.
 |---|---|
 | **Decision records,** one decision each with its evidence | `NNNN-title.md`, numbered. Claim the next number with `tooling/gate/claim-record.sh "title"`, which creates the file atomically. |
 | **The decisions log,** every user decision with its date and words | [`notebooks/decisions-log.md`](notebooks/decisions-log.md) |
-| **Notebooks:** lane notebooks, conformance ledgers, the plan's history | [`notebooks/`](notebooks) |
+| **Notebooks:** notebooks by area, conformance ledgers, the plan's history | [`notebooks/`](notebooks) |
 | **Studies:** the research behind the foundations (memory, Unicode, builtins, JSON, the primitives, tsrs) | [`notebooks/studies/`](notebooks/studies) |
 | **Ideas:** directions nobody has committed to | [`ideas/`](ideas) |
 

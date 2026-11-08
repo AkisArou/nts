@@ -29,8 +29,8 @@ Measured on HEAD 009b48e9 (probes under ~/.cache/nts-react/probes):
 - `new ctor()` through a value is refused: the constructor would be chosen
   from the declared type, not the value.
 - A static read through a `typeof Base` value compiles and returns
-  **Base's** static, not the class passed. That's silently wrong; reported to
-  the compiler lane.
+  **Base's** static, not the class passed. That's silently wrong; reported as a
+  compiler defect.
 - An optional method (`componentDidMount?(): void`) is refused: a method
   needs a body.
 

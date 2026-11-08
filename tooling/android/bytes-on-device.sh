@@ -235,7 +235,7 @@ JAVA
   # `popDiskFrom` does not (67 to 51, still over).
   #
   # `NTS_D8_DEBUG=1` goes back, for a run being compared against a figure taken
-  # before this changed. Every ART number in `benchmarks/jvm-rows.md` older than
+  # before this changed. Every ART number in `docs/records/notebooks/jvm-rows.md` older than
   # 2026-09-12 is a debug-dexed one and is pessimistic by about that much.
   "$tools/d8" $nts_android_flags ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/dex" $(find "$out/classes" -name '*.class') \
     "$out/classes/nts-runtime.jar" > /dev/null 2>&1 \

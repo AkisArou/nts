@@ -5,7 +5,7 @@
 #
 # # Why a timing on an emulator is worth anything at all
 #
-# It is not, as a nanosecond. `benchmarks/jvm-rows.md` measures absolute times on
+# It is not, as a nanosecond. `docs/records/notebooks/jvm-rows.md` measures absolute times on
 # this machine's HotSpot and nothing here replaces one of them.
 #
 # But the bar is not a nanosecond. It is **jvm over Java**: two programs, one
@@ -21,7 +21,7 @@
 # on HotSpot **and** on ART, for both the compiled program and `ref.java`.
 #
 # The HotSpot pair is the control. Its ratio has an independent published value
-# in `benchmarks/jvm-rows.md`, measured by `tooling/bench` with a different driver
+# in `docs/records/notebooks/jvm-rows.md`, measured by `tooling/bench` with a different driver
 # path and a real `Bench`. If this script's HotSpot column reproduces it, the
 # harness is not distorting the fraction and the ART column means what it says.
 # If it does not, the ART column is worthless and the HotSpot column says so
@@ -225,7 +225,7 @@ JAVA
   # `popDiskFrom` does not (67 to 51, still over).
   #
   # `NTS_D8_DEBUG=1` goes back, for a run compared against a figure taken
-  # before this changed. **Every ART number in `benchmarks/jvm-rows.md` older than
+  # before this changed. **Every ART number in `docs/records/notebooks/jvm-rows.md` older than
   # 2026-09-12 is debug-dexed** and is pessimistic by about that much.
   # shellcheck disable=SC2046
   if ! "$tools/d8" $nts_android_flags ${NTS_D8_DEBUG:-"--release"} --min-api 29 --output "$out/nts/dex" \

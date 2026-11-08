@@ -18,7 +18,7 @@
 // 3-4% across two runs comparing minima -- so the narrow type is not a gift to
 // this lane and obeying the no-field-narrower-than-f64 rule here would move the
 // row against us. That is an argument for obeying it, not against, and it is
-// recorded with its numbers in `benches/jvm-rows.md` as a decision not yet
+// recorded with its numbers in `docs/records/notebooks/jvm-rows.md` as a decision not yet
 // taken.
 //
 // Read the measured input through a volatile field, as the other references do.

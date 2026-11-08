@@ -138,13 +138,13 @@ LLVM/iOS evidence. Host-only evidence cannot promote a row beyond **shared** or
 | persistent `CookieJar`          | shared     | Typed store and policy exist; production durable stores remain.                              |
 | provider-backed large Blob/File | shared     | Typed ranged store exists; production spill/durable providers remain.                        |
 | WebSocket server                | missing    | Node-only public server reusing the shared frame/extension engine remains.                   |
-| mobile lifecycle/network change | provider   | JVM implementation exists in its lane; shared adapter corpus and iOS path remain.            |
-| Android OkHttp provider         | provider   | JVM lane owns implementation/evidence; shared semantic integration remains.                  |
+| mobile lifecycle/network change | provider   | JVM implementation exists in runtime/jvm; shared adapter corpus and iOS path remain.         |
+| Android OkHttp provider         | provider   | The JVM runtime holds implementation/evidence; shared semantic integration remains.          |
 | iOS `URLSession` provider       | missing    | Requires a named iOS owner and its own platform floors.                                      |
 | HTTP/3/QUIC extension point     | missing    | Stable negotiated capability seam remains; protocol implementation is staged.                |
 | canonical ECMAScript JSON       | dependency | Compiler/common-runtime prerequisite; body `.json()` cannot claim compiled completion first. |
-| Node `Buffer` adapters          | facade     | Node lane owns exact Buffer conversions over canonical typed memory.                         |
-| Node classic-stream adapters    | facade     | Node lane owns readable/writable conversions and the stream/pipeline facade.                 |
+| Node `Buffer` adapters          | facade     | The Node runtime owns exact Buffer conversions over canonical typed memory.                  |
+| Node classic-stream adapters    | facade     | The Node runtime owns readable/writable conversions and the stream/pipeline facade.          |
 
 ## Updating this ledger
 

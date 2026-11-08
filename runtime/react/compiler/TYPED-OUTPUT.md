@@ -142,8 +142,8 @@ just not memoized, and the fallback count is reported.
 - **tsgo already exposes `typeToString` and `typeToTypeNode`** with an
   enclosing declaration and flags (`third_party/typescript-go/internal/api/session.go`).
   `compiler/frontend-ts` doesn't call them yet (`tsgo/proto.rs`), so adding
-  them is a request to the compiler lane, and a batched variant would be
-  worth asking for. The lane itself edits nothing in `compiler/`.
+  them is a compiler task, and a batched variant would be worth asking
+  for. Work on the port itself edits nothing in `compiler/`.
 - **`react/compiler-runtime` has to type `c`.** `@types/react` exports
   nothing from it, so upstream's own output doesn't typecheck against the
   official types. Our runtime declares it.
