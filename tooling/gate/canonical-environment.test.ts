@@ -128,9 +128,11 @@ function ampleMemory(run:string):string {
   const meminfo=join(run,"meminfo");writeFileSync(meminfo,"MemAvailable: 64000000 kB\n");return meminfo;
 }
 
+// A gate environment prunes its HOME's registry of closed run temporaries, an
+// evictable cache: these fixtures own theirs, so the account's is never touched.
 function fixture(t:{after(fn:()=>void):void}) {
   const run=newTestScratch("canonical-environment-run");t.after(()=>{removable(run);rmSync(run,{recursive:true,force:true});});
-  return {run,base:{PATH:process.env.PATH,HOME:homedir(),XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,JAVA_HOME:"/jdk with spaces",CARGO_HOME:"/cargo",RUSTUP_HOME:"/rustup"}};
+  return {run,base:{PATH:process.env.PATH,HOME:join(run,"home"),XDG_RUNTIME_DIR:process.env.XDG_RUNTIME_DIR,DBUS_SESSION_BUS_ADDRESS:process.env.DBUS_SESSION_BUS_ADDRESS,JAVA_HOME:"/jdk with spaces",CARGO_HOME:"/cargo",RUSTUP_HOME:"/rustup"}};
 }
 
 test("canonical Git status keeps its index unchanged after a stat refresh",t=>{
