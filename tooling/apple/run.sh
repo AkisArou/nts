@@ -29,7 +29,7 @@ ssh_opts=(-o BatchMode=yes -o ConnectTimeout=5 -o StrictHostKeyChecking=accept-n
 # Reachable means it answers, not that it answers within ssh_opts' 5 s. The
 # first Apple project of a gate probes at the gate's busiest moment, and a VM
 # guest starved of host CPU then missed even one 30 s connect (ios-form, two
-# trains, 2026-10-16) while answering at once alone. So an attempt that timed
+# landings, 2026-10-16) while answering at once alone. So an attempt that timed
 # out is tried again, up to three; one that failed fast -- a refused port, a
 # Mac that is down, 6 ms -- is not, so a missing Mac costs nothing. The first
 # ConnectTimeout given is the one ssh uses. Why it gave up goes to stderr.
@@ -49,7 +49,7 @@ reachable() {
 # builds its projects in parallel, and a 4 GB VM running an iOS simulator beside
 # AppKit apps, on a host busy with the rest of the gate, stopped answering ssh
 # within ConnectTimeout: the first project timed out and every one after it read
-# "no Mac reachable" (two trains, 2026-10-16), where the same step alone ran all
+# "no Mac reachable" (two landings, 2026-10-16), where the same step alone ran all
 # 61. Taken before the reachability probe too, so a probe never measures a Mac
 # busy with someone else's run; held until this script exits.
 exec 9>"${XDG_CACHE_HOME:-$HOME/.cache}/nts-mac.lock"

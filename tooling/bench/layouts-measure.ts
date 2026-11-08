@@ -35,10 +35,7 @@ function conditions() {
   const mem = /^MemAvailable:\s+(\d+) kB$/m.exec(readFileSync('/proc/meminfo', 'utf8'));
   if (!mem) throw new Error('MemAvailable missing');
   const disk = statfsSync(dir);
-  let gate: string | null = null;
-  try { gate = readFileSync('/home/akisarou/.cache/nts-parallel-20261004/mainctl/GATE-RUNNING', 'utf8').trim(); }
-  catch (e) { if (e.code !== 'ENOENT') throw e; }
-  return { utc: new Date().toISOString(), memGiB: Number(mem[1]) / 1024 ** 2, diskGiB: disk.bavail * disk.bsize / 1024 ** 3, load: readFileSync('/proc/loadavg', 'utf8').trim(), gate };
+  return { utc: new Date().toISOString(), memGiB: Number(mem[1]) / 1024 ** 2, diskGiB: disk.bavail * disk.bsize / 1024 ** 3, load: readFileSync('/proc/loadavg', 'utf8').trim() };
 }
 async function admit() {
   for (;;) {
@@ -152,7 +149,7 @@ function report(){
     rounds.push({timeA:Math.sqrt(a.value.nsPerOp*r.value.nsPerOp),timeB:b.value.nsPerOp,
      cyclesA:Math.sqrt(a.counters.cycles*r.counters.cycles)/spec.n,cyclesB:b.counters.cycles/spec.n,
      instructionsA:Math.sqrt(a.counters.instructions*r.counters.instructions)/spec.n,instructionsB:b.counters.instructions/spec.n,
-     load:[a.start.load,b.start.load,r.start.load],gates:[a.start.gate,b.start.gate,r.start.gate],rssA:Math.sqrt(a.rssKiB*r.rssKiB),rssB:b.rssKiB});
+     load:[a.start.load,b.start.load,r.start.load],rssA:Math.sqrt(a.rssKiB*r.rssKiB),rssB:b.rssKiB});
    }
    layouts.push({seed:spec.seed,n:spec.n,addresses:spec.arms.map((a:any)=>({arm:a.arm,hot:a.hot})),rounds,
     timeA:mean(rounds.map(r=>r.timeA)),timeB:mean(rounds.map(r=>r.timeB)),cyclesA:mean(rounds.map(r=>r.cyclesA)),cyclesB:mean(rounds.map(r=>r.cyclesB)),
@@ -166,7 +163,7 @@ function report(){
  const pct=(n:number)=>((n-1)*100).toFixed(2)+'%';
  let text=`# Native layout sampling
 
-Five predefined seeded function orders per arm; five A/B/A brackets per layout, rotated/reversed layout scheduling. Same compiled inputs, shipping optimization flags and matched hot counts as the prior matrix. All layouts pass output equivalence. Hot instructions (including anonymous read-only constant bytes) are unchanged within each arm. PMU counts cover only the acknowledged hot window, running >=99%; RSS and host load/train state are retained per process. No Node/Bun ratio is inferred from another sitting.
+Five predefined seeded function orders per arm; five A/B/A brackets per layout, rotated/reversed layout scheduling. Same compiled inputs, shipping optimization flags and matched hot counts as the prior matrix. All layouts pass output equivalence. Hot instructions (including anonymous read-only constant bytes) are unchanged within each arm. PMU counts cover only the acknowledged hot window, running >=99%; RSS and host load are retained per process. No Node/Bun ratio is inferred from another sitting.
 
 Each layout contributes the mean of its five brackets (A is the geometric mean of the two anchors). Arm means give equal weight to every layout. Reported layout spread is the full min/max range relative to the mean; the decision floor is the larger arm spread or largest intra-layout A-repeat drift. All seeds are retained, with no favored link.
 

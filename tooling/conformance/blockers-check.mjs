@@ -213,7 +213,7 @@ function run(args) {
 // across commits keeps a directory a fixture left behind when a later commit
 // does not have it -- its ignored node_modules survive the clean -- and reading
 // that directory's main.ts failed the step with ENOENT (2026-10-14, six GTK
-// fixtures of a train that had not landed). Outside a checkout, the directory.
+// fixtures of a change that had not landed). Outside a checkout, the directory.
 const tracked = (() => {
   const listed = spawnSync("git", ["ls-files", "-z", "--", "."], { cwd: FIXTURES, encoding: "utf8" });
   return listed.status === 0 ? new Set(listed.stdout.split("\0").filter(Boolean).map((p) => p.split("/")[0])) : null;

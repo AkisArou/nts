@@ -69,13 +69,13 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
   });
   if (load.some((n: number) => !Number.isFinite(n))) throw Error('invalid host load');
   const conditions = {start: rows[0].start.utc, end: rows.at(-1).end.utc,
-    loadMin: Math.min(...load), loadMax: Math.max(...load), gates: [...new Set(rows.map((r: any) => r.start.gate))]};
+    loadMin: Math.min(...load), loadMax: Math.max(...load)};
   const provenance = provenanceFile ? JSON.parse(readFileSync(provenanceFile, 'utf8')) : null;
-  if (provenance?.calibration === true && (provenance.captureExperiments !== false || conditions.gates.some(g => g !== null) || conditions.loadMax > 2))
-    throw Error('reference table requires no train/capture and load at most 2 throughout');
+  if (provenance?.calibration === true && (provenance.captureExperiments !== false || conditions.loadMax > 2))
+    throw Error('reference table requires no capture experiment and load at most 2 throughout');
   table = table.replace('# Native layout ranges\n', '# Native layout ranges\n\n' +
-    (provenance?.calibration === true ? 'Quiet reference sitting for future A/Bs.' : 'Change evidence only. Under a train or capture load, these ranges are upper bounds; future A/Bs consult the separate quiet-reference sitting.') + '\n');
-  table += `\nSitting: ${conditions.start}–${conditions.end}; host load ${conditions.loadMin}–${conditions.loadMax}. Active train records: ${conditions.gates.map(g => g ?? 'none').join('; ')}.\n`;
+    (provenance?.calibration === true ? 'Quiet reference sitting for future A/Bs.' : 'Change evidence only. Under a capture experiment or host load, these ranges are upper bounds; future A/Bs consult the separate quiet-reference sitting.') + '\n');
+  table += `\nSitting: ${conditions.start}–${conditions.end}; host load ${conditions.loadMin}–${conditions.loadMax}.\n`;
   if (provenance) table += '\nCompiler/link provenance is retained in `ranges.json`.\n';
   mkdirSync(dirname(resolve(output)), {recursive: true});
   mkdirSync(output, {recursive: true});

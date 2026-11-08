@@ -222,7 +222,7 @@ const RUNS_FOR_STABILITY = 5;
  * block ending. Node begins it sooner than this module's JavaScript scheduler
  * on top of node does, so on an idle machine both say `immediate3` first; under
  * a loaded gate ours said `timeout4` first, ten runs of ten, confirmed three
- * times, on four trains that did not touch timers. Node says the same when its
+ * times, on four landings that did not touch timers. Node says the same when its
  * callbacks block twice as long.
  *
  * So a divergence whose order is node's own at that speed is a race on

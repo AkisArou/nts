@@ -241,7 +241,7 @@ runs five A/B/A brackets per layout, rotating and reversing layout order across
 rounds. Each process checks checksum, exact count, repeated-addition sink and
 exit/stderr. Native warmup is one untimed call. PMU cycles, instructions,
 branches and branch misses cover only the acknowledged hot window, with at
-least 99% counter running time. Raw streams, argv, RSS, load, active train,
+least 99% counter running time. Raw streams, argv, RSS, load,
 counter files and in-flight checkpoints survive failures. Failed or incomplete
 sittings cannot publish range tables.
 
@@ -256,11 +256,11 @@ at the recorded layout count and pins, not a universal bound. Unmeasured rows
 have no calibrated range.
 
 A future-reference range table must come from a dedicated sitting with no
-train, no capture experiment and low load. Keep a loaded sitting as the change's
-evidence; its ranges are upper bounds. Pass a provenance JSON with
-`"calibration": true, "captureExperiments": false` to `layouts-record.ts` only
-for the dedicated quiet sitting, after coordinating with the other lanes.
-Publication rejects any recorded active train or one-minute load above 2.
+capture experiment and low load, taken under `tooling/gate/with-lock.sh --wait`.
+Keep a loaded sitting as the change's evidence; its ranges are upper bounds.
+Pass a provenance JSON with `"calibration": true, "captureExperiments": false`
+to `layouts-record.ts` only for the dedicated quiet sitting. Publication
+rejects a one-minute load above 2.
 The optional third argument is preserved beside the recorded conditions and
 compiler/link inputs in `ranges.json`.
 
