@@ -5,6 +5,6 @@
     "rootDir": "../..",
     "composite": false
   },
-  "files": ["node-preloads.ts", "node-preload-runtime.ts", "outcomes-node-preload.ts", "node-paths.ts", "outcomes-project.ts", "outcomes-oracle.ts"],
+  "files": ["node-preloads.ts", "node-preload-runtime.ts", "outcomes-node-preload.ts", "node-paths.ts", "outcomes-project.ts", "outcomes-oracle.ts", "zip-codec-bindings.test.ts"],
   "include": []
 }

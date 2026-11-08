@@ -7,42 +7,35 @@ import { ERR_ZIP_ENTRY_CORRUPT, ERR_ZIP_ENTRY_TOO_LARGE, ERR_ZIP_UNSUPPORTED_FEA
 import { kMaxLength } from "../../../buffer/src/main.ts";
 import { compose } from "../../../stream/src/main.ts";
 import { FLAG_ENCRYPTED, METHOD_STORE, METHOD_DEFLATE, METHOD_ZSTD } from "./constants.ts";
-import * as zlibFacade from "../main.ts";
+import {
+  deflateRaw as facadeDeflateRaw,
+  inflateRaw as facadeInflateRaw,
+  createDeflateRaw as facadeCreateDeflateRaw,
+  createInflateRaw as facadeCreateInflateRaw,
+  zstdCompress as facadeZstdCompress,
+  zstdDecompress as facadeZstdDecompress,
+  createZstdCompress as facadeCreateZstdCompress,
+  createZstdDecompress as facadeCreateZstdDecompress,
+  deflateRawSync as facadeDeflateRawSync,
+  zstdCompressSync as facadeZstdCompressSync,
+  inflateRawSync as facadeInflateRawSync,
+  zstdDecompressSync as facadeZstdDecompressSync,
+} from "../main.ts";
 
 
-// Compression/decompression plumbing over the lazily-required `zlib` facade:
-// one-shot (async and sync) and streaming deflate/inflate/zstd helpers, plus
-// the member decoders that add method dispatch, size bounding, and CRC-32
-// verification on top.
-
-
-
-
-
-
-
-
-
-// `internal/zip` is required from `lib/zlib.js`, so it must not require the
-// public `zlib` facade at load time (its module.exports is not yet
-// populated). Compression is only needed once an entry is actually read or
-// written, well after `zlib.js` has finished loading, so a lazy reference is
-// enough to break the cycle.
-let zlib: typeof zlibFacade | undefined;
-function lazyZlib() : typeof zlibFacade {
-  zlib ??= zlibFacade;
-  return zlib;
-}
+// Named imports are live ESM bindings. Read them only inside the codec calls:
+// the parent zlib module imports ZIP before completing its initialization.
+// No module namespace needs to be stored or returned as a runtime value.
 
 // -- compression plumbing ------------------------------------------------------
 
 // The one-shot (async/sync) and streaming helpers below are thin adapters that
-// promisify or stream-wrap the lazy `zlib` facade; individually trivial, they
+// promisify or stream-wrap the parent `zlib` facade; individually trivial, they
 // exist only so the rest of the module never touches `zlib` directly.
 
 function deflateRawAsync(buffer: Buffer) : Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    lazyZlib().deflateRaw(buffer, (err, result) => {
+    facadeDeflateRaw(buffer, (err, result) => {
       if (err) reject(err);
       else resolve(result as Buffer);
     });
@@ -51,7 +44,7 @@ function deflateRawAsync(buffer: Buffer) : Promise<Buffer> {
 
 function inflateRawAsync(buffer: Buffer, options: { maxOutputLength: number }) : Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    lazyZlib().inflateRaw(buffer, options, (err, result) => {
+    facadeInflateRaw(buffer, options, (err, result) => {
       if (err) reject(err);
       else resolve(result as Buffer);
     });
@@ -67,16 +60,16 @@ function pumpThroughTransform(source: AsyncIterable<Uint8Array>, transform: Tran
 }
 
 function deflateRawStream(source: AsyncIterable<Uint8Array>) : AsyncIterable<Buffer> {
-  return pumpThroughTransform(source, lazyZlib().createDeflateRaw());
+  return pumpThroughTransform(source, facadeCreateDeflateRaw());
 }
 
 function inflateRawStream(source: AsyncIterable<Uint8Array>) : AsyncIterable<Buffer> {
-  return pumpThroughTransform(source, lazyZlib().createInflateRaw());
+  return pumpThroughTransform(source, facadeCreateInflateRaw());
 }
 
 function zstdCompressAsync(buffer: Buffer) : Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    lazyZlib().zstdCompress(buffer, (err, result) => {
+    facadeZstdCompress(buffer, (err, result) => {
       if (err) reject(err);
       else resolve(result as Buffer);
     });
@@ -85,7 +78,7 @@ function zstdCompressAsync(buffer: Buffer) : Promise<Buffer> {
 
 function zstdDecompressAsync(buffer: Buffer, options: { maxOutputLength: number }) : Promise<Buffer> {
   return new Promise((resolve, reject) => {
-    lazyZlib().zstdDecompress(buffer, options, (err, result) => {
+    facadeZstdDecompress(buffer, options, (err, result) => {
       if (err) reject(err);
       else resolve(result as Buffer);
     });
@@ -93,20 +86,20 @@ function zstdDecompressAsync(buffer: Buffer, options: { maxOutputLength: number 
 }
 
 function zstdCompressStream(source: AsyncIterable<Uint8Array>) : AsyncIterable<Buffer> {
-  return pumpThroughTransform(source, lazyZlib().createZstdCompress());
+  return pumpThroughTransform(source, facadeCreateZstdCompress());
 }
 
 function zstdDecompressStream(source: AsyncIterable<Uint8Array>) : AsyncIterable<Buffer> {
-  return pumpThroughTransform(source, lazyZlib().createZstdDecompress());
+  return pumpThroughTransform(source, facadeCreateZstdDecompress());
 }
 
 
 function deflateRawSync(buffer: Buffer) : Buffer {
-  return lazyZlib().deflateRawSync(buffer) as Buffer;
+  return facadeDeflateRawSync(buffer) as Buffer;
 }
 
 function zstdCompressSync(buffer: Buffer) : Buffer {
-  return lazyZlib().zstdCompressSync(buffer) as Buffer;
+  return facadeZstdCompressSync(buffer) as Buffer;
 }
 
 /**
@@ -268,13 +261,13 @@ function decodeMemberSync(compressed: Buffer, info: ZipMemberInfo, options?: Zip
   let data: Buffer;
   if (info.method === METHOD_DEFLATE) {
     try {
-      data = lazyZlib().inflateRawSync(compressed, { maxOutputLength: cap }) as Buffer;
+      data = facadeInflateRawSync(compressed, { maxOutputLength: cap }) as Buffer;
     } catch (err) {
       rethrowDecodeFailure(err as DecodeError, info, METHOD_DEFLATE);
     }
   } else if (info.method === METHOD_ZSTD) {
     try {
-      data = lazyZlib().zstdDecompressSync(compressed, { maxOutputLength: cap }) as Buffer;
+      data = facadeZstdDecompressSync(compressed, { maxOutputLength: cap }) as Buffer;
     } catch (err) {
       rethrowDecodeFailure(err as DecodeError, info, METHOD_ZSTD);
     }
