@@ -10,7 +10,7 @@ import {join} from "node:path";
 import {test} from "node:test";
 import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
 import type { Recorder } from "./records.ts";
-import {cycle, followVerified, parseOptions, partSteps, type Effects} from "./service.ts";
+import {cycle, followVerified, parseOptions, partSteps, recordPending, type Effects} from "./service.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
 
@@ -469,4 +469,21 @@ test("a culprit its own part is green after is cleared and its waiting revert wi
   assert.deepEqual(state.culprits, []);
   assert.deepEqual(fx.withdrawn, [revert], "landing the revert would take out a commit the core is green with");
   assert.ok(fx.lines.some(line => line === `${b.slice(0, 12)} is no culprit: core was green after it at ${fixed.slice(0, 12)}; its revert ${revert.slice(0, 12)} is withdrawn`), fx.lines.join("\n"));
+});
+
+test("the recorder's output reaches the run's log while it runs, so no buffer bounds it", t => {
+  const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run"), log = join(run, "records.log");
+  mkdirSync(join(tree, "tooling/records"), { recursive: true });
+  mkdirSync(run);
+  // The fake recorder looks for its own first line in the log before it exits.
+  writeFileSync(join(tree, "tooling/records/record-pending.ts"), `import {existsSync, readFileSync} from "node:fs";
+process.stdout.write("first line\\n");
+const seen = existsSync(${JSON.stringify(log)}) && readFileSync(${JSON.stringify(log)}, "utf8").includes("first line");
+process.stdout.write(seen ? "streamed\\n" : "buffered\\n");
+process.exit(seen ? 3 : 4);
+`);
+  const result = recordPending(tree, "pin", run);
+  assert.equal(result.status, 3, readFileSync(log, "utf8"));
+  assert.equal(readFileSync(log, "utf8"), "first line\nstreamed\n");
+  assert.equal(result.output, "first line\nstreamed\n", "the result carries the log's tail");
 });

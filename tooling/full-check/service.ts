@@ -30,7 +30,7 @@
 //   - held (a step that could not finish): nothing moves; it runs again when
 //     main moves, or after half an hour.
 import { spawnSync } from "node:child_process";
-import { existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, fstatSync, lstatSync, mkdirSync, openSync, readdirSync, readFileSync, readSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -494,20 +494,39 @@ function stamp(line: string): void {
   process.stdout.write(`${new Date().toISOString()} ${line}\n`);
 }
 
-/** record-pending.ts in the tree at the run's commit, with the run's pin, its output kept in the run. */
+/** The last `bytes` of a file, without reading the rest. */
+function tail(file: string, bytes = 1 << 16): string {
+  const fd = openSync(file, "r");
+  try {
+    const size = fstatSync(fd).size, length = Math.min(size, bytes), buffer = Buffer.alloc(length);
+    readSync(fd, buffer, 0, length, size - length);
+    return buffer.toString("utf8");
+  } finally { closeSync(fd); }
+}
+
+/**
+ * record-pending.ts in the tree at the run's commit, with the run's pin, its
+ * output written to the run's records.log as it comes. It used to be captured
+ * whole and written after: at 2df45c6ebdb5 the recorders printed 1.7 million
+ * lines, past the 256 MiB buffer, and spawnSync killed record-pending (ENOBUFS)
+ * before its later kinds ran. The result's output is the log's tail.
+ */
 export const recordPending: Recorder = (tree, pin, run) => {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: `no tooling/records/record-pending.ts at this commit` };
-  const tmp = join(run, "records-tmp");
+  const tmp = join(run, "records-tmp"), log = join(run, "records.log");
   mkdirSync(tmp, { recursive: true });
-  const r = spawnSync(process.execPath, [script], {
-    cwd: tree, encoding: "utf8", maxBuffer: 1 << 28,
-    env: { ...hostEnvironment(process.env), ...FIXED_AMBIENT, NTS_BIN: pin, NTS_CHECKERS: "1", TMPDIR: tmp },
-  });
-  const output = `${r.stdout ?? ""}${r.stderr ?? ""}${r.error ? `\n${r.error.message}` : ""}`;
-  writeFileSync(join(run, "records.log"), output);
+  const out = openSync(log, "w");
+  let r: ReturnType<typeof spawnSync>;
+  try {
+    r = spawnSync(process.execPath, [script], {
+      cwd: tree, stdio: ["ignore", out, out],
+      env: { ...hostEnvironment(process.env), ...FIXED_AMBIENT, NTS_BIN: pin, NTS_CHECKERS: "1", TMPDIR: tmp },
+    });
+  } finally { closeSync(out); }
+  if (r.error) appendFileSync(log, `\n${r.error.message}\n`);
   rmSync(tmp, { recursive: true, force: true });
-  return { status: r.status ?? 1, output };
+  return { status: r.status ?? 1, output: tail(log) };
 };
 
 /** Wait, without spinning, until MemAvailable reaches the threshold AGENTS.md sets. */
