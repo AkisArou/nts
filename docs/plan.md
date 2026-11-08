@@ -143,6 +143,10 @@ ids, kept so the records that cite them still resolve.
   `refs/cited/252b3ba25611` with its first caller; a field overwritten in a
   loop leaks (#126), its fixture on `helper4/lifetime-field-overwrite-finding`
   landing with the fix.
+- Reduce [jetstream-ai-astar](../benchmarks/cases/jetstream-ai-astar)'s emitted C
+  size or function shape at the native
+  ThinLTO link: its nts-bench link spins in `ld` instead of finishing. The
+  benchmark build bound records the timeout and continues to the next case.
 - LLVM at least as fast as C (#97): `compiler/llvm-linkage-nsw`; land
   7858d092d (nsw and final-link preemption) with LLVM benchmark rows, then
   rebuild linkage by product and emission pruning on today's

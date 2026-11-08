@@ -42,6 +42,25 @@ test("the bound is the command's own CPU: a child's CPU reaches only the group's
   assert.equal(f.read()?.kind, "runaway");
 });
 
+test("a build bounds each process's own CPU, so a waiting driver cannot hide a spinning linker", async t => {
+  const f = frame(t);
+  const result = await activeCommand(spinningChild[0], [...spinningChild[1]], { cwd: process.cwd(), env: f.env, eachProcessCpuSeconds: 0.3, cpuBudgetSeconds: 60, pollMs: 20 });
+  assert.match(result.timeout ?? "", /used its 0\.3 s CPU bound: process \d+ own CPU reached/);
+  assert.equal(result.runaway, undefined);
+  assert.equal(result.signal, "SIGKILL");
+  assert.equal(f.read(), null, "a build timeout is a recorded case failure, never a step hold");
+});
+
+test("the build bound does not add together different processes' own CPU", async t => {
+  const f = frame(t);
+  const worker="import time\nstart=time.process_time()\nwhile time.process_time()-start<0.2: pass";
+  const driver=`import subprocess\nchildren=[subprocess.Popen(['python3','-c',${JSON.stringify(worker)}]) for _ in range(3)]\nfor child in children: assert child.wait()==0`;
+  const result = await activeCommand("python3", ["-c",driver], {cwd:process.cwd(),env:f.env,eachProcessCpuSeconds:0.3,pollMs:20});
+  assert.equal(result.status,0,result.out);
+  assert.equal(result.timeout,undefined);
+  assert.equal(f.read(),null);
+});
+
 test("the helper's exits: the command's own, 125 for a timeout, 124 for what it could not measure", async t => {
   const out: string[] = [], err: string[] = [];
   const write = { out: (text: string) => { out.push(text); }, err: (text: string) => { err.push(text); } };
@@ -61,6 +80,8 @@ test("the helper's exits: the command's own, 125 for a timeout, 124 for what it 
 test("the helper's arguments", () => {
   assert.deepEqual(parseCaseBound(["--compile", "--", "nts", "emit-jvm", "x"]),
     { ownCpuSeconds: COMPILE_CPU_BOUND_SECONDS, cpuSeconds: COMMAND_CPU_BUDGET_SECONDS, idleMs: 5 * 60_000, command: "nts", args: ["emit-jvm", "x"] });
+  assert.deepEqual(parseCaseBound(["--build", "--", "clang++", "a.o"]),
+    { eachProcessCpuSeconds: COMPILE_CPU_BOUND_SECONDS, cpuSeconds: COMMAND_CPU_BUDGET_SECONDS, idleMs: 5 * 60_000, command: "clang++", args: ["a.o"] });
   assert.deepEqual(parseCaseBound(["--cpu", "14400", "--idle", "1800", "--", "node", "r.ts"]),
     { cpuSeconds: 14400, idleMs: 1_800_000, command: "node", args: ["r.ts"] });
   for (const bad of [[], ["--", ], ["nts"], ["--cpu", "0", "--", "x"], ["--idle", "soon", "--", "x"], ["--wall", "1", "--", "x"]]) {

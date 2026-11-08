@@ -4,7 +4,9 @@ import { readFileSync } from "node:fs";
 import { stripTypeScriptTypes } from "node:module";
 import { parse } from "acorn";
 import { typedTimer } from "./typed-timer.ts";
-import { parseMeasurement } from "./host-columns.ts";
+import { parseMeasurement, buildCommand, buildFailure } from "./host-columns.ts";
+import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
+import {testScratch} from "../gate/test-scratch.ts";
 function receipt() {
   return {
     command: ["probe"],
@@ -60,4 +62,33 @@ test("host observations distinguish checksum, CPU budget, abort and hang", () =>
     assert.equal(observed.status, status);
     assert.equal(observed.nanoseconds, null);
   }
+});
+
+test("comparator builds share the compile bound and record a spinning child without blocking the next build", async t => {
+  const root=testScratch(t,"comparator-build-bound");
+  const supervise: typeof activeCommand=(command,args,options)=>{
+    assert.equal(options.eachProcessCpuSeconds,COMPILE_CPU_BOUND_SECONDS);
+    return activeCommand(command,args,{...options,eachProcessCpuSeconds:0.3,pollMs:20});
+  };
+  const driver="require('node:child_process').spawn('python3',['-c','while True: pass'],{stdio:'inherit'});";
+  const stopped=await buildCommand(process.execPath,["-e",driver],root,{},supervise);
+  assert.match(stopped.timeout??"",/process \d+ own CPU reached/);
+  const cell=buildFailure(stopped);
+  assert.equal(cell.status,"TIMED_OUT");
+  assert.match(cell.reason??"",/^timed out building:/);
+  assert.equal(cell.nanoseconds,null);
+  const next=await buildCommand(process.execPath,["-e","process.stdout.write('next built')"],root,{},supervise);
+  assert.equal(next.status,0,next.stderr);
+  assert.equal(next.stdout,"next built");
+});
+
+test("an unmeasured comparator build keeps its hold instead of yielding a failure cell", async t => {
+  const root=testScratch(t,"comparator-build-hold");
+  const frame=root+"/result.json";
+  const supervise: typeof activeCommand=(command,args,options)=>activeCommand(command,args,{...options,idleMs:200,pollMs:20});
+  await assert.rejects(()=>buildCommand("python3",["-c","import time; time.sleep(60)"],root,
+    {NTS_GATE_STEP_RESULT:frame,NTS_GATE_STEP:"benches",NTS_GATE_STEP_ATTEMPT:"hold"},supervise),/build not measured:.*hung/);
+  const result=JSON.parse(readFileSync(frame,"utf8"));
+  assert.equal(result.kind,"hung");
+  assert.equal(result.verdict,"NOT RUN");
 });

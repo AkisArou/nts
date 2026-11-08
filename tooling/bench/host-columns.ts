@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
+import {activeCommand, COMPILE_CPU_BOUND_SECONDS} from "../gate/active-command.ts";
+import {ToolingInstrumentError, publishToolingFailure} from "../gate/step-result.ts";
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -14,6 +16,7 @@ type Receipt = {
   finishedAt: string;
   status: number | null;
   signal: string | null;
+  timeout?: string;
   stdout: string;
   stderr: string;
   wallNanoseconds: number;
@@ -64,6 +67,25 @@ async function admission(): Promise<void> {
   )
     await new Promise((r) => setTimeout(r, 2000));
 }
+/** Untimed compiler and linker work uses the same per-process policy as native builds. */
+export async function buildCommand(program: string, args: string[], cwd: string,
+  extra: Record<string,string> = {}, supervise = activeCommand): Promise<Receipt> {
+  const command = ["taskset", "-c", affinity(false), program, ...args];
+  const startedAt = new Date().toISOString(), began = process.hrtime.bigint(), before = cpu5();
+  const env = {...process.env, ...extra};
+  delete env.NTS_BENCH_STARTUP;
+  for (const key of Object.keys(env)) if (key.startsWith("NTS_BENCH_COUNT_")) delete env[key];
+  const result = await supervise(command[0], command.slice(1), {cwd, env, eachProcessCpuSeconds: COMPILE_CPU_BOUND_SECONDS});
+  if(result.error) {
+    const error=new ToolingInstrumentError("tooling-setup", `benchmark build not measured: ${result.error.message}`);
+    publishToolingFailure(error,env);throw error;
+  }
+  if(result.hung || result.runaway)
+    throw new ToolingInstrumentError("tooling-setup", `benchmark build not measured: ${result.hung ?? result.runaway}`);
+  return {command, cwd, startedAt, finishedAt: new Date().toISOString(), status: result.status,
+    signal: result.signal, ...(result.timeout ? {timeout: result.timeout} : {}),
+    stdout: result.stdout, stderr: result.stderr, wallNanoseconds: Number(process.hrtime.bigint()-began), cpu5: delta(before,cpu5())};
+}
 async function execute(
   program: string,
   args: string[],
@@ -71,7 +93,10 @@ async function execute(
   timed: boolean,
   extra: Record<string, string> = {},
 ): Promise<Receipt> {
-  if (!timed) await admission();
+  if (!timed) {
+    await admission();
+    return buildCommand(program, args, cwd, extra);
+  }
   const command = [
     "timeout",
     "--kill-after=10s",
@@ -187,14 +212,14 @@ async function measure(
     },
   };
 }
-function buildFailure(receipt: Receipt): Cell {
+export function buildFailure(receipt: Receipt): Cell {
   return absent(
-    receipt.status === 124
+    receipt.timeout || receipt.status === 124
       ? "TIMED_OUT"
       : receipt.signal === "SIGXCPU"
         ? "OVER_BUDGET"
         : "BUILD_FAILED",
-    "Comparator build failed",
+    receipt.timeout ? `timed out building: ${receipt.timeout}` : "Comparator build failed",
     receipt,
   );
 }
@@ -256,7 +281,7 @@ export async function hostColumns(
         false,
       );
     cells["Bun AOT"] =
-      build.status === 0
+      build.status === 0 && !build.timeout
         ? await measure(binary, input, root, expected, build)
         : buildFailure(build);
   }
@@ -308,7 +333,7 @@ export async function hostColumns(
       report = JSON.parse(build.stdout);
     } catch {}
     if (
-      build.status === 0 &&
+      build.status === 0 && !build.timeout &&
       report?.success === true &&
       !report.diagnostics?.some((d) => d.code === "SC8001")
     )
@@ -352,5 +377,9 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
     root && name && harness && out,
     "host-columns.ts <root> <case> <harness> <output> [input]",
   );
-  console.log(JSON.stringify(await hostColumns(root, name, harness, input, out)));
+  try { console.log(JSON.stringify(await hostColumns(root, name, harness, input, out))); }
+  catch(error) {
+    if(!(error instanceof ToolingInstrumentError))throw error;
+    console.error(error.message);process.exitCode=2;
+  }
 }

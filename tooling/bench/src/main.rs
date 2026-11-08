@@ -35,6 +35,7 @@ use nts_core::hir;
 use nts_frontend_ts::Frontend;
 use serde::{Deserialize, Serialize};
 
+mod build;
 mod capture;
 mod cli;
 /// Counting mode: fixed-work `instructions:u` under perf's control FIFO.
@@ -319,6 +320,17 @@ fn repository_root(given: Option<&str>) -> Result<Utf8PathBuf> {
 }
 
 fn main() -> Result<()> {
+    let result = run();
+    if let Err(error) = &result
+        && error.is::<build::NotMeasured>()
+    {
+        eprintln!("{error:#}");
+        std::process::exit(2);
+    }
+    result
+}
+
+fn run() -> Result<()> {
     let args = cli::parse(std::env::args().skip(1))?;
     if args.command == cli::Command::Help {
         println!("{}", cli::USAGE);
@@ -381,16 +393,7 @@ fn main() -> Result<()> {
         let name = case.file_name().unwrap_or("?");
         let before = results::conditions(&root)?;
         let computed = run_case(&root, case, &out);
-        if let Err(error) = &computed {
-            row_failures.insert(
-                name.to_owned(),
-                RowFailure {
-                    kind: FailureKind::BuildFailed,
-                    reason: format!("{error:#}"),
-                },
-            );
-        }
-        if let Some(measurements) = accept_result(name, computed, &mut failed) {
+        if let Some(measurements) = accept_build(name, computed, &mut row_failures, &mut failed)? {
             let assembled = assemble(&measurements, lanes.is_some());
             if let Err(error) = &assembled {
                 row_failures.insert(
@@ -773,7 +776,9 @@ fn variants(
         }
         let libraries = if variant.generated == Generated::None {
             let libraries = reference_link::Libraries::read(case)?;
-            if let Some(reason) = libraries.probe(&out.join(format!("{name}.reference-link")))? {
+            if let Some(reason) =
+                libraries.probe(root, &out.join(format!("{name}.reference-link")))?
+            {
                 cpp_absence = Some(reason);
                 results.push(None);
                 continue;
@@ -812,7 +817,7 @@ fn variants(
                 continue;
             }
             Generated::JavaReference => {
-                results.push(java_cell(root, case, out, name));
+                results.push(java_cell(root, case, out, name)?);
                 continue;
             }
             Generated::Specialized => c.push(specialized.to_owned()),
@@ -1085,6 +1090,29 @@ struct Run {
     measured: Vec<Measurements>,
 }
 
+/// Build failures, including timeouts, stay in the saved row while the next case runs.
+fn accept_build<T>(
+    name: &str,
+    result: Result<T>,
+    failures: &mut std::collections::BTreeMap<String, RowFailure>,
+    failed: &mut Vec<String>,
+) -> Result<Option<T>> {
+    let result = match result {
+        Err(error) if error.is::<build::NotMeasured>() => return Err(error),
+        other => other,
+    };
+    if let Err(error) = &result {
+        failures.insert(
+            name.to_owned(),
+            RowFailure {
+                kind: FailureKind::BuildFailed,
+                reason: format!("{error:#}"),
+            },
+        );
+    }
+    Ok(accept_result(name, result, failed))
+}
+
 /// Keep the other rows and the rejected row's raw measurements, but never let
 /// a printed `failed:` line become a successful run (including filtered runs).
 fn accept_result<T>(name: &str, result: Result<T>, failed: &mut Vec<String>) -> Option<T> {
@@ -1147,6 +1175,11 @@ fn measure_hosts(
         .current_dir(root)
         .output()
         .context("running the standing comparators")?;
+    if output.status.code() == Some(2) {
+        return Err(
+            build::NotMeasured(String::from_utf8_lossy(&output.stderr).into_owned()).into(),
+        );
+    }
     if !output.status.success() {
         bail!(
             "host instrument failed: {}",
@@ -1406,9 +1439,17 @@ fn node_harness(
 ///
 /// So the reason is printed. Rule 6, in the harness that the rule is about: a
 /// dash that means "not measured" has to say so.
-fn java_cell(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path, name: &str) -> Option<Measured> {
+fn java_cell(
+    root: &Utf8Path,
+    case: &Utf8Path,
+    out: &Utf8Path,
+    name: &str,
+) -> Result<Option<Measured>> {
     match java_reference(root, case, out, name) {
-        Ok(measured) => measured,
+        Ok(measured) => Ok(measured),
+        Err(error) if error.is::<build::Timeout>() || error.is::<build::NotMeasured>() => {
+            Err(error)
+        }
         Err(error) => {
             println!(
                 "note: {:<16} has a ref.java that could not be measured, so its \
@@ -1416,7 +1457,7 @@ fn java_cell(root: &Utf8Path, case: &Utf8Path, out: &Utf8Path, name: &str) -> Op
                 name,
                 error.to_string().lines().next().unwrap_or("?"),
             );
-            None
+            Ok(None)
         }
     }
 }
@@ -1657,15 +1698,17 @@ fn run_driver(
     driver_path: &Utf8Path,
 ) -> Result<Measured> {
     let javac = java_tool("javac");
-    let built = nts_codegen_jvm::toolchain::command(javac)
-        .arg("-cp")
-        .arg(dir)
-        .arg("-d")
-        .arg(dir)
-        .arg(root.join("benchmarks/common/Bench.java"))
-        .arg(driver_path)
-        .output()
-        .context("running javac")?;
+    let built = build::output(
+        root,
+        nts_codegen_jvm::toolchain::command(javac)
+            .arg("-cp")
+            .arg(dir)
+            .arg("-d")
+            .arg(dir)
+            .arg(root.join("benchmarks/common/Bench.java"))
+            .arg(driver_path),
+    )
+    .context("running javac")?;
     if !built.status.success() {
         bail!("javac: {}", String::from_utf8_lossy(&built.stderr));
     }
@@ -1749,14 +1792,16 @@ fn handwritten_java(
     if let Some(ref classes) = awfy {
         javac.arg("-cp").arg(classes.as_str());
     }
-    let compiled = javac
-        .arg("-d")
-        .arg(dir.as_str())
-        .arg(case.join("ref.java").as_str())
-        .arg(root.join("benchmarks/common/Bench.java").as_str())
-        .arg(driver_path.as_str())
-        .output()
-        .context("running javac over a hand-written Java reference")?;
+    let compiled = build::output(
+        root,
+        javac
+            .arg("-d")
+            .arg(dir.as_str())
+            .arg(case.join("ref.java").as_str())
+            .arg(root.join("benchmarks/common/Bench.java").as_str())
+            .arg(driver_path.as_str()),
+    )
+    .context("running javac over a hand-written Java reference")?;
     if !compiled.status.success() {
         bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
     }
@@ -1789,13 +1834,15 @@ fn awfy_classes(root: &Utf8Path, out: &Utf8Path) -> Result<Option<Utf8PathBuf>> 
     std::fs::create_dir_all(&built)?;
     let mut listing = Vec::new();
     collect_java(&sources, &mut listing)?;
-    let compiled = nts_codegen_jvm::toolchain::command(java_tool("javac"))
-        .arg("-nowarn")
-        .arg("-d")
-        .arg(built.as_str())
-        .args(listing.iter().map(|path| path.as_str()))
-        .output()
-        .context("running javac over the Are We Fast Yet Java sources")?;
+    let compiled = build::output(
+        root,
+        nts_codegen_jvm::toolchain::command(java_tool("javac"))
+            .arg("-nowarn")
+            .arg("-d")
+            .arg(built.as_str())
+            .args(listing.iter().map(|path| path.as_str())),
+    )
+    .context("running javac over the Are We Fast Yet Java sources")?;
     if !compiled.status.success() {
         bail!("javac: {}", String::from_utf8_lossy(&compiled.stderr));
     }
@@ -2151,18 +2198,20 @@ fn compile(
                 "{}.o",
                 source.file_name().unwrap_or("unit").replace('.', "_")
             ));
-            let output = std::process::Command::new(driver)
-                .args(&shared)
-                .args(&extra)
-                .args(references::warning_flags(source)?)
-                .args(defines)
-                .args(&includes)
-                .arg("-c")
-                .arg(source)
-                .arg("-o")
-                .arg(&object)
-                .output()
-                .with_context(|| format!("running {driver}"))?;
+            let output = build::output(
+                root,
+                std::process::Command::new(driver)
+                    .args(&shared)
+                    .args(&extra)
+                    .args(references::warning_flags(source)?)
+                    .args(defines)
+                    .args(&includes)
+                    .arg("-c")
+                    .arg(source)
+                    .arg("-o")
+                    .arg(&object),
+            )
+            .with_context(|| format!("running {driver}"))?;
             if !output.status.success() {
                 bail!("{driver}: {}", String::from_utf8_lossy(&output.stderr));
             }
@@ -2173,16 +2222,18 @@ fn compile(
         }
     }
 
-    let link = std::process::Command::new("clang++")
-        .args(&shared)
-        .args(loops_at_link)
-        .args(&objects)
-        .arg("-o")
-        .arg(binary)
-        .arg("-lm")
-        .args(libraries.flags())
-        .output()
-        .context("linking")?;
+    let link = build::output(
+        root,
+        std::process::Command::new("clang++")
+            .args(&shared)
+            .args(loops_at_link)
+            .args(&objects)
+            .arg("-o")
+            .arg(binary)
+            .arg("-lm")
+            .args(libraries.flags()),
+    )
+    .context("linking")?;
     if !link.status.success() {
         bail!("link: {}", String::from_utf8_lossy(&link.stderr));
     }

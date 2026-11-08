@@ -1,10 +1,11 @@
 // One case's command under the shared supervisor (active-command.ts), for a
 // runner written in shell or a tool that runs one command at a time.
 //
-//   node tooling/gate/case-bound.ts [--compile] [--cpu <s>] [--idle <s>] -- <command> [argument ...]
+//   node tooling/gate/case-bound.ts [--compile | --build] [--cpu <s>] [--idle <s>] -- <command> [argument ...]
 //
 //   --compile  the command is a case's compile: past COMPILE_CPU_BOUND_SECONDS
 //              of its own CPU it timed out
+//   --build    the same compile bound on each process's own CPU, including linkers
 //   --cpu      the process group's CPU budget (default COMMAND_CPU_BUDGET_SECONDS)
 //   --idle     seconds with no output and no CPU before it is hung (default
 //              COMMAND_IDLE_GUARD_MS)
@@ -25,11 +26,11 @@ import { publishHung, publishRunaway, publishToolingFailure, ToolingInstrumentEr
 export const CASE_TIMEOUT_EXIT = 125;
 export const CASE_UNMEASURED_EXIT = 124;
 
-export type CaseBoundArguments = { ownCpuSeconds?: number; cpuSeconds: number; idleMs: number; command: string; args: string[] };
+export type CaseBoundArguments = { ownCpuSeconds?: number; eachProcessCpuSeconds?: number; cpuSeconds: number; idleMs: number; command: string; args: string[] };
 
 export function parseCaseBound(argv: readonly string[]): CaseBoundArguments {
   const rest = [...argv];
-  let ownCpuSeconds: number | undefined, cpuSeconds = COMMAND_CPU_BUDGET_SECONDS, idleMs = COMMAND_IDLE_GUARD_MS;
+  let ownCpuSeconds: number | undefined, eachProcessCpuSeconds: number | undefined, cpuSeconds = COMMAND_CPU_BUDGET_SECONDS, idleMs = COMMAND_IDLE_GUARD_MS;
   const seconds = (flag: string) => {
     const value = Number(rest.shift());
     if (!Number.isFinite(value) || value <= 0) throw new Error(`${flag} needs a positive number of seconds`);
@@ -39,13 +40,14 @@ export function parseCaseBound(argv: readonly string[]): CaseBoundArguments {
     const flag = rest.shift();
     if (flag === "--") break;
     if (flag === "--compile") ownCpuSeconds = COMPILE_CPU_BOUND_SECONDS;
+    else if (flag === "--build") eachProcessCpuSeconds = COMPILE_CPU_BOUND_SECONDS;
     else if (flag === "--cpu") cpuSeconds = seconds(flag);
     else if (flag === "--idle") idleMs = seconds(flag) * 1000;
-    else throw new Error(`usage: case-bound.ts [--compile] [--cpu <s>] [--idle <s>] -- <command> [argument ...]${flag === undefined ? "" : `; unknown argument ${flag}`}`);
+    else throw new Error(`usage: case-bound.ts [--compile | --build] [--cpu <s>] [--idle <s>] -- <command> [argument ...]${flag === undefined ? "" : `; unknown argument ${flag}`}`);
   }
   const [command, ...args] = rest;
   if (!command) throw new Error("case-bound.ts needs a command after --");
-  return { ...(ownCpuSeconds === undefined ? {} : { ownCpuSeconds }), cpuSeconds, idleMs, command, args };
+  return { ...(eachProcessCpuSeconds === undefined ? {} : { eachProcessCpuSeconds }), ...(ownCpuSeconds === undefined ? {} : { ownCpuSeconds }), cpuSeconds, idleMs, command, args };
 }
 
 /** Run one bounded case and say how it ended, as an exit status. */
@@ -57,6 +59,7 @@ export async function runCaseBound(bound: CaseBoundArguments, env: NodeJS.Proces
   try {
     result = await activeCommand(bound.command, bound.args, { cwd: process.cwd(), env: own, cpuBudgetSeconds: bound.cpuSeconds, idleMs: bound.idleMs,
       pollMs: Math.min(COMMAND_ACTIVITY_POLL_MS, bound.idleMs / 4),
+      ...(bound.eachProcessCpuSeconds === undefined ? {} : { eachProcessCpuSeconds: bound.eachProcessCpuSeconds }),
       ...(bound.ownCpuSeconds === undefined ? {} : { ownCpuSeconds: bound.ownCpuSeconds }) });
   } catch (error) {
     const failure = error instanceof ToolingInstrumentError ? error : new ToolingInstrumentError("tooling-setup", `cannot supervise ${bound.command}: ${String(error)}`);

@@ -68,7 +68,7 @@ function activitySnapshot(owned:ReadonlySet<number>):ReadonlyMap<number,ProcessA
   return records;
 }
 
-type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean)=>void;broken:(error:unknown)=>void};
+type ActivityWatch={group:number;started:number;pollMs:number;sample:(cpu:number,own:number,busy:boolean,processOwn:{pid:number;cpu:number})=>void;broken:(error:unknown)=>void};
 /** One snapshot per tick for every live command; activity stays group-local. */
 export class CommandActivitySampler {
   private readonly watches=new Set<ActivityWatch>();
@@ -94,8 +94,9 @@ export class CommandActivitySampler {
     let records:ReadonlyMap<number,ProcessActivity>;
     try{records=this.snapshot(new Set(watches.map(watch=>watch.group)));}
     catch(error){for(const watch of watches)watch.broken(error);return;}
-    const totals=new Map<number,number>(),busy=new Set<number>();
-    for(const record of records.values()){
+    const totals=new Map<number,number>(),busy=new Set<number>(),mostOwn=new Map<number,{pid:number;cpu:number}>();
+    for(const [pid,record] of records){
+      if(record.own>(mostOwn.get(record.session)?.cpu??0))mostOwn.set(record.session,{pid,cpu:record.own});
       totals.set(record.session,(totals.get(record.session)??0)+record.cpu);
       if(record.busy)busy.add(record.session);
     }
@@ -104,7 +105,7 @@ export class CommandActivitySampler {
       try{
         const leader=records.get(watch.group);
         if(leader&&(leader.started!==watch.started||leader.group!==watch.group||leader.session!==watch.group))throw new Error("command process-group identity changed");
-        watch.sample(totals.get(watch.group)??0,leader?.own??0,busy.has(watch.group));
+        watch.sample(totals.get(watch.group)??0,leader?.own??0,busy.has(watch.group),mostOwn.get(watch.group)??{pid:watch.group,cpu:0});
       }catch(error){watch.broken(error);}
     }
   }
@@ -113,9 +114,11 @@ const activitySampler=new CommandActivitySampler();
 
 export type ActiveResult={status:number|null;signal:NodeJS.Signals|null;out:string;stdout:string;stderr:string;error?:Error;hung?:string;runaway?:string;timeout?:string;elapsedMs:number};
 // `ownCpuSeconds` bounds the command's own CPU, its threads and not its
-// children: a case's compile. Past it the command is stopped and `timeout` says
+// children: a case's compile. `eachProcessCpuSeconds` applies the same kind of
+// bound independently to every process in a build session (a driver can wait
+// while its linker spends CPU). Past it the command is stopped and `timeout` says
 // so; nothing is published, because a timeout is the case's outcome, not a hold.
-type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;maxBuffer?:number;
+type Options={cwd:string;env:NodeJS.ProcessEnv;idleMs?:number;pollMs?:number;cpuBudgetSeconds?:number;ownCpuSeconds?:number;eachProcessCpuSeconds?:number;maxBuffer?:number;
   onActivity?:(event:{cpu:number;elapsedMs:number;pid:number})=>void};
 
 /** Own one process group while retaining the caller's cgroup and resource caps.
@@ -128,7 +131,8 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
     if(!Number.isFinite(idle)||idle<=0)throw new Error("command idle guard must be positive");
     const budget=options.cpuBudgetSeconds??COMMAND_CPU_BUDGET_SECONDS;
     if(!Number.isFinite(budget)||budget<=0)throw new Error("command CPU budget must be positive");
-    const ownBound=options.ownCpuSeconds;
+    const ownBound=options.ownCpuSeconds,processBound=options.eachProcessCpuSeconds;
+    if(processBound!==undefined&&(!Number.isFinite(processBound)||processBound<=0))throw new Error("build process CPU bound must be positive");
     if(ownBound!==undefined&&(!Number.isFinite(ownBound)||ownBound<=0))throw new Error("command own CPU bound must be positive");
     if(options.maxBuffer!==undefined&&(!Number.isSafeInteger(options.maxBuffer)||options.maxBuffer<1))throw new Error("command capture budget must be a positive integer");
     let frequency;
@@ -191,11 +195,15 @@ export function activeCommand(command:string,args:readonly string[],options:Opti
       const leader=processAt(child.pid);
       if(!leader||leader.group!==child.pid||leader.session!==child.pid)throw new Error("spawned command has no owned process group");
       started=leader.started;cpu=leader.cpu;
-      cancelActivity=activitySampler.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy)=>{
+      cancelActivity=activitySampler.watch({group:child.pid,started,pollMs:options.pollMs??COMMAND_ACTIVITY_POLL_MS,broken,sample:(measured,own,busy,processOwn)=>{
         try{
           const now=performance.now();
           if(ownBound!==undefined&&own/frequency>=ownBound){
             timeout=`${command} used its ${ownBound} s CPU bound: its own CPU reached ${(own/frequency).toFixed(3)} s`;
+            cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();return;
+          }
+          if(processBound!==undefined&&processOwn.cpu/frequency>=processBound){
+            timeout=`${command} used its ${processBound} s CPU bound: process ${processOwn.pid} own CPU reached ${(processOwn.cpu/frequency).toFixed(3)} s`;
             cancelActivity();stop();child.stdout.destroy();child.stderr.destroy();return;
           }
           if(measured/frequency>=budget){
