@@ -1,4 +1,5 @@
 {
+  "schema": 2,
   "arm": "nogc",
   "work_profile": "upstream-single-threaded-v2:checkers=1;rayon=1",
   "work_settings": {
@@ -7,12 +8,7 @@
     "rayon_num_threads": "1"
   },
   "counter_scope": "exec-inherited-user-instructions-v1",
-  "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
-  "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
-  "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1",
   "complete": true,
-  "total_cpu_s": 1977.1877990000003,
-  "maximum_spread": 0.001090542482069523,
   "modules": [
     {
       "module": "runtime/node/assert",
@@ -141,7 +137,12 @@
       ],
       "median_instructions": 168587701438,
       "median_cpu_s": 15.251367,
-      "spread": 0.0005742532725019345
+      "spread": 0.0005742532725019345,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/async_hooks",
@@ -270,7 +271,12 @@
       ],
       "median_instructions": 2809278482,
       "median_cpu_s": 0.228413,
-      "spread": 0.00001266916286035702
+      "spread": 0.00001266916286035702,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/buffer",
@@ -399,7 +405,12 @@
       ],
       "median_instructions": 8785754203,
       "median_cpu_s": 0.732094,
-      "spread": 0.000004681451918342461
+      "spread": 0.000004681451918342461,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/child_process",
@@ -528,7 +539,12 @@
       ],
       "median_instructions": 249779988627,
       "median_cpu_s": 23.209549,
-      "spread": 0.0006895734603749037
+      "spread": 0.0006895734603749037,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/cluster",
@@ -657,7 +673,12 @@
       ],
       "median_instructions": 271701952128,
       "median_cpu_s": 25.991421,
-      "spread": 0.00038060431981579157
+      "spread": 0.00038060431981579157,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/console",
@@ -786,7 +807,12 @@
       ],
       "median_instructions": 175411465645,
       "median_cpu_s": 17.385426,
-      "spread": 0.0005368443558808611
+      "spread": 0.0005368443558808611,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/crypto",
@@ -915,7 +941,12 @@
       ],
       "median_instructions": 289062818549,
       "median_cpu_s": 28.211335,
-      "spread": 0.0008533323946104954
+      "spread": 0.0008533323946104954,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/dgram",
@@ -1044,7 +1075,12 @@
       ],
       "median_instructions": 246689387340,
       "median_cpu_s": 23.825459,
-      "spread": 0.00016619417233321165
+      "spread": 0.00016619417233321165,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/diagnostics_channel",
@@ -1173,7 +1209,12 @@
       ],
       "median_instructions": 2627977809,
       "median_cpu_s": 0.21465599999999999,
-      "spread": 0.00001180650870247213
+      "spread": 0.00001180650870247213,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/dns",
@@ -1302,7 +1343,12 @@
       ],
       "median_instructions": 10722921821,
       "median_cpu_s": 0.9093199999999999,
-      "spread": 0.000003729964036747191
+      "spread": 0.000003729964036747191,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/events",
@@ -1431,7 +1477,12 @@
       ],
       "median_instructions": 161538517557,
       "median_cpu_s": 15.310049,
-      "spread": 0.0008312406957236007
+      "spread": 0.0008312406957236007,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/fs",
@@ -1560,7 +1611,12 @@
       ],
       "median_instructions": 337315988200,
       "median_cpu_s": 32.944002000000005,
-      "spread": 0.00047242211423070835
+      "spread": 0.00047242211423070835,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/http",
@@ -1689,7 +1745,12 @@
       ],
       "median_instructions": 335896073158,
       "median_cpu_s": 31.210034,
-      "spread": 0.0005253110576484143
+      "spread": 0.0005253110576484143,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/net",
@@ -1818,7 +1879,12 @@
       ],
       "median_instructions": 247366162029,
       "median_cpu_s": 22.742818999999997,
-      "spread": 0.00034495073547491373
+      "spread": 0.00034495073547491373,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/os",
@@ -1947,7 +2013,12 @@
       ],
       "median_instructions": 9450329905,
       "median_cpu_s": 0.801844,
-      "spread": 0.000003349523129081433
+      "spread": 0.000003349523129081433,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/path",
@@ -2076,7 +2147,12 @@
       ],
       "median_instructions": 7483625963,
       "median_cpu_s": 0.61732,
-      "spread": 0.0000035445438235637283
+      "spread": 0.0000035445438235637283,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/perf_hooks",
@@ -2205,7 +2281,12 @@
       ],
       "median_instructions": 173602910101,
       "median_cpu_s": 15.585318000000001,
-      "spread": 0.0002288508415777546
+      "spread": 0.0002288508415777546,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/process",
@@ -2334,7 +2415,12 @@
       ],
       "median_instructions": 334725134282,
       "median_cpu_s": 32.75074,
-      "spread": 0.0004263563571924589
+      "spread": 0.0004263563571924589,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/punycode",
@@ -2463,7 +2549,12 @@
       ],
       "median_instructions": 773269704,
       "median_cpu_s": 0.07837100000000001,
-      "spread": 0.000005869903288768796
+      "spread": 0.000005869903288768796,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/querystring",
@@ -2592,7 +2683,12 @@
       ],
       "median_instructions": 13314756083,
       "median_cpu_s": 1.119373,
-      "spread": 0.00006477816308891882
+      "spread": 0.00006477816308891882,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/readline",
@@ -2721,7 +2817,12 @@
       ],
       "median_instructions": 200699891965,
       "median_cpu_s": 19.333842,
-      "spread": 0.000557849272780242
+      "spread": 0.000557849272780242,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/stream",
@@ -2850,7 +2951,12 @@
       ],
       "median_instructions": 228053359861,
       "median_cpu_s": 22.960351000000003,
-      "spread": 0.00017260137275876275
+      "spread": 0.00017260137275876275,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/string_decoder",
@@ -2979,7 +3085,12 @@
       ],
       "median_instructions": 9127938856,
       "median_cpu_s": 0.763239,
-      "spread": 0.00004451095229418556
+      "spread": 0.00004451095229418556,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/timers",
@@ -3108,7 +3219,12 @@
       ],
       "median_instructions": 4674904809,
       "median_cpu_s": 0.403511,
-      "spread": 0.000007213433373953748
+      "spread": 0.000007213433373953748,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/tty",
@@ -3237,7 +3353,12 @@
       ],
       "median_instructions": 50262157,
       "median_cpu_s": 0.011125,
-      "spread": 0.000012255852378517673
+      "spread": 0.000012255852378517673,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/url",
@@ -3366,7 +3487,12 @@
       ],
       "median_instructions": 33665906368,
       "median_cpu_s": 2.828411,
-      "spread": 0.00009516162974243514
+      "spread": 0.00009516162974243514,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/util",
@@ -3495,7 +3621,12 @@
       ],
       "median_instructions": 172179019700,
       "median_cpu_s": 15.702504,
-      "spread": 0.001090542482069523
+      "spread": 0.001090542482069523,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "runtime/node/zlib",
@@ -3512,18 +3643,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 247774941997,
-          "user_s": 22.914826,
-          "sys_s": 0.230063,
-          "cpu_s": 23.144889000000003,
-          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1/runtime_node_zlib-1.perf",
+          "instructions": 351833308695,
+          "user_s": 33.176793,
+          "sys_s": 0.238378,
+          "cpu_s": 33.415171,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IAuDAK/runtime_node_zlib-1.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 23.31526109,
-          "listing_functions": 4130,
-          "listing_definitions": 4130,
-          "listing_sha256": "34d618c6778f5989cae4fb8f2b01544b229fec45c63ff0613187d932d04261f5"
+          "wall_s": 33.542339327,
+          "listing_functions": 4695,
+          "listing_definitions": 4695,
+          "listing_sha256": "fbae682e27186808a5d75b52f05a07a5e713595eb1ce11abcec6790f25b4c400"
         },
         {
           "module": "runtime/node/zlib",
@@ -3536,18 +3667,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 247767667836,
-          "user_s": 24.230741,
-          "sys_s": 0.168552,
-          "cpu_s": 24.399292999999997,
-          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1/runtime_node_zlib-2.perf",
+          "instructions": 351915279833,
+          "user_s": 32.970065,
+          "sys_s": 0.248286,
+          "cpu_s": 33.218351,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IAuDAK/runtime_node_zlib-2.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 24.580244179,
-          "listing_functions": 4130,
-          "listing_definitions": 4130,
-          "listing_sha256": "34d618c6778f5989cae4fb8f2b01544b229fec45c63ff0613187d932d04261f5"
+          "wall_s": 33.316694632,
+          "listing_functions": 4695,
+          "listing_definitions": 4695,
+          "listing_sha256": "fbae682e27186808a5d75b52f05a07a5e713595eb1ce11abcec6790f25b4c400"
         },
         {
           "module": "runtime/node/zlib",
@@ -3560,18 +3691,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 247788926106,
-          "user_s": 25.158477,
-          "sys_s": 0.237656,
-          "cpu_s": 25.396133000000003,
-          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1/runtime_node_zlib-3.perf",
+          "instructions": 351900885803,
+          "user_s": 32.802646,
+          "sys_s": 0.250336,
+          "cpu_s": 33.052982,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IAuDAK/runtime_node_zlib-3.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 25.475273382999994,
-          "listing_functions": 4130,
-          "listing_definitions": 4130,
-          "listing_sha256": "34d618c6778f5989cae4fb8f2b01544b229fec45c63ff0613187d932d04261f5"
+          "wall_s": 33.149566861,
+          "listing_functions": 4695,
+          "listing_definitions": 4695,
+          "listing_sha256": "fbae682e27186808a5d75b52f05a07a5e713595eb1ce11abcec6790f25b4c400"
         },
         {
           "module": "runtime/node/zlib",
@@ -3584,18 +3715,18 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 247762387907,
-          "user_s": 22.135945,
-          "sys_s": 0.155713,
-          "cpu_s": 22.291657999999998,
-          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1/runtime_node_zlib-4.perf",
+          "instructions": 351866059974,
+          "user_s": 32.242417,
+          "sys_s": 0.240411,
+          "cpu_s": 32.482828000000005,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IAuDAK/runtime_node_zlib-4.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 22.38370754699997,
-          "listing_functions": 4130,
-          "listing_definitions": 4130,
-          "listing_sha256": "34d618c6778f5989cae4fb8f2b01544b229fec45c63ff0613187d932d04261f5"
+          "wall_s": 32.58071585299999,
+          "listing_functions": 4695,
+          "listing_definitions": 4695,
+          "listing_sha256": "fbae682e27186808a5d75b52f05a07a5e713595eb1ce11abcec6790f25b4c400"
         },
         {
           "module": "runtime/node/zlib",
@@ -3608,23 +3739,28 @@
             "rayon_num_threads": "1"
           },
           "counter_scope": "exec-inherited-user-instructions-v1",
-          "instructions": 247770249339,
-          "user_s": 21.39926,
-          "sys_s": 0.156543,
-          "cpu_s": 21.555803,
-          "counter_file": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1/runtime_node_zlib-5.perf",
+          "instructions": 351881697422,
+          "user_s": 63.286651,
+          "sys_s": 0.329074,
+          "cpu_s": 63.615725,
+          "counter_file": "/home/akisarou/.cache/nts-compile-calibration/run-IAuDAK/runtime_node_zlib-5.perf",
           "status": 0,
           "signal": null,
           "counter_error": null,
-          "wall_s": 21.613800787999992,
-          "listing_functions": 4130,
-          "listing_definitions": 4130,
-          "listing_sha256": "34d618c6778f5989cae4fb8f2b01544b229fec45c63ff0613187d932d04261f5"
+          "wall_s": 64.25942594399999,
+          "listing_functions": 4695,
+          "listing_definitions": 4695,
+          "listing_sha256": "fbae682e27186808a5d75b52f05a07a5e713595eb1ce11abcec6790f25b4c400"
         }
       ],
-      "median_instructions": 247770249339,
-      "median_cpu_s": 23.144889000000003,
-      "spread": 0.00010711149187803137
+      "median_instructions": 351881697422,
+      "median_cpu_s": 33.218351,
+      "spread": 0.00023298288130835232,
+      "source": {
+        "commit": "2d289401cc732a36ac2385348370a0a604368c29",
+        "nts_sha256": "084babac19ca7c6b89b6187c8bf35f28ec35a41943e3bd7a1def76fbed00715f",
+        "raw_directory": "/home/akisarou/.cache/nts-compile-calibration/run-IAuDAK"
+      }
     },
     {
       "module": "runtime/web-platform",
@@ -3753,7 +3889,12 @@
       ],
       "median_instructions": 203947968037,
       "median_cpu_s": 18.709323,
-      "spread": 0.00033858090352367753
+      "spread": 0.00033858090352367753,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     },
     {
       "module": "tests/compile-time/escape-analysis-scaling",
@@ -3882,7 +4023,12 @@
       ],
       "median_instructions": 2006283641,
       "median_cpu_s": 0.138675,
-      "spread": 0.0000025265641578897657
+      "spread": 0.0000025265641578897657,
+      "source": {
+        "commit": "f61f23cbe681d559b85df16f4d357d6bdbdd4891",
+        "nts_sha256": "a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a",
+        "raw_directory": "/home/akisarou/.cache/nts-handover/compiler4/lowering-context102-r1/calibration-nogc-r1"
+      }
     }
   ],
   "tripwire_policy": {

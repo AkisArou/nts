@@ -1,7 +1,7 @@
 # counter-scope: exec-inherited-user-instructions-v1
 # work-profile: upstream-single-threaded-v2:checkers=1;rayon=1
 # arm: rc
-# compiler-sha256: a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a
+# compiler-provenance: per-module in results/compile-counter-rc-calibration.json
 # regression-ratio: 1.10
 # Five-repeat medians; policy/evidence: results/compile-counter-rc-calibration.json
 # Rerecord with node tooling/gate/compile-time.mjs --record --arm rc; explain why.
@@ -33,6 +33,6 @@ runtime/node/timers	5.518	0.500
 runtime/node/tty	0.051	0.011
 runtime/node/url	36.218	3.428
 runtime/node/util	186.088	18.144
-runtime/node/zlib	270.149	27.276
+runtime/node/zlib	379.935	64.240
 runtime/web-platform	219.435	22.327
 tests/compile-time/escape-analysis-scaling	3.335	0.218

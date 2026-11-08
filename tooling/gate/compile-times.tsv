@@ -1,7 +1,7 @@
 # counter-scope: exec-inherited-user-instructions-v1
 # work-profile: upstream-single-threaded-v2:checkers=1;rayon=1
 # arm: nogc
-# compiler-sha256: a99d37da6cdceeeeaaf7f1bcd4ffb00b567b7db995364de94ff0999bb12c486a
+# compiler-provenance: per-module in results/compile-counter-calibration.json
 # regression-ratio: 1.10
 # Five-repeat medians; policy/evidence: results/compile-counter-calibration.json
 # Rerecord with node tooling/gate/compile-time.mjs --record --arm nogc; explain why.
@@ -33,6 +33,6 @@ runtime/node/timers	4.675	0.404
 runtime/node/tty	0.050	0.011
 runtime/node/url	33.666	2.828
 runtime/node/util	172.179	15.703
-runtime/node/zlib	247.770	23.145
+runtime/node/zlib	351.882	33.218
 runtime/web-platform	203.948	18.709
 tests/compile-time/escape-analysis-scaling	2.006	0.139
