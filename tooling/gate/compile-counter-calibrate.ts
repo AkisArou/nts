@@ -2,6 +2,7 @@ import { FIXED_AMBIENT, measuredCompileEnvironment } from "./canonical-environme
 // Five A/A repetitions of every compile-time module, on one immutable compiler.
 // node tooling/gate/compile-counter-calibrate.ts --run-dir <evidence directory>
 // --record measures then publishes; --publish <summary.json> uses retained raw evidence.
+// --module <module> refreshes one existing row, retaining the other rows and policy.
 import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
@@ -10,7 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as poll } from "node:timers/promises";
 import { Admission } from "./admission.ts";
-import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, discoverCompileTimeFixtures, counterProblem, calibratedTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
+import { COMPILE_ARMS, COMPILE_WORK_PROFILE, compileWorkSettings, COUNTER_SCOPE, compileArm, compileCommand, discoverCompileTimeFixtures, counterProblem, calibrationRecord, replaceCalibrationModules, readCounterTable, type Calibration, type CalibrationRun } from "./compile-counter.ts";
 import { instructionsWork, parseMeasurement, spawnCounted } from "./cputime.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
@@ -20,27 +21,36 @@ const option = (name: string) => {
   const i = process.argv.indexOf(name);
   return i < 0 ? undefined : process.argv[i + 1];
 };
-const cache = join(homedir(), ".cache/nts-compile-calibration");
-mkdirSync(cache, { recursive: true });
-const out = resolve(option("--run-dir") ?? mkdtempSync(join(cache, "run-")));
-mkdirSync(out, { recursive: true });
 const jobs = Number(option("--jobs") ?? 4);
 if (!Number.isInteger(jobs) || jobs < 1 || jobs > 8) throw new Error("--jobs must be between 1 and 8");
 // The locked workspace install owns the root links. runtime/node is not a
 // pnpm importer; the former copied node_modules tree is no longer an input.
 for (const input of ["node_modules"]) {
-  if (!existsSync(join(root, input))) throw new Error(`missing workspace input ${input}; run tooling/lanes/inputs.sh before calibration`);
+  if (!existsSync(join(root, input))) throw new Error(`missing workspace input ${input}; run node tooling/inputs/linker.ts work <shared checkout> <tree> before calibration`);
 }
-const cannot = instructionsWork();
-if (cannot) throw new Error(`not measured: ${cannot}`);
 const digest = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
-const sha256 = digest(nts);
-const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
-const modules = [
+const population = [
   ...readdirSync(join(root, "runtime/node"), { withFileTypes: true })
     .filter(e => e.isDirectory() && existsSync(join(root, "runtime/node", e.name, "tsconfig.json")))
     .map(e => `runtime/node/${e.name}`), "runtime/web-platform", ...discoverCompileTimeFixtures(root),
 ].sort();
+const selected = option("--module");
+if (process.argv.includes("--module") && (!selected || selected.startsWith("--"))) throw new Error("--module requires a module");
+if (process.argv.filter(arg => arg === "--module").length > 1) throw new Error("--module may be specified once");
+const table = join(root, "tooling/gate", COMPILE_ARMS[arm].table);
+const recordFile = join(root, "results", COMPILE_ARMS[arm].calibration);
+const previousTable = selected ? readFileSync(table, "utf8") : undefined;
+if (selected && !readCounterTable(previousTable!, arm).rows.has(selected)) throw new Error(`module is not in the baseline table: ${selected}`);
+if (selected && !population.includes(selected)) throw new Error(`unknown compile-time module: ${selected}`);
+const modules = selected ? [selected] : population;
+const cannot = instructionsWork();
+if (cannot) throw new Error(`not measured: ${cannot}`);
+const sha256 = digest(nts);
+const commit = execFileSync("git", ["rev-parse", "HEAD"], { cwd: root, encoding: "utf8" }).trim();
+const cache = join(homedir(), ".cache/nts-compile-calibration");
+mkdirSync(cache, { recursive: true });
+const out = resolve(option("--run-dir") ?? mkdtempSync(join(cache, "run-")));
+mkdirSync(out, { recursive: true });
 // The inventoried command population has no config evaluator descendants.
 const configured = modules.filter(module => existsSync(join(root, module, "nts.config.ts")));
 if (configured.length) throw new Error(`not measured: project config can spawn descendants: ${configured.join(", ")}; audit the command first`);
@@ -51,9 +61,12 @@ const publish = (summary: Calibration) => {
     const raw = parseMeasurement(readFileSync(run.counter_file, "utf8"));
     if (counterProblem(raw) || raw.instructions !== run.instructions || raw.cpu_s !== run.cpu_s) throw new Error(`raw counter evidence differs: ${run.counter_file}`);
   }
-  const { text, policy } = calibratedTable(summary, modules);
+  if (selected && summary.commit !== commit) throw new Error("selected calibration source commit differs from this tree");
+  const { text, policy, record } = selected
+    ? replaceCalibrationModules(previousTable!, JSON.parse(readFileSync(recordFile, "utf8")), summary, population, selected)
+    : calibrationRecord(summary, population);
   // No writes occur until every row and its retained raw evidence is valid.
-  writeFileSync(join(root, "results", COMPILE_ARMS[arm].calibration), JSON.stringify({ ...summary, arm, tripwire_policy: policy }, null, 2) + "\n");
+  writeFileSync(join(root, "results", COMPILE_ARMS[arm].calibration), JSON.stringify(record, null, 2) + "\n");
   writeFileSync(join(root, "tooling/gate", COMPILE_ARMS[arm].table), text);
   console.log(`published ${arm}: ${modules.length} five-repeat medians, relative-only ratio ${policy.ratio.toFixed(2)}`);
 };

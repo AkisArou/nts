@@ -6,7 +6,7 @@ import {join} from "node:path";
 import {fileURLToPath} from "node:url";
 import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {test} from "node:test";
-import {COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, compileArm, compileCommand, discoverCompileTimeFixtures} from "./compile-counter.ts";
+import {COUNTER_SCOPE, COMPILE_WORK_PROFILE, COMPILE_WORK_SETTINGS, compileWorkSettings, compileWorkProblem, counterProblem, readCounterTable, calibratedTable, replaceCalibrationModules, compileArm, compileCommand, discoverCompileTimeFixtures} from "./compile-counter.ts";
 import {testScratch} from "./test-scratch.ts";
 
 test("compile-time fixture discovery requires a config and includes each configured directory", t => {
@@ -61,6 +61,66 @@ test("baseline publication refuses missing runs/populations and derives its thre
   assert.throws(() => calibratedTable(summary, ["runtime/example", "missing"]), /population/);
   assert.throws(() => calibratedTable({ ...summary, modules: [{ module: "runtime/example", runs: runs.slice(1) }] }, ["runtime/example"]), /five-repeat/);
   assert.throws(() => calibratedTable({ ...summary, complete: false }, ["runtime/example"]), /incomplete/);
+});
+
+function calibration(module: string, base: number, source = "a") {
+  return { arm: "nogc" as const, work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS,
+    counter_scope: COUNTER_SCOPE, complete: true, nts_sha256: source.repeat(64), commit: source.repeat(40), raw_directory: `/raw/${source}`,
+    modules: [{ module, runs: [1, 2, 3, 4, 5].map(repeat => ({ module, repeat, arm: "nogc" as const,
+      work_profile: COMPILE_WORK_PROFILE, work_settings: COMPILE_WORK_SETTINGS, counter_scope: COUNTER_SCOPE,
+      status: 0, instructions: (base + repeat / 100) * 1e9, cpu_s: 10, listing_functions: 1, listing_definitions: 1,
+      counter_file: `/raw/${source}/${module}-${repeat}.perf` })) }] };
+}
+
+test("a selected calibration preserves every other row and its compiler/source provenance", () => {
+  const a = calibration("runtime/a", 100), b = calibration("runtime/b", 200);
+  const previous = { ...a, modules: [...a.modules, ...b.modules] };
+  const original = calibratedTable(previous, ["runtime/a", "runtime/b"]);
+  const published = { ...previous, tripwire_policy: original.policy };
+  const fresh = calibration("runtime/a", 150, "b");
+  const updated = replaceCalibrationModules(original.text, published, fresh, ["runtime/a", "runtime/b"], "runtime/a");
+  const line = (text: string, module: string) => text.split("\n").find(row => row.startsWith(`${module}\t`));
+  assert.equal(line(updated.text, "runtime/b"), line(original.text, "runtime/b"));
+  assert.equal(line(updated.text, "runtime/a"), "runtime/a\t150.030\t10.000");
+  assert.equal(updated.policy.ratio, 1.10);
+  assert.match(updated.text, /# compiler-provenance: per-module/);
+  assert.doesNotMatch(updated.text, /# compiler-sha256:/);
+  assert.equal("nts_sha256" in updated.record, false, "a mixed record makes no global compiler claim");
+  assert.deepEqual(updated.record.modules[0]!.source, { nts_sha256: "b".repeat(64), commit: "b".repeat(40), raw_directory: "/raw/b" });
+  assert.deepEqual(updated.record.modules[1]!.source, { nts_sha256: "a".repeat(64), commit: "a".repeat(40), raw_directory: "/raw/a" });
+  assert.deepEqual(updated.record.modules[1]!.runs, b.modules[0]!.runs);
+  const again = replaceCalibrationModules(updated.text, updated.record, calibration("runtime/b", 250, "c"), ["runtime/a", "runtime/b"], "runtime/b");
+  assert.equal(line(again.text, "runtime/a"), line(updated.text, "runtime/a"));
+  assert.deepEqual(again.record.modules[0], updated.record.modules[0]);
+  assert.equal(again.record.modules[1]!.source.commit, "c".repeat(40));
+});
+
+test("selected publication refuses absent modules, drift, incomplete repeats and a wider policy", () => {
+  const previous = calibration("runtime/a", 100);
+  const original = calibratedTable(previous, ["runtime/a"]);
+  const published = { ...previous, tripwire_policy: original.policy };
+  const fresh = calibration("runtime/a", 150, "b");
+  const update = (summary = fresh, text = original.text) => replaceCalibrationModules(text, published, summary, ["runtime/a"], "runtime/a");
+  assert.throws(() => replaceCalibrationModules(original.text, published, calibration("runtime/missing", 150, "b"), ["runtime/a"], "runtime/missing"), /not in the baseline table/);
+  assert.throws(() => update(calibration("runtime/missing", 150, "b")), /population/);
+  assert.throws(() => update({ ...fresh, modules: [{ ...fresh.modules[0]!, runs: fresh.modules[0]!.runs.slice(1) }] }), /five-repeat/);
+  const noisy = structuredClone(fresh); noisy.modules[0]!.runs[4]!.instructions *= 1.04;
+  assert.throws(() => update(noisy), /above existing 1.10/);
+  assert.throws(() => update(fresh, original.text.replace("100.030", "99.000")), /differs from its five-repeat proof/);
+  assert.throws(() => update({ ...fresh, commit: "missing" }), /provenance/);
+  assert.throws(() => replaceCalibrationModules(original.text, published, { ...fresh, arm: "rc" }, ["runtime/a"], "runtime/a"), /arm/);
+  assert.throws(() => replaceCalibrationModules(original.text, { ...published, complete: false }, fresh, ["runtime/a"], "runtime/a"), /incomplete/);
+  assert.throws(() => replaceCalibrationModules(original.text, { ...published, modules: [] }, fresh, ["runtime/a"], "runtime/a"), /population/);
+  assert.equal(readCounterTable(original.text).rows.get("runtime/a"), 100.03);
+});
+
+test("the recorder rejects an unrecorded selection before creating a run", t => {
+  const root = testScratch(t, "counter-selection"), out = join(root, "not-created");
+  const result = spawnTest(process.execPath, [fileURLToPath(new URL("compile-counter-calibrate.ts", import.meta.url)),
+    "--module", "runtime/node/not-a-recorded-module", "--run-dir", out], { encoding: "utf8", env: { ...process.env, NTS_BIN: process.execPath } });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /module is not in the baseline table/);
+  assert.equal(existsSync(out), false);
 });
 
 test("the real tripwire reports missed, absent and legacy readings as not measured", { skip: instructionsWork() ?? false }, t => {

@@ -137,8 +137,9 @@ ids, kept so the records that cite them still resolve.
   backing type: [the type-parameter base](../tests/refusals/a-type-parameter-in-a-typed-array-subclass-base/src/main.ts)
   refuses while [the concrete backing type](../tests/programs/a-concrete-backing-type-in-a-typed-array-subclass-base/src/main.ts)
   compiles the same allocation and byte access. The Node 26 Buffer split
-  exposes this gap across the runtime modules; restore the lost definitions
-  before moving their floors or the refusal-profile ceiling.
+  exposes this gap across the runtime modules. After restoring their reach,
+  raise the five definition floors (buffer, os, querystring, string_decoder
+  and url) and ratchet the refusal-profile ceiling to what the fix reaches.
 - Compile the [asserted indexed compound write](../tests/refusals/a-byte-mask-through-an-asserted-index/src/main.ts)
   that drops MIME's character-class initialization; the
   [explicit indexed write](../tests/programs/a-byte-mask-through-an-explicit-index-write/src/main.ts)

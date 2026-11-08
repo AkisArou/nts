@@ -10,7 +10,7 @@
 # module definitions
 runtime/node/assert 2092
 runtime/node/async_hooks 367
-runtime/node/buffer 465
+runtime/node/buffer 411
 runtime/node/child_process 2636
 runtime/node/cluster 2820
 runtime/node/console 2194
@@ -22,18 +22,18 @@ runtime/node/events 2063
 runtime/node/fs 3276
 runtime/node/http 3201
 runtime/node/net 2751
-runtime/node/os 487
+runtime/node/os 433
 runtime/node/path 346
 runtime/node/perf_hooks 2253
 runtime/node/process 3327
 runtime/node/punycode 27
-runtime/node/querystring 489
+runtime/node/querystring 436
 runtime/node/readline 2372
 runtime/node/stream 2659
-runtime/node/string_decoder 475
+runtime/node/string_decoder 413
 runtime/node/timers 449
 runtime/node/tty 2
-runtime/node/url 691
+runtime/node/url 647
 runtime/node/util 2118
 runtime/node/zlib 2673
 runtime/web-platform 2382

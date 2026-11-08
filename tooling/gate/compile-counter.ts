@@ -1,5 +1,5 @@
 import { existsSync, readdirSync } from "node:fs";
-import { join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, sep } from "node:path";
 
 // Scope changes invalidate old baselines and kept listings. Inheritance covers
 // the exec's threads and descendants; the runtime hir population has no child
@@ -116,6 +116,20 @@ export interface CalibrationRun extends CounterRow {
   listing_definitions: number;
   counter_file: string;
 }
+export interface CalibrationPolicy {
+  ratio: number;
+  observed_max_spread: number;
+  spread_multiplier: number;
+  relative_floor: number;
+}
+export interface CalibrationModule {
+  module: string;
+  runs: CalibrationRun[];
+  valid?: boolean;
+  median_instructions?: number | null;
+  median_cpu_s?: number | null;
+  spread?: number | null;
+}
 export interface Calibration {
   work_profile?: string;
   work_settings?: unknown;
@@ -123,7 +137,10 @@ export interface Calibration {
   counter_scope: string;
   complete: boolean;
   nts_sha256: string;
-  modules: { module: string; runs: CalibrationRun[] }[];
+  commit?: string;
+  raw_directory?: string;
+  tripwire_policy?: CalibrationPolicy;
+  modules: CalibrationModule[];
 }
 
 /** Publish only a full five-repeat population. The baseline is the median;
@@ -137,7 +154,7 @@ export function calibratedTable(summary: Calibration, expected: string[]) {
   const arm = summary.arm ?? "nogc";
   if (arm !== "nogc" && arm !== "rc") throw new Error("invalid calibration preparation arm");
   if (JSON.stringify(modules.map(m => m.module)) !== JSON.stringify([...expected].sort())) throw new Error("calibration population differs from the current runtime modules");
-  const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[2];
+  const median = (xs: number[]) => [...xs].sort((a, b) => a - b)[2]!;
   let maxSpread = 0;
   const rows = modules.map(({ module, runs }) => {
     if (runs.length !== 5 || runs.some(r => r.module !== module || (r.arm ?? "nogc") !== arm || r.work_profile !== COMPILE_WORK_PROFILE || r.status !== 0 || counterProblem(r) !== null)
@@ -156,4 +173,99 @@ export function calibratedTable(summary: Calibration, expected: string[]) {
     `# Rerecord with node tooling/gate/compile-time.mjs --record --arm ${arm}; explain why.`,
     "# module\tG user instructions (all threads/descendants from exec)\tCPU s", ...rows, ""].join("\n");
   return { text, policy };
+}
+
+export interface CalibrationSource {
+  commit: string;
+  nts_sha256: string;
+  raw_directory: string;
+}
+export interface RecordedModule extends CalibrationModule {
+  valid: true;
+  median_instructions: number;
+  median_cpu_s: number;
+  spread: number;
+  source: CalibrationSource;
+}
+export interface RecordedCalibration extends Omit<Calibration, "nts_sha256" | "commit" | "raw_directory" | "modules"> {
+  schema: 2;
+  modules: RecordedModule[];
+  tripwire_policy: CalibrationPolicy;
+}
+
+function calibrationSource(value: { commit?: string; nts_sha256: string; raw_directory?: string }): CalibrationSource {
+  const { commit, nts_sha256, raw_directory } = value;
+  if (typeof commit !== "string" || !/^[a-f0-9]{40}$/.test(commit)
+    || !/^[a-f0-9]{64}$/.test(nts_sha256) || typeof raw_directory !== "string" || !isAbsolute(raw_directory)) {
+    throw new Error("calibration lacks compiler/source provenance");
+  }
+  return { commit, nts_sha256, raw_directory };
+}
+
+function recordedModule(module: CalibrationModule, source: CalibrationSource): RecordedModule {
+  const median = (values: number[]) => [...values].sort((a, b) => a - b)[2]!;
+  const counts = module.runs.map(run => run.instructions!);
+  return { ...module, valid: true, median_instructions: median(counts),
+    median_cpu_s: median(module.runs.map(run => run.cpu_s!)),
+    spread: Math.max(...counts) / Math.min(...counts) - 1, source };
+}
+
+/** A publication records each row's source, including when all rows share it. */
+export function calibrationRecord(summary: Calibration, expected: string[]) {
+  const published = calibratedTable(summary, expected);
+  const source = calibrationSource(summary);
+  const record: RecordedCalibration = {
+    schema: 2, arm: summary.arm ?? "nogc", work_profile: summary.work_profile,
+    work_settings: summary.work_settings, counter_scope: summary.counter_scope,
+    complete: true, modules: summary.modules.map(module => recordedModule(module, source)),
+    tripwire_policy: published.policy,
+  };
+  return { ...published, record };
+}
+
+/** Refresh selected rows without accepting drift or relabelling other rows.
+ * Legacy single-compiler records acquire explicit per-module provenance.
+ * Only new raw files are needed: older rows are already published records,
+ * and their five-run proof must still reproduce their exact table row.
+ */
+export function replaceCalibrationModules(table: string, previous: Calibration | RecordedCalibration,
+  summary: Calibration, expected: string[], selected: string) {
+  const arm = summary.arm ?? "nogc";
+  const baseline = readCounterTable(table, arm);
+  const population = [...baseline.rows.keys()].sort();
+  if (JSON.stringify(population) !== JSON.stringify([...expected].sort())
+    || JSON.stringify(previous.modules.map(module => module.module).sort()) !== JSON.stringify(population)) {
+    throw new Error("baseline provenance population differs from the current modules");
+  }
+  if ((previous.arm ?? "nogc") !== arm || previous.tripwire_policy?.ratio !== baseline.ratio) {
+    throw new Error("baseline provenance policy or arm differs from the table");
+  }
+  if (!baseline.rows.has(selected)) throw new Error(`module is not in the baseline table: ${selected}`);
+  const fresh = calibrationRecord(summary, [selected]);
+  if (fresh.policy.ratio > baseline.ratio) {
+    throw new Error(`selected repeats require policy ${fresh.policy.ratio.toFixed(2)}, above existing ${baseline.ratio.toFixed(2)}; not published`);
+  }
+  const existing = "nts_sha256" in previous
+    ? previous.modules.map(module => ({ ...module, source: calibrationSource(previous) })) : previous.modules;
+  const old = existing.map(module => {
+    const source = calibrationSource(module.source);
+    const proof = calibratedTable({ ...previous, nts_sha256: source.nts_sha256, modules: [module] }, [module.module]);
+    const row = proof.text.split("\n").find(line => line.startsWith(`${module.module}\t`));
+    if (table.split("\n").find(line => line.startsWith(`${module.module}\t`)) !== row) {
+      throw new Error(`published table differs from its five-repeat proof: ${module.module}`);
+    }
+    if (proof.policy.ratio > baseline.ratio) throw new Error(`published proof exceeds its policy: ${module.module}`);
+    return recordedModule(module, source);
+  });
+  const replacements = new Map(fresh.record.modules.map(module => [module.module, module]));
+  const modules = old.map(module => replacements.get(module.module) ?? module);
+  const policy = { ...fresh.policy, ratio: baseline.ratio,
+    observed_max_spread: Math.max(...modules.map(module => module.spread)) };
+  const record: RecordedCalibration = { ...fresh.record, modules, tripwire_policy: policy };
+  const rows = new Map(fresh.text.split("\n").filter(line => line && !line.startsWith("#"))
+    .map(line => [line.split("\t")[0]!, line]));
+  const text = table.split("\n").map(line => line.startsWith("# compiler-sha256:")
+    ? `# compiler-provenance: per-module in results/${COMPILE_ARMS[arm].calibration}`
+    : rows.get(line.split("\t")[0]!) ?? line).join("\n");
+  return { text, record, policy };
 }
