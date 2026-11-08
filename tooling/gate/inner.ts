@@ -126,7 +126,7 @@ function heavy(what: string, memoryMax: string, command: string, args: readonly 
   admitted(what);
   const bounded = ["nice", "-n", "19", "taskset", "-c", cpusOffMeasurement(), command, ...args];
   const scoped = spawnSync("systemd-run", ["--version"], { stdio: "ignore" }).status === 0
-    ? ["systemd-run", "--user", "--scope", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
+    ? ["systemd-run", "--user", "--scope", "--collect", ...toolingSliceArgs(), "-q", "-p", `MemoryMax=${memoryMax}`, "-p", "MemorySwapMax=0", ...bounded]
     : bounded;
   const [program, ...rest] = scoped;
   return run(program, rest, env);

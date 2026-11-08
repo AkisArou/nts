@@ -55,9 +55,11 @@ checker is compiled into nts, and every tree shares the object store.
   restoring the "before" state with `git checkout` has destroyed the fix
   itself. A control is usually a pin (`tooling/conformance/pin.ts`), not a tree.
 - **Stop your own work by its systemd unit, never by a list of PIDs.** Start
-  every long run in a named unit (`systemd-run --user --unit=<name>`) and stop
-  it with `systemctl --user stop <name>`: the cgroup holds exactly its
-  processes. Never send a signal to PIDs worked out from `ps`, and never
+  every long run in a named unit (`systemd-run --user --unit=<name> --collect`)
+  and stop it with `systemctl --user stop <name>`: the cgroup holds exactly its
+  processes, and `--collect` unloads it when it ends, failed or not (its log
+  stays in the journal), where a failed unit would stay loaded until someone
+  resets it. Never send a signal to PIDs worked out from `ps`, and never
   `pkill -f` or `pgrep -f` a pattern. On 2026-10-27 a descendant walk over
   `ps` started from PID 1, and its `kill -TERM` reached the systemd user
   manager, which ended the session and every agent, tmux pane and gate with
@@ -66,7 +68,7 @@ checker is compiled into nts, and every tree shares the object store.
 - **A test that starts a real gate runner gives that run its own memory
   reading and its own unit.** Pass `NTS_MEMINFO` through `gateEnvironment`'s
   owned values, so the host's free memory never decides the result, and run
-  it under `systemd-run --user --unit=<name>`, so a runner that outlives its
+  it under `systemd-run --user --unit=<name> --collect`, so a runner that outlives its
   test is stopped by name. On 2026-11-07 an inner run waited silently for
   host memory inside a gate run, and an orphaned runner spun a core in the
   tmux pane's own cgroup.

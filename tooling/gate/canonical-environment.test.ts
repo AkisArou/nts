@@ -361,7 +361,7 @@ fi
   const memory=join(run,'meminfo');writeFileSync(memory,'MemAvailable: 0 kB\n');
   const directory=join(run,'gate-run'),planned=gateEnvironment(base,{run:directory,owned:{NTS_GATE_STEPS:'rustfmt',NTS_MEMINFO:memory,CARGO_TARGET_DIR:join(run,'target')}});
   const unit='nts-startup-capture-'+run.split('/').pop()!;
-  const child=spawn('systemd-run',['--user','--quiet','--pipe','--wait','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',
+  const child=spawn('systemd-run',['--user','--quiet','--pipe','--wait','--collect','--unit='+unit,'-p','LimitCORE=0','-p','TimeoutStopSec=2',
     ...Object.entries(planned.env).filter((pair):pair is [string,string]=>typeof pair[1]==='string').map(([key,value])=>'--setenv='+key+'='+value),
     '-p','WorkingDirectory='+root,'taskset','-c','0-3,6-31',process.execPath,join(gate,'run.mjs')],{stdio:['ignore','pipe','pipe']});
   t.after(()=>{spawnTest('systemctl',['--user','stop',unit],{encoding:'utf8'});});
