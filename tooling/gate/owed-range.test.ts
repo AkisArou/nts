@@ -326,7 +326,8 @@ test("Cargo infrastructure crosses the endpoint process without becoming a polic
   const git = (...args: string[]) => execFileSync("git", args, { cwd: repo, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   const gate = join(repo, "tooling/gate");
   mkdirSync(gate, { recursive: true });
-  for (const file of ["owed-range.ts", "checks.ts", "change-paths.ts"]) writeFileSync(join(gate, file), readFileSync(join(ROOT, "tooling/gate", file)));
+  mkdirSync(join(repo, "tooling/inputs"));
+  for (const file of ["gate/owed-range.ts", "gate/checks.ts", "gate/change-paths.ts", "inputs/linker.ts"]) writeFileSync(join(repo, "tooling", file), readFileSync(join(ROOT, "tooling", file)));
   writeFileSync(join(repo, "Cargo.toml"), "[workspace]\n");
   writeFileSync(join(gate, "owed.mjs"), `
 import {readFileSync} from "node:fs";

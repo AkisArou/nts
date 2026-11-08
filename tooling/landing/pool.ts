@@ -33,6 +33,7 @@ import { pathToFileURL } from "node:url";
 import { TEMP_DISK_FLOOR_BYTES } from "../gate/run-temporary.ts";
 import { deleteBranch, revParse, sharedCheckout, worktrees, type BranchOutcome, type Git } from "./git.ts";
 import { withLock } from "./lock.ts";
+import { linkTree } from "../inputs/linker.ts";
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
 /** A free tree idle longer than this goes in the hourly upkeep. */
@@ -297,14 +298,9 @@ export class Pool {
   }
 }
 
-/** A tree's untracked inputs, linked from the shared checkout as a lane's are (inputs.sh). */
+/** A tree's untracked inputs, linked from the shared checkout by the tree's own linker, for work. */
 export function linkInputs(root: string): Inputs {
-  return tree => {
-    const script = join(tree, "tooling/lanes/inputs.sh");
-    if (!existsSync(script)) return;
-    const r = spawnSync("sh", [script, "lane", root, tree], { cwd: tree, encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`inputs for ${tree}: ${(r.stderr || r.stdout).trim().split("\n").slice(-3).join("; ")}`);
-  };
+  return tree => linkTree(tree, "work", root);
 }
 
 export const POOL_HOME = join(homedir(), ".cache/nts-pool");

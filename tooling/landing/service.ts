@@ -29,6 +29,7 @@ import { landingCeiling } from "../gate/step-bound.ts";
 import { costKey, deferredSteps, landingSteps, machineBudget, readLandingCosts, type ChangeKind, type Selection } from "./selection.ts";
 import { durableRecord } from "../lanes/durable-record.ts";
 import { selectionInfrastructure } from "../gate/owed-range.ts";
+import { linkTree } from "../inputs/linker.ts";
 
 export const KEEP_DAYS = 3;
 
@@ -215,7 +216,7 @@ export function prune(dir: string, days: number, now = Date.now()): string[] {
   return removed;
 }
 
-/** The landing tree at `tip`, with the inputs no commit carries (inputs.sh, as for a gate tree). */
+/** The landing tree at `tip`, with the inputs no commit carries, linked by the tree's own linker as a gate tree's are. */
 export function prepareTree(root: string, tree: string, tip: string, env?: NodeJS.ProcessEnv): void {
   const run = (args: string[], cwd: string) => {
     const r = spawnSync("git", args, { cwd, env: env ?? process.env, encoding: "utf8" });
@@ -227,11 +228,7 @@ export function prepareTree(root: string, tree: string, tip: string, env?: NodeJ
     run(["checkout", "-q", "--detach", "--force", tip], tree);
     run(["clean", "-fdq", "-e", "third_party", "-e", "node_modules", "-e", "**/node_modules"], tree);
   }
-  const inputs = join(tree, "tooling/lanes/inputs.sh");
-  if (existsSync(inputs)) {
-    const r = spawnSync("sh", [inputs, "gate", root, tree], { cwd: tree, env: env ?? process.env, encoding: "utf8" });
-    if (r.status !== 0) throw new Error(`inputs.sh: ${(r.stderr || r.stdout || "").trim().split("\n").slice(-3).join("; ")}`);
-  }
+  linkTree(tree, "gate", root, { env: env ?? process.env });
 }
 
 /** The service's configuration on this machine: the shared checkout, origin, the landing tree and target, the pool. */

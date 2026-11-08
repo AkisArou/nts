@@ -27,7 +27,7 @@ for (const refuses of [false, true]) for (const inherited of [false,true]) {
     });
     const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
     writeFileSync(join(root, "tooling/gate/pinned.sh"), script);
-    copyModuleClosure(["tooling/gate/canonical-environment.ts"], root);
+    copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/inputs/linker.ts"], root);
     // Affinity is independently tested; this fixture isolates which commit
     // supplies preparation without depending on delegated host cpusets.
     writeFileSync(join(root, "tooling/gate/affinity.ts"), "");

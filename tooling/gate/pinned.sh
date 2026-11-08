@@ -125,14 +125,14 @@ else
   git -C "$root" worktree add --detach -q "$tree" "$sha"
 fi
 
-# What no commit carries -- the third-party clones and the
-# workspace's node_modules -- linked in. One list, shared with `lane start`,
-# so a gate tree and a lane's tree cannot disagree about what is there; the
-# reasons for each entry are in that script.
-# Input preparation belongs to the candidate, just like the gate steps below.
-# Main may already have removed an input that a historical commit still needs,
-# or may still require an input that the candidate has removed.
-sh "$tree/tooling/lanes/inputs.sh" gate "$root" "$tree"
+# What no commit carries -- the third-party clones and the workspace's
+# node_modules -- linked in by the candidate's own linker, the one its pool
+# trees use, so a gate tree and a work tree cannot disagree about what is
+# there; the reasons for each entry are in that script. Input preparation
+# belongs to the candidate, just like the gate steps below: main may already
+# have removed an input a historical commit still needs, or may still require
+# one the candidate has removed.
+node "$(dirname -- "$0")/../inputs/linker.ts" gate "$root" "$tree"
 
 echo "gate: $sha in $tree"
 # Set up and stop: what `lane doctor` and this script's own test ask.

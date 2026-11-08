@@ -833,8 +833,9 @@ test("an unavailable Cargo toolchain grants no scope for compiled inputs or docu
 });
 
 test("the gate trees' inputs owe every step", () => {
-  // pinned.sh builds every gate tree through it.
-  assert.equal(stepsFor("tooling/lanes/inputs.sh").length, allSteps().length);
+  // Every gate tree is linked through them.
+  for (const path of ["tooling/lanes/inputs.sh", "tooling/inputs/linker.ts", "tooling/inputs/linker.test.ts"])
+    assert.equal(stepsFor(path).length, allSteps().length, path);
 });
 
 test("the full check owes its own tests, not the full gate", () => {

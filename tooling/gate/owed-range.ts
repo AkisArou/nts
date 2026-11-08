@@ -9,6 +9,7 @@ import { basename, dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { unionChecks, type Checks } from "./checks.ts";
 import {committedChanges,type PathChange} from "./change-paths.ts";
+import {linkTree} from "../inputs/linker.ts";
 
 type Arm = { kind: string; asks: string; run: string; if?: string };
 type Rule = { name: string; paths: string[]; steps: string[]; arms: Arm[]; full?: boolean; wide?: boolean; doctests?: string[] };
@@ -16,7 +17,6 @@ export type StepSuccessors = Record<string, { steps: string[]; reason?: string }
 export type RuleView = { revision: string; checks: Checks; catalogue: string[]; successors?: StepSuccessors; rules: Rule[]; selector?: { identity: string | null; existing: RuleView } };
 export type RangeSelection = { base: string; tip: string; checks: Checks; views: RuleView[]; candidateNewPaths?: { identity: string; paths: string[] } };
 const SELF = fileURLToPath(import.meta.url);
-const INPUTS = join(dirname(SELF), "../lanes/inputs.sh");
 const INFRASTRUCTURE_CODE = "NTS_SELECTION_INFRASTRUCTURE";
 const INFRASTRUCTURE_EXIT = 75;
 export class SelectionInfrastructureError extends Error {
@@ -173,7 +173,7 @@ export function selectRange(repo: string, range: string): RangeSelection {
       const tree = join(directory, `${basename(directory)}-${index}`);
       git(registry, "worktree", "add", "--quiet", "--detach", tree, revision);
       if (existsSync(join(tree, "pnpm-lock.yaml"))) {
-        infrastructure("selector inputs",()=>execFileSync("sh", [INPUTS, "lane", shared, tree], { cwd: tree, stdio: ["ignore", "pipe", "pipe"] }));
+        infrastructure("selector inputs",()=>linkTree(tree, "work", shared));
       }
       try {
         const text = execFileSync(process.execPath, [SELF, "--endpoint", tree, revision],

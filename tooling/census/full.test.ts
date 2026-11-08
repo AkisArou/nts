@@ -40,7 +40,7 @@ function fixture(t: { after(fn: () => void): void }) {
   const git = (...args: string[]) => execFileSync("git", args, { cwd: root, env, encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
   writeFileSync(join(root, "results/marker"), "main record\n");
   writeFileSync(join(root, "tooling/gate/pinned.sh"), readFileSync(new URL("../gate/pinned.sh", import.meta.url)));
-  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json"], root);
+  copyModuleClosure(["tooling/gate/canonical-environment.ts", "tooling/differential/oracle-toolchain.json", "tooling/inputs/linker.ts"], root);
   // These controls exercise the real sealed worktree setup, without a build
   // or dependence on delegated cpusets (affinity has its own kernel tests).
   writeFileSync(join(root, "tooling/gate/affinity.ts"), "");

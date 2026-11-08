@@ -6,6 +6,7 @@ import { execFileSync, spawnSync } from "node:child_process";
 import { copyFileSync, existsSync, lstatSync, mkdirSync, mkdtempSync, readlinkSync, renameSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { basename, dirname, join, resolve } from "node:path";
 import { isRecordedBinary, provenanceOf } from "../conformance/pin.ts";
+import { linkTree } from "../inputs/linker.ts";
 import { GENERATOR, fixtureOf, parseGenerator, parseLegacyTable, readRecords, readRecordsAt } from "./oracle-records.ts";
 
 function git(root: string, args: string[], input?: Buffer): string {
@@ -73,7 +74,7 @@ export function comparisonOracleRoot(root: string, binaries: string[], cache: st
         else copyFileSync(source, target);
       }
       const shared = dirname(git(root, ["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim());
-      execFileSync("sh", [join(snapshot, "tooling/lanes/inputs.sh"), "lane", shared, snapshot], { cwd: snapshot, maxBuffer: 64 * 1024 * 1024 });
+      linkTree(snapshot, "work", shared);
       const historical = readRecordsAt(root, commit);
       const {rows: currentRows, ...currentRawHeader} = current;
       const {rows: historicalRows, ...historicalRawHeader} = historical;

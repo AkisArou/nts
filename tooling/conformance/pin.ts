@@ -59,6 +59,7 @@ const sha256 = (data) => createHash("sha256").update(data).digest("hex");
 export const keyOf = (sha, applied) => (applied ? `${sha.slice(0, 12)}+${applied.sha256.slice(0, 12)}` : sha.slice(0, 12));
 
 import {provenanceOf} from "./pin-provenance.ts";
+import {linkTree} from "../inputs/linker.ts";
 export {provenanceOf};
 
 /** Cached artifacts are complete native compilers; their bytes must still match. */
@@ -259,7 +260,7 @@ function build(sha, diff, applied, dir) {
   if (!clean) throw new Error(`the pin tree at ${TREE} is not clean after checkout`);
   if (diff) git(["apply", "--whitespace=nowarn", "-"], TREE, diff.text);
   const shared = dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim());
-  execFileSync("sh", [join(TREE, "tooling/lanes/inputs.sh"), "gate", shared, TREE], { stdio: "inherit" });
+  linkTree(TREE, "gate", shared, { inherit: true });
   // **What the tree holds, before and after the build.** The lock keeps other
   // pins out; this catches anything else that moves the tree while cargo
   // reads it. A binary is recorded only if the source it was built from is

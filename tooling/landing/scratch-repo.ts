@@ -34,7 +34,8 @@ export function scratchRepo(t: TestContext, name = "landing"): Scratch {
     git(["commit", "-q", "-m", message], cwd);
     return git(["rev-parse", "HEAD"], cwd);
   };
-  commit({ "README.md": "nts\n", "docs/workflow.md": "how we work\n" }, "base");
+  // Every tree has its own input linker (tooling/inputs/linker.ts); this one has nothing to link.
+  commit({ "README.md": "nts\n", "docs/workflow.md": "how we work\n", "tooling/inputs/link.sh": "#!/bin/sh\nexit 0\n" }, "base");
   git(["push", "-q", "origin", "main"]);
   return { dir, root, origin, env, git, commit };
 }
