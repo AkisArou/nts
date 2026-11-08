@@ -472,6 +472,20 @@ test("a culprit its own part is green after is cleared and its waiting revert wi
   assert.ok(fx.lines.some(line => line === `${b.slice(0, 12)} is no culprit: core was green after it at ${fixed.slice(0, 12)}; its revert ${revert.slice(0, 12)} is withdrawn`), fx.lines.join("\n"));
 });
 
+test("the recorder runs in the gate's canonical environment, in a temporary folder its run owns", t => {
+  const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run");
+  mkdirSync(join(tree, "tooling/records"), { recursive: true });
+  mkdirSync(run);
+  // The fake recorder reports what the oracles it would run are given.
+  writeFileSync(join(tree, "tooling/records/record-pending.ts"), `import {existsSync} from "node:fs";
+console.log(JSON.stringify({ canonical: !!process.env.NTS_GATE_ENV_CONTEXT, tmp: process.env.TMPDIR, there: existsSync(process.env.TMPDIR ?? ""), bin: process.env.NTS_BIN }));
+`);
+  const result = recordPending(tree, "pin", run);
+  assert.equal(result.status, 0, result.output);
+  assert.deepEqual(JSON.parse(readFileSync(join(run, RECORDER_LOG), "utf8")), { canonical: true, tmp: join(run, "records", "tmp"), there: true, bin: "pin" });
+  assert.equal(existsSync(join(run, "records", "tmp")), false, "its temporary folder goes after it");
+});
+
 test("the recorder's output reaches the run's log while it runs, so no buffer bounds it", t => {
   const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run"), log = join(run, RECORDER_LOG);
   mkdirSync(join(tree, "tooling/records"), { recursive: true });

@@ -53,7 +53,10 @@ export const RECORD_ROOTS = ["results/", "tests/"];
 /** Every changed or untracked path of a tree, with a hash of its bytes. */
 function dirty(git: Git): Map<string, string> {
   const out = new Map<string, string>();
-  const entries = git.run(["status", "--porcelain=v1", "-z", "--untracked-files=all"]).split("\0").filter(Boolean);
+  // Untrimmed: an entry's first column is a space when nothing is staged, and
+  // trimming took it from the first entry, cutting a letter off its path
+  // ("esults/benchmarks/c/outcomes.tsv"), which then read as outside the records.
+  const entries = git.output(["status", "--porcelain=v1", "-z", "--untracked-files=all"]).split("\0").filter(Boolean);
   for (let k = 0; k < entries.length; k++) {
     const entry = entries[k]!;
     const path = entry.slice(3);

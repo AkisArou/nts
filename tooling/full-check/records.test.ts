@@ -25,6 +25,17 @@ test("the pending and improved lines of a run's step logs are what it lists", t 
   assert.deepEqual(listedRecords(join(run, "missing")), { pending: [], improved: [] });
 });
 
+test("a recorder that rewrites a tracked record commits it whole, whatever git lists first", t => {
+  // git status gives " M <path>" for an unstaged change: the first column is a
+  // space, and a trimmed listing cut the path's first letter off, so the file
+  // read as outside the records.
+  const repo = repository(t);
+  const commit = repo.commit({ "results/benchmarks/c/outcomes.tsv": "row 1\n" }, "a record");
+  const recorded = recordAt(repo.git, commit, tree => { writeFileSync(join(tree, "results/benchmarks/c/outcomes.tsv"), "row 1\nrow 2\n"); return { status: 0, output: "" }; }, "records\n");
+  assert.equal(recorded.kind, "committed", JSON.stringify(recorded));
+  assert.deepEqual(recorded.kind === "committed" && [recorded.files, recorded.refused], [["results/benchmarks/c/outcomes.tsv"], []]);
+});
+
 test("a recorder that writes nothing commits nothing, and one at the wrong commit is refused", t => {
   const repo = repository(t);
   const commit = repo.commit({ "a": "1\n" }, "one");

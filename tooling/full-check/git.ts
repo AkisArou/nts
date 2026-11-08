@@ -19,11 +19,15 @@ export class Git {
     if (r.error) throw r.error;
     return { status: r.status ?? 1, stdout: r.stdout, stderr: r.stderr };
   }
-  /** Its trimmed output; a non-zero status throws, naming the command. */
-  run(args: string[], input?: string): string {
+  /** Its output as git wrote it, for a format whose columns matter; a non-zero status throws, naming the command. */
+  output(args: string[], input?: string): string {
     const r = this.try(args, input);
     if (r.status !== 0) throw new Error(`git ${args.join(" ")}: ${r.stderr.trim() || `exit ${r.status}`}`);
-    return r.stdout.trim();
+    return r.stdout;
+  }
+  /** Its trimmed output; a non-zero status throws, naming the command. */
+  run(args: string[], input?: string): string {
+    return this.output(args, input).trim();
   }
   ok(args: string[]): boolean {
     return this.try(args).status === 0;

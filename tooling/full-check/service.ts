@@ -35,7 +35,8 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
-import { FIXED_AMBIENT, hostEnvironment } from "../gate/canonical-environment.ts";
+import { gateEnvironment } from "../gate/canonical-environment.ts";
+import { finishRunTemporary } from "../gate/run-temporary.ts";
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
@@ -521,8 +522,12 @@ function tail(file: string, bytes = 1 << 16): string {
 export const RECORDER_LOG = "record-pending.log";
 
 /**
- * record-pending.ts in the tree at the run's commit, with the run's pin, its
- * output written to the run's RECORDER_LOG as it comes. It used to be captured
+ * record-pending.ts in the tree at the run's commit, with the run's pin, in the
+ * gate's canonical environment, as every step of the full check runs: the
+ * recorders prepare and run oracles, which need its dependency capability
+ * (NTS_ORACLE_DEPENDENCIES) and a temporary folder the run owns. Outside it the
+ * outcomes recorder refused at 7cb136996c17 ("capability ... is missing").
+ * Its output goes to the run's RECORDER_LOG as it comes. It used to be captured
  * whole and written after: at 2df45c6ebdb5 the recorders printed 1.7 million
  * lines, past the 256 MiB buffer, and spawnSync killed record-pending (ENOBUFS)
  * before its later kinds ran. The result's output is the log's tail.
@@ -530,18 +535,17 @@ export const RECORDER_LOG = "record-pending.log";
 export const recordPending: Recorder = (tree, pin, run) => {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: `no tooling/records/record-pending.ts at this commit` };
-  const tmp = join(run, "records-tmp"), log = join(run, RECORDER_LOG);
-  mkdirSync(tmp, { recursive: true });
+  const log = join(run, RECORDER_LOG);
+  const planned = gateEnvironment(process.env, { run: join(run, "records"), owned: { NTS_BIN: pin, NTS_CHECKERS: "1" }, oracleRoot: tree });
   const out = openSync(log, "w");
   let r: ReturnType<typeof spawnSync>;
   try {
-    r = spawnSync(process.execPath, [script], {
-      cwd: tree, stdio: ["ignore", out, out],
-      env: { ...hostEnvironment(process.env), ...FIXED_AMBIENT, NTS_BIN: pin, NTS_CHECKERS: "1", TMPDIR: tmp },
-    });
+    r = spawnSync(process.execPath, [script], { cwd: tree, stdio: ["ignore", out, out], env: planned.env });
   } finally { closeSync(out); }
   if (r.error) appendFileSync(log, `\n${r.error.message}\n`);
-  rmSync(tmp, { recursive: true, force: true });
+  // Its temporary folder goes either way: a refused recording keeps its
+  // evidence in the recorder's own folder, which the log names.
+  finishRunTemporary(planned.temporary, homedir(), true);
   return { status: r.status ?? 1, output: tail(log) };
 };
 
