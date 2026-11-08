@@ -16,7 +16,7 @@ import {newTestScratch} from "../test-scratch.ts";
 type Row = { name: string; verdict: string; reason?: string; started_at?: string;
   signal?: string | null; instrument?: { kind: string }; scope?: { slice: string; populated: number } };
 type Summary = { steps: Row[]; identities?: { commit: string }; fail_fast: boolean; interrupted: string | null;
-  temporary: { path: string; state: string } };
+  temporary: { path: string; state: string; enclosing?: string } };
 const FAIL_FAST_STOP = "NTS_GATE_FAIL_FAST: a step failed";
 type Cancellation = { slice: string; signal: string; record: string; before: string; after: string; isolated: boolean };
 
@@ -199,11 +199,12 @@ const r=spawnSync('/usr/bin/systemd-run',args,{stdio:'inherit'});process.exit(r.
   assert.equal(actual.status, 1, actual.stdout + actual.stderr);
   assert.equal(actual.signal, null);
   const summary = JSON.parse(readFileSync(join(run, "summary.json"), "utf8")) as Summary;
-  // The red run closed its temporary in this fixture's registry alone. A
-  // neighbour's prune, here one that evicts all it holds, never reaches it.
+  // An independent red run owns its registry entry; an enclosed run shares
+  // its outer lifetime. A neighbour's prune can reach neither one.
   const registry = join(home, ".cache/nts-gate/closed-temporaries");
   const closed = existsSync(registry) ? readdirSync(registry).map(name => (JSON.parse(readFileSync(join(registry, name), "utf8")) as { owned: { path: string } }).owned.path) : [];
-  assert.deepEqual(closed, summary.temporary.state === "retained after red" ? [planned.temporary.path] : [], JSON.stringify(summary.temporary));
+  assert.equal(summary.temporary.enclosing, planned.temporary.enclosing?.path);
+  assert.deepEqual(closed, summary.temporary.state === "retained after red" && !summary.temporary.enclosing ? [planned.temporary.path] : [], JSON.stringify(summary.temporary));
   const retained = existsSync(planned.temporary.path), other = captureRunTemporary(join(neighbor, ".cache/run"));
   finishRunTemporary(other, neighbor, false, { minimumFreeBytes: 0, maxBytes: Number.MAX_SAFE_INTEGER, write: () => {} });
   assert.deepEqual(pruneRunTemporaries(neighbor, { minimumFreeBytes: 0, maxBytes: 0, write: () => {} }).removed, [other.path]);

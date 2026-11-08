@@ -138,7 +138,9 @@ if(process.argv.includes('nested')){
   assert.equal(record.preparation.cleanup.state,'retained after failure or explicit keep');
   assert.ok(existsSync(record.preparation.cleanup.path));
   const registry=join(home,'.cache/nts-gate/closed-temporaries');
-  assert.ok(readdirSync(registry).some(name=>JSON.parse(readFileSync(join(registry,name),'utf8')).owned.path===record.preparation.temporary.path),'the closed job belongs to the fixture HOME');
+  const closed=existsSync(registry)?readdirSync(registry).map(name=>JSON.parse(readFileSync(join(registry,name),'utf8')).owned.path):[];
+  assert.deepEqual(closed,record.preparation.temporary.enclosing?[]:[record.preparation.temporary.path],
+    'a nested job shares its enclosing run retention; an independent job belongs to the fixture HOME');
   const other=captureRunTemporary(join(neighbor,'.cache/run'));writeFileSync(join(other.path,'generated'),'neighbor');
   finishRunTemporary(other,neighbor,false,{minimumFreeBytes:0,maxBytes:Number.MAX_SAFE_INTEGER,write:()=>{}});
   assert.deepEqual(pruneRunTemporaries(neighbor,{minimumFreeBytes:0,maxBytes:0,write:()=>{}}).removed,[other.path]);
