@@ -10,7 +10,7 @@ import {join} from "node:path";
 import {test} from "node:test";
 import {assertMessage, ENV, fakeGate, repository, stubBench, stubQueue, type FakeGate, type Repository} from "./repository-fixture.ts";
 import type { Recorder } from "./records.ts";
-import {cycle, followVerified, parseOptions, partSteps, recordPending, type Effects} from "./service.ts";
+import {cycle, followVerified, parseOptions, partSteps, RECORDER_LOG, recordPending, type Effects} from "./service.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
 
@@ -267,7 +267,7 @@ test("a green run that listed pending cases records them, commits exactly the re
     mkdirSync(join(tree, "results/oracle-counts/tests/programs"), { recursive: true });
     writeFileSync(join(tree, "results/oracle-counts/tests/programs/new-case.json"), "{\"cases\": 3}\n");
     writeFileSync(join(tree, "scratch-output.txt"), "not a record\n");
-    writeFileSync(join(run, "records.log"), "record-pending: 1 row(s) recorded\n");
+    writeFileSync(join(run, RECORDER_LOG), "record-pending: 1 row(s) recorded\n");
     return { status: 0, output: "" };
   };
   const fx = harness(repo, gate, { recorder });
@@ -473,9 +473,11 @@ test("a culprit its own part is green after is cleared and its waiting revert wi
 });
 
 test("the recorder's output reaches the run's log while it runs, so no buffer bounds it", t => {
-  const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run"), log = join(run, "records.log");
+  const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run"), log = join(run, RECORDER_LOG);
   mkdirSync(join(tree, "tooling/records"), { recursive: true });
   mkdirSync(run);
+  // The core run's own `records` step logs beside it; the recorder leaves that log alone.
+  writeFileSync(join(run, "records.log"), "the records step's log\n");
   // The fake recorder looks for its own first line in the log before it exits.
   writeFileSync(join(tree, "tooling/records/record-pending.ts"), `import {existsSync, readFileSync} from "node:fs";
 process.stdout.write("first line\\n");
@@ -487,6 +489,7 @@ process.exit(seen ? 3 : 4);
   assert.equal(result.status, 3, readFileSync(log, "utf8"));
   assert.equal(readFileSync(log, "utf8"), "first line\nstreamed\n");
   assert.equal(result.output, "first line\nstreamed\n", "the result carries the log's tail");
+  assert.equal(readFileSync(join(run, "records.log"), "utf8"), "the records step's log\n");
 });
 
 test("the hourly count removes what it found removable, then counts again", async t => {

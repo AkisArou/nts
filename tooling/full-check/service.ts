@@ -353,7 +353,7 @@ async function writeRecords(fx: Effects, state: State, part: Part, commit: strin
     const pin = runPin(fx.pins, commit, fx.git.subject(commit), join(fx.layout.target, "release/nts"), run);
     const tree = new Git(fx.layout.tree, fx.git.env);
     const recorded = recordAt(tree, commit, (dir) => fx.recorder(dir, pin, run), recordsMessage(commit, part, run, pin, listed));
-    if (recorded.status !== 0) fx.log(`record-pending exited ${recorded.status}; see ${join(run, "records.log")}`);
+    if (recorded.status !== 0) fx.log(`record-pending exited ${recorded.status}; see ${join(run, RECORDER_LOG)}`);
     if (recorded.kind !== "committed") {
       state.records = { commit, at, submitted: null, result: recorded.kind === "refused" ? `wrote only outside the records: ${recorded.refused.join(", ")}` : "recorded nothing" };
       fx.log(`records: ${state.records.result}`);
@@ -515,8 +515,14 @@ function tail(file: string, bytes = 1 << 16): string {
 }
 
 /**
+ * The recorder's log in a run's folder. Not `records.log`: that is the core
+ * run's own `records` step's log, which the recorder would overwrite.
+ */
+export const RECORDER_LOG = "record-pending.log";
+
+/**
  * record-pending.ts in the tree at the run's commit, with the run's pin, its
- * output written to the run's records.log as it comes. It used to be captured
+ * output written to the run's RECORDER_LOG as it comes. It used to be captured
  * whole and written after: at 2df45c6ebdb5 the recorders printed 1.7 million
  * lines, past the 256 MiB buffer, and spawnSync killed record-pending (ENOBUFS)
  * before its later kinds ran. The result's output is the log's tail.
@@ -524,7 +530,7 @@ function tail(file: string, bytes = 1 << 16): string {
 export const recordPending: Recorder = (tree, pin, run) => {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: `no tooling/records/record-pending.ts at this commit` };
-  const tmp = join(run, "records-tmp"), log = join(run, "records.log");
+  const tmp = join(run, "records-tmp"), log = join(run, RECORDER_LOG);
   mkdirSync(tmp, { recursive: true });
   const out = openSync(log, "w");
   let r: ReturnType<typeof spawnSync>;
