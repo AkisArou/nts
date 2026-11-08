@@ -144,6 +144,25 @@ ids, kept so the records that cite them still resolve.
   [explicit indexed write](../tests/programs/a-byte-mask-through-an-explicit-index-write/src/main.ts)
   is its control. Prototype descriptor registrations remain a separate
   representation boundary.
+- Admit the [nullable iterable/intersection field](../tests/refusals/an-iterable-intersection-kept-in-a-nullable-field/src/main.ts)
+  used by ZIP's `ZipSource`; the [equivalent named-interface field](../tests/programs/an-iterable-interface-kept-in-a-nullable-field/src/main.ts)
+  is its control. Keep the iterable with optional cleanup hooks as the
+  runtime's type until the representation supports it.
+- Preserve module namespace values through [a lazy global cache](../tests/refusals/a-module-namespace-kept-in-a-lazy-global/src/main.ts);
+  [live named imports](../tests/programs/a-module-facade-called-through-live-imports/src/main.ts)
+  are the control. ZIP uses live imports, but the namespace form remains a
+  compiler finding.
+- Restore ZIP's remaining language reach: [Map iterator results](../tests/refusals/a-map-iterator-result-cannot-leave-its-factory/src/main.ts),
+  [async interface iteration](../tests/refusals/an-async-walk-over-a-declared-interface/src/main.ts),
+  and [finally across yield](../tests/refusals/a-finally-that-spans-a-yield/src/main.ts).
+  Its [stored Promise settler](../tests/refusals/a-promise-settler-stored-as-a-value/src/main.ts)
+  and indirect exceptions retain their existing findings; do not change
+  iteration or resource cleanup to avoid these gaps.
+- ZIP's default timestamps need the clock and local-calendar capabilities:
+  [the Date constructor](../tests/refusals/a-clock-read-through-the-date-constructor/src/main.ts)
+  and [local Date fields](../tests/refusals/builtin-study-es-date-parts/src/main.ts).
+  Keep these capabilities explicit rather than substituting a fixed time or
+  UTC fields for local ZIP metadata.
 - Exceptional transfer through indirect calls (#18): build the producer per
   [the design](records/notebooks/exceptional-transfer-and-activation-design.md).
 - Octane: `Error()` without `new`, and `new.target` (#147's rest).
@@ -174,6 +193,12 @@ ids, kept so the records that cite them still resolve.
   size or function shape at the native
   ThinLTO link: its nts-bench link spins in `ld` instead of finishing. The
   benchmark build bound records the timeout and continues to the next case.
+- Remove the super-linear compile cost of [class layouts sharing a numeric
+  field prefix](../tests/programs/many-class-layouts-sharing-a-numeric-prefix/src/main.ts).
+  The [same layouts with distinct first fields](../tests/programs/many-class-layouts-with-distinct-prefixes/src/main.ts)
+  are the control: field declaration order alone changes the growth.
+  Profile `fields::shares_storage` and the layout/member hierarchy scans;
+  keep the compile-time tripwire until the compiler fix lands.
 - LLVM at least as fast as C (#97): `compiler/llvm-linkage-nsw`; land
   7858d092d (nsw and final-link preemption) with LLVM benchmark rows, then
   rebuild linkage by product and emission pruning on today's
