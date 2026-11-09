@@ -6,7 +6,7 @@ import {dirname,join,resolve} from 'node:path';
 import {test} from 'node:test';
 import {REPOSITORY,verifyToolchain,oracleRecipeIdentity,removeOracleSnapshot} from './oracle-emit.ts';
 import * as producer from './program-oracles.ts';
-import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,type ProgramOracleTask} from './program-oracles.ts';
+import {PROGRAM_EMIT_PROJECTS,programOracleDirectory,hasOracleWork,type ProgramOracleTask} from './program-oracles.ts';
 import {openProgramOracleResults,programOracleHandoff} from './oracle-results.ts';
 import {setupOracleTestEnvironment} from './oracle-test-fixture.ts';
 import {readRecords,fixtureOf} from './oracle-records.ts';
@@ -14,12 +14,19 @@ import {gateEnvironment,hostEnvironment,oracleToolchainLocation,sealOracleRun,ty
 import {newTestScratch} from '../gate/test-scratch.ts';
 import {finishRunTemporary} from '../gate/run-temporary.ts';
 
+test('a recorded budget is retried without treating its missing count as zero',()=>{
+  assert.equal(hasOracleWork({kind:'budget'}),true);
+  assert.equal(hasOracleWork({kind:'measured',count:4}),true);
+  assert.equal(hasOracleWork({kind:'measured',count:0}),false);
+  assert.equal(hasOracleWork({kind:'no-oracle'}),false);
+});
+
 test('the measured example corpus names every type-directed emit project',()=>{
   const location=oracleToolchainLocation(),{compiler}=verifyToolchain(location),require=createRequire(join(location,'package.json'));
   const {API}:typeof import('typescript/sync')=require('typescript/sync'),ast:typeof import('typescript/ast')=require('typescript/ast');
   const api=new API({cwd:REPOSITORY,tsserverPath:compiler}),needed=new Set<string>();
   try{
-    const projects=new Set(readRecords(REPOSITORY).rows.filter(row=>row.kind==='measured'&&!!row.count&&row.source.startsWith('tests/programs/')).map(row=>fixtureOf(row.source)));
+    const projects=new Set(readRecords(REPOSITORY).rows.filter(row=>hasOracleWork(row)&&row.source.startsWith('tests/programs/')).map(row=>fixtureOf(row.source)));
     for(const project of projects){
       const parsed=api.parseConfigFile(join(REPOSITORY,project,'tsconfig.json'));
       assert.equal(parsed.errors.length,0,project);

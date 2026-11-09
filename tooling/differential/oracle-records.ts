@@ -2,6 +2,9 @@
 // A flat table is an interchange value in memory, never a second authority.
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join, posix } from "node:path";
+import {createHash} from "node:crypto";
+import {homedir} from "node:os";
+import type {OracleBudget} from "./oracle-execution.ts";
 import { execFileSync } from "node:child_process";
 
 export const RECORDS = "results/oracle-counts";
@@ -9,13 +12,14 @@ export const GENERATOR = `${RECORDS}/_generator.json`;
 export type NumericDomain = { min?: number; max?: number; integer?: boolean; allowNaN?: boolean; reason: string };
 export type RecordedDomain = { identity: string; declaration: { version: number; functions: Record<string, Record<string, NumericDomain>> } };
 export type Populations = Record<string, { count: number; cases_sha256: string }>;
-export type OracleRow = { kind: "measured" | "no-oracle"; source: string; signature: string;
+export type OracleRow = { kind: "measured" | "no-oracle" | "budget"; source: string; signature: string;
   input_domain?: RecordedDomain; populations?: Populations;
   keys: Record<string, string>; cases_sha256: string; driver_sha256: string;
+  budget?: OracleBudget & {version:1}; revision?: {entry:string;node:string;producer:string;policy:string};
   count?: number; complete?: true; node_cpu_s?: number[]; source_digest?: string; reason?: string };
 export type OracleTable = { version: number; generator_version?: number; generator_digest?: string; seed?: null; rows: OracleRow[] };
 export type Generator = { version: 1; generator_version: number; generator_digest: string; seed: null };
-type Shard = { version: 1; fixture: string; rows: OracleRow[] };
+type Shard = { version: 1|2; fixture: string; rows: OracleRow[] };
 type Object_ = Record<string, unknown>;
 const BACKENDS = new Set(["c", "llvm", "jvm"]);
 
@@ -95,8 +99,8 @@ function domain(value: unknown): RecordedDomain {
 
 export function parseRow(value: unknown): OracleRow {
   const raw = object(value, "row");
-  fields(raw, ["kind", "source", "signature", "input_domain", "populations", "keys", "cases_sha256", "driver_sha256", "count", "complete", "node_cpu_s", "source_digest", "reason"], "row");
-  if (raw.kind !== "measured" && raw.kind !== "no-oracle") fail("unknown oracle row kind");
+  fields(raw, ["kind", "source", "signature", "input_domain", "populations", "keys", "cases_sha256", "driver_sha256", "count", "complete", "node_cpu_s", "source_digest", "reason", "budget", "revision"], "row");
+  if (raw.kind !== "measured" && raw.kind !== "no-oracle" && raw.kind !== "budget") fail("unknown oracle row kind "+String(raw.kind));
   const source = text(raw.source, "row source"); fixtureOf(source);
   const keys = Object.fromEntries(Object.entries(object(raw.keys, "backend keys")).map(([name, value]) => {
     if (!BACKENDS.has(name)) fail(`unknown backend key ${name}`);
@@ -119,10 +123,19 @@ export function parseRow(value: unknown): OracleRow {
         || !raw.node_cpu_s.every((value): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0)) fail("invalid legacy CPU provenance");
       row.node_cpu_s = raw.node_cpu_s;
     }
+  } else if(raw.kind==='budget'){
+    if(['count','complete','node_cpu_s','populations','reason'].some(key=>key in raw))fail('budget row cannot claim a count or complete execution');
+    row.source_digest=hash(raw.source_digest,32,'source_digest');
+    const budget=object(raw.budget,'oracle budget');fields(budget,['version','phase','outcome','bound','signal','reason'],'oracle budget');
+    if(budget.version!==1||!['prepare','execute'].includes(String(budget.phase))||!['timeout','memory-cap'].includes(String(budget.outcome))||typeof budget.bound!=='number'||!Number.isFinite(budget.bound)||budget.bound<=0||!(budget.signal===null||typeof budget.signal==='string'&&/^SIG[A-Z0-9]+$/.test(budget.signal)))fail('invalid versioned oracle budget');
+    row.budget={version:1,phase:budget.phase as OracleBudget['phase'],outcome:budget.outcome as OracleBudget['outcome'],bound:budget.bound,signal:budget.signal as string|null,reason:text(budget.reason,'budget reason')};
+    const revision=object(raw.revision,'budget revision');fields(revision,['entry','node','producer','policy'],'budget revision');
+    row.revision={entry:hash(revision.entry,64,'entry revision'),node:hash(revision.node,64,'Node revision'),producer:hash(revision.producer,64,'producer revision'),policy:hash(revision.policy,64,'policy revision')};
   } else {
     if ("count" in raw || "complete" in raw || "node_cpu_s" in raw) fail("no-oracle row cannot claim measurements");
     row.source_digest = hash(raw.source_digest, 32, "source_digest"); row.reason = text(raw.reason, "no-oracle reason");
   }
+  if(raw.kind!=='budget'&&('budget' in raw||'revision' in raw))fail('only a budget row has budget provenance');
   return row;
 }
 
@@ -152,10 +165,11 @@ export function parseLegacyTable(value: unknown): OracleTable {
 export function parseShard(value: unknown, fixture: string): Shard {
   recordPath(fixture);
   const raw = object(value, `fixture ${fixture}`); fields(raw, ["version", "fixture", "rows"], `fixture ${fixture}`);
-  if (raw.version !== 1 || raw.fixture !== fixture || !Array.isArray(raw.rows) || raw.rows.length === 0) fail(`invalid or misnamed fixture record ${fixture}`);
+  if ((raw.version !== 1 && raw.version !== 2) || raw.fixture !== fixture || !Array.isArray(raw.rows) || raw.rows.length === 0) fail(`invalid or misnamed fixture record ${fixture}`);
   const rows = unique(raw.rows.map(parseRow));
   if (rows.some(row => fixtureOf(row.source) !== fixture)) fail(`record ${fixture} contains another fixture's source`);
-  return { version: 1, fixture, rows };
+  if(rows.some(row=>row.kind==='budget')&&raw.version!==2)fail('oracle budget rows require fixture record version 2');
+  return { version: raw.version as 1|2, fixture, rows };
 }
 
 // These are compiler-checker negative inputs, not executable oracle subjects.
@@ -243,7 +257,7 @@ export function writeRecords(root: string, table: OracleTable, selected?: Readon
   }
   for (const fixture of selected ?? groups.keys()) {
     if (!expected.has(fixture)) fail(`orphaned fixture ${fixture}`);
-    const shard = parseShard({ version: 1, fixture, rows: groups.get(fixture) }, fixture);
+    const shard = parseShard({ version: groups.get(fixture)?.some(row=>row.kind==='budget')?2:1, fixture, rows: groups.get(fixture) }, fixture);
     atomic(root, join(root, recordPath(fixture)), shard);
   }
   const path = join(root, GENERATOR), bytes = JSON.stringify(header, null, 2) + "\n";
@@ -287,4 +301,35 @@ export function readRecordsAt(root: string, revision: string): OracleTable {
   }
   for (const fixture of expected) if (!found.has(fixture)) fail(`missing committed fixture record ${fixture}`);
   return { ...header, rows: unique(rows) };
+}
+
+export function oracleImprovementDirectory():string{return join(homedir(),'.cache/nts-oracle-record/improvements');}
+export function oracleImprovementPath(fixture:string):string{return join(oracleImprovementDirectory(),createHash('sha256').update(fixture).digest('hex')+'.json');}
+/** A successful check only requests a fresh recording; no result is reused. */
+export function hintedOracleImprovements(root:string):string[]{
+  return [...inventory(root)].filter(fixture=>{
+    const file=join(root,recordPath(fixture)),hint=oracleImprovementPath(fixture);
+    if(!existsSync(file)||!existsSync(hint))return false;
+    const record=readFileSync(file),value=JSON.parse(readFileSync(hint,'utf8'));
+    return value.fixture===fixture&&value.recordSha256===createHash('sha256').update(record).digest('hex')&&parseShard(JSON.parse(record.toString()),fixture).rows.some(row=>row.kind==='budget');
+  }).sort();
+}
+
+export function requestOracleImprovement(root:string,entry:string):void{
+  const source=entry.startsWith(root+'/')?entry.slice(root.length+1):null;if(!source)return;
+  const fixture=fixtureOf(source),file=join(root,recordPath(fixture));if(!existsSync(file))return;
+  const bytes=readFileSync(file),record=parseShard(JSON.parse(bytes.toString()),fixture);
+  if(!record.rows.some(row=>row.source===source&&row.kind==='budget'))return;
+  const hint=oracleImprovementPath(fixture);mkdirSync(dirname(hint),{recursive:true});
+  const temporary=hint+'.'+process.pid;writeFileSync(temporary,JSON.stringify({fixture,recordSha256:createHash('sha256').update(bytes).digest('hex')})+'\n');renameSync(temporary,hint);
+  console.error('ORACLE IMPROVED: '+source+': budget -> measured; fresh recording requested');
+}
+
+export function oracleBudgetFixtures(root:string):string[]{
+  return [...inventory(root)].filter(fixture=>{
+    const file=join(root,recordPath(fixture));if(!existsSync(file))return false;
+    const raw=JSON.parse(readFileSync(file,'utf8'));
+    if(!raw.rows?.some((row:{kind?:string})=>row.kind==='budget'))return false;
+    parseShard(raw,fixture);return true;
+  }).sort();
 }

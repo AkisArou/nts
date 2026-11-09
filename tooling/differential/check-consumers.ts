@@ -1,3 +1,4 @@
+import {CaseBudgetError} from '../gate/step-result.ts';
 // Batch owners count completed comparisons before publishing incomplete work.
 import {existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync, writeFileSync} from "node:fs";
 import {availableParallelism, homedir} from "node:os";
@@ -15,6 +16,7 @@ import {acceptedLine, pendingLine} from "../records/pending.ts";
 import {createHash} from "node:crypto";
 import {readFileSync, renameSync} from "node:fs";
 import {acceptedChange} from "../conformance/outcome-transition.ts";
+import {PROGRAM_DISAGREEMENTS} from "../gate/verdict-policy.ts";
 import {benchmarkRun, compareBenchmarkRun, mergeRunRecord, parseRunRecord, pendingRuns, runsRecord, serializeRunRecord,
   type BenchmarkRun, type RunBackend, type RunRecord} from "../bench/run-outcomes.ts";
 
@@ -55,6 +57,11 @@ function completedFailure(row: Completed, mode: Mode): boolean {
   return row.disposition === 1 || (mode === "compiled-web" && row.disposition !== 0);
 }
 
+function namedDisagreement(row: Completed, mode: Mode): string | undefined {
+  return (mode === "programs" || mode === "rc") && row.disposition === 1 && row.record.first === "disagrees" && !row.record.timeout
+    ? PROGRAM_DISAGREEMENTS[row.entry.name] : undefined;
+}
+
 function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): number {
   const agreed = completed.filter(row => row.disposition === 0 && row.entry.consumer !== "refusal").length;
   const bare = completed.filter(row => row.disposition === 2).length;
@@ -67,8 +74,11 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
     if (timeout) { console.log(`TIMEOUT  ${row.entry.name} (${timeout.stage}): ${timeout.reason}`); continue; }
     console.log(`DIS  ${row.entry.name}: ${row.record.first}`);
     for (const answer of row.record.answers) console.log(answer);
+    const reason = namedDisagreement(row, mode);
+    if (reason) console.log(`  allowed disagreement ${row.entry.name}: ${reason}`);
   }
-  for (const row of incomplete) console.log(`NOT MEASURED ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
+  for(const row of completed.filter(row=>row.disposition===5))console.log(`ORACLE BUDGET ${row.entry.name}: ${row.record.first}`);
+  for (const row of incomplete) console.log(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
   if (mode === "compiled-web") {
     console.log(`  ${agreed} of ${completed.length} compiled Web-platform columns compared and agreed`);
   } else {
@@ -78,7 +88,7 @@ function summary(mode: Mode, completed: Completed[], incomplete: Incomplete[]): 
   if (bare) console.log(`  ${bare} compared nothing (no drivable source exports)`);
   for (const row of pending) console.log(`  ${pendingLine(row.entry.fixture!, recordPath(row.entry.fixture!))}`);
   if (declined) console.log(`  ${declined} source populations measured, but no compiled bindings were available`);
-  return failed.length;
+  return failed.filter(row => !namedDisagreement(row, mode)).length;
 }
 
 /** bench-agree's record for one backend (tooling/bench/run-outcomes.ts): which benchmarks it holds, and which it has no row for. */
@@ -128,7 +138,7 @@ async function runPreparedBatch(mode: Mode, only: string | undefined, scratch: s
     return reportCheckFailure(chosen.error, process.env, failures);
   }
   if (failures > 0) return 1;
-  const compared = completed.filter(row => row.disposition === 0 && row.entry.consumer !== "refusal").length;
+  const compared = completed.filter(row => (row.disposition === 0 && row.entry.consumer !== "refusal") || namedDisagreement(row, mode)).length;
   if (compared === 0) { console.log("  no example was compared, which is not agreement"); return 1; }
   return 0;
 }
@@ -148,6 +158,7 @@ async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Complete
     const path = row.entry.fixture!;
     // No oracle record yet: nothing compared, and nothing to record.
     if (row.disposition === 4) { console.log(`  ${pendingLine(path, recordPath(path))}`); continue; }
+    if (row.disposition === 5) { console.log(`ORACLE BUDGET ${path}: ${row.record.first}`); continue; }
     const now = benchmarkRun(row.record)!, before = plan.record?.rows.get(path);
     if (!before) { updates.set(path, now); console.log(`  ${pendingLine(path, record)}`); continue; }
     const change = compareBenchmarkRun(before, now);
@@ -157,7 +168,7 @@ async function finishBenchmarks(plan: RunPlan, all: Entry[], completed: Complete
   }
   const waiting = plan.recordPending ? [] : all.filter(entry => plan.pending.has(entry.fixture!)).map(entry => entry.fixture!);
   for (const path of waiting) console.log(`  ${pendingLine(path, record)}`);
-  for (const row of incomplete) console.log(`NOT MEASURED ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
+  for (const row of incomplete) console.log(`${row.error instanceof CaseBudgetError?"ORACLE BUDGET":"NOT MEASURED"} ${row.entry.name}: ${row.error instanceof Error ? row.error.message : String(row.error)}`);
   console.log(`  ${completed.length} benchmark cases through the ${plan.backend} backend: ${reproduced} as recorded, ${accepted} accepted, ${changed} changed; ${waiting.length} not recorded yet`);
   if (incomplete.length) {
     const chosen = incomplete.find(row => checkFailurePolicy(row.error, changed).disposition !== "verdict") ?? incomplete[0]!;

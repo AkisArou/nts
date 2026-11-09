@@ -2,13 +2,15 @@
 // which recorders it runs, and what it lets them write. The recorders here are
 // stand-ins that write rows through the same merge helpers the real ones use.
 import assert from "node:assert/strict";
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { test } from "node:test";
 import { mergeBenchmarkRecord, serializeBenchmarkRecord, type BenchmarkOutcome } from "../bench/outcomes.ts";
 import { mergeTypeScriptRecord, serializeTypeScriptRecord, type TypeScriptObservation } from "../census/typescript-record.ts";
-import { auditRecord, findPending, recordPending, type Runner } from "./record-pending.ts";
+import { auditRecord, findPending, oracleRefreshes, recordPending, type Runner } from "./record-pending.ts";
 import { written as dexRecord, type DexOutcome } from "../android/dex-record.ts";
+import {oracleBudgetRevision} from "../differential/record-oracles.ts";
+import {requestOracleImprovement,recordPath,oracleImprovementPath} from "../differential/oracle-records.ts";
 import { testScratch } from "../gate/test-scratch.ts";
 
 const BACKENDS = ["c", "llvm", "jvm"] as const;
@@ -166,4 +168,28 @@ test("the dex record starts from its pending rows, takes an improvement, and ref
   const fixed = text({ "tests/programs/a": { kind: "pass" }, "benchmarks/cases/b": { kind: "pass" } });
   assert.match(auditRecord("dex", file, first, fixed, new Set()).join("\n"), /^benchmarks\/cases\/b .* \(improved\)$/);
   assert.throws(() => auditRecord("dex", file, fixed, first, new Set()), /the row of benchmarks\/cases\/b was rewritten, and the ratchet does not accept it/);
+});
+
+test('budget refreshes need an improvement hint or changed identity, and only a measured count improves them',t=>{
+  const root=tree(t),fixture='benchmarks/cases/recorded',source=fixture+'/case.ts',file=recordPath(fixture);
+  const saved=process.env.HOME;process.env.HOME=join(root,'home');t.after(()=>{if(saved===undefined)delete process.env.HOME;else process.env.HOME=saved;});
+  const common={source,signature:'b'.repeat(64),keys:{c:'c'.repeat(32)},cases_sha256:'d'.repeat(64),driver_sha256:'e'.repeat(64)};
+  const budget={kind:'budget',...common,source_digest:'a'.repeat(32),budget:{version:1,phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'},revision:oracleBudgetRevision(root,source)};
+  const before=JSON.stringify({version:2,fixture,rows:[budget]});writeFileSync(join(root,file),before);
+  assert.equal(findPending(root,'oracle-counts').some(one=>one.name===fixture),false);
+  assert.deepEqual(oracleRefreshes(root),[],'an unchanged budget is not retried by every records pass');
+  const sidecar=join(root,fixture,'case.domains.json');writeFileSync(sidecar,'{"version":1,"functions":{}}');
+  assert.deepEqual(oracleRefreshes(root).map(one=>one.name),[fixture],'a changed declared population requests fresh measurement');
+  rmSync(sidecar);
+  requestOracleImprovement(root,join(root,source));
+  assert.ok(oracleImprovementPath(fixture).startsWith(join(root,'home')+'/'),'the hint belongs to the fixture HOME');
+  assert.ok(existsSync(oracleImprovementPath(fixture)),'the only hint was written inside the fixture');
+  assert.deepEqual(oracleRefreshes(root).map(one=>one.name),[fixture],'a completed check schedules fresh recording, not a cached count');
+  const measured={kind:'measured',...common,complete:true,count:4,node_cpu_s:[1,1]};
+  const after=JSON.stringify({version:1,fixture,rows:[measured]});
+  assert.deepEqual(auditRecord('oracle-counts',file,before,after,new Set()),[source+' budget -> measured']);
+  assert.throws(()=>auditRecord('oracle-counts',file,after,before,new Set()),/recorded population was rewritten/);
+  writeFileSync(join(root,file),after);assert.deepEqual(oracleRefreshes(root),[],'the stale hint cannot request an already measured population');
+  writeFileSync(join(root,file),before);writeFileSync(join(root,source),'export function run(){return 2;}');
+  assert.deepEqual(oracleRefreshes(root).map(one=>one.name),[fixture],'a changed case independently requests fresh measurement');
 });

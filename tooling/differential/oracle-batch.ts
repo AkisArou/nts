@@ -5,27 +5,29 @@ import {activeCommand,COMPILE_CPU_BOUND_SECONDS} from '../gate/active-command.ts
 import {Admission} from '../gate/admission.ts';
 import {CaseBudgetError,PressureError,ToolingInstrumentError} from '../gate/step-result.ts';
 import {memoryRun,memoryCause,memoryDisposition} from '../census/worker-memory.ts';
+import type {OracleBudget} from './oracle-execution.ts';
 import {OracleWorker,TypeScriptDiagnosticError,type OracleOptions,type OraclePrepared} from './oracle-emit.ts';
 
 export type OracleRequest={key:string;options:OracleOptions};
 // The measured case peak plus margin; the census aggregate remains authoritative.
 export const ORACLE_COMPILE_MEMORY_BYTES=3*2**30;
 let residentWorker=0;
-export type OraclePreparation={prepared:OraclePrepared}|{instrument:string}|{timeout:string}|{memoryCap:string};
+export type OraclePreparation={prepared:OraclePrepared}|{instrument:string}|{timeout:string;budget?:OracleBudget}|{memoryCap:string;budget?:OracleBudget};
 export class OracleCompileBudgetError extends CaseBudgetError{
   readonly outcome:'timeout'|'memory-cap';
-  constructor(outcome:OracleCompileBudgetError['outcome'],reason:string){super(reason);this.outcome=outcome;this.name='OracleCompileBudgetError';}
+  readonly budget:OracleBudget;
+  constructor(outcome:OracleCompileBudgetError['outcome'],reason:string,budget?:OracleBudget){super(reason);this.budget=budget??{phase:'prepare',outcome,bound:outcome==='timeout'?COMPILE_CPU_BOUND_SECONDS:ORACLE_COMPILE_MEMORY_BYTES,signal:null,reason};this.outcome=outcome;this.name='OracleCompileBudgetError';}
 }
 /** Budget exhaustion describes the compiler's case, never a broken instrument. */
 export function preparedOracle(member:OraclePreparation|undefined,context:string):OraclePrepared{
   if(member&&'prepared' in member)return member.prepared;
-  if(member&&'timeout' in member)throw new OracleCompileBudgetError('timeout',context+': '+member.timeout);
-  if(member&&'memoryCap' in member)throw new OracleCompileBudgetError('memory-cap',context+': '+member.memoryCap);
+  if(member&&'timeout' in member)throw new OracleCompileBudgetError('timeout',context+': '+member.timeout,member.budget?{...member.budget,reason:context+': '+member.timeout}:undefined);
+  if(member&&'memoryCap' in member)throw new OracleCompileBudgetError('memory-cap',context+': '+member.memoryCap,member.budget?{...member.budget,reason:context+': '+member.memoryCap}:undefined);
   throw new ToolingInstrumentError('tooling-setup',context+': '+(member&&'instrument' in member?member.instrument:'missing finite member'));
 }
 export async function prepareOracles(requests:OracleRequest[],options:{
   directory:string;toolchain:string;workers:number;env:NodeJS.ProcessEnv;memoryBytes?:number;
-  report?:(message:string)=>void;signal?:AbortSignal;
+  report?:(message:string)=>void;signal?:AbortSignal;waitForAdmission?:boolean;resolutionOwnerPid?:number;
 }):Promise<Record<string,OraclePreparation>>{
   const {directory,report=()=>{}}=options;mkdirSync(directory,{recursive:true});
   if(!Number.isInteger(options.workers)||options.workers<1)throw Error('oracle worker count must be positive');
@@ -36,16 +38,16 @@ export async function prepareOracles(requests:OracleRequest[],options:{
   const bytes=options.memoryBytes??ORACLE_COMPILE_MEMORY_BYTES;
   const settled=await Promise.allSettled(Array.from({length:Math.min(options.workers,requests.length)},async(_,index)=>{
     // No toolchain is verified or started for an empty population.
-    while(!admission.open()){if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
+    while(!admission.open()){if(options.waitForAdmission===false)throw new PressureError('oracle preparation awaits host memory admission');if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
     // The census owner supplies the aggregate cap and signal/exit drain too.
     const memory=memoryRun(),resident=memory.worker('oracle'+residentWorker++,bytes);
     let closeWorker=()=>{};
     try{
-      const worker=new OracleWorker(join(directory,'worker-'+index),options.toolchain,outputRoots);
+      const worker=new OracleWorker(join(directory,'worker-'+index),options.toolchain,outputRoots,options.resolutionOwnerPid);
       closeWorker=()=>worker.close();
       while(true){
         if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');
-        while(!admission.open()){if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
+        while(!admission.open()){if(options.waitForAdmission===false)throw new PressureError('oracle preparation awaits host memory admission');if(options.signal?.aborted)throw Error('oracle preparation owner was canceled');await new Promise(resolve=>setTimeout(resolve,1000));}
         // Claim only after admission: another worker may drain the queue while we wait.
         const request=requests[next];if(!request)break;
         const ordinal=next++,own=join(directory,'request-'+ordinal);mkdirSync(own,{recursive:true});
@@ -74,9 +76,10 @@ export async function prepareOracles(requests:OracleRequest[],options:{
               residentPeakBytes:Number(readFileSync('/sys/fs/cgroup'+resident.group+'/memory.peak','utf8'))},null,2)+'\n');
             report(`oracle project ${args[1]}: ${wallMs.toFixed(3)} ms; sampled process-group CPU ${cpuTicks} ticks; status ${run.status}`);
             const disposition=memoryDisposition(cause,options.workers===1?'exclusive':'parallel');
-            if(disposition==='budget')throw new OracleCompileBudgetError('memory-cap',`oracle compile memory-cap: ${request.key} exceeded its ${resident.bytes} byte resident budget`);
+            if(disposition==='budget'&&resident.bytes<bytes)throw new PressureError('oracle compile not measured: aggregate reservation is smaller than the case resident allowance');
+            if(disposition==='budget')throw new OracleCompileBudgetError('memory-cap',`oracle compile memory-cap: ${request.key} exceeded its ${resident.bytes} byte resident budget`,{phase:'prepare',outcome:'memory-cap',bound:resident.bytes,signal:run.signal,reason:`oracle compile memory-cap: ${request.key} exceeded its ${resident.bytes} byte resident budget`});
             if(disposition==='pressure')throw new PressureError('oracle compile not measured: resident '+cause);
-            if(run.timeout)throw new OracleCompileBudgetError('timeout','oracle compile timed out: '+run.timeout);
+            if(run.timeout)throw new OracleCompileBudgetError('timeout','oracle compile timed out: '+run.timeout,{phase:'prepare',outcome:'timeout',bound:COMPILE_CPU_BOUND_SECONDS,signal:run.signal,reason:'oracle compile timed out: '+run.timeout});
             if(run.hung||run.runaway||run.error||run.signal)throw new ToolingInstrumentError('tooling-setup','oracle request not measured: '+(run.hung??run.runaway??run.error??run.signal));
             return run;
           },options.signal);
@@ -89,7 +92,7 @@ export async function prepareOracles(requests:OracleRequest[],options:{
             ...(error instanceof TypeScriptDiagnosticError?{compilerStatus:error.status,diagnostics:error.diagnostics}: {})};
           if(options.signal?.aborted)throw error;
           result[request.key]=error instanceof OracleCompileBudgetError
-            ?error.outcome==='timeout'?{timeout:error.message}:{memoryCap:error.message}
+            ?error.outcome==='timeout'?{timeout:error.message,budget:error.budget}:{memoryCap:error.message,budget:error.budget}
             :{instrument:String(error)};
         }finally{
           writeFileSync(join(own,'finished.json'),JSON.stringify({...outcome,started,finished:new Date().toISOString()},null,2)+'\n');
@@ -98,7 +101,7 @@ export async function prepareOracles(requests:OracleRequest[],options:{
     }finally{try{closeWorker();}finally{resident.close();}}
   }));
   const failed=settled.find(outcome=>outcome.status==='rejected');
-  if(failed?.status==='rejected')throw failed.reason instanceof ToolingInstrumentError||options.signal?.aborted?failed.reason
+  if(failed?.status==='rejected')throw failed.reason instanceof ToolingInstrumentError||failed.reason instanceof PressureError||options.signal?.aborted?failed.reason
     :new ToolingInstrumentError('tooling-setup','oracle worker was not measured: '+String(failed.reason),{cause:failed.reason});
   writeFileSync(join(directory,'members.json'),JSON.stringify(result,null,2)+'\n');return result;
 }

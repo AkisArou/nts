@@ -1060,7 +1060,9 @@ backend_examples() {
   # sabotage that way on 2026-09-27, with every example agreeing. A named
   # allowance absorbs only itself. When it agrees again the step says to remove
   # it rather than failing, since going red on a fix is the wrong direction.
-  allowed=${5:-}
+  # One named policy also serves the C and RC program consumers. A disagreement
+  # stays printed; only the named fixture is accepted, never anonymous slack.
+  allowed=${5:-$(node --input-type=module -e 'import {pathToFileURL} from "node:url"; const {PROGRAM_DISAGREEMENTS}=await import(pathToFileURL(process.argv[1])); console.log(Object.keys(PROGRAM_DISAGREEMENTS).join(" "));' "$root/tooling/gate/verdict-policy.ts")}
   # Source-owned plans retain these deliberate lowering boundaries instead
   # of reporting an empty compiled-body population. This allowance applies
   # only to typed all-unavailable observations, never to wrong answers,

@@ -18,28 +18,52 @@ pub(super) struct Prepared {
     pub(super) assets: Utf8PathBuf,
 }
 
+const IMPLEMENTATION_FILES: &[(&str, &str)] = &[
+    ("oracle-batch.ts", include_str!("../oracle-batch.ts")),
+    ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
+    (
+        "oracle-execution.ts",
+        include_str!("../oracle-execution.ts"),
+    ),
+    (
+        "oracle-execution-policy.ts",
+        include_str!("../oracle-execution-policy.ts"),
+    ),
+    ("oracle-loader.ts", include_str!("../oracle-loader.ts")),
+    ("oracle-assets.ts", include_str!("../oracle-assets.ts")),
+    (
+        "oracle-filesystem.ts",
+        include_str!("../oracle-filesystem.ts"),
+    ),
+    ("oracle-runtime.ts", include_str!("../oracle-runtime.ts")),
+    ("oracle-results.ts", include_str!("../oracle-results.ts")),
+    (
+        "oracle-resolution.ts",
+        include_str!("../oracle-resolution.ts"),
+    ),
+    (
+        "oracle-toolchain.json",
+        include_str!("../oracle-toolchain.json"),
+    ),
+    ("package.json", "{\"type\":\"module\"}\n"),
+];
+
+pub(super) fn verify_source(root: &Utf8Path) -> Result<()> {
+    for &(name, bytes) in IMPLEMENTATION_FILES {
+        if name == "package.json" {
+            continue;
+        }
+        anyhow::ensure!(
+            std::fs::read(root.join(name))? == bytes.as_bytes(),
+            "oracle source-owned producer {name} identity changed"
+        );
+    }
+    Ok(())
+}
+
 fn materialize(directory: &Utf8Path) -> Result<Utf8PathBuf> {
     std::fs::create_dir_all(directory)?;
-    for (name, bytes) in [
-        ("oracle-emit.ts", include_str!("../oracle-emit.ts")),
-        ("oracle-loader.ts", include_str!("../oracle-loader.ts")),
-        ("oracle-assets.ts", include_str!("../oracle-assets.ts")),
-        (
-            "oracle-filesystem.ts",
-            include_str!("../oracle-filesystem.ts"),
-        ),
-        ("oracle-runtime.ts", include_str!("../oracle-runtime.ts")),
-        ("oracle-results.ts", include_str!("../oracle-results.ts")),
-        (
-            "oracle-resolution.ts",
-            include_str!("../oracle-resolution.ts"),
-        ),
-        (
-            "oracle-toolchain.json",
-            include_str!("../oracle-toolchain.json"),
-        ),
-        ("package.json", "{\"type\":\"module\"}\n"),
-    ] {
+    for &(name, bytes) in IMPLEMENTATION_FILES {
         std::fs::write(directory.join(name), bytes)?;
     }
     Ok(directory.join("oracle-emit.ts"))
@@ -232,24 +256,20 @@ fn read_loader_events(mut reader: std::fs::File) -> Result<()> {
 
 pub(super) fn node_command() -> std::process::Command {
     let mut command = std::process::Command::new("prlimit");
-    command
-        .arg(format!("--as={}", super::MEMORY_MB << 20))
-        .arg("--core=0")
-        .arg(format!(
-            "--cpu={}:{}",
-            super::oracle_coverage::CPU_SECONDS,
-            super::oracle_coverage::CPU_SECONDS + 1
-        ))
-        .arg("node");
+    command.arg("--core=0").arg("node");
     command
 }
 
 #[derive(Deserialize)]
 pub(super) struct ProgramReference {
+    #[serde(default)]
     pub(super) rows: Vec<String>,
+    #[serde(default)]
     pub(super) stdout: Vec<u8>,
+    #[serde(default)]
     pub(super) stderr: Vec<u8>,
-    pub(super) replay: Prepared,
+    pub(super) replay: Option<Prepared>,
+    pub(super) budget: Option<Value>,
 }
 
 fn uri_bytes(bytes: &[u8]) -> String {
@@ -595,32 +615,14 @@ pub(super) fn prepare(
     prepare_dependencies()?;
     let owned = directory.canonicalize_utf8()?.join("oracle-emit");
     let assets = owned.join("assets");
-    let entry = materialize(&assets)?;
-    let mut command = node_command();
-    command
-        .arg(entry)
-        .arg("--prepare")
-        .arg(source)
-        .arg(&owned)
-        .arg(tsconfig.canonicalize_utf8()?);
-    let mut status = Value::Null;
-    let output = super::case_costs::child("oracle.emit", || {
-        let finished = super::oracle_run::run(
-            super::without_colour(command),
-            std::time::Duration::from_millis(super::oracle_coverage::IDLE_MILLIS),
-        )?;
-        status = finished.status;
-        Ok::<_, anyhow::Error>(finished.output)
+    materialize(&assets)?;
+    let value = super::case_costs::measure("oracle.emit", || {
+        super::oracle_run::prepare(
+            &serde_json::json!({"entry":source,"directory":owned,"project":tsconfig.canonicalize_utf8()?}),
+        )
     })?;
-    if !output.status.success() || !status["stop"].is_null() {
-        bail!(
-            "oracle TypeScript emit not measured: {}\n{}",
-            status,
-            String::from_utf8_lossy(&output.stderr)
-        );
-    }
-    let mut prepared: Prepared = serde_json::from_slice(&output.stdout)
-        .context("reading shared TypeScript emit preparation")?;
+    let mut prepared: Prepared =
+        serde_json::from_value(value).context("reading shared TypeScript emit preparation")?;
     if !prepared.manifest.starts_with(&owned)
         || !prepared.manifest.is_file()
         || prepared.loader_state.parent() != prepared.manifest.parent()
@@ -631,6 +633,15 @@ pub(super) fn prepare(
     let stored: Value = serde_json::from_slice(&bytes)?;
     if prepared.snapshot != bind_snapshot(&prepared.manifest, &bytes, &stored["runtimeIndex"])? {
         bail!("oracle snapshot preparation identity mismatch");
+    }
+    // Fresh preparation uses the verified source-owned producer. Unlike a
+    // published handoff, its source assets belong to this native owner.
+    verify_implementation(&prepared.identity, &assets)?;
+    if stored["identity"] != prepared.identity
+        || stored["entry"] != source.as_str()
+        || stored["project"] != tsconfig.canonicalize_utf8()?.as_str()
+    {
+        bail!("oracle snapshot implementation identity mismatch");
     }
     prepared.assets = assets;
     Ok(prepared)
@@ -1193,6 +1204,25 @@ fn verify_implementation(identity: &Value, assets: &Utf8Path) -> Result<Executio
     if identity["version"] != 1 || expected.is_null() || identity["options"] != execution.options {
         bail!("prepared oracle implementation identity mismatch");
     }
+    if identity["executionSha256"] != super::oracle_run::execution_identity()? {
+        bail!("prepared oracle execution policy identity mismatch");
+    }
+    for file in [
+        "oracle-execution.ts",
+        "oracle-execution-policy.ts",
+        "oracle-batch.ts",
+    ] {
+        let expected = if file == "oracle-execution.ts" {
+            include_bytes!("../oracle-execution.ts").as_slice()
+        } else if file == "oracle-execution-policy.ts" {
+            include_bytes!("../oracle-execution-policy.ts").as_slice()
+        } else {
+            include_bytes!("../oracle-batch.ts").as_slice()
+        };
+        if std::fs::read(assets.join(file))? != expected {
+            bail!("prepared oracle embedded {file} identity mismatch");
+        }
+    }
     for key in [
         "version",
         "rootPackageSha256",
@@ -1541,7 +1571,7 @@ mod tests {
             .map(|(path, value)| serde_json::json!({"kind":"file","path":path,"value":value}))
             .collect::<Vec<_>>();
         let mut stored = json!({"version":3,"observations":observations,"status":"complete","entry":source,"project":project,"roots":null,
-            "identity":{"version":1,"typescript":typescript,"emitterSha256":digest(include_bytes!("../oracle-emit.ts")),
+            "identity":{"version":1,"typescript":typescript,"executionSha256":super::super::oracle_run::execution_identity().unwrap(),"emitterSha256":digest(include_bytes!("../oracle-emit.ts")),
                 "assetsSha256":digest(include_bytes!("../oracle-assets.ts")),"loaderSha256":digest(include_bytes!("../oracle-loader.ts")),"filesystemSha256":digest(include_bytes!("../oracle-filesystem.ts")),"runtimeSha256":digest(include_bytes!("../oracle-runtime.ts")),"resolutionSha256":digest(include_bytes!("../oracle-resolution.ts")),"toolchainRecordSha256":digest(include_bytes!("../oracle-toolchain.json")),"options":record["execution"]["options"]},
             "inputs":inputs,"outputs":{"program/main.js":digest(&std::fs::read(&emitted).unwrap()),"source-index.json":digest(&std::fs::read(&index).unwrap())},
             "groups":[{"entry":source,"project":project,"output":"program","compilerStatus":0}]

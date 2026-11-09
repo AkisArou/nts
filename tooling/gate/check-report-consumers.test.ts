@@ -45,6 +45,7 @@ import {basename, dirname} from 'node:path';
 if (process.argv.includes('--help')) {
   console.log('  check        compile, run, and compare against node (--json)'); process.exit(0);
 }
+
 if (!process.argv.includes('--json')) { console.error('JSON interface required'); process.exit(78); }
 const name = basename(dirname(process.argv[3]));
 if (process.env.CHECK_MUTATION === 'spin' && name === 'spin') for (;;) {}
@@ -71,6 +72,10 @@ if (name === 'invalid') {
   }
 } else if (process.env.CHECK_MUTATION === 'pending' && name === 'control') {
   report.status='pending'; report.counts=null; report.oracle=null;
+} else if (process.env.CHECK_MUTATION === 'oracle-budget') {
+  report.version=3; report.status='error'; report.counts=null; report.oracle=null; report.incomplete=[]; status=1;
+  report.error={kind:'oracle_budget',source:'benchmarks/cases/control/case.ts',message:'ORACLE BUDGET: timeout at 60 CPU-s',
+    budget:{recorded:true,value:{phase:'execute',outcome:'timeout',bound:60,signal:'SIGKILL',reason:'oracle timed out'}}};
 } else if (process.env.CHECK_MUTATION === 'unavailable') {
   report.status='all_unavailable'; report.counts.compared=0; report.counts.unavailable=2;
 } else if (process.env.CHECK_MUTATION === 'contradiction') {
@@ -108,6 +113,23 @@ process.exit(status);
 `, { mode: 0o755 });
   return { root, compiler };
 }
+
+test("a named program disagreement stays loud and cannot accept another fixture or failure kind", t => {
+  const {root, compiler} = sandbox(t);
+  const known = join(root, "tests/programs/typed-array-aliasing");
+  mkdirSync(known);writeFileSync(join(known, "tsconfig.json"), "{}");
+  const run = (mode: string, name: string, mutation: string) => spawnTest("sh", [join(root, `tooling/gate/${mode}.sh`), name], {
+    cwd: root, encoding: "utf8", env: {...process.env, NTS_GATE_STEP_RESULT: "", NTS_BIN: compiler, CHECK_MUTATION: mutation},
+  });
+  for (const mode of ["gate", "rc"]) {
+    const accepted = run(mode, "typed-array-aliasing", "wrong");
+    assert.equal(accepted.status, 0, accepted.stdout + accepted.stderr);
+    assert.match(accepted.stdout, /DIS  typed-array-aliasing: disagrees/);
+    assert.match(accepted.stdout, /allowed disagreement typed-array-aliasing: node 26 answers 302/);
+    const other = run(mode, "control", "wrong");assert.equal(other.status, 1, other.stdout + other.stderr);
+    const typecheck = run(mode, "typed-array-aliasing", "typecheck");assert.equal(typecheck.status, 1, typecheck.stdout + typecheck.stderr);
+  }
+});
 
 test("declines.sh reads backend-stage fields and keeps runtime declines separate", t => {
   const {root, compiler} = sandbox(t);
@@ -177,6 +199,13 @@ test("bench-agree.sh holds each benchmark to its run record: what reproduces pas
   assert.match(pending.stdout, /pending: benchmarks\/cases\/control is not recorded in results\/benchmarks\/jvm\/runs\.tsv yet/);
   record({ kind: "agrees" });
   const holds = run(); assert.equal(holds.status, 0, holds.stdout + holds.stderr); assert.match(holds.stdout, /1 as recorded/);
+  const originalBudgetRecord = readFileSync(file, 'utf8');
+  const budget = run('oracle-budget');
+  assert.equal(budget.status, 0, budget.stdout + budget.stderr);
+  assert.match(budget.stdout, /^ORACLE BUDGET benchmarks\/cases\/control: ORACLE BUDGET: timeout at 60 CPU-s$/m);
+  assert.match(budget.stdout, /0 as recorded, 0 accepted, 0 changed/);
+  assert.doesNotMatch(budget.stdout, /pending:/);
+  assert.equal(readFileSync(file, 'utf8'), originalBudgetRecord, 'no native run is invented for an oracle budget');
   for (const mutation of ["legacy-text", "contradiction"]) assert.notEqual(run(mutation).status, 0, mutation);
   const worse = run("runtime-decline");
   assert.equal(worse.status, 1, worse.stdout + worse.stderr);

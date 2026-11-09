@@ -59,8 +59,12 @@ fn header(bytes: &[u8]) -> Result<()> {
 fn record(bytes: &[u8], expected: &str) -> Result<Value> {
     let record: Shard = serde_json::from_slice(bytes)?;
     ensure!(
-        record.version == 1 && record.fixture == expected && !record.rows.is_empty(),
+        matches!(record.version, 1 | 2) && record.fixture == expected && !record.rows.is_empty(),
         "oracle not measured: invalid fixture record for {expected}"
+    );
+    ensure!(
+        record.version == 2 || !record.rows.iter().any(|row| row["kind"] == "budget"),
+        "oracle budget rows require fixture record version 2"
     );
     let mut identities = std::collections::BTreeSet::new();
     let mut populations = std::collections::BTreeSet::new();
@@ -174,6 +178,28 @@ mod tests {
             changed[field] = value;
             assert!(header(&serde_json::to_vec(&changed).unwrap()).is_err());
         }
+    }
+
+    #[test]
+    fn a_budget_requires_its_version_and_never_becomes_a_zero_count() {
+        let fixture = "benchmarks/cases/private";
+        let mut shard = json!({"version":2,"fixture":fixture,"rows":[{
+            "kind":"budget","source":"benchmarks/cases/private/case.ts",
+            "signature":"one","keys":{"c":"key"},
+            "budget":{"version":1,"phase":"execute","outcome":"timeout","bound":60,"signal":"SIGKILL","reason":"oracle timed out"}
+        }]});
+        let parsed = record(&serde_json::to_vec(&shard).unwrap(), fixture).unwrap();
+        assert_eq!(parsed["rows"][0]["kind"], "budget");
+        assert!(parsed["rows"][0].get("count").is_none());
+        shard["version"] = json!(1);
+        assert!(
+            record(&serde_json::to_vec(&shard).unwrap(), fixture)
+                .unwrap_err()
+                .to_string()
+                .contains("require fixture record version 2")
+        );
+        shard["version"] = json!(3);
+        assert!(record(&serde_json::to_vec(&shard).unwrap(), fixture).is_err());
     }
 
     #[test]

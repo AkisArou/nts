@@ -2,6 +2,9 @@
 //! The driver blocks at each boundary while its owner samples process
 //! CPU, so a fast following call cannot be charged to the preceding one.
 
+/// Generic runaway guard for an instrument, independent of a case allowance.
+pub(super) const COMMAND_CPU_BUDGET_SECONDS: f64 = 30.0 * 60.0;
+
 use std::io::Write as _;
 use std::process::{Child, Command, Output, Stdio};
 use std::thread;
@@ -500,7 +503,7 @@ impl Watch {
     fn new(identity: &Process, hz: u32, limits: Limits, channel: Option<&Channel>) -> Self {
         let budget = channel.map_or(limits.cpu_seconds, |c| {
             let calls = u32::try_from(c.boundaries.total - c.boundaries.next).unwrap_or(u32::MAX);
-            (limits.cpu_seconds * (f64::from(calls) + 1.0)).min(1800.0)
+            (limits.cpu_seconds * (f64::from(calls) + 1.0)).min(COMMAND_CPU_BUDGET_SECONDS)
         });
         Self {
             hz,

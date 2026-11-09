@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import {copyModuleClosure} from "./module-closure-fixture.ts";
 import {execFileSync} from "node:child_process";
 import {mkdirSync,mkdtempSync,readFileSync,rmSync,writeFileSync} from "node:fs";
 import {join} from "node:path";
@@ -8,6 +9,7 @@ import {spawnTest} from "./test-wait.ts";
 
 test("backend policy separates named unavailable populations from defects and partial coverage", t => {
   const root=mkdtempSync(join(tmpdir(),"nts-source-unavailable-"));t.after(()=>rmSync(root,{recursive:true,force:true}));
+  copyModuleClosure(['tooling/gate/verdict-policy.ts'],root);
   for(const name of ["control","calls"]){const dir=join(root,"tests/programs",name);mkdirSync(dir,{recursive:true});writeFileSync(join(dir,"tsconfig.json"),"{}");}
   const diff=join(root,"tooling/differential");mkdirSync(diff,{recursive:true});
   writeFileSync(join(diff,"agree.mjs"),`import {copyFileSync} from 'node:fs';const out=process.argv.find(arg=>arg.startsWith('--verdicts=')).slice('--verdicts='.length);copyFileSync(process.env.SOURCE_VERDICTS,out);`);

@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "functions": {
+    "state": {
+      "n": {
+        "min": 0,
+        "max": 2,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size."
+      }
+    },
+    "work": {
+      "n": {
+        "min": 0,
+        "max": 2,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size."
+      }
+    },
+    "render": {
+      "n": {
+        "min": 0,
+        "max": 2,
+        "integer": true,
+        "allowNaN": false,
+        "reason": "Outer repetitions of a complete upstream benchmark iteration: 0 is empty, 1 is one full iteration, and 2 carries state across a repeat. Every inner workload retains its original size."
+      }
+    }
+  }
+}

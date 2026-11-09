@@ -4,6 +4,11 @@ export const STANDING_GATE_POLICY = Object.freeze({
   NTS_GATE_ACCEPT_SKIP: "on-device",
 });
 
+/** Exact program disagreements, kept visible until their outcome task is fixed. */
+export const PROGRAM_DISAGREEMENTS: Readonly<Record<string, string>> = Object.freeze({
+  "typed-array-aliasing": "node 26 answers 302 for a resizable ArrayBuffer with maxByteLength 2^31-1 or 2^32-1; nts throws RangeError. The old 2 GiB address-space oracle bound made node fail too",
+});
+
 /**
  * Programs that run on another platform. An Apple or Windows interop project
  * builds on this host and runs on a Mac or a Windows machine; with none

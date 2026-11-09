@@ -684,6 +684,7 @@ pub fn check_with_oracle(
         .finish()
         .map_err(|error| annotate(error, FailureKind::OracleExecution))?;
     let report = provisional?;
+    oracle_coverage::improvement(&check.entry, &coverage)?;
     case_costs::event(
         serde_json::json!({"event":"report", "functions":report.functions, "checked":report.checked, "expected":report.expected, "refused":report.refused, "timeouts":report.timeouts, "aborts":report.aborts.len(), "disagreements":report.disagreements.len()}),
     );
@@ -2959,6 +2960,7 @@ fn run_node_cases(
         .with_context(|| format!("locating {entry}"))?;
     execute_node_driver(
         dir,
+        entry,
         &driver_cases(&format!("file://{absolute}"), cases, Engine::Node),
         Some(sources),
         coverage,
@@ -2968,6 +2970,7 @@ fn run_node_cases(
 
 fn execute_node_driver(
     dir: &Utf8Path,
+    entry: &Utf8Path,
     driver_text: &str,
     sources: Option<&[nts_diagnostics::SourceFile]>,
     coverage: &oracle_coverage::Coverage,
@@ -2996,10 +2999,7 @@ fn execute_node_driver(
     let mut status = serde_json::Value::Null;
     let mut completion = serde_json::Value::Null;
     let result = case_costs::child("oracle.execute", || {
-        let finished = oracle_run::run(
-            without_colour(command),
-            std::time::Duration::from_millis(oracle_coverage::IDLE_MILLIS),
-        )?;
+        let finished = oracle_run::execute(&without_colour(command), entry)?;
         status = finished.status;
         Ok::<_, anyhow::Error>(finished.output)
     })
@@ -3015,6 +3015,9 @@ fn execute_node_driver(
             rows.pop();
         }
         let delivered = rows.len();
+        if !status["budget"].is_null() {
+            return Err(oracle_coverage::BudgetExceeded { budget: status["budget"].clone(), recorded: coverage.budget.is_some() }.into());
+        }
         let measured = oracle_coverage::measured_rows(rows, done, &status, coverage);
         completion = serde_json::json!({"required":coverage.count,"delivered":delivered,
             "done":done,"case_key":coverage.key,"measured":measured.is_ok()});
@@ -3077,9 +3080,28 @@ pub fn execute_oracle_plan(
     let coverage = oracle_coverage::Coverage {
         count,
         key: text("case_key")?.to_owned(),
+        budget: oracle_coverage::recorded_budget(entry, text("backend")?, text("case_key")?)?,
     };
     std::fs::create_dir_all(directory)?;
-    let run = execute_node_driver(directory, text("driver")?, None, &coverage, &prepared)?;
+    let run = match execute_node_driver(
+        directory,
+        entry,
+        text("driver")?,
+        None,
+        &coverage,
+        &prepared,
+    ) {
+        Ok(run) => run,
+        Err(error) => {
+            if let Some(budget) = error.downcast_ref::<oracle_coverage::BudgetExceeded>() {
+                return Ok(
+                    serde_json::json!({"version":1,"provisional":true,"budget":budget.budget,"recorded":budget.recorded}),
+                );
+            }
+            return Err(error);
+        }
+    };
+    // The producer owns finalization and only then publishes the improvement hint.
     Ok(
         serde_json::json!({"version":1,"provisional":true,"rows":run.results,
         "stdout":run.output.stdout,"stderr":run.output.stderr}),

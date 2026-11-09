@@ -9,7 +9,7 @@ import {fileURLToPath,pathToFileURL} from 'node:url';
 import {dependencySealReady,dependencySealError,ownsDependencyRun,checkerImportIdentity,OracleFilesystem,OraclePathPrefixes,validateHostObservations,OracleResolutionDomain,capturedPackageMetadata,ORACLE_NODE_RESOLUTION_RECIPE,capturedModuleIdentity,writeOracleSnapshotIndex,readOracleSnapshotIndex,type OracleSnapshotReference,type CheckerImportRelation,type CapturedModulePath,type CapturedAlias,type HostObservation} from './oracle-filesystem.ts';
 
 import {startNodeResolutionSession,queryNodeResolutions,nodeResolutionOptions,type NodeResolutionSession,type NodeResolutionQuery} from './oracle-resolution.ts';
-import {oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
+import {ORACLE_EXECUTION_FILES,oracleIdentityFor,oracleRecipeIdentity,nodeProcessAlive,parseOracleLoaderEvents,sourceAssetPath,type SourceAssetRule,type OracleManifest} from './oracle-runtime.ts';
 export type {OracleManifest} from './oracle-runtime.ts';
 const HERE=dirname(fileURLToPath(import.meta.url));
 export const REPOSITORY=resolve(HERE,'../..');
@@ -19,7 +19,7 @@ const hash=(bytes:string|Uint8Array)=>createHash('sha256').update(bytes).digest(
 export type TypeScriptIdentity={version:string;rootPackageSha256:string;packageSha256:string;nativeSha256:string;nativePackageSha256:string};
 type ToolchainRecord=TypeScriptIdentity&{nativePackage:string;executable:string};
 type ToolchainRecords={version:1;platforms:Record<string,ToolchainRecord>;execution:{manifestVersion:3;options:string;args:string[]}};
-export type OracleIdentity={dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
+export type OracleIdentity={executionSha256:string;dependencyRecipeSha256?:string;assetsSha256:string;resolutionSha256:string;filesystemSha256:string;runtimeSha256:string;declarationsSha256?:string;version:1;typescript:TypeScriptIdentity;emitterSha256:string;loaderSha256:string;toolchainRecordSha256:string;options:string};
 export type EmitOptions=CompilerOptions;
 export type RuntimeCoverage={version:3;recipe:typeof ORACLE_NODE_RESOLUTION_RECIPE;aliases:CapturedAlias[];roots:CapturedModulePath[];excluded:CapturedModulePath[];directories:CapturedModulePath[];packages:({directory:CapturedModulePath;sha256:string}&ReturnType<typeof capturedPackageMetadata>)[]};
 // No compiler map does not prohibit an authored sourceMappingURL comment.
@@ -881,7 +881,10 @@ export class OracleWorker{
   private closed=false;
   private released=false;
   private busy=false;
-  constructor(directory:string,toolchain=process.env.NTS_ORACLE_TYPESCRIPT,outputRoots:Iterable<string>=[]){
+  // A command's snapshot can outlive its helper. A canonical run still wins.
+  private readonly resolutionOwnerPid:number;
+  constructor(directory:string,toolchain=process.env.NTS_ORACLE_TYPESCRIPT,outputRoots:Iterable<string>=[],resolutionOwnerPid=process.pid){
+    this.resolutionOwnerPid=resolutionOwnerPid;
     this.outputRoots=new OraclePathPrefixes(outputRoots);
     this.binding=captureToolchain(toolchain);
     // No directory is published before the capability is verified.
@@ -1523,7 +1526,7 @@ export class OracleWorker{
     const pending:OraclePrepared[]=[];
     for(const job of jobs){
       const {directory}=job,assets=join(directory,'assets');mkdirSync(assets);
-      for(const file of ['oracle-emit.ts','oracle-loader.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-assets.ts','oracle-toolchain.json'])writeFileSync(join(assets,file),readFileSync(join(HERE,file)));
+      for(const file of [...ORACLE_EXECUTION_FILES,'oracle-emit.ts','oracle-loader.ts','oracle-filesystem.ts','oracle-runtime.ts','oracle-resolution.ts','oracle-assets.ts','oracle-toolchain.json'])writeFileSync(join(assets,file),readFileSync(join(HERE,file)));
       writeFileSync(join(assets,'package.json'),'{"type":"module"}\n');
       const outputs:Record<string,string>={};
       const tree=trees.get(job)!,sources=tree.sources;
@@ -1559,8 +1562,7 @@ export class OracleWorker{
       const owner=scope?JSON.parse(process.env.NTS_GATE_ENV_CONTEXT??'null')?.resolutionOwner:undefined;
       if(scope&&(!owner||!nodeProcessAlive(owner)))throw Error('oracle resolution run owner is missing or changed');
       const sessionDirectory=scope?join(scope.directory,'oracle-resolution','node-'+process.versions.node):join(directory,'resolution');
-      const cli=process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)&&process.argv[2]==='--prepare';
-      stored.runtimeIndex=await publishRuntimeSnapshot(directory,stored,runtimeIndex,this.api,sessionDirectory,owner?.pid??(cli?process.ppid:process.pid),tree.dependency);
+      stored.runtimeIndex=await publishRuntimeSnapshot(directory,stored,runtimeIndex,this.api,sessionDirectory,owner?.pid??this.resolutionOwnerPid,tree.dependency);
       const manifestBytes=Buffer.from(JSON.stringify(stored,null,2)+'\n');
       writeFileSync(manifest+'.pending',manifestBytes);
       const snapshot:OracleSnapshotIdentity={version:1,index:stored.runtimeIndex,manifestSha256:hash(manifestBytes),assets:stored.runtimeAssets};
@@ -1648,8 +1650,8 @@ function emittedPath(group:EmitGroup,file:string):string|null{
 }
 
 /** The caller owns all output lifetimes, just as its existing scratch. */
-export async function prepareOracle(request:OracleOptions):Promise<OraclePrepared>{
-  const worker=new OracleWorker(request.directory,request.toolchain);
+export async function prepareOracle(request:OracleOptions,resolutionOwnerPid=process.pid):Promise<OraclePrepared>{
+  const worker=new OracleWorker(request.directory,request.toolchain,[],resolutionOwnerPid);
   try{return await worker.prepare(request);}finally{worker.close();}
 }
 
@@ -1665,7 +1667,7 @@ if(process.argv[1]&&resolve(process.argv[1])===fileURLToPath(import.meta.url)){
   }
   else if(process.argv[2]==='--identity')process.stdout.write(JSON.stringify(oracleIdentity())+'\n');
   else if(process.argv[2]==='--prepare'&&process.argv[3]&&process.argv[4])
-    process.stdout.write(JSON.stringify(await prepareOracle({entry:process.argv[3],directory:process.argv[4],project:process.argv[5]}))+'\n');
+    process.stdout.write(JSON.stringify(await prepareOracle({entry:process.argv[3],directory:process.argv[4],project:process.argv[5]},process.ppid))+'\n');
   else if(process.argv[2]==='--finish-snapshot'&&process.argv[3]){
     const result=finishOracleSnapshot(JSON.parse(process.argv[3]));
     process.stdout.write(JSON.stringify(result)+'\n');process.exitCode=result.ready?0:1;

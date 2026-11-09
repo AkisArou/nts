@@ -50,6 +50,10 @@ branch goes when the task lands or is dropped. The numbers are the old task
 ids, kept so the records that cite them still resolve.
 
 **Wrong answers**
+- A resizable ArrayBuffer with maximum 2^31-1 or 2^32-1 throws RangeError
+  where node 26 returns 302: [outcome](../tests/outcomes/a-resizable-array-buffer-with-a-large-maximum),
+  [maximum-16 control](../tests/programs/a-resizable-array-buffer-with-a-small-maximum).
+  Remove the typed-array-aliasing disagreement allowance when it agrees.
 - Decorators are compiled away; refuse them by name until the standard
   semantics exist (#14).
 - Stored callbacks and catch roles (#188):
@@ -92,6 +96,9 @@ ids, kept so the records that cite them still resolve.
 - The rest of #190's wrong answers, by reach.
 
 **Aborts and failed builds**
+- Use one JDK from JAVA_HOME through the TS and native JVM launchers: with
+  JAVA_HOME naming Corretto 21, a PATH without its bin selected OpenJDK 27
+  in the TS census launcher and changed the native-output stop classification.
 - Flow's incremental fixpoint for test262's
   [infinity division](../third_party/test262/test/language/expressions/division/S11.5.2_A4_T4.js)
   differs from a full sweep: materialize the case with `tooling/census/project.ts`;

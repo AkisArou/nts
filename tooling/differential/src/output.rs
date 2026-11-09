@@ -47,7 +47,21 @@ impl<'a> Oracle<'a> {
         let prepared = match (supplied, shared) {
             (Some(prepared), _) => Some(prepared),
             (None, true) => None,
-            (None, false) => Some(super::oracle_emit::prepare(dir, &absolute, tsconfig)?),
+            (None, false) => Some(
+                super::oracle_emit::prepare(dir, &absolute, tsconfig).map_err(|error| {
+                    if let Some(budget) =
+                        error.downcast_ref::<super::oracle_coverage::BudgetExceeded>()
+                    {
+                        super::oracle_coverage::BudgetExceeded {
+                            budget: budget.budget.clone(),
+                            recorded: coverage.budget.is_some(),
+                        }
+                        .into()
+                    } else {
+                        error
+                    }
+                })?,
+            ),
         };
         Ok(Self {
             dir,
@@ -81,6 +95,13 @@ impl<'a> Oracle<'a> {
                 &super::driver(&format!("file://{absolute}"), testable, super::Engine::Node),
             )?
             .context("program oracle handoff disappeared")?;
+            if let Some(budget) = &reference.budget {
+                return Err(super::oracle_coverage::BudgetExceeded {
+                    budget: budget.clone(),
+                    recorded: self.coverage.budget.is_some(),
+                }
+                .into());
+            }
             anyhow::ensure!(
                 reference.rows.len() == self.coverage.count,
                 "program oracle reference has a different population"
@@ -134,6 +155,7 @@ impl<'a> Oracle<'a> {
             let coverage = super::oracle_coverage::Coverage {
                 count: selected.len(),
                 key: format!("{:032x}", xxhash_rust::xxh3::xxh3_128(&identity)),
+                budget: None,
             };
             if self.prepared.borrow().is_none() {
                 let reference = self.reference.borrow();
@@ -141,12 +163,26 @@ impl<'a> Oracle<'a> {
                     .as_ref()
                     .context("missing program oracle reference")?;
                 anyhow::ensure!(
-                    reference.replay.snapshot["manifestSha256"]
-                        == super::oracle_emit::digest(&std::fs::read(&reference.replay.manifest)?),
+                    reference
+                        .replay
+                        .as_ref()
+                        .context("program oracle has no executable replay")?
+                        .snapshot["manifestSha256"]
+                        == super::oracle_emit::digest(&std::fs::read(
+                            &reference
+                                .replay
+                                .as_ref()
+                                .context("program oracle has no executable replay")?
+                                .manifest
+                        )?),
                     "program oracle replay original proof changed"
                 );
                 *self.prepared.borrow_mut() = Some(super::oracle_emit::read_prepared(
-                    &reference.replay.manifest,
+                    &reference
+                        .replay
+                        .as_ref()
+                        .context("program oracle has no executable replay")?
+                        .manifest,
                     self.entry,
                     self.project,
                 )?);
@@ -418,6 +454,7 @@ mod tests {
                 ("c", true),
                 ("llvm", true),
             ] {
+                eprintln!("native prefix arm starts: {backend}, RC={rc}");
                 let mut command = std::process::Command::new(std::env::current_exe().unwrap());
                 command
                     .args(["--exact", NAME, "--nocapture"])
@@ -431,7 +468,8 @@ mod tests {
                 let output = command.output().unwrap();
                 assert!(
                     output.status.success(),
-                    "{backend}, RC={rc}: {}{}",
+                    "{backend}, RC={rc}: child exit {}; stdout: {}; stderr: {}",
+                    output.status,
                     String::from_utf8_lossy(&output.stdout),
                     String::from_utf8_lossy(&output.stderr)
                 );
