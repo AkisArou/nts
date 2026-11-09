@@ -39,8 +39,10 @@ import { homedir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { memAvailableGB, RESUME_AT_GB } from "../gate/admission.ts";
-import { gateEnvironment } from "../gate/canonical-environment.ts";
-import { finishRunTemporary } from "../gate/run-temporary.ts";
+import {candidateCommand} from '../landing/candidate-environment.ts';
+import {launcherEnvironment} from '../landing/run.ts';
+import {nodePin} from '../bootstrap/node.ts';
+import {nodeToolchain} from '../gate/toolchain.ts';
 import { sharedCheckout } from "../landing/git.ts";
 import { linkInputs, Pool, POOL_HOME, pruneLines, type Inputs } from "../landing/pool.ts";
 import { pruneNodeCompileCache, type NodeCacheRetention } from "./node-cache-retention.ts";
@@ -597,22 +599,22 @@ export const RECORDER_LOG = "record-pending.log";
  * lines, past the 256 MiB buffer, and spawnSync killed record-pending (ENOBUFS)
  * before its later kinds ran. The result's output is the log's tail.
  */
-export const recordPending: Recorder = (tree, pin, run) => {
+export function recordPending(tree: string, pin: string, run: string, options: { nodeInstallations?: string; env?: NodeJS.ProcessEnv } = {}) {
   const script = join(tree, "tooling/records/record-pending.ts");
   if (!existsSync(script)) return { status: 2, output: `no tooling/records/record-pending.ts at this commit` };
   const log = join(run, RECORDER_LOG);
-  const planned = gateEnvironment(process.env, { run: join(run, "records"), owned: { NTS_BIN: pin, NTS_CHECKERS: "1" }, oracleRoot: tree });
+  const selected = nodeToolchain(nodePin(tree), launcherEnvironment(options.env ?? process.env), options.nodeInstallations);
   const out = openSync(log, "w");
   let r: ReturnType<typeof spawnSync>;
   try {
-    r = spawnSync(process.execPath, [script], { cwd: tree, stdio: ["ignore", out, out], env: planned.env });
+    r = candidateCommand(selected.node, {
+      tree, run: join(run, 'records'), owned: { NTS_BIN: pin, NTS_CHECKERS: '1' },
+      command: [selected.node, script], discardTemporary: true,
+    }, selected.env, { output: out });
   } finally { closeSync(out); }
   if (r.error) appendFileSync(log, `\n${r.error.message}\n`);
-  // Its temporary folder goes either way: a refused recording keeps its
-  // evidence in the recorder's own folder, which the log names.
-  finishRunTemporary(planned.temporary, homedir(), true);
   return { status: r.status ?? 1, output: tail(log) };
-};
+}
 
 /** Wait, without spinning, until MemAvailable reaches the threshold AGENTS.md sets. */
 export function admitWhenMemory(log: (line: string) => void, read = memAvailableGB): () => void {

@@ -10,7 +10,7 @@ import {appendFileSync,fstatSync} from 'node:fs';
 import {spawnSync} from 'node:child_process';
 appendFileSync(${JSON.stringify(log)},JSON.stringify(process.argv.slice(2))+'\\n');
 if(process.argv[2]==='--version')console.log(${JSON.stringify("v"+reported)});
-else {const stdio=['inherit','inherit','inherit'];if(process.argv[2]?.endsWith('/tooling/landing/candidate-environment.ts')){fstatSync(3);stdio.push(3);}const result=spawnSync(${JSON.stringify(process.execPath)},process.argv.slice(2),{env:process.env,stdio});if(result.error)throw result.error;process.exitCode=result.status??1;}
+else {const stdio=['inherit','inherit','inherit'];if(process.argv[2]?.endsWith('/tooling/landing/candidate-environment.ts')){fstatSync(3);stdio.push(3);}if(process.env.NTS_GATE_LOCK_FD==='8'){fstatSync(8);while(stdio.length<8)stdio.push('ignore');stdio.push(8);}const result=spawnSync(${JSON.stringify(process.execPath)},process.argv.slice(2),{env:process.env,stdio});if(result.error)throw result.error;process.exitCode=result.status??1;}
 `,{mode:0o755});
   return node;
 }

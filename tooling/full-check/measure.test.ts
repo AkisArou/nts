@@ -5,7 +5,7 @@
 // step unless the policy lets that platform stay unrun, and a summary of
 // another commit or from a non-canonical environment vouches for nothing.
 import assert from "node:assert/strict";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { chmodSync,existsSync,mkdirSync,mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
@@ -13,6 +13,10 @@ import { pinnedGate, readSummary, verdictOf } from "./measure.ts";
 import {layout} from "./state.ts";
 import {scratchRepo} from "../landing/scratch-repo.ts";
 import {nodeInstallation} from "../gate/toolchain-fixture.ts";
+import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSessionClosed} from './run-environment-fixture.ts';
+import {hostEnvironment} from '../gate/canonical-environment.ts';
+import {copyModuleClosure} from '../gate/module-closure-fixture.ts';
+import {GateResource} from '../gate/gate-resource.ts';
 
 const COMMIT = "1234567890ab".padEnd(40, "c");
 
@@ -36,11 +40,18 @@ test("the full check launches each measured commit with its pin, including histo
   const repo=scratchRepo(t,"full-check-toolchain"),paths=layout(repo.dir),installations=join(repo.dir,"installed"),log=join(repo.dir,"node-launches.jsonl");
   for(const pin of ["99.1.0","99.2.0"])nodeInstallation(installations,pin,log);
   const script=`#!/bin/sh
+if [ -n "$NTS_GATE_SETUP_ONLY" ];then
+  mkdir -p "$NTS_GATE_TREE"
+  git archive "$1" | tar -x -C "$NTS_GATE_TREE"
+  exit 0
+fi
+[ "$1" = --environment-ready ] && shift
 node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join} from "node:path";const run=process.env.NTS_GATE_RUN_DIR;writeFileSync(join(run,"observed-node"),process.env.PATH);writeFileSync(join(run,"summary.json"),JSON.stringify({identities:{commit:process.argv[1]},environment:{canonical:true},steps:[{name:"tooling",verdict:"PASS"}]}));' "$1"
 `;
+  candidateEnvironmentFixture(repo.root);repo.git(['add','-f','tooling']);repo.git(['commit','-qm','private environment']);
   const old=repo.commit({".tool-versions":"nodejs 99.1.0\n","tooling/gate/pinned.sh":script},"first pin");
   const next=repo.commit({".tool-versions":"nodejs 99.2.0\n"},"next pin");
-  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations});
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir}});
   for(const [commit,pin] of [[old,"99.1.0"],[next,"99.2.0"]]){
     const result=gate.run(commit!,["tooling"],pin!);
     assert.equal(result.verdict,"green",JSON.stringify(result.reasons));
@@ -51,6 +62,58 @@ node --input-type=module -e 'import {writeFileSync} from "node:fs";import {join}
   assert.equal(result.verdict,"held");assert.match(result.reasons.tooling!,/asdf install nodejs 99\.3\.0/);
   const invocations=readFileSync(log,"utf8").trim().split("\n").map(line=>JSON.parse(line) as string[]);
   assert.equal(invocations.filter(args=>args.includes("--input-type=module")).length,2,"both measured pins execute their private binary");
+});
+
+test('red full-check runs use the measured environment and release resolution sessions while the controller lives',async t=>{
+  const repo=scratchRepo(t,'full-check-session'),paths=layout(repo.dir),installations=join(repo.dir,'installed');
+  nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
+  candidateEnvironmentFixture(repo.root);candidateVersion(repo.root,'measured');
+  const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session');
+  const subject=resolutionSubject(observed,session,1)+`import {writeFileSync as write} from 'node:fs';write(process.env.NTS_GATE_RUN_DIR+'/summary.json',JSON.stringify({identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL',reason:'private red control'}]}));\n`;
+  const script=`#!/bin/sh
+if [ -n "$NTS_GATE_SETUP_ONLY" ];then
+  mkdir -p "$NTS_GATE_TREE"
+  git archive "$1" | tar -x -C "$NTS_GATE_TREE"
+  exit 0
+fi
+[ "$1" = --environment-ready ] && shift
+exec node "$NTS_GATE_TREE/subject.ts" "$1"
+`;
+  repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','measured environment']);
+  const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject},'red measured command');
+  const gate=pinnedGate(paths,repo.root,()=>{},{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir}});
+  for(const label of ['core','core-probe','wide']){
+    const measured=gate.run(commit,['tooling'],label);
+    assert.equal(measured.verdict,'red',JSON.stringify(measured.reasons));
+    const value=JSON.parse(readFileSync(observed,'utf8'));assert.equal(value.version,'measured');assert.equal(value.canonical,true);
+    await assertSessionClosed(observed);
+    // Each run gets a distinct resolution directory just like production.
+    rmSync(session,{recursive:true});
+  }
+});
+
+test('the real pinned wrapper preserves the tree lock across candidate environment creation and consumes its handoff',async t=>{
+  const repo=scratchRepo(t,'full-check-pinned-session'),paths=layout(repo.dir),installations=join(repo.dir,'installed');
+  candidateEnvironmentFixture(repo.root);
+  copyModuleClosure(['tooling/inputs/linker.ts'],repo.root);
+  writeFileSync(join(repo.root,'tooling/gate/affinity.ts'),'// affinity is checked independently\n');
+  const observed=join(repo.dir,'observed.json'),session=join(repo.dir,'retained-session'),bin=join(repo.dir,'bin');mkdirSync(bin);
+  const cargo=join(bin,'cargo');writeFileSync(cargo,'#!/bin/sh\nmkdir -p "$CARGO_TARGET_DIR/release"\nprintf "#!/bin/sh\\n" > "$CARGO_TARGET_DIR/release/nts"\n');chmodSync(cargo,0o755);
+  nodeInstallation(installations,process.versions.node,join(repo.dir,'nodes.jsonl'));
+  const subject=resolutionSubject(observed,session,1)+`import assert from 'node:assert/strict';assert.equal(process.env.NTS_GATE_LOCK_FD,undefined);\nimport {GateResource} from ${JSON.stringify(new URL('../gate/gate-resource.ts',import.meta.url).href)};assert.equal(GateResource.tryAcquire(process.env.NTS_GATE_TREE+'.lock'),null);\nimport {writeFileSync as write} from 'node:fs';write(process.env.NTS_GATE_RUN_DIR+'/summary.json',JSON.stringify({identities:{commit:process.argv[2]},environment:{canonical:true},steps:[{name:'tooling',verdict:'FAIL'}]}));\n`;
+  repo.git(['add','-f','tooling','.tool-versions']);repo.git(['commit','-qm','private candidate inputs']);
+  const script=readFileSync(new URL('../gate/pinned.sh',import.meta.url),'utf8');
+  const commit=repo.commit({'tooling/gate/pinned.sh':script,'subject.ts':subject,'tooling/gate/all.sh':`#!/bin/sh\nif [ "$1" = --list ];then echo tooling; exit 0;fi\nexec node subject.ts "$(git rev-parse HEAD)"\n`},'real pinned control');
+  const lines:string[]=[],gate=pinnedGate(paths,repo.root,line=>lines.push(line),{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.dir,PATH:bin+':'+process.env.PATH}});
+  const result=gate.run(commit,['tooling'],'core');assert.equal(result.verdict,'red',JSON.stringify(result.reasons)+'\n'+lines.join('\n')+'\n'+readFileSync(join(result.run,'full-check.log'),'utf8'));
+  await assertSessionClosed(observed);
+  const lock=GateResource.tryAcquire(paths.tree+'.lock');assert.ok(lock,'the run releases the tree lock');lock.close();
+  assert.equal(existsSync(join(result.run,'summary.json')),true);
+  const busy=GateResource.tryAcquire(paths.tree+'.lock')!;
+  try{
+    const held=gate.run(commit,['tooling'],'busy');assert.equal(held.verdict,'held');
+    assert.match(held.reasons.tooling!,/full-check gate tree is in use/);
+  }finally{busy.close();}
 });
 
 test("each step's verdict, as the full check reads it", t => {

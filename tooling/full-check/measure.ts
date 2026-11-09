@@ -4,11 +4,14 @@
 import { spawnSync } from "node:child_process";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
-import { fullEnvironment } from "../census/full-plan.ts";
 import { PLATFORM_PROGRAMS, PLATFORMS_UNRUN_OK, unrunPlatforms, type UnrunPolicy } from "../gate/verdict-policy.ts";
 import type { Layout } from "./state.ts";
 import {nodePin} from "../bootstrap/node.ts";
 import {nodeToolchain} from "../gate/toolchain.ts";
+import {candidateCommand} from '../landing/candidate-environment.ts';
+import {launcherEnvironment} from '../landing/run.ts';
+import {GateResource} from '../gate/gate-resource.ts';
+import {fullOwned} from '../census/full-plan.ts';
 
 /**
  * A step's result as the full check reads it: a skip the policy accepts is a
@@ -78,16 +81,35 @@ export type Gate = {
 const stamp = () => new Date().toISOString().replace(/[-:]/g, "").replace(/\.\d+Z$/, "Z");
 
 /** The production gate: pinned.sh from the controller's tree, measuring in the full check's. */
-export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string}={}): Gate {
+export function pinnedGate(layout: Layout, controller: string, log: (line: string) => void, options:{nodeInstallations?:string;env?:NodeJS.ProcessEnv}={}): Gate {
   const pinned = join(controller, "tooling/gate/pinned.sh");
   const launch = (commit: string, run: string, steps: readonly string[], extra: NodeJS.ProcessEnv) => {
     mkdirSync(run, { recursive: true });
-    const selected=nodeToolchain(nodePin(controller,commit),process.env,options.nodeInstallations);
-    const env = { ...fullEnvironment({ candidate: false, commit, label: "MAIN", run, tree: layout.tree, target: layout.target }, [...steps], selected.env), ...extra };
-    const out = openSync(join(run, "full-check.log"), "a");
+    const selected = nodeToolchain(nodePin(controller, commit), options.env ?? process.env, options.nodeInstallations);
+    // Hold pinned.sh's existing tree lock through setup, candidate import and
+    // execution, so no other user of this tree can change the imported code.
+    const lock = GateResource.tryAcquire(layout.tree + '.lock');
+    if (!lock) throw Error('full-check gate tree is in use: ' + layout.tree);
+    const launcher = launcherEnvironment(selected.env);
+    const owned = {
+      ...fullOwned({ candidate: false, commit, label: 'MAIN', run, tree: layout.tree, target: layout.target }, steps),
+      NTS_GATE_LOCK_FD: '8', CARGO_TARGET_DIR: layout.target,
+      NTS_BIN: join(layout.target, 'release/nts'), NTS_SUITE_BIN: join(layout.target, 'release/nts-suite'),
+    };
+    let out: number | undefined;
     try {
-      return spawnSync("sh", [pinned, commit], { cwd: controller, env, stdio: ["ignore", out, out] });
-    } finally { closeSync(out); }
+      out = openSync(join(run, 'full-check.log'), 'a');
+      // Setup's normalization is a short-lived child, never the controller.
+      // The measured tree does not exist until pinned.sh has linked its inputs.
+      const prepared = spawnSync('sh', [pinned, commit], {
+        cwd: controller, env: { ...launcher, ...owned, NTS_GATE_SETUP_ONLY: '1' },
+        stdio: ['ignore', out, out, 'ignore', 'ignore', 'ignore', 'ignore', 'ignore', lock.fd],
+      });
+      if (prepared.status !== 0 || prepared.error || prepared.signal || extra.NTS_GATE_SETUP_ONLY) return prepared;
+      return candidateCommand(selected.node, {
+        tree: layout.tree, run, owned, standalone: true, command: ['sh', pinned, '--environment-ready', commit],
+      }, launcher, { output: out, treeLock: lock.fd });
+    } finally { if (out !== undefined) closeSync(out); lock.close(); }
   };
   return {
     // The commit's own lists, read in the tree pinned.sh sets up for it
@@ -96,7 +118,7 @@ export function pinnedGate(layout: Layout, controller: string, log: (line: strin
       const setup = join(layout.runs, `setup-${commit.slice(0, 12)}-${stamp()}`);
       const ready = launch(commit, setup, [], { NTS_GATE_SETUP_ONLY: "1" });
       if (ready.status !== 0) throw new Error(`pinned.sh could not set ${commit.slice(0, 12)} up (exit ${ready.status}); see ${setup}`);
-      const selected=nodeToolchain(nodePin(layout.tree),process.env,options.nodeInstallations);
+      const selected=nodeToolchain(nodePin(layout.tree),options.env??process.env,options.nodeInstallations);
       const list = spawnSync("sh", ["tooling/gate/all.sh", "--list"], { cwd: layout.tree, env:selected.env, encoding: "utf8" });
       if (list.status !== 0) throw new Error(`all.sh --list at ${commit.slice(0, 12)}: ${list.stderr.trim()}`);
       const wide = spawnSync(selected.node, ["--input-type=module", "-e", 'const { WIDE } = await import("./tooling/gate/owed.mjs"); process.stdout.write(JSON.stringify([...WIDE]))'], { cwd: layout.tree, env:selected.env, encoding: "utf8" });

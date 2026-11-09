@@ -39,8 +39,6 @@ Development starts on the user's word.
 
 Branches the count names from here, besides each open issue's own:
 
-- in flight from before the issues: `full-check/run-environment`
-  ([#588](https://github.com/AkisArou/nts/issues/588));
 - Chromium, paused by the user (`chromium/counter-tree-profile`,
   [#589](https://github.com/AkisArou/nts/issues/589)), its trees kept with
   it: `~/Projects/nts-lanes/chromium`,

@@ -1,21 +1,27 @@
 // Cross-version contract: the candidate's tooling/gate/canonical-environment.ts
 // exports gateEnvironment. No other version creates its environment or grants.
 // Keep this process alive while the command runs: it owns resolutionOwner.
-import {spawnSync} from "node:child_process";
+import {spawnSync,type StdioOptions} from "node:child_process";
 import {readFileSync,writeFileSync} from "node:fs";
 import {isAbsolute,join,resolve} from "node:path";
 import {fileURLToPath,pathToFileURL} from "node:url";
+import {finishRunTemporary} from '../gate/run-temporary.ts';
 
-export type CandidateCommand = {tree:string;run:string;owned:Record<string,string>;command:readonly string[]};
+export type CandidateCommand = {tree:string;run:string;owned:Record<string,string>;command:readonly string[];standalone?:boolean;discardTemporary?:boolean};
+type LaunchRequest=CandidateCommand&{treeLock?:boolean};
 class CandidateEnvironmentContractError extends Error {}
 
 /** The caller supplies the already verified candidate Node, never PATH's node. */
-export function candidateCommand(node:string,request:CandidateCommand,env:NodeJS.ProcessEnv){
+export function candidateCommand(node:string,request:CandidateCommand,env:NodeJS.ProcessEnv,options:{output?:number;treeLock?:number}={}){
+  const output=options.output??'pipe',stdio:StdioOptions=['pipe',output,output,'pipe'];
+  if(options.treeLock!==undefined)stdio.push('ignore','ignore','ignore','ignore',options.treeLock);
   const result=spawnSync(node,[fileURLToPath(new URL('./candidate-environment.ts',import.meta.url))],{
-    cwd:request.tree,env,input:JSON.stringify(request),encoding:'utf8',maxBuffer:1<<30,stdio:['pipe','pipe','pipe','pipe'],
+    cwd:request.tree,env:options.treeLock!==undefined?{...env,NTS_GATE_LOCK_FD:'8'}:env,
+    input:JSON.stringify({...request,treeLock:options.treeLock!==undefined}),encoding:'utf8',maxBuffer:1<<30,
+    stdio,
   });
   // Keep a killed/not-started command distinct from its ordinary nonzero exit.
-  if(result.output[3]){
+  if(result.output?.[3]){
     const receipt:{signal:NodeJS.Signals|null;error:{message:string;code?:string}|null}=JSON.parse(result.output[3]);
     result.signal=receipt.signal;
     if(receipt.error)result.error=Object.assign(new Error(receipt.error.message),{code:receipt.error.code});
@@ -24,7 +30,7 @@ export function candidateCommand(node:string,request:CandidateCommand,env:NodeJS
 }
 
 async function launch():Promise<number>{
-  const request:CandidateCommand=JSON.parse(readFileSync(0,'utf8'));
+  const request:LaunchRequest=JSON.parse(readFileSync(0,'utf8'));
   if(!isAbsolute(request.tree)||!isAbsolute(request.run)||!request.command.length||
     request.command.some(value=>typeof value!=='string')||!request.owned||Object.values(request.owned).some(value=>typeof value!=='string'))throw Error('invalid candidate command request');
   const module=join(request.tree,'tooling/gate/canonical-environment.ts');
@@ -33,10 +39,17 @@ async function launch():Promise<number>{
     candidate=await import(pathToFileURL(module).href);
     if(typeof candidate.gateEnvironment!=='function')throw Error('gateEnvironment is not exported');
   }catch(error){throw new CandidateEnvironmentContractError(`candidate environment contract: ${module} must export gateEnvironment: ${String(error)}`);}
-  const planned=candidate.gateEnvironment(process.env,{run:request.run,owned:request.owned,oracleRoot:request.tree});
-  const child=spawnSync(request.command[0]!,request.command.slice(1),{cwd:request.tree,env:planned.env,stdio:'inherit'});
-  writeFileSync(3,JSON.stringify({signal:child.signal,error:child.error?{message:child.error.message,code:(child.error as NodeJS.ErrnoException).code}:null}));
-  return child.status??1;
+  const planned=candidate.gateEnvironment(process.env,{run:request.run,owned:request.owned,oracleRoot:request.tree,standalone:request.standalone});
+  try{
+    const child=spawnSync(request.command[0]!,request.command.slice(1),{cwd:request.tree,env:planned.env,
+      stdio:request.treeLock?['inherit','inherit','inherit','ignore','ignore','ignore','ignore','ignore',8]:'inherit'});
+    writeFileSync(3,JSON.stringify({signal:child.signal,error:child.error?{message:child.error.message,code:(child.error as NodeJS.ErrnoException).code}:null}));
+    return child.status??1;
+  }finally{
+    // Recorder evidence lives in its own run files, as before. Its run-owned
+    // scratch is discarded even when recording refuses or cannot start.
+    if(request.discardTemporary)finishRunTemporary(planned.temporary,planned.env.HOME!,true);
+  }
 }
 
 if(process.argv[1]&&pathToFileURL(resolve(process.argv[1])).href===import.meta.url){

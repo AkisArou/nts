@@ -15,6 +15,9 @@ import {cycle, followVerified, fullCheckStatus, parseOptions, partSteps, RECORDE
 import {reopenIssue, type Gh} from "./revert.ts";
 import {readState} from "./state.ts";
 import {Git} from "./git.ts";
+import {candidateEnvironmentFixture,candidateVersion,resolutionSubject,assertSessionClosed} from './run-environment-fixture.ts';
+import {hostEnvironment} from '../gate/canonical-environment.ts';
+import {nodeInstallation} from '../gate/toolchain-fixture.ts';
 
 type Harness = Effects & { lines: string[]; queue: Effects["queue"]; submitted: ReturnType<typeof stubQueue>["submitted"]; withdrawn: string[]; told: { n: number; comment: string }[] };
 
@@ -513,11 +516,12 @@ test("the recorder runs in the gate's canonical environment, in a temporary fold
   const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run");
   mkdirSync(join(tree, "tooling/records"), { recursive: true });
   mkdirSync(run);
+  candidateEnvironmentFixture(tree);
   // The fake recorder reports what the oracles it would run are given.
   writeFileSync(join(tree, "tooling/records/record-pending.ts"), `import {existsSync} from "node:fs";
 console.log(JSON.stringify({ canonical: !!process.env.NTS_GATE_ENV_CONTEXT, tmp: process.env.TMPDIR, there: existsSync(process.env.TMPDIR ?? ""), bin: process.env.NTS_BIN }));
 `);
-  const result = recordPending(tree, "pin", run);
+  const result = recordPending(tree, "pin", run, {env:{...hostEnvironment(process.env),HOME:repo.root}});
   assert.equal(result.status, 0, result.output);
   assert.deepEqual(JSON.parse(readFileSync(join(run, RECORDER_LOG), "utf8")), { canonical: true, tmp: join(run, "records", "tmp"), there: true, bin: "pin" });
   assert.equal(existsSync(join(run, "records", "tmp")), false, "its temporary folder goes after it");
@@ -527,6 +531,7 @@ test("the recorder's output reaches the run's log while it runs, so no buffer bo
   const repo = repository(t), tree = join(repo.root, "tree"), run = join(repo.root, "run"), log = join(run, RECORDER_LOG);
   mkdirSync(join(tree, "tooling/records"), { recursive: true });
   mkdirSync(run);
+  candidateEnvironmentFixture(tree);
   // The core run's own `records` step logs beside it; the recorder leaves that log alone.
   writeFileSync(join(run, "records.log"), "the records step's log\n");
   // The fake recorder looks for its own first line in the log before it exits.
@@ -536,11 +541,51 @@ const seen = existsSync(${JSON.stringify(log)}) && readFileSync(${JSON.stringify
 process.stdout.write(seen ? "streamed\\n" : "buffered\\n");
 process.exit(seen ? 3 : 4);
 `);
-  const result = recordPending(tree, "pin", run);
+  const result = recordPending(tree, "pin", run, {env:{...hostEnvironment(process.env),HOME:repo.root}});
   assert.equal(result.status, 3, readFileSync(log, "utf8"));
   assert.equal(readFileSync(log, "utf8"), "first line\nstreamed\n");
   assert.equal(result.output, "first line\nstreamed\n", "the result carries the log's tail");
   assert.equal(readFileSync(join(run, "records.log"), "utf8"), "the records step's log\n");
+});
+
+test('each records run uses its candidate Node and environment and closes its resolution session',async t=>{
+  for(const status of [0,1]){
+    const repo=repository(t),tree=join(repo.root,'tree'),run=join(repo.root,'run'),installations=join(repo.root,'installed');
+    mkdirSync(join(tree,'tooling/records'),{recursive:true});mkdirSync(run);
+    candidateEnvironmentFixture(tree);candidateVersion(tree,'recorder');
+    const observed=join(run,'observed.json'),session=join(run,'retained-session');
+    writeFileSync(join(tree,'tooling/records/record-pending.ts'),resolutionSubject(observed,session,status));
+    const log=join(repo.root,'nodes.jsonl');nodeInstallation(installations,process.versions.node,log);
+    const result=recordPending(tree,'private-pin',run,{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
+    assert.equal(result.status,status,result.output);
+    const value=JSON.parse(readFileSync(observed,'utf8'));assert.equal(value.version,'recorder');assert.equal(value.canonical,true);
+    assert.equal(value.node,process.versions.node);assert.equal(value.bin,'private-pin');assert.equal(value.there,true);
+    assert.equal(existsSync(join(run,'records/tmp')),false,'recorder scratch still goes on every exit status');
+    assert.ok(readFileSync(log,'utf8').includes('candidate-environment.ts'),'the recorder uses the selected Node');
+    await assertSessionClosed(observed);
+  }
+});
+
+test('records use the newly verified environment before the controller can restart',async t=>{
+  const repo=repository(t),installations=join(repo.root,'installed'),observed=join(repo.root,'observed.json'),session=join(repo.root,'retained-session');
+  candidateEnvironmentFixture(repo.dir);candidateVersion(repo.dir,'new-verified');
+  nodeInstallation(installations,process.versions.node,join(repo.root,'nodes.jsonl'));
+  repo.git.run(['add','-f','tooling','.tool-versions']);
+  const script=resolutionSubject(observed,session,0)+`import {mkdirSync} from 'node:fs';mkdirSync('results',{recursive:true});writeFileSync('results/fresh.tsv','fresh row\\n');\n`;
+  const commit=repo.commit({'tooling/records/record-pending.ts':script,'LOG/tests':'pending: private-case is not recorded in results/fresh.tsv yet\n'},'new verified environment');
+  let calls=0;
+  const fx=harness(repo,fakeGate(repo),{recorder:(tree,pin,run)=>{
+    calls++;
+    assert.equal(repo.git.commit('verified'),commit,'verified moves before recording');
+    assert.equal(new Git(tree,ENV).commit('HEAD'),commit,'recordAt uses that exact tree');
+    return recordPending(tree,pin,run,{nodeInstallations:installations,env:{...hostEnvironment(process.env),HOME:repo.root}});
+  }});
+  await cycle(fx);
+  assert.equal(calls,1);
+  assert.equal(JSON.parse(readFileSync(observed,'utf8')).version,'new-verified','the still-running controller imports the verified tree environment');
+  assert.equal(readState(repo.layout.state).records?.commit,commit);
+  assert.equal(fx.submitted.length,1,'the resulting records are submitted');
+  await assertSessionClosed(observed);
 });
 
 test("the hourly count removes what it found removable, then counts again", async t => {

@@ -29,7 +29,12 @@ export function fullPlan(root: string, home: string, args: string[], now = Date.
 }
 
 export function fullEnvironment(plan: ReturnType<typeof fullPlan>, steps: string[], base: NodeJS.ProcessEnv) {
-  return gateEnvironment(base, {run:plan.run, standalone:true, owned:{
+  return gateEnvironment(base, {run:plan.run, standalone:true, owned:fullOwned(plan,steps)}).env;
+}
+
+/** Policy owned by a full run, shared by manual and controller launchers. */
+export function fullOwned(plan: ReturnType<typeof fullPlan>, steps: readonly string[]) {
+  return {
     ...STANDING_GATE_POLICY,
     // Candidate times must not rewrite even its pinned policy records.
     ...(plan.candidate ? { NTS_GATE_RECORD_TIMES: "0" } : {}),
@@ -38,5 +43,5 @@ export function fullEnvironment(plan: ReturnType<typeof fullPlan>, steps: string
     NTS_GATE_TARGET: plan.target,
     NTS_GATE_RUN_DIR: plan.run,
     NTS_CHECKERS: "1",
-  }}).env;
+  };
 }
