@@ -1,10 +1,12 @@
-// The task spec (spec.ts), the creation tool (new.ts) and the label sync
-// (labels.ts), against the real .github/labels.json and a stand-in for gh.
+// The task spec (spec.ts), the creation tool (new.ts), the label sync
+// (labels.ts) and the branch rule (branch.ts), against the real
+// .github/labels.json and a stand-in for gh.
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createDrafts, draftProblems, type Draft, type Gh } from "./new.ts";
 import { sync, syncPlan } from "./labels.ts";
 import { bodyProblems, labelProblems, readSpec, renderCard, REQUIRED } from "./spec.ts";
+import { BRANCH, issueBranch, issueOfBranch, slugOf } from "./branch.ts";
 
 const spec = readSpec();
 const card = renderCard({ Goal: "g", Why: "w", Paths: "p", "Done when": "d", "Tests and rows": "t", Parent: "Stream" });
@@ -104,4 +106,15 @@ test("--prune deletes a label the file lacks, and says how many issues carry it;
   calls.length = 0;
   sync(run, spec, { dry: true, prune: true }, () => {});
   assert.ok(!calls.some(args => args[1] === "delete"), "a dry run deletes nothing");
+});
+
+test("a task's branch is its issue number and a slug, and only the number counts", () => {
+  assert.equal(issueBranch(516, "LLVM: at least as fast as C"), "516-llvm-at-least-as-fast-as-c");
+  assert.equal(issueBranch(42), "42");
+  assert.equal(issueOfBranch("516-llvm-linkage-nsw"), 516);
+  assert.equal(issueOfBranch("42"), 42);
+  for (const branch of ["compiler/llvm-linkage-nsw", "0516-x", "516-", "516-X", "516--x", "x-516", "main"]) assert.equal(issueOfBranch(branch), null, branch);
+  assert.throws(() => issueBranch(0), /positive integer/);
+  assert.equal(slugOf("Map and Set: by the proven layout, their contents", 4), "map-and-set-by");
+  assert.ok(BRANCH.test("547-records-listed-kinds"));
 });

@@ -34,13 +34,25 @@ follows; this page is the why and the whole picture.
 - **A design first, when there is a design to make.** A short note says
   what will be built and why; the user or the coordinator agrees; then the
   slices are written as tasks.
-- **One task list,** visible to the user. Until the signalbox app runs it
-  (it takes tasks from GitHub issues and its own local list, assigns them to
-  agents, and shows them on its dashboard), the list is
-  [`plan.md`](plan.md): its Now section holds the active tasks and who has
-  them, its Backlog the queued ones.
+- **Tasks are GitHub issues,** one per task, each a sub-issue of its stream's
+  parent issue. [`plan.md`](plan.md) holds the priorities and the order of the
+  streams; the work's state lives on the issues. Chores, which no stream
+  owns, are on signalbox's local board.
+- **One spec for an issue, kept where issues are made.** Every issue is made
+  with `node tooling/tasks/new.ts`, which refuses one that breaks the spec;
+  a GitHub issue form asks for the same card in the browser.
+  - Labels, from [`.github/labels.json`](../.github/labels.json): `task` when
+    an agent can take it, exactly one `area:`, exactly one `kind:`, at most
+    one `state:`. `node tooling/tasks/labels.ts sync --prune` keeps GitHub's
+    labels equal to the file.
+  - A task's card, in this order: Goal, Why, Paths, Done when, Tests and rows,
+    then, when they say something, Depends on, Branch, Check first and Parent.
+- **A task's branch names its issue:** `<N>` or `<N>-<slug>`, by
+  `tooling/tasks/branch.ts`. `node tooling/landing/pool.ts take --issue <N>`
+  takes a tree on it, and the hourly count names a branch while its issue is
+  open.
 - **Nothing valuable sits on a branch.** Unfinished work on a branch is
-  either a task in the list that names the branch, or it is deleted. Old
+  either an open task's, or it is deleted. Old
   branches are not kept "just in case": that is how work gets forgotten.
   A commit that a record cites by hash stays reachable through
   `refs/cited/<sha>`, a pointer at that commit alone, so deleting a branch
@@ -212,8 +224,8 @@ got quiet within four hours of its slot is given up to the next one.
   pinned compiler, not a tree: `node tooling/conformance/pin.ts <rev>` builds
   `~/.cache/nts-pins/<12 hex>/nts`.
 - **The full check counts them.** Its hourly count
-  (`tooling/full-check/count.ts`) is red when a branch is named by no task in
-  [`plan.md`](plan.md), a worktree is outside the pool and no task names its
+  (`tooling/full-check/count.ts`) is red when a branch is named by no open
+  issue and not in [`plan.md`](plan.md), a worktree is outside the pool and no task names its
   path, or `~/.cache` holds an nts folder that `tooling/full-check/keep.json`
   does not name with its reason. Rules alone let 1,364 branches, 185
   worktrees and 120 GB of evidence folders pile up by 11-06; a red step does
@@ -251,6 +263,11 @@ the first node task.
   past three days; every other red line stays report-only
   ([log](records/notebooks/decisions-log.md#the-full-check-sweeps-11-08),
   [log](records/notebooks/decisions-log.md#hand-run-gate-logs-are-swept-11-09)).
+- **Tasks are GitHub issues** (11-09): one issue per task under its stream's
+  parent issue, made by `tooling/tasks/new.ts` against one label and card
+  spec; `plan.md` keeps the priorities and the order of the streams; a
+  task's branch names its issue; no periodic check reads the issues
+  ([log](records/notebooks/decisions-log.md#tasks-are-github-issues-11-09)).
 - **Records are evidence, never instructions** (11-09): `docs/records/` is read
   when a page, an issue or a code comment links it, a page holds where the two
   disagree, and search tools skip it through `.ignore`

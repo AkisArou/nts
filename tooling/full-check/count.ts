@@ -1,5 +1,5 @@
 // The count step (docs/workflow.md, The machine: "the full check counts
-// them"). Red when a branch is named by no task in docs/plan.md, a worktree is
+// them"). Red when a branch is named by no open issue nor docs/plan.md, a worktree is
 // outside the pool, or ~/.cache holds an nts folder no entry of keep.json
 // keeps, or a node test root a stopped runner left (n<pid in base 36>). Each
 // red line names the item and why. It reports; of what it reports, the full
@@ -11,8 +11,10 @@
 //   node tooling/full-check/count.ts          the lines, exit 0 green, 1 red, 2 not counted
 //
 // What counts as named, kept or in the pool:
-//   - a branch, on the machine or on GitHub, is named when docs/plan.md (on
-//     main) has it in backticks, or a backticked `prefix/*` covering it, or
+//   - a branch, on the machine or on GitHub, is named when it is a task's,
+//     `<N>` or `<N>-<slug>` with issue N open (tooling/tasks/branch.ts; only
+//     which issues are open is read, never what they say), when docs/plan.md
+//     (on main) has it in backticks, or a backticked `prefix/*` covering it, or
 //     when it is the head or the base of an open pull request whose number
 //     docs/plan.md names (#N, or a range "#A to #B"): undone work stays
 //     visible, and deleting a base would close the pull request. `main` and
@@ -33,6 +35,7 @@ import { dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { OWNER_MARK } from "../conformance/node-environment.ts";
 import { removable as makeRemovable } from "../gate/run-temporary.ts";
+import { issueOfBranch } from "../tasks/branch.ts";
 
 export type Pull = { number: number; headRefName: string; baseRefName?: string; isCrossRepository?: boolean };
 export type Worktree = { path: string; head?: string; branch?: string; prunable?: boolean };
@@ -47,6 +50,8 @@ export type CountInput = {
   remote: string[] | Unavailable;
   /** GitHub's open pull requests, or why they could not be read. */
   pulls: Pull[] | Unavailable;
+  /** The numbers of GitHub's open issues, or why they could not be read. */
+  issues: number[] | Unavailable;
   worktrees: Worktree[];
   /** The shared checkout, ~/Projects/nts. */
   shared: string;
@@ -86,7 +91,10 @@ export function planNames(plan: string): { names: Set<string>; prefixes: string[
 
 function branchLines(input: CountInput, red: string[], notes: string[]): void {
   const plan = planNames(input.plan);
-  const named = (branch: string) => plan.names.has(branch) || plan.prefixes.some(prefix => branch.startsWith(prefix));
+  // A task's branch names its issue (tooling/tasks/branch.ts): it is named while that issue is open.
+  const openIssues = new Set(unavailable(input.issues) ? [] : input.issues);
+  const issue = (branch: string) => { const n = issueOfBranch(branch); return n !== null && openIssues.has(n); };
+  const named = (branch: string) => issue(branch) || plan.names.has(branch) || plan.prefixes.some(prefix => branch.startsWith(prefix));
   const pulls = unavailable(input.pulls) ? [] : input.pulls.filter(pull => !pull.isCrossRepository);
   const pullOf = (branch: string) => pulls.filter(pull => pull.headRefName === branch);
   // A branch an open pull request is based on is that pull request's: deleting
@@ -98,12 +106,13 @@ function branchLines(input: CountInput, red: string[], notes: string[]): void {
     if (heads.some(pull => plan.pulls.has(pull.number))) return;
     if (basedOn(branch).some(pull => plan.pulls.has(pull.number))) return;
     const open = heads.length ? `; the head of open pull request ${heads.map(p => `#${p.number}`).join(", ")}, which docs/plan.md does not name either` : "";
-    red.push(`branch ${branch} (${where}): named by no task in docs/plan.md${open}`);
+    red.push(`branch ${branch} (${where}): named by no open issue and not in docs/plan.md${open}`);
   };
   for (const branch of [...input.local].sort()) judge(branch, "on the machine");
   if (unavailable(input.remote)) notes.push(`not counted: GitHub's branches (${input.remote.error})`);
   else for (const branch of [...input.remote].sort()) judge(branch, "on GitHub");
   if (unavailable(input.pulls)) notes.push(`not counted: GitHub's open pull requests (${input.pulls.error}), so no branch is named by one`);
+  if (unavailable(input.issues)) notes.push(`not counted: GitHub's open issues (${input.issues.error}), so no branch is named by one`);
 }
 
 const inside = (path: string, root: string) => {
@@ -361,11 +370,13 @@ export function gather(repo: string, cache = join(homedir(), ".cache"), now = Da
   const sha = (rev: string) => { const r = read("git", ["rev-parse", "--verify", "--quiet", `${rev}^{commit}`], repo); return r.ok ? r.out.trim() : null; };
   const remote = read("git", ["ls-remote", "--heads", "origin"], repo);
   const pulls = read("gh", ["pr", "list", "--state", "open", "--limit", "1000", "--json", "number,headRefName,baseRefName,isCrossRepository"], repo);
+  const issues = read("gh", ["issue", "list", "--state", "open", "--limit", "5000", "--json", "number"], repo);
   return {
     plan: git(["show", "main:docs/plan.md"]),
     local: git(["for-each-ref", "--format=%(refname)", "refs/heads/"]).split("\n").filter(Boolean).map(ref => ref.slice("refs/heads/".length)),
     remote: remote.ok ? remote.out.split("\n").filter(Boolean).map(line => line.split("\t")[1]!.slice("refs/heads/".length)) : { error: remote.error },
     pulls: pulls.ok ? JSON.parse(pulls.out) as Pull[] : { error: pulls.error },
+    issues: issues.ok ? (JSON.parse(issues.out) as { number: number }[]).map(issue => issue.number) : { error: issues.error },
     worktrees: parseWorktrees(git(["worktree", "list", "--porcelain"])),
     shared: dirname(git(["rev-parse", "--path-format=absolute", "--git-common-dir"]).trim()),
     cache,

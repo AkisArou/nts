@@ -1594,3 +1594,25 @@ Decided: the records stay as the evidence store; AGENTS.md says they are
 history, read when something links them, with the page holding where the two
 disagree; and a repository `.ignore` keeps search tools out of them unless the
 path is named. The 339 unlinked records stay where they are for now.
+
+## Tasks are GitHub issues (11-09)
+
+The user decided that tasks move from `docs/plan.md` into GitHub issues, with
+the local board for chores, and that the plan shrinks to the priorities and
+the order of the streams. The plan had grown to 764 lines holding tasks, their
+state and their order together, which a coordinator had to reread and edit by
+hand as work moved.
+
+Decided with it:
+- one issue per task, a sub-issue of its stream's parent issue;
+- every issue made by `tooling/tasks/new.ts` against one spec: the labels in
+  `.github/labels.json` (`task`, exactly one `area:`, exactly one `kind:`, at
+  most one `state:`) and the card's sections;
+- GitHub's default labels deleted, so its labels are the file's;
+- a task's branch is `<N>` or `<N>-<slug>` (`tooling/tasks/branch.ts`), and the
+  hourly count names it while issue N is open;
+- no periodic check reads the open issues' content: the user ruled it out as
+  too much.
+
+131 issues were made from the plan on 11-09 (#467 to #597), after a check
+against `main` that dropped two finished tasks and rewrote nine.

@@ -22,22 +22,26 @@ design isn't known, measure until it is, then build it.
 
 ## Tasks
 
-Work is a task in [`docs/plan.md`](docs/plan.md): one agent per task, small
-enough to land within a day ([`docs/workflow.md`](docs/workflow.md)).
+Work is a task: a GitHub issue under its stream's parent issue, one agent per
+task, small enough to land within a day ([`docs/workflow.md`](docs/workflow.md)).
+Every issue is made with `node tooling/tasks/new.ts`, which checks its card and
+labels; [`docs/plan.md`](docs/plan.md) holds the priorities and the order of the
+streams.
 
 - Two tasks editing one file lose hunks: before editing a file another open
   task is changing, say so to that task's agent.
 - A change to the compiler's core (`compiler/`, `runtime/c/`), the gate or the
   landing tools is read by the coordinator before it is submitted.
-- Report a compiler defect as a fixture (below), then a task line in
-  `docs/plan.md`, not as prose.
+- Report a compiler defect as a fixture (below), then an issue made with
+  `tooling/tasks/new.ts`, not as prose.
 
 ## Your tree, and the shared checkout
 
-A task works on one branch named after it, in a worktree from the pool:
+A task works on its issue's branch, `<N>` or `<N>-<slug>`, in a worktree from
+the pool:
 
 ```sh
-node tooling/landing/pool.ts take <branch>   # a free tree at the newest main, on a new branch
+node tooling/landing/pool.ts take --issue <N> [--slug <words>]   # a free tree at the newest main, on issue N's branch
 node tooling/landing/pool.ts status          # which task holds which tree
 node tooling/landing/pool.ts give <branch> --discard   # drop a task: its branch, here and on GitHub, goes too
 ```
@@ -133,8 +137,9 @@ launcher never has to remember it.
 
 **A page in `docs/` is a specification, not a notebook** (user, 2026-10-27).
 It states the current design and contract, with no dates, history or running
-log, and changes when a decision changes it. `docs/plan.md` is the only page
-updated as work goes. Numbers are not copied into pages: they live in
+log, and changes when a decision changes it. The work's state lives on its
+issues; `docs/plan.md` changes when the priorities or the order of the streams
+do. Numbers are not copied into pages: they live in
 `results/`, written by tools. Observations, measurements, investigations and
 long notes go to `docs/records/` (long notes in `docs/records/notebooks/`).
 A decision is written into the page it governs, in its `## Decisions` section;

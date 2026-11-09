@@ -7,6 +7,7 @@
 //
 //   node tooling/landing/pool.ts status [--json]        each tree's state, task, idle time and target size
 //   node tooling/landing/pool.ts take <branch>          a tree on the task's branch at the newest main
+//   node tooling/landing/pool.ts take --issue <N> [--slug <words>]   the same, on issue N's branch (tooling/tasks/branch.ts)
 //   node tooling/landing/pool.ts give <branch|tree> [--discard]
 //                                                       give a tree back, detached at main and warm;
 //                                                       --discard drops the task: its uncommitted work
@@ -34,6 +35,7 @@ import { TEMP_DISK_FLOOR_BYTES } from "../gate/run-temporary.ts";
 import { deleteBranch, revParse, sharedCheckout, worktrees, type BranchOutcome, type Git } from "./git.ts";
 import { withLock } from "./lock.ts";
 import { linkTree } from "../inputs/linker.ts";
+import { issueBranch } from "../tasks/branch.ts";
 
 const GB = 2 ** 30, HOUR = 3_600_000, DAY = 24 * HOUR;
 /** A free tree idle longer than this goes in the hourly upkeep. */
@@ -351,13 +353,16 @@ export function pruneLines(pruned: Pruned, now = Date.now()): string[] {
 }
 
 function main(argv: string[]): number {
-  const at = argv.indexOf("--pool");
-  const dir = at >= 0 ? argv[at + 1]! : POOL_HOME;
-  const args = argv.filter((arg, i) => arg !== "--pool" && argv[i - 1] !== "--pool");
-  const [command, target] = args;
+  const value = (name: string) => { const at = argv.indexOf(name); return at >= 0 ? argv[at + 1] : undefined; };
+  const dir = value("--pool") ?? POOL_HOME;
+  const args = argv.filter((arg, i) => !["--pool", "--issue", "--slug"].includes(arg) && !["--pool", "--issue", "--slug"].includes(argv[i - 1]!));
+  const [command] = args;
   const root = sharedCheckout();
   const pool = new Pool(dir, { root }, linkInputs(root));
   try {
+    // A task's tree is taken by its issue: the branch rule (tooling/tasks/branch.ts) names its branch.
+    const issue = value("--issue");
+    const target = command === "take" && issue !== undefined ? issueBranch(Number(issue), value("--slug")) : args[1];
     if (command === "status" || command === undefined) {
       const trees = pool.measured(), room = pool.room(trees);
       if (args.includes("--json")) console.log(JSON.stringify(statusJson(pool.dir, trees, room), null, 2));
@@ -369,7 +374,7 @@ function main(argv: string[]): number {
       for (const b of given.branch) console.log(`  branch ${b.where === "local" ? "here" : `on ${pool.remote}`}: ${b.state}${b.reason ? ` (${b.reason})` : ""}`);
     } else if (command === "init" && target) console.log(describePool(pool.init(Number(target))));
     else if (command === "prune") { const lines = pruneLines(pool.prune()); console.log(lines.length ? lines.join("\n") : "pool: nothing to remove"); }
-    else { console.error("usage: pool.ts status [--json] | take <branch> | give <branch|tree> [--discard] | init <n> | prune  [--pool <dir>]"); return 2; }
+    else { console.error("usage: pool.ts status [--json] | take <branch> | take --issue <N> [--slug <words>] | give <branch|tree> [--discard] | init <n> | prune  [--pool <dir>]"); return 2; }
     return 0;
   } catch (error) {
     console.error(`pool: ${(error as Error).message}`);
