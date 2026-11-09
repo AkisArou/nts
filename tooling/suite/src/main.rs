@@ -131,8 +131,7 @@ struct Totals {
 /// before anyone asked whether a *program* had written it. Nobody had touched
 /// the file by hand.
 ///
-/// This is the isolation failure `wait-idle.sh` documents, in a third place:
-/// the instrument was made worktree-proof in the dimension someone thought
+/// The instrument was made worktree-proof in the dimension someone thought
 /// about, and the write went out through the one nobody did.
 fn repository_root() -> Result<Utf8PathBuf> {
     let mut args = std::env::args();

@@ -1,59 +1,59 @@
 // The nightly benchmarks (docs/workflow.md, Benchmarks): after the nightly
 // wide steps, nts-bench measures `verified`, on CPU 4 with its sibling idle,
-// through the measurement lock -- the same entry point a person runs:
+// through the measurement lock -- the entry point a person runs, asked
+// without --wait:
 //
-//   tooling/gate/with-lock.sh --wait target/release/nts-bench --root <tree>
+//   tooling/gate/with-lock.sh target/release/nts-bench --root <tree>
 //
-// nts-bench refuses to start while any other `nts` runs, and a landing check
-// may be running one, so the machine is waited for rather than fought, and
-// the wait never holds the full check: the nightly slot makes the benchmarks
-// due for a window, and each cycle with nothing else to do asks
-// tooling/gate/wait-idle.sh, for a short while only and holding nothing
-// anyone else needs, whether the machine is quiet. A busy machine gives way
-// to the core and is asked again on a later cycle. Once it was quiet, the
-// measurement waits for it again inside the lock, briefly, as wait-idle.sh
-// says the order must be. nts-bench keeps every run itself: it writes one
-// immutable record under results/benchmarks/runs/, renders full.md and
-// commits the two as a results-only commit on the tree's HEAD, `verified`.
-// The service submits that commit the way it submits records.
+// A measurement waits for the reserved core and nothing else (AGENTS.md, The
+// machine): gates, landing checks and agents' work run on the other CPUs, and
+// nts-bench records the machine's load and free memory beside every row.
+// with-lock.sh admits the run once CPUs 4-5 are quiet, and nts-bench asks
+// again before it starts. A run either did not start -- the lock held by
+// another measurement, or the pair busy -- which is exit 75 from either and
+// leaves the benchmarks due for a later cycle, so the full check never waits
+// behind another measurement; or it ran. nts-bench keeps every run itself: it
+// writes one immutable record under results/benchmarks/runs/, renders full.md
+// and commits the two as a results-only commit on the tree's HEAD,
+// `verified`. The service submits that commit the way it submits records.
 import { spawnSync } from "node:child_process";
-import { closeSync, openSync } from "node:fs";
+import { closeSync, openSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import type { Git } from "./git.ts";
 
-/** Whether the machine was quiet, by wait-idle.sh, at some point within `seconds`. */
-export type Quiet = (seconds: number) => boolean;
+/**
+ * with-lock.sh's exit for a run it does not start (EX_TEMPFAIL), and
+ * nts-bench's when the reserved core is busy as it starts: nothing ran.
+ */
+export const NOT_ADMITTED_EXIT = 75;
+
+/** One attempt at the benchmarks: not admitted, and why; or admitted, with the run's exit status. */
+export type BenchAttempt = { admitted: false; reason: string } | { admitted: true; status: number };
 /** Measure in `tree`, keeping the output in `run`. */
-export type Bench = (tree: string, run: string) => { status: number };
+export type Bench = (tree: string, run: string) => BenchAttempt;
 
 export const RESULTS_SUBJECT = "results: retain benchmark run ";
 /** The page nts-bench renders from the newest complete run. */
 export const FULL_MD = "results/benchmarks/full.md";
 
-/** How long the nightly benchmarks stay due after their slot before the night is given up. */
-export const DEFAULT_QUIET_WAIT_MINUTES = 240;
-/** How long one cycle asks whether the machine is quiet before it gives way. */
-export const QUIET_ASK_SECONDS = 120;
-
-/** wait-idle.sh for at most `seconds`: 45 quiet seconds within them. */
-export function quietWithin(controller: string): Quiet {
-  const waitIdle = join(controller, "tooling/gate/wait-idle.sh");
-  return seconds => spawnSync("timeout", [String(seconds), "sh", waitIdle, "45"], { stdio: "ignore" }).status === 0;
-}
-
-/** The production benchmark: with-lock.sh --wait, wait-idle.sh inside the lock, then nts-bench --root <tree>. */
+/** The production benchmark: with-lock.sh, which admits the run on the reserved core, then nts-bench --root <tree>. */
 export function benchWithLock(controller: string, target: string): Bench {
-  const waitIdle = join(controller, "tooling/gate/wait-idle.sh");
   const withLock = join(controller, "tooling/gate/with-lock.sh");
   const bench = join(target, "release/nts-bench");
   return (tree, run) => {
-    const out = openSync(join(run, "bench.log"), "a");
+    const log = join(run, "bench.log");
+    const out = openSync(log, "a");
+    let status: number;
     try {
-      const io = { cwd: tree, stdio: ["ignore", out, out] as ["ignore", number, number] };
-      const measured = spawnSync("sh", [withLock, "--wait", "sh", "-c", 'timeout 600 sh "$0" 45 && exec "$1" --root "$2"', waitIdle, bench, tree], io);
-      return { status: measured.status ?? 1 };
+      status = spawnSync("sh", [withLock, bench, "--root", tree], { cwd: tree, stdio: ["ignore", out, out] }).status ?? 1;
     } finally { closeSync(out); }
+    return status === NOT_ADMITTED_EXIT ? { admitted: false, reason: admission(readFileSync(log, "utf8")) } : { admitted: true, status };
   };
+}
+
+/** Why a run was not admitted, from its log: the last line with-lock.sh or nts-bench gave for it. */
+export function admission(log: string): string {
+  return log.split("\n").filter(line => /^(with-lock|not admitted): /.test(line)).at(-1) ?? `exit ${NOT_ADMITTED_EXIT}, and the log says no more`;
 }
 
 /**

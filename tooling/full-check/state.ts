@@ -105,6 +105,32 @@ export type RecordsRun = {
 };
 
 /**
+ * How a night's benchmarks ended: `record`, nts-bench kept a run record;
+ * `no-record`, it ran and kept none; `interrupted`, the controller stopped
+ * while it measured; `not-run`, the night ended before a run, its build red
+ * at verified or the next nightly slot replacing it.
+ */
+export type BenchOutcome = "record" | "no-record" | "interrupted" | "not-run";
+
+export type BenchRun = {
+  commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean; slower?: string[];
+  outcome?: BenchOutcome;
+};
+
+/**
+ * The nightly benchmarks from their slot until they run on the newest
+ * `verified`, or the next nightly slot (`until`) replaces them. `waiting` is
+ * what holds them now, and `asked` when an attempt last did not start;
+ * `measuring` is the attempt in flight, which a cycle that finds it knows was
+ * interrupted, and `interrupted` how many were this night.
+ */
+export type BenchmarksDue = {
+  since: string; until: string; waiting?: string; asked?: string;
+  measuring?: { commit: string; at: string; run: string };
+  interrupted?: number;
+};
+
+/**
  * A part's runs, and its records: each part records the kinds its own checks
  * hold, after its own green run. `slot` is when the wide steps last answered
  * their schedule.
@@ -118,12 +144,16 @@ export type State = {
   culprits: Culprit[];
   probes: ProbeRecord[];
   /**
-   * The last nightly benchmark attempt; `measured` when nts-bench ran on
-   * `commit`, and `slower` its rows slower than their own best (bench.ts).
+   * The last nightly benchmark attempt that ran, or the night that ended
+   * without one, and what came of it: `measured` only when nts-bench kept a
+   * run record of `commit`, and `slower` its rows slower than their own best
+   * (bench.ts).
    */
-  bench?: { commit: string; at: string; run: string; result: string; submitted: string | null; measured: boolean; slower?: string[] };
-  /** The nightly benchmarks still waiting for a quiet machine, from their slot until the window closes. */
-  benchmarks_due?: { since: string; until: string };
+  bench?: BenchRun;
+  /** The nightly benchmarks while they are due (service.ts's runBenchmarks). */
+  benchmarks_due?: BenchmarksDue;
+  /** When the benchmarks last answered the nightly slot (schedule.ts's dueNightly). */
+  nightly?: string;
   /** The last commit `verified` was pushed at, and when a push last failed. */
   pushed?: string;
   push_failed_at?: string;

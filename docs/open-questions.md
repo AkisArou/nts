@@ -92,8 +92,6 @@ Ranked by how much each blocks or how much harm it does today.
 13. The tsrs patch adds a checker API beyond what its decision allows ("for the two crashes only").
 
 **Code and scripts behind the documents:** small fixes, each its own change.
-- `tooling/gate/with-lock.sh` and `wait-idle.sh` disagree on whether
-  measurement needs a quiet machine.
 - The project's `CLAUDE.md` names only node as the bar; the bar is node and
   Bun (the user's file to change).
 - Comments behind the code: `compiler/semantic-schema/src/schema.rs` cites the

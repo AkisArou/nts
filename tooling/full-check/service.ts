@@ -6,20 +6,20 @@
 //   node tooling/full-check/service.ts --once              one cycle, then exit
 //   node tooling/full-check/service.ts --status [--json]   what it is doing, what it last did, and the task lines
 //   options: --wide-at=10:00,16:00,22:00 --nightly-at=03:00   (local time; schedule.ts)
-//            --bench-wait=240   minutes the nightly benchmarks wait for a quiet machine
 //
 // Each cycle does the first of these that is due:
 //   0. a records commit the landing check refused or held, its delta applied
 //      again on the newest main and submitted (seconds; followRecords);
 //   1. the wide steps (owed.mjs's WIDE) on the newest `verified`, at a slot of
 //      the schedule, if verified moved since their last run; the nightly slot
-//      also makes the benchmarks due (bench.ts), if nts-bench has not
-//      measured verified yet;
+//      also makes the benchmarks due (bench.ts), whatever wide slot came after
+//      it, if nts-bench has not measured verified yet;
 //   2. the core (every other step of all.sh) on the newest `main`, if main
 //      moved since the core's last run;
-//   3. due benchmarks on `verified`, when the machine is quiet: a busy machine
-//      is asked again on a later cycle, never waited for, until --bench-wait
-//      minutes after the slot;
+//   3. due benchmarks on the newest `verified`, admitted by the measurement
+//      lock once CPU 4 and its sibling 5 are quiet: an attempt the lock does
+//      not admit keeps them due, asked again ten minutes later, until they run
+//      or the next nightly slot replaces them;
 //   4. the count step (count.ts), once an hour, after the pool's upkeep
 //      (tooling/landing/pool.ts's prune: free trees idle past its limit go).
 //
@@ -62,9 +62,9 @@ import { appliedIn, countsText, DELTA_FILE, parseDelta } from "../records/delta.
 import { listedIn, type Listed } from "../records/pending.ts";
 import { ghIn, issueComment, makeRevert, reopenIssue, taskLine, type Finding } from "./revert.ts";
 import { issuesNamed } from "../tasks/links.ts";
-import { benchWithLock, DEFAULT_QUIET_WAIT_MINUTES, FULL_MD, QUIET_ASK_SECONDS, quietWithin, resultsCommit, slowerRows, type Bench, type Quiet } from "./bench.ts";
-import { DEFAULT_SCHEDULE, dueSlot, parseTimes, type Schedule } from "./schedule.ts";
-import { layout as defaultLayout, PARTS, probeKey, readState, writeState, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
+import { benchWithLock, FULL_MD, resultsCommit, slowerRows, type Bench, type BenchAttempt } from "./bench.ts";
+import { DEFAULT_SCHEDULE, dueNightly, dueSlot, nextNightly, parseTimes, type Schedule } from "./schedule.ts";
+import { layout as defaultLayout, PARTS, probeKey, readState, writeState, type BenchRun, type Culprit, type Doing, type Layout, type Part, type PartState, type RecordsRun, type RunRecord, type State } from "./state.ts";
 
 const HOUR = 3_600_000, DAY = 24 * HOUR;
 /** Logs are evidence for three days (docs/workflow.md, The machine). */
@@ -86,10 +86,6 @@ export type Effects = {
   applier: Applier;
   /** nts-bench on the tree, through the measurement lock (bench.ts). */
   bench: Bench;
-  /** Whether the machine is quiet within a short wait (bench.ts). */
-  quiet: Quiet;
-  /** How long the nightly benchmarks stay due after their slot. */
-  benchWindowMs: number;
   /** Where pins live (pin.ts's PINS). */
   pins: string;
   count: () => CountResult;
@@ -116,27 +112,26 @@ const short = (sha: string) => sha.slice(0, 12);
 export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks" | "count" | "idle"> {
   const state = readState(fx.layout.state);
   housekeeping(fx, state);
+  interruptedBenchmarks(fx, state);
   if (await followRecords(fx, state)) return "records";
   const now = fx.now();
   const verified = fx.git.commit("refs/heads/verified");
+  // Answered on its own: a cycle that first gets to the night after a later
+  // wide slot still makes it due. A state that never answered one starts
+  // here, and its first night is the next slot.
+  if (!state.nightly) { state.nightly = now.toISOString(); writeState(fx.layout.state, state); }
+  const night = dueNightly(fx.schedule, new Date(state.nightly), now);
+  if (night) answerNightly(fx, state, night, verified);
   const slot = dueSlot(fx.schedule, state.wide.slot ? new Date(state.wide.slot) : undefined, now);
   if (slot) {
     state.wide.slot = now.toISOString();
     let did: "wide" | null = null;
     if (verified && verified !== state.wide.last_run?.commit) {
       fx.log(`wide steps due (${slot.nightly ? "the nightly run" : `the ${slot.at.toTimeString().slice(0, 5)} slot`}) on verified ${short(verified)}`);
+      holds(state, `the wide steps on verified ${short(verified)} go first`);
       await runPart(fx, state, "wide", verified);
       did = "wide";
     } else fx.log(verified ? `wide steps due, but verified ${short(verified)} is where they last ran` : "wide steps due, but nothing is verified yet");
-    if (slot.nightly && verified) {
-      if (state.bench?.measured && state.bench.commit === verified) fx.log(`benchmarks: nts-bench already measured verified ${short(verified)}`);
-      else {
-        // Due, not run here: the core goes first, and a busy machine is asked again later.
-        const until = new Date(now.getTime() + fx.benchWindowMs);
-        state.benchmarks_due = { since: now.toISOString(), until: until.toISOString() };
-        fx.log(`benchmarks due until ${until.toTimeString().slice(0, 5)}: nts-bench runs on verified once the machine is quiet, after any core run`);
-      }
-    }
     writeState(fx.layout.state, state);
     if (did) return did;
   }
@@ -144,6 +139,7 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   if (!main) throw new Error("no main");
   const last = state.core.last_run;
   if (main !== last?.commit || (last.verdict === "held" && now.getTime() - Date.parse(last.at) >= HELD_RETRY_MS)) {
+    holds(state, `the core on main ${short(main)} goes first`);
     await runPart(fx, state, "core", main);
     return "core";
   }
@@ -151,24 +147,15 @@ export async function cycle(fx: Effects): Promise<Part | "records" | "benchmarks
   for (const part of ["core", "wide"] as const) {
     const red = state[part].last_run;
     if (red?.verdict === "red" && red.search?.result.startsWith("held") && now.getTime() - Date.parse(red.search.at) >= HELD_RETRY_MS) {
+      holds(state, `the ${part} culprit search goes first`);
       await findCulprit(fx, state, part, red);
       writeState(fx.layout.state, state);
       return part;
     }
   }
   const due = state.benchmarks_due;
-  if (due && verified) {
-    if (now.getTime() >= Date.parse(due.until)) {
-      delete state.benchmarks_due;
-      state.bench = { commit: verified, at: now.toISOString(), run: "", result: "not run: the machine was not quiet in time; the next nightly slot tries again", submitted: null, measured: false };
-      fx.log(`benchmarks at ${short(verified)}: ${state.bench.result}`);
-      writeState(fx.layout.state, state);
-    } else if (await runBenchmarks(fx, state, verified) === "done") {
-      delete state.benchmarks_due;
-      writeState(fx.layout.state, state);
-      return "benchmarks";
-    }
-  }
+  if (due && verified && !(due.asked && now.getTime() - Date.parse(due.asked) < BENCH_ASK_AGAIN_MS)
+    && await runBenchmarks(fx, state, verified) === "done") return "benchmarks";
   if (!state.count || now.getTime() - Date.parse(state.count.at) >= COUNT_EVERY_MS) {
     upkeepPool(fx);
     runCount(fx, state);
@@ -552,40 +539,129 @@ async function followRecords(fx: Effects, state: State): Promise<boolean> {
 }
 
 /**
+ * How long an attempt that did not start waits to be asked again: the lock
+ * may be another measurement's for an hour, and each attempt builds first.
+ */
+export const BENCH_ASK_AGAIN_MS = 10 * 60_000;
+/** How many of a night's attempts a stopped controller may cost before the night is given up. */
+export const BENCH_INTERRUPTIONS = 3;
+
+/**
+ * The nightly slot, answered: the benchmarks are due on the newest verified
+ * until the next nightly slot, unless nts-bench already measured it. A night
+ * still due when the next one comes is replaced, and its end says what held
+ * it.
+ */
+function answerNightly(fx: Effects, state: State, night: Date, verified: string | null): void {
+  const now = fx.now().toISOString(), left = state.benchmarks_due;
+  state.nightly = now;
+  if (left) {
+    endNight(fx, state, { commit: verified ?? "", at: now, run: "", outcome: "not-run",
+      result: `not run: ${left.waiting ?? "no cycle reached them"}; the nightly slot at ${night.toISOString()} replaced the night` });
+  }
+  if (verified && state.bench?.measured && state.bench.commit === verified) fx.log(`benchmarks: nts-bench already measured verified ${short(verified)}`);
+  else {
+    const until = nextNightly(fx.schedule, night).toISOString();
+    state.benchmarks_due = { since: now, until };
+    fx.log(`benchmarks due until ${until}: nts-bench measures the newest verified once the core has nothing to do and the measurement lock admits it`);
+  }
+  writeState(fx.layout.state, state);
+}
+
+/** What holds the due benchmarks now, for the status (`benchmarks.due.waiting`); the run that follows writes it down. */
+function holds(state: State, what: string): void {
+  if (state.benchmarks_due) state.benchmarks_due.waiting = what;
+}
+
+/** The night has its answer: the benchmarks are no longer due, and the status says how they ended. */
+function endNight(fx: Effects, state: State, bench: Pick<BenchRun, "commit" | "at" | "run" | "result" | "outcome"> & Partial<BenchRun>): "done" {
+  state.bench = { submitted: null, measured: false, ...bench };
+  delete state.benchmarks_due;
+  fx.log(`benchmarks at ${bench.commit ? short(bench.commit) : "nothing verified"}: ${bench.result}`);
+  writeState(fx.layout.state, state);
+  return "done";
+}
+
+/**
+ * An attempt the state says is in flight was interrupted: a cycle runs its
+ * own attempt to its end before the next begins, so only a controller that
+ * stopped during one leaves it for a later cycle to find. It is tried again
+ * while the night lasts, BENCH_INTERRUPTIONS lost attempts at most, and then
+ * the night is given up as a task.
+ */
+function interruptedBenchmarks(fx: Effects, state: State): void {
+  const due = state.benchmarks_due, lost = due?.measuring;
+  if (!due || !lost) return;
+  delete due.measuring;
+  due.interrupted = (due.interrupted ?? 0) + 1;
+  const result = `interrupted: the controller stopped while nts-bench measured, from ${lost.at}`;
+  if (due.interrupted < BENCH_INTERRUPTIONS) {
+    state.bench = { commit: lost.commit, at: lost.at, run: lost.run, result: `${result}; tried again`, submitted: null, measured: false, outcome: "interrupted" };
+    due.waiting = `the attempt from ${lost.at} was interrupted, and is tried again`;
+    fx.log(`benchmarks at ${short(lost.commit)}: ${state.bench.result}`);
+    writeState(fx.layout.state, state);
+    return;
+  }
+  endNight(fx, state, { commit: lost.commit, at: lost.at, run: lost.run, outcome: "interrupted",
+    result: `${result}; interrupted ${due.interrupted} times this night, so the next nightly slot tries again` });
+  task(fx, state, `- The nightly benchmarks at ${short(lost.commit)} were interrupted ${due.interrupted} times: the controller stopped while nts-bench measured; see ${lost.run}.`);
+  writeState(fx.layout.state, state);
+}
+
+/**
  * nts-bench on `verified`, built by pinned.sh in the full check's tree (its
  * `build` step: nts-bench links the compiler crates, so it is built from the
- * commit it measures), and its results-only commit submitted. `busy` when the
- * machine was not quiet within QUIET_ASK_SECONDS: nothing is built or kept,
- * and the benchmarks stay due for a later cycle.
+ * commit it measures), admitted by the measurement lock (bench.ts), and its
+ * results-only commit submitted. `waiting` when it did not start -- its build
+ * held, or the lock not admitting it -- and nothing is kept: the benchmarks
+ * stay due, asked again BENCH_ASK_AGAIN_MS later. `done` when the night has
+ * its answer: a run record, a run that kept none, or a build red at
+ * verified. The attempt is written down before nts-bench starts, so one a
+ * stopped controller cut short is found (interruptedBenchmarks).
  */
-async function runBenchmarks(fx: Effects, state: State, verified: string): Promise<"busy" | "done"> {
-  if (!fx.quiet(QUIET_ASK_SECONDS)) return "busy";
-  const at = fx.now().toISOString();
-  const attempt = (run: string, result: string, measured: boolean, submitted: string | null = null) => {
-    state.bench = { commit: verified, at, run, result, submitted, measured };
-    fx.log(`benchmarks at ${short(verified)}: ${result}`);
+async function runBenchmarks(fx: Effects, state: State, verified: string): Promise<"waiting" | "done"> {
+  const due = state.benchmarks_due!, at = fx.now().toISOString();
+  const wait = (why: string): "waiting" => {
+    Object.assign(due, { waiting: why, asked: at });
+    fx.log(`benchmarks at ${short(verified)}: ${why}; still due, and asked again in ${BENCH_ASK_AGAIN_MS / 60_000} min`);
     writeState(fx.layout.state, state);
+    return "waiting";
   };
   const built = doing(fx, state, "benchmarks", verified, () => { fx.admit(); return fx.gate.run(verified, ["build"], "bench-build"); }, at);
-  if (built.verdict !== "green") { attempt(built.run, `not run: the build at verified is ${built.verdict}`, false); return "done"; }
+  if (built.verdict === "held") return wait(`the build at verified was held (${built.reasons.build ?? "no reason given"}); see ${built.run}`);
+  if (built.verdict !== "green") return endNight(fx, state, { commit: verified, at, run: built.run, result: `not run: the build at verified is ${built.verdict}`, outcome: "not-run" });
   const run = join(fx.layout.runs, `bench-${short(verified)}-${Date.parse(at)}`);
   mkdirSync(run, { recursive: true });
-  fx.log(`benchmarks: nts-bench on verified ${short(verified)}; logs ${run}`);
-  const measured = doing(fx, state, "benchmarks", verified, () => fx.bench(fx.layout.tree, run), at);
+  due.measuring = { commit: verified, at, run };
+  fx.log(`benchmarks: nts-bench on verified ${short(verified)}, once the measurement lock admits it; logs ${run}`);
+  let attempt: BenchAttempt | { failed: string };
+  try { attempt = doing(fx, state, "benchmarks", verified, () => fx.bench(fx.layout.tree, run), at); }
+  catch (error) { attempt = { failed: error instanceof Error ? error.message : String(error) }; }
+  delete due.measuring;
+  writeState(fx.layout.state, state);
+  if ("failed" in attempt) return endNight(fx, state, { commit: verified, at, run, result: `nts-bench could not be run: ${attempt.failed}`, outcome: "no-record" });
+  if (!attempt.admitted) {
+    // It started nothing: its log holds only the refusal, said here and in the state.
+    rmSync(run, { recursive: true, force: true });
+    return wait(`not admitted: ${attempt.reason}`);
+  }
   const tree = new Git(fx.layout.tree, fx.git.env);
   const found = resultsCommit(tree, verified);
   if ("none" in found) {
-    attempt(run, `nts-bench exited ${measured.status}: ${found.none}`, true);
-    task(fx, state, `- The nightly benchmark run at ${short(verified)} kept no run record (nts-bench exited ${measured.status}: ${found.none}); see ${run}.`);
+    endNight(fx, state, { commit: verified, at, run, result: `nts-bench exited ${attempt.status}: ${found.none}`, outcome: "no-record" });
+    task(fx, state, `- The nightly benchmark run at ${short(verified)} kept no run record (nts-bench exited ${attempt.status}: ${found.none}); see ${run}.`);
+    writeState(fx.layout.state, state);
     return "done";
   }
   fx.git.run(["update-ref", `refs/full-check/benchmarks/${short(verified)}`, found.commit]);
   const submitted = await submitTo(fx.queue, found.commit, { first: false });
-  attempt(run, `run record ${short(found.commit)}${measured.status ? ` (nts-bench exited ${measured.status})` : ""}: ${submitted.line}`, true, submitted.submitted ? found.commit : null);
   const slower = slowerRows(tree.run(["show", `${found.commit}:${FULL_MD}`]));
-  state.bench!.slower = slower;
-  writeState(fx.layout.state, state);
-  if (slower.length) task(fx, state, `- ${slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(verified)}: ${slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
+  endNight(fx, state, { commit: verified, at, run, outcome: "record", measured: true, slower, submitted: submitted.submitted ? found.commit : null,
+    result: `run record ${short(found.commit)}${attempt.status ? ` (nts-bench exited ${attempt.status})` : ""}: ${submitted.line}` });
+  if (slower.length) {
+    task(fx, state, `- ${slower.length} benchmark row(s) slower than their own best in the nightly run at ${short(verified)}: ${slower.join(", ")} (${FULL_MD}); measure each before calling it a regression.`);
+    writeState(fx.layout.state, state);
+  }
   return "done";
 }
 
@@ -744,7 +820,7 @@ export function admitWhenMemory(log: (line: string) => void, read = memAvailable
   };
 }
 
-function production(options: { schedule: Schedule; quietWait: number }): Effects {
+function production(options: { schedule: Schedule }): Effects {
   const layout = defaultLayout();
   mkdirSync(layout.runs, { recursive: true });
   const git = new Git(ROOT);
@@ -756,8 +832,6 @@ function production(options: { schedule: Schedule; quietWait: number }): Effects
     checkout: commit => prepareTree(sharedCheckout(ROOT), layout.tree, commit),
     applier: (tree, delta, log) => applyRecords(tree, delta, log),
     bench: benchWithLock(ROOT, layout.target),
-    quiet: quietWithin(ROOT),
-    benchWindowMs: options.quietWait * 60_000,
     pins: process.env.NTS_PINS ?? join(homedir(), ".cache/nts-pins"),
     count: () => countMachine(gather(ROOT)),
     sweep: removable => sweepLeftovers(removable, join(homedir(), ".cache")),
@@ -860,7 +934,8 @@ export type FullCheckStatus = {
   core: PartStatus;
   wide: PartStatus & { slot: string | null };
   culprits: Culprit[];
-  benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null };
+  /** The last attempt or night and how it ended, its slower rows, the night still due and what holds it, and when the nightly slot was last answered. */
+  benchmarks: { last: State["bench"] | null; slower: string[]; due: State["benchmarks_due"] | null; slot: string | null };
   count: State["count"] | null;
   tasks: State["tasks"];
 };
@@ -893,7 +968,7 @@ export function fullCheckStatus(state: State, inputs: StatusInputs): FullCheckSt
     core: part(state.core),
     wide: { ...part(state.wide), slot: state.wide.slot ?? null },
     culprits: state.culprits,
-    benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null },
+    benchmarks: { last: state.bench ?? null, slower: state.bench?.slower ?? [], due: state.benchmarks_due ?? null, slot: state.nightly ?? null },
     count: state.count ?? null,
     tasks: state.tasks,
   };
@@ -919,7 +994,8 @@ export function statusText(s: FullCheckStatus): string {
     `records: core ${records(s.core.records)}`,
     `         wide ${records(s.wide.records)}`,
     `benchmarks: ${s.benchmarks.last ? `${short(s.benchmarks.last.commit)} at ${s.benchmarks.last.at}: ${s.benchmarks.last.result}; ${s.benchmarks.last.run}` : "none"}`
-      + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}` : ""}`,
+      + `${s.benchmarks.slower.length ? `; ${s.benchmarks.slower.length} row(s) slower than their own best` : ""}${s.benchmarks.due ? `; due until ${s.benchmarks.due.until}${
+        s.benchmarks.due.measuring ? `, measuring from ${s.benchmarks.due.measuring.at}` : s.benchmarks.due.waiting ? `, waiting: ${s.benchmarks.due.waiting}` : ""}` : ""}`,
     `count: ${s.count ? `${s.count.verdict} at ${s.count.at}, ${s.count.lines.length} line(s)` : "never"}`,
     ...s.count?.lines.map(line => `  ${line}`) ?? [],
     "tasks for an issue:", ...s.tasks.map(t => `  ${t.at} ${t.line}`),
@@ -938,23 +1014,26 @@ export function machineStatus(layout: Layout, now = new Date()): FullCheckStatus
   });
 }
 
-export function parseOptions(argv: readonly string[]): { once: boolean; status: boolean; json: boolean; schedule: Schedule; quietWait: number } {
+export function parseOptions(argv: readonly string[]): { once: boolean; status: boolean; json: boolean; schedule: Schedule; ignored: string[] } {
   const schedule = { ...DEFAULT_SCHEDULE };
-  let once = false, status = false, json = false, quietWait = DEFAULT_QUIET_WAIT_MINUTES;
+  let once = false, status = false, json = false;
+  const ignored: string[] = [];
   for (const arg of argv) {
     if (arg === "--once") once = true;
     else if (arg === "--status") status = true;
     else if (arg === "--json") json = true;
-    else if (/^--bench-wait=\d+$/.test(arg)) quietWait = Number(arg.slice(13));
+    // A unit written before the benchmarks stayed due until the next nightly
+    // slot still passes the wait that bounded them; it starts, and says so.
+    else if (/^--bench-wait=\d+$/.test(arg)) ignored.push(arg);
     else if (arg.startsWith("--wide-at=")) schedule.wide = parseTimes(arg.slice(10));
     else if (arg.startsWith("--nightly-at=")) {
       const [nightly, ...rest] = parseTimes(arg.slice(13));
       if (!nightly || rest.length) throw new Error("--nightly-at takes one time of day");
       schedule.nightly = nightly;
-    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json]] [--wide-at=HH:MM,...] [--nightly-at=HH:MM] [--bench-wait=<minutes>]`);
+    } else throw new Error(`unknown argument ${arg}; usage: service.ts [--once | --status [--json]] [--wide-at=HH:MM,...] [--nightly-at=HH:MM]`);
   }
   if (json && !status) throw new Error("--json is for --status");
-  return { once, status, json, schedule, quietWait };
+  return { once, status, json, schedule, ignored };
 }
 
 async function main(argv: readonly string[]): Promise<number> {
@@ -971,7 +1050,8 @@ async function main(argv: readonly string[]): Promise<number> {
   const left = readState(layout.state);
   if (left.now) { delete left.now; writeState(layout.state, left); }
   const fx = production(options);
-  stamp(`full check: core on main, wide steps at ${options.schedule.wide.join(", ")} and ${options.schedule.nightly} nightly with the benchmarks (waiting up to ${options.quietWait} min for quiet); tree ${layout.tree}`);
+  stamp(`full check: core on main, wide steps at ${options.schedule.wide.join(", ")} and ${options.schedule.nightly} nightly with the benchmarks (due until the next nightly slot, measured on CPU 4 with its sibling idle); tree ${layout.tree}`);
+  if (options.ignored.length) stamp(`ignored ${options.ignored.join(" ")}: the benchmarks stay due until the next nightly slot; node tooling/full-check/unit.ts --install writes the unit without it`);
   const nap = new Int32Array(new SharedArrayBuffer(4));
   for (;;) {
     if (followVerified(fx.git, layout)) return 0;

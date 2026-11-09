@@ -33,14 +33,13 @@
 # clears `target/bench` unless `--keep` says otherwise, and `--keep` prints what
 # it is leaving behind.
 #
-# It also refuses while a measurement is running, for the reason
-# `tooling/gate/wait-idle.sh` exists: moving the tree under a `nts-bench` that
-# is reading it produces a number for two programs. **Only when the tree would
-# actually move**, though -- the first thing anyone wants from this is
-# provenance for a worktree that has none, and refusing to record where a tree
-# already is would make that hardest exactly when the machine is busy, which is
-# when a stale pin does its damage. It refused its own first useful invocation
-# before that was separated.
+# It also refuses while a measurement is running: moving the tree under a
+# `nts-bench` that is reading it produces a number for two programs. **Only
+# when the tree would actually move**, though -- the first thing anyone wants
+# from this is provenance for a worktree that has none, and refusing to record
+# where a tree already is would make that hardest exactly when the machine is
+# busy, which is when a stale pin does its damage. It refused its own first
+# useful invocation before that was separated.
 set -eu
 
 root=$(CDPATH= cd -- "$(dirname -- "$0")/../.." && pwd)
@@ -142,7 +141,7 @@ at=$(git -C "$tree" rev-parse HEAD 2>/dev/null || echo none)
 if [ "$at" != "$sha" ] &&
   { pgrep -x nts-bench > /dev/null 2>&1 || pgrep -x nts > /dev/null 2>&1; }; then
   echo "refusing: a measurement is running; moving the tree under it would" >&2
-  echo "  produce a number for two programs. tooling/gate/wait-idle.sh" >&2
+  echo "  produce a number for two programs." >&2
   exit 1
 fi
 

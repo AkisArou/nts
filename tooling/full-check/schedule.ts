@@ -3,7 +3,9 @@
 // command line (`--wide-at=10:00,16:00,22:00 --nightly-at=03:00`, local time);
 // these are the defaults. A slot that passes while the core is running starts
 // as soon as that run ends, and one missed while the service was stopped runs
-// once when it starts again, not once per slot missed.
+// once when it starts again, not once per slot missed. The benchmarks answer
+// the nightly slot on their own: a controller that first gets to it after a
+// later wide slot still makes them due.
 
 export type Schedule = { wide: string[]; nightly: string };
 
@@ -44,4 +46,25 @@ export function lastSlot(schedule: Schedule, now: Date): Slot {
 export function dueSlot(schedule: Schedule, lastStart: Date | undefined, now: Date): Slot | null {
   const slot = lastSlot(schedule, now);
   return !lastStart || lastStart.getTime() < slot.at.getTime() ? slot : null;
+}
+
+/** The latest nightly slot at or before `now`: today's, or yesterday's before it. */
+export function lastNightly(schedule: Schedule, now: Date): Date {
+  const today = at(now, schedule.nightly);
+  return today.getTime() <= now.getTime() ? today : at(new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1), schedule.nightly);
+}
+
+/** The nightly slot after `slot`, which replaces a night that has not run by then. */
+export function nextNightly(schedule: Schedule, slot: Date): Date {
+  return at(new Date(slot.getFullYear(), slot.getMonth(), slot.getDate() + 1), schedule.nightly);
+}
+
+/**
+ * The nightly slot the benchmarks are due for, or null: due when the latest
+ * nightly slot came after they last answered one, whatever wide slots came
+ * since.
+ */
+export function dueNightly(schedule: Schedule, lastAnswer: Date | undefined, now: Date): Date | null {
+  const slot = lastNightly(schedule, now);
+  return !lastAnswer || lastAnswer.getTime() < slot.getTime() ? slot : null;
 }

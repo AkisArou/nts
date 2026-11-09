@@ -10,7 +10,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import type { TestContext } from "node:test";
 import { appliedLine, DELTA_FILE, parseDelta, serializeDelta } from "../records/delta.ts";
-import type { Bench } from "./bench.ts";
+import type { Bench, BenchAttempt } from "./bench.ts";
 import { Git } from "./git.ts";
 import { verdictOf, type Gate, type Measurement, type StepResult } from "./measure.ts";
 import type { LandingAnswer } from "./queue.ts";
@@ -101,13 +101,23 @@ export function fakeGate(repo: Repository, options: { all?: string[]; wide?: str
 /**
  * A stand-in nts-bench: like the real one it keeps one run record and the
  * rendered page as a results-only commit on the tree's HEAD. `slower` names
- * the rows the page marks slower than their own best.
+ * the rows the page marks slower than their own best; `refuse` gives the
+ * reasons the measurement lock does not admit the first attempts for, one
+ * each; `noRecord` runs and keeps nothing; `during` is called while it
+ * measures, when the controller's state is as a stop then would leave it.
  */
-export function stubBench(options: { slower?: string[]; stray?: boolean } = {}): Bench & { calls: string[] } {
-  const calls: string[] = [];
-  const bench = (tree: string, run: string) => {
+export function stubBench(options: { slower?: string[]; stray?: boolean; refuse?: string[]; noRecord?: boolean; during?: () => void } = {}): Bench & { calls: string[] } {
+  const calls: string[] = [], refusals = [...options.refuse ?? []];
+  const bench = (tree: string, run: string): BenchAttempt => {
     calls.push(tree);
+    const refusal = refusals.shift();
+    if (refusal !== undefined) {
+      writeFileSync(join(run, "bench.log"), `${refusal}\n`);
+      return { admitted: false, reason: refusal };
+    }
+    options.during?.();
     writeFileSync(join(run, "bench.log"), "nts-bench\n");
+    if (options.noRecord) return { admitted: true, status: 1 };
     const git = new Git(tree, ENV);
     const id = `2026-11-07-${git.run(["rev-parse", "--short=12", "HEAD"])}-${calls.length}`;
     mkdirSync(join(tree, "results/benchmarks/runs"), { recursive: true });
@@ -118,7 +128,7 @@ export function stubBench(options: { slower?: string[]; stray?: boolean } = {}):
     if (options.stray) { writeFileSync(join(tree, "stray.txt"), "x\n"); paths.push("stray.txt"); }
     git.run(["add", "--", ...paths]);
     git.run(["commit", "-q", "-m", `results: retain benchmark run ${id}`, "--", ...paths]);
-    return { status: 0 };
+    return { admitted: true, status: 0 };
   };
   return Object.assign(bench, { calls });
 }

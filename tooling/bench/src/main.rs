@@ -42,6 +42,7 @@ mod cli;
 mod execution;
 mod reference_link;
 mod references;
+mod reserved;
 mod results;
 mod workload;
 
@@ -179,117 +180,92 @@ const WIDE_REFERENCE_GAPS: &[(&str, &str)] = &[(
      them, which is what this row exists to report.",
 )];
 
-/// Other compiler processes on this machine, by executable name.
-///
-/// **`pgrep -x`, never `-f`.** The full-command-line form matches the caller's
-/// own command line and the loop sees itself; `tooling/gate/wait-idle.sh` has
-/// that trap written out at length and a self-test that runs the claim. This is
-/// the same question asked from Rust.
-///
-/// Our own pid is excluded so a second `nts-bench` is visible and this one is
-/// not.
-fn other_compilers() -> Vec<u32> {
-    let mine = std::process::id();
-    let mut found = Vec::new();
-    for name in ["nts", "nts-bench"] {
-        let Ok(output) = std::process::Command::new("pgrep")
-            .arg("-x")
-            .arg(name)
-            .output()
-        else {
-            continue;
-        };
-        found.extend(
-            String::from_utf8_lossy(&output.stdout)
-                .split_whitespace()
-                .filter_map(|pid| pid.parse::<u32>().ok())
-                .filter(|pid| *pid != mine),
-        );
+/// A run the reserved core did not admit, which measured nothing.
+#[derive(Debug)]
+struct NotAdmitted(String);
+
+impl std::fmt::Display for NotAdmitted {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "not admitted: {}", self.0)
     }
-    found.sort_unstable();
-    found.dedup();
-    found
 }
 
-/// Refuse to begin, or warn about the row that was measured anyway.
+impl std::error::Error for NotAdmitted {}
+
+/// The exit of a run that did not start: `with-lock.sh`'s own when it does
+/// not admit one (`EX_TEMPFAIL`), so a caller that asks again later -- the full
+/// check's nightly -- tells it from a run that failed.
+const NOT_ADMITTED_EXIT: i32 = 75;
+
+/// Refuse to begin, or note the row measured anyway, when another program is
+/// on the reserved core.
 ///
-/// A benchmark wants a quiet machine and the measurement lock does not give it
-/// one: the lock excludes *other sessions*, and the run that spoiled a full
-/// publish here was a 159-case `nts check` sweep started from the same session
-/// that held it. Both processes were legitimately mine, so no lock protocol
-/// could have refused either.
+/// A timed run wants CPU 4 to itself and its sibling 5 idle, and nothing more
+/// (reserved.rs): gates and other sessions' compiles run on the other CPUs,
+/// and each row records the machine's load and free memory beside it.
+/// `with-lock.sh` admits a run once the pair has been quiet for 45 s; this
+/// looks again, for a second, at the start and before every case, when
+/// nothing of this run is on the pair -- its timed children run on CPU 4 only
+/// while a case measures -- so a program found on either is another's.
 ///
-/// What can refuse is this: the timed runner asking, at the start and before
-/// every case, whether anything else is compiling. `NTS_BENCH_ALONE=0` opts out
-/// for a run that knowingly shares.
-fn quiet_enough(when: &str) -> Option<String> {
-    if std::env::var("NTS_BENCH_ALONE").is_ok_and(|value| value == "0") {
-        return None;
+/// It used to ask whether any `nts` ran anywhere on the machine, which on a
+/// machine whose landing checks run all night kept the nightly run from ever
+/// starting.
+fn reserved_core_busy(when: &str) -> Option<String> {
+    match glance() {
+        Ok(None) => None,
+        Ok(Some(cpu)) => Some(reserved_note(cpu, when)),
+        Err(error) => Some(format!(
+            "the reserved CPUs 4-5 could not be read {when} ({error:#}), and what cannot be read is not known to be quiet"
+        )),
     }
-    let busy = other_compilers();
-    if busy.is_empty() {
-        return None;
-    }
-    // **With its age, which is the difference between a note and an alarm.**
-    // Before the native switch, on 2026-09-12 an `emit-jvm` of
-    // `tests/programs/library` blocked in `anon_pipe_read` waiting on tsgo -- zero CPU
-    // ticks in eleven hours and forty-three minutes -- and this check did its
-    // job perfectly: it declined every timed run on the machine for half a day
-    // rather than measure against it.
-    //
-    // That is the failure. A check that refuses correctly makes a hung process
-    // **silent** rather than loud, and `wait-idle.sh` waits forever on one that
-    // never exits. `another compiler is running (1542606)` reads as "somebody is
-    // working"; `another compiler is running (1542606 11h43m)` reads as
-    // "something is wrong", and they are one field apart.
-    let pids: Vec<String> = busy
-        .iter()
-        .map(|pid| match age_of(*pid) {
-            Some(age) => format!("{pid} {age}"),
-            None => pid.to_string(),
-        })
-        .collect();
-    Some(format!(
-        "another compiler is running ({}) {when}; a timed run wants the machine \
-         to itself -- `tooling/gate/wait-idle.sh`, or `NTS_BENCH_ALONE=0` to \
-         measure anyway",
-        pids.join(", ")
+}
+
+/// The reserved CPU a program ran on during a one-second look, if any.
+fn glance() -> Result<Option<u32>> {
+    let before = reserved::read()?;
+    std::thread::sleep(std::time::Duration::from_secs(1));
+    Ok(reserved::program_on(
+        &before,
+        &reserved::read()?,
+        &reserved::CPUS,
+        reserved::RUNNING_PERCENT,
     ))
 }
 
-/// How long a process has been alive, as a person reads it.
-///
-/// From `/proc`, because `ps` would be a second process to spawn per pid inside
-/// a check that runs before every case. `starttime` is field 22 of
-/// `/proc/<pid>/stat`, and the fields are counted from after the **last** `)`
-/// rather than by splitting the whole line: the command name sits in
-/// parentheses and may itself contain spaces and parentheses, which is the
-/// documented reason `/proc` parsers go wrong.
-fn age_of(pid: u32) -> Option<String> {
-    let stat = std::fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
-    let fields: Vec<&str> = stat[stat.rfind(')')? + 1..].split_whitespace().collect();
-    // Index 0 here is `state`, which is field 3, so field 22 is index 19.
-    let started: u64 = fields.get(19)?.parse().ok()?;
-    let uptime = std::fs::read_to_string("/proc/uptime").ok()?;
-    // Whole seconds on both sides, so there is no float and no cast: `/proc`
-    // gives uptime as `12345.67` and `starttime` in clock ticks, and a second
-    // of granularity is more than a message measured in hours needs.
-    //
-    // `_SC_CLK_TCK`, which is 100 on every Linux this runs on. A wrong constant
-    // here misreports an age and cannot misreport whether there is one.
-    let up: u64 = uptime
-        .split_whitespace()
-        .next()?
-        .split('.')
-        .next()?
-        .parse()
-        .ok()?;
-    let seconds = up.saturating_sub(started / 100);
-    Some(match seconds {
-        s if s >= 3600 => format!("{}h{:02}m", s / 3600, (s % 3600) / 60),
-        s if s >= 60 => format!("{}m{:02}s", s / 60, s % 60),
-        s => format!("{s}s"),
-    })
+/// A program on the sibling while a case measured, from the counters read as
+/// it began. Over the case itself only CPU 5 can be judged: CPU 4 runs the
+/// case's own timed children.
+fn sibling_busy(before: Option<[reserved::Ticks; 2]>) -> Option<String> {
+    let before = before?;
+    let after = reserved::read().ok()?;
+    reserved::program_on(
+        &before,
+        &after,
+        &[reserved::CPUS[1]],
+        reserved::AVERAGE_PERCENT,
+    )
+    .map(|cpu| reserved_note(cpu, "while this case was measured"))
+}
+
+/// Say beside the row what disturbed it, if anything did.
+fn disturbance_note(name: &str, disturbance: Option<&str>) {
+    if let Some(warning) = disturbance {
+        println!("note: {name:<16} {warning}");
+    }
+}
+
+/// What a program found on reserved `cpu` means for the row.
+fn reserved_note(cpu: u32, when: &str) -> String {
+    let role = if cpu == reserved::CPUS[0] {
+        "the CPU a timed run uses"
+    } else {
+        "the sibling a timed run keeps idle"
+    };
+    format!(
+        "another program ran on CPU {cpu}, {role}, {when}; a timed run wants CPU 4 to itself and CPU 5 idle -- \
+         `tooling/gate/with-lock.sh` admits a run once they are"
+    )
 }
 
 /// The tree this run measures and publishes into.
@@ -327,6 +303,12 @@ fn main() -> Result<()> {
         eprintln!("{error:#}");
         std::process::exit(2);
     }
+    if let Err(error) = &result
+        && error.is::<NotAdmitted>()
+    {
+        eprintln!("{error:#}");
+        std::process::exit(NOT_ADMITTED_EXIT);
+    }
     result
 }
 
@@ -350,6 +332,9 @@ fn run() -> Result<()> {
         cli::Command::Help | cli::Command::Count => unreachable!("handled before setup"),
     };
     let cases = selected_cases(&root, &requested)?;
+    if let Some(warning) = reserved_core_busy("before this run started") {
+        return Err(NotAdmitted(warning).into());
+    }
 
     let out = root.join("target/bench");
     std::fs::create_dir_all(&out).context("creating the build directory")?;
@@ -360,10 +345,6 @@ fn run() -> Result<()> {
     // *current* case needs would leave the next one without it. Which of them
     // reaches a binary is still per-case -- `nts_unicode.c` goes on a command
     // line only when that case's program calls into it.
-    if let Some(warning) = quiet_enough("before this run started") {
-        bail!("{warning}");
-    }
-
     for file in nts_codegen_c::support_files(nts_codegen_c::UnicodeNeeds::ALL) {
         file.write(out.as_std_path())
             .with_context(|| format!("writing {}", file.name))?;
@@ -380,19 +361,24 @@ fn run() -> Result<()> {
     let mut conditions = std::collections::BTreeMap::new();
     let mut row_failures = std::collections::BTreeMap::new();
     for case in &cases {
-        // Before each case rather than once at the start: a sweep begun while
-        // the suite is halfway through spoils the rows after it and none
-        // before, and a note on those rows is worth more than a refusal that
-        // throws away forty minutes of correct measurement.
-        if let Some(warning) = quiet_enough("while this case was measured") {
-            println!("note: {:<16} {warning}", case.file_name().unwrap_or("?"));
-            spoiled.push(case.file_name().unwrap_or("?").to_string());
-        }
+        let name = case.file_name().unwrap_or("?");
+        // Before each case rather than once at the start: a program that comes
+        // to the reserved core while the suite is halfway through spoils the
+        // rows after it and none before, and a note on those rows is worth
+        // more than a refusal that throws away forty minutes of correct
+        // measurement.
+        let early = reserved_core_busy("before this case was measured");
+        disturbance_note(name, early.as_deref());
         // A row that fails its checks keeps its measurements: `--render` judges
         // them again, which is the point of saving them.
-        let name = case.file_name().unwrap_or("?");
         let before = results::conditions(&root)?;
+        let sibling = reserved::read().ok();
         let computed = run_case(&root, case, &out);
+        let late = early.is_none().then(|| sibling_busy(sibling)).flatten();
+        disturbance_note(name, late.as_deref());
+        if early.is_some() || late.is_some() {
+            spoiled.push(name.to_owned());
+        }
         if let Some(measurements) = accept_build(name, computed, &mut row_failures, &mut failed)? {
             let assembled = assemble(&measurements, lanes.is_some());
             if let Err(error) = &assembled {

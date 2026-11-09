@@ -216,10 +216,21 @@ in two ways:
 
 Benchmarks run nightly on `verified`, on the CPUs reserved for measurement
 (4 and 5), and produce the report with every row and its ratios. A
-regression becomes a task. Benchmarks never block a landing, and never hold
-the full check: the nightly slot makes them due, they run once the machine
-is quiet and the core has nothing to do, and a night whose machine never
-got quiet within four hours of its slot is given up to the next one.
+regression becomes a task.
+
+- **A measurement waits for CPU 4 with its sibling 5 idle, and for nothing
+  else.** Gates, landing checks and agents' work run on the other CPUs and
+  never hold it; every row records the machine's load and free memory beside
+  it. `tooling/gate/with-lock.sh` admits a run, and nts-bench marks a row
+  whose reserved core another program used.
+- **Due from the nightly slot until they run.** The slot makes them due on
+  the newest `verified`, whatever wide slots follow it, until they run or the
+  next nightly slot replaces them. They never block a landing, and run when
+  the core has nothing to do.
+- **Only a record counts.** An attempt the measurement lock does not admit
+  leaves them due, asked again later rather than waited for; one a stopped
+  controller cut short is tried again; only a run that kept a record counts
+  as measured, and the full check's status says what stopped one.
 
 ## The machine
 
