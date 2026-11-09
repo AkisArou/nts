@@ -325,6 +325,13 @@ ids, kept so the records that cite them still resolve.
   kind with nothing listed does not run: at 89809ede4 the TypeScript census
   ran on all three backends with nothing of its own pending, while the
   records run held the core for hours.
+- A records commit lands by case, not by text: measured at `verified`, its
+  rows apply to `main` for the cases `main` has not changed since, the rest
+  stay pending, and a refused submission is seen and retried. At 89809ede4
+  the 73 rows of a five-hour records run (4815f13f5) were refused for a
+  textual conflict with ff64edcbb's deleted rows in
+  `results/benchmarks/c/outcomes.tsv`, and the full check still records
+  them as submitted.
 - `tooling/cli/tests/case_roots.rs`'s
   `native_checker_errors_keep_their_count_diagnostics_and_exit` once found its
   own scratch folder already gone when it removed it (`remove scratch:
