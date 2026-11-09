@@ -1,4 +1,4 @@
-import {oracleToolchainLocation} from "../gate/canonical-environment.ts";
+import {oracleToolchainLocation,ownTemporary} from "../gate/canonical-environment.ts";
 // Defects that neither `tests/programs/` nor `blockers/` can hold, each pinned to what
 // it does today, re-measured against whatever compiler is current.
 //
@@ -213,8 +213,7 @@ if (recordingPending) {
 serialRun(TOOLS);
 const FINGERPRINT = createHash("sha256").update(readFileSync(NTS)).digest("hex").slice(0, 16);
 mkdirSync(SCRATCH, { recursive: true });
-process.env.TMPDIR = join(SCRATCH, "tmp");
-mkdirSync(process.env.TMPDIR, { recursive: true });
+ownTemporary(SCRATCH);
 
 
 // --- one project in a scratch directory --------------------------------------

@@ -14,7 +14,7 @@ import {instrumentPolicy} from "./step-result.ts";
 import * as canonicalEnvironment from "./canonical-environment.ts";
 import {
   assertLandingEnvironment, ENVIRONMENT_CONTEXT, ENVIRONMENT_EXPERIMENT,
-  FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,
+  FIXED_AMBIENT, gateEnvironment, oracleStepEnvironment, measuredCompileEnvironment, nodeHeapOomReason, reportEnvironment,oracleToolchainLocation,ownTemporary,
 } from "./canonical-environment.ts";
 import {newTestScratch} from "./test-scratch.ts";
 import {toolingSliceArgs} from "./tooling-slice.ts";
@@ -64,6 +64,39 @@ test("canonical Node cache storage has one owned root across nested runs",t=>{
   const child=gateEnvironment({...parent.env,NODE_COMPILE_CACHE:"/tmp/child-cache"},{run:join(run,"child")});
   assert.equal(child.env.NODE_COMPILE_CACHE,expected);
   assert.equal(child.env.TMPDIR,join(run,"child/tmp"));
+});
+
+test("a tool's own temporary is registered in its canonical context, nested in the run's, so a child's owned cache check holds",t=>{
+  const {run,base}=fixture(t),authority=cacheAuthority(),planned=gateEnvironment(base,{run});
+  const env={...planned.env},scratch=join(planned.env.TMPDIR!,"conformance262","1");
+  assert.equal(ownTemporary(scratch,env),join(scratch,"tmp"));
+  assert.equal(env.TMPDIR,join(scratch,"tmp"));
+  const context=JSON.parse(env[ENVIRONMENT_CONTEXT]!);
+  assert.equal(context.temporary.path,env.TMPDIR,"the context registers the TMPDIR its children get");
+  assert.equal(context.temporary.enclosing.path,planned.temporary.path,"nested in the run's own temporary");
+  assert.equal(context.report.ambient.TMPDIR,env.TMPDIR);
+  // What the oracle dependency capture's package manager asks of a child, unchanged.
+  assert.equal(authority.environment(env,{temporary:env.TMPDIR!}).TMPDIR,env.TMPDIR);
+  // A child that registers the same temporary again changes nothing.
+  const child={...env};
+  assert.equal(ownTemporary(scratch,child),env.TMPDIR);
+  assert.deepEqual(JSON.parse(child[ENVIRONMENT_CONTEXT]!).temporary,context.temporary);
+  // The control: the same folder as TMPDIR, never registered, is refused by the same check.
+  assert.throws(()=>authority.environment({...planned.env,TMPDIR:env.TMPDIR},{temporary:env.TMPDIR!}),
+    /owned Node cache temporary: canonical TMPDIR differs from its registered temporary/);
+});
+
+test("a temporary outside its run's registered one is refused, and outside a canonical context only TMPDIR changes",t=>{
+  const {run,base}=fixture(t),planned=gateEnvironment(base,{run}),outside=join(run,"elsewhere");
+  const env={...planned.env};
+  assert.throws(()=>ownTemporary(outside,env),/a temporary of its own: .* is outside its run's registered temporary/);
+  assert.equal(env.TMPDIR,planned.env.TMPDIR);
+  assert.equal(env[ENVIRONMENT_CONTEXT],planned.env[ENVIRONMENT_CONTEXT],"a refusal leaves the context as it was");
+  const plain:NodeJS.ProcessEnv={HOME:base.HOME,TMPDIR:"/tmp"};
+  assert.equal(ownTemporary(outside,plain),join(outside,"tmp"));
+  assert.equal(plain.TMPDIR,join(outside,"tmp"));
+  assert.equal(plain[ENVIRONMENT_CONTEXT],undefined);
+  assert.ok(existsSync(join(outside,"tmp")));
 });
 
 test("the oracle toolchain location is supplied by the tooling tree",t=>{

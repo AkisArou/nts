@@ -48,7 +48,7 @@
 //   3. The harness is a stand-in, not the harness.
 
 import { execFileSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -56,6 +56,7 @@ import { BACKENDS, attempt, selfChecks } from "./attempt262.ts";
 import { pinCompiler, workspace } from "./project.ts";
 
 import { serialRun } from "./worker-memory.ts";
+import { ownTemporary } from "../gate/canonical-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -100,8 +101,7 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 process.env.NTS_CHECKERS = "1";
 
 
-process.env.TMPDIR = join(SCRATCH, "tmp");
-mkdirSync(process.env.TMPDIR, { recursive: true });
+ownTemporary(SCRATCH);
 
 // --- the selection --------------------------------------------------------
 

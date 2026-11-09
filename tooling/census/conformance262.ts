@@ -134,7 +134,7 @@
 
 import { checkerPin } from "./checker-pin.ts";
 import { execFileSync, spawnSync } from "node:child_process";
-import { appendFileSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { availableParallelism, homedir, loadavg } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -156,6 +156,7 @@ import { runMemoryWorkers } from "./worker-pool.ts";
 import { acquireToken, withToken } from "../gate/tokens.mjs";
 import { OUTPUT_PREFIX_VERSION } from "../conformance/output-prefix.ts";
 import { exitAfterOutput } from "../gate/exit.ts";
+import { ownTemporary } from "../gate/canonical-environment.ts";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, "../..");
@@ -248,8 +249,7 @@ const { path: PINNED, fingerprint: FINGERPRINT } = pinCompiler(NTS, SCRATCH);
 process.env.NTS_CHECKERS = "1";
 
 
-process.env.TMPDIR = join(SCRATCH, "tmp");
-mkdirSync(process.env.TMPDIR, { recursive: true });
+ownTemporary(SCRATCH);
 // Executed programs retain the address-space cap. Compiler processes use a
 // resident worker cap under the aggregate run slice; no compiler RLIMIT_AS.
 // Zero disables the program/individual cap, while the aggregate stays bounded.

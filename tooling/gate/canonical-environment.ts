@@ -1,7 +1,7 @@
 // One environment contract for landing, pinned and full gates. A launcher is
 // not allowed to choose verdict policy; standalone experiments are explicit.
 import { createHash } from "node:crypto";
-import { existsSync,lstatSync,readFileSync,realpathSync } from "node:fs";
+import { existsSync,lstatSync,mkdirSync,readFileSync,realpathSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import { userInfo } from "node:os";
 import { dirname,join, relative, resolve, isAbsolute } from "node:path";
@@ -105,6 +105,36 @@ export function ownedCacheEnvironment(launcher:NodeJS.ProcessEnv,options:{tempor
     }
     return {TMPDIR:temporary,NODE_COMPILE_CACHE:NODE_COMPILE_CACHE_ROOT};
   }catch(error){throw new Error(`owned Node cache temporary: ${(error as Error).message}`);}
+}
+
+/**
+ * Gives this process `<run>/tmp` as the temporary its children write to, and
+ * returns it. In a canonical context it is registered there as well, as a
+ * temporary of the run's own nested in the one the context registered (a job's
+ * inside its run's: run-temporary.ts's `enclosing`). TMPDIR and the context
+ * then agree by construction, so `ownedCacheEnvironment` holds in every child.
+ * A temporary outside the context's is refused. Outside a canonical context
+ * only TMPDIR changes.
+ */
+export function ownTemporary(run:string,env:NodeJS.ProcessEnv=process.env):string {
+  const raw=env[ENVIRONMENT_CONTEXT];
+  if(!raw){
+    const path=join(resolve(run),"tmp");
+    mkdirSync(path,{recursive:true});
+    env.TMPDIR=path;
+    return path;
+  }
+  // The context's TMPDIR is its registered temporary before this one nests in it.
+  ownedCacheEnvironment(env,{temporary:env.TMPDIR!});
+  const context=JSON.parse(raw) as Context;
+  const temporary=captureRunTemporary(run,context.temporary);
+  if(temporary.path!==context.temporary.path&&!temporary.enclosing)
+    throw new Error(`a temporary of its own: ${temporary.path} is outside its run's registered temporary ${context.temporary.path}`);
+  const storage=ownedCacheEnvironment(env,{temporary:temporary.path});
+  const report={...context.report,ambient:{...context.report.ambient,TMPDIR:storage.TMPDIR}};
+  Object.assign(env,storage);
+  env[ENVIRONMENT_CONTEXT]=JSON.stringify({...context,report,temporary} satisfies Context);
+  return storage.TMPDIR;
 }
 
 export function launcherPolicyNames(env: NodeJS.ProcessEnv): string[] {
