@@ -1634,3 +1634,24 @@ As built (#597):
   each (the red steps, their logs, the culprit search and the revert), then
   reopens it; a culprit that names none, or an issue `gh` cannot reach,
   leaves a task line in the full check's status instead.
+
+## One memory ledger for the machine (11-09)
+
+The user asked for one memory admission pool for the machine ("fix it", #590),
+after the full check's core was held three times on 11-09 by a nested
+oracle preparation that waited for host memory its own gate run was using.
+
+As built:
+- `tooling/gate/memory-ledger.ts` keeps one queue for every heavy job: the
+  landing check, then agents' work, then the full check, first come first
+  served within a priority. A request is admitted when the memory free beside
+  what admitted jobs may still take covers it, with 2 GiB kept for the system.
+- A gate run holds one reservation, measured by its own cgroup, that grows in
+  1 GiB blocks as its steps and tokens need it and shrinks as they end; a run
+  outranked by a waiting request of higher priority starts nothing new and
+  gives back what it does not use, so the request waits only for running work.
+- Tools inside a step run inside its reservation; standalone, a job reserves
+  once (`reserveJob`), and `node tooling/gate/admit.ts --bytes <N> -- <command>`
+  runs any command through the ledger. The 12/14 GB host waits are gone.
+- Each step's memory peak is recorded, for sizing the reservations from
+  measurement rather than the step table's declared numbers.

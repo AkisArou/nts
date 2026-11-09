@@ -72,7 +72,7 @@ follows; this page is the why and the whole picture.
   paths run in parallel: for example two or three agents on the compiler,
   and others on `runtime/node`, Chromium, tooling or tests at the same time.
   The limit is the disk: the pool grows while it can host another tree, and
-  each heavy phase waits for memory on its own.
+  each heavy job waits its turn for memory in the machine's one ledger.
 - **One message per task:** landed, or blocked and why. No progress reports,
   no evidence packets. The landing check is the evidence.
 - **Which agents** (Codex or Claude sessions, started by hand or by
@@ -151,8 +151,8 @@ are written by the full check.
 ## After landing: the full check
 
 The full check is every step the gate has today, in two parts. Both run at
-low priority and within their own memory share, so agents' landing checks
-come first.
+low priority, and reserve their memory at the full check's priority, below
+landing checks' and agents', so those come first.
 
 - **The core** (all suites on all three backends, about half an hour) runs
   on the newest `main` back to back, covering everything that landed since
@@ -303,6 +303,12 @@ the first node task.
   spec; `plan.md` keeps the priorities and the order of the streams; a
   task's branch names its issue; no periodic check reads the issues
   ([log](records/notebooks/decisions-log.md#tasks-are-github-issues-11-09)).
+- **One memory ledger for the machine** (11-09): every heavy job reserves its
+  peak in one queue, in priority order (the landing check, agents' work, the
+  full check); a gate run holds one reservation that grows and shrinks with
+  its steps; a job yields while one of higher priority waits; and no tool
+  waits for the host's free memory itself
+  ([log](records/notebooks/decisions-log.md#one-memory-ledger-for-the-machine-11-09)).
 - **A landing closes its issue, and a revert reopens it** (11-09): the
   landing adds `Fixes #N` from the branch unless the change names its issue,
   and the full check comments on and reopens the issue a reverted commit

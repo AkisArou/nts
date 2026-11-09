@@ -70,8 +70,10 @@ checker is compiled into nts, and every tree shares the object store.
   it. A pattern matches other agents' processes and your own shell the same
   way.
 - **A test that starts a real gate runner gives that run its own memory
-  reading and its own unit.** Pass `NTS_MEMINFO` through `gateEnvironment`'s
-  owned values, so the host's free memory never decides the result, and run
+  reading, its own memory ledger and its own unit.** Pass
+  `tooling/gate/test-memory.ts`'s `ownMemory` (`NTS_MEMINFO` and
+  `NTS_MEMORY_LEDGER`) through `gateEnvironment`'s owned values, so neither
+  the host's free memory nor the machine's ledger decides the result, and run
   it under `systemd-run --user --unit=<name> --collect`, so a runner that outlives its
   test is stopped by name. On 2026-11-07 an inner run waited silently for
   host memory inside a gate run, and an orphaned runner spun a core in the
@@ -242,16 +244,17 @@ then a guard once fixed), `tests/memory/`.
   `target/debug` held every landing on the disk floor.
 - A native snapshot of a large program can take gigabytes: cap parallel frontends,
   and check `journalctl -k` for OOM kills before blaming a crash.
-- **Gates run back to back, so heavy work runs beside them:** `nice -n 19`, one
-  heavy job of yours at a time, a heavy phase started only when `MemAvailable`
-  (`/proc/meminfo`) is at least 14 GB. Below 12 GB, stop starting new cases
-  (the conformance feeder and gate-pool tokens); let running cases finish, and
-  resume admission at 14 GB. The gate's token pool and the conformance
-  runner's feeder hold it themselves (`tooling/gate/admission.ts`); work of
-  your own outside them holds its next case or phase by hand. Never SIGSTOP timed work:
-  its wall-clock timeout keeps running, so suspension fabricates a timeout.
-  A gate step's memory pre-check is what a neighbour breaks, and a red step
-  costs its change a rerun of its check.
+- **Heavy work reserves its memory in the machine's one ledger**
+  (`tooling/gate/memory-ledger.ts`), a queue for every job on the machine:
+  the landing check first, then agents' work, then the full check, and a job
+  yields while one of higher priority waits. The gate's runs and the tools
+  they start reserve for themselves. Run a heavy command of your own (a cargo
+  build or test, a census) through `node tooling/gate/admit.ts --bytes <its
+  peak> -- <command>`, which waits its turn and holds the memory until the
+  command ends; `node tooling/gate/admit.ts --status` shows who holds what
+  and who waits. Still `nice -n 19` and one heavy job of yours at a time.
+  Never SIGSTOP timed work: its wall-clock timeout keeps running, so
+  suspension fabricates a timeout.
 - **CPUs 4–5 (hyperthread siblings of one physical P-core) are reserved for
   measurement.** Every process an agent starts excludes both, monitors and
   samplers as much as gates and heavy jobs: `taskset -c 0-3,6-31` inside the
